@@ -1,0 +1,43 @@
+[project]
+name = "mrpark"
+version = "0.1.0"
+description = "MrPark - Multi-Channel Sales Intelligence System for Sales Professionals"
+authors = [{name = "MrCall", email = "info@mrcall.ai"}]
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.39.0",
+    "google-auth-oauthlib>=1.2.0",
+    "google-api-python-client>=2.108.0",
+    "httpx>=0.25.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.0.0",
+    "prompt-toolkit>=3.0.50",
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "vonage>=3.0.0",
+    "sendgrid>=6.11.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.23.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[project.scripts]
+mrpark = "mrpark.cli.main:main"

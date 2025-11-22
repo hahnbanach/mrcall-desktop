@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(/Users/mal/starchat/**)",
+      "Glob(/Users/mal/starchat/**)",
+      "Grep(/Users/mal/starchat/**)",
+      "Write(/Users/mal/starchat/mrpark/**)",
+      "Edit(/Users/mal/starchat/mrpark/**)",
+      "Bash"
+    ]
+  }
+}
