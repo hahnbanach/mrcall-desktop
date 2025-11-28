@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Morning sync workflow for MrPark.
+"""Morning sync workflow for Zylch AI.
 
 Run this at 5am via cron to:
 1. Sync email threads
@@ -11,7 +11,7 @@ Usage:
     python morning_sync.py
 
 Or add to crontab:
-    0 5 * * * cd /path/to/mrpark && python morning_sync.py >> logs/morning_sync.log 2>&1
+    0 5 * * * cd /path/to/zylch && python morning_sync.py >> logs/morning_sync.log 2>&1
 """
 
 import sys
@@ -20,16 +20,17 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
-# Add mrpark to path
+# Add zylch to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from mrpark.config import settings
-from mrpark.tools.gmail import GmailClient
-from mrpark.tools.gcalendar import GoogleCalendarClient
-from mrpark.tools.email_sync import EmailSyncManager
-from mrpark.tools.calendar_sync import CalendarSyncManager
-from mrpark.tools.relationship_analyzer import RelationshipAnalyzer
-from mrpark.memory.reasoning_bank import ReasoningBankMemory
+from zylch.config import settings
+from zylch.tools.gmail import GmailClient
+from zylch.tools.gcalendar import GoogleCalendarClient
+from zylch.tools.email_archive import EmailArchiveManager
+from zylch.tools.email_sync import EmailSyncManager
+from zylch.tools.calendar_sync import CalendarSyncManager
+from zylch.tools.relationship_analyzer import RelationshipAnalyzer
+from zylch.memory import ZylchMemory, ZylchMemoryConfig
 
 # Configure logging
 logging.basicConfig(
@@ -53,22 +54,35 @@ def main():
     start_time = datetime.now()
 
     try:
-        # Step 1: Sync emails
-        logger.info("\n📧 STEP 1: Syncing email threads...")
+        # Step 1: Sync email archive (incremental)
+        logger.info("\n📧 STEP 1: Syncing email archive...")
         gmail = GmailClient(
             credentials_path=settings.google_credentials_path,
             token_dir=settings.google_token_path
         )
         gmail.authenticate()
 
+        # NEW: Use email archive with incremental sync
+        archive = EmailArchiveManager(gmail_client=gmail)
+
+        # Run incremental sync (fast - only fetches changes)
+        archive_results = archive.incremental_sync()
+        logger.info(
+            f"✅ Archive sync complete: "
+            f"+{archive_results.get('messages_added', 0)} "
+            f"-{archive_results.get('messages_deleted', 0)} messages"
+        )
+
+        # Step 2: Build intelligence cache from archive
+        logger.info("\n🧠 STEP 2: Building intelligence cache...")
         email_sync = EmailSyncManager(
-            gmail_client=gmail,
+            email_archive=archive,  # CHANGED: pass archive instead of gmail
             anthropic_api_key=settings.anthropic_api_key
         )
 
         email_results = email_sync.sync_emails()
         logger.info(
-            f"✅ Email sync complete: "
+            f"✅ Intelligence cache complete: "
             f"{email_results.get('new_threads', 0)} new threads, "
             f"{email_results.get('updated_threads', 0)} updated"
         )
@@ -78,8 +92,8 @@ def main():
         email_results = {"success": False, "error": str(e)}
 
     try:
-        # Step 2: Sync calendar events
-        logger.info("\n📅 STEP 2: Syncing calendar events...")
+        # Step 3: Sync calendar events
+        logger.info("\n📅 STEP 3: Syncing calendar events...")
         calendar = GoogleCalendarClient(
             credentials_path=settings.google_credentials_path,
             token_dir=settings.google_token_path,
@@ -104,11 +118,15 @@ def main():
         calendar_results = {"success": False, "error": str(e)}
 
     try:
-        # Step 3: Analyze relationship gaps
-        logger.info("\n🔍 STEP 3: Analyzing relationship gaps...")
+        # Step 4: Analyze relationship gaps
+        logger.info("\n🔍 STEP 4: Analyzing relationship gaps...")
 
-        # Initialize memory for personalized filtering
-        memory = ReasoningBankMemory(user_id="mario", cache_dir=settings.cache_dir)
+        # Initialize ZylchMemory for personalized filtering
+        memory_config = ZylchMemoryConfig(
+            db_path=Path(settings.cache_dir) / "zylch_memory.db",
+            index_dir=Path(settings.cache_dir) / "indices"
+        )
+        memory = ZylchMemory(config=memory_config)
 
         analyzer = RelationshipAnalyzer(
             anthropic_api_key=settings.anthropic_api_key,

@@ -1,11 +1,11 @@
-"""Tests for MrPark agent."""
+"""Tests for Zylch AI agent."""
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from mrpark.agent import MrParkAgent
-from mrpark.agent.models import ModelSelector
-from mrpark.tools.base import Tool, ToolResult, ToolStatus
+from zylch.agent import ZylchAIAgent
+from zylch.agent.models import ModelSelector
+from zylch.tools.base import Tool, ToolResult, ToolStatus
 
 
 class MockTool(Tool):
@@ -39,7 +39,7 @@ async def test_agent_initialization():
     tools = [MockTool()]
     model_selector = ModelSelector()
 
-    agent = MrParkAgent(
+    agent = ZylchAIAgent(
         api_key="test_key",
         tools=tools,
         model_selector=model_selector,

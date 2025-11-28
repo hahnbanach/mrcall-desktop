@@ -1,6 +1,6 @@
 # StarChat API Enhancement Requests
 
-This document tracks feature requests for the StarChat API to improve MrPark integration.
+This document tracks feature requests for the StarChat API to improve Zylch AI integration.
 
 ---
 
@@ -8,7 +8,7 @@ This document tracks feature requests for the StarChat API to improve MrPark int
 
 **Date:** 2025-11-17
 **Priority:** High
-**Requested by:** MrPark integration team
+**Requested by:** Zylch AI integration team
 
 ### Current Behavior
 
@@ -36,7 +36,7 @@ This would enable proper contact lookup without requiring JWT authentication.
 
 ### Use Case
 
-MrPark needs to check if a contact already exists before creating/updating:
+Zylch AI needs to check if a contact already exists before creating/updating:
 ```python
 # Current workaround: GET all contacts and filter in Python (slow)
 all_contacts = await get_all_contacts(business_id)
@@ -71,7 +71,7 @@ Thank you! 🙏
 
 **Date:** 2025-11-17
 **Priority:** High
-**Requested by:** MrPark integration team
+**Requested by:** Zylch AI integration team
 **Status:** WORKAROUND IMPLEMENTED ✅
 
 ### Current Behavior
@@ -106,12 +106,12 @@ GET /mrcall/v1/crm/contact/{businessId}?id={contactId}
 
 ### Use Case
 
-MrPark needs to retrieve all contacts for a business to:
+Zylch AI needs to retrieve all contacts for a business to:
 1. Check if contact exists before creating (prevent duplicates)
 2. Filter contacts client-side by custom variables
 3. List all contacts for the user
 
-### ✅ Workaround Implemented (MrPark)
+### ✅ Workaround Implemented (Zylch AI)
 
 **Date:** 2025-11-18
 
@@ -137,7 +137,7 @@ Content-Type: application/json
 **Usage:**
 ```
 You: puoi cercare tutti i contatti nel business per favore?
-MrPark: [Fetches all contacts using ListAllContactsTool]
+Zylch AI: [Fetches all contacts using ListAllContactsTool]
 Found 127 total contacts: customer=45, lead=32, prospect=28, unknown=22
 ```
 
@@ -156,5 +156,164 @@ Thank you! 🙏
 
 ---
 
-## Request 3: (Future requests go here)
+## Request 3: WhatsApp Messages REST API Endpoint
+
+**Date:** 2025-11-26
+**Priority:** Medium
+**Requested by:** Zylch AI integration team
+**Status:** UNDER DEVELOPMENT 🚧
+
+### Current Situation
+
+StarChat has WhatsApp integration via:
+- **WebSocket endpoint:** `GET /mrcall/v1/{realm}/whatsappweb/stream`
+- **PostgreSQL storage:** `whatsapp_messages` table
+
+However, there is no REST API endpoint to query WhatsApp messages.
+
+### Desired Behavior
+
+Please add a REST API endpoint to query WhatsApp messages:
+
+```
+GET /mrcall/v1/crm/whatsapp/{businessId}/messages
+Authorization: Basic <base64(username:password)>
+
+Query Parameters:
+- days_back: int (default: 30) - Number of days to look back
+- phone: string (optional) - Filter by phone number
+- limit: int (default: 100) - Maximum results
+- offset: int (default: 0) - Pagination offset
+
+Response:
+[
+  {
+    "id": "msg_123",
+    "business_id": "business_456",
+    "phone_number": "+391234567890",
+    "message_text": "Hello, I need help with...",
+    "direction": "inbound",  // or "outbound"
+    "timestamp": "2025-11-26T10:30:00Z",
+    "contact_id": "contact_789"  // If matched to CRM contact
+  }
+]
+```
+
+### Use Case
+
+Zylch AI needs to:
+1. Read WhatsApp conversations to identify contacts by phone number
+2. Analyze communication gaps across email + WhatsApp + phone
+3. Build person-centric task list including WhatsApp follow-ups
+
+### Benefits
+
+1. **Consistency**: Matches existing REST API patterns
+2. **Security**: Uses existing BasicAuth or JWT authentication (NEVER bypass with direct DB access!)
+3. **Easier integration**: Clean API interface, no database management
+4. **Pagination support**: Handle large message histories efficiently
+
+### Implementation Status (Zylch AI)
+
+**Date:** 2025-11-26
+
+Zylch AI has prepared the tool structure to consume this endpoint once available:
+
+**What's Ready:**
+1. `_GetWhatsAppContactsTool` - Agent tool registered and ready
+2. `StarChatClient.get_whatsapp_contacts()` - Client method prepared
+3. Tool will automatically work once StarChat provides the endpoint
+
+**What's Needed:**
+- StarChat REST API endpoint: `GET /mrcall/v1/crm/whatsapp/{businessId}/messages`
+- Uses existing BasicAuth authentication
+- Returns message list with phone numbers and timestamps
+
+**IMPORTANT:** We will NOT use direct PostgreSQL access - all data access must go through StarChat's authenticated API.
+
+Thank you! 🙏
+
+---
+
+## Request 4: Fast Email Lookup API
+
+**Date:** 2025-11-28
+**Priority:** ALTA
+**Requested by:** Zylch AI integration team
+**Status:** DA IMPLEMENTARE
+
+### Problema
+
+Attualmente per verificare se un contatto esiste in StarChat, dobbiamo:
+1. Chiamare `GET /api/contacts?email={email}` che scarica TUTTO il contatto
+2. Questo è lento e costoso per semplici verifiche di esistenza
+
+Zylch AI ha implementato una cache locale (`identifier_map.json`) per evitare chiamate remote quando i dati sono freschi, ma serve comunque un modo per verificare se StarChat ha dati più recenti della cache locale.
+
+### Endpoint Richiesto
+
+```
+GET /mrcall/v1/crm/contact/{businessId}/lookup
+Authorization: Basic <base64(username:password)>
+```
+
+**Query Parameters:**
+- `email` (string, required): Email da cercare
+
+**Response (leggera, solo metadata):**
+```json
+{
+  "exists": true,
+  "contact_id": "abc123",
+  "last_updated": "2024-01-15T10:30:00Z"
+}
+```
+
+Se non esiste:
+```json
+{
+  "exists": false
+}
+```
+
+### Use Case in Zylch
+
+Prima di fare ricerche costose (Gmail 10+ secondi, web search), Zylch verifica:
+1. Il contatto è già in cache locale? → usa cache
+2. Il contatto è in StarChat ma più recente della cache? → sync da StarChat
+3. Il contatto non esiste da nessuna parte? → ricerche remote
+
+### Benefici
+
+- Riduzione chiamate API Gmail del 70-80%
+- Response time da 10s a <100ms per contatti noti
+- Risparmio costi API
+- Permette sync bidirezionale cache locale ↔ StarChat
+
+### Implementation Status (Zylch AI)
+
+**Date:** 2025-11-28
+
+Zylch AI ha già implementato la struttura per usare questo endpoint quando disponibile:
+
+1. `IdentifierMapCache` - Cache locale con TTL 7 giorni
+2. `_SearchLocalMemoryTool` - Tool che cerca prima in cache locale
+3. `_SaveContactTool` - Registra identificatori in cache dopo salvataggio
+
+**Placeholder nel codice:**
+```python
+# TODO: STARCHAT_REQUEST - Quando disponibile, usare StarChat lookup_by_email
+# per verificare se il contatto è stato aggiornato remotamente
+# async def _check_starchat_freshness(self, email: str) -> Optional[datetime]:
+#     result = await self.starchat.lookup_by_email(email, self.business_id)
+#     if result and result.get("exists"):
+#         return datetime.fromisoformat(result["last_updated"])
+#     return None
+```
+
+Grazie! 🙏
+
+---
+
+## Request 5: (Future requests go here)
 
