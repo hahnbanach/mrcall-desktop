@@ -14,7 +14,8 @@
 
 ### Core Features
 
-- **[Multi-Tenant Architecture](./features/multi-tenant-architecture.md)** - ⭐ NEW! Complete isolation per owner with multiple assistants support
+- **[Multi-Tenant Architecture](./features/multi-tenant-architecture.md)** - Complete isolation per owner with multiple assistants support
+- **[User Persona Learning](./features/user-persona-learning.md)** - ⭐ NEW! Background AI that learns about the user from conversations
 - **[Email Archive System](./features/email-archive.md)** - Permanent email storage with full-text search and incremental sync
 - **[Relationship Intelligence](./features/relationship-intelligence.md)** - Cross-channel communication gap analysis
 - **[Task Management](./features/task-management.md)** - AI-powered task tracking and prioritization
@@ -93,7 +94,30 @@ Essential documents in the project root:
 
 **Read more:** [Email Archive Documentation](./features/email-archive.md)
 
-### Multi-Tenant Architecture ⭐ NEW
+### User Persona Learning ⭐ NEW
+
+**What it does:** Background AI system that learns about the user from conversations and uses this proactively.
+
+**Key features:**
+- 🧠 **Background Learning**: Extracts facts without blocking conversation
+- 👤 **Personal Knowledge**: Relationships, preferences, work context, patterns
+- 🔄 **Reconsolidation**: Similar facts merged, not duplicated
+- 💬 **Proactive Usage**: AI references facts naturally ("Since Francesca is your sister...")
+- 💰 **Economical**: Uses Haiku model for fast, low-cost extraction
+
+**Example:**
+```
+User: "Scrivi a mia sorella Francesca"
+Zylch: [learns: user has sister named Francesca]
+
+# Later...
+User: "Manda un messaggio a Francesca"
+Zylch: "Scrivo a tua sorella Francesca?"
+```
+
+**Read more:** [User Persona Learning Documentation](./features/user-persona-learning.md)
+
+### Multi-Tenant Architecture
 
 **What it does:** Complete data isolation per owner with support for multiple completely isolated assistants.
 
@@ -228,6 +252,7 @@ zylch/
 ├── docs/                           # 📚 This directory
 │   ├── README.md                   # Documentation index (you are here)
 │   ├── features/                   # Feature documentation
+│   │   ├── user-persona-learning.md # ⭐ NEW! User persona learning
 │   │   ├── email-archive.md        # Email archive system
 │   │   ├── relationship-intelligence.md
 │   │   ├── task-management.md

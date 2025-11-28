@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""Zylch AI CLI launcher script.
+
+Usage:
+    ./zylch-cli                    # Default (quiet mode, only errors shown)
+    ./zylch-cli --log-level 0      # Same as default (quiet)
+    ./zylch-cli --log-level info   # Show INFO and above
+    ./zylch-cli --log-level warning # Show WARNING and above
+    ./zylch-cli --log-level error  # Show only ERROR
+    ./zylch-cli -l info            # Short form
+"""
+
+import argparse
+import logging
+import sys
+import os
+
+# Add the project root to path if running from project directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.insert(0, script_dir)
+
+
+def setup_logging(log_level: str) -> None:
+    """Configure logging based on user preference.
+
+    Args:
+        log_level: One of '0', 'quiet', 'info', 'warning', 'error'
+    """
+    level_map = {
+        '0': logging.ERROR,       # Quiet - only errors
+        'quiet': logging.ERROR,   # Same as 0
+        'info': logging.INFO,
+        'warning': logging.WARNING,
+        'error': logging.ERROR,
+    }
+
+    level = level_map.get(log_level.lower(), logging.ERROR)
+
+    # Configure root logger
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        force=True  # Override any existing config
+    )
+
+    # Set level for all zylch loggers
+    for name in logging.Logger.manager.loggerDict:
+        if name.startswith('zylch'):
+            logging.getLogger(name).setLevel(level)
+
+    # Also set for common noisy libraries
+    for lib_name in ['httpx', 'httpcore', 'anthropic', 'hpack']:
+        logging.getLogger(lib_name).setLevel(max(level, logging.WARNING))
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Zylch AI - Email Intelligence Assistant',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Log levels:
+  0, quiet   Only show errors (default)
+  info       Show INFO messages and above
+  warning    Show WARNING messages and above
+  error      Show only ERROR messages
+
+Examples:
+  ./zylch-cli                    Start in quiet mode
+  ./zylch-cli -l info            Start with INFO logging
+  ./zylch-cli --log-level warning  Start with WARNING logging
+"""
+    )
+
+    parser.add_argument(
+        '-l', '--log-level',
+        type=str,
+        default='0',
+        choices=['0', 'quiet', 'info', 'warning', 'error'],
+        help='Logging level (default: 0/quiet)'
+    )
+
+    args = parser.parse_args()
+
+    # Setup logging before importing zylch modules
+    setup_logging(args.log_level)
+
+    # Now import and run
+    from zylch.cli.main import main as cli_main
+    cli_main()
+
+
+if __name__ == '__main__':
+    main()
