@@ -1,8 +1,86 @@
 # Changelog
 
-All notable changes to the MrPark project will be documented in this file.
+All notable changes to the Zylch AI project will be documented in this file.
 
 ## [Unreleased]
+
+### Fixed - Contact Enrichment Performance & Clarity (2025-11-27)
+
+#### Web Search Opt-In
+- **Problem**: Contact enrichment automatically triggered web search, taking 10+ minutes
+- **Solution**: Changed to opt-in only - web search executes ONLY when user explicitly asks
+- **Examples**: "cerca sul web", "search web for...", "find online info about..."
+- **Impact**: Contact enrichment completes in seconds instead of 10+ minutes when web search not needed
+- **Files**: `zylch/agent/prompts.py:170`
+
+#### Contact Dual-Save Clarification
+- **Problem**: Users confused about where enriched contacts are saved
+- **Solution**: Clarified that `save_contact` automatically saves to BOTH locations:
+  1. **StarChat** - Structured contact data (name, email, phone, company, variables)
+  2. **ZylchMemory** - Semantic person-centric namespace `{owner}:{assistant}:{contact_id}`
+- **Changes**:
+  - Updated tool description to emphasize dual-save (`factory.py:1516`)
+  - Updated prompt instructions to explain dual-save when asking permission (`prompts.py:175-176`)
+  - Implementation already present (`factory.py:1624-1663`)
+- **Files**: `zylch/agent/prompts.py`, `zylch/tools/factory.py`
+
+#### Documentation
+- **NEW**: `docs/implementation-notes.md` - Implementation decisions and recent changes
+- Added to `docs/README.md` index under Developer Documentation
+
+### Added - Multi-Tenant Person-Centric Memory Architecture (2025-11-27)
+
+#### 🚨 Single-Assistant Mode (v0.2.0)
+- **Constraint**: ONE assistant per owner (temporary limitation)
+- **Auto-creation**: Default assistant created automatically on first startup
+- **Validation**: `/assistant --create` blocked if assistant already exists
+- **Rationale**: Simplifies development without requiring StarChat modifications
+- **Future-ready**: Architecture supports multi-assistant expansion
+
+#### Core Multi-Tenant Implementation
+- **Two-level isolation**: Owner-level (Firebase UID) + Assistant-level (business separation)
+- **Namespace structure**: `{owner}:{zylch_assistant_id}` for business data, `{owner}:{zylch_assistant_id}:{contact_id}` for person data
+- **Zero data leakage**: Complete workspace isolation between owners
+- **Category-based organization**: business, config, style, person, relationship
+- **StarChat contact integration**: Uses StarChat contact IDs in person namespaces
+
+#### New Services
+- **AssistantManager**: JSON-based service for managing multiple assistants per owner
+  - `create_assistant()` - Create new isolated workspace
+  - `list_assistants()` - List all assistants for owner
+  - `link_mrcall_assistant()` - Connect to MrCall/StarChat assistant
+  - Storage: `cache/zylch_assistants.json`
+
+#### CLI Commands
+- **`/assistant`** - Manage Zylch assistants
+  - `--list` - List all assistants for current owner
+  - `--create <name>` - Create new assistant
+  - `--id <assistant_id>` - Switch to different assistant
+- **`/mrcall`** - Link to MrCall/StarChat assistant
+  - `--id <mrcall_id>` - Link assistant to MrCall contacts
+  - `--list` - List available MrCall assistants (placeholder)
+
+#### Updated Components
+- **TaskManager**: Multi-tenant person memory namespace `{owner}:{assistant}:{contact}`
+- **DraftEmailFromMemoryTool**: Retrieves memories from namespaced storage
+- **populate_business_memory.py**: Reads OWNER_ID/ZYLCH_ASSISTANT_ID from env
+- **CLI /memory --build**: Uses multi-tenant namespaces for person memories
+- **Config**: Added `owner_id` and `zylch_assistant_id` settings
+
+#### Documentation
+- **NEW**: `docs/features/multi-tenant-architecture.md` - Complete 650-line guide
+  - Architecture overview and namespace structure
+  - CLI command reference
+  - Use cases (multiple businesses, multi-tenant SaaS, person-centric memory)
+  - AssistantManager API documentation
+  - Migration guide from single-tenant
+  - Best practices
+- **UPDATED**: `docs/README.md` - Added multi-tenant as featured capability
+
+#### Configuration
+- **NEW env vars**: `OWNER_ID`, `ZYLCH_ASSISTANT_ID`
+- **Placeholder mode**: Development support without Firebase
+- **Firebase-ready**: Production ready with Firebase UID integration
 
 ### Added - Gmail Draft Threading & Google Meet Integration (2025-11-21)
 

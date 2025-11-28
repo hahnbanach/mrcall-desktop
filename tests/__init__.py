@@ -1,1 +1,1 @@
-"""Tests for MrPark."""
+"""Tests for Zylch AI."""

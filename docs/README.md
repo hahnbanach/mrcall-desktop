@@ -1,6 +1,6 @@
-# MrPark Documentation
+# Zylch AI Documentation
 
-**Complete technical documentation for MrPark - AI-powered communication assistant**
+**Complete technical documentation for Zylch AI - AI-powered communication assistant**
 
 ---
 
@@ -8,23 +8,39 @@
 
 ### Getting Started
 
-- **[Quick Start Guide](./quick-start.md)** - Get MrPark up and running in minutes
+- **[Quick Start Guide](./setup/quick-start.md)** - Get Zylch AI up and running in minutes
 - **[Gmail OAuth Setup](./setup/gmail-oauth.md)** - Configure Google authentication for Gmail and Calendar
+- **[Email Sending Setup](./setup/email-sending-setup.md)** - Configure email sending capabilities
 
 ### Core Features
 
-- **[Memory System](./memory-system.md)** - Channel-based behavioral learning from user corrections
-- **[Relationship Intelligence](./relationship-intelligence.md)** - Cross-channel communication gap analysis
-- **[Task Management](./task-management.md)** - AI-powered task tracking and prioritization
-- **[Calendar & Meet Integration](./calendar-integration.md)** - Google Calendar with automatic Meet link generation
+- **[Multi-Tenant Architecture](./features/multi-tenant-architecture.md)** - ⭐ NEW! Complete isolation per owner with multiple assistants support
+- **[Email Archive System](./features/email-archive.md)** - Permanent email storage with full-text search and incremental sync
+- **[Relationship Intelligence](./features/relationship-intelligence.md)** - Cross-channel communication gap analysis
+- **[Task Management](./features/task-management.md)** - AI-powered task tracking and prioritization
+- **[Calendar & Meet Integration](./features/calendar-integration.md)** - Google Calendar with automatic Meet link generation
+- **[Memory System](./features/memory-system.md)** - Channel-based behavioral learning from user corrections
+- **[Cache Management](./features/cache-management.md)** - Data caching and performance optimization
+
+### API Documentation
+
+- **[Chat API](./api/chat-api.md)** - Conversational AI HTTP endpoint with 25+ tools
+
+### Developer Documentation
+
+- **[Implementation Notes](./implementation-notes.md)** - ⭐ Recent changes and implementation decisions (Nov 2025)
+- **[Architecture](./.claude/ARCHITECTURE.md)** - System design and key decisions
+- **[Conventions](./.claude/CONVENTIONS.md)** - Code style and patterns
+- **[Testing](./.claude/TESTING.md)** - Testing strategy and examples
+- **[Documentation](./.claude/DOCUMENTATION.md)** - How to document
 
 ### Root Documentation
 
 Essential documents in the project root:
 
 - **[README.md](../README.md)** - Project overview and main entry point
-- **[MRPARK_SPEC.md](../MRPARK_SPEC.md)** - Complete technical specification
-- **[MRPARK_BUSINESS_MODEL.md](../MRPARK_BUSINESS_MODEL.md)** - Business context and model
+- **[ZYLCH_SPEC.md](../spec/ZYLCH_SPEC.md)** - Complete technical specification
+- **[ZYLCH_BUSINESS_MODEL.md](../ZYLCH_BUSINESS_MODEL.md)** - Business context and model
 - **[CHANGELOG.md](../CHANGELOG.md)** - Version history and changes
 
 ---
@@ -33,34 +49,94 @@ Essential documents in the project root:
 
 ### I want to...
 
-**Get started with MrPark**
-→ [Quick Start Guide](./quick-start.md)
+**Get started with Zylch AI**
+→ [Quick Start Guide](./setup/quick-start.md)
 
 **Set up Gmail integration**
 → [Gmail OAuth Setup](./setup/gmail-oauth.md)
 
-**Teach MrPark my preferences**
-→ [Memory System - Usage Guide](./memory-system.md#usage-guide)
+**Search my email archive**
+→ [Email Archive System](./features/email-archive.md)
+
+**Build a chatbot with Zylch**
+→ [Chat API](./api/chat-api.md)
+
+**Teach Zylch AI my preferences**
+→ [Memory System - Usage Guide](./features/memory-system.md#usage-guide)
 
 **Understand relationship gaps**
-→ [Relationship Intelligence](./relationship-intelligence.md)
+→ [Relationship Intelligence](./features/relationship-intelligence.md)
 
-**Learn about memory architecture**
-→ [Memory System - Design Philosophy](./memory-system.md#design-philosophy)
+**Learn about system architecture**
+→ [Architecture](./.claude/ARCHITECTURE.md)
 
-**Integrate MrPark with my workflow**
-→ [Task Management](./task-management.md)
+**Integrate Zylch AI with my workflow**
+→ [Task Management](./features/task-management.md)
 
 **Understand the complete system**
-→ [MRPARK_SPEC.md](../MRPARK_SPEC.md)
+→ [Technical Specification](../spec/ZYLCH_SPEC.md)
 
 ---
 
 ## 📖 Feature Documentation
 
+### Email Archive System
+
+**What it does:** Permanent email storage with incremental sync and full-text search.
+
+**Key features:**
+- 💾 Complete history preservation (never lose old emails)
+- ⚡ Incremental sync (<1 second daily)
+- 🔍 Full-text search (FTS5-powered)
+- 🗄️ SQLite backend with optional PostgreSQL
+- 📊 Two-tier architecture (Archive + Intelligence Cache)
+
+**Read more:** [Email Archive Documentation](./features/email-archive.md)
+
+### Multi-Tenant Architecture ⭐ NEW
+
+**What it does:** Complete data isolation per owner with support for multiple completely isolated assistants.
+
+**Key features:**
+- 🏢 **Multi-Tenant**: Complete isolation per owner (Firebase UID)
+- 🤖 **Multiple Assistants**: Each owner can run completely different businesses
+- 👤 **Person-Centric Memory**: Semantic memory per contact with HNSW vector search
+- 🔒 **Zero Data Leakage**: `{owner}:{assistant}:{contact}` namespace structure
+- 📊 **Scalable**: Works with thousands of users
+
+**Example use case:**
+```
+owner_mario:mrcall_assistant    → Telecom business
+owner_mario:caffe_assistant     → Coffee shop (ISOLATED!)
+```
+
+**CLI commands:**
+```bash
+# Manage assistants
+/assistant --create "MrCall Business"
+/assistant --list
+
+# Link MrCall assistant for contacts
+/mrcall --id hahnbanach_personal
+```
+
+**Read more:** [Multi-Tenant Architecture Documentation](./features/multi-tenant-architecture.md)
+
+### Chat API
+
+**What it does:** Conversational AI HTTP endpoint for web/mobile integration.
+
+**Key features:**
+- 💬 Natural language conversation
+- 🔧 25+ tools (email, calendar, tasks, CRM, web search)
+- 🤖 Automatic model selection (Haiku/Sonnet/Opus)
+- 📡 RESTful API with OpenAPI docs
+
+**Read more:** [Chat API Documentation](./api/chat-api.md)
+
 ### Memory System
 
-**What it does:** MrPark learns from your corrections and automatically applies them in future interactions.
+**What it does:** Zylch AI learns from your corrections and automatically applies them in future interactions.
 
 **Key concepts:**
 - 📡 Channel-based organization (email, calendar, WhatsApp, phone, tasks)
@@ -69,7 +145,7 @@ Essential documents in the project root:
 - 📈 Confidence scoring (rules improve over time)
 - 🔄 Automatic application (injected into AI prompts)
 
-**Read more:** [Memory System Documentation](./memory-system.md)
+**Read more:** [Memory System Documentation](./features/memory-system.md)
 
 ### Relationship Intelligence
 
@@ -87,13 +163,13 @@ Essential documents in the project root:
 2. **Urgent emails without meeting** - Important email but no meeting scheduled
 3. **Silent contacts** - Contacts with past interactions but no recent communication
 
-**Read more:** [Relationship Intelligence Documentation](./relationship-intelligence.md)
+**Read more:** [Relationship Intelligence Documentation](./features/relationship-intelligence.md)
 
 ### Task Management
 
 **What it does:** AI-powered task tracking integrated with email and calendar context.
 
-**Read more:** [Task Management Documentation](./task-management.md)
+**Read more:** [Task Management Documentation](./features/task-management.md)
 
 ---
 
@@ -101,14 +177,14 @@ Essential documents in the project root:
 
 ```bash
 # 1. Clone and setup
-cd /path/to/mrpark
+cd /path/to/zylch
 source venv/bin/activate
 
 # 2. Configure OAuth (first time only)
 # Follow: docs/setup/gmail-oauth.md
 
-# 3. Start MrPark
-python -m mrpark.cli.main
+# 3. Start Zylch AI
+python -m zylch.cli.main
 
 # 4. Try these commands
 /sync               # Sync emails and calendar
@@ -121,7 +197,7 @@ python -m mrpark.cli.main
 ## 🏗️ Architecture Overview
 
 ```
-MrPark
+Zylch AI
 ├── Communication Sync
 │   ├── Email (Gmail API)
 │   ├── Calendar (Google Calendar API)
@@ -148,31 +224,54 @@ MrPark
 ## 📁 File Structure
 
 ```
-mrpark/
+zylch/
 ├── docs/                           # 📚 This directory
 │   ├── README.md                   # Documentation index (you are here)
-│   ├── memory-system.md            # Memory system guide
-│   ├── relationship-intelligence.md # Relationship intelligence guide
-│   ├── task-management.md          # Task management guide
-│   ├── quick-start.md              # Getting started guide
-│   └── setup/
-│       └── gmail-oauth.md          # OAuth setup instructions
+│   ├── features/                   # Feature documentation
+│   │   ├── email-archive.md        # Email archive system
+│   │   ├── relationship-intelligence.md
+│   │   ├── task-management.md
+│   │   ├── calendar-integration.md
+│   │   ├── memory-system.md
+│   │   └── cache-management.md
+│   ├── api/                        # API documentation
+│   │   └── chat-api.md             # Chat API endpoint
+│   ├── setup/                      # Setup guides
+│   │   ├── quick-start.md
+│   │   ├── gmail-oauth.md
+│   │   └── email-sending-setup.md
+│   ├── admin/                      # Admin documentation
+│   └── archive/                    # Historical docs
 │
-├── mrpark/                         # 💻 Source code
+├── .claude/                        # 🔧 Developer guidelines
+│   ├── ARCHITECTURE.md             # System design
+│   ├── CONVENTIONS.md              # Code standards
+│   ├── TESTING.md                  # Test strategy
+│   └── DOCUMENTATION.md            # Documentation guide
+│
+├── spec/                           # 📋 Technical specifications
+│   ├── ZYLCH_SPEC.md
+│   ├── ZYLCH_DEVELOPMENT_PLAN.md
+│   └── MEMORY_GAP_ANALYSIS.md
+│
+├── zylch/                          # 💻 Source code
 │   ├── cli/                        # CLI interface
-│   ├── memory/                     # Memory system
-│   ├── tools/                      # Gmail, Calendar, sync managers
+│   ├── api/                        # HTTP API (FastAPI)
+│   ├── services/                   # Business logic
+│   ├── tools/                      # Gmail, Calendar, Archive, etc.
 │   └── agent/                      # AI agent core
 │
 ├── cache/                          # 💾 Data storage
-│   ├── emails/threads.json         # Email threads with AI analysis
+│   ├── emails/
+│   │   ├── archive.db              # SQLite email archive (permanent)
+│   │   └── threads.json            # Intelligence cache (30-day)
 │   ├── calendar/events.json        # Calendar events
 │   ├── relationship_gaps.json      # Detected gaps
 │   └── memory_mario.json           # User memory
 │
 ├── README.md                       # 📄 Main project README
-├── MRPARK_SPEC.md                  # 📋 Technical specification
-├── MRPARK_BUSINESS_MODEL.md        # 💼 Business context
+├── CLAUDE.md                       # 🤖 Claude Code instructions
+├── ZYLCH_BUSINESS_MODEL.md         # 💼 Business context
 └── CHANGELOG.md                    # 📝 Version history
 ```
 
@@ -184,7 +283,7 @@ mrpark/
 
 ```bash
 # Test email sync
-python -c "from mrpark.tools.email_sync import EmailSyncManager; ..."
+python -c "from zylch.tools.email_sync import EmailSyncManager; ..."
 
 # Test relationship analysis
 python test_relationship_intelligence.py
@@ -196,10 +295,10 @@ python test_channel_memory.py
 ### End-to-End Testing
 
 ```bash
-# Start MrPark and run full workflow
-python -m mrpark.cli.main
+# Start Zylch AI and run full workflow
+python -m zylch.cli.main
 
-# In MrPark CLI:
+# In Zylch AI CLI:
 /sync 7        # Sync last 7 days
 /gaps          # View relationship briefing
 /memory --list # Check learned preferences
@@ -227,18 +326,18 @@ python -m mrpark.cli.main
 
 ### Communication Channels
 
-MrPark operates across 5 distinct channels:
+Zylch AI operates across 5 distinct channels:
 - **email** - Email drafting and responses
 - **calendar** - Event scheduling and management
 - **whatsapp** - WhatsApp messaging
 - **mrcall** - Phone assistant behavior
-- **task** - Task management (MrPark internal)
+- **task** - Task management (Zylch AI internal)
 
 Each channel has independent memory and rules.
 
 ### Memory-Based Learning
 
-Instead of forgetting corrections, MrPark:
+Instead of forgetting corrections, Zylch AI:
 1. Stores corrections in channel-specific memory
 2. Builds confidence scores based on outcomes
 3. Automatically applies learned rules
@@ -269,10 +368,13 @@ Goes beyond simple inbox management:
 → Follow [Gmail OAuth Setup](./setup/gmail-oauth.md) carefully
 
 **"Memory rules not applied"**
-→ Check confidence threshold, see [Memory System](./memory-system.md#confidence-scoring)
+→ Check confidence threshold, see [Memory System](./features/memory-system.md#confidence-scoring)
 
 **"Gaps analysis showing wrong emails"**
-→ Teach the system with memory rules, see [Relationship Intelligence](./relationship-intelligence.md#personalized-filtering-with-memory-system)
+→ Teach the system with memory rules, see [Relationship Intelligence](./features/relationship-intelligence.md#personalized-filtering-with-memory-system)
+
+**"Email archive not syncing"**
+→ Check History ID expiration, see [Email Archive - Troubleshooting](./features/email-archive.md#troubleshooting)
 
 ---
 

@@ -11,13 +11,13 @@
 5. Click "+ CREATE CREDENTIALS" → "OAuth client ID"
 6. If prompted, configure OAuth consent screen first:
    - User Type: **External** (for testing)
-   - App name: "MrPark Dev"
+   - App name: "Zylch AI Dev"
    - User support email: your email
    - Developer contact: your email
    - Click "Save and Continue" (skip scopes, test users for now)
 7. Back to Create OAuth Client ID:
    - Application type: **Desktop app**
-   - Name: "MrPark Desktop"
+   - Name: "Zylch AI Desktop"
    - Click "Create"
 8. **Download JSON** file (click download icon)
 
@@ -25,16 +25,16 @@
 
 Move the downloaded JSON to:
 ```bash
-mv ~/Downloads/client_secret_*.json /Users/mal/starchat/mrpark/credentials/gmail_oauth.json
+mv ~/Downloads/client_secret_*.json /Users/mal/starchat/zylch/credentials/gmail_oauth.json
 ```
 
 ### Step 3: Test Authentication
 
 ```bash
-cd /Users/mal/starchat/mrpark
+cd /Users/mal/starchat/zylch
 source venv/bin/activate
 python -c "
-from mrpark.tools.gmail import GmailClient
+from zylch.tools.gmail import GmailClient
 gmail = GmailClient()
 gmail.authenticate()
 print('✅ Gmail OAuth successful!')
@@ -51,7 +51,7 @@ This will:
 
 ```bash
 python -c "
-from mrpark.tools.gmail import GmailClient
+from zylch.tools.gmail import GmailClient
 gmail = GmailClient()
 gmail.authenticate()
 messages = gmail.search_messages('is:inbox', max_results=5)
