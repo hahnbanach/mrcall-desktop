@@ -231,6 +231,18 @@ class ToolFactory:
                 anthropic_api_key=config.anthropic_api_key
             ))
 
+        # Sharing tools (4 tools) - for intelligence sharing between users
+        if config.user_email:
+            sharing_tools = ToolFactory._create_sharing_tools(
+                zylch_memory=zylch_memory,
+                cache_dir=config.cache_dir,
+                owner_id=config.owner_id,
+                user_email=config.user_email,
+                user_display_name=config.user_display_name if hasattr(config, 'user_display_name') else None
+            )
+            tools.extend(sharing_tools)
+            logger.info(f"Sharing tools initialized ({len(sharing_tools)} tools)")
+
         # Initialize PersonaAnalyzer for user persona learning
         from ..services.persona_analyzer import PersonaAnalyzer
         persona_analyzer = PersonaAnalyzer(
@@ -410,6 +422,71 @@ class ToolFactory:
                 anthropic_api_key
             ),
             SaveMrCallAdminRuleTool(starchat_client, session_state, zylch_memory),
+        ]
+
+    @staticmethod
+    def _create_sharing_tools(
+        zylch_memory,
+        cache_dir: str,
+        owner_id: str,
+        user_email: str,
+        user_display_name: Optional[str] = None
+    ) -> List[Tool]:
+        """Create intelligence sharing tools.
+
+        These tools enable sharing contact intelligence between Zylch users.
+        Features:
+        - Share intel with authorized recipients
+        - Retrieve shared intel when looking up contacts
+        - Accept/reject share requests
+        """
+        from .sharing_tools import (
+            ShareContactIntelTool,
+            GetSharedIntelTool,
+            AcceptShareRequestTool,
+            RejectShareRequestTool,
+        )
+        from ..sharing import SharingAuthorizationManager, IntelShareManager
+
+        # Initialize sharing managers
+        sharing_db_path = Path(cache_dir) / "sharing.db"
+        auth_manager = SharingAuthorizationManager(db_path=sharing_db_path)
+        intel_share_manager = IntelShareManager(
+            zylch_memory=zylch_memory,
+            auth_manager=auth_manager
+        )
+
+        # Register current user
+        if user_email:
+            auth_manager.register_user(
+                owner_id=owner_id,
+                email=user_email,
+                display_name=user_display_name
+            )
+
+        return [
+            ShareContactIntelTool(
+                intel_share_manager=intel_share_manager,
+                auth_manager=auth_manager,
+                owner_id=owner_id,
+                user_email=user_email,
+                user_display_name=user_display_name
+            ),
+            GetSharedIntelTool(
+                intel_share_manager=intel_share_manager,
+                owner_id=owner_id,
+                user_email=user_email
+            ),
+            AcceptShareRequestTool(
+                intel_share_manager=intel_share_manager,
+                auth_manager=auth_manager,
+                owner_id=owner_id,
+                user_email=user_email
+            ),
+            RejectShareRequestTool(
+                auth_manager=auth_manager,
+                user_email=user_email
+            ),
         ]
 
 

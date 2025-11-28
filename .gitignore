@@ -20,11 +20,15 @@ wheels/
 .installed.cfg
 *.egg
 
+zylch-website/
+
 # Virtual environments
 venv/
 env/
 ENV/
 .venv
+.venv.production
+.venv.test
 
 # IDEs
 .vscode/

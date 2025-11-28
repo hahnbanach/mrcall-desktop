@@ -52,6 +52,9 @@ class ZylchAICLI:
         self.owner_id = settings.owner_id  # Multi-tenant owner ID
         self.zylch_assistant_id = settings.zylch_assistant_id  # Multi-tenant assistant ID
         self.forced_model = None  # Override model selection (None = auto)
+        self.sharing_auth = None  # Sharing authorization manager
+        self.intel_share = None  # Intel share manager
+        self.user_email = settings.user_email  # Current user's email for sharing
 
         # Initialize AssistantManager
         from zylch.services.assistant_manager import AssistantManager
@@ -99,6 +102,24 @@ class ZylchAICLI:
             self.starchat = ToolFactory._starchat_client
             self.email_archive = ToolFactory._email_archive
             self.task_manager = ToolFactory._task_manager
+
+            # Initialize sharing system
+            from ..sharing import SharingAuthorizationManager, IntelShareManager
+            sharing_db_path = Path(settings.cache_dir) / "sharing.db"
+            self.sharing_auth = SharingAuthorizationManager(db_path=sharing_db_path)
+            self.intel_share = IntelShareManager(
+                zylch_memory=self.memory,
+                auth_manager=self.sharing_auth
+            )
+
+            # Register current user for sharing (if email is configured)
+            if self.user_email:
+                self.sharing_auth.register_user(
+                    owner_id=self.owner_id,
+                    email=self.user_email,
+                    display_name=settings.user_display_name if hasattr(settings, 'user_display_name') else None
+                )
+            print(f"✅ Sharing system initialized")
 
             # Initialize agent
             self.agent = ZylchAIAgent(
@@ -163,6 +184,9 @@ class ZylchAICLI:
         print("  /archive       - Email archive management (use /archive --help for details)")
         print("  /cache         - Inspect and manage cache (use /cache --help for details)")
         print("  /model         - Change AI model (use /model --help for details)")
+        print("  /share <email> - Register user for intelligence sharing")
+        print("  /revoke <email> - Revoke sharing authorization")
+        print("  /sharing       - Show sharing status and pending requests")
         print("  /quit          - Exit Zylch AI")
         print()
 
@@ -1154,6 +1178,210 @@ class ZylchAICLI:
         else:
             print("❌ Unknown command. Use /mrcall --help for help")
 
+    def _handle_share_command(self, command: str):
+        """Handle /share command - register recipient for sharing.
+
+        Usage:
+            /share <email>     - Register email as sharing recipient
+            /share --help      - Show help
+        """
+        parts = command.split()
+
+        if "--help" in command or len(parts) == 1:
+            print("\n📤 /share Command Help")
+            print("=" * 60)
+            print("Register a Zylch user to share intelligence with")
+            print()
+            print("Usage:")
+            print("  /share <email>     - Register recipient for sharing")
+            print()
+            print("Example:")
+            print("  /share luigi@azienda.com")
+            print()
+            print("After registration, share info by saying:")
+            print('  "Condividi con Luigi che Marco Ferrari ha firmato"')
+            print()
+            print("The recipient must accept before seeing shared info.")
+            print()
+            return
+
+        if not self.sharing_auth:
+            print("❌ Sistema di condivisione non inizializzato")
+            return
+
+        if not self.user_email:
+            print("❌ Email utente non configurata. Aggiungi USER_EMAIL al file .env")
+            return
+
+        recipient_email = parts[1].strip().lower()
+
+        # Validate email format
+        if "@" not in recipient_email:
+            print(f"❌ Email non valida: {recipient_email}")
+            return
+
+        success, message = self.sharing_auth.register_recipient(
+            sender_email=self.user_email,
+            recipient_email=recipient_email
+        )
+
+        if success:
+            print(f"\n✅ {message}")
+        else:
+            print(f"\n❌ {message}")
+        print()
+
+    def _handle_revoke_command(self, command: str):
+        """Handle /revoke command - revoke sharing authorization.
+
+        Usage:
+            /revoke <email>    - Revoke authorization from sender
+            /revoke --help     - Show help
+        """
+        parts = command.split()
+
+        if "--help" in command or len(parts) == 1:
+            print("\n🚫 /revoke Command Help")
+            print("=" * 60)
+            print("Revoke sharing authorization from a sender")
+            print()
+            print("Usage:")
+            print("  /revoke <email>    - Stop receiving shares from this user")
+            print()
+            print("Example:")
+            print("  /revoke mario@azienda.com")
+            print()
+            print("Note: Existing shared info remains visible, but no new")
+            print("      shares from this user will be accepted.")
+            print()
+            return
+
+        if not self.sharing_auth:
+            print("❌ Sistema di condivisione non inizializzato")
+            return
+
+        if not self.user_email:
+            print("❌ Email utente non configurata. Aggiungi USER_EMAIL al file .env")
+            return
+
+        sender_email = parts[1].strip().lower()
+
+        success, message = self.sharing_auth.revoke_authorization(
+            recipient_email=self.user_email,
+            sender_email=sender_email
+        )
+
+        if success:
+            print(f"\n✅ {message}")
+        else:
+            print(f"\n❌ {message}")
+        print()
+
+    def _handle_sharing_command(self, command: str):
+        """Handle /sharing command - show sharing status.
+
+        Usage:
+            /sharing           - Show all sharing status
+            /sharing --help    - Show help
+        """
+        if "--help" in command:
+            print("\n📊 /sharing Command Help")
+            print("=" * 60)
+            print("Show sharing status and pending requests")
+            print()
+            print("Usage:")
+            print("  /sharing           - Show all sharing info")
+            print()
+            print("Shows:")
+            print("  - Pending requests from others (to accept/reject)")
+            print("  - Users who can share with you (authorized)")
+            print("  - Users you've registered to share with")
+            print()
+            return
+
+        if not self.sharing_auth:
+            print("❌ Sistema di condivisione non inizializzato")
+            return
+
+        if not self.user_email:
+            print("❌ Email utente non configurata. Aggiungi USER_EMAIL al file .env")
+            return
+
+        print("\n📊 SHARING STATUS")
+        print("=" * 60)
+        print(f"Your email: {self.user_email}")
+        print()
+
+        # 1. Pending requests (from others wanting to share with me)
+        pending = self.sharing_auth.get_pending_requests(self.user_email)
+        if pending:
+            print("📬 RICHIESTE IN SOSPESO:")
+            for i, req in enumerate(pending, 1):
+                sender = req.get('sender_display_name') or req.get('sender_email')
+                print(f"\n{i}. Da {sender}:")
+                print(f"   📝 \"{req['intel_context']}\"")
+                print(f"   📅 {req['created_at']}")
+            print()
+            print("💡 Per accettare: rispondi 'Sì' o 'Accetta' quando richiesto")
+            print()
+        else:
+            print("📬 Nessuna richiesta in sospeso\n")
+
+        # 2. Authorized senders (who can share with me)
+        authorized = self.sharing_auth.list_authorized_senders(self.user_email)
+        if authorized:
+            print("✅ POSSONO CONDIVIDERE CON TE:")
+            for sender in authorized:
+                name = sender.get('display_name') or sender.get('sender_email')
+                print(f"   • {name} ({sender['sender_email']})")
+            print()
+        else:
+            print("✅ Nessuno autorizzato a condividere con te\n")
+
+        # 3. My registered recipients (who I've registered to share with)
+        my_recipients = self.sharing_auth.list_authorized_recipients(self.user_email)
+        pending_reg = self.sharing_auth.list_pending_registrations(self.user_email)
+
+        if my_recipients:
+            print("📤 PUOI CONDIVIDERE CON:")
+            for recipient in my_recipients:
+                name = recipient.get('display_name') or recipient.get('recipient_email')
+                print(f"   • {name} ({recipient['recipient_email']}) ✓")
+            print()
+
+        if pending_reg:
+            print("⏳ IN ATTESA DI ACCETTAZIONE:")
+            for recipient in pending_reg:
+                name = recipient.get('display_name') or recipient.get('recipient_email')
+                print(f"   • {name} ({recipient['recipient_email']})")
+            print()
+
+        if not my_recipients and not pending_reg:
+            print("📤 Non hai registrato nessun destinatario")
+            print("   Usa: /share <email> per registrarne uno\n")
+
+        print("=" * 60 + "\n")
+
+    async def _check_pending_shares(self):
+        """Check for and prompt about pending share requests at startup."""
+        if not self.sharing_auth or not self.user_email:
+            return
+
+        pending = self.sharing_auth.get_pending_requests(self.user_email)
+        if not pending:
+            return
+
+        print(f"\n📬 Hai {len(pending)} richiesta/e di condivisione in sospeso!")
+        for i, req in enumerate(pending, 1):
+            sender = req.get('sender_display_name') or req.get('sender_email')
+            print(f"\n{i}. {sender} vuole condividere:")
+            print(f"   \"{req['intel_context']}\"")
+
+        print("\n   Accetti? [sì/no/dopo]")
+
+        # Note: This is shown at startup, user can type response
+        # The actual acceptance is handled in handle_command or agent
+
     def _handle_model_command(self, command: str):
         """Handle /model command - change AI model at runtime.
 
@@ -1697,6 +1925,18 @@ class ZylchAICLI:
         elif cmd.startswith("/model"):
             # Model selection command
             self._handle_model_command(command)
+
+        elif cmd.startswith("/share"):
+            # Share command - register recipient for sharing
+            self._handle_share_command(command)
+
+        elif cmd.startswith("/revoke"):
+            # Revoke sharing authorization
+            self._handle_revoke_command(command)
+
+        elif cmd.startswith("/sharing"):
+            # Show sharing status
+            self._handle_sharing_command(command)
 
         elif cmd.startswith("/sync"):
             # Morning sync workflow

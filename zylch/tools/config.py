@@ -66,6 +66,10 @@ class ToolConfig:
     owner_id: str = "owner_default"
     zylch_assistant_id: str = "default_assistant"
 
+    # User Identity (for sharing feature)
+    user_email: str = ""
+    user_display_name: str = ""
+
     @classmethod
     def from_settings(cls) -> 'ToolConfig':
         """Create ToolConfig from global settings.
@@ -124,6 +128,10 @@ class ToolConfig:
             # Multi-tenant Configuration
             owner_id=settings.owner_id,
             zylch_assistant_id=settings.zylch_assistant_id,
+
+            # User Identity (for sharing)
+            user_email=settings.user_email,
+            user_display_name=settings.user_display_name,
         )
 
     def get_cache_path(self) -> Path:
