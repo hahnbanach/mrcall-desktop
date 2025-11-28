@@ -1,0 +1,26 @@
+[
+  {
+    "id": "cmd-memory-1763900402107",
+    "type": "memory",
+    "success": true,
+    "duration": 2.1672499999999957,
+    "timestamp": 1763900402110,
+    "metadata": {}
+  },
+  {
+    "id": "cmd-memory-1763900472887",
+    "type": "memory",
+    "success": true,
+    "duration": 287.924125,
+    "timestamp": 1763900473175,
+    "metadata": {}
+  },
+  {
+    "id": "cmd-memory-1763901470942",
+    "type": "memory",
+    "success": true,
+    "duration": 399.24050000000005,
+    "timestamp": 1763901471341,
+    "metadata": {}
+  }
+]

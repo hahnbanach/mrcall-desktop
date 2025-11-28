@@ -1,0 +1,252 @@
+"""Configuration management for Zylch AI."""
+
+import json
+from pathlib import Path
+from typing import List, Optional
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Zylch AI configuration loaded from .env file."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # Anthropic
+    anthropic_api_key: str = Field(default="", description="Anthropic API key")
+    default_model: str = Field(
+        default="claude-sonnet-4-20250514",
+        description="Default model for general tasks"
+    )
+    classification_model: str = Field(
+        default="claude-3-5-haiku-20241022",
+        description="Fast model for classification"
+    )
+    executive_model: str = Field(
+        default="claude-opus-4-20250514",
+        description="Premium model for executive communications"
+    )
+
+    # Google OAuth (shared by Gmail, Calendar, etc.)
+    google_credentials_path: str = Field(
+        default="credentials/google_oauth.json",
+        description="Path to Google OAuth credentials (used for Gmail, Calendar, etc.)"
+    )
+    google_token_path: str = Field(
+        default="credentials/google_tokens/",
+        description="Directory for Google OAuth tokens"
+    )
+
+    # Gmail
+    gmail_accounts: List[str] = Field(
+        default_factory=list,
+        description="List of authorized Gmail accounts"
+    )
+
+    # Google Calendar
+    calendar_id: str = Field(default="primary", description="Calendar ID to use")
+
+    # Firebase Authentication (for dashboard integration)
+    firebase_service_account_path: str = Field(
+        default="",
+        description="Path to Firebase service account JSON file"
+    )
+    firebase_project_id: str = Field(
+        default="",
+        description="Firebase project ID"
+    )
+
+    # CORS Configuration (for dashboard integration)
+    cors_allowed_origins: str = Field(
+        default="http://localhost:8080,http://localhost:3000",
+        description="Comma-separated list of allowed CORS origins"
+    )
+
+    # Email signature
+    made_by_zylch_email: str = Field(
+        default="Written with the help of Zylch AI",
+        description="Signature appended to all outgoing emails"
+    )
+
+    # SendGrid
+    sendgrid_api_key: str = Field(default="", description="SendGrid API key")
+    sendgrid_from_email: str = Field(
+        default="noreply@example.com",
+        description="Default sender email"
+    )
+    sendgrid_webhook_secret: str = Field(
+        default="",
+        description="Webhook signature verification secret"
+    )
+
+    # Vonage SMS
+    vonage_api_key: str = Field(default="", description="Vonage API key")
+    vonage_api_secret: str = Field(default="", description="Vonage API secret")
+    vonage_from_number: str = Field(
+        default="",
+        description="Vonage sender phone number"
+    )
+
+    # Webhook Server
+    webhook_host: str = Field(default="0.0.0.0", description="Webhook server host")
+    webhook_port: int = Field(default=8000, description="Webhook server port")
+    webhook_public_url: str = Field(
+        default="",
+        description="Public URL for webhooks"
+    )
+
+    # StarChat
+    starchat_api_url: str = Field(
+        default="https://mrcall-0.scw.hbsrv.net:443",
+        description="StarChat API base URL"
+    )
+    starchat_api_key: str = Field(default="", description="StarChat API key")
+    starchat_username: str = Field(default="admin", description="StarChat username")
+    starchat_password: str = Field(default="", description="StarChat password")
+    starchat_business_id: str = Field(default="", description="StarChat business ID")
+    starchat_auth_method: str = Field(
+        default="basic",
+        description="Auth method: basic or jwt"
+    )
+
+    # Multi-tenant Configuration
+    owner_id: str = Field(
+        default="owner_default",
+        description="Owner ID (Firebase UID or placeholder)"
+    )
+    zylch_assistant_id: str = Field(
+        default="default_assistant",
+        description="Zylch assistant ID"
+    )
+
+    # Cache
+    cache_dir: str = Field(default="cache/", description="Cache directory")
+    cache_ttl_days: int = Field(default=30, description="Cache TTL in days")
+
+    # Campaign Data
+    campaigns_file: str = Field(
+        default="data/campaigns.json",
+        description="Campaign configuration file"
+    )
+    templates_file: str = Field(
+        default="data/templates.json",
+        description="Email templates file"
+    )
+
+    # CRM (Optional)
+    pipedrive_api_token: str = Field(default="", description="Pipedrive API token")
+    pipedrive_enabled: bool = Field(default=False, description="Enable Pipedrive")
+
+    # Apollo (Future)
+    apollo_api_key: str = Field(default="", description="Apollo.io API key")
+    apollo_enabled: bool = Field(default=False, description="Enable Apollo.io")
+
+    # Email Style Preferences
+    email_style_prompt: str = Field(
+        default="",
+        description="Custom email writing style instructions"
+    )
+
+    # My Email Addresses (for contact identification)
+    my_emails: str = Field(
+        default="",
+        description="Comma-separated list of my email addresses (supports wildcards like *@domain.com)"
+    )
+
+    # Bot Email Patterns (to downgrade priority)
+    bot_emails: str = Field(
+        default="*@noreply.*,*@no-reply.*,noreply@*,no-reply@*,*@notifications.*,notifications@*,*@updates.*,updates@*,*@alerts.*,alerts@*,*@automated.*,automated@*",
+        description="Comma-separated list of bot email patterns (supports wildcards)"
+    )
+
+    # Skill System Configuration
+    skill_router_model: str = Field(
+        default="claude-3-5-haiku-20241022",
+        description="Model for intent classification (router)"
+    )
+    skill_execution_model: str = Field(
+        default="claude-sonnet-4-20250514",
+        description="Model for skill execution"
+    )
+    skill_pattern_model: str = Field(
+        default="claude-3-5-haiku-20241022",
+        description="Model for pattern matching"
+    )
+
+    # Performance Optimization
+    enable_prompt_caching: bool = Field(default=True, description="Enable prompt caching")
+    enable_batch_processing: bool = Field(default=False, description="Enable batch processing")
+    claude_queue_enabled: bool = Field(default=False, description="Enable API request queue")
+
+    # Pattern Learning System
+    pattern_store_enabled: bool = Field(default=True, description="Enable pattern store")
+    pattern_store_path: str = Field(default=".swarm/patterns.db", description="Pattern store path")
+    pattern_confidence_threshold: float = Field(default=0.5, description="Pattern confidence threshold")
+    pattern_max_results: int = Field(default=3, description="Max pattern results")
+
+    # Storage Backend
+    storage_backend: str = Field(default="json", description="Storage backend: json, sqlite, hybrid")
+    sqlite_db_path: str = Field(default=".swarm/threads.db", description="SQLite database path")
+
+    # Skill System Feature Flags
+    skill_mode_enabled: bool = Field(default=False, description="Enable skill-based interface")
+
+    # Email Archive Configuration
+    email_archive_backend: str = Field(
+        default="sqlite",
+        description="Email archive backend: sqlite or postgres"
+    )
+    email_archive_sqlite_path: str = Field(
+        default="cache/emails/archive.db",
+        description="SQLite database path for email archive"
+    )
+    email_archive_postgres_url: str = Field(
+        default="",
+        description="PostgreSQL connection URL for email archive"
+    )
+    email_archive_initial_months: int = Field(
+        default=1,
+        description="Months of email to fetch during initial sync"
+    )
+    email_archive_batch_size: int = Field(
+        default=500,
+        description="Messages per batch during archive sync"
+    )
+    email_archive_enable_fts: bool = Field(
+        default=True,
+        description="Enable full-text search in email archive"
+    )
+
+    def get_cache_path(self) -> Path:
+        """Get cache directory as Path object."""
+        path = Path(self.cache_dir)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def get_campaigns_path(self) -> Path:
+        """Get campaigns file path."""
+        path = Path(self.campaigns_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def get_templates_path(self) -> Path:
+        """Get templates file path."""
+        path = Path(self.templates_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def get_email_archive_path(self) -> Path:
+        """Get email archive database path (for SQLite)."""
+        path = Path(self.email_archive_sqlite_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+
+# Global settings instance
+settings = Settings()

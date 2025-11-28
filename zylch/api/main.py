@@ -1,0 +1,85 @@
+"""FastAPI main application - HTTP API for Zylch services."""
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import logging
+
+from zylch.api.routes import sync, gaps, skills, patterns, archive, chat, admin
+from zylch.api.firebase_auth import initialize_firebase
+from zylch.config import settings
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Create FastAPI app
+app = FastAPI(
+    title="Zylch AI API",
+    description="HTTP API for Zylch AI services - email intelligence, skills, and pattern learning",
+    version="1.0.0"
+)
+
+# CORS middleware - read allowed origins from settings
+allowed_origins = [
+    origin.strip()
+    for origin in settings.cors_allowed_origins.split(",")
+    if origin.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include routers
+app.include_router(sync.router, prefix="/api/sync", tags=["sync"])
+app.include_router(gaps.router, prefix="/api/gaps", tags=["gaps"])
+app.include_router(skills.router, prefix="/api/skills", tags=["skills"])
+app.include_router(patterns.router, prefix="/api/patterns", tags=["patterns"])
+app.include_router(archive.router, prefix="/api/archive", tags=["archive"])
+app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on application startup."""
+    logger.info("Starting Zylch API server...")
+
+    # Initialize Firebase Admin SDK for authentication
+    firebase_app = initialize_firebase()
+    if firebase_app:
+        logger.info("Firebase authentication enabled")
+    else:
+        logger.warning("Firebase not configured - chat authentication will fail")
+
+    logger.info("Zylch API server started successfully")
+
+
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    return {
+        "name": "Zylch AI API",
+        "version": "1.0.0",
+        "status": "running",
+        "docs": "/docs",
+        "skill_mode_enabled": settings.skill_mode_enabled
+    }
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint."""
+    return {
+        "status": "healthy",
+        "skill_mode": settings.skill_mode_enabled,
+        "pattern_store": settings.pattern_store_enabled
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
