@@ -125,6 +125,16 @@ class Settings(BaseSettings):
         description="Zylch assistant ID"
     )
 
+    # User Identity (for sharing feature)
+    user_email: str = Field(
+        default="",
+        description="Current user's email address (for sharing system)"
+    )
+    user_display_name: str = Field(
+        default="",
+        description="Current user's display name (for sharing system)"
+    )
+
     # Cache
     cache_dir: str = Field(default="cache/", description="Cache directory")
     cache_ttl_days: int = Field(default=30, description="Cache TTL in days")
