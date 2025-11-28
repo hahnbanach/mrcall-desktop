@@ -30,6 +30,10 @@ ENV/
 .venv.production
 .venv.test
 
+# Claude/Swarm data directories (may contain user data)
+.claude-flow/
+.swarm/
+
 # IDEs
 .vscode/
 .idea/
@@ -39,10 +43,29 @@ ENV/
 
 # Environment and credentials
 .env
+.env.*
+!.env.example
 credentials/
+**/credentials/
+*.pem
+*.key
+
+# Cache and data storage (may contain PII)
 cache/
+**/cache/
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
+*.sqlite3
+*.pickle
+*.pkl
+
+# Token files
+token.pickle
+token.json
+**/token.pickle
+**/token.json
 
 # Data files (may contain PII)
 data/*.json
@@ -50,7 +73,20 @@ data/*.json
 
 # Logs
 *.log
+logs/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Memory/index files
+*.hnsw
+indices/
