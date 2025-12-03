@@ -11,8 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy application code (explicit to avoid .dockerignore issues)
+COPY zylch/ ./zylch/
+COPY pyproject.toml .
 
 # Create non-root user for security
 RUN useradd -m -u 1000 zylch && \
