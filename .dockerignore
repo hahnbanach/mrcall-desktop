@@ -36,10 +36,11 @@ docs/
 .claude/
 
 # Cache and runtime data (use volumes instead)
-# Note: /cache/ is data, but zylch/cache/ is CODE - don't exclude it!
-/cache/
+# Note: zylch/cache/ is CODE - explicitly include it!
+cache/
+!zylch/cache/
+!zylch/cache/*
 .swarm/
-*.db
 
 # Credentials (mount as volume instead)
 credentials/
