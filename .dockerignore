@@ -36,7 +36,8 @@ docs/
 .claude/
 
 # Cache and runtime data (use volumes instead)
-cache/
+# Note: /cache/ is data, but zylch/cache/ is CODE - don't exclude it!
+/cache/
 .swarm/
 *.db
 
