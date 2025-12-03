@@ -51,8 +51,9 @@ credentials/
 *.key
 
 # Cache and data storage (may contain PII)
-cache/
-**/cache/
+# Note: zylch/cache/ is CODE (json_cache.py, identifier_map.py), not data!
+/cache/
+!zylch/cache/
 *.db
 *.db-shm
 *.db-wal
