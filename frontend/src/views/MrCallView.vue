@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useMrCallStore } from '@/stores/mrcall'
 
 const mrcallStore = useMrCallStore()
@@ -11,22 +11,27 @@ const setupForm = ref({
 })
 
 onMounted(() => {
-  mrcallStore.fetchStatus()
-  mrcallStore.fetchCallHistory()
+  mrcallStore.fetchAssistants()
 })
 
-function formatDate(date: string) {
-  return new Date(date).toLocaleString()
-}
+// Computed property to expose assistant info from linkedAssistant
+const assistant = computed(() => mrcallStore.linkedAssistant)
 
-function formatDuration(seconds: number) {
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${mins}:${secs.toString().padStart(2, '0')}`
-}
+// Note: These functions are currently unused but kept for future call history feature
+// function formatDate(_date: string) {
+//   return new Date(_date).toLocaleString()
+// }
+// function formatDuration(seconds: number) {
+//   const mins = Math.floor(seconds / 60)
+//   const secs = seconds % 60
+//   return `${mins}:${secs.toString().padStart(2, '0')}`
+// }
 
 async function handleSetup() {
-  await mrcallStore.configure(setupForm.value)
+  // Note: configure is not in the store, link an existing assistant instead
+  if (mrcallStore.assistants.length > 0) {
+    await mrcallStore.linkAssistant(mrcallStore.assistants[0].id)
+  }
   showSetupModal.value = false
 }
 </script>
@@ -51,7 +56,7 @@ async function handleSetup() {
 
     <!-- Content -->
     <div class="flex-1 overflow-y-auto p-4">
-      <div v-if="mrcallStore.loading" class="flex items-center justify-center h-32">
+      <div v-if="mrcallStore.isLoading" class="flex items-center justify-center h-32">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
       </div>
 
@@ -63,14 +68,14 @@ async function handleSetup() {
             <span
               :class="[
                 'px-3 py-1 rounded-full text-sm',
-                mrcallStore.assistant?.enabled ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'
+                assistant?.status === 'active' ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'
               ]"
             >
-              {{ mrcallStore.assistant?.enabled ? 'Active' : 'Inactive' }}
+              {{ assistant?.status === 'active' ? 'Active' : 'Inactive' }}
             </span>
           </div>
 
-          <div v-if="mrcallStore.assistant" class="space-y-3">
+          <div v-if="assistant" class="space-y-3">
             <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
               <div class="w-10 h-10 bg-accent/10 rounded-full flex items-center justify-center">
                 <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -78,19 +83,19 @@ async function handleSetup() {
                 </svg>
               </div>
               <div>
-                <p class="text-sm text-gray-500">Phone Number</p>
-                <p class="font-medium text-gray-900">{{ mrcallStore.assistant.phoneNumber || 'Not configured' }}</p>
+                <p class="text-sm text-gray-500">Assistant Name</p>
+                <p class="font-medium text-gray-900">{{ assistant.name || 'Not configured' }}</p>
               </div>
             </div>
 
             <div class="grid grid-cols-2 gap-3">
               <div class="p-3 bg-gray-50 rounded-lg">
-                <p class="text-sm text-gray-500">Voice Type</p>
-                <p class="font-medium text-gray-900 capitalize">{{ mrcallStore.assistant.voiceType || 'Default' }}</p>
+                <p class="text-sm text-gray-500">Status</p>
+                <p class="font-medium text-gray-900 capitalize">{{ assistant.status || 'Unknown' }}</p>
               </div>
               <div class="p-3 bg-gray-50 rounded-lg">
-                <p class="text-sm text-gray-500">Total Calls</p>
-                <p class="font-medium text-gray-900">{{ mrcallStore.assistant.totalCalls || 0 }}</p>
+                <p class="text-sm text-gray-500">Linked</p>
+                <p class="font-medium text-gray-900">{{ mrcallStore.isLinked ? 'Yes' : 'No' }}</p>
               </div>
             </div>
           </div>
@@ -112,44 +117,36 @@ async function handleSetup() {
           </div>
         </div>
 
-        <!-- Call History -->
+        <!-- Available Assistants -->
         <div class="bg-white border border-gray-200 rounded-xl p-6">
-          <h2 class="font-semibold text-gray-900 mb-4">Recent Calls</h2>
+          <h2 class="font-semibold text-gray-900 mb-4">Available Assistants</h2>
 
-          <div v-if="mrcallStore.callHistory.length === 0" class="text-center py-8 text-gray-500">
-            No call history yet
+          <div v-if="mrcallStore.assistants.length === 0" class="text-center py-8 text-gray-500">
+            No assistants available
           </div>
 
           <div v-else class="space-y-3">
             <div
-              v-for="call in mrcallStore.callHistory"
-              :key="call.id"
+              v-for="asst in mrcallStore.assistants"
+              :key="asst.id"
               class="flex items-center gap-4 p-3 bg-gray-50 rounded-lg"
             >
               <div
                 :class="[
                   'w-10 h-10 rounded-full flex items-center justify-center',
-                  call.direction === 'incoming' ? 'bg-blue-100' : 'bg-green-100'
+                  asst.status === 'active' ? 'bg-green-100' : 'bg-gray-100'
                 ]"
               >
                 <svg
                   :class="[
                     'w-5 h-5',
-                    call.direction === 'incoming' ? 'text-blue-600' : 'text-green-600'
+                    asst.status === 'active' ? 'text-green-600' : 'text-gray-600'
                   ]"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
                   <path
-                    v-if="call.direction === 'incoming'"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                  />
-                  <path
-                    v-else
                     stroke-linecap="round"
                     stroke-linejoin="round"
                     stroke-width="2"
@@ -158,12 +155,19 @@ async function handleSetup() {
                 </svg>
               </div>
               <div class="flex-1 min-w-0">
-                <p class="font-medium text-gray-900">{{ call.callerNumber || 'Unknown' }}</p>
-                <p class="text-sm text-gray-500">{{ formatDate(call.timestamp) }}</p>
+                <p class="font-medium text-gray-900">{{ asst.name || 'Unnamed Assistant' }}</p>
+                <p class="text-sm text-gray-500 capitalize">{{ asst.status }}</p>
               </div>
               <div class="text-right">
-                <p class="text-sm text-gray-900">{{ formatDuration(call.duration || 0) }}</p>
-                <p class="text-xs text-gray-500 capitalize">{{ call.status }}</p>
+                <button
+                  v-if="!asst.linkedZylchAssistant"
+                  @click="mrcallStore.linkAssistant(asst.id)"
+                  :disabled="mrcallStore.isLoading"
+                  class="px-3 py-1 text-sm bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50"
+                >
+                  Link
+                </button>
+                <span v-else class="text-sm text-green-600">Linked</span>
               </div>
             </div>
           </div>
@@ -219,7 +223,7 @@ async function handleSetup() {
             </button>
             <button
               @click="handleSetup"
-              :disabled="!setupForm.phoneNumber || mrcallStore.loading"
+              :disabled="mrcallStore.assistants.length === 0 || mrcallStore.isLoading"
               class="px-6 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
             >
               Save

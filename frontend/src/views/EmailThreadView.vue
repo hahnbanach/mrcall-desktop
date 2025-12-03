@@ -30,7 +30,10 @@ function formatDate(date: string) {
 async function handleReply() {
   if (!replyBody.value.trim() || !emailStore.currentThread) return
 
-  const lastMessage = emailStore.currentThread.messages[emailStore.currentThread.messages.length - 1]
+  const messages = emailStore.currentThread?.messages || []
+  if (!messages.length) return
+
+  const lastMessage = messages[messages.length - 1]
   const success = await emailStore.sendEmail(
     lastMessage.from,
     `Re: ${emailStore.currentThread.subject}`,
@@ -72,7 +75,7 @@ function goBack() {
             {{ emailStore.currentThread?.subject || 'Loading...' }}
           </h1>
           <p class="text-sm text-gray-500">
-            {{ emailStore.currentThread?.messages?.length || 0 }} messages
+            {{ emailStore.currentThread?.messageCount || 0 }} messages
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -107,7 +110,7 @@ function goBack() {
 
       <div v-else class="max-w-3xl mx-auto space-y-4">
         <div
-          v-for="message in emailStore.currentThread.messages"
+          v-for="message in emailStore.currentThread?.messages || []"
           :key="message.id"
           class="bg-white border border-gray-200 rounded-xl overflow-hidden"
         >

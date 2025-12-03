@@ -1,9 +1,28 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 
 const settingsStore = useSettingsStore()
 const clearing = ref(false)
+
+// Computed properties for aggregated stats
+const totalSize = computed(() => {
+  const stats = settingsStore.cacheStats
+  if (!stats) return 0
+  return (stats.emails?.sizeBytes || 0) +
+         (stats.calendar?.sizeBytes || 0) +
+         (stats.gaps?.sizeBytes || 0) +
+         (stats.tasks?.sizeBytes || 0)
+})
+
+const totalCount = computed(() => {
+  const stats = settingsStore.cacheStats
+  if (!stats) return 0
+  return (stats.emails?.count || 0) +
+         (stats.calendar?.count || 0) +
+         (stats.gaps?.count || 0) +
+         (stats.tasks?.count || 0)
+})
 
 onMounted(() => {
   settingsStore.fetchCacheStats()
@@ -17,10 +36,10 @@ function formatBytes(bytes: number) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-async function clearCache(type?: string) {
+async function clearCache(type?: 'emails' | 'calendar' | 'gaps' | 'tasks' | 'all') {
   if (!confirm(`Are you sure you want to clear ${type || 'all'} cache?`)) return
   clearing.value = true
-  await settingsStore.clearCache(type)
+  await settingsStore.clearCache(type || 'all')
   await settingsStore.fetchCacheStats()
   clearing.value = false
 }
@@ -47,7 +66,7 @@ async function clearCache(type?: string) {
 
     <!-- Cache Stats -->
     <div class="flex-1 overflow-y-auto p-4">
-      <div v-if="settingsStore.loading" class="flex items-center justify-center h-32">
+      <div v-if="settingsStore.isLoading" class="flex items-center justify-center h-32">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
       </div>
 
@@ -58,19 +77,19 @@ async function clearCache(type?: string) {
           <div class="grid grid-cols-3 gap-4">
             <div class="text-center p-4 bg-gray-50 rounded-lg">
               <p class="text-2xl font-bold text-gray-900">
-                {{ formatBytes(settingsStore.cacheStats.totalSize || 0) }}
+                {{ formatBytes(totalSize) }}
               </p>
               <p class="text-sm text-gray-500">Total Size</p>
             </div>
             <div class="text-center p-4 bg-gray-50 rounded-lg">
               <p class="text-2xl font-bold text-gray-900">
-                {{ settingsStore.cacheStats.itemCount || 0 }}
+                {{ totalCount }}
               </p>
               <p class="text-sm text-gray-500">Items Cached</p>
             </div>
             <div class="text-center p-4 bg-gray-50 rounded-lg">
               <p class="text-2xl font-bold text-gray-900">
-                {{ settingsStore.cacheStats.hitRate ? Math.round(settingsStore.cacheStats.hitRate * 100) : 0 }}%
+                N/A
               </p>
               <p class="text-sm text-gray-500">Hit Rate</p>
             </div>
@@ -92,13 +111,13 @@ async function clearCache(type?: string) {
                 <div>
                   <h3 class="font-medium text-gray-900">Email Cache</h3>
                   <p class="text-sm text-gray-500">
-                    {{ settingsStore.cacheStats.emailCount || 0 }} threads •
-                    {{ formatBytes(settingsStore.cacheStats.emailSize || 0) }}
+                    {{ settingsStore.cacheStats?.emails?.count || 0 }} threads •
+                    {{ formatBytes(settingsStore.cacheStats?.emails?.sizeBytes || 0) }}
                   </p>
                 </div>
               </div>
               <button
-                @click="clearCache('email')"
+                @click="clearCache('emails')"
                 :disabled="clearing"
                 class="text-sm text-red-600 hover:text-red-700 transition-colors disabled:opacity-50"
               >
@@ -116,8 +135,8 @@ async function clearCache(type?: string) {
                 <div>
                   <h3 class="font-medium text-gray-900">Calendar Cache</h3>
                   <p class="text-sm text-gray-500">
-                    {{ settingsStore.cacheStats.calendarCount || 0 }} events •
-                    {{ formatBytes(settingsStore.cacheStats.calendarSize || 0) }}
+                    {{ settingsStore.cacheStats?.calendar?.count || 0 }} events •
+                    {{ formatBytes(settingsStore.cacheStats?.calendar?.sizeBytes || 0) }}
                   </p>
                 </div>
               </div>
@@ -138,15 +157,15 @@ async function clearCache(type?: string) {
                   </svg>
                 </div>
                 <div>
-                  <h3 class="font-medium text-gray-900">Chat History</h3>
+                  <h3 class="font-medium text-gray-900">Gap Analysis</h3>
                   <p class="text-sm text-gray-500">
-                    {{ settingsStore.cacheStats.chatCount || 0 }} messages •
-                    {{ formatBytes(settingsStore.cacheStats.chatSize || 0) }}
+                    {{ settingsStore.cacheStats?.gaps?.count || 0 }} entries •
+                    {{ formatBytes(settingsStore.cacheStats?.gaps?.sizeBytes || 0) }}
                   </p>
                 </div>
               </div>
               <button
-                @click="clearCache('chat')"
+                @click="clearCache('gaps')"
                 :disabled="clearing"
                 class="text-sm text-red-600 hover:text-red-700 transition-colors disabled:opacity-50"
               >
@@ -158,19 +177,19 @@ async function clearCache(type?: string) {
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
                   <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
                   </svg>
                 </div>
                 <div>
-                  <h3 class="font-medium text-gray-900">Memory Data</h3>
+                  <h3 class="font-medium text-gray-900">Tasks Cache</h3>
                   <p class="text-sm text-gray-500">
-                    {{ settingsStore.cacheStats.memoryCount || 0 }} entries •
-                    {{ formatBytes(settingsStore.cacheStats.memorySize || 0) }}
+                    {{ settingsStore.cacheStats?.tasks?.count || 0 }} entries •
+                    {{ formatBytes(settingsStore.cacheStats?.tasks?.sizeBytes || 0) }}
                   </p>
                 </div>
               </div>
               <button
-                @click="clearCache('memory')"
+                @click="clearCache('tasks')"
                 :disabled="clearing"
                 class="text-sm text-red-600 hover:text-red-700 transition-colors disabled:opacity-50"
               >
@@ -180,49 +199,12 @@ async function clearCache(type?: string) {
           </div>
         </div>
 
-        <!-- Cache Settings -->
+        <!-- Cache Info -->
         <div class="bg-white border border-gray-200 rounded-xl p-6">
-          <h2 class="font-semibold text-gray-900 mb-4">Cache Settings</h2>
-
-          <div class="space-y-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="font-medium text-gray-900">Auto-clear on logout</h3>
-                <p class="text-sm text-gray-500">Clear cache when signing out</p>
-              </div>
-              <button
-                @click="settingsStore.updateSettings({ autoClearCache: !settingsStore.settings.autoClearCache })"
-                :class="[
-                  'relative w-12 h-6 rounded-full transition-colors',
-                  settingsStore.settings.autoClearCache ? 'bg-accent' : 'bg-gray-300'
-                ]"
-              >
-                <span
-                  :class="[
-                    'absolute top-1 w-4 h-4 bg-white rounded-full transition-transform',
-                    settingsStore.settings.autoClearCache ? 'left-7' : 'left-1'
-                  ]"
-                />
-              </button>
-            </div>
-
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="font-medium text-gray-900">Cache Retention</h3>
-                <p class="text-sm text-gray-500">How long to keep cached data</p>
-              </div>
-              <select
-                :value="settingsStore.settings.cacheRetention || '7d'"
-                @change="settingsStore.updateSettings({ cacheRetention: ($event.target as HTMLSelectElement).value })"
-                class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50"
-              >
-                <option value="1d">1 Day</option>
-                <option value="7d">7 Days</option>
-                <option value="30d">30 Days</option>
-                <option value="forever">Forever</option>
-              </select>
-            </div>
-          </div>
+          <h2 class="font-semibold text-gray-900 mb-4">Cache Information</h2>
+          <p class="text-sm text-gray-500">
+            Cache data is stored locally to improve performance. Clear individual categories or all cache data using the buttons above.
+          </p>
         </div>
       </div>
     </div>

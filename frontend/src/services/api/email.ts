@@ -1,11 +1,5 @@
 import api from './index'
-import type { EmailThread, EmailMessage, Draft, PaginatedResponse } from '@/types'
-
-interface GetThreadsParams {
-  page?: number
-  pageSize?: number
-  query?: string
-}
+import type { EmailThread, EmailMessage, Draft } from '@/types'
 
 export const emailService = {
   async getThreads(maxResults = 50): Promise<EmailThread[]> {

@@ -7,7 +7,7 @@ const inputMessage = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 
 onMounted(() => {
-  chatStore.fetchHistory()
+  // Chat history loads from the store's messages
 })
 
 watch(() => chatStore.messages.length, () => {
@@ -20,7 +20,7 @@ watch(() => chatStore.messages.length, () => {
 
 async function handleSubmit() {
   const message = inputMessage.value.trim()
-  if (!message || chatStore.loading) return
+  if (!message || chatStore.isLoading) return
 
   inputMessage.value = ''
   await chatStore.sendMessage(message)
@@ -94,7 +94,7 @@ function formatTime(timestamp: string) {
       </div>
 
       <!-- Streaming indicator -->
-      <div v-if="chatStore.streaming" class="flex justify-start">
+      <div v-if="chatStore.isStreaming" class="flex justify-start">
         <div class="bg-gray-100 rounded-2xl px-4 py-3">
           <div class="flex space-x-2">
             <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
@@ -115,12 +115,12 @@ function formatTime(timestamp: string) {
             rows="1"
             class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent resize-none"
             placeholder="Type your message..."
-            :disabled="chatStore.loading"
+            :disabled="chatStore.isLoading"
           />
         </div>
         <button
           type="submit"
-          :disabled="!inputMessage.trim() || chatStore.loading"
+          :disabled="!inputMessage.trim() || chatStore.isLoading"
           class="px-6 py-3 bg-accent text-white rounded-xl hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

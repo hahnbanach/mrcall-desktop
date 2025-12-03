@@ -63,64 +63,58 @@ const serviceIcons: Record<string, string> = {
             <span
               :class="[
                 'px-3 py-1 rounded-full text-sm',
-                syncStore.status.status === 'synced' ? 'bg-green-50 text-green-600' :
-                syncStore.status.status === 'syncing' ? 'bg-blue-50 text-blue-600' :
-                syncStore.status.status === 'error' ? 'bg-red-50 text-red-600' :
+                syncStore.isRunning ? 'bg-blue-50 text-blue-600' :
+                syncStore.error ? 'bg-red-50 text-red-600' :
+                syncStore.lastSync ? 'bg-green-50 text-green-600' :
                 'bg-gray-50 text-gray-600'
               ]"
             >
-              {{ syncStore.status.status || 'Unknown' }}
+              {{ syncStore.isRunning ? 'Syncing' : syncStore.error ? 'Error' : syncStore.lastSync ? 'Synced' : 'Ready' }}
             </span>
           </div>
 
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
               <p class="text-gray-500">Last Full Sync</p>
-              <p class="font-medium text-gray-900">{{ formatDate(syncStore.status.lastSync) }}</p>
+              <p class="font-medium text-gray-900">{{ formatDate(syncStore.lastSync) }}</p>
             </div>
             <div>
-              <p class="text-gray-500">Next Scheduled Sync</p>
-              <p class="font-medium text-gray-900">{{ formatDate(syncStore.status.nextSync) }}</p>
+              <p class="text-gray-500">Status</p>
+              <p class="font-medium text-gray-900">{{ syncStore.isRunning ? 'In Progress' : 'Idle' }}</p>
             </div>
           </div>
 
           <!-- Progress Bar -->
-          <div v-if="syncStore.isRunning && syncStore.progress?.percent" class="mt-4">
+          <div v-if="syncStore.isRunning && syncStore.progress" class="mt-4">
             <div class="flex items-center justify-between text-sm mb-1">
-              <span class="text-gray-500">Progress</span>
-              <span class="text-gray-900">{{ Math.round(syncStore.progress.percent) }}%</span>
+              <span class="text-gray-500">{{ syncStore.progress.message }}</span>
+              <span class="text-gray-900">{{ syncStore.progress.current }}/{{ syncStore.progress.total }}</span>
             </div>
             <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
                 class="h-full bg-accent transition-all duration-300"
-                :style="{ width: `${syncStore.progress.percent}%` }"
+                :style="{ width: `${syncStore.progress.total > 0 ? (syncStore.progress.current / syncStore.progress.total) * 100 : 0}%` }"
               />
             </div>
           </div>
         </div>
 
-        <!-- Service Status -->
+        <!-- Sync Phases -->
         <div class="bg-white border border-gray-200 rounded-xl p-6">
-          <h2 class="font-semibold text-gray-900 mb-4">Service Status</h2>
+          <h2 class="font-semibold text-gray-900 mb-4">Sync Phases</h2>
 
-          <div v-if="!syncStore.status.services?.length" class="text-center py-8 text-gray-500">
-            No services connected
-          </div>
-
-          <div v-else class="space-y-4">
+          <div class="space-y-4">
             <div
-              v-for="service in syncStore.status.services"
-              :key="service.name"
+              v-for="phase in ['emails', 'calendar', 'gaps', 'tasks']"
+              :key="phase"
               class="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
             >
               <div class="flex items-center gap-3">
-                <span class="text-xl">{{ serviceIcons[service.name] || '🔗' }}</span>
+                <span class="text-xl">{{ serviceIcons[phase === 'emails' ? 'gmail' : phase === 'calendar' ? 'google_calendar' : phase === 'tasks' ? 'google_tasks' : '🔗'] || '🔗' }}</span>
                 <div>
-                  <h3 class="font-medium text-gray-900 capitalize">
-                    {{ service.name.replace('_', ' ') }}
-                  </h3>
+                  <h3 class="font-medium text-gray-900 capitalize">{{ phase }}</h3>
                   <p class="text-sm text-gray-500">
-                    Last sync: {{ formatDate(service.lastSync) }}
+                    {{ syncStore.progress?.phase === phase ? syncStore.progress.message : 'Ready' }}
                   </p>
                 </div>
               </div>
@@ -128,13 +122,12 @@ const serviceIcons: Record<string, string> = {
                 <span
                   :class="[
                     'w-2 h-2 rounded-full',
-                    service.status === 'connected' ? 'bg-green-500' :
-                    service.status === 'syncing' ? 'bg-blue-500 animate-pulse' :
-                    service.status === 'error' ? 'bg-red-500' :
-                    'bg-gray-400'
+                    syncStore.progress?.phase === phase ? 'bg-blue-500 animate-pulse' : 'bg-gray-400'
                   ]"
                 />
-                <span class="text-sm text-gray-600 capitalize">{{ service.status }}</span>
+                <span class="text-sm text-gray-600 capitalize">
+                  {{ syncStore.progress?.phase === phase ? 'Syncing' : 'Idle' }}
+                </span>
               </div>
             </div>
           </div>

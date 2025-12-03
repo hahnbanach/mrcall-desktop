@@ -10,7 +10,7 @@ onMounted(() => {
   contactsStore.fetchContacts()
 })
 
-function formatDate(date: string | undefined) {
+function formatDate(date: string | null | undefined) {
   if (!date) return 'Never'
   return new Date(date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
 }

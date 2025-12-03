@@ -113,7 +113,7 @@ async function handleSendEmail() {
                   {{ thread.participants.join(', ') }}
                 </p>
                 <span class="text-xs text-gray-500 flex-shrink-0 ml-2">
-                  {{ formatDate(thread.lastMessageAt) }}
+                  {{ formatDate(thread.lastMessageDate) }}
                 </span>
               </div>
               <p
