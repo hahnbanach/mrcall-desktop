@@ -1,0 +1,29 @@
+# Auto-generated from pyproject.toml
+# Python dependencies for Zylch project
+
+# Core AI & API
+anthropic>=0.39.0
+httpx>=0.25.0
+pydantic>=2.5.0
+pydantic-settings>=2.0.0
+prompt-toolkit>=3.0.50
+python-dotenv>=1.0.0
+
+# Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Google APIs
+google-auth-oauthlib>=1.2.0
+google-api-python-client>=2.108.0
+
+# Communications
+vonage>=3.0.0
+sendgrid>=6.11.0
+
+# Firebase & Database
+firebase-admin>=6.0.0
+sqlalchemy>=2.0.0
+
+# Scheduling
+apscheduler>=3.10.0
