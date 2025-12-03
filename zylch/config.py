@@ -39,8 +39,8 @@ class Settings(BaseSettings):
         description="Path to Google OAuth credentials (used for Gmail, Calendar, etc.)"
     )
     google_token_path: str = Field(
-        default="credentials/google_tokens/",
-        description="Directory for Google OAuth tokens"
+        default=str(Path.home() / ".zylch" / "credentials" / "google"),
+        description="Directory for Google OAuth tokens (isolated per-user)"
     )
 
     # Gmail
@@ -60,6 +60,30 @@ class Settings(BaseSettings):
     firebase_project_id: str = Field(
         default="",
         description="Firebase project ID"
+    )
+
+    # Firebase Client SDK (for CLI browser-based login)
+    firebase_api_key: str = Field(
+        default="",
+        description="Firebase API key for client SDK"
+    )
+    firebase_auth_domain: str = Field(
+        default="",
+        description="Firebase auth domain (e.g., project-id.firebaseapp.com)"
+    )
+
+    # Microsoft Graph API (for Outlook email)
+    graph_token: str = Field(
+        default="",
+        description="Microsoft Graph API access token (from login)"
+    )
+    graph_refresh_token: str = Field(
+        default="",
+        description="Microsoft Graph API refresh token"
+    )
+    auth_provider: str = Field(
+        default="google.com",
+        description="Authentication provider (google.com or microsoft.com)"
     )
 
     # CORS Configuration (for dashboard integration)
@@ -93,6 +117,12 @@ class Settings(BaseSettings):
         description="Vonage sender phone number"
     )
 
+    # API Server (for thin client)
+    api_server_url: str = Field(
+        default="http://localhost:9000",
+        description="Zylch API server URL for CLI thin client"
+    )
+
     # Webhook Server
     webhook_host: str = Field(default="0.0.0.0", description="Webhook server host")
     webhook_port: int = Field(default=8000, description="Webhook server port")
@@ -113,6 +143,10 @@ class Settings(BaseSettings):
     starchat_auth_method: str = Field(
         default="basic",
         description="Auth method: basic or jwt"
+    )
+    starchat_webhook_secret: str = Field(
+        default="",
+        description="Secret for validating StarChat webhook signatures"
     )
 
     # Multi-tenant Configuration

@@ -2,11 +2,11 @@
 """Zylch AI CLI launcher script.
 
 Usage:
-    ./zylch-cli                    # Default (quiet mode, only errors shown)
-    ./zylch-cli --log-level 0      # Same as default (quiet)
-    ./zylch-cli --log-level info   # Show INFO and above
-    ./zylch-cli --log-level warning # Show WARNING and above
-    ./zylch-cli --log-level error  # Show only ERROR
+    ./zylch-cli                    # Start CLI (requires login)
+    ./zylch-cli --login            # Login via browser
+    ./zylch-cli --logout           # Logout and clear credentials
+    ./zylch-cli --status           # Check login status
+    ./zylch-cli --log-level info   # Start with INFO logging
     ./zylch-cli -l info            # Short form
 """
 
@@ -54,11 +54,51 @@ def setup_logging(log_level: str) -> None:
         logging.getLogger(lib_name).setLevel(max(level, logging.WARNING))
 
 
+def handle_auth_command(command: str) -> int:
+    """Handle authentication commands.
+
+    Args:
+        command: One of 'login', 'logout', 'status'
+
+    Returns:
+        Exit code (0 = success)
+    """
+    from zylch.cli.auth import CLIAuthManager
+
+    auth = CLIAuthManager()
+
+    if command == 'login':
+        success = auth.login()
+        return 0 if success else 1
+
+    elif command == 'logout':
+        success = auth.logout()
+        return 0 if success else 1
+
+    elif command == 'status':
+        if auth.is_authenticated():
+            info = auth.get_user_info()
+            print(f"Logged in as {info.get('display_name', 'User')} ({info.get('email', 'unknown')})")
+            print(f"   Owner ID: {info.get('owner_id', 'unknown')}")
+            return 0
+        else:
+            print("Not logged in")
+            print("   Run: zylch-cli --login")
+            return 1
+
+    return 1
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Zylch AI - Email Intelligence Assistant',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
+Authentication:
+  --login    Login via browser (Firebase)
+  --logout   Logout and clear stored credentials
+  --status   Check current login status
+
 Log levels:
   0, quiet   Only show errors (default)
   info       Show INFO messages and above
@@ -66,10 +106,28 @@ Log levels:
   error      Show only ERROR messages
 
 Examples:
-  ./zylch-cli                    Start in quiet mode
-  ./zylch-cli -l info            Start with INFO logging
-  ./zylch-cli --log-level warning  Start with WARNING logging
+  ./zylch-cli --login              Login via browser
+  ./zylch-cli                      Start CLI (requires login)
+  ./zylch-cli -l info              Start with INFO logging
 """
+    )
+
+    # Auth commands (mutually exclusive)
+    auth_group = parser.add_mutually_exclusive_group()
+    auth_group.add_argument(
+        '--login',
+        action='store_true',
+        help='Login via browser (Firebase)'
+    )
+    auth_group.add_argument(
+        '--logout',
+        action='store_true',
+        help='Logout and clear credentials'
+    )
+    auth_group.add_argument(
+        '--status',
+        action='store_true',
+        help='Check login status'
     )
 
     parser.add_argument(
@@ -85,7 +143,20 @@ Examples:
     # Setup logging before importing zylch modules
     setup_logging(args.log_level)
 
-    # Now import and run
+    # Handle auth commands first
+    if args.login:
+        result = handle_auth_command('login')
+        if result != 0:
+            sys.exit(result)  # Exit only on failure
+        # On success, continue to start CLI
+        print()  # Blank line before CLI startup
+
+    elif args.logout:
+        sys.exit(handle_auth_command('logout'))
+    elif args.status:
+        sys.exit(handle_auth_command('status'))
+
+    # Normal CLI startup - import and run
     from zylch.cli.main import main as cli_main
     cli_main()
 

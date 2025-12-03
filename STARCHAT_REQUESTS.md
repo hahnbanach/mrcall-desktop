@@ -315,5 +315,360 @@ Grazie! 🙏
 
 ---
 
-## Request 5: (Future requests go here)
+## Request 5: Multi-Tenant Infrastructure - Owner Isolation e OAuth Token Storage
+
+**Date:** 2025-11-30
+**Priority:** CRITICA (Security)
+**Requested by:** Zylch AI integration team
+**Status:** RICHIESTO
+
+### Contesto
+
+Zylch AI supporta autenticazione Firebase (Google e Microsoft). Ogni utente Firebase ha:
+- **owner_id** (Firebase UID)
+- **zylch_assistant_id** (ID univoco dell'assistant)
+- **provider** (google.com o microsoft.com)
+- **OAuth tokens** (per accesso email)
+
+**Attualmente:** Zylch CLI salva tutto in filesystem locale (~/.zylch/).
+
+**Futuro:** Zylch API multi-tenant avrà bisogno di StarChat per storage centralizzato e sicuro.
+
+### Architettura Richiesta
+
+```
+Firebase UID (owner_id)
+    ↓
+Zylch Assistant (zylch_assistant_id) - 1:1 mapping
+    ↓
+Email Channels (Google/Microsoft)
+```
+
+**Vincoli di Sicurezza:**
+- 1 owner_id → 1 zylch_assistant (relazione 1:1 strict)
+- zylch_assistant NON PUÒ essere condiviso tra owner_id diversi
+- Token OAuth DEVONO essere isolati per owner_id
+- Dati DEVONO essere filtrati per firebase_uid in TUTTE le query
+
+---
+
+### 5.1 Tabella: zylch_assistants
+
+Mappatura tra Firebase UID e Zylch Assistant ID.
+
+```sql
+CREATE TABLE zylch_assistants (
+    firebase_uid VARCHAR(255) PRIMARY KEY,
+    zylch_assistant_id VARCHAR(255) NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_assistant (zylch_assistant_id),
+    INDEX idx_assistant (zylch_assistant_id)
+);
+```
+
+**Vincoli:**
+- firebase_uid è PRIMARY KEY (un owner = un assistant)
+- zylch_assistant_id è UNIQUE (un assistant non può essere condiviso)
+- Se owner tenta di creare secondo assistant → ERROR
+
+**API Endpoint richiesto:**
+
+```
+POST /api/zylch/assistants/register
+Authorization: Bearer {firebase_jwt}
+
+Request:
+{
+  "firebase_uid": "abc123xyz",
+  "zylch_assistant_id": "assistant_789"
+}
+
+Response (success):
+{
+  "success": true,
+  "zylch_assistant_id": "assistant_789"
+}
+
+Response (error - già esiste):
+{
+  "success": false,
+  "error": "ASSISTANT_ALREADY_EXISTS",
+  "existing_assistant_id": "assistant_456"
+}
+```
+
+```
+GET /api/zylch/assistants/:firebase_uid
+Authorization: Bearer {firebase_jwt}
+
+Response (se esiste):
+{
+  "firebase_uid": "abc123xyz",
+  "zylch_assistant_id": "assistant_789",
+  "created_at": "2025-11-30T10:00:00Z"
+}
+
+Response (se non esiste):
+{
+  "error": "ASSISTANT_NOT_FOUND"
+}
+```
+
+---
+
+### 5.2 Tabella: zylch_oauth_tokens
+
+Storage sicuro dei token OAuth (Google e Microsoft).
+
+```sql
+CREATE TABLE zylch_oauth_tokens (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    firebase_uid VARCHAR(255) NOT NULL,
+    provider VARCHAR(50) NOT NULL,  -- 'google' or 'microsoft'
+    token_type VARCHAR(50) NOT NULL,  -- 'access' or 'refresh'
+    token_value TEXT NOT NULL,  -- ENCRYPTED
+    expires_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_token (firebase_uid, provider, token_type),
+    INDEX idx_owner_provider (firebase_uid, provider)
+);
+```
+
+**Vincoli:**
+- Token DEVONO essere isolati per firebase_uid
+- token_value DEVE essere encrypted at rest (AES-256 o equivalente)
+- Ogni owner può avere token sia Google che Microsoft
+- expires_at può essere NULL per refresh token (lifetime lungo)
+
+**API Endpoint richiesto:**
+
+```
+POST /api/zylch/tokens/save
+Authorization: Bearer {firebase_jwt}
+
+Request:
+{
+  "firebase_uid": "abc123xyz",
+  "provider": "google",  // or "microsoft"
+  "access_token": "ya29.a0AfH6...",
+  "refresh_token": "1//0gJx...",
+  "expires_at": "2025-11-30T11:00:00Z"
+}
+
+Response:
+{
+  "success": true
+}
+```
+
+```
+GET /api/zylch/tokens/:firebase_uid/:provider
+Authorization: Bearer {firebase_jwt}
+
+Response:
+{
+  "access_token": "ya29.a0AfH6...",
+  "refresh_token": "1//0gJx...",
+  "expires_at": "2025-11-30T11:00:00Z"
+}
+
+Response (se scaduto):
+{
+  "error": "TOKEN_EXPIRED",
+  "refresh_token": "1//0gJx..."  // Può essere usato per refresh
+}
+```
+
+```
+DELETE /api/zylch/tokens/:firebase_uid/:provider
+Authorization: Bearer {firebase_jwt}
+
+Response:
+{
+  "success": true
+}
+```
+
+---
+
+### 5.3 Isolamento Dati StarChat
+
+**CRITICO:** Tutte le tabelle esistenti devono avere isolamento per firebase_uid.
+
+**Tabelle da verificare:**
+- `contacts` - aggiungere colonna `firebase_uid VARCHAR(255) NOT NULL`
+- `messages` - aggiungere colonna `firebase_uid VARCHAR(255) NOT NULL`
+- `email_threads` - aggiungere colonna `firebase_uid VARCHAR(255) NOT NULL`
+- `calendars` - aggiungere colonna `firebase_uid VARCHAR(255) NOT NULL`
+- Ogni altra tabella che contiene dati utente
+
+**Migrazione Schema:**
+```sql
+ALTER TABLE contacts ADD COLUMN firebase_uid VARCHAR(255) NOT NULL DEFAULT 'legacy';
+CREATE INDEX idx_contacts_firebase ON contacts(firebase_uid);
+```
+
+**TUTTE le query SQL devono filtrare per firebase_uid:**
+
+```sql
+-- CORRETTO
+SELECT * FROM contacts
+WHERE firebase_uid = ?
+AND email = ?;
+
+-- SBAGLIATO (PERICOLOSO!)
+SELECT * FROM contacts
+WHERE email = ?;  -- NO firebase_uid filter!
+```
+
+**Endpoint API devono estrarre firebase_uid da JWT:**
+```python
+@app.get("/api/contacts/{contact_id}")
+async def get_contact(contact_id: str, token: str = Depends(verify_firebase_token)):
+    firebase_uid = token["uid"]  # From JWT
+
+    # Query DEVE includere firebase_uid
+    contact = db.query(
+        "SELECT * FROM contacts WHERE id = ? AND firebase_uid = ?",
+        contact_id, firebase_uid
+    )
+
+    if not contact:
+        raise HTTPException(404, "Contact not found")  # O non esiste O non appartiene a questo owner
+
+    return contact
+```
+
+---
+
+### 5.4 Audit Log
+
+Tabella per loggare accessi cross-owner (sicurezza).
+
+```sql
+CREATE TABLE zylch_access_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    firebase_uid VARCHAR(255) NOT NULL,
+    action VARCHAR(100) NOT NULL,  -- 'read_contact', 'write_token', etc.
+    resource_type VARCHAR(50) NOT NULL,  -- 'contact', 'token', etc.
+    resource_id VARCHAR(255),
+    resource_owner_uid VARCHAR(255),
+    access_granted BOOLEAN NOT NULL,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_owner (firebase_uid),
+    INDEX idx_resource_owner (resource_owner_uid),
+    INDEX idx_timestamp (timestamp)
+);
+```
+
+**Uso:**
+- Log ogni accesso a risorse
+- Se `firebase_uid != resource_owner_uid` → FLAG DI SICUREZZA
+- Alert se `access_granted = false` ripetuto
+- Retention policy: 90 giorni (GDPR compliance)
+
+**Esempi di log:**
+```json
+// Accesso corretto
+{
+  "firebase_uid": "owner_abc",
+  "action": "read_contact",
+  "resource_type": "contact",
+  "resource_id": "contact_123",
+  "resource_owner_uid": "owner_abc",  // STESSO owner
+  "access_granted": true
+}
+
+// Tentativo cross-owner (ALERT!)
+{
+  "firebase_uid": "owner_abc",
+  "action": "read_contact",
+  "resource_type": "contact",
+  "resource_id": "contact_456",
+  "resource_owner_uid": "owner_xyz",  // DIVERSO owner!
+  "access_granted": false
+}
+```
+
+---
+
+### Use Case: Zylch Multi-Tenant API
+
+**Scenario:** 100 utenti usano Zylch AI via web.
+
+**Flow:**
+1. User A fa login con Google → Firebase JWT
+2. Zylch API verifica JWT → estrae firebase_uid
+3. Zylch API chiama StarChat: `POST /api/zylch/assistants/register`
+4. StarChat registra (firebase_uid_A → zylch_assistant_A)
+5. Zylch API salva token OAuth: `POST /api/zylch/tokens/save`
+6. StarChat cripta e salva token per firebase_uid_A
+7. User A sync email → StarChat recupera token per firebase_uid_A
+8. User B (firebase_uid_B) NON PUÒ vedere dati di User A (isolamento DB)
+
+**Sicurezza:**
+- Token OAuth MAI esposti via API
+- Ogni query filtra per firebase_uid
+- Audit log traccia ogni accesso
+- Cross-owner access = BLOCKED + LOGGED
+
+---
+
+### Benefici
+
+1. **Sicurezza:** Isolamento totale tra owner
+2. **Scalabilità:** Supporto multi-tenant nativo
+3. **Compliance:** GDPR-ready (data isolation)
+4. **Token Management:** Centralizzato e sicuro
+5. **Auditability:** Tutti gli accessi tracciati
+
+---
+
+### Priorità Implementazione
+
+**P0 - Critico:**
+1. Tabella `zylch_assistants` + API endpoints
+2. Isolamento `contacts` con colonna `firebase_uid`
+3. Modificare API contacts per filtrare per firebase_uid
+
+**P1 - Alta:**
+4. Tabella `zylch_oauth_tokens` + API endpoints
+5. Token encryption at rest
+6. Migrazione altre tabelle (messages, calendars)
+
+**P2 - Media:**
+7. Audit log
+8. Monitoring e alerting per cross-owner access
+9. Token refresh automatico
+
+---
+
+### Note Implementazione (Lato Zylch)
+
+**Data:** 2025-11-30
+
+Zylch AI ha già implementato l'isolamento lato CLI:
+- ✅ Token Google: `~/.zylch/google_tokens/token_<email>.pickle`
+- ✅ Token Microsoft: `~/.zylch/credentials.json` (graph_token)
+- ✅ GmailClient con account parameter
+- ✅ GoogleCalendarClient con account parameter
+- ✅ Calendar condizionale in base a provider
+
+**File modificati:**
+- `zylch/tools/factory.py` - Account isolation
+- `zylch/config.py` - Token path per-user
+- `zylch/tools/gcalendar.py` - Account parameter
+- `zylch/cli/auth_server.py` - Graph token storage
+
+**Prossimo step:** Quando StarChat implementa le API, Zylch API userà quelle invece del filesystem locale.
+
+Grazie! 🙏
+
+---
+
+## Request 6: (Future requests go here)
 

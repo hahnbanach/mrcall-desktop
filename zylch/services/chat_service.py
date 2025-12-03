@@ -96,6 +96,60 @@ class ChatService:
         start_time = time.time()
 
         try:
+            # INTERCEPT SLASH COMMANDS - NEVER SEND TO ANTHROPIC
+            if user_message.strip().startswith('/'):
+                from zylch.services.command_handlers import COMMAND_HANDLERS
+
+                parts = user_message.strip().split()
+                cmd = parts[0].lower()
+                args = parts[1:] if len(parts) > 1 else []
+                execution_time_ms = (time.time() - start_time) * 1000
+
+                # Check if command is implemented
+                if cmd in COMMAND_HANDLERS:
+                    handler = COMMAND_HANDLERS[cmd]
+
+                    # Call handler (some need config/memory, some don't)
+                    if cmd in ['/sync', '/archive', '/memory']:
+                        # Get owner_id from context, fall back to user_id
+                        owner_id = (context.get("user_id") if context else None) or user_id
+
+                        # Create temporary config objects
+                        config = ToolConfig.from_settings()
+
+                        if cmd == '/sync':
+                            # /sync needs config, memory, and owner_id
+                            memory = await ToolFactory.create_memory_system(config)
+                            response_text = await handler(args, config, memory, owner_id)
+                        else:
+                            # /archive and /memory need config and owner_id
+                            response_text = await handler(args, config, owner_id)
+                    else:
+                        response_text = await handler()
+
+                    return {
+                        "response": response_text,
+                        "tool_calls": [],
+                        "metadata": {
+                            "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                            "command": cmd,
+                            "instant": True
+                        },
+                        "session_id": session_id
+                    }
+
+                # Return error for unknown commands
+                return {
+                    "response": f"❌ **Command not found:** `{cmd}`\n\nUsa `/help` per vedere i comandi disponibili.",
+                    "tool_calls": [],
+                    "metadata": {
+                        "execution_time_ms": round(execution_time_ms, 2),
+                        "command": cmd,
+                        "instant": True
+                    },
+                    "session_id": session_id
+                }
+
             # Ensure agent is initialized
             await self._initialize_agent()
 

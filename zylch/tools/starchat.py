@@ -610,6 +610,91 @@ class StarChatClient:
         logger.warning("WhatsApp integration requires StarChat REST API endpoint - not yet available")
         return []
 
+    async def initiate_outbound_call(
+        self,
+        phone_number: str,
+        business_id: str,
+        caller_id: Optional[str] = None,
+        contact_id: Optional[str] = None,
+        variables: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        """Initiate an outbound phone call via MrCall.
+
+        This triggers the MrCall AI assistant to call the specified phone number.
+        The call will use the assistant configuration for the given business_id.
+
+        Args:
+            phone_number: Phone number to call (with country code, e.g., +12025551234)
+            business_id: MrCall business/assistant ID to use for the call
+            caller_id: Optional caller ID to display (must be verified number)
+            contact_id: Optional contact ID if calling a known contact
+            variables: Optional variables to pass to the call script
+
+        Returns:
+            Dict with call_id and status
+
+        Raises:
+            httpx.HTTPStatusError: If API call fails
+        """
+        logger.info(f"Initiating outbound call to {phone_number} via business {business_id}")
+
+        # Normalize phone number
+        if not phone_number.startswith('+'):
+            phone_number = '+' + phone_number.lstrip('0')
+
+        # Build request body
+        call_data = {
+            "phoneNumber": phone_number,
+            "businessId": business_id,
+        }
+
+        if caller_id:
+            call_data["callerId"] = caller_id
+        if contact_id:
+            call_data["contactId"] = contact_id
+        if variables:
+            # Ensure all variables are strings
+            call_data["variables"] = {
+                k: str(v) if not isinstance(v, str) else v
+                for k, v in variables.items()
+            }
+
+        # StarChat outbound call endpoint
+        # Note: Endpoint format may vary based on StarChat API version
+        endpoint = f"/mrcall/v1/call/outbound/{business_id}"
+
+        logger.info(f"POST {endpoint}")
+        logger.debug(f"Call data: {call_data}")
+
+        response = await self.client.post(endpoint, json=call_data)
+
+        if response.status_code >= 400:
+            logger.error(f"Outbound call failed: {response.status_code}")
+            logger.error(f"Response: {response.text}")
+
+        response.raise_for_status()
+
+        # Parse response
+        response_text = response.text
+        if not response_text or response_text.strip() == "":
+            return {
+                "status": "initiated",
+                "phone_number": phone_number,
+                "business_id": business_id,
+            }
+
+        try:
+            result = response.json()
+            result["status"] = result.get("status", "initiated")
+            return result
+        except json.JSONDecodeError:
+            return {
+                "status": "initiated",
+                "phone_number": phone_number,
+                "business_id": business_id,
+                "raw_response": response_text,
+            }
+
     async def close(self) -> None:
         """Close HTTP client."""
         await self.client.aclose()

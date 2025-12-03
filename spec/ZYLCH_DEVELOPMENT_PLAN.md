@@ -10,6 +10,22 @@
 
 ## Current Status (November 2024)
 
+### 🔴 P0 - Lead Onboarding Flow
+
+**Status:** Spec ready, not implemented
+**Spec:** [ONBOARDING_FLOW.md](./ONBOARDING_FLOW.md)
+
+Automated lead capture and qualification via email + phone verification:
+1. Lead submits email on website (HubSpot)
+2. Zylch sends welcome email, lead replies
+3. Contact created, phone number provided
+4. Wait for inbound call or offer callback with SMS verification
+5. Demo call via MrCall
+
+**Why P0:** This is the primary acquisition funnel for new customers.
+
+---
+
 ### MrCall Dashboard Integration ✅
 
 **Status:** Completed (November 24, 2024)
@@ -2077,6 +2093,435 @@ This implementation plan transforms Zylch from a command-based CLI to an intelli
 **All LLM model choices are configurable via .env** - no hard-coding, easy upgrades, enterprise-ready.
 
 The architecture is ready to build. The decision is yours.
+
+---
+
+---
+
+## Phase D: Multi-Tenant Infrastructure (Planned)
+
+### Overview
+
+Questa fase prepara Zylch per deployment multi-tenant con autenticazione Firebase e containerizzazione Docker.
+
+### D.1: Firebase Authentication via mrcall-dashboard
+
+**Obiettivo:** Riutilizzare l'infrastruttura di login esistente in mrcall-dashboard per autenticare utenti CLI.
+
+**Workflow:**
+```
+./zylch-cli --login
+> Open: https://dashboard.mrcall.ai/zylch-auth
+> Paste the token: eyJhbGc...
+> ✅ Logged in as Mario Rossi (owner_id: abc123)
+```
+
+**Componenti da implementare:**
+
+1. **Dashboard Endpoint** (`mrcall-dashboard/src/views/ZylchAuth.vue`)
+   - Genera token JWT per CLI
+   - Mostra token da copiare
+   - Scadenza 30 giorni
+
+2. **CLI Credential Store** (`~/.zylch/credentials.json`)
+   ```json
+   {
+     "token": "eyJhbGc...",
+     "owner_id": "abc123",
+     "email": "mario@azienda.com",
+     "display_name": "Mario Rossi",
+     "expires_at": "2025-12-29T00:00:00Z"
+   }
+   ```
+
+3. **CLI Auth Flow** (`zylch/cli/auth.py`)
+   ```python
+   class ZylchAuth:
+       def login(self) -> bool
+       def logout(self) -> bool
+       def get_token(self) -> Optional[str]
+       def is_authenticated(self) -> bool
+       def refresh_if_needed(self) -> bool
+   ```
+
+4. **API Middleware** (`zylch/api/middleware.py`)
+   - Valida JWT Firebase per ogni request
+   - Estrae owner_id dal token
+   - Inietta context multi-tenant
+
+**Effort stimato:** 1 settimana
+
+### D.2: Docker Deployment
+
+**Obiettivo:** Containerizzare Zylch per deployment scalabile.
+
+**Architettura:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    DOCKER COMPOSE                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
+│  │  zylch-api  │    │ zylch-worker│    │   redis     │     │
+│  │  (FastAPI)  │◄──►│  (Celery)   │◄──►│  (queue)    │     │
+│  │  Port 8000  │    │             │    │             │     │
+│  └──────┬──────┘    └─────────────┘    └─────────────┘     │
+│         │                                                   │
+│         │ JWT validation                                    │
+│         ▼                                                   │
+│  ┌─────────────┐    ┌─────────────┐                        │
+│  │  Firebase   │    │  PostgreSQL │ (shared, multi-tenant) │
+│  │   Admin     │    │  or SQLite  │                        │
+│  └─────────────┘    └─────────────┘                        │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Files da creare:**
+
+1. **`Dockerfile`**
+   ```dockerfile
+   FROM python:3.11-slim
+   WORKDIR /app
+   COPY requirements.txt .
+   RUN pip install -r requirements.txt
+   COPY . .
+   EXPOSE 8000
+   CMD ["uvicorn", "zylch.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+   ```
+
+2. **`docker-compose.yml`**
+   ```yaml
+   version: '3.8'
+   services:
+     api:
+       build: .
+       ports: ["8000:8000"]
+       environment:
+         - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+         - FIREBASE_SERVICE_ACCOUNT=${FIREBASE_SERVICE_ACCOUNT}
+       volumes:
+         - ./cache:/app/cache
+       depends_on: [redis]
+
+     worker:
+       build: .
+       command: celery -A zylch.worker worker --loglevel=info
+       depends_on: [redis]
+
+     redis:
+       image: redis:7-alpine
+       ports: ["6379:6379"]
+   ```
+
+3. **`zylch/worker.py`** - Celery worker per task asincroni
+
+**Effort stimato:** 1 settimana
+
+---
+
+## Phase E: Webhook Server (Priority)
+
+### Overview
+
+Webserver FastAPI per ricevere notifiche da servizi esterni (StarChat, SendGrid, Gmail Push).
+
+**Status:** DA IMPLEMENTARE ORA
+
+### E.1: Webhook Endpoints
+
+**File:** `zylch/api/webhooks.py`
+
+```python
+from fastapi import APIRouter, Request, HTTPException
+from ..services.webhook_processor import WebhookProcessor
+
+router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+
+@router.post("/starchat")
+async def starchat_webhook(request: Request):
+    """Riceve notifiche chiamate da StarChat/MrCall."""
+    payload = await request.json()
+    await WebhookProcessor.process_starchat(payload)
+    return {"status": "ok"}
+
+@router.post("/sendgrid")
+async def sendgrid_webhook(request: Request):
+    """Riceve eventi email da SendGrid (open, click, bounce)."""
+    events = await request.json()
+    await WebhookProcessor.process_sendgrid(events)
+    return {"status": "ok"}
+
+@router.post("/gmail/push")
+async def gmail_push(request: Request):
+    """Riceve notifiche Gmail Push (nuove email)."""
+    payload = await request.json()
+    await WebhookProcessor.process_gmail_push(payload)
+    return {"status": "ok"}
+```
+
+### E.2: Webhook Processor
+
+**File:** `zylch/services/webhook_processor.py`
+
+Processa webhook e:
+1. Salva eventi in coda (Redis o SQLite)
+2. Notifica CLI attivi (WebSocket)
+3. Triggera azioni automatiche (es. inbound call → suggerisci follow-up)
+
+### E.3: API Main Entry Point
+
+**File:** `zylch/api/main.py`
+
+```python
+from fastapi import FastAPI
+from .webhooks import router as webhook_router
+from .routes.chat import router as chat_router
+
+app = FastAPI(title="Zylch AI API")
+
+# Health check
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+
+# Include routers
+app.include_router(webhook_router)
+app.include_router(chat_router)  # Existing chat API
+```
+
+**Effort stimato:** 3-4 giorni
+
+---
+
+## Recently Completed: Generic Automation Features ✅
+
+**Date:** November 29, 2024
+**Status:** COMPLETED
+
+### Overview
+
+Implemented generic features that enable automation flows (like lead onboarding) through natural conversation. These are NOT onboarding-specific - they are general-purpose capabilities that any user can leverage.
+
+**Philosophy:** Onboarding is a DEMO of Zylch's capabilities, not a special feature.
+
+### Features Implemented
+
+#### 1. Standing Instructions System ✅
+
+**Purpose:** Persistent user-defined instructions that Zylch follows across sessions.
+
+**Files Created:**
+- `zylch/tools/instruction_tools.py` - 3 tools for managing instructions
+
+**Tools:**
+- `add_standing_instruction` - Save a persistent instruction
+- `list_standing_instructions` - List all active instructions
+- `remove_standing_instruction` - Deactivate an instruction
+
+**How It Works:**
+1. User: "Da ora in poi, quando arriva email da prospect, crea contatto e rispondi con il numero demo"
+2. Zylch saves this as a standing instruction in ZylchMemory
+3. At every session start, instructions are loaded and injected into system prompt
+4. Zylch automatically follows these instructions
+
+**Storage:** `{owner_id}:{zylch_assistant_id}:instructions` namespace in ZylchMemory
+
+#### 2. Vonage SMS Tools ✅
+
+**Purpose:** Send SMS messages and verification codes via Vonage.
+
+**Files Created:**
+- `zylch/tools/sms_tools.py` - 3 tools for SMS functionality
+
+**Tools:**
+- `send_sms` - Send a text message to a phone number
+- `send_verification_code` - Generate and send 6-digit code for phone verification
+- `verify_sms_code` - Verify a code that was sent via SMS
+
+**Use Cases:**
+- Phone verification before outbound calls
+- Sending confirmation messages
+- Two-factor authentication
+
+#### 3. StarChat Outbound Call ✅
+
+**Purpose:** Initiate outbound phone calls via MrCall AI.
+
+**Files Modified:**
+- `zylch/tools/starchat.py` - Added `initiate_outbound_call()` method
+- `zylch/tools/call_tools.py` - Created `InitiateCallTool`
+
+**Tools:**
+- `initiate_call` - Start an AI-powered outbound call
+
+**How It Works:**
+1. Zylch verifies phone via SMS
+2. Zylch calls `initiate_call` with phone number
+3. MrCall AI handles the conversation
+
+#### 4. APScheduler Reminder System ✅
+
+**Purpose:** Schedule reminders, conditional timeouts, and recurring tasks.
+
+**Files Created:**
+- `zylch/services/scheduler.py` - ZylchScheduler with SQLite persistence
+- `zylch/tools/scheduler_tools.py` - 5 tools for scheduling
+
+**Tools:**
+- `schedule_reminder` - Schedule a one-time reminder
+- `schedule_conditional` - Action if condition not met in time
+- `cancel_conditional` - Cancel when condition is met
+- `list_scheduled_jobs` - List all pending jobs
+- `cancel_scheduled_job` - Cancel by job ID
+
+**Use Cases:**
+- "Ricordami tra 30 minuti di chiamare Marco"
+- "Se non risponde entro 24 ore, invia follow-up"
+- Timeout per callback flow (30 min senza chiamata → offri callback)
+
+**Persistence:** Jobs survive restarts via SQLite database (`cache/scheduler.db`)
+
+### How Lead Onboarding Works Now
+
+With these generic features, onboarding is just a normal conversation:
+
+```
+Tu: "Aspettati email da prospect che hanno ricevuto la welcome dal sito.
+     Quando qualcuno risponde:
+     1. Crea un contatto
+     2. Rispondi invitandolo a chiamare +1-202-XXX-XXXX
+     3. Se non chiama entro 30 minuti, offri callback con verifica SMS"
+
+Zylch usa i tool esistenti:
+     - Gmail (ricevi/rispondi email)
+     - Contacts (crea contatto)
+     - schedule_conditional (timeout 30 min)
+     - send_verification_code (verifica SMS)
+     - initiate_call (callback)
+```
+
+**No onboarding-specific code. Just Zylch doing its job.**
+
+### Dependencies Added
+
+```toml
+# pyproject.toml
+"apscheduler>=3.10.0"
+"sqlalchemy>=2.0.0"
+```
+
+---
+
+## Future: Background Agent (Phase 2)
+
+**Status:** Planned (not yet implemented)
+**Priority:** High - Required for true automation
+
+### Problem
+
+Currently, Zylch is stateless:
+- When the session ends, everything stops
+- Standing instructions work within sessions, but...
+- Who processes webhooks when no session is active?
+
+### Solution: Zylch Background Agent
+
+A daemon process that:
+1. Runs continuously (systemd/supervisor/Docker)
+2. Receives webhooks (email, SMS, call events)
+3. Loads standing instructions from memory
+4. Processes events and takes actions autonomously
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    BACKGROUND AGENT                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
+│  │   Webhook   │───▶│  Standing   │───▶│   Claude    │     │
+│  │   Queue     │    │ Instruction │    │   Process   │     │
+│  │  (Redis)    │    │   Matcher   │    │   Action    │     │
+│  └─────────────┘    └─────────────┘    └─────────────┘     │
+│        ▲                                      │             │
+│        │                                      ▼             │
+│  ┌─────────────┐                       ┌─────────────┐     │
+│  │  Webhook    │                       │   Tool      │     │
+│  │  Endpoints  │                       │  Execution  │     │
+│  │ /gmail/push │                       │  (Gmail,    │     │
+│  │ /vonage/*   │                       │  SMS, Call) │     │
+│  │ /starchat/* │                       └─────────────┘     │
+│  └─────────────┘                                            │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Plan
+
+#### Phase 2.1: Event Queue
+- Redis or SQLite-backed queue for incoming events
+- Webhook endpoints push to queue
+- Background worker processes queue
+
+#### Phase 2.2: Instruction Matcher
+- Load standing instructions at startup
+- Match incoming events to relevant instructions
+- Determine which instructions apply
+
+#### Phase 2.3: Autonomous Processing
+- Call Claude with event + matching instructions
+- Execute suggested tools
+- Log actions taken
+
+#### Phase 2.4: Monitoring
+- Dashboard showing processed events
+- Alerts for failures
+- Manual override capability
+
+### Deployment Options
+
+1. **Simple:** Python script with supervisor
+2. **Docker:** Container with health checks
+3. **Kubernetes:** Scalable deployment
+
+### Effort Estimate
+
+- Phase 2.1 (Event Queue): 2-3 days
+- Phase 2.2 (Instruction Matcher): 2-3 days
+- Phase 2.3 (Autonomous Processing): 3-4 days
+- Phase 2.4 (Monitoring): 2-3 days
+
+**Total: ~10-13 days**
+
+---
+
+## Pending: Gmail Push Notifications
+
+**Status:** Not yet implemented
+**Priority:** High - Required for real-time email detection
+
+### What's Needed
+
+1. **Google Cloud Setup:**
+   - Create Pub/Sub topic
+   - Configure Gmail watch
+
+2. **Webhook Endpoint:**
+   - `/webhooks/gmail/push` to receive Pub/Sub messages
+
+3. **Gmail Watch Setup:**
+   - `setup_gmail_watch()` to register for notifications
+
+### Implementation Notes
+
+Gmail Push requires:
+- Google Cloud project with Pub/Sub API enabled
+- Service account with appropriate permissions
+- Pub/Sub subscription pointing to Zylch webhook
+
+This is more infrastructure setup than code, but enables real-time email detection instead of polling.
 
 ---
 

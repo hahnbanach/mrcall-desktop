@@ -40,10 +40,11 @@ class Tool(ABC):
         self.description = description
 
     @abstractmethod
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, validation_only: bool = False, **kwargs) -> ToolResult:
         """Execute the tool with given parameters.
 
         Args:
+            validation_only: If True, return preview without side effects
             **kwargs: Tool-specific parameters
 
         Returns:
