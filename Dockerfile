@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code (explicit to avoid .dockerignore issues)
 COPY zylch/ ./zylch/
+COPY zylch_memory/ ./zylch_memory/
 COPY pyproject.toml .
 
 # Create non-root user for security
