@@ -30,7 +30,7 @@ class CalendarSyncManager:
         """Initialize calendar sync manager.
 
         Args:
-            calendar_client: GoogleCalendarClient instance
+            calendar_client: Calendar client (GoogleCalendarClient or OutlookCalendarClient)
             cache_dir: Directory to store calendar cache
             anthropic_api_key: API key for event analysis
             days_back: Days in past to sync (default: 30)
@@ -106,10 +106,10 @@ class CalendarSyncManager:
         else:
             logger.info(f"📥 Incremental sync since {cache['last_sync']}")
 
-        # Fetch events from Google Calendar
+        # Fetch events from calendar provider
         try:
-            # Convert timezone-aware datetimes to naive UTC for Google Calendar API
-            # (API expects naive UTC + 'Z' suffix, not timezone-aware)
+            # Convert timezone-aware datetimes to naive UTC for calendar API
+            # (Both Google and Outlook APIs expect naive UTC)
             time_min_naive = time_min.replace(tzinfo=None) if time_min.tzinfo else time_min
             time_max_naive = time_max.replace(tzinfo=None) if time_max.tzinfo else time_max
 
@@ -177,7 +177,7 @@ class CalendarSyncManager:
         """Process and enrich a calendar event.
 
         Args:
-            event: Raw event from Google Calendar
+            event: Raw event from calendar provider (Google or Outlook)
 
         Returns:
             Processed event with metadata

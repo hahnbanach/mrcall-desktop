@@ -1,0 +1,17 @@
+<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg">
+  <!-- Z Mark (centered) -->
+  <path
+    d="M 15 25
+       C 35 24, 65 23, 85 22
+       C 65 40, 35 60, 15 78
+       C 35 77, 65 76, 85 75"
+    stroke="#ffffff"
+    stroke-width="7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+
+  <!-- "ylch" text (centered below) -->
+  <text x="50" y="110" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="400" fill="#ffffff" text-anchor="middle">ylch</text>
+</svg>

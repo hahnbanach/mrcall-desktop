@@ -43,9 +43,12 @@ from .web_search import WebSearchTool
 
 # External service imports
 from .gmail import GmailClient
+from .outlook import OutlookClient
 from .gcalendar import GoogleCalendarClient
+from .outlook_calendar import OutlookCalendarClient
 from .starchat import StarChatClient
 from .pipedrive import PipedriveClient
+from .vonage import VonageClient
 from ..cache.json_cache import JSONCache
 from ..cache.identifier_map import IdentifierMapCache, normalize_phone, normalize_name
 from .email_archive import EmailArchiveManager
@@ -53,6 +56,25 @@ from .email_sync import EmailSyncManager
 from .task_manager import TaskManager
 from ..memory import ZylchMemory, ZylchMemoryConfig
 from ..agent.models import ModelSelector
+from .instruction_tools import (
+    AddTriggeredInstructionTool,
+    ListTriggeredInstructionsTool,
+    RemoveTriggeredInstructionTool,
+)
+from .sms_tools import (
+    SendSMSTool,
+    SendVerificationCodeTool,
+    VerifyCodeTool,
+)
+from .call_tools import InitiateCallTool
+from .scheduler_tools import (
+    ScheduleReminderTool,
+    ScheduleConditionalTool,
+    CancelConditionalTool,
+    ListScheduledJobsTool,
+    CancelJobTool,
+)
+from ..services.scheduler import ZylchScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +89,8 @@ class ToolFactory:
     # Class attributes for storing service client references
     # These are set during create_all_tools() and can be accessed by CLI
     _starchat_client = None
+    _email_client = None  # GmailClient or OutlookClient
+    _calendar_client = None  # GoogleCalendarClient or OutlookCalendarClient
     _email_archive = None
     _session_state = None  # Shared session state for runtime updates
 
@@ -106,29 +130,73 @@ class ToolFactory:
                 realm="default",
             )
 
-            # Gmail client
-            gmail = GmailClient(
-                credentials_path=config.google_credentials_path,
-                token_dir=config.google_token_path,
-            )
+            # Email client - choose based on auth provider
+            if config.auth_provider == "microsoft.com":
+                # Microsoft Outlook client
+                email_client = OutlookClient(
+                    graph_token=config.graph_token,
+                    account=config.user_email,
+                )
+                logger.info("Using Microsoft Outlook for email")
 
-            # Google Calendar client
-            calendar = GoogleCalendarClient(
-                credentials_path=config.google_credentials_path,
-                token_dir=config.google_token_path,
-                calendar_id=config.calendar_id,
-            )
+                # Try to authenticate
+                try:
+                    if config.graph_token:
+                        email_client.authenticate()
+                        logger.info("Microsoft Graph API authenticated")
+                    else:
+                        logger.warning("Microsoft Graph token not found")
+                except Exception as e:
+                    logger.warning(f"Microsoft authentication needed: {e}")
 
-            # Try to authenticate Google services silently
-            try:
-                token_path = Path(config.google_token_path) / "token.pickle"
-                if token_path.exists():
-                    gmail.authenticate()
-                    logger.info("Google services authenticated (Gmail, Calendar)")
+            else:
+                # Gmail client (default)
+                email_client = GmailClient(
+                    credentials_path=config.google_credentials_path,
+                    token_dir=config.google_token_path,
+                    account=config.user_email,  # Isolate tokens per user account
+                )
+                logger.info("Using Gmail for email")
+
+                # Try to authenticate Google services silently
+                try:
+                    token_path = Path(config.google_token_path) / "token.pickle"
+                    if token_path.exists():
+                        email_client.authenticate()
+                        logger.info("Google services authenticated (Gmail)")
+                    else:
+                        logger.warning("Google authentication needed - tokens not found")
+                except Exception as e:
+                    logger.warning(f"Google authentication needed: {e}")
+
+            # Calendar client (conditional based on provider)
+            calendar = None
+            if config.auth_provider == "google.com":
+                # Gmail users get Google Calendar automatically
+                calendar = GoogleCalendarClient(
+                    credentials_path=config.google_credentials_path,
+                    token_dir=config.google_token_path,
+                    calendar_id=config.calendar_id,
+                    account=config.user_email,
+                )
+                logger.info("Google Calendar initialized for Gmail user")
+            elif config.auth_provider == "microsoft.com":
+                # Microsoft users get Outlook Calendar automatically
+                # Use the graph_token from OutlookClient for authentication
+                if isinstance(email_client, OutlookClient) and email_client.graph_token:
+                    calendar = OutlookCalendarClient(
+                        graph_token=email_client.graph_token,
+                        calendar_id="primary",
+                    )
+                    logger.info("Outlook Calendar initialized for Microsoft user")
                 else:
-                    logger.warning("Google authentication needed - tokens not found")
-            except Exception as e:
-                logger.warning(f"Google authentication needed: {e}")
+                    logger.warning("Outlook Calendar not available - email client not authenticated")
+            else:
+                logger.info("No calendar provider configured")
+
+            # Save clients to class variables for access by other services
+            ToolFactory._email_client = email_client
+            ToolFactory._calendar_client = calendar
 
             # Cache
             cache = JSONCache(
@@ -143,7 +211,7 @@ class ToolFactory:
             )
 
             # Email archive manager
-            email_archive = EmailArchiveManager(gmail_client=gmail)
+            email_archive = EmailArchiveManager(gmail_client=email_client)
 
             # Email sync manager
             email_sync = EmailSyncManager(
@@ -162,6 +230,20 @@ class ToolFactory:
                 except Exception as e:
                     logger.warning(f"Pipedrive connection failed: {e}")
                     pipedrive = None
+
+            # Vonage SMS client (optional)
+            vonage = None
+            if config.vonage_api_key and config.vonage_api_secret:
+                try:
+                    vonage = VonageClient(
+                        api_key=config.vonage_api_key,
+                        api_secret=config.vonage_api_secret,
+                        from_number=config.vonage_from_number or "Zylch"
+                    )
+                    logger.info("Vonage SMS client connected")
+                except Exception as e:
+                    logger.warning(f"Vonage connection failed: {e}")
+                    vonage = None
 
             # Initialize zylch_memory for person-centric memory
             zylch_memory = await ToolFactory.create_memory_system(config)
@@ -189,9 +271,9 @@ class ToolFactory:
         # Initialize tools list
         tools = []
 
-        # Gmail tools (7-8 tools, +1 if zylch_memory)
+        # Email tools (7-8 tools, +1 if zylch_memory) - Gmail or Outlook
         tools.extend(ToolFactory._create_gmail_tools(
-            gmail, calendar, email_sync, zylch_memory,
+            email_client, calendar, email_sync, zylch_memory,
             starchat, identifier_cache, config.owner_id, config.zylch_assistant_id
         ))
 
@@ -242,6 +324,43 @@ class ToolFactory:
             )
             tools.extend(sharing_tools)
             logger.info(f"Sharing tools initialized ({len(sharing_tools)} tools)")
+
+        # Triggered instruction tools (3 tools) - for event-driven automation
+        tools.extend(ToolFactory._create_trigger_tools(
+            zylch_memory=zylch_memory,
+            owner_id=config.owner_id,
+            zylch_assistant_id=config.zylch_assistant_id
+        ))
+        logger.info("Triggered instruction tools initialized")
+
+        # SMS tools (3 tools) - optional, requires Vonage config
+        if vonage:
+            tools.extend(ToolFactory._create_sms_tools(
+                vonage_client=vonage,
+                zylch_memory=zylch_memory,
+                owner_id=config.owner_id,
+                zylch_assistant_id=config.zylch_assistant_id
+            ))
+            logger.info("SMS tools initialized (Vonage)")
+
+        # Call tools (1 tool) - for outbound calls via MrCall
+        if starchat:
+            tools.append(InitiateCallTool(
+                starchat_client=starchat,
+                session_state=session_state
+            ))
+            logger.info("Call tool initialized (StarChat/MrCall)")
+
+        # Scheduler tools (5 tools) - for reminders and timed actions
+        scheduler_db_path = Path(config.cache_dir) / "scheduler.db"
+        scheduler = ZylchScheduler(
+            db_path=scheduler_db_path,
+            owner_id=config.owner_id,
+            zylch_assistant_id=config.zylch_assistant_id
+        )
+        scheduler.start()
+        tools.extend(ToolFactory._create_scheduler_tools(scheduler))
+        logger.info("Scheduler tools initialized (APScheduler)")
 
         # Initialize PersonaAnalyzer for user persona learning
         from ..services.persona_analyzer import PersonaAnalyzer
@@ -487,6 +606,86 @@ class ToolFactory:
                 auth_manager=auth_manager,
                 user_email=user_email
             ),
+        ]
+
+    @staticmethod
+    def _create_trigger_tools(
+        zylch_memory,
+        owner_id: str,
+        zylch_assistant_id: str
+    ) -> List[Tool]:
+        """Create triggered instruction tools.
+
+        These tools allow users to create event-driven automation that executes
+        when specific triggers occur. For example:
+        - "All'inizio di ogni sessione devi dirmi Buongiorno Mario..." (session_start)
+        - "When a new email arrives from someone I don't know, create a contact" (email_received)
+        - "When a prospect replies, invite them to call the demo number" (email_received)
+        """
+        return [
+            AddTriggeredInstructionTool(
+                zylch_memory=zylch_memory,
+                owner_id=owner_id,
+                zylch_assistant_id=zylch_assistant_id
+            ),
+            ListTriggeredInstructionsTool(
+                zylch_memory=zylch_memory,
+                owner_id=owner_id,
+                zylch_assistant_id=zylch_assistant_id
+            ),
+            RemoveTriggeredInstructionTool(
+                zylch_memory=zylch_memory,
+                owner_id=owner_id,
+                zylch_assistant_id=zylch_assistant_id
+            ),
+        ]
+
+    @staticmethod
+    def _create_sms_tools(
+        vonage_client,
+        zylch_memory,
+        owner_id: str,
+        zylch_assistant_id: str
+    ) -> List[Tool]:
+        """Create SMS tools for sending messages via Vonage.
+
+        Tools:
+        - send_sms: Send a text message to a phone number
+        - send_verification_code: Send a 6-digit code for phone verification
+        - verify_sms_code: Verify a code that was sent via SMS
+        """
+        return [
+            SendSMSTool(vonage_client=vonage_client),
+            SendVerificationCodeTool(
+                vonage_client=vonage_client,
+                zylch_memory=zylch_memory,
+                owner_id=owner_id,
+                zylch_assistant_id=zylch_assistant_id
+            ),
+            VerifyCodeTool(
+                zylch_memory=zylch_memory,
+                owner_id=owner_id,
+                zylch_assistant_id=zylch_assistant_id
+            ),
+        ]
+
+    @staticmethod
+    def _create_scheduler_tools(scheduler) -> List[Tool]:
+        """Create scheduler tools for reminders and timed actions.
+
+        Tools:
+        - schedule_reminder: Schedule a one-time reminder
+        - schedule_conditional: Schedule action if condition not met in time
+        - cancel_conditional: Cancel a conditional timeout
+        - list_scheduled_jobs: List all pending jobs
+        - cancel_scheduled_job: Cancel a job by ID
+        """
+        return [
+            ScheduleReminderTool(scheduler=scheduler),
+            ScheduleConditionalTool(scheduler=scheduler),
+            CancelConditionalTool(scheduler=scheduler),
+            ListScheduledJobsTool(scheduler=scheduler),
+            CancelJobTool(scheduler=scheduler),
         ]
 
 

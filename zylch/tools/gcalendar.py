@@ -38,6 +38,7 @@ class GoogleCalendarClient:
         credentials_path: str = "credentials/calendar_oauth.json",
         token_dir: str = "credentials/calendar_tokens/",
         calendar_id: str = "primary",
+        account: Optional[str] = None,
     ):
         """Initialize Google Calendar client.
 
@@ -45,18 +46,25 @@ class GoogleCalendarClient:
             credentials_path: Path to OAuth credentials JSON
             token_dir: Directory to store tokens
             calendar_id: Calendar ID to use (default: 'primary')
+            account: Account email for token isolation (optional)
         """
         self.credentials_path = Path(credentials_path)
         self.token_dir = Path(token_dir)
         self.token_dir.mkdir(parents=True, exist_ok=True)
         self.calendar_id = calendar_id
+        self.account = account
         self.service = None
 
         logger.info(f"Initialized Google Calendar client for calendar: {calendar_id}")
 
     def _get_token_path(self) -> Path:
-        """Get token file path."""
-        return self.token_dir / "token.pickle"
+        """Get token file path for this account."""
+        if self.account:
+            # Use account-specific token
+            safe_account = self.account.replace("@", "_at_").replace(".", "_")
+            return self.token_dir / f"token_{safe_account}.pickle"
+        else:
+            return self.token_dir / "token.pickle"
 
     def authenticate(self) -> None:
         """Authenticate with Google Calendar API using OAuth 2.0."""

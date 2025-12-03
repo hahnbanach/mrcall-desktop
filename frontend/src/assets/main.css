@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Zylch Design System - matching zylch-website */
+:root {
+  --bg-primary: #ffffff;
+  --text-primary: #1a1a1a;
+  --text-muted: #888888;
+  --text-link: #666666;
+  --accent: #4a9eff;
+  --radius: 24px;
+  --radius-sm: 12px;
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+  padding: 0;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* Utility Classes */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-zylch-sm font-medium transition-all duration-200;
+  }
+
+  .btn-primary {
+    @apply bg-zylch-primary text-white hover:bg-gray-800;
+  }
+
+  .btn-secondary {
+    @apply bg-gray-100 text-zylch-primary hover:bg-gray-200;
+  }
+
+  .btn-accent {
+    @apply bg-zylch-accent text-white hover:bg-blue-600;
+  }
+
+  .card {
+    @apply bg-white rounded-zylch shadow-zylch p-6;
+  }
+
+  .input {
+    @apply w-full px-4 py-2 border border-gray-200 rounded-zylch-sm focus:outline-none focus:ring-2 focus:ring-zylch-accent/50 focus:border-zylch-accent;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-zylch-muted mb-1;
+  }
+}

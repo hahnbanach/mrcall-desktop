@@ -55,6 +55,11 @@ class ToolConfig:
     sendgrid_api_key: Optional[str] = ""
     sendgrid_from_email: Optional[str] = ""
 
+    # Vonage SMS (optional)
+    vonage_api_key: Optional[str] = ""
+    vonage_api_secret: Optional[str] = ""
+    vonage_from_number: Optional[str] = ""
+
     # Email Style
     email_style_prompt: Optional[str] = ""
 
@@ -69,6 +74,11 @@ class ToolConfig:
     # User Identity (for sharing feature)
     user_email: str = ""
     user_display_name: str = ""
+
+    # Microsoft Graph API (for Outlook)
+    auth_provider: str = "google.com"
+    graph_token: str = ""
+    graph_refresh_token: str = ""
 
     @classmethod
     def from_settings(cls) -> 'ToolConfig':
@@ -118,6 +128,11 @@ class ToolConfig:
             sendgrid_api_key=settings.sendgrid_api_key,
             sendgrid_from_email=settings.sendgrid_from_email,
 
+            # Vonage SMS
+            vonage_api_key=settings.vonage_api_key,
+            vonage_api_secret=settings.vonage_api_secret,
+            vonage_from_number=settings.vonage_from_number,
+
             # Email Style
             email_style_prompt=settings.email_style_prompt,
 
@@ -132,6 +147,11 @@ class ToolConfig:
             # User Identity (for sharing)
             user_email=settings.user_email,
             user_display_name=settings.user_display_name,
+
+            # Microsoft Graph API (for Outlook)
+            auth_provider=settings.auth_provider,
+            graph_token=settings.graph_token,
+            graph_refresh_token=settings.graph_refresh_token,
         )
 
     def get_cache_path(self) -> Path:

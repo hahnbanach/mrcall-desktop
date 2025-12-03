@@ -9,12 +9,15 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.styles import Style
 
 from ..agent import ZylchAIAgent
 from ..config import settings
 from ..tools import ToolFactory, ToolConfig
+from ..tools.instruction_tools import load_triggered_instructions
+from .auth import CLIAuthManager
 from ..tools.email_archive import EmailArchiveManager
 from ..tools.gmail import GmailClient
 
@@ -37,11 +40,102 @@ cli_style = Style.from_dict({
 })
 
 
+class ZylchCompleter(Completer):
+    """Tab completion for Zylch CLI commands and subcommands."""
+
+    # Command definitions: command -> (subcommands, description)
+    COMMANDS = {
+        '/help': ([], 'Show help'),
+        '/quit': ([], 'Exit Zylch AI'),
+        '/exit': ([], 'Exit Zylch AI'),
+        '/clear': ([], 'Clear conversation history'),
+        '/history': ([], 'Show conversation history'),
+        '/sync': ([], 'Run morning sync (emails + calendar + gaps)'),
+        '/gaps': ([], 'Show relationship gaps briefing'),
+        '/briefing': ([], 'Show relationship gaps briefing'),
+        '/tutorial': (['contact', 'email', 'calendar', 'sync', 'memory'], 'Interactive tutorial'),
+        '/memory': (['--help', '--list', '--add', '--remove', '--stats', '--build',
+                     '--global', '--all', '--days', '--contact', '--force', '--check'], 'Manage behavioral memory'),
+        '/trigger': (['--help', '--list', '--types', '--add', '--remove', '--check'], 'Manage triggered instructions'),
+        '/cache': (['--help', '--clear', 'emails', 'calendar', 'gaps', 'all'], 'Cache management'),
+        '/model': (['haiku', 'sonnet', 'opus', 'auto', '--help'], 'Change AI model'),
+        '/assistant': (['--help', '--list', '--id', '--create'], 'Manage Zylch assistants'),
+        '/mrcall': (['--help', '--list', '--id'], 'Manage MrCall assistant link'),
+        '/share': (['--help'], 'Register recipient for sharing'),
+        '/revoke': (['--help'], 'Revoke sharing authorization'),
+        '/sharing': (['--help'], 'Show sharing status'),
+        '/archive': (['--help', '--stats', '--sync', '--init', '--search', '--limit'], 'Email archive management'),
+    }
+
+    def get_completions(self, document, complete_event):
+        """Generate completions for current input."""
+        text = document.text_before_cursor
+        words = text.split()
+
+        # Empty or just starting with /
+        if not text or text == '/':
+            for cmd in sorted(self.COMMANDS.keys()):
+                yield Completion(cmd, start_position=-len(text),
+                                display_meta=self.COMMANDS[cmd][1])
+            return
+
+        # Completing a command name
+        if len(words) == 1 and not text.endswith(' '):
+            word = words[0]
+            for cmd in sorted(self.COMMANDS.keys()):
+                if cmd.startswith(word):
+                    yield Completion(cmd, start_position=-len(word),
+                                    display_meta=self.COMMANDS[cmd][1])
+            return
+
+        # Completing subcommands
+        if len(words) >= 1:
+            cmd = words[0]
+            if cmd in self.COMMANDS:
+                subcommands = self.COMMANDS[cmd][0]
+                if not subcommands:
+                    return
+
+                # Get what user is typing for subcommand
+                current_word = words[-1] if not text.endswith(' ') else ''
+
+                # Filter already used subcommands
+                used = set(words[1:])
+
+                for sub in subcommands:
+                    if sub in used and not text.endswith(' '):
+                        continue
+                    if sub.startswith(current_word):
+                        yield Completion(
+                            sub,
+                            start_position=-len(current_word) if current_word else 0
+                        )
+
+
 class ZylchAICLI:
     """Interactive CLI for Zylch AI agent."""
 
     def __init__(self):
         """Initialize CLI."""
+        # Check authentication FIRST - CLI requires login
+        self.auth = CLIAuthManager()
+        if not self.auth.is_authenticated():
+            print("⚠️  Not logged in. Run: zylch-cli --login")
+            sys.exit(1)
+
+        # Get user info from credentials
+        creds = self.auth.get_credentials()
+        self.owner_id = creds["owner_id"]
+        self.user_email = creds.get("email", "")
+        self.user_display_name = creds.get("display_name", "")
+
+        # Set provider and Microsoft Graph token in settings
+        settings.auth_provider = creds.get("provider", "google.com")
+        if "graph_token" in creds:
+            settings.graph_token = creds["graph_token"]
+        if "graph_refresh_token" in creds:
+            settings.graph_refresh_token = creds.get("graph_refresh_token", "")
+
         self.agent = None
         self.session = None
         self.running = False
@@ -49,12 +143,12 @@ class ZylchAICLI:
         self.starchat = None  # Store StarChat client reference
         self.memory = None  # ZylchMemory system
         self.email_archive = None  # Email archive manager
-        self.owner_id = settings.owner_id  # Multi-tenant owner ID
         self.zylch_assistant_id = settings.zylch_assistant_id  # Multi-tenant assistant ID
         self.forced_model = None  # Override model selection (None = auto)
         self.sharing_auth = None  # Sharing authorization manager
         self.intel_share = None  # Intel share manager
-        self.user_email = settings.user_email  # Current user's email for sharing
+        self.tools = None  # Store tool instances for direct access
+        self.validator = None  # Command validator service
 
         # Initialize AssistantManager
         from zylch.services.assistant_manager import AssistantManager
@@ -82,17 +176,27 @@ class ZylchAICLI:
             # Create ToolConfig from settings
             config = ToolConfig.from_settings()
 
+            # Override owner_id with actual user ID from Firebase credentials
+            # (settings has a default placeholder, but we need the real user ID)
+            config.owner_id = self.owner_id
+
             # Set default business_id from config if available
             if settings.starchat_business_id:
                 self.current_business_id = settings.starchat_business_id
 
             # Create all tools using factory (passing current_business_id for contact tools)
             tools, self.session_state, persona_analyzer = await ToolFactory.create_all_tools(config, current_business_id=self.current_business_id)
+            self.tools = {tool.name: tool for tool in tools}  # Store for direct access
             print(f"✅ {len(tools)} tools initialized")
 
             # Create memory system
             self.memory = await ToolFactory.create_memory_system(config)
             print(f"✅ ZylchMemory system initialized (semantic search enabled)")
+
+            # Create validation service
+            from ..services.validation_service import CommandValidator
+            self.validator = CommandValidator(anthropic_api_key=settings.anthropic_api_key)
+            print(f"✅ Validation service initialized")
 
             # Create model selector
             model_selector = ToolFactory.create_model_selector(config)
@@ -117,9 +221,22 @@ class ZylchAICLI:
                 self.sharing_auth.register_user(
                     owner_id=self.owner_id,
                     email=self.user_email,
-                    display_name=settings.user_display_name if hasattr(settings, 'user_display_name') else None
+                    display_name=self.user_display_name or None
                 )
             print(f"✅ Sharing system initialized")
+
+            # Load ALL triggered instructions for this user (for prompt injection)
+            all_triggers_data = await load_triggered_instructions(
+                zylch_memory=self.memory,
+                owner_id=self.owner_id,
+                zylch_assistant_id=self.zylch_assistant_id,
+                trigger_filter=None  # Get all triggers (not just session_start)
+            )
+            # Extract just instruction text for prompt injection
+            triggered_instructions = [t["instruction"] for t in all_triggers_data]
+
+            if triggered_instructions:
+                print(f"✅ Loaded {len(triggered_instructions)} triggered instructions")
 
             # Initialize agent
             self.agent = ZylchAIAgent(
@@ -129,12 +246,15 @@ class ZylchAICLI:
                 email_style_prompt=settings.email_style_prompt,
                 memory_system=self.memory,
                 persona_analyzer=persona_analyzer,
+                triggered_instructions=triggered_instructions,
             )
 
             print(f"\n✅ Zylch AI initialized successfully!")
             print(f"   • {len(tools)} tools available")
             print(f"   • Memory system: enabled")
             print(f"   • Persona learning: enabled")
+            if triggered_instructions:
+                print(f"   • Triggered instructions: {len(triggered_instructions)}")
             print(f"   • Model: {settings.default_model}\n")
 
             # Auto-create default assistant if none exists (single-assistant mode)
@@ -163,7 +283,12 @@ class ZylchAICLI:
         print("🌟  Zylch AI - Email Intelligence Assistant")
         print("=" * 60)
         print()
-        print(f"📌 Owner: {self.owner_id}")
+        # Show logged-in user info
+        user_display = self.user_display_name or self.user_email or "User"
+        print(f"👤 Logged in as: {user_display}")
+        if self.user_email:
+            print(f"   Email: {self.user_email}")
+        print(f"📌 Owner ID: {self.owner_id}")
         print(f"📌 Current Zylch assistant: {self.zylch_assistant_id}")
         if self.current_business_id:
             print(f"📌 Linked MrCall assistant: {self.current_business_id}")
@@ -178,6 +303,7 @@ class ZylchAICLI:
         print("  /clear         - Clear conversation history")
         print("  /history       - Show conversation history")
         print("  /memory        - Manage behavioral memory (use /memory --help for details)")
+        print("  /trigger       - Manage triggered instructions (use /trigger --help for details)")
         print("  /sync [days]   - Run morning sync (emails + calendar + gap analysis)")
         print("                   Examples: /sync (default 30 days), /sync 3 (last 3 days)")
         print("  /gaps          - Show relationship gaps briefing")
@@ -187,6 +313,7 @@ class ZylchAICLI:
         print("  /share <email> - Register user for intelligence sharing")
         print("  /revoke <email> - Revoke sharing authorization")
         print("  /sharing       - Show sharing status and pending requests")
+        print("  /tutorial      - Interactive tutorial to learn Zylch features")
         print("  /quit          - Exit Zylch AI")
         print()
 
@@ -195,8 +322,28 @@ class ZylchAICLI:
         await self.initialize()
         self.print_welcome()
 
-        # Create prompt session
-        self.session = PromptSession(history=self.history)
+        # Execute session_start triggered instructions via ChatService
+        from ..services.chat_service import ChatService
+        chat_service = ChatService()
+
+        startup_response = await chat_service.execute_session_start_triggers(
+            user_id=self.owner_id,
+            zylch_assistant_id=self.zylch_assistant_id,
+            context={
+                "forced_model": self.forced_model,
+                "current_business_id": self.current_business_id
+            }
+        )
+
+        if startup_response:
+            print(f"\n{startup_response}\n")
+
+        # Create prompt session with tab completion
+        self.session = PromptSession(
+            history=self.history,
+            completer=ZylchCompleter(),
+            complete_while_typing=False  # Only complete on Tab press
+        )
         self.running = True
 
         while self.running:
@@ -404,6 +551,350 @@ class ZylchAICLI:
         else:
             print("❌ Unknown subcommand")
             print("Use /memory --help to see available commands")
+
+    async def _handle_trigger_command(self, command: str):
+        """Handle /trigger command for managing triggered instructions.
+
+        Supported commands:
+        - /trigger --help          - Show help
+        - /trigger --list          - List all triggered instructions
+        - /trigger --types         - Show available trigger types
+        - /trigger --add           - Add a new triggered instruction (interactive)
+        - /trigger --remove <id>   - Remove a triggered instruction by ID
+        """
+        import shlex
+
+        # Parse command into parts
+        parts = command.split(None, 1)
+        if len(parts) == 1:
+            # Just "/trigger" with no args - show help
+            self._print_trigger_help()
+            return
+
+        # Parse arguments
+        args_str = parts[1]
+        try:
+            args = shlex.split(args_str)
+        except ValueError as e:
+            print(f"❌ Error parsing arguments: {e}")
+            return
+
+        # Extract flags and positional arguments
+        flags = {arg for arg in args if arg.startswith('--')}
+        positional = [arg for arg in args if not arg.startswith('--')]
+
+        # Handle --help
+        if '--help' in flags or '-h' in flags:
+            self._print_trigger_help()
+            return
+
+        # Handle --types
+        if '--types' in flags:
+            print("\n=== 🎯 Available Trigger Types ===\n")
+            print("  session_start    - Executes when a new CLI/API session starts")
+            print("  email_received   - Executes when a new email is received")
+            print("  sms_received     - Executes when a new SMS is received")
+            print("  call_received    - Executes when a new call is received")
+            print()
+            print("Examples:")
+            print("  'Greet me at the start of every session with Good morning...' (session_start)")
+            print("  'When a new email arrives from unknown sender, create a contact' (email_received)")
+            print("  'When prospect replies, invite them to call demo number' (email_received)")
+            print()
+            return
+
+        # Handle --list
+        if '--list' in flags:
+            await self._trigger_list()
+            return
+
+        # Handle --add
+        if '--add' in flags:
+            # Check if --check is also present for validation only
+            if '--check' in flags:
+                await self._trigger_check_add()
+            else:
+                await self._trigger_add_interactive()
+            return
+
+        # Handle --remove
+        if '--remove' in flags:
+            if not positional:
+                print("❌ Usage: /trigger --remove <trigger_id>")
+                print("   Get IDs with: /trigger --list")
+                return
+
+            trigger_id = positional[0]
+            # Check if --check is also present for validation only
+            if '--check' in flags:
+                await self._trigger_check_remove(trigger_id)
+            else:
+                await self._trigger_remove(trigger_id)
+            return
+
+        print("❌ Unknown subcommand")
+        print("Use /trigger --help to see available commands")
+
+    def _display_validation_result(self, result: Dict[str, Any]):
+        """Display validation result in a user-friendly format.
+
+        Args:
+            result: ValidationResult dictionary from CommandValidator
+        """
+        status = result.get("status", "valid")
+        valid = result.get("valid", True)
+        explanation = result.get("explanation", "")
+        suggestion = result.get("suggestion")
+        semantic_issues = result.get("semantic_issues", [])
+
+        # Status icon
+        if status == "valid":
+            icon = "✅"
+        elif status == "warning":
+            icon = "⚠️"
+        elif status == "invalid":
+            icon = "❌"
+        else:
+            icon = "ℹ️"
+
+        # Display result
+        print(f"\n{icon} Validation Result:")
+        print(f"  {explanation}")
+
+        # Show semantic issues
+        if semantic_issues:
+            print("\n  Semantic issues detected:")
+            for issue in semantic_issues:
+                print(f"    • {issue}")
+
+        # Show suggestion
+        if suggestion:
+            print(f"\n  💡 Suggestion: {suggestion}")
+
+        # Show preview if available
+        preview = result.get("preview", {})
+        if preview and isinstance(preview, dict):
+            print("\n  Preview:")
+            for key, value in preview.items():
+                if key not in ["id", "namespace", "created_at", "active"]:  # Skip internal fields
+                    if isinstance(value, str) and len(value) > 80:
+                        value = value[:77] + "..."
+                    print(f"    {key}: {value}")
+
+        print()
+
+    def _print_trigger_help(self):
+        """Print help for /trigger command."""
+        print("\n=== 🎯 Triggered Instructions Help ===\n")
+        print("Manage event-driven automation instructions")
+        print()
+        print("Usage:")
+        print("  /trigger --help          - Show this help")
+        print("  /trigger --list          - List all triggered instructions")
+        print("  /trigger --types         - Show available trigger types")
+        print("  /trigger --add           - Add a new triggered instruction (interactive)")
+        print("  /trigger --add --check   - Validate instruction WITHOUT saving (check mode)")
+        print("  /trigger --remove <id>   - Remove a triggered instruction")
+        print("  /trigger --remove <id> --check  - Validate removal WITHOUT removing (check mode)")
+        print()
+        print("Examples:")
+        print('  /trigger --add')
+        print('  /trigger --add --check   # Validate without saving')
+        print('  /trigger --list')
+        print('  /trigger --remove trigger_abc123')
+        print('  /trigger --remove trigger_abc123 --check   # Preview removal')
+        print()
+        print("Trigger types: session_start, email_received, sms_received, call_received")
+        print()
+
+    async def _trigger_list(self):
+        """List all triggered instructions."""
+        from ..tools.instruction_tools import load_triggered_instructions
+
+        triggers = await load_triggered_instructions(
+            zylch_memory=self.memory,
+            owner_id=self.owner_id,
+            zylch_assistant_id=self.zylch_assistant_id,
+            trigger_filter=None  # Get all
+        )
+
+        if not triggers:
+            print("\n📭 No triggered instructions found")
+            print("   Use /trigger --add to create one")
+            print()
+            return
+
+        print(f"\n=== 🎯 Triggered Instructions ({len(triggers)}) ===\n")
+        for trigger in triggers:
+            print(f"ID: {trigger['id']}")
+            print(f"   Name: {trigger['name']}")
+            print(f"   Trigger: {trigger['trigger']}")
+            print(f"   Instruction: {trigger['instruction'][:80]}...")
+            print()
+
+    async def _trigger_add_interactive(self):
+        """Add a triggered instruction interactively."""
+        print("\n=== 🎯 Add Triggered Instruction ===\n")
+
+        # Get trigger type
+        print("Available trigger types:")
+        print("  1. session_start    - When a new session starts")
+        print("  2. email_received   - When a new email arrives")
+        print("  3. sms_received     - When a new SMS arrives")
+        print("  4. call_received    - When a new call is received")
+        print()
+
+        trigger_choice = input("Select trigger type (1-4): ").strip()
+        trigger_map = {
+            '1': 'session_start',
+            '2': 'email_received',
+            '3': 'sms_received',
+            '4': 'call_received'
+        }
+
+        if trigger_choice not in trigger_map:
+            print("❌ Invalid choice")
+            return
+
+        trigger_type = trigger_map[trigger_choice]
+
+        # Get instruction
+        print()
+        instruction = input("Enter instruction (what should Zylch do?): ").strip()
+        if not instruction:
+            print("❌ Instruction cannot be empty")
+            return
+
+        # Get optional name
+        print()
+        name = input("Enter short name (optional, press Enter to skip): ").strip()
+
+        # Use agent to save via tool
+        try:
+            response = await self.agent.process_message(
+                f"Please add a triggered instruction with these details:\n"
+                f"- Trigger: {trigger_type}\n"
+                f"- Instruction: {instruction}\n"
+                + (f"- Name: {name}\n" if name else ""),
+                context={"user_id": self.owner_id}
+            )
+            print(f"\n{response}\n")
+        except Exception as e:
+            print(f"❌ Failed to add triggered instruction: {e}")
+
+    async def _trigger_remove(self, trigger_id: str):
+        """Remove a triggered instruction by ID."""
+        try:
+            response = await self.agent.process_message(
+                f"Please remove the triggered instruction with ID: {trigger_id}",
+                context={"user_id": self.owner_id}
+            )
+            print(f"\n{response}\n")
+        except Exception as e:
+            print(f"❌ Failed to remove triggered instruction: {e}")
+
+    async def _trigger_check_add(self):
+        """Validate triggered instruction add without executing (--check mode)."""
+        print("\n=== 🔍 Validate Triggered Instruction (Check Mode) ===\n")
+        print("This will validate your instruction WITHOUT saving it.\n")
+
+        # Get trigger type
+        print("Available trigger types:")
+        print("  1. session_start    - When a new session starts")
+        print("  2. email_received   - When a new email arrives")
+        print("  3. sms_received     - When a new SMS arrives")
+        print("  4. call_received    - When a new call is received")
+        print()
+
+        trigger_choice = input("Select trigger type (1-4): ").strip()
+        trigger_map = {
+            '1': 'session_start',
+            '2': 'email_received',
+            '3': 'sms_received',
+            '4': 'call_received'
+        }
+
+        if trigger_choice not in trigger_map:
+            print("❌ Invalid choice")
+            return
+
+        trigger_type = trigger_map[trigger_choice]
+
+        # Get instruction
+        print()
+        instruction = input("Enter instruction (what should Zylch do?): ").strip()
+        if not instruction:
+            print("❌ Instruction cannot be empty")
+            return
+
+        # Get optional name
+        print()
+        name = input("Enter short name (optional, press Enter to skip): ").strip()
+
+        try:
+            # Step 1: AI semantic validation
+            validation_result = await self.validator.validate_command(
+                command="/trigger",
+                parameters={
+                    "action": "add",
+                    "instruction": instruction,
+                    "trigger": trigger_type,
+                    "name": name or None
+                },
+                context={"user_id": self.owner_id}
+            )
+
+            # Display AI validation result
+            self._display_validation_result(validation_result.__dict__)
+
+            # Step 2: Tool preview (if AI validation passed)
+            if validation_result.valid:
+                tool = self.tools.get("add_triggered_instruction")
+                if tool:
+                    result = await tool.execute(
+                        validation_only=True,
+                        instruction=instruction,
+                        trigger=trigger_type,
+                        name=name or None
+                    )
+                    if result.message:
+                        print(f"📋 {result.message}")
+
+        except Exception as e:
+            print(f"❌ Validation failed: {e}")
+
+    async def _trigger_check_remove(self, trigger_id: str):
+        """Validate triggered instruction removal without executing (--check mode)."""
+        print("\n=== 🔍 Validate Triggered Instruction Removal (Check Mode) ===\n")
+        print(f"This will validate removal of trigger '{trigger_id}' WITHOUT removing it.\n")
+
+        try:
+            # Step 1: AI semantic validation
+            validation_result = await self.validator.validate_command(
+                command="/trigger",
+                parameters={
+                    "action": "remove",
+                    "trigger_id": trigger_id
+                },
+                context={"user_id": self.owner_id}
+            )
+
+            # Display AI validation result
+            self._display_validation_result(validation_result.__dict__)
+
+            # Step 2: Tool preview (if AI validation passed)
+            if validation_result.valid:
+                tool = self.tools.get("remove_triggered_instruction")
+                if tool:
+                    result = await tool.execute(
+                        validation_only=True,
+                        trigger_id=trigger_id
+                    )
+                    if result.message:
+                        print(f"📋 {result.message}")
+
+        except Exception as e:
+            print(f"❌ Validation failed: {e}")
 
     def _print_memory_help(self):
         """Print help for /memory command."""
@@ -879,8 +1370,18 @@ class ZylchAICLI:
 
         # Use service layer for sync
         try:
-            sync_service = SyncService()
-            results = sync_service.run_full_sync(days_back=days_back or 30)
+            # Import here to avoid circular imports
+            from ..tools.factory import ToolFactory
+
+            # Get email and calendar clients from factory (already initialized)
+            email_client = ToolFactory._email_client
+            calendar_client = ToolFactory._calendar_client
+
+            sync_service = SyncService(
+                email_client=email_client,
+                calendar_client=calendar_client
+            )
+            results = await sync_service.run_full_sync(days_back=days_back or 30)
 
             # Display results
             if results['email_sync']['success']:
@@ -1875,6 +2376,50 @@ class ZylchAICLI:
             print(f"❌ Unknown subcommand: {subcommand}")
             print("Use /archive --help for available commands")
 
+    async def _handle_tutorial_command(self, command: str):
+        """Handle /tutorial command - interactive feature guide.
+
+        Usage:
+            /tutorial           - Start interactive tutorial
+            /tutorial <topic>   - Jump to specific topic
+            /tutorial --help    - Show help
+
+        Topics: contact, email, calendar, sync, memory
+        """
+        from ..tutorial import TutorialManager
+
+        parts = command.split()
+
+        if "--help" in command:
+            print("\n📚 /tutorial Command Help")
+            print("=" * 60)
+            print("Interactive tutorial to learn Zylch features")
+            print()
+            print("Usage:")
+            print("  /tutorial              Start interactive tutorial")
+            print("  /tutorial <topic>      Jump to specific topic")
+            print()
+            print("Topics:")
+            print("  contact    Contact Intelligence")
+            print("  email      Email Management")
+            print("  calendar   Calendar & Meetings")
+            print("  sync       Daily Briefing")
+            print("  memory     Memory & Learning")
+            print()
+            print("Examples:")
+            print("  /tutorial")
+            print("  /tutorial contact")
+            print("  /tutorial email")
+            print("=" * 60 + "\n")
+            return
+
+        # Get optional topic argument
+        topic = parts[1] if len(parts) > 1 else None
+
+        # Run tutorial
+        tutorial = TutorialManager(cli=self)
+        await tutorial.start(topic=topic)
+
     async def handle_command(self, command: str):
         """Handle CLI commands.
 
@@ -1917,6 +2462,10 @@ class ZylchAICLI:
         elif cmd.startswith("/memory"):
             # Unix-style memory subcommands: /memory --help, /memory --add, /memory --list, etc.
             self._handle_memory_command(command)
+
+        elif cmd.startswith("/trigger"):
+            # Triggered instructions management
+            await self._handle_trigger_command(command)
 
         elif cmd.startswith("/cache"):
             # Cache management command
@@ -1964,6 +2513,10 @@ class ZylchAICLI:
         elif cmd.startswith("/archive"):
             # Email archive management
             await self._handle_archive_command(command)
+
+        elif cmd.startswith("/tutorial"):
+            # Interactive tutorial
+            await self._handle_tutorial_command(command)
 
         else:
             print(f"Unknown command: {cmd}")

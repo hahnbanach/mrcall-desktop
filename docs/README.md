@@ -6,6 +6,18 @@
 
 ## 📚 Documentation Index
 
+### User Guide (Non-Technical)
+
+- **[User Features](./user-features/README.md)** - What Zylch can do for you (no technical jargon!)
+  - [Contact Intelligence](./user-features/contact-intelligence.md) - Know everyone you know
+  - [Email Management](./user-features/email-management.md) - Draft and find emails fast
+  - [Calendar Integration](./user-features/calendar-integration.md) - Schedule with context
+  - [Daily Briefing](./user-features/daily-briefing.md) - Know what needs attention
+  - [Memory & Learning](./user-features/memory-learning.md) - Zylch learns your style
+  - [Task Management](./user-features/task-management.md) - See what needs doing
+  - [Sharing](./user-features/sharing.md) - Share intel with colleagues
+  - [MrCall Integration](./user-features/mrcall-integration.md) - Phone assistant config
+
 ### Getting Started
 
 - **[Quick Start Guide](./setup/quick-start.md)** - Get Zylch AI up and running in minutes
@@ -211,6 +223,7 @@ source venv/bin/activate
 python -m zylch.cli.main
 
 # 4. Try these commands
+/tutorial           # Interactive tour of all features
 /sync               # Sync emails and calendar
 /gaps               # See relationship intelligence briefing
 /memory --list      # View your learned preferences
@@ -284,7 +297,11 @@ zylch/
 │   ├── api/                        # HTTP API (FastAPI)
 │   ├── services/                   # Business logic
 │   ├── tools/                      # Gmail, Calendar, Archive, etc.
-│   └── agent/                      # AI agent core
+│   ├── agent/                      # AI agent core
+│   └── tutorial/                   # Interactive tutorial system
+│       ├── tutorial_manager.py     # Tutorial orchestrator
+│       ├── sandbox/                # Mock data for demos
+│       └── steps/                  # Tutorial step definitions
 │
 ├── cache/                          # 💾 Data storage
 │   ├── emails/
