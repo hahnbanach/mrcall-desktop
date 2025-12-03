@@ -31,6 +31,7 @@ export interface EmailThread {
   isUnread?: boolean
   unread?: boolean  // alias for compatibility
   labels: string[]
+  messages?: EmailMessage[]  // populated when fetching full thread
 }
 
 export interface EmailMessage {
@@ -256,4 +257,13 @@ export interface AssistantSettings {
   emailStyle: string | null
   model: 'haiku' | 'sonnet' | 'opus' | 'auto'
   timezone: string
+  // UI preferences
+  assistantTone?: 'casual' | 'professional' | 'formal'
+  responseLength?: 'concise' | 'balanced' | 'detailed'
+  proactiveSuggestions?: boolean
+  storeHistory?: boolean
+  shareAnalytics?: boolean
+  emailNotifications?: boolean
+  taskReminders?: boolean
+  gapAlerts?: boolean
 }

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useCalendarStore } from '@/stores/calendar'
-import type { CalendarEvent } from '@/types'
 
 const calendarStore = useCalendarStore()
 const showCreateModal = ref(false)
@@ -169,7 +168,7 @@ function formatTime(date: string) {
                 :key="event.id"
                 class="text-xs px-1 py-0.5 rounded bg-accent/10 text-accent truncate"
               >
-                {{ event.title }}
+                {{ event.summary }}
               </div>
               <div
                 v-if="getEventsForDate(day.date).length > 2"
@@ -198,7 +197,7 @@ function formatTime(date: string) {
             :key="event.id"
             class="p-3 bg-gray-50 rounded-lg"
           >
-            <h3 class="font-medium text-gray-900">{{ event.title }}</h3>
+            <h3 class="font-medium text-gray-900">{{ event.summary }}</h3>
             <p class="text-sm text-gray-500">
               {{ formatTime(event.start) }} - {{ formatTime(event.end) }}
             </p>

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
-import type { ShareAuthorization } from '@/types'
 
 const settingsStore = useSettingsStore()
 const showAddModal = ref(false)
@@ -19,14 +18,14 @@ function formatDate(date: string) {
 }
 
 async function addAuthorization() {
-  await settingsStore.addShareAuthorization(newShare.value)
+  await settingsStore.shareWithRecipient(newShare.value.email, newShare.value.permissions)
   showAddModal.value = false
   newShare.value = { email: '', permissions: ['read'] }
 }
 
 async function revokeAuthorization(id: string) {
   if (confirm('Are you sure you want to revoke this authorization?')) {
-    await settingsStore.revokeShareAuthorization(id)
+    await settingsStore.revokeShare(id)
   }
 }
 
@@ -58,7 +57,7 @@ const permissionLabels: Record<string, string> = {
 
     <!-- Content -->
     <div class="flex-1 overflow-y-auto p-4">
-      <div v-if="settingsStore.loading" class="flex items-center justify-center h-32">
+      <div v-if="settingsStore.isLoading" class="flex items-center justify-center h-32">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
       </div>
 
@@ -86,11 +85,11 @@ const permissionLabels: Record<string, string> = {
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 bg-accent/10 rounded-full flex items-center justify-center">
                   <span class="text-accent font-medium">
-                    {{ auth.email.charAt(0).toUpperCase() }}
+                    {{ auth.recipientEmail.charAt(0).toUpperCase() }}
                   </span>
                 </div>
                 <div>
-                  <p class="font-medium text-gray-900">{{ auth.email }}</p>
+                  <p class="font-medium text-gray-900">{{ auth.recipientEmail }}</p>
                   <div class="flex items-center gap-2 mt-1">
                     <span
                       v-for="perm in auth.permissions"
@@ -197,7 +196,7 @@ const permissionLabels: Record<string, string> = {
             </button>
             <button
               @click="addAuthorization"
-              :disabled="!newShare.email || newShare.permissions.length === 0 || settingsStore.loading"
+              :disabled="!newShare.email || newShare.permissions.length === 0 || settingsStore.isLoading"
               class="px-6 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
             >
               Share

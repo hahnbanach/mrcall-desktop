@@ -9,10 +9,7 @@ import { useAuthStore } from '@/stores/auth'
 import {
   ClipboardDocumentListIcon,
   CalendarIcon,
-  ExclamationTriangleIcon,
-  ArrowPathIcon,
-  EnvelopeIcon,
-  UserGroupIcon
+  ExclamationTriangleIcon
 } from '@heroicons/vue/24/outline'
 import { formatDistanceToNow } from 'date-fns'
 

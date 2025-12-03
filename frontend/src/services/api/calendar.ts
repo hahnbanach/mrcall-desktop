@@ -1,11 +1,6 @@
 import api from './index'
 import type { CalendarEvent } from '@/types'
 
-interface GetEventsParams {
-  startDate?: Date
-  endDate?: Date
-}
-
 export const calendarService = {
   async getEvents(timeMin?: string, timeMax?: string): Promise<CalendarEvent[]> {
     const { data } = await api.get('/api/calendar/events', {

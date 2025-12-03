@@ -35,10 +35,10 @@ async function saveDraft() {
 async function sendDraft() {
   if (!editingDraft.value) return
   const success = await emailStore.sendEmail(
-    editingDraft.value.to,
+    editingDraft.value.to.join(', '),
     editingDraft.value.subject,
     editingDraft.value.body,
-    editingDraft.value.threadId
+    editingDraft.value.threadId || undefined
   )
   if (success) {
     await emailStore.deleteDraft(editingDraft.value.id)

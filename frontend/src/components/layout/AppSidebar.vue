@@ -22,7 +22,7 @@ import {
   LightBulbIcon
 } from '@heroicons/vue/24/outline'
 
-const props = defineProps<{
+defineProps<{
   open: boolean
 }>()
 

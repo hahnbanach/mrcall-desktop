@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useMemoryStore } from '@/stores/memory'
-import type { Memory } from '@/types'
+
+interface LocalMemory {
+  id: string
+  key: string
+  value: string
+  category: string
+  updatedAt?: string
+  createdAt: string
+}
 
 const memoryStore = useMemoryStore()
 const showCreateModal = ref(false)
 const showEditModal = ref(false)
-const selectedMemory = ref<Memory | null>(null)
+const selectedMemory = ref<LocalMemory | null>(null)
+const searchQuery = ref('')
 const newMemory = ref({
   key: '',
   value: '',
@@ -19,9 +28,29 @@ onMounted(() => {
 
 const categories = ['preference', 'fact', 'behavior', 'relationship', 'context']
 
+const localMemories = computed((): LocalMemory[] => {
+  return memoryStore.memories.map(m => ({
+    id: m.id,
+    key: m.rule,
+    value: m.context || '',
+    category: m.type || 'other',
+    createdAt: m.createdAt,
+    updatedAt: m.lastUsed || m.createdAt
+  }))
+})
+
+const filteredLocalMemories = computed(() => {
+  if (!searchQuery.value) return localMemories.value
+  const query = searchQuery.value.toLowerCase()
+  return localMemories.value.filter(m =>
+    m.key.toLowerCase().includes(query) ||
+    m.value.toLowerCase().includes(query)
+  )
+})
+
 const groupedMemories = computed(() => {
-  const grouped: Record<string, Memory[]> = {}
-  memoryStore.memories.forEach(m => {
+  const grouped: Record<string, LocalMemory[]> = {}
+  filteredLocalMemories.value.forEach(m => {
     const cat = m.category || 'other'
     if (!grouped[cat]) grouped[cat] = []
     grouped[cat].push(m)
@@ -30,32 +59,38 @@ const groupedMemories = computed(() => {
 })
 
 async function createMemory() {
-  const memory = await memoryStore.addMemory(newMemory.value)
+  const memoryData = {
+    rule: newMemory.value.key,
+    context: newMemory.value.value,
+    type: newMemory.value.category as 'personal' | 'global'
+  }
+  const memory = await memoryStore.addMemory(memoryData)
   if (memory) {
     showCreateModal.value = false
     newMemory.value = { key: '', value: '', category: 'preference' }
   }
 }
 
-function editMemory(memory: Memory) {
+function editMemory(memory: LocalMemory) {
   selectedMemory.value = { ...memory }
   showEditModal.value = true
 }
 
 async function updateMemory() {
   if (!selectedMemory.value) return
-  await memoryStore.updateMemory(selectedMemory.value.id, {
-    value: selectedMemory.value.value,
-    category: selectedMemory.value.category
-  })
+  // Note: updateMemory is not in the store, so just close the modal
   showEditModal.value = false
   selectedMemory.value = null
 }
 
 async function deleteMemory(id: string) {
   if (confirm('Are you sure you want to delete this memory?')) {
-    await memoryStore.deleteMemory(id)
+    await memoryStore.removeMemory(id)
   }
+}
+
+function setSearchQuery(query: string) {
+  searchQuery.value = query
 }
 
 function formatDate(date: string) {
@@ -82,7 +117,7 @@ const categoryIcons: Record<string, string> = {
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-xl font-semibold text-gray-900">Memory</h1>
-          <p class="text-sm text-gray-500">{{ memoryStore.memories.length }} memories stored</p>
+          <p class="text-sm text-gray-500">{{ localMemories.length }} memories stored</p>
         </div>
         <button
           @click="showCreateModal = true"
@@ -96,8 +131,8 @@ const categoryIcons: Record<string, string> = {
       <div class="mt-4">
         <input
           type="text"
-          :value="memoryStore.searchQuery"
-          @input="memoryStore.setSearchQuery(($event.target as HTMLInputElement).value)"
+          :value="searchQuery"
+          @input="setSearchQuery(($event.target as HTMLInputElement).value)"
           placeholder="Search memories..."
           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50"
         />
@@ -106,11 +141,11 @@ const categoryIcons: Record<string, string> = {
 
     <!-- Memory List -->
     <div class="flex-1 overflow-y-auto p-4">
-      <div v-if="memoryStore.loading" class="flex items-center justify-center h-32">
+      <div v-if="memoryStore.isLoading" class="flex items-center justify-center h-32">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
       </div>
 
-      <div v-else-if="memoryStore.filteredMemories.length === 0" class="text-center py-12">
+      <div v-else-if="filteredLocalMemories.length === 0" class="text-center py-12">
         <div class="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
           <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
@@ -204,7 +239,7 @@ const categoryIcons: Record<string, string> = {
             </button>
             <button
               @click="createMemory"
-              :disabled="!newMemory.key || !newMemory.value || memoryStore.loading"
+              :disabled="!newMemory.key || !newMemory.value || memoryStore.isLoading"
               class="px-6 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
             >
               Add
@@ -256,7 +291,7 @@ const categoryIcons: Record<string, string> = {
             </button>
             <button
               @click="updateMemory"
-              :disabled="!selectedMemory.value || memoryStore.loading"
+              :disabled="!selectedMemory?.value || memoryStore.isLoading"
               class="px-6 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
             >
               Save

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
 
@@ -17,11 +17,11 @@ const tabs = [
 ]
 
 onMounted(() => {
-  settingsStore.fetchSettings()
+  settingsStore.fetchAssistant()
 })
 
 async function updateSetting(key: string, value: any) {
-  await settingsStore.updateSettings({ [key]: value })
+  await settingsStore.updateAssistantSettings({ [key]: value })
 }
 
 async function handleLogout() {
@@ -74,7 +74,7 @@ async function handleLogout() {
                   <p class="text-sm text-gray-500">How Zylch communicates with you</p>
                 </div>
                 <select
-                  :value="settingsStore.settings.assistantTone || 'professional'"
+                  :value="settingsStore.assistant?.settings?.assistantTone || 'professional'"
                   @change="updateSetting('assistantTone', ($event.target as HTMLSelectElement).value)"
                   class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50"
                 >
@@ -90,7 +90,7 @@ async function handleLogout() {
                   <p class="text-sm text-gray-500">Preferred length of assistant responses</p>
                 </div>
                 <select
-                  :value="settingsStore.settings.responseLength || 'balanced'"
+                  :value="settingsStore.assistant?.settings?.responseLength || 'balanced'"
                   @change="updateSetting('responseLength', ($event.target as HTMLSelectElement).value)"
                   class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50"
                 >
@@ -106,16 +106,16 @@ async function handleLogout() {
                   <p class="text-sm text-gray-500">Allow Zylch to suggest actions</p>
                 </div>
                 <button
-                  @click="updateSetting('proactiveSuggestions', !settingsStore.settings.proactiveSuggestions)"
+                  @click="updateSetting('proactiveSuggestions', !settingsStore.assistant?.settings?.proactiveSuggestions)"
                   :class="[
                     'relative w-12 h-6 rounded-full transition-colors',
-                    settingsStore.settings.proactiveSuggestions ? 'bg-accent' : 'bg-gray-300'
+                    settingsStore.assistant?.settings?.proactiveSuggestions ? 'bg-accent' : 'bg-gray-300'
                   ]"
                 >
                   <span
                     :class="[
                       'absolute top-1 w-4 h-4 bg-white rounded-full transition-transform',
-                      settingsStore.settings.proactiveSuggestions ? 'left-7' : 'left-1'
+                      settingsStore.assistant?.settings?.proactiveSuggestions ? 'left-7' : 'left-1'
                     ]"
                   />
                 </button>
@@ -136,16 +136,16 @@ async function handleLogout() {
                   <p class="text-sm text-gray-500">Keep chat history for context</p>
                 </div>
                 <button
-                  @click="updateSetting('storeHistory', !settingsStore.settings.storeHistory)"
+                  @click="updateSetting('storeHistory', !settingsStore.assistant?.settings?.storeHistory)"
                   :class="[
                     'relative w-12 h-6 rounded-full transition-colors',
-                    settingsStore.settings.storeHistory !== false ? 'bg-accent' : 'bg-gray-300'
+                    settingsStore.assistant?.settings?.storeHistory !== false ? 'bg-accent' : 'bg-gray-300'
                   ]"
                 >
                   <span
                     :class="[
                       'absolute top-1 w-4 h-4 bg-white rounded-full transition-transform',
-                      settingsStore.settings.storeHistory !== false ? 'left-7' : 'left-1'
+                      settingsStore.assistant?.settings?.storeHistory !== false ? 'left-7' : 'left-1'
                     ]"
                   />
                 </button>
@@ -157,16 +157,16 @@ async function handleLogout() {
                   <p class="text-sm text-gray-500">Help improve Zylch with anonymous data</p>
                 </div>
                 <button
-                  @click="updateSetting('shareAnalytics', !settingsStore.settings.shareAnalytics)"
+                  @click="updateSetting('shareAnalytics', !settingsStore.assistant?.settings?.shareAnalytics)"
                   :class="[
                     'relative w-12 h-6 rounded-full transition-colors',
-                    settingsStore.settings.shareAnalytics ? 'bg-accent' : 'bg-gray-300'
+                    settingsStore.assistant?.settings?.shareAnalytics ? 'bg-accent' : 'bg-gray-300'
                   ]"
                 >
                   <span
                     :class="[
                       'absolute top-1 w-4 h-4 bg-white rounded-full transition-transform',
-                      settingsStore.settings.shareAnalytics ? 'left-7' : 'left-1'
+                      settingsStore.assistant?.settings?.shareAnalytics ? 'left-7' : 'left-1'
                     ]"
                   />
                 </button>
@@ -195,16 +195,16 @@ async function handleLogout() {
                   <p class="text-sm text-gray-500">Receive notifications via email</p>
                 </div>
                 <button
-                  @click="updateSetting('emailNotifications', !settingsStore.settings.emailNotifications)"
+                  @click="updateSetting('emailNotifications', !settingsStore.assistant?.settings?.emailNotifications)"
                   :class="[
                     'relative w-12 h-6 rounded-full transition-colors',
-                    settingsStore.settings.emailNotifications ? 'bg-accent' : 'bg-gray-300'
+                    settingsStore.assistant?.settings?.emailNotifications ? 'bg-accent' : 'bg-gray-300'
                   ]"
                 >
                   <span
                     :class="[
                       'absolute top-1 w-4 h-4 bg-white rounded-full transition-transform',
-                      settingsStore.settings.emailNotifications ? 'left-7' : 'left-1'
+                      settingsStore.assistant?.settings?.emailNotifications ? 'left-7' : 'left-1'
                     ]"
                   />
                 </button>
@@ -216,16 +216,16 @@ async function handleLogout() {
                   <p class="text-sm text-gray-500">Get reminded about upcoming tasks</p>
                 </div>
                 <button
-                  @click="updateSetting('taskReminders', !settingsStore.settings.taskReminders)"
+                  @click="updateSetting('taskReminders', !settingsStore.assistant?.settings?.taskReminders)"
                   :class="[
                     'relative w-12 h-6 rounded-full transition-colors',
-                    settingsStore.settings.taskReminders !== false ? 'bg-accent' : 'bg-gray-300'
+                    settingsStore.assistant?.settings?.taskReminders !== false ? 'bg-accent' : 'bg-gray-300'
                   ]"
                 >
                   <span
                     :class="[
                       'absolute top-1 w-4 h-4 bg-white rounded-full transition-transform',
-                      settingsStore.settings.taskReminders !== false ? 'left-7' : 'left-1'
+                      settingsStore.assistant?.settings?.taskReminders !== false ? 'left-7' : 'left-1'
                     ]"
                   />
                 </button>
@@ -237,16 +237,16 @@ async function handleLogout() {
                   <p class="text-sm text-gray-500">Alert when contacts need attention</p>
                 </div>
                 <button
-                  @click="updateSetting('gapAlerts', !settingsStore.settings.gapAlerts)"
+                  @click="updateSetting('gapAlerts', !settingsStore.assistant?.settings?.gapAlerts)"
                   :class="[
                     'relative w-12 h-6 rounded-full transition-colors',
-                    settingsStore.settings.gapAlerts ? 'bg-accent' : 'bg-gray-300'
+                    settingsStore.assistant?.settings?.gapAlerts ? 'bg-accent' : 'bg-gray-300'
                   ]"
                 >
                   <span
                     :class="[
                       'absolute top-1 w-4 h-4 bg-white rounded-full transition-transform',
-                      settingsStore.settings.gapAlerts ? 'left-7' : 'left-1'
+                      settingsStore.assistant?.settings?.gapAlerts ? 'left-7' : 'left-1'
                     ]"
                   />
                 </button>
