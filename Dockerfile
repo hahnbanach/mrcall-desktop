@@ -24,12 +24,15 @@ RUN mkdir -p /app/cache /app/.swarm /app/credentials && \
 
 USER zylch
 
-# Expose API port
+# Expose API port (Railway provides PORT env var)
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Set default PORT if not provided
+ENV PORT=8000
 
-# Default command: run API server
-CMD ["uvicorn", "zylch.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Health check (uses PORT env var)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+# Default command: run API server (shell form for variable expansion)
+CMD uvicorn zylch.api.main:app --host 0.0.0.0 --port ${PORT}
