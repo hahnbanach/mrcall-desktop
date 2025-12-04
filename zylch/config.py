@@ -320,7 +320,12 @@ class Settings(BaseSettings):
             return set()
 
         try:
+            # Try relative path first, then absolute from module location
             path = Path(self.alpha_testers_file)
+            if not path.exists():
+                # Try relative to this module's directory
+                module_dir = Path(__file__).parent.parent
+                path = module_dir / self.alpha_testers_file
             if not path.exists():
                 return set()
 
