@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 // Lazy load views for better performance
 const LoginView = () => import('@/views/LoginView.vue')
 const AuthCallbackView = () => import('@/views/AuthCallbackView.vue')
+const NotAllowedView = () => import('@/views/NotAllowedView.vue')
 const DashboardView = () => import('@/views/DashboardView.vue')
 const EmailsView = () => import('@/views/EmailsView.vue')
 const EmailThreadView = () => import('@/views/EmailThreadView.vue')
@@ -33,6 +34,12 @@ const routes: RouteRecordRaw[] = [
     path: '/auth/callback',
     name: 'auth-callback',
     component: AuthCallbackView,
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/not-allowed',
+    name: 'not-allowed',
+    component: NotAllowedView,
     meta: { requiresAuth: false }
   },
 

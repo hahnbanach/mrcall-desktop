@@ -249,6 +249,16 @@ class Settings(BaseSettings):
     # Skill System Feature Flags
     skill_mode_enabled: bool = Field(default=False, description="Enable skill-based interface")
 
+    # Alpha Testers Allowlist
+    alpha_testers_file: str = Field(
+        default="data/alpha_testers.txt",
+        description="Path to file containing allowed alpha tester emails (one per line)"
+    )
+    alpha_testers_enabled: bool = Field(
+        default=True,
+        description="Enable alpha testers allowlist check"
+    )
+
     # Email Archive Configuration
     email_archive_backend: str = Field(
         default="sqlite",
@@ -298,6 +308,51 @@ class Settings(BaseSettings):
         path = Path(self.email_archive_sqlite_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
+
+    def get_alpha_testers(self) -> set:
+        """Get set of allowed alpha tester emails.
+
+        Returns:
+            Set of lowercase email addresses from the alpha testers file.
+            Returns empty set if file doesn't exist or allowlist is disabled.
+        """
+        if not self.alpha_testers_enabled:
+            return set()
+
+        try:
+            path = Path(self.alpha_testers_file)
+            if not path.exists():
+                return set()
+
+            emails = set()
+            with open(path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    # Skip empty lines and comments
+                    if line and not line.startswith('#'):
+                        emails.add(line.lower())
+            return emails
+        except Exception:
+            return set()
+
+    def is_alpha_tester(self, email: str) -> bool:
+        """Check if email is in the alpha testers list.
+
+        Args:
+            email: Email address to check
+
+        Returns:
+            True if allowlist is disabled OR email is in the list.
+            False if allowlist is enabled AND email is not in the list.
+        """
+        if not self.alpha_testers_enabled:
+            return True  # Everyone allowed when disabled
+
+        if not email:
+            return False
+
+        allowed = self.get_alpha_testers()
+        return email.lower() in allowed
 
 
 # Global settings instance
