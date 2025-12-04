@@ -57,6 +57,10 @@ class Settings(BaseSettings):
         default="",
         description="Path to Firebase service account JSON file"
     )
+    firebase_service_account_json: str = Field(
+        default="",
+        description="Firebase service account JSON as string (for cloud deployments)"
+    )
     firebase_project_id: str = Field(
         default="",
         description="Firebase project ID"

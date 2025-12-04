@@ -1,5 +1,6 @@
 """Firebase Authentication utilities for validating JWT tokens."""
 
+import json
 import logging
 from typing import Optional
 from fastapi import HTTPException, Header
@@ -18,6 +19,10 @@ def initialize_firebase():
 
     This should be called once at application startup.
     Uses service account credentials from environment config.
+
+    Supports two methods:
+    1. FIREBASE_SERVICE_ACCOUNT_JSON env var (for cloud deployments like Railway)
+    2. FIREBASE_SERVICE_ACCOUNT_PATH file path (for local development)
     """
     global _firebase_app
 
@@ -26,18 +31,32 @@ def initialize_firebase():
         return _firebase_app
 
     try:
-        # Check if service account path is configured
-        if not settings.firebase_service_account_path:
-            logger.warning("Firebase service account path not configured")
+        cred = None
+
+        # Method 1: JSON string from environment variable (preferred for cloud)
+        if settings.firebase_service_account_json:
+            logger.info("Initializing Firebase from FIREBASE_SERVICE_ACCOUNT_JSON env var")
+            service_account_info = json.loads(settings.firebase_service_account_json)
+            cred = credentials.Certificate(service_account_info)
+
+        # Method 2: File path (for local development)
+        elif settings.firebase_service_account_path:
+            logger.info(f"Initializing Firebase from file: {settings.firebase_service_account_path}")
+            cred = credentials.Certificate(settings.firebase_service_account_path)
+
+        else:
+            logger.warning("Firebase not configured - set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH")
             return None
 
         # Initialize Firebase Admin SDK with service account
-        cred = credentials.Certificate(settings.firebase_service_account_path)
         _firebase_app = firebase_admin.initialize_app(cred)
 
         logger.info("Firebase Admin SDK initialized successfully")
         return _firebase_app
 
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
+        return None
     except Exception as e:
         logger.error(f"Failed to initialize Firebase: {e}")
         return None
