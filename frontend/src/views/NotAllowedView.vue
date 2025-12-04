@@ -9,7 +9,7 @@ const authStore = useAuthStore()
 // Get email from query params
 const email = route.query.email as string || authStore.user?.email || 'your email'
 
-const countdown = ref(5)
+const countdown = ref(10)
 
 onMounted(() => {
   // Logout and redirect after 5 seconds
