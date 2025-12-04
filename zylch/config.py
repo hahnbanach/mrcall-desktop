@@ -61,6 +61,10 @@ class Settings(BaseSettings):
         default="",
         description="Firebase service account JSON as string (for cloud deployments)"
     )
+    firebase_service_account_base64: str = Field(
+        default="",
+        description="Firebase service account JSON as Base64 (for cloud deployments - avoids escaping issues)"
+    )
     firebase_project_id: str = Field(
         default="",
         description="Firebase project ID"
