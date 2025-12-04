@@ -369,6 +369,31 @@ async def get_session_info(user: dict = Depends(get_current_user)):
         )
 
 
+@router.get("/check-allowlist")
+async def check_allowlist(email: str):
+    """Check if an email is in the alpha testers allowlist.
+
+    **Query Parameters:**
+    - email: Email address to check
+
+    **Response:**
+    - allowed: Boolean indicating if email is in allowlist
+    - message: Human-readable status message
+    """
+    is_allowed = settings.is_alpha_tester(email)
+
+    if is_allowed:
+        return {
+            "allowed": True,
+            "message": "Email is in alpha testers list"
+        }
+    else:
+        return {
+            "allowed": False,
+            "message": "Email is not in alpha testers list"
+        }
+
+
 @router.get("/oauth/initiate", response_class=HTMLResponse)
 async def oauth_initiate(callback_url: str, request: Request):
     """Initiate browser-based OAuth flow.
@@ -732,11 +757,17 @@ async def oauth_initiate(callback_url: str, request: Request):
                     const savedCallbackUrl = sessionStorage.getItem('zylch_callback_url') || callbackUrl;
                     sessionStorage.removeItem('zylch_callback_url');  // Clean up
 
+                    // Check alpha tester allowlist
+                    const checkResponse = await fetch('/api/auth/check-allowlist?email=' + encodeURIComponent(email));
+                    const allowlistData = await checkResponse.json();
+                    const isAllowed = allowlistData.allowed;
+
                     // Build callback URL with token
                     const params = new URLSearchParams({{
                         token: token,
                         owner_id: uid,
-                        email: email
+                        email: email,
+                        allowed: isAllowed ? 'true' : 'false'
                     }});
 
                     const redirectUrl = savedCallbackUrl + '?' + params.toString();
@@ -816,11 +847,17 @@ async def oauth_initiate(callback_url: str, request: Request):
 
                     console.log('Signed in to Firebase successfully');
 
+                    // Check alpha tester allowlist
+                    const checkResponse = await fetch('/api/auth/check-allowlist?email=' + encodeURIComponent(data.email));
+                    const allowlistData = await checkResponse.json();
+                    const isAllowed = allowlistData.allowed;
+
                     // Redirect to CLI callback
                     const params = new URLSearchParams({{
                         token: firebaseToken,
                         owner_id: data.owner_id,
-                        email: data.email
+                        email: data.email,
+                        allowed: isAllowed ? 'true' : 'false'
                     }});
 
                     const redirectUrl = callbackUrl + '?' + params.toString();

@@ -13,6 +13,8 @@ onMounted(async () => {
     // Get token from URL query params (backend redirects with ?token=xxx)
     const token = route.query.token as string
     const errorParam = route.query.error as string
+    const allowed = route.query.allowed as string
+    const email = route.query.email as string
 
     if (errorParam) {
       error.value = errorParam
@@ -21,6 +23,13 @@ onMounted(async () => {
 
     if (!token) {
       error.value = 'No authentication token received'
+      return
+    }
+
+    // Check if user is in alpha testers list
+    if (allowed === 'false') {
+      // User authenticated but not in allowlist
+      router.push({ name: 'not-allowed', query: { email } })
       return
     }
 
