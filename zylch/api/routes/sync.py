@@ -20,9 +20,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# In-memory sync status (per user) - in production, use Redis or DB
-_sync_status: dict[str, SyncStatusResponse] = {}
-
 
 class SyncStatusResponse(BaseModel):
     """Response model for sync status."""
@@ -51,6 +48,10 @@ class SyncCalendarRequest(BaseModel):
 class FullSyncRequest(BaseModel):
     """Request model for full sync."""
     days_back: Optional[int] = None
+
+
+# In-memory sync status (per user) - in production, use Redis or DB
+_sync_status: dict[str, SyncStatusResponse] = {}
 
 
 def _get_user_token_dir(user_id: str) -> Path:
