@@ -21,6 +21,8 @@ wheels/
 *.egg
 
 zylch-website/
+zylch-website
+
 
 # Virtual environments
 venv/

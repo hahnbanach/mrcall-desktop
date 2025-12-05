@@ -39,3 +39,4 @@ hnswlib>=0.7.0
 
 # HTTP
 requests>=2.31.0
+supabase

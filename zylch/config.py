@@ -42,6 +42,18 @@ class Settings(BaseSettings):
         default=str(Path.home() / ".zylch" / "credentials" / "google"),
         description="Directory for Google OAuth tokens (isolated per-user)"
     )
+    google_client_id: str = Field(
+        default="",
+        description="Google OAuth client ID (for server-side OAuth flow)"
+    )
+    google_client_secret: str = Field(
+        default="",
+        description="Google OAuth client secret (for server-side OAuth flow)"
+    )
+    google_oauth_redirect_uri: str = Field(
+        default="",
+        description="Google OAuth redirect URI (e.g., https://api.zylch.ai/api/auth/google/callback)"
+    )
 
     # Gmail
     gmail_accounts: List[str] = Field(
@@ -78,6 +90,20 @@ class Settings(BaseSettings):
     firebase_auth_domain: str = Field(
         default="",
         description="Firebase auth domain (e.g., project-id.firebaseapp.com)"
+    )
+
+    # Supabase (multi-tenant database)
+    supabase_url: str = Field(
+        default="",
+        description="Supabase project URL"
+    )
+    supabase_anon_key: str = Field(
+        default="",
+        description="Supabase anon/public key"
+    )
+    supabase_service_role_key: str = Field(
+        default="",
+        description="Supabase service role key (secret, for backend)"
     )
 
     # Microsoft Graph API (for Outlook email)

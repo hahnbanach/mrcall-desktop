@@ -5,9 +5,12 @@ import logging
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import anthropic
+
+if TYPE_CHECKING:
+    from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +20,8 @@ class EmailSyncManager:
 
     NOW READS FROM EMAIL ARCHIVE instead of Gmail directly.
     Analyzes threads from archive with Haiku and caches intelligence.
+
+    Supports both local JSON cache and Supabase multi-tenant storage.
     """
 
     def __init__(
@@ -25,6 +30,8 @@ class EmailSyncManager:
         cache_dir: str = "cache/emails",
         anthropic_api_key: str = None,
         days_back: int = 30,
+        owner_id: Optional[str] = None,
+        supabase_storage: Optional['SupabaseStorage'] = None,
     ):
         """Initialize email sync manager.
 
@@ -33,14 +40,24 @@ class EmailSyncManager:
             cache_dir: Directory to store intelligence cache
             anthropic_api_key: API key for Haiku analysis
             days_back: Days back for intelligence window (default: 30)
+            owner_id: User's Firebase UID (required for Supabase backend)
+            supabase_storage: Optional SupabaseStorage instance for multi-tenant
         """
         self.archive = email_archive  # CHANGED: use archive instead of gmail
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key) if anthropic_api_key else None
         self.days_back = 30  # Fixed: always 1 month intelligence window
+        self.owner_id = owner_id
+        self.supabase = supabase_storage
 
-        logger.info(f"Initialized EmailSyncManager (reads from archive, intelligence window: 30 days)")
+        # Use Supabase if provided
+        self._use_supabase = bool(self.supabase and self.owner_id)
+
+        if self._use_supabase:
+            logger.info(f"EmailSyncManager using Supabase for owner {owner_id}")
+        else:
+            logger.info(f"EmailSyncManager using local JSON cache")
 
     def _get_cache_path(self) -> Path:
         """Get path to email cache file."""
@@ -48,6 +65,19 @@ class EmailSyncManager:
 
     def _load_cache(self) -> Dict[str, Any]:
         """Load existing email cache."""
+        if self._use_supabase:
+            # Load from Supabase
+            analyses = self.supabase.get_thread_analyses(self.owner_id)
+            threads = {}
+            for analysis in analyses:
+                thread_id = analysis['thread_id']
+                threads[thread_id] = self._convert_supabase_to_cache(analysis)
+            return {
+                "last_sync": None,  # Not tracked in Supabase
+                "threads": threads
+            }
+
+        # Load from local JSON
         cache_path = self._get_cache_path()
         if cache_path.exists():
             with open(cache_path, 'r') as f:
@@ -58,11 +88,62 @@ class EmailSyncManager:
         }
 
     def _save_cache(self, cache: Dict[str, Any]) -> None:
-        """Save email cache to disk."""
+        """Save email cache to disk or Supabase."""
+        if self._use_supabase:
+            # Save each thread to Supabase
+            for thread_id, thread_data in cache['threads'].items():
+                self._save_thread_to_supabase(thread_data)
+            logger.info(f"Saved {len(cache['threads'])} threads to Supabase")
+            return
+
+        # Save to local JSON
         cache_path = self._get_cache_path()
         with open(cache_path, 'w') as f:
             json.dump(cache, f, indent=2)
         logger.info(f"Saved {len(cache['threads'])} threads to cache")
+
+    def _save_thread_to_supabase(self, thread_data: Dict[str, Any]) -> None:
+        """Save a single thread analysis to Supabase."""
+        analysis = {
+            'thread_id': thread_data['thread_id'],
+            'contact_email': thread_data.get('last_email', {}).get('from_email'),
+            'contact_name': thread_data.get('last_email', {}).get('from_name'),
+            'last_email_date': thread_data.get('last_message_date'),
+            'last_email_direction': thread_data.get('last_email', {}).get('direction'),
+            'analysis': {
+                'summary': thread_data.get('summary'),
+                'expected_action': thread_data.get('expected_action'),
+                'priority_score': thread_data.get('priority_score'),
+                'email_count': thread_data.get('email_count'),
+                'participants': thread_data.get('participants', []),
+            },
+            'needs_action': thread_data.get('open', False),
+            'task_description': thread_data.get('expected_action'),
+            'priority': thread_data.get('priority_score'),
+            'manually_closed': thread_data.get('manually_closed', False),
+        }
+        self.supabase.store_thread_analysis(self.owner_id, analysis)
+
+    def _convert_supabase_to_cache(self, supabase_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert Supabase thread_analysis format to cache format."""
+        analysis = supabase_analysis.get('analysis', {}) or {}
+        return {
+            'thread_id': supabase_analysis['thread_id'],
+            'subject': analysis.get('subject', ''),
+            'participants': analysis.get('participants', []),
+            'email_count': analysis.get('email_count', 0),
+            'last_updated': supabase_analysis.get('updated_at'),
+            'open': supabase_analysis.get('needs_action', False),
+            'expected_action': supabase_analysis.get('task_description'),
+            'summary': analysis.get('summary', ''),
+            'priority_score': supabase_analysis.get('priority', 5),
+            'manually_closed': supabase_analysis.get('manually_closed', False),
+            'last_message_date': supabase_analysis.get('last_email_date'),
+            'last_email': {
+                'from_email': supabase_analysis.get('contact_email'),
+                'from_name': supabase_analysis.get('contact_name'),
+            }
+        }
 
     def sync_emails(self, force_full: bool = False, days_back: Optional[int] = None) -> Dict[str, Any]:
         """Build intelligence cache from email archive.

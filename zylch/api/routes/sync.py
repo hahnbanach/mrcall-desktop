@@ -15,8 +15,40 @@ from zylch.tools.gmail import GmailClient
 from zylch.tools.gcalendar import GoogleCalendarClient
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token, get_user_email_from_token
 from zylch.config import settings
+from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)
+
+# Shared Supabase storage instance (lazy-loaded)
+_supabase_storage: Optional[SupabaseStorage] = None
+
+
+def get_supabase_storage() -> Optional[SupabaseStorage]:
+    """Get shared Supabase storage instance.
+
+    Returns:
+        SupabaseStorage if configured, None otherwise
+    """
+    global _supabase_storage
+
+    # Check if Supabase is configured
+    if not settings.supabase_url or not settings.supabase_service_role_key:
+        logger.debug("Supabase not configured, using local storage")
+        return None
+
+    # Lazy initialize
+    if _supabase_storage is None:
+        try:
+            _supabase_storage = SupabaseStorage(
+                url=settings.supabase_url,
+                key=settings.supabase_service_role_key
+            )
+            logger.info("Supabase storage initialized for sync routes")
+        except Exception as e:
+            logger.error(f"Failed to initialize Supabase storage: {e}")
+            return None
+
+    return _supabase_storage
 
 router = APIRouter()
 
@@ -88,16 +120,19 @@ def _get_email_client_for_user(user: dict) -> GmailClient:
 
     logger.info(f"Initializing Gmail client for user {user_id} ({user_email})")
 
-    # Create Gmail client with user-specific token directory
+    # Create Gmail client with owner_id for Supabase token storage
     gmail_client = GmailClient(
         credentials_path=settings.google_credentials_path,
         token_dir=str(user_token_dir),
-        account=user_email
+        account=user_email,
+        owner_id=user_id  # Enables Supabase token storage
     )
 
-    # Check if token exists and authenticate
-    token_path = user_token_dir / "token.pickle"
-    if token_path.exists():
+    # Check for existing credentials (Supabase or filesystem)
+    from zylch.api import token_storage
+    has_credentials = token_storage.has_google_credentials(user_id)
+
+    if has_credentials:
         try:
             gmail_client.authenticate()
             logger.info(f"Gmail authenticated for user {user_id}")
@@ -135,17 +170,20 @@ def _get_calendar_client_for_user(user: dict) -> GoogleCalendarClient:
 
     logger.info(f"Initializing Calendar client for user {user_id} ({user_email})")
 
-    # Create Calendar client with user-specific token directory
+    # Create Calendar client with owner_id for Supabase token storage
     calendar_client = GoogleCalendarClient(
         credentials_path=settings.google_credentials_path,
         token_dir=str(user_token_dir),
         calendar_id=settings.calendar_id,
-        account=user_email
+        account=user_email,
+        owner_id=user_id  # Enables Supabase token storage
     )
 
-    # Check if token exists and authenticate
-    token_path = user_token_dir / "token.pickle"
-    if token_path.exists():
+    # Check for existing credentials (Supabase or filesystem)
+    from zylch.api import token_storage
+    has_credentials = token_storage.has_google_credentials(user_id)
+
+    if has_credentials:
         try:
             calendar_client.authenticate()
             logger.info(f"Calendar authenticated for user {user_id}")
@@ -216,9 +254,14 @@ async def start_sync(
         email_client = _get_email_client_for_user(user)
         calendar_client = _get_calendar_client_for_user(user)
 
+        # Get Supabase storage for multi-tenant support
+        supabase = get_supabase_storage()
+
         service = SyncService(
             email_client=email_client,
-            calendar_client=calendar_client
+            calendar_client=calendar_client,
+            owner_id=user_id,
+            supabase_storage=supabase
         )
 
         # Update progress
@@ -280,7 +323,14 @@ async def sync_emails(
         # Get email client for authenticated user
         email_client = _get_email_client_for_user(user)
 
-        service = SyncService(email_client=email_client)
+        # Get Supabase storage for multi-tenant support
+        supabase = get_supabase_storage()
+
+        service = SyncService(
+            email_client=email_client,
+            owner_id=user_id,
+            supabase_storage=supabase
+        )
         results = await service.sync_emails(
             days_back=request.days_back,
             force_full=request.force_full
@@ -314,7 +364,14 @@ async def sync_calendar(
         # Get calendar client for authenticated user
         calendar_client = _get_calendar_client_for_user(user)
 
-        service = SyncService(calendar_client=calendar_client)
+        # Get Supabase storage for multi-tenant support
+        supabase = get_supabase_storage()
+
+        service = SyncService(
+            calendar_client=calendar_client,
+            owner_id=user_id,
+            supabase_storage=supabase
+        )
         results = service.sync_calendar()
         return {
             "success": True,
@@ -349,9 +406,14 @@ async def full_sync(
         email_client = _get_email_client_for_user(user)
         calendar_client = _get_calendar_client_for_user(user)
 
+        # Get Supabase storage for multi-tenant support
+        supabase = get_supabase_storage()
+
         service = SyncService(
             email_client=email_client,
-            calendar_client=calendar_client
+            calendar_client=calendar_client,
+            owner_id=user_id,
+            supabase_storage=supabase
         )
         results = await service.run_full_sync(days_back=request.days_back)
 

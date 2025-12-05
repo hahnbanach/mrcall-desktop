@@ -1,6 +1,6 @@
 """Email and calendar sync service - business logic layer."""
 
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, TYPE_CHECKING
 from pathlib import Path
 import logging
 
@@ -14,6 +14,10 @@ from zylch.tools.config import ToolConfig
 from zylch.tools.factory import ToolFactory
 from zylch.config import settings
 
+# Avoid circular imports
+if TYPE_CHECKING:
+    from zylch.storage.supabase_client import SupabaseStorage
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,7 +29,9 @@ class SyncService:
         email_client: Optional[Union[GmailClient, OutlookClient]] = None,
         calendar_client: Optional[GoogleCalendarClient] = None,
         email_archive: Optional[EmailArchiveManager] = None,
-        anthropic_api_key: Optional[str] = None
+        anthropic_api_key: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        supabase_storage: Optional['SupabaseStorage'] = None
     ):
         """Initialize sync service.
 
@@ -34,11 +40,18 @@ class SyncService:
             calendar_client: Optional Calendar client (will create if not provided)
             email_archive: Optional EmailArchiveManager (will create if not provided)
             anthropic_api_key: Anthropic API key (uses settings if not provided)
+            owner_id: Firebase UID for multi-tenant Supabase storage
+            supabase_storage: SupabaseStorage instance for cloud storage
         """
         self.email_client = email_client
         self.calendar_client = calendar_client
         self.email_archive = email_archive
         self.anthropic_api_key = anthropic_api_key or settings.anthropic_api_key
+
+        # Multi-tenant Supabase support
+        self.owner_id = owner_id
+        self.supabase = supabase_storage
+        self._use_supabase = bool(self.supabase and self.owner_id)
 
     async def _ensure_email_client(self):
         """Ensure email client is initialized.
@@ -68,7 +81,11 @@ class SyncService:
         """Ensure email archive is initialized."""
         if not self.email_archive:
             email_client = await self._ensure_email_client()
-            self.email_archive = EmailArchiveManager(gmail_client=email_client)
+            self.email_archive = EmailArchiveManager(
+                gmail_client=email_client,
+                owner_id=self.owner_id,
+                supabase_storage=self.supabase
+            )
         return self.email_archive
 
     async def sync_emails(self, days_back: Optional[int] = None, force_full: bool = False) -> Dict[str, Any]:
@@ -127,7 +144,9 @@ class SyncService:
             email_archive=archive,
             cache_dir=settings.cache_dir + "/emails",
             anthropic_api_key=self.anthropic_api_key,
-            days_back=days_back or 30
+            days_back=days_back or 30,
+            owner_id=self.owner_id,
+            supabase_storage=self.supabase
         )
 
         results = email_sync.sync_emails(force_full=force_full, days_back=days_back)
@@ -172,7 +191,9 @@ class SyncService:
         calendar_sync = CalendarSyncManager(
             calendar_client=calendar,
             anthropic_api_key=self.anthropic_api_key,
-            my_emails=my_emails_list
+            my_emails=my_emails_list,
+            owner_id=self.owner_id,
+            supabase_storage=self.supabase
         )
 
         results = calendar_sync.sync_events()
@@ -248,7 +269,10 @@ class SyncService:
                 from zylch.services.gap_service import GapService
 
                 logger.info("Starting gap analysis")
-                gap_service = GapService()
+                gap_service = GapService(
+                    owner_id=self.owner_id,
+                    supabase_storage=self.supabase
+                )
                 gap_result = gap_service.analyze_gaps(days_back=days_back or 7)
 
                 # Count tasks from results

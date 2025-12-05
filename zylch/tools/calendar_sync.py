@@ -4,9 +4,12 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import anthropic
+
+if TYPE_CHECKING:
+    from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +19,8 @@ class CalendarSyncManager:
 
     Fetches events, analyzes patterns, and caches with actionable metadata
     for relationship intelligence.
+
+    Supports both local JSON cache and Supabase multi-tenant storage.
     """
 
     def __init__(
@@ -26,6 +31,8 @@ class CalendarSyncManager:
         days_back: int = 30,
         days_forward: int = 30,
         my_emails: Optional[List[str]] = None,
+        owner_id: Optional[str] = None,
+        supabase_storage: Optional['SupabaseStorage'] = None,
     ):
         """Initialize calendar sync manager.
 
@@ -36,6 +43,8 @@ class CalendarSyncManager:
             days_back: Days in past to sync (default: 30)
             days_forward: Days in future to sync (default: 30)
             my_emails: List of my email addresses (for identifying external attendees)
+            owner_id: User's Firebase UID (required for Supabase backend)
+            supabase_storage: Optional SupabaseStorage instance for multi-tenant
         """
         self.calendar = calendar_client
         self.cache_dir = Path(cache_dir)
@@ -44,11 +53,19 @@ class CalendarSyncManager:
         self.days_back = days_back
         self.days_forward = days_forward
         self.my_emails = my_emails or []
+        self.owner_id = owner_id
+        self.supabase = supabase_storage
 
-        logger.info(
-            f"Initialized CalendarSyncManager (cache: {cache_dir}, "
-            f"window: -{days_back}/+{days_forward} days, my_emails: {len(self.my_emails)})"
-        )
+        # Use Supabase if provided
+        self._use_supabase = bool(self.supabase and self.owner_id)
+
+        if self._use_supabase:
+            logger.info(f"CalendarSyncManager using Supabase for owner {owner_id}")
+        else:
+            logger.info(
+                f"CalendarSyncManager using local JSON cache (cache: {cache_dir}, "
+                f"window: -{days_back}/+{days_forward} days)"
+            )
 
     def _get_cache_path(self) -> Path:
         """Get path to calendar cache file."""
@@ -56,6 +73,23 @@ class CalendarSyncManager:
 
     def _load_cache(self) -> Dict[str, Any]:
         """Load existing calendar cache."""
+        if self._use_supabase:
+            # Load from Supabase
+            events = self.supabase.get_all_calendar_events(self.owner_id)
+            events_dict = {}
+            for event in events:
+                event_id = event['google_event_id']
+                events_dict[event_id] = self._convert_supabase_to_cache(event)
+            return {
+                "last_sync": None,
+                "sync_window": {
+                    "days_back": self.days_back,
+                    "days_forward": self.days_forward
+                },
+                "events": events_dict
+            }
+
+        # Load from local JSON
         cache_path = self._get_cache_path()
         if cache_path.exists():
             with open(cache_path, 'r') as f:
@@ -70,11 +104,59 @@ class CalendarSyncManager:
         }
 
     def _save_cache(self, cache: Dict[str, Any]) -> None:
-        """Save calendar cache to disk."""
+        """Save calendar cache to disk or Supabase."""
+        if self._use_supabase:
+            # Convert and save to Supabase
+            events_for_supabase = []
+            for event_id, event_data in cache['events'].items():
+                events_for_supabase.append(self._convert_cache_to_supabase(event_data))
+            self.supabase.store_calendar_events_batch(self.owner_id, events_for_supabase)
+            logger.info(f"Saved {len(events_for_supabase)} events to Supabase")
+            return
+
+        # Save to local JSON
         cache_path = self._get_cache_path()
         with open(cache_path, 'w') as f:
             json.dump(cache, f, indent=2, default=str)
         logger.info(f"Saved {len(cache['events'])} events to cache")
+
+    def _convert_supabase_to_cache(self, supabase_event: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert Supabase calendar_event format to cache format."""
+        return {
+            'id': supabase_event['google_event_id'],
+            'summary': supabase_event.get('summary', ''),
+            'description': supabase_event.get('description', ''),
+            'location': supabase_event.get('location', ''),
+            'start': supabase_event.get('start_time', ''),
+            'end': supabase_event.get('end_time', ''),
+            'is_past': None,  # Will be calculated when needed
+            'attendees': supabase_event.get('attendees', []),
+            'attendees_with_status': supabase_event.get('attendees', []),
+            'external_attendees': [],  # Will be populated when needed
+            'attendee_count': len(supabase_event.get('attendees', [])),
+            'organizer': supabase_event.get('organizer_email', ''),
+            'status': '',
+            'html_link': '',
+            'created_at': supabase_event.get('created_at', ''),
+            'updated_at': supabase_event.get('updated_at', ''),
+            'cached_at': supabase_event.get('updated_at', ''),
+        }
+
+    def _convert_cache_to_supabase(self, cache_event: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert cache event format to Supabase format."""
+        return {
+            'id': cache_event['id'],
+            'summary': cache_event.get('summary'),
+            'description': cache_event.get('description'),
+            'start_time': cache_event.get('start'),
+            'end_time': cache_event.get('end'),
+            'location': cache_event.get('location'),
+            'attendees': cache_event.get('attendees_with_status', cache_event.get('attendees', [])),
+            'organizer_email': cache_event.get('organizer'),
+            'is_external': bool(cache_event.get('external_attendees')),
+            'meet_link': cache_event.get('html_link'),
+            'calendar_id': 'primary',
+        }
 
     def sync_events(self, force_full: bool = False) -> Dict[str, Any]:
         """Sync calendar events and update cache.
