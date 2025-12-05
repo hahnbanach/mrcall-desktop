@@ -1,52 +1,89 @@
 # Zylch AI Memory System
 
-**Complete guide to Zylch AI's channel-based behavioral memory system**
+**The relational memory layer that transforms stateless LLMs into assistants that know your network**
 
-> **⚠️ MIGRATION NOTE**: This documentation describes the legacy ReasoningBank system.
-> The system has been migrated to **ZylchMemory** with semantic search and O(log n) HNSW indexing.
-> See `zylch_memory/README.md` and `zylch_memory/ZYLCH_MEMORY_ARCHITECTURE.md` for current implementation.
-> The CLI commands documented here still work but now use ZylchMemory backend.
+> **Technical Implementation**: See `zylch_memory/README.md` for API reference and `zylch_memory/ZYLCH_MEMORY_ARCHITECTURE.md` for architecture details.
+> The CLI commands documented here use the ZylchMemory backend with semantic search and O(log n) HNSW indexing.
 
 ---
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Design Philosophy](#design-philosophy)
-3. [Architecture](#architecture)
-4. [Usage Guide](#usage-guide)
-5. [Integration Examples](#integration-examples)
-6. [Technical Implementation](#technical-implementation)
+1. [Vision: The World Model for Relationships](#vision-the-world-model-for-relationships)
+2. [Why LLMs Need Persistent Memory](#why-llms-need-persistent-memory)
+3. [How It Works](#how-it-works)
+4. [Channel-Based Learning](#channel-based-learning)
+5. [From Channels to Avatars](#from-channels-to-avatars)
+6. [Usage Guide](#usage-guide)
 7. [Best Practices](#best-practices)
 
 ---
 
-## Overview
+## Vision: The World Model for Relationships
 
-Zylch AI implements a **ReasoningBank-inspired memory system** that learns from user corrections and applies them automatically in future interactions. The system is organized by **communication channels** (email, calendar, WhatsApp, phone calls, tasks) with separate memory for each channel.
+This memory system is the foundation for **relational avatars**—personalized representations of each contact in your professional network that persist across conversations and accumulate understanding over time.
 
-### Key Features
+**The thesis**: LLMs are already perfect for relational intelligence because professional relationships are encoded in language. Every email, message, and call transcript contains the substrate of human connection. Where physical world models require learning object permanence and spatial reasoning from sensory data, the "world of relationships" is already made of text. The missing piece is persistent memory.
 
-- 🧠 **Behavioral Learning**: Remembers corrections like "use 'lei' not 'tu'" or "always include timezone"
-- 📡 **Channel Isolation**: Email rules don't affect phone calls, calendar rules don't affect WhatsApp
-- 👤 **Personal Memory**: Each user has their own preferences
-- 🌍 **Global Memory**: Admins can set system-wide improvements
-- 📈 **Confidence Scoring**: Rules improve over time based on success/failure
-- 🔄 **Automatic Application**: Memories are automatically injected into AI prompts
+**What Zylch builds**: The relational memory layer that transforms stateless LLMs into assistants that know your network better than you do. Not a CRM, not a productivity tool—a living representation of people through their interactions with you.
+
+**The moat**: Avatar architecture. Today this manifests as vector memory with small-world topology and per-person namespaces. Tomorrow: continuous training on interaction patterns. These avatars are shareable—when an employee leaves, the relational knowledge stays; when a new one joins, they inherit the context.
+
+**The philosophical stance**: Professional communication has trapped us in a digital cage. Zylch doesn't want to deepen that cage—it wants to handle the digital burden so humans can have more embodied, in-person interactions. This is why Zylch focuses exclusively on professional relationships.
 
 ---
 
-## Design Philosophy
+## Why LLMs Need Persistent Memory
+
+Yann LeCun argues that LLMs are a "dead end" for human-level intelligence because they lack four fundamental capabilities: understanding of the physical world, persistent memory, true reasoning, and hierarchical planning. He's right about physical intelligence—LLMs can describe a rotating cube but can't actually model spatial reasoning the way humans intuitively grasp it.
+
+But here's the insight that guides Zylch's architecture: **LeCun's critique doesn't apply to relational intelligence.**
+
+Professional relationships exist entirely in language. The "world model" for understanding that your CFO prefers direct communication, that your client has a 3-week response latency, or that two contacts you're about to introduce have a shared history—all of this is encoded in text you've already generated. LLMs don't need to learn physics to model relationships; they need to remember.
+
+**What we address**: The memory gap. LLMs are stateless by default—every conversation starts from zero. We provide the persistent memory layer that transforms episodic interactions into continuous relational understanding.
+
+**What we don't build**: We're not building a world model for physical reasoning. We're building the specific world model for relationships, where the world is already made of text.
+
+---
+
+## How It Works
 
 ### The Problem
 
-Traditional AI assistants forget corrections. If you say "don't do that," they'll do it again next time. This creates frustration and wastes time repeating feedback.
+Traditional AI assistants are amnesiac. If you correct them today, they'll make the same mistake tomorrow. This isn't just frustrating—it's fundamentally incompatible with relationship building. Relationships accumulate. Every interaction adds context that shapes future interactions.
 
-**Human Analogy:** Humans have excellent behavioral memory. If someone corrects us once, we remember. Zylch AI should work the same way.
+### The Solution
 
-### The Solution: Channel-Based Memory
+Zylch learns from your corrections and approvals. When you say "no, use 'lei' not 'tu' for formal contacts," the system stores this as a behavioral pattern. Next time you ask it to draft a formal email, it remembers.
 
-Zylch AI operates across 5 communication channels:
+The system doesn't just store exact phrases—it understands meaning. If you taught it about "formal emails," it will apply that learning when you ask to "compose a professional message" because it recognizes these are semantically similar.
+
+### Two Types of Memory
+
+**Skill Patterns**: What worked before in specific situations
+- "When drafting emails to Luisa, use formal tone and 'lei' pronoun"
+- "For calendar events with international attendees, always include timezone"
+- Stored with your approval/rejection feedback, so the system learns what you prefer
+
+**Behavioral Memory**: General preferences across channels
+- "I prefer casual tone in WhatsApp messages"
+- "Always check past communication history before drafting"
+- Rules that apply broadly within a communication channel
+
+### Confidence and Learning
+
+Every pattern starts at 50% confidence. When the system applies a pattern and you approve the result, confidence increases. If you reject or modify the output, confidence decreases. Over time, reliable patterns become stronger while unreliable ones fade.
+
+This mimics how human memory works: memories that are retrieved and reinforced become stronger; memories that fail verification weaken.
+
+---
+
+## Channel-Based Learning
+
+Zylch organizes behavioral memory by communication channel. This prevents conflicts—you can be formal on email but casual on WhatsApp, and the system won't mix them up.
+
+### Channels
 
 | Channel | Purpose | Example Rules |
 |---------|---------|---------------|
@@ -56,116 +93,48 @@ Zylch AI operates across 5 communication channels:
 | `mrcall` | Phone assistant behavior | "Speak slowly and clearly" |
 | `task` | Task management | "Set reminders 1 day before deadlines" |
 
-### Why Channel-Based?
+### Why Channel Isolation Matters
 
-**✅ Advantages:**
 - **Clear boundaries**: Email rules ≠ Phone rules ≠ WhatsApp rules
-- **No conflicts**: Can be formal on email, casual on WhatsApp
+- **No conflicts**: Be formal on email, casual on WhatsApp—no confusion
 - **Scalable**: Works with 10 contacts or 10,000
-- **Simple**: No per-contact complexity
 - **Extensible**: Easy to add Slack, Teams, SMS later
 
-**❌ Rejected Alternative - Contact-specific rules:**
-- Too granular (management nightmare)
-- Doesn't scale ("be formal with Luisa" → what about 1000 contacts?)
-- Hard to generalize
+### Two Tiers
 
-### Two-Tier Architecture
-
-1. **👤 Personal Memory** (`cache/memory_{user_id}.json`)
-   - User's own learned behaviors per channel
-   - Example: "I prefer casual tone in WhatsApp messages"
-
-2. **🌍 Global Memory** (`cache/memory_global.json`)
-   - System-wide improvements for all users (admin only)
-   - Example: "Always check past communication history before drafting"
+1. **Personal Memory**: Your own learned behaviors per channel
+2. **Global Memory**: System-wide improvements for all users (admin only)
 
 ---
 
-## Architecture
+## From Channels to Avatars
 
-### Memory Storage (JSON)
+Channels organize behavioral rules, but the real goal is person-centric avatars that understand each contact across all channels.
 
-**Why JSON instead of SQLite?**
-- ✅ Consistent with Zylch AI architecture (threads.json, tasks.json)
-- ✅ Human-readable and debuggable
-- ✅ Easy backup and version control
-- ✅ No SQL dependency
+### Current Architecture
 
-### Memory Schema
+**Namespace Isolation (Implemented)**
+The system already supports per-person memory isolation via namespaces. Each user's patterns are stored separately (`user:mario`, `user:alice`), and retrieval cascades from user-specific to global patterns. This is the foundation for avatar architecture.
 
-```json
-{
-  "user_id": "mario",
-  "created_at": "2025-11-20T18:00:00",
-  "last_updated": "2025-11-20T18:30:00",
-  "corrections": [
-    {
-      "id": 1,
-      "channel": "email",
-      "what_went_wrong": "Used 'tu' instead of 'lei'",
-      "correct_behavior": "Always use 'lei' for formal email communication",
-      "attempted_text": null,
-      "correct_text": null,
-      "confidence": 0.575,
-      "times_applied": 1,
-      "times_successful": 1,
-      "created_at": "2025-11-20T18:00:00",
-      "last_applied": "2025-11-20T18:10:00",
-      "last_updated": "2025-11-20T18:10:00"
-    }
-  ],
-  "applications": [
-    {
-      "correction_id": 1,
-      "task_type": "email_draft",
-      "was_successful": true,
-      "user_feedback": null,
-      "applied_at": "2025-11-20T18:10:00",
-      "scope": "personal"
-    }
-  ]
-}
-```
+**Channel-Based Behavioral Memory (Implemented)**
+Within each user namespace, behavioral rules are organized by communication channel. This prevents conflicts—you can be formal on email but casual on WhatsApp.
 
-### Field Descriptions
+### The Evolution Path
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | int | ✅ | Unique correction ID |
-| `channel` | string | ✅ | One of: email, calendar, whatsapp, mrcall, task |
-| `what_went_wrong` | string | ✅ | Description of the problem |
-| `correct_behavior` | string | ✅ | What should be done instead |
-| `attempted_text` | string | ❌ | Optional: What the AI tried |
-| `correct_text` | string | ❌ | Optional: Corrected version |
-| `confidence` | float | ✅ | 0.0-1.0, starts at 0.5 |
-| `times_applied` | int | ✅ | How many times used |
-| `times_successful` | int | ✅ | How many times worked |
+**Phase 1: Per-Contact Namespaces (Current)**
+Extend the namespace structure to isolate contact-specific patterns: `user:mario:contact:luisa`. This enables storing what you've learned about each person—their communication preferences, response patterns, relationship context.
 
-### Confidence Scoring (Bayesian Update)
+**Phase 2: Avatar Aggregation (Next)**
+Build the synthesis layer that combines per-contact patterns across channels into coherent avatars. The avatar for "Luisa" would know: formal tone preferred (from email patterns), responds within 24h (from response tracking), prefers morning meetings (from calendar patterns).
 
-All corrections start at **50% confidence** (neutral).
+**Phase 3: Continuous Training (Future)**
+Avatars that learn from every interaction without explicit correction. Predicting optimal communication timing, suggesting relationship maintenance actions, identifying network patterns.
 
-**Update formula:**
-- **Success**: `confidence += 0.15 * (1 - confidence)`
-- **Failure**: `confidence -= 0.10 * confidence`
+### The Enterprise Moat
 
-**Example progression:**
-```
-Initial:         0.50 (50%)
-After 1 success: 0.575 (57.5%)
-After 2 success: 0.639 (63.9%)
-After 3 success: 0.693 (69.3%)
-...converges toward 1.0
+**Onboarding via avatar sharing**: New employees inherit relationship context immediately. They don't start from zero with key contacts—they inherit their predecessor's relational knowledge.
 
-After 1 failure: 0.45 (45%)
-After 2 failure: 0.405 (40.5%)
-...converges toward 0.0
-```
-
-**Filtering:**
-- Only inject memories with confidence > 30% (configurable)
-- Sort by confidence descending (most reliable first)
+**Knowledge retention**: When employees leave, the relational knowledge stays. The institutional memory of how to work with key clients, partners, and vendors persists in the avatar layer.
 
 ---
 
@@ -195,7 +164,7 @@ All memory operations use Unix-style subcommands:
 /memory --add "what went wrong" "correct behavior" channel
 
 # Examples:
-/memory --add "Used tu instead of lei" "Always use lei for formal email communication" email
+/memory --add "Used tu instead of lei" "Always use lei for formal business communication" email
 /memory --add "Missing timezone" "Always specify timezone (e.g., CET, PST) in event description" calendar
 /memory --add "Too formal tone" "Use casual, friendly language on WhatsApp" whatsapp
 /memory --add "Script too brief" "Provide full context when explaining reason for phone call" mrcall
@@ -230,202 +199,48 @@ All memory operations use Unix-style subcommands:
 /memory --stats --all
 ```
 
-### Programmatic Usage
+### Learning from Behavior
 
-```python
-from zylch.memory.reasoning_bank import ReasoningBankMemory
+The system learns automatically when you interact with Zylch:
 
-# Initialize memory for a user
-memory = ReasoningBankMemory(user_id="mario")
-
-# Add a correction
-correction_id = memory.add_correction(
-    what_went_wrong="Used tu instead of lei",
-    correct_behavior="Always use lei for formal business communication",
-    channel='email'
-)
-
-# Retrieve relevant memories for a channel
-memories = memory.get_relevant_memories(
-    channel='email',
-    min_confidence=0.5,
-    limit=5
-)
-
-# Build memory prompt for AI
-memory_prompt = memory.build_memory_prompt(
-    channel='email',
-    task_description="drafting formal business email"
-)
-
-# Record application outcome
-memory.record_application(
-    correction_id=correction_id,
-    was_successful=True,
-    task_type="email_draft"
-)
-```
-
----
-
-## Integration Examples
-
-### Email Channel - Drafting
-
-**Workflow:**
-
-1. User asks Zylch AI to draft email → Zylch AI uses 'tu'
-2. User corrects: "No, use 'lei' - this is formal business"
-3. User adds memory:
+**Example 1: Email Drafting**
+1. You ask Zylch to draft an email → It uses 'tu'
+2. You correct: "No, use 'lei' - this is formal business"
+3. You add the memory:
    ```bash
    /memory --add "Used tu instead of lei" "Always use lei for formal business communication" email
    ```
-4. Next time: Zylch AI automatically uses 'lei' because memory is injected into prompt
+4. Next time: Zylch automatically uses 'lei' for formal emails
 
-### Email Channel - Gap Analysis (NEW ✨)
-
-**Workflow:**
-
-1. User runs `/gaps` → System shows reminder@superhuman.com email as urgent
-2. User annoyed: "This is just an automated reminder!"
-3. User teaches the system:
-   ```python
-   memory.add_correction(
-       what_went_wrong="Email da reminder@superhuman.com considerata importante",
-       correct_behavior="Ignorare sempre reminder@superhuman.com, sono reminder automatici",
-       channel='email'
-   )
+**Example 2: Gap Analysis**
+1. You run `/gaps` → System flags reminder@superhuman.com as urgent
+2. You're annoyed: "This is just an automated reminder!"
+3. You teach it:
+   ```bash
+   /memory --add "Email from reminder@superhuman.com considered important" "Always ignore reminder@superhuman.com - automated reminders" email
    ```
-4. Next `/gaps` run: reminder@superhuman.com automatically filtered out
-5. System learns over time as user adds more rules
+4. Next `/gaps` run: Those reminders are automatically filtered out
 
-**See:** [Relationship Intelligence docs](./relationship-intelligence.md) for details
-
-### Calendar Channel
-
-**Workflow:**
-
-1. User creates meeting with international attendees → Zylch AI creates event without timezone
-2. User corrects: "Add timezone - this is international!"
-3. User adds memory:
+**Example 3: Calendar Events**
+1. You create a meeting with international attendees → No timezone included
+2. You correct: "Add timezone - this is international!"
+3. You add the memory:
    ```bash
    /memory --add "Missing timezone" "Always specify timezone (e.g., CET, PST) in event description" calendar
    ```
-4. Next calendar event: Zylch AI automatically includes timezone
+4. Next calendar event: Timezone automatically included
 
-### Channel Isolation Example
+### Channel Isolation in Practice
 
 ```bash
-# Add email rule
+# Add email rule - be friendly
 /memory --add "Too formal" "Use friendly, conversational tone" email
 
-# Add whatsapp rule (opposite!)
+# Add whatsapp rule - be more professional (opposite!)
 /memory --add "Too casual" "Be more professional on WhatsApp" whatsapp
 
 # Result: No conflict! Each channel has independent rules.
-```
-
----
-
-## Technical Implementation
-
-### Core Class: `ReasoningBankMemory`
-
-```python
-class ReasoningBankMemory:
-    """Channel-based behavioral memory system."""
-
-    def __init__(self, user_id: str, cache_dir: str = "cache"):
-        """Initialize memory for a user."""
-
-    def add_correction(
-        self,
-        what_went_wrong: str,
-        correct_behavior: str,
-        channel: str,  # REQUIRED
-        attempted_text: Optional[str] = None,
-        correct_text: Optional[str] = None,
-        is_global: bool = False
-    ) -> int:
-        """Add a new correction to memory."""
-
-    def get_relevant_memories(
-        self,
-        channel: str,  # REQUIRED
-        min_confidence: float = 0.3,
-        limit: int = 5,
-        include_global: bool = True
-    ) -> List[Dict]:
-        """Retrieve relevant memories for a channel."""
-
-    def build_memory_prompt(
-        self,
-        channel: str,  # REQUIRED
-        task_description: Optional[str] = None,
-        min_confidence: float = 0.3
-    ) -> str:
-        """Build prompt section with relevant memories."""
-
-    def record_application(
-        self,
-        correction_id: int,
-        was_successful: bool,
-        task_type: str = "email_draft",
-        feedback: Optional[str] = None,
-        is_global: bool = False
-    ):
-        """Record that a memory was applied and update confidence."""
-```
-
-### Integration with Relationship Intelligence
-
-The memory system is integrated with relationship gap analysis for personalized email filtering:
-
-```python
-# In relationship_analyzer.py:
-def _sonnet_requires_response(self, thread, contact_email, contact_name):
-    # 1. Load user's email channel memories
-    memories = self.memory_bank.get_relevant_memories(
-        channel='email',
-        min_confidence=0.5
-    )
-
-    # 2. Build memory rules section
-    memory_rules = "\n\nREGOLE PERSONALI DELL'UTENTE (PRIORITÀ ASSOLUTA):\n"
-    for mem in memories:
-        memory_rules += f"- {mem['what_went_wrong']} → {mem['correct_behavior']}\n"
-
-    # 3. Inject into Sonnet prompt
-    prompt = f"""Analizza questa email...
-{memory_rules}
-IMPORTANTE: Le regole personali hanno PRIORITÀ ASSOLUTA."""
-
-    # 4. Get Sonnet's decision
-    response = anthropic_client.messages.create(...)
-```
-
-**Benefits:**
-- ✅ No more false positives: Newsletter/marketing emails automatically filtered
-- ✅ Personalized rules: Each user has their own preferences
-- ✅ Continuous learning: Rules improve over time
-- ✅ Explainable AI: You can see exactly what rules were applied
-
-### Automatic Injection
-
-When Zylch AI performs a task, relevant memories are automatically injected:
-
-1. **Global rules** for the current channel (if confidence > 30%)
-2. **Personal rules** for the current channel
-3. **Only relevant channel rules** (email rules not injected for calendar tasks)
-
-Example - Scheduling a calendar event:
-```python
-context = {"channel": "calendar"}
-memory_prompt = memory.build_memory_prompt(
-    channel="calendar",
-    task_description="scheduling and managing calendar events"
-)
-# Result: Only calendar rules injected, not email/whatsapp rules
+# Email drafts will be friendly, WhatsApp messages will be professional.
 ```
 
 ---
@@ -462,7 +277,7 @@ Always choose the most specific channel:
 - Phone assistant behavior → `mrcall`
 - Task management → `task`
 
-### Global vs Personal Memory
+### When to Use Global vs Personal Memory
 
 **Use Personal Memory when:**
 - Preference is user-specific ("I like casual tone")
@@ -472,71 +287,36 @@ Always choose the most specific channel:
 - Improvement benefits all users ("Always check past communication")
 - Fixes a systematic problem ("Include video link for remote meetings")
 
-### Confidence Threshold
+### Understanding Confidence Levels
 
 - **0.3-0.5**: Experimental rules, being tested
 - **0.5-0.7**: Proven rules, reliable
 - **0.7+**: Highly reliable, used many times successfully
 
-Adjust `min_confidence` parameter based on how conservative you want filtering to be.
+Rules below 0.3 confidence are automatically filtered out—they've failed too often to be useful.
 
 ---
 
-## Files and References
+## Technical Reference
 
-### Implementation
-- **Core class**: `zylch/memory/reasoning_bank.py`
-- **CLI integration**: `zylch/cli/main.py`
-- **Agent integration**: `zylch/agent/core.py`
+For implementation details, API reference, and architecture documentation:
 
-### Documentation
-- **This guide**: Complete memory system documentation
-- **Relationship Intelligence**: [./relationship-intelligence.md](./relationship-intelligence.md)
-- **Quick Start**: [./quick-start.md](./quick-start.md)
-
-### Tests
-- **Channel isolation**: `test_channel_memory.py`
-- **Calendar integration**: `test_calendar_memory.py`
-- **Relationship analyzer**: `test_relationship_intelligence.py`
+- **API & Quick Start**: [`zylch_memory/README.md`](./zylch_memory/README.md)
+- **Architecture**: [`zylch_memory/ZYLCH_MEMORY_ARCHITECTURE.md`](./zylch_memory/ZYLCH_MEMORY_ARCHITECTURE.md)
+- **Relationship Intelligence**: [`relationship-intelligence.md`](./relationship-intelligence.md)
 
 ---
 
-## Design Decisions
+## Research Foundations
 
-### Decision 1: Channel-Based (not contact-based)
-**Date:** 2025-11-20
-**Rationale:** User feedback: "io non metterei il contatto... altrimenti impazziamo"
-**Result:** Removed `contact_email` field entirely
+This system draws on:
 
-### Decision 2: Remove correction_type
-**Date:** 2025-11-20
-**Rationale:** Too granular, adds complexity without value
-**Result:** `what_went_wrong` and `correct_behavior` describe everything needed
+**ReasoningBank** (Google Research): Strategy-level memory with success/failure learning and contrastive patterns ("Do this, not that").
 
-### Decision 3: Keep personal/global distinction
-**Date:** 2025-11-20
-**Rationale:** User: "Non perde senso!!! Io come admin faccio miglioramenti che valgono per tutti"
-**Result:** Two-tier architecture maintained
+**Memory Reconsolidation** (Neuroscience): Memories update rather than duplicate. Retrieval makes memories labile; reinforcement strengthens, failure weakens.
 
-### Decision 4: Mandatory channel field
-**Date:** 2025-11-20
-**Rationale:** Channel is ALWAYS known and clear
-**Result:** `channel` is required, validates against CHANNEL_TYPES
-
-### Decision 5: JSON storage (not SQLite)
-**Date:** 2025-11-19
-**Rationale:** Consistent with Zylch AI architecture, human-readable
-**Result:** `cache/memory_{user_id}.json` format
+**JEPA** (LeCun, Meta AI): Representation-level prediction over pixel-level generation. Learning essential features, not raw reconstruction.
 
 ---
 
-## Inspiration
-
-Based on Google's **ReasoningBank** paper:
-- **Strategy-level memory** (not raw traces)
-- **Success + Failure learning**
-- **Retrieval-augmented generation**
-- **Self-evolution** with confidence scores
-- **Contrastive learning** ("Do this, not that")
-
-**Reference:** [Google Research - Learning from Failures](https://arxiv.org/abs/2305.xxxxx)
+**End of Memory System Documentation**

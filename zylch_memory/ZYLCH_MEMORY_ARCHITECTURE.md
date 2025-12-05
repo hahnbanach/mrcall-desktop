@@ -1,98 +1,98 @@
 # ZylchMemory - Architecture Documentation
 
-**Version:** 1.0.0
-**Author:** Zylch Team
-**Date:** November 22, 2025
+**Version:** 2.0.0  
+**Author:** Zylch Team  
+**Date:** December 2025
 
-**Blueprint**: Inspired by [claude-flow](https://github.com/ruvnet/claude-flow)'s AgentDB architecture
+**Blueprint**: Inspired by [claude-flow](https://github.com/ruvnet/claude-flow)'s AgentDB architecture  
 **Development**: Built with assistance from claude-flow's AI orchestration patterns
-
----
-
-## Credits & Inspiration
-
-ZylchMemory's architecture was inspired by the **AgentDB** component from [claude-flow](https://github.com/ruvnet/claude-flow), an MCP server for AI agent orchestration. We studied claude-flow's approach to:
-
-- Multi-agent memory management with namespace isolation
-- Pattern-based skill learning systems
-- Vector embedding storage and retrieval
-- Semantic search for agent behaviors
-
-While claude-flow's AgentDB is built on Node.js/TypeScript with ChromaDB, we implemented ZylchMemory as a pure Python solution using HNSW indexing for better performance and tighter integration with our Python-based agent system.
-
-**Development tooling**: This package was developed using claude-flow's AI orchestration capabilities to accelerate the implementation process.
 
 ---
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Architecture](#architecture)
+2. [System Architecture](#system-architecture)
 3. [Core Components](#core-components)
-4. [Namespace Strategy](#namespace-strategy)
-5. [Semantic Search](#semantic-search)
-6. [Confidence Learning](#confidence-learning)
-7. [Performance](#performance)
-8. [Database Schema](#database-schema)
-9. [Integration](#integration)
-10. [Future Enhancements](#future-enhancements)
+4. [Namespace Architecture](#namespace-architecture)
+5. [Avatar Aggregation Layer](#avatar-aggregation-layer)
+6. [Semantic Search Pipeline](#semantic-search-pipeline)
+7. [Confidence & Learning](#confidence--learning)
+8. [Memory Lifecycle](#memory-lifecycle)
+9. [Database Schema](#database-schema)
+10. [Performance](#performance)
+11. [Integration Patterns](#integration-patterns)
+12. [Roadmap](#roadmap)
 
 ---
 
 ## Overview
 
-**ZylchMemory** is a unified memory system for AI agents that combines:
-- **Pattern learning** for skill-based behavior
-- **Behavioral memory** for general agent preferences
-- **Semantic search** using vector embeddings and HNSW indexing
-- **Multi-tenant support** with namespace isolation
-- **Bayesian confidence tracking** for continuous learning
+**ZylchMemory** is the persistent memory layer for AI agents, designed to transform stateless LLMs into assistants that accumulate relational understanding over time.
 
 ### Design Goals
 
-1. **Performance**: Sub-millisecond retrieval (O(log n) search)
-2. **Accuracy**: Semantic similarity matching, not just exact match
-3. **Scalability**: Support 100k+ patterns per user
-4. **Privacy**: Complete user isolation via namespaces
-5. **Simplicity**: Pure Python, minimal dependencies
+| Goal | Implementation |
+|------|----------------|
+| **Performance** | O(log n) retrieval via HNSW indexing |
+| **Semantic Understanding** | Vector embeddings capture meaning, not just keywords |
+| **Privacy** | Complete user isolation via hierarchical namespaces |
+| **Scalability** | 100k+ patterns per user, multi-tenant ready |
+| **Learning** | Bayesian confidence tracking from feedback |
+| **Simplicity** | Pure Python, minimal dependencies, single SQLite file |
 
 ### Replaces
 
-- `PatternStore` (SQLite hash-based matching)
-- `ReasoningBank` (JSON file storage)
+- `PatternStore` (SQLite hash-based matching → O(n), exact match only)
+- `ReasoningBank` (JSON file storage → slow, no semantic search)
 
 ---
 
-## Architecture
+## System Architecture
 
-### Three-Layer Design
+### Four-Layer Design
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Layer 1: API (ZylchMemory class)               │
-│  - store_pattern()                              │
-│  - retrieve_similar_patterns()                  │
-│  - store_memory()                               │
-│  - retrieve_memories()                          │
-│  - update_confidence()                          │
-└──────────────┬──────────────────────────────────┘
-               │
-               ↓
-┌─────────────────────────────────────────────────┐
-│  Layer 2: Processing                            │
-│  - EmbeddingEngine: text → vector (384-dim)     │
-│  - VectorIndex: HNSW O(log n) search            │
-│  - ConfidenceTracker: Bayesian updates          │
-└──────────────┬──────────────────────────────────┘
-               │
-               ↓
-┌─────────────────────────────────────────────────┐
-│  Layer 3: Storage (SQLite)                      │
-│  - patterns table (skill learning)              │
-│  - memories table (behavioral)                  │
-│  - embeddings table (vector cache)              │
-│  - Multiple HNSW indices (per namespace)        │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 1: API                                                   │
+│  ZylchMemory class                                              │
+│  ├── store_pattern()      → skill-based patterns                │
+│  ├── store_memory()       → behavioral rules                    │
+│  ├── retrieve_similar_patterns()                                │
+│  ├── retrieve_memories()                                        │
+│  ├── update_confidence()                                        │
+│  └── get_avatar()         → aggregated contact representation   │
+└──────────────────────────────┬──────────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 2: Avatar Aggregation                                    │
+│  AvatarEngine class                                             │
+│  ├── aggregate_contact_patterns()                               │
+│  ├── compute_communication_profile()                            │
+│  ├── merge_cross_channel_insights()                             │
+│  └── export_avatar() / import_avatar()                          │
+└──────────────────────────────┬──────────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 3: Processing                                            │
+│  ├── EmbeddingEngine    → text → vector (384-dim)               │
+│  ├── VectorIndex        → HNSW O(log n) search                  │
+│  ├── ConfidenceTracker  → Bayesian updates                      │
+│  └── LifecycleManager   → TTL, decay, garbage collection        │
+└──────────────────────────────┬──────────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 4: Storage                                               │
+│  SQLite (.swarm/zylch_memory.db)                                │
+│  ├── patterns table         (skill learning)                    │
+│  ├── memories table         (behavioral rules)                  │
+│  ├── embeddings table       (vector cache)                      │
+│  ├── avatars table          (aggregated contact profiles)       │
+│  └── lifecycle table        (access tracking, TTL metadata)     │
+│                                                                 │
+│  HNSW Indices (.swarm/indices/)                                 │
+│  └── One index per namespace for isolation                      │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -103,517 +103,621 @@ While claude-flow's AgentDB is built on Node.js/TypeScript with ChromaDB, we imp
 
 **Purpose**: Convert text to semantic vector representations
 
-**Technology**: `sentence-transformers` with `all-MiniLM-L6-v2` model
+**Technology**: `sentence-transformers` with `all-MiniLM-L6-v2`
 
-**Specifications**:
-- **Dimensions**: 384
-- **Model size**: 80MB
-- **Mode**: Offline (no API keys required)
-- **Training**: 1B+ sentence pairs
-- **Use case**: Semantic similarity search
+| Spec | Value |
+|------|-------|
+| Dimensions | 384 |
+| Model size | 80MB |
+| Mode | Offline (no API keys) |
+| Training | 1B+ sentence pairs |
 
 **How it works**:
 ```python
 text = "Draft a formal reminder email to Luisa about invoice"
 embedding = encoder.encode(text)
-# Result: [0.234, -0.891, 0.456, ..., 0.123]  # 384 float32 numbers
+# Result: [0.234, -0.891, 0.456, ..., 0.123]  # 384 float32
 ```
 
-**Why it works**:
-- Texts with similar meanings produce similar vectors
-- Cosine distance measures semantic similarity
-- "draft formal email" ≈ "compose professional message"
-- "draft email" ≠ "schedule meeting" (far in vector space)
+**Semantic similarity**: Texts with similar meanings produce similar vectors. Cosine distance measures semantic closeness.
 
-**Caching**:
-- Embeddings are cached in SQLite `embeddings` table
-- Avoids recomputing same text multiple times
-- Key: `(text, model_name)` → unique constraint
+**Caching**: Embeddings cached in SQLite `embeddings` table. Key: `(text, model_name)` → avoids recomputation.
 
 ---
 
 ### 2. VectorIndex (HNSW)
 
-**Purpose**: Ultra-fast approximate nearest neighbor search
+**Purpose**: O(log n) approximate nearest neighbor search
 
 **Technology**: `hnswlib` (Hierarchical Navigable Small World graphs)
 
-**Problem solved**:
-- Linear search: O(n) - 10,000 comparisons = ~10ms
-- HNSW: O(log n) - ~20 comparisons = ~0.1ms
-- **100x speedup**
+**Performance comparison**:
 
-**How HNSW works**:
+| Method | Complexity | 10k patterns | 100k patterns |
+|--------|------------|--------------|---------------|
+| Linear scan | O(n) | ~10ms | ~100ms |
+| HNSW | O(log n) | ~0.1ms | ~0.5ms |
 
-Multi-layer graph structure (like highway system):
+**How HNSW works** (highway analogy):
 
 ```
-Layer 2 (highways):   A ←─────→ B ←─────→ C
+Layer 2 (highways):   A ←─────→ B ←─────→ C       (few nodes, long jumps)
                        ↓          ↓          ↓
-Layer 1 (roads):      A → D → B → E → C → F
+Layer 1 (roads):      A → D → B → E → C → F      (more nodes, medium jumps)
                        ↓   ↓   ↓   ↓   ↓   ↓
-Layer 0 (streets):    A→D→G→B→E→H→C→F→I→J
+Layer 0 (streets):    A→D→G→B→E→H→C→F→I→J        (all nodes, precise)
 ```
 
 **Search algorithm**:
-1. Start at top layer (sparse, long jumps)
-2. Greedy search for closest node
+1. Start at top layer (sparse)
+2. Greedy search toward query
 3. Descend to next layer
-4. Refine search with more connections
-5. Continue until bottom layer
-6. Return k-nearest neighbors
+4. Repeat until bottom layer
+5. Return k-nearest neighbors
 
 **Parameters**:
 ```python
 index.init_index(
-    max_elements=100000,   # Capacity
-    ef_construction=200,   # Build quality (higher = better accuracy, slower build)
-    M=16                   # Connections per node (higher = better accuracy, more memory)
+    max_elements=100000,
+    ef_construction=200,  # Build quality
+    M=16                  # Connections per node
 )
-index.set_ef(50)  # Search quality (higher = better recall, slower query)
+index.set_ef(50)  # Search quality
 ```
 
-**Performance**:
-- 10,000 vectors: ~0.1ms per query
-- 100,000 vectors: ~0.5ms per query
-- 1,000,000 vectors: ~2ms per query
-
-**Why it works**:
-- Exploits small-world property of high-dimensional spaces
-- Few hops to reach any node (logarithmic)
-- Greedy navigation with multi-scale structure
-- Probabilistic guarantees on recall
-
----
-
-### How We Achieve O(log n) Complexity
-
-**The Problem**: Linear Search is O(n)
-
-In traditional vector search, finding the closest match requires comparing the query against every stored vector:
-
+**Hybrid approach** (our implementation):
 ```python
-# Linear search: O(n)
-best_match = None
-best_distance = infinity
-
-for pattern in all_patterns:  # n iterations
-    distance = cosine_distance(query, pattern.embedding)
-    if distance < best_distance:
-        best_match = pattern
-        best_distance = distance
-```
-
-- **10 patterns**: 10 comparisons
-- **1,000 patterns**: 1,000 comparisons
-- **100,000 patterns**: 100,000 comparisons (slow!)
-
-**The Solution**: HNSW is O(log n)
-
-HNSW builds a hierarchical graph structure that allows "skipping" most comparisons:
-
-**Key Insight**: Think of a multi-level highway system:
-- **Top layer (highways)**: Few exits, long distances between nodes → quick navigation across city
-- **Middle layer (roads)**: More exits, medium distances → navigate to neighborhood
-- **Bottom layer (streets)**: All destinations, short distances → precise navigation
-
-**How the Algorithm Works**:
-
-1. **Start at top layer** (sparse graph with ~log(n) nodes)
-   - Only a few "highway exits" to check
-   - Make big jumps toward target region
-
-2. **Greedy search at current layer**
-   ```
-   current = entry_point
-   while True:
-       neighbors = get_neighbors(current, layer)
-       best = find_closest_to_query(neighbors)
-       if best is closer than current:
-           current = best  # Move closer
-       else:
-           break  # Local minimum reached
-   ```
-
-3. **Descend to next layer** (denser graph)
-   - Start from the best node found above
-   - Repeat greedy search with more connections
-
-4. **Continue until bottom layer**
-   - Bottom layer contains ALL vectors
-   - But we only examine a small subset near target
-
-**Comparison Count**:
-```
-Layers: log(n) layers
-Checks per layer: ef_search (constant, ~50)
-Total comparisons: log(n) × ef_search ≈ O(log n)
-```
-
-**Example with 100,000 patterns**:
-- Linear search: 100,000 comparisons
-- HNSW: log₂(100,000) × 50 ≈ 17 × 50 = 850 comparisons
-- **Speedup: 117x faster**
-
-**Why Logarithmic?**
-
-The number of layers grows as log(n) because each layer is exponentially sparser:
-- Layer 0: 100% of vectors (n vectors)
-- Layer 1: ~50% of vectors (n/2 vectors)
-- Layer 2: ~25% of vectors (n/4 vectors)
-- Layer k: n/(2^k) vectors
-
-Top layer has ~1 vector when: n/(2^k) ≈ 1 → k ≈ log₂(n)
-
-**Trade-offs**:
-- ✅ Sub-millisecond queries even with millions of vectors
-- ✅ High recall (>95% with proper parameters)
-- ⚠️ Approximate, not exact (but close enough for semantic search)
-- ⚠️ More memory than flat search (stores graph structure)
-
-**Our Implementation**:
-```python
-# index.py
 if self._size < 10:
-    # Brute-force for small indices (HNSW overhead not worth it)
-    return self._brute_force_search(query, k)
+    return self._brute_force_search(query, k)  # Small: brute force
 else:
-    # HNSW for larger indices (O(log n))
-    return self.index.knn_query(query, k)
+    return self.index.knn_query(query, k)      # Large: HNSW
 ```
 
-This hybrid approach ensures optimal performance for both small test datasets and large production workloads.
-
 ---
 
-### 3. SQLite Storage
-
-**Purpose**: Persistent storage for metadata and embeddings
-
-**Why SQLite**:
-- ✅ Built-in Python (zero setup)
-- ✅ ACID transactions (safe concurrent writes)
-- ✅ Single file (easy backup/restore)
-- ✅ Fast for <1M rows (perfect for agent memory)
-- ✅ JSON support (flexible context storage)
-- ✅ Full-text search bonus
-
-**File location**: `.swarm/zylch_memory.db`
-
----
-
-### 4. ConfidenceTracker
+### 3. ConfidenceTracker
 
 **Purpose**: Bayesian learning from user feedback
 
 **Algorithm**:
 ```python
-def update_confidence(current_confidence: float, success: bool) -> float:
-    """Bayesian update with reinforcement/penalty"""
+def update_confidence(current: float, success: bool) -> float:
     if success:
-        # Positive reinforcement
-        new = current_confidence + (1 - current_confidence) * 0.3
+        return current + (1 - current) * 0.3  # Reinforce
     else:
-        # Penalty
-        new = current_confidence * 0.7
-    return max(0.0, min(1.0, new))
+        return current * 0.7                   # Penalize
 ```
 
-**Example learning trajectory**:
+**Learning trajectory**:
 ```
-Initial confidence: 0.5
-User approves → 0.65
-User approves → 0.755
-User approves → 0.829
-User approves → 0.880
-User approves → 0.916  (high confidence!)
-
-User rejects → 0.641   (significant drop)
+Initial:  0.50
+Approve:  0.65 → 0.76 → 0.83 → 0.88 → 0.92
+Reject:   0.64  (significant drop from 0.92)
 ```
 
 **Properties**:
 - Never reaches 1.0 (always room to learn)
-- More evidence → higher confidence
-- Recent evidence weighted more
+- Recent evidence weighted more heavily
 - Exponential decay on rejection
 
 ---
 
-## Namespace Strategy
+### 4. LifecycleManager
 
-### Two-Level Memory Hierarchy
+**Purpose**: Memory hygiene—TTL, decay, garbage collection
 
-**1. Global Memory** (`global:*`)
-- System-wide instructions and guidelines
-- Skill best practices
-- Default behavior templates
-- Written by: Admin/developers
-- Read by: All users (fallback)
+**Components**:
 
-**2. User Memory** (`user:{user_id}:*`)
-- Personal preferences and patterns
-- Learned from user approvals/rejections
-- Contact-specific rules
-- Written by: System (auto-learning)
-- Read by: Specific user only
+| Component | Function |
+|-----------|----------|
+| Access tracker | Records last retrieval time |
+| TTL enforcer | Marks stale patterns for review |
+| Decay function | Reduces confidence over time if unused |
+| GC runner | Removes low-confidence, stale patterns |
+
+**Decay formula**:
+```python
+def apply_temporal_decay(pattern, now):
+    days_since_use = (now - pattern.last_accessed).days
+    if days_since_use > 90:
+        decay_factor = 0.99 ** (days_since_use - 90)
+        pattern.confidence *= decay_factor
+```
+
+**Garbage collection rules**:
+```python
+def should_gc(pattern):
+    return (
+        pattern.confidence < 0.2 and
+        pattern.times_applied < 3 and
+        days_since_created(pattern) > 30
+    )
+```
+
+---
+
+## Namespace Architecture
+
+### Three-Level Hierarchy
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Level 1: Global                                                │
+│  global:system     → System instructions                        │
+│  global:skills     → Skill templates, best practices            │
+│  global:defaults   → Default behaviors                          │
+└─────────────────────────────────────────────────────────────────┘
+                               ↓ (fallback)
+┌─────────────────────────────────────────────────────────────────┐
+│  Level 2: User                                                  │
+│  user:{user_id}:patterns    → Learned skill patterns            │
+│  user:{user_id}:behavioral  → Channel-based rules               │
+│  user:{user_id}:preferences → General preferences               │
+└─────────────────────────────────────────────────────────────────┘
+                               ↓ (priority)
+┌─────────────────────────────────────────────────────────────────┐
+│  Level 3: Contact                                               │
+│  user:{user_id}:contact:{contact_id}:patterns                   │
+│  user:{user_id}:contact:{contact_id}:profile                    │
+│  user:{user_id}:contact:{contact_id}:history                    │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### Namespace Format
 
 ```
-global:system          → System instructions
-global:skills          → Skill templates/guidelines
-user:mario:patterns    → Mario's learned patterns
-user:mario:behavioral  → Mario's behavioral preferences
-user:alice:patterns    → Alice's learned patterns (isolated from Mario)
+global:system                           → System-wide instructions
+global:skills                           → Skill templates
+user:mario                              → Mario's general patterns
+user:mario:behavioral:email             → Mario's email channel rules
+user:mario:behavioral:whatsapp          → Mario's WhatsApp channel rules
+user:mario:contact:luisa                → Mario's patterns for Luisa
+user:mario:contact:luisa:profile        → Aggregated avatar for Luisa
+user:mario:contact:acme_corp            → Company-level patterns
 ```
 
-### Privacy & Isolation
+### Contact Identification
 
-**Rule**: Users can only access their own namespace + global
-
+**Contact ID generation**:
 ```python
-# Mario's query
-patterns = memory.retrieve_similar_patterns(
-    intent="draft email",
-    user_id="mario"
-)
-# Returns: user:mario:* + global:* only
-# Never returns: user:alice:* (privacy!)
+def generate_contact_id(email: str = None, name: str = None, phone: str = None) -> str:
+    """Generate stable contact ID from available identifiers"""
+    if email:
+        return hashlib.md5(email.lower().encode()).hexdigest()[:12]
+    elif phone:
+        normalized = re.sub(r'[^\d]', '', phone)
+        return hashlib.md5(normalized.encode()).hexdigest()[:12]
+    else:
+        normalized = name.lower().strip()
+        return hashlib.md5(normalized.encode()).hexdigest()[:12]
+```
+
+**Contact merging** (when same person has multiple identifiers):
+```python
+def merge_contacts(primary_id: str, secondary_id: str):
+    """Merge secondary contact into primary, preserving all patterns"""
+    # Move all patterns from secondary namespace to primary
+    db.execute("""
+        UPDATE patterns 
+        SET namespace = REPLACE(namespace, :old, :new)
+        WHERE namespace LIKE :old_pattern
+    """, {
+        'old': f'contact:{secondary_id}',
+        'new': f'contact:{primary_id}',
+        'old_pattern': f'%contact:{secondary_id}%'
+    })
+    
+    # Recalculate avatar for merged contact
+    avatar_engine.rebuild_avatar(primary_id)
 ```
 
 ### Cascading Retrieval
 
-**Search order**:
-1. User-specific patterns (priority)
-2. Global skill patterns (fallback)
-3. Score boosting for user patterns (1.5x multiplier)
-4. Rank by combined score
+**Search priority**:
+1. Contact-specific patterns (if contact_id provided)
+2. User patterns
+3. Global patterns (fallback)
 
+**Score boosting**:
 ```python
-def retrieve_similar_patterns(intent, skill, user_id, limit=5):
+def retrieve_with_cascade(intent, skill, user_id, contact_id=None, limit=5):
     results = []
-
-    # Step 1: User patterns
-    if user_id:
-        user_patterns = search(f"user:{user_id}", intent, skill, limit)
+    
+    # Priority 1: Contact-specific (highest boost)
+    if contact_id:
+        contact_ns = f"user:{user_id}:contact:{contact_id}"
+        contact_patterns = search(contact_ns, intent, skill, limit)
+        for p in contact_patterns:
+            p['score'] *= 2.0  # Contact-specific boost
+        results.extend(contact_patterns)
+    
+    # Priority 2: User patterns
+    if len(results) < limit:
+        user_ns = f"user:{user_id}"
+        user_patterns = search(user_ns, intent, skill, limit - len(results))
+        for p in user_patterns:
+            p['score'] *= 1.5  # User boost
         results.extend(user_patterns)
-
-    # Step 2: Global patterns (if needed)
+    
+    # Priority 3: Global fallback
     if len(results) < limit:
         global_patterns = search("global:skills", intent, skill, limit - len(results))
         results.extend(global_patterns)
-
-    # Step 3: Boost user patterns
-    for p in results:
-        if p['namespace'].startswith('user:'):
-            p['score'] *= 1.5  # User preference boost
-
+    
     return sorted(results, key=lambda x: x['score'], reverse=True)[:limit]
 ```
 
-### Use Cases
+### Privacy & Isolation
 
-**New user (no personalization yet)**:
-- Query: "draft professional email"
-- Returns: `global:skills` patterns only
-- Behavior: Standard Zylch defaults
+**Hard rule**: Users can only access their own namespace + global
 
-**Experienced user (50+ learned patterns)**:
-- Query: "draft email to Luisa about invoice"
-- Returns: Mostly `user:mario` patterns (personalized!)
-- Behavior: Mario's learned preferences
+```python
+def validate_namespace_access(user_id: str, namespace: str) -> bool:
+    if namespace.startswith("global:"):
+        return True  # Global readable by all
+    if namespace.startswith(f"user:{user_id}"):
+        return True  # Own namespace
+    return False  # Denied
+```
 
-**Global update benefits all**:
-- Admin updates `global:skills` pattern
-- All users get improved baseline
-- User-specific patterns still take priority
+**Index isolation**: Separate HNSW index per user namespace
+```python
+indices = {
+    "global:skills": hnswlib.Index(...),
+    "user:mario": hnswlib.Index(...),
+    "user:alice": hnswlib.Index(...),  # Completely separate
+}
+```
 
 ---
 
-## Semantic Search
+## Avatar Aggregation Layer
+
+The Avatar layer synthesizes patterns across channels into coherent contact representations.
+
+### Avatar Structure
+
+```python
+@dataclass
+class Avatar:
+    contact_id: str
+    user_id: str
+    
+    # Identity
+    display_name: str
+    identifiers: List[str]  # emails, phones
+    
+    # Communication profile
+    preferred_channel: str  # "email", "whatsapp", etc.
+    preferred_tone: str     # "formal", "casual", "professional"
+    preferred_language: str
+    response_latency: ResponseLatency  # typical response time
+    
+    # Behavioral patterns
+    patterns_by_channel: Dict[str, List[Pattern]]
+    aggregated_preferences: Dict[str, Any]
+    
+    # Relationship metadata
+    first_interaction: datetime
+    last_interaction: datetime
+    interaction_count: int
+    relationship_strength: float  # 0-1, based on frequency/recency
+    
+    # Confidence
+    profile_confidence: float  # How reliable is this avatar
+    last_updated: datetime
+```
+
+### Response Latency Model
+
+```python
+@dataclass
+class ResponseLatency:
+    median_hours: float
+    p90_hours: float
+    sample_size: int
+    by_channel: Dict[str, float]  # Per-channel breakdown
+    by_day_of_week: Dict[int, float]  # 0=Monday
+    by_hour_of_day: Dict[int, float]  # 0-23
+```
+
+**Calculation**:
+```python
+def compute_response_latency(contact_id: str) -> ResponseLatency:
+    """Analyze email/message threads to compute response patterns"""
+    threads = get_threads_with_contact(contact_id)
+    
+    response_times = []
+    for thread in threads:
+        for i, msg in enumerate(thread.messages[1:], 1):
+            if msg.sender == contact_id:
+                prev_msg = thread.messages[i-1]
+                delta = msg.timestamp - prev_msg.timestamp
+                response_times.append(delta.total_seconds() / 3600)
+    
+    return ResponseLatency(
+        median_hours=np.median(response_times),
+        p90_hours=np.percentile(response_times, 90),
+        sample_size=len(response_times),
+        by_channel=compute_by_channel(threads),
+        by_day_of_week=compute_by_day(response_times),
+        by_hour_of_day=compute_by_hour(response_times)
+    )
+```
+
+### Avatar Aggregation
+
+```python
+class AvatarEngine:
+    def aggregate_contact_patterns(self, user_id: str, contact_id: str) -> Avatar:
+        """Build avatar from all patterns related to a contact"""
+        
+        # Gather patterns from all channels
+        patterns = {}
+        for channel in CHANNELS:
+            ns = f"user:{user_id}:contact:{contact_id}:behavioral:{channel}"
+            patterns[channel] = self.memory.list_patterns(namespace=ns)
+        
+        # Compute aggregated preferences
+        preferences = self._compute_preferences(patterns)
+        
+        # Compute communication profile
+        profile = self._compute_communication_profile(contact_id, patterns)
+        
+        # Compute relationship strength
+        strength = self._compute_relationship_strength(contact_id)
+        
+        return Avatar(
+            contact_id=contact_id,
+            user_id=user_id,
+            patterns_by_channel=patterns,
+            aggregated_preferences=preferences,
+            preferred_channel=profile['preferred_channel'],
+            preferred_tone=profile['preferred_tone'],
+            response_latency=profile['response_latency'],
+            relationship_strength=strength,
+            profile_confidence=self._compute_confidence(patterns)
+        )
+    
+    def _compute_preferences(self, patterns: Dict[str, List]) -> Dict:
+        """Weighted aggregation across channels"""
+        all_patterns = []
+        for channel, channel_patterns in patterns.items():
+            for p in channel_patterns:
+                p['channel'] = channel
+                all_patterns.append(p)
+        
+        # Group by preference key, weighted by confidence
+        preferences = {}
+        for key in ['tone', 'pronoun', 'language', 'formality']:
+            values = [(p['action'].get(key), p['confidence']) 
+                      for p in all_patterns if key in p.get('action', {})]
+            if values:
+                preferences[key] = weighted_majority(values)
+        
+        return preferences
+```
+
+### Avatar Export/Import (Enterprise Feature)
+
+**Use case**: Employee onboarding—inherit predecessor's relational knowledge
+
+```python
+def export_avatar(user_id: str, contact_id: str) -> bytes:
+    """Export avatar for sharing/transfer"""
+    avatar = get_avatar(user_id, contact_id)
+    patterns = list_patterns(namespace=f"user:{user_id}:contact:{contact_id}")
+    
+    export_data = {
+        'avatar': asdict(avatar),
+        'patterns': patterns,
+        'exported_at': datetime.utcnow().isoformat(),
+        'version': '2.0'
+    }
+    
+    return gzip.compress(json.dumps(export_data).encode())
+
+def import_avatar(user_id: str, data: bytes, contact_id: str = None):
+    """Import avatar into user's namespace"""
+    export_data = json.loads(gzip.decompress(data))
+    
+    # Use original contact_id or override
+    target_contact_id = contact_id or export_data['avatar']['contact_id']
+    target_ns = f"user:{user_id}:contact:{target_contact_id}"
+    
+    # Import patterns with reduced confidence (inherited, not learned)
+    for pattern in export_data['patterns']:
+        pattern['confidence'] *= 0.7  # Inheritance discount
+        pattern['namespace'] = target_ns
+        store_pattern(**pattern)
+    
+    # Rebuild avatar
+    avatar_engine.rebuild_avatar(target_contact_id)
+```
+
+---
+
+## Semantic Search Pipeline
 
 ### End-to-End Flow
 
-**Scenario**: User asks "compose professional message to client about payment"
+**Query**: "compose professional message to client about payment"
 
-#### Step 1: Generate Query Embedding
-```python
-query = "compose professional message to client about payment"
-query_embedding = encoder.encode(query)
-# [0.123, -0.456, 0.789, ..., 0.234]  # 384 dimensions
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Step 1: Embed Query                                            │
+│  "compose professional message..." → [0.12, -0.45, 0.78, ...]   │
+│  Time: ~1ms (cached if repeated)                                │
+└──────────────────────────────┬──────────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Step 2: HNSW Search (per namespace)                            │
+│  Contact namespace: 2 results                                   │
+│  User namespace: 3 results                                      │
+│  Global namespace: 2 results (fallback)                         │
+│  Time: ~0.3ms                                                   │
+└──────────────────────────────┬──────────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Step 3: Fetch Metadata from SQLite                             │
+│  JOIN patterns ON embedding_id                                  │
+│  Time: ~1ms                                                     │
+└──────────────────────────────┬──────────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Step 4: Score & Rank                                           │
+│  score = similarity × confidence × namespace_boost              │
+│  Filter: confidence > min_threshold                             │
+│  Sort: descending by score                                      │
+└──────────────────────────────┬──────────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  Result                                                         │
+│  [                                                              │
+│    {intent: "email to luisa about invoice",                     │
+│     action: {tone: "formal"}, score: 0.85},                     │
+│    {intent: "professional message to client",                   │
+│     action: {tone: "professional"}, score: 0.72}                │
+│  ]                                                              │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-#### Step 2: HNSW Search
-```python
-labels, distances = index.knn_query(query_embedding, k=5)
-# labels = [42, 17, 89, 103, 55]  # Pattern IDs
-# distances = [0.15, 0.23, 0.28, 0.31, 0.35]  # Cosine distance
-```
+**Total latency**: ~2-3ms
 
-#### Step 3: Fetch Metadata
-```python
-patterns = []
-for label, distance in zip(labels, distances):
-    pattern = db.execute(
-        "SELECT * FROM patterns WHERE id = ? AND skill = ?",
-        (label, "draft_composer")
-    ).fetchone()
+### Semantic Matching Power
 
-    pattern['similarity'] = 1 - distance  # Convert distance to similarity
-    patterns.append(pattern)
-```
-
-#### Step 4: Filter & Rank
-```python
-# Filter by minimum confidence
-filtered = [p for p in patterns if p['confidence'] > 0.6]
-
-# Combined score: similarity × confidence
-scored = [
-    {**p, 'score': p['similarity'] * p['confidence']}
-    for p in filtered
-]
-
-# Sort by score
-ranked = sorted(scored, key=lambda x: x['score'], reverse=True)
-```
-
-#### Result
-```json
-[
-  {
-    "intent": "draft formal email to luisa about invoice",
-    "action": {"tone": "formal", "pronoun": "lei"},
-    "confidence": 0.85,
-    "similarity": 0.85,
-    "score": 0.7225
-  },
-  {
-    "intent": "write professional message to client",
-    "action": {"tone": "professional", "pronoun": "lei"},
-    "confidence": 0.72,
-    "similarity": 0.77,
-    "score": 0.5544
-  }
-]
-```
-
-### Why Semantic Search is Powerful
-
-**Finds related concepts**:
-- "compose" → "draft" (synonyms)
-- "payment" → "invoice" (related concepts)
-- "client" → "customer" (domain knowledge)
-
-**Handles variations**:
-- "write email" ≈ "draft message" ≈ "compose correspondence"
-- All map to similar vectors
-- No need for exact keyword match!
-
-**Context-aware**:
-- "bank" in "river bank" ≠ "bank" in "financial institution"
-- Embeddings capture context from surrounding words
+| Query | Matches | Why |
+|-------|---------|-----|
+| "compose message" | "draft email" | Synonyms in embedding space |
+| "payment reminder" | "invoice followup" | Related concepts |
+| "client" | "customer", "Luisa" | Domain knowledge + contact association |
 
 ---
 
-## Confidence Learning
+## Confidence & Learning
 
 ### Learning Loop
 
 ```
-┌─────────────────────────────────────────┐
-│  1. User provides natural language      │
-│     "Draft reminder to Luisa"           │
-└──────────────┬──────────────────────────┘
-               ↓
-┌─────────────────────────────────────────┐
-│  2. Retrieve similar patterns           │
-│     Found: "email to luisa" (conf=0.7)  │
-└──────────────┬──────────────────────────┘
-               ↓
-┌─────────────────────────────────────────┐
-│  3. Execute skill with pattern action   │
-│     Generate draft with formal tone     │
-└──────────────┬──────────────────────────┘
-               ↓
-┌─────────────────────────────────────────┐
-│  4. User feedback                       │
-│     ✅ Approved  or  ❌ Rejected        │
-└──────────────┬──────────────────────────┘
-               ↓
-┌─────────────────────────────────────────┐
-│  5. Update confidence                   │
-│     Approved: 0.7 → 0.79               │
-│     Rejected: 0.7 → 0.49               │
-└──────────────┬──────────────────────────┘
-               ↓
-┌─────────────────────────────────────────┐
-│  6. Store new pattern if approved       │
-│     Learn user's exact preference       │
-└─────────────────────────────────────────┘
+User request → Retrieve patterns → Execute skill → User feedback → Update confidence
+      ↑                                                                    │
+      └────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Confidence Thresholds
 
-| Confidence | Interpretation | Action |
-|-----------|---------------|--------|
-| 0.0 - 0.3 | Low confidence | Treat as unreliable, may ignore |
-| 0.3 - 0.6 | Medium confidence | Consider but ask for confirmation |
-| 0.6 - 0.8 | High confidence | Apply automatically |
-| 0.8 - 1.0 | Very high confidence | Strong user preference |
+| Range | Interpretation | System Behavior |
+|-------|----------------|-----------------|
+| 0.0 - 0.2 | Unreliable | Candidate for GC |
+| 0.2 - 0.4 | Low confidence | Excluded from retrieval |
+| 0.4 - 0.6 | Medium | Include but may ask confirmation |
+| 0.6 - 0.8 | High | Apply automatically |
+| 0.8 - 1.0 | Very high | Strong user preference |
 
 ### Multi-Pattern Aggregation
 
-When multiple patterns match:
+When multiple patterns match, aggregate by weighted vote:
 
 ```python
-def aggregate_patterns(patterns):
-    """Weighted aggregation by confidence"""
-    total_weight = sum(p['confidence'] for p in patterns)
-
-    aggregated_action = {}
-    for key in patterns[0]['action'].keys():
-        # Weighted vote
-        values = [(p['action'][key], p['confidence']) for p in patterns]
-        aggregated_action[key] = weighted_majority(values, total_weight)
-
-    return aggregated_action
+def aggregate_actions(patterns: List[Pattern]) -> Dict:
+    """Weighted aggregation when multiple patterns apply"""
+    weights = {p['id']: p['confidence'] * p['similarity'] for p in patterns}
+    total_weight = sum(weights.values())
+    
+    aggregated = {}
+    for key in get_all_action_keys(patterns):
+        votes = defaultdict(float)
+        for p in patterns:
+            if key in p['action']:
+                votes[p['action'][key]] += weights[p['id']]
+        
+        # Winner takes all
+        aggregated[key] = max(votes.items(), key=lambda x: x[1])[0]
+    
+    return aggregated
 ```
 
 ---
 
-## Performance
+## Memory Lifecycle
 
-### Storage Requirements
+### Pattern States
 
-| Patterns | SQLite | HNSW Index | Total | Notes |
-|----------|--------|-----------|-------|-------|
-| 1,000 | 500 KB | 300 KB | 800 KB | Single user |
-| 10,000 | 5 MB | 3 MB | 8 MB | Active user |
-| 100,000 | 50 MB | 30 MB | 80 MB | Heavy user |
-| 1,000,000 | 500 MB | 300 MB | 800 MB | Enterprise |
+```
+┌─────────┐     approve      ┌─────────┐     high usage     ┌─────────┐
+│  NEW    │ ────────────────→│ ACTIVE  │ ─────────────────→ │ STABLE  │
+│ (0.5)   │                  │ (0.5-0.8)│                    │ (0.8+)  │
+└─────────┘                  └─────────┘                    └─────────┘
+     │                            │                              │
+     │ reject                     │ no usage (90d)               │ no usage (180d)
+     ↓                            ↓                              ↓
+┌─────────┐                  ┌─────────┐                    ┌─────────┐
+│ DECLINED│                  │ STALE   │                    │ ARCHIVED│
+│ (<0.3)  │                  │ decaying│                    │ frozen  │
+└─────────┘                  └─────────┘                    └─────────┘
+     │                            │
+     │ times_applied < 3          │ confidence < 0.2
+     ↓                            ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│                        GARBAGE COLLECTED                            │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-### Query Latency
+### Lifecycle Rules
 
-| Operation | Time | Details |
-|-----------|------|---------|
-| Generate embedding | ~1ms | CPU-bound, cached |
-| HNSW search (10k) | ~0.1ms | In-memory index |
-| HNSW search (100k) | ~0.5ms | In-memory index |
-| HNSW search (1M) | ~2ms | In-memory index |
-| SQLite fetch | ~1ms | Indexed lookup |
-| **Total (10k patterns)** | **~2ms** | End-to-end |
-| **Total (100k patterns)** | **~3ms** | End-to-end |
+```python
+LIFECYCLE_CONFIG = {
+    'stale_threshold_days': 90,      # No access → start decay
+    'archive_threshold_days': 180,   # No access → archive
+    'gc_min_confidence': 0.2,        # Below this → GC candidate
+    'gc_min_applications': 3,        # Must be applied N times to survive
+    'gc_grace_period_days': 30,      # New patterns protected
+    'decay_rate': 0.99,              # Daily decay multiplier after stale
+}
+```
 
-### Comparison with Legacy Systems
+### Lifecycle Manager
 
-| System | Search | Latency | Accuracy |
-|--------|--------|---------|----------|
-| PatternStore (hash) | O(n) | ~10ms | Exact match only |
-| ReasoningBank (JSON) | O(n) | ~50ms | No similarity |
-| **ZylchMemory** | **O(log n)** | **~2ms** | **Semantic match** |
-
-**Improvement**: 5-25x faster + semantic understanding
+```python
+class LifecycleManager:
+    def run_daily_maintenance(self):
+        """Run as daily cron job"""
+        self._apply_temporal_decay()
+        self._mark_stale_patterns()
+        self._archive_old_patterns()
+        self._garbage_collect()
+        self._rebuild_stale_avatars()
+    
+    def _apply_temporal_decay(self):
+        """Reduce confidence for unused patterns"""
+        stale = self.db.execute("""
+            SELECT id, confidence, last_accessed 
+            FROM patterns 
+            WHERE julianday('now') - julianday(last_accessed) > ?
+        """, (LIFECYCLE_CONFIG['stale_threshold_days'],))
+        
+        for pattern in stale:
+            days_stale = (now() - pattern.last_accessed).days
+            decay = LIFECYCLE_CONFIG['decay_rate'] ** days_stale
+            new_confidence = pattern.confidence * decay
+            self.db.execute(
+                "UPDATE patterns SET confidence = ? WHERE id = ?",
+                (new_confidence, pattern.id)
+            )
+    
+    def _garbage_collect(self):
+        """Remove patterns that failed to prove useful"""
+        self.db.execute("""
+            DELETE FROM patterns 
+            WHERE confidence < ?
+              AND times_applied < ?
+              AND julianday('now') - julianday(created_at) > ?
+        """, (
+            LIFECYCLE_CONFIG['gc_min_confidence'],
+            LIFECYCLE_CONFIG['gc_min_applications'],
+            LIFECYCLE_CONFIG['gc_grace_period_days']
+        ))
+```
 
 ---
 
@@ -625,235 +729,272 @@ def aggregate_patterns(patterns):
 ```sql
 CREATE TABLE patterns (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    namespace TEXT NOT NULL,              -- "user:mario" or "global:skills"
-    skill TEXT NOT NULL,                  -- "draft_composer", "email_triage", etc.
-    intent TEXT NOT NULL,                 -- "write formal email to luisa"
-    context TEXT,                         -- JSON: {"contact": "Luisa", "company": "Acme"}
-    action TEXT,                          -- JSON: {"tone": "formal", "pronoun": "lei"}
-    outcome TEXT,                         -- "approved", "rejected", "modified"
-    user_id TEXT,                         -- "mario" (for user:* namespace)
-    confidence REAL DEFAULT 0.5,          -- Bayesian confidence [0, 1]
+    namespace TEXT NOT NULL,
+    skill TEXT NOT NULL,
+    intent TEXT NOT NULL,
+    context TEXT,                    -- JSON
+    action TEXT,                     -- JSON
+    outcome TEXT,
+    user_id TEXT,
+    contact_id TEXT,                 -- NEW: for per-contact patterns
+    confidence REAL DEFAULT 0.5,
+    times_applied INTEGER DEFAULT 0,
+    times_successful INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    embedding_id INTEGER,                 -- FK to embeddings table
-
+    last_accessed TIMESTAMP,         -- NEW: for lifecycle tracking
+    embedding_id INTEGER,
+    state TEXT DEFAULT 'active',     -- NEW: active, stale, archived
+    
     UNIQUE(namespace, skill, intent)
 );
 
 CREATE INDEX idx_patterns_namespace ON patterns(namespace);
 CREATE INDEX idx_patterns_skill ON patterns(skill);
 CREATE INDEX idx_patterns_user ON patterns(user_id);
+CREATE INDEX idx_patterns_contact ON patterns(contact_id);
 CREATE INDEX idx_patterns_confidence ON patterns(confidence);
+CREATE INDEX idx_patterns_state ON patterns(state);
+CREATE INDEX idx_patterns_last_accessed ON patterns(last_accessed);
 ```
 
 #### memories
 ```sql
 CREATE TABLE memories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    namespace TEXT NOT NULL,              -- "user:mario" or "global:system"
-    category TEXT NOT NULL,               -- "email", "contacts", "calendar", "task", "general"
-    context TEXT,                         -- "Luisa from Acme Corp"
-    pattern TEXT,                         -- "Always use formal tone, Lei pronoun"
-    examples TEXT,                        -- JSON: ["email_123", "email_456"]
+    namespace TEXT NOT NULL,
+    category TEXT NOT NULL,          -- email, calendar, whatsapp, mrcall, task
+    context TEXT,
+    pattern TEXT,
+    examples TEXT,                   -- JSON array
     confidence REAL DEFAULT 0.5,
+    times_applied INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    embedding_id INTEGER
+    last_accessed TIMESTAMP,
+    embedding_id INTEGER,
+    state TEXT DEFAULT 'active'
 );
 
 CREATE INDEX idx_memories_namespace ON memories(namespace);
 CREATE INDEX idx_memories_category ON memories(category);
 ```
 
+#### avatars
+```sql
+CREATE TABLE avatars (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    contact_id TEXT NOT NULL,
+    display_name TEXT,
+    identifiers TEXT,                -- JSON array of emails/phones
+    preferred_channel TEXT,
+    preferred_tone TEXT,
+    preferred_language TEXT,
+    response_latency TEXT,           -- JSON: ResponseLatency object
+    aggregated_preferences TEXT,     -- JSON
+    relationship_strength REAL,
+    first_interaction TIMESTAMP,
+    last_interaction TIMESTAMP,
+    interaction_count INTEGER DEFAULT 0,
+    profile_confidence REAL DEFAULT 0.5,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    UNIQUE(user_id, contact_id)
+);
+
+CREATE INDEX idx_avatars_user ON avatars(user_id);
+CREATE INDEX idx_avatars_contact ON avatars(contact_id);
+```
+
 #### embeddings
 ```sql
 CREATE TABLE embeddings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    text TEXT NOT NULL,                   -- Original text
-    vector BLOB NOT NULL,                 -- Serialized numpy array (384 float32)
-    model TEXT NOT NULL,                  -- "all-MiniLM-L6-v2"
+    text TEXT NOT NULL,
+    vector BLOB NOT NULL,            -- Serialized numpy array
+    model TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE(text, model)                   -- Cache: same text → same embedding
+    
+    UNIQUE(text, model)
 );
 
 CREATE INDEX idx_embeddings_text ON embeddings(text);
 ```
 
-### HNSW Indices
+### HNSW Index Files
 
-**Stored in memory** (not in SQLite):
-- One index per namespace for isolation
-- Loaded on startup from embeddings table
-- Persisted to disk in separate files (`.swarm/indices/`)
-
-```python
-# Index organization
-indices = {
-    "global:system": hnswlib.Index(...),
-    "global:skills": hnswlib.Index(...),
-    "user:mario": hnswlib.Index(...),
-    "user:alice": hnswlib.Index(...)
-}
 ```
+.swarm/indices/
+├── global_skills.hnsw
+├── user_mario.hnsw
+├── user_mario_contact_luisa.hnsw
+├── user_alice.hnsw
+└── ...
+```
+
+**Index lifecycle**:
+- Created on first pattern in namespace
+- Loaded into memory on startup
+- Persisted after each modification
+- Deleted when namespace is empty
 
 ---
 
-## Integration
+## Performance
 
-### Replacing PatternStore
+### Storage Requirements
 
-**Before**:
+| Scale | Patterns | SQLite | HNSW Indices | Total |
+|-------|----------|--------|--------------|-------|
+| Single user | 1,000 | 500 KB | 300 KB | ~1 MB |
+| Active user | 10,000 | 5 MB | 3 MB | ~8 MB |
+| Heavy user | 100,000 | 50 MB | 30 MB | ~80 MB |
+| Enterprise | 1,000,000 | 500 MB | 300 MB | ~800 MB |
+
+### Query Latency
+
+| Operation | 10k patterns | 100k patterns | 1M patterns |
+|-----------|--------------|---------------|-------------|
+| Embed query | ~1ms | ~1ms | ~1ms |
+| HNSW search | ~0.1ms | ~0.5ms | ~2ms |
+| SQLite fetch | ~1ms | ~1ms | ~2ms |
+| **Total** | **~2ms** | **~3ms** | **~5ms** |
+
+### Comparison with Legacy
+
+| System | Search | Latency (10k) | Semantic |
+|--------|--------|---------------|----------|
+| PatternStore | O(n) | ~10ms | No |
+| ReasoningBank | O(n) | ~50ms | No |
+| **ZylchMemory** | **O(log n)** | **~2ms** | **Yes** |
+
+---
+
+## Integration Patterns
+
+### Skill Service Integration
+
 ```python
-from zylch.memory.pattern_store import PatternStore
-
-store = PatternStore()
-patterns = store.retrieve_similar_patterns(
-    intent="draft email",
-    skill="draft_composer"
-)
-# Hash-based exact matching
-```
-
-**After**:
-```python
-from zylch_memory import ZylchMemory
-
-memory = ZylchMemory()
-patterns = memory.retrieve_similar_patterns(
-    intent="draft email",
-    skill="draft_composer",
-    user_id="mario"
-)
-# Semantic search with namespace isolation
-```
-
-### Replacing ReasoningBank
-
-**Before**:
-```python
-from zylch.memory.reasoning_bank import ReasoningBankMemory
-
-bank = ReasoningBankMemory()
-memories = bank.list_patterns(category="email")
-# JSON file scanning
-```
-
-**After**:
-```python
-from zylch_memory import ZylchMemory
-
-memory = ZylchMemory()
-memories = memory.retrieve_memories(
-    query="email preferences",
-    category="email",
-    user_id="mario"
-)
-# Semantic search in SQLite
-```
-
-### Service Layer Integration
-
-**skill_service.py**:
-```python
-from zylch_memory import ZylchMemory
-
 class SkillService:
     def __init__(self):
         self.memory = ZylchMemory()
-
-    async def execute_skill(self, skill_name, user_id, intent, params):
-        # Retrieve relevant patterns
+    
+    async def execute_skill(self, skill_name, user_id, intent, contact_id=None):
+        # Retrieve with contact context
         patterns = self.memory.retrieve_similar_patterns(
             intent=intent,
             skill=skill_name,
             user_id=user_id,
+            contact_id=contact_id,
             limit=3
         )
-
-        # Execute skill with pattern context
+        
+        # Get avatar if contact specified
+        avatar = None
+        if contact_id:
+            avatar = self.memory.get_avatar(user_id, contact_id)
+        
+        # Execute skill with pattern + avatar context
         skill = self.registry.get_skill(skill_name)
-        result = await skill.activate(context, patterns=patterns)
-
+        result = await skill.activate(
+            context=build_context(patterns, avatar),
+            user_id=user_id
+        )
+        
         return result
+    
+    async def record_feedback(self, pattern_id, success, user_id, contact_id=None):
+        # Update pattern confidence
+        self.memory.update_confidence(pattern_id, success)
+        
+        # Rebuild avatar if contact-specific
+        if contact_id:
+            self.memory.avatar_engine.rebuild_avatar(user_id, contact_id)
 ```
 
 ### CLI Integration
 
-**/memory command**:
 ```python
-async def _handle_memory_command(self, args):
+@command("/memory")
+async def memory_command(args):
     memory = ZylchMemory()
-
+    
     if args.action == "list":
         patterns = memory.list_patterns(
-            namespace=f"user:{self.user_id}",
+            namespace=f"user:{user_id}",
             limit=args.limit
         )
-        self._display_patterns(patterns)
+        display_patterns(patterns)
+    
+    elif args.action == "avatar":
+        avatar = memory.get_avatar(user_id, args.contact_id)
+        display_avatar(avatar)
+    
+    elif args.action == "export":
+        data = memory.export_avatar(user_id, args.contact_id)
+        save_file(f"{args.contact_id}_avatar.zylch", data)
+    
+    elif args.action == "import":
+        data = read_file(args.file)
+        memory.import_avatar(user_id, data, args.contact_id)
+```
 
-    elif args.action == "stats":
-        stats = memory.get_stats(user_id=self.user_id)
-        print(f"Total patterns: {stats['total']}")
-        print(f"Avg confidence: {stats['avg_confidence']:.2f}")
+### Event Hooks
+
+```python
+# Register lifecycle hooks
+memory.on_pattern_created(lambda p: log_analytics("pattern_created", p))
+memory.on_confidence_updated(lambda p, old, new: 
+    log_analytics("confidence_change", {"delta": new - old}))
+memory.on_avatar_updated(lambda a: 
+    notify_sync_service(a.user_id, a.contact_id))
+memory.on_garbage_collected(lambda patterns: 
+    log_analytics("gc", {"count": len(patterns)}))
 ```
 
 ---
 
-## Future Enhancements
+## Roadmap
 
-### Phase 2: Advanced Features
+### v2.1 - Avatar Intelligence
+- [ ] Response time prediction (when will they reply?)
+- [ ] Optimal contact time suggestion
+- [ ] Relationship health scoring
+- [ ] Network graph visualization
 
-**1. Temporal Decay**
-- Patterns not used for >90 days lose confidence
-- Ensures memory stays fresh and relevant
-- Configurable decay rate
+### v2.2 - Enterprise Features
+- [ ] Team-level avatars (shared across organization)
+- [ ] Role-based avatar inheritance
+- [ ] Audit logging for compliance
+- [ ] Avatar versioning and rollback
 
-**2. Cross-User Learning** (Privacy-Safe)
-- Aggregate patterns across users (anonymized)
-- Improve `global:skills` from collective intelligence
-- Differential privacy guarantees
+### v2.3 - Advanced Learning
+- [ ] Active learning (ask for feedback on uncertain cases)
+- [ ] Cross-user learning (anonymized, differential privacy)
+- [ ] Automatic pattern discovery from interaction logs
+- [ ] Contradiction detection and resolution
 
-**3. Explainability**
-- "Why did you use this pattern?"
-- Show retrieval reasoning (similarity scores, confidence, etc.)
-- Trust building with users
-
-**4. Active Learning**
-- Identify uncertain scenarios (confidence 0.4-0.6)
-- Proactively ask user for feedback
-- Accelerate learning in ambiguous cases
-
-**5. Multi-Modal Embeddings**
-- Support images, audio (for future features)
-- Unified vector space for all modalities
-- CLIP-like architecture
-
-**6. Compression**
-- Product quantization for embeddings
-- 4-8x memory reduction
-- Minimal accuracy loss
-
-**7. Distributed Sync**
-- Multi-device support (desktop, mobile, web)
-- CRDT-based conflict resolution
-- Real-time sync via WebSockets
+### v2.4 - Performance
+- [ ] Product quantization for embedding compression
+- [ ] Tiered storage (hot/warm/cold)
+- [ ] Distributed sync (multi-device)
+- [ ] Real-time WebSocket updates
 
 ---
 
 ## Conclusion
 
-ZylchMemory provides a production-ready, scalable, and privacy-compliant memory system for AI agents. By combining semantic search, Bayesian learning, and namespace isolation, it enables personalized AI behavior while maintaining global system knowledge.
+ZylchMemory v2.0 provides:
 
-**Key Achievements**:
-- ✅ 5-25x faster than legacy systems
-- ✅ Semantic understanding (not just keyword matching)
-- ✅ Multi-tenant ready with privacy guarantees
-- ✅ Continuous learning from user feedback
-- ✅ Pure Python, minimal dependencies
-- ✅ Battle-tested algorithms (HNSW, transformers)
+- **Hierarchical namespaces** for user + contact isolation
+- **Avatar aggregation** for person-centric intelligence
+- **Memory lifecycle** management for system hygiene
+- **O(log n) semantic search** via HNSW
+- **Bayesian learning** from user feedback
 
-**Next Steps**: See `README.md` for installation and usage guide.
+The architecture is designed to evolve from channel-based behavioral memory toward full relational avatars that capture the nuance of professional relationships.
 
 ---
 

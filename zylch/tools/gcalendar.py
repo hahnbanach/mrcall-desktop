@@ -12,6 +12,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 from .base import Tool, ToolResult, ToolStatus
+from zylch.api import token_storage
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class GoogleCalendarClient:
     """Client for Google Calendar API operations.
 
     Handles OAuth authentication and calendar operations.
+    Supports both filesystem tokens (local dev) and Supabase tokens (production).
     """
 
     def __init__(
@@ -39,23 +41,29 @@ class GoogleCalendarClient:
         token_dir: str = "credentials/calendar_tokens/",
         calendar_id: str = "primary",
         account: Optional[str] = None,
+        owner_id: Optional[str] = None,
     ):
         """Initialize Google Calendar client.
 
         Args:
             credentials_path: Path to OAuth credentials JSON
-            token_dir: Directory to store tokens
+            token_dir: Directory to store tokens (filesystem fallback)
             calendar_id: Calendar ID to use (default: 'primary')
             account: Account email for token isolation (optional)
+            owner_id: Firebase UID (enables Supabase token storage)
         """
         self.credentials_path = Path(credentials_path)
         self.token_dir = Path(token_dir)
         self.token_dir.mkdir(parents=True, exist_ok=True)
         self.calendar_id = calendar_id
         self.account = account
+        self.owner_id = owner_id
         self.service = None
 
-        logger.info(f"Initialized Google Calendar client for calendar: {calendar_id}")
+        # Use Supabase token storage if owner_id is provided
+        self._use_token_storage = bool(owner_id)
+
+        logger.info(f"Initialized Google Calendar client for calendar: {calendar_id}, owner_id: {owner_id or 'none'}")
 
     def _get_token_path(self) -> Path:
         """Get token file path for this account."""
@@ -67,20 +75,32 @@ class GoogleCalendarClient:
             return self.token_dir / "token.pickle"
 
     def authenticate(self) -> None:
-        """Authenticate with Google Calendar API using OAuth 2.0."""
-        creds = None
-        token_path = self._get_token_path()
+        """Authenticate with Google Calendar API using OAuth 2.0.
 
-        # Load existing token
-        if token_path.exists():
-            with open(token_path, "rb") as token:
-                creds = pickle.load(token)
+        Uses Supabase token storage when owner_id is set, otherwise filesystem.
+        """
+        creds = None
+
+        # Load existing token from appropriate backend
+        if self._use_token_storage:
+            # Load from Supabase via token_storage
+            creds = token_storage.get_google_credentials(self.owner_id)
+            if creds:
+                logger.info(f"Loaded credentials from Supabase for owner {self.owner_id}")
+        else:
+            # Load from filesystem
+            token_path = self._get_token_path()
+            if token_path.exists():
+                with open(token_path, "rb") as token:
+                    creds = pickle.load(token)
 
         # If no valid credentials, request new ones
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 logger.info("Refreshing expired credentials")
                 creds.refresh(Request())
+                # Save refreshed credentials
+                self._save_credentials(creds)
             else:
                 if not self.credentials_path.exists():
                     raise FileNotFoundError(
@@ -94,14 +114,33 @@ class GoogleCalendarClient:
                 )
                 creds = flow.run_local_server(port=0)
 
-            # Save credentials
-            with open(token_path, "wb") as token:
-                pickle.dump(creds, token)
-            logger.info(f"Saved credentials to {token_path}")
+                # Save credentials
+                self._save_credentials(creds)
 
         # Build Calendar service
         self.service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
         logger.info("Google Calendar API authenticated successfully")
+
+    def _save_credentials(self, creds: Credentials) -> None:
+        """Save credentials to appropriate backend.
+
+        Args:
+            creds: Google OAuth credentials
+        """
+        if self._use_token_storage:
+            # Save to Supabase via token_storage
+            token_storage.save_google_credentials(
+                owner_id=self.owner_id,
+                credentials=creds,
+                email=self.account or ""
+            )
+            logger.info(f"Saved credentials to Supabase for owner {self.owner_id}")
+        else:
+            # Save to filesystem
+            token_path = self._get_token_path()
+            with open(token_path, "wb") as token:
+                pickle.dump(creds, token)
+            logger.info(f"Saved credentials to {token_path}")
 
     def list_events(
         self,

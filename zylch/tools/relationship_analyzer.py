@@ -9,7 +9,11 @@ import logging
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+
+# Avoid circular imports
+if TYPE_CHECKING:
+    from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +26,9 @@ class RelationshipAnalyzer:
         email_cache_path: str = "cache/emails/threads.json",
         calendar_cache_path: str = "cache/calendar/events.json",
         anthropic_api_key: Optional[str] = None,
-        memory_bank = None
+        memory_bank = None,
+        owner_id: Optional[str] = None,
+        supabase_storage: Optional['SupabaseStorage'] = None
     ):
         """Initialize relationship analyzer.
 
@@ -31,11 +37,18 @@ class RelationshipAnalyzer:
             calendar_cache_path: Path to calendar events cache
             anthropic_api_key: Anthropic API key for semantic filtering
             memory_bank: ZylchMemory instance for user preferences
+            owner_id: Firebase UID for multi-tenant Supabase queries
+            supabase_storage: SupabaseStorage instance for cloud storage
         """
         self.email_cache_path = Path(email_cache_path)
         self.calendar_cache_path = Path(calendar_cache_path)
         self.anthropic_api_key = anthropic_api_key
         self.memory_bank = memory_bank
+
+        # Multi-tenant Supabase support
+        self.owner_id = owner_id
+        self.supabase = supabase_storage
+        self._use_supabase = bool(self.supabase and self.owner_id)
 
         # Initialize Anthropic client if API key provided
         self.anthropic_client = None
@@ -49,10 +62,23 @@ class RelationshipAnalyzer:
             except Exception as e:
                 logger.warning(f"Failed to initialize Anthropic client: {e}")
 
-        logger.info("Initialized RelationshipAnalyzer")
+        storage_mode = "Supabase" if self._use_supabase else "local JSON"
+        logger.info(f"Initialized RelationshipAnalyzer (storage: {storage_mode})")
 
     def _load_threads(self) -> Dict[str, Any]:
-        """Load email threads from cache."""
+        """Load email threads from cache or Supabase."""
+        if self._use_supabase:
+            # Load from Supabase thread_analysis table
+            analyses = self.supabase.get_thread_analyses(self.owner_id)
+            threads = {}
+            for analysis in analyses:
+                thread_id = analysis.get('thread_id')
+                if thread_id:
+                    threads[thread_id] = self._convert_supabase_thread(analysis)
+            logger.debug(f"Loaded {len(threads)} threads from Supabase")
+            return {"threads": threads}
+
+        # Fallback to local JSON
         if not self.email_cache_path.exists():
             logger.warning(f"Email cache not found: {self.email_cache_path}")
             return {"threads": {}}
@@ -60,14 +86,89 @@ class RelationshipAnalyzer:
         with open(self.email_cache_path, 'r') as f:
             return json.load(f)
 
+    def _convert_supabase_thread(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert Supabase thread_analysis row to thread format.
+
+        Args:
+            analysis: Row from thread_analysis table
+
+        Returns:
+            Thread dict in the format expected by RelationshipAnalyzer
+        """
+        return {
+            'thread_id': analysis.get('thread_id'),
+            'subject': analysis.get('subject', ''),
+            'summary': analysis.get('summary', ''),
+            'open': analysis.get('needs_action', False),
+            'manually_closed': analysis.get('manually_closed', False),
+            'requires_action': analysis.get('needs_action', False),
+            'expected_action': analysis.get('expected_action', ''),
+            'last_message_date': analysis.get('last_message_date', ''),
+            'priority_score': analysis.get('priority_score', 5),
+            'participants': [],  # Not stored in thread_analysis
+            'last_email': {
+                'from': analysis.get('contact_name', '') + ' <' + (analysis.get('contact_email') or '') + '>',
+                'from_email': analysis.get('contact_email', ''),
+                'body': ''  # Not stored in thread_analysis
+            }
+        }
+
     def _load_events(self) -> Dict[str, Any]:
-        """Load calendar events from cache."""
+        """Load calendar events from cache or Supabase."""
+        if self._use_supabase:
+            # Load from Supabase calendar_events table
+            supabase_events = self.supabase.get_all_calendar_events(self.owner_id)
+            events = {}
+            for ev in supabase_events:
+                event_id = ev.get('google_event_id')
+                if event_id:
+                    events[event_id] = self._convert_supabase_event(ev)
+            logger.debug(f"Loaded {len(events)} calendar events from Supabase")
+            return {"events": events}
+
+        # Fallback to local JSON
         if not self.calendar_cache_path.exists():
             logger.warning(f"Calendar cache not found: {self.calendar_cache_path}")
             return {"events": {}}
 
         with open(self.calendar_cache_path, 'r') as f:
             return json.load(f)
+
+    def _convert_supabase_event(self, ev: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert Supabase calendar_events row to event format.
+
+        Args:
+            ev: Row from calendar_events table
+
+        Returns:
+            Event dict in the format expected by RelationshipAnalyzer
+        """
+        # Parse attendees JSON
+        attendees = ev.get('attendees') or []
+        external_attendees = ev.get('external_attendees') or []
+
+        # Build attendees_with_status from attendees
+        attendees_with_status = []
+        if isinstance(attendees, list):
+            for attendee in attendees:
+                if isinstance(attendee, dict):
+                    attendees_with_status.append(attendee)
+                elif isinstance(attendee, str):
+                    attendees_with_status.append({'email': attendee})
+
+        return {
+            'id': ev.get('google_event_id'),
+            'summary': ev.get('summary', ''),
+            'start': ev.get('start_time', ''),
+            'end': ev.get('end_time', ''),
+            'organizer': ev.get('organizer', ''),
+            'attendees': [a.get('email', a) if isinstance(a, dict) else a for a in attendees],
+            'external_attendees': external_attendees,
+            'attendees_with_status': attendees_with_status,
+            'is_past': ev.get('is_past', False),
+            'is_recurring': ev.get('is_recurring', False),
+            'has_external': len(external_attendees) > 0 if external_attendees else False
+        }
 
     def find_meeting_without_followup(
         self,

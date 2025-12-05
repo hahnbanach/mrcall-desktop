@@ -906,3 +906,391 @@ async def oauth_initiate(callback_url: str, request: Request):
     """
 
     return HTMLResponse(content=html_content)
+
+
+# =============================================================================
+# Google OAuth Server-Side Flow (for Gmail/Calendar API access)
+# =============================================================================
+
+# Google OAuth scopes for Gmail + Calendar
+GOOGLE_SCOPES = [
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+]
+
+# In-memory state storage (use Redis in production for multi-instance)
+_oauth_states: dict = {}
+
+
+@router.get("/google/authorize")
+async def google_oauth_authorize(user: dict = Depends(get_current_user)):
+    """Initiate Google OAuth flow for Gmail/Calendar API access.
+
+    This endpoint generates a Google OAuth authorization URL with the necessary
+    scopes for Gmail and Calendar API access. The user must be authenticated
+    with Firebase first.
+
+    **Authentication:**
+    - Requires Firebase ID token in Authorization header
+
+    **Response:**
+    - auth_url: URL to redirect user to for Google OAuth consent
+
+    **Flow:**
+    1. Frontend calls this endpoint with Firebase token
+    2. Backend generates OAuth URL with state parameter
+    3. Frontend redirects user to auth_url
+    4. User grants permissions on Google consent screen
+    5. Google redirects to /api/auth/google/callback with code
+    6. Backend exchanges code for tokens and stores in Supabase
+    """
+    import secrets
+    from urllib.parse import urlencode
+
+    owner_id = get_user_id_from_token(user)
+    user_email = user.get('email', '')
+
+    # Check if Google OAuth is configured
+    if not settings.google_client_id or not settings.google_client_secret:
+        raise HTTPException(
+            status_code=500,
+            detail="Google OAuth not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
+        )
+
+    # Generate state parameter for CSRF protection
+    state = secrets.token_urlsafe(32)
+
+    # Store state with user info (expires in 10 minutes)
+    _oauth_states[state] = {
+        'owner_id': owner_id,
+        'email': user_email,
+        'created_at': datetime.now(timezone.utc).isoformat()
+    }
+
+    # Build authorization URL
+    redirect_uri = settings.google_oauth_redirect_uri
+    if not redirect_uri:
+        # Default to API server URL + callback path
+        redirect_uri = f"{settings.api_server_url}/api/auth/google/callback"
+
+    params = {
+        'client_id': settings.google_client_id,
+        'redirect_uri': redirect_uri,
+        'response_type': 'code',
+        'scope': ' '.join(GOOGLE_SCOPES),
+        'access_type': 'offline',  # Get refresh token
+        'prompt': 'consent',  # Force consent to get refresh token
+        'state': state,
+        'login_hint': user_email,  # Pre-fill email
+    }
+
+    auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+
+    logger.info(f"Generated Google OAuth URL for user {owner_id}")
+
+    return {
+        "auth_url": auth_url,
+        "state": state
+    }
+
+
+@router.get("/google/callback")
+async def google_oauth_callback(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None
+):
+    """Handle Google OAuth callback.
+
+    This endpoint receives the authorization code from Google after user
+    grants permissions. It exchanges the code for tokens and stores them
+    in Supabase.
+
+    **Query Parameters:**
+    - code: Authorization code from Google
+    - state: State parameter for CSRF validation
+    - error: Error message if authorization failed
+
+    **Response:**
+    - HTML page that closes the popup and notifies parent window
+    """
+    import httpx
+
+    # Handle errors
+    if error:
+        logger.error(f"Google OAuth error: {error}")
+        return HTMLResponse(content=_oauth_error_page(f"Google OAuth failed: {error}"))
+
+    if not code or not state:
+        return HTMLResponse(content=_oauth_error_page("Missing code or state parameter"))
+
+    # Validate state
+    if state not in _oauth_states:
+        logger.error(f"Invalid OAuth state: {state}")
+        return HTMLResponse(content=_oauth_error_page("Invalid or expired state. Please try again."))
+
+    state_data = _oauth_states.pop(state)
+    owner_id = state_data['owner_id']
+    user_email = state_data['email']
+
+    # Check if state is expired (10 minutes)
+    created_at = datetime.fromisoformat(state_data['created_at'])
+    if datetime.now(timezone.utc) - created_at > timedelta(minutes=10):
+        logger.error(f"Expired OAuth state for user {owner_id}")
+        return HTMLResponse(content=_oauth_error_page("OAuth session expired. Please try again."))
+
+    # Exchange code for tokens
+    redirect_uri = settings.google_oauth_redirect_uri
+    if not redirect_uri:
+        redirect_uri = f"{settings.api_server_url}/api/auth/google/callback"
+
+    token_url = "https://oauth2.googleapis.com/token"
+    token_data = {
+        'client_id': settings.google_client_id,
+        'client_secret': settings.google_client_secret,
+        'code': code,
+        'grant_type': 'authorization_code',
+        'redirect_uri': redirect_uri,
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(token_url, data=token_data)
+
+            if response.status_code != 200:
+                logger.error(f"Token exchange failed: {response.status_code} - {response.text}")
+                return HTMLResponse(content=_oauth_error_page(f"Failed to exchange code for tokens: {response.text}"))
+
+            tokens = response.json()
+
+        access_token = tokens.get('access_token')
+        refresh_token = tokens.get('refresh_token')
+        expires_in = tokens.get('expires_in', 3600)
+
+        if not access_token:
+            return HTMLResponse(content=_oauth_error_page("No access token received from Google"))
+
+        # Create Google Credentials object
+        from google.oauth2.credentials import Credentials
+
+        creds = Credentials(
+            token=access_token,
+            refresh_token=refresh_token,
+            token_uri='https://oauth2.googleapis.com/token',
+            client_id=settings.google_client_id,
+            client_secret=settings.google_client_secret,
+            scopes=GOOGLE_SCOPES
+        )
+
+        # Save credentials using token_storage (saves to Supabase if configured)
+        from zylch.api.token_storage import save_google_credentials, save_provider, save_email
+
+        save_provider(owner_id, "google.com", user_email)
+        save_email(owner_id, user_email)
+        save_google_credentials(owner_id, creds, user_email)
+
+        logger.info(f"Saved Google OAuth credentials for user {owner_id}")
+
+        # Return success page that closes popup
+        return HTMLResponse(content=_oauth_success_page())
+
+    except Exception as e:
+        logger.error(f"Google OAuth callback error: {e}", exc_info=True)
+        return HTMLResponse(content=_oauth_error_page(f"Error processing OAuth callback: {str(e)}"))
+
+
+@router.get("/google/status")
+async def google_oauth_status(user: dict = Depends(get_current_user)):
+    """Check if user has valid Google OAuth credentials.
+
+    **Authentication:**
+    - Requires Firebase ID token in Authorization header
+
+    **Response:**
+    - has_credentials: Whether user has Google credentials
+    - email: User's email
+    - scopes: List of authorized scopes (if credentials exist)
+    """
+    from zylch.api.token_storage import has_google_credentials, get_google_credentials, get_email
+
+    owner_id = get_user_id_from_token(user)
+
+    has_creds = has_google_credentials(owner_id)
+    email = get_email(owner_id)
+
+    response = {
+        "has_credentials": has_creds,
+        "email": email,
+        "owner_id": owner_id
+    }
+
+    if has_creds:
+        creds = get_google_credentials(owner_id)
+        if creds:
+            response["scopes"] = list(creds.scopes) if creds.scopes else GOOGLE_SCOPES
+            response["valid"] = creds.valid
+            response["expired"] = creds.expired
+
+    return response
+
+
+@router.post("/google/revoke")
+async def google_oauth_revoke(user: dict = Depends(get_current_user)):
+    """Revoke Google OAuth credentials.
+
+    **Authentication:**
+    - Requires Firebase ID token in Authorization header
+
+    **Response:**
+    - success: Whether revocation succeeded
+    """
+    import httpx
+    from zylch.api.token_storage import get_google_credentials, delete_user_credentials
+
+    owner_id = get_user_id_from_token(user)
+
+    creds = get_google_credentials(owner_id)
+    if creds and creds.token:
+        # Revoke token with Google
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"https://oauth2.googleapis.com/revoke?token={creds.token}"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to revoke Google token: {e}")
+
+    # Delete local credentials
+    delete_user_credentials(owner_id)
+
+    logger.info(f"Revoked Google credentials for user {owner_id}")
+
+    return {"success": True, "message": "Google credentials revoked"}
+
+
+def _oauth_success_page() -> str:
+    """Generate HTML page for successful OAuth completion."""
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Authorization Successful</title>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                margin: 0;
+                background: #f9fafb;
+            }
+            .container {
+                text-align: center;
+                padding: 40px;
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }
+            .success-icon {
+                font-size: 64px;
+                margin-bottom: 20px;
+            }
+            h1 {
+                color: #166534;
+                margin-bottom: 10px;
+            }
+            p {
+                color: #6b7280;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="success-icon">✓</div>
+            <h1>Authorization Successful!</h1>
+            <p>Your Google account has been connected.</p>
+            <p>You can close this window and return to Zylch.</p>
+        </div>
+        <script>
+            // Notify parent window if in popup
+            if (window.opener) {
+                window.opener.postMessage({ type: 'google-oauth-success' }, '*');
+                setTimeout(() => window.close(), 2000);
+            }
+        </script>
+    </body>
+    </html>
+    """
+
+
+def _oauth_error_page(error_message: str) -> str:
+    """Generate HTML page for OAuth error."""
+    import html
+    safe_message = html.escape(error_message)
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Authorization Failed</title>
+        <style>
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                margin: 0;
+                background: #f9fafb;
+            }}
+            .container {{
+                text-align: center;
+                padding: 40px;
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                max-width: 500px;
+            }}
+            .error-icon {{
+                font-size: 64px;
+                margin-bottom: 20px;
+            }}
+            h1 {{
+                color: #991b1b;
+                margin-bottom: 10px;
+            }}
+            p {{
+                color: #6b7280;
+            }}
+            .error-detail {{
+                background: #fef2f2;
+                color: #991b1b;
+                padding: 12px;
+                border-radius: 8px;
+                margin-top: 16px;
+                font-size: 14px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="error-icon">✗</div>
+            <h1>Authorization Failed</h1>
+            <p>We couldn't connect your Google account.</p>
+            <div class="error-detail">{safe_message}</div>
+            <p style="margin-top: 20px;">Please close this window and try again.</p>
+        </div>
+        <script>
+            // Notify parent window if in popup
+            if (window.opener) {{
+                window.opener.postMessage({{ type: 'google-oauth-error', error: '{safe_message}' }}, '*');
+            }}
+        </script>
+    </body>
+    </html>
+    """
