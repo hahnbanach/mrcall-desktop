@@ -152,6 +152,16 @@ OWNER_ID=owner_default              # Firebase UID or placeholder
 ZYLCH_ASSISTANT_ID=default_assistant  # Assistant identifier
 ```
 
+### Production Environment (Railway)
+
+```bash
+# Encryption key for OAuth tokens and API keys
+ENCRYPTION_KEY=<fernet-key>
+# Generate: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+```
+
+**Important:** Store `ENCRYPTION_KEY` only in Railway, never in Supabase or version control. Local development can run without encryption (single-tenant mode).
+
 ### Config Settings
 
 In `zylch/config.py`:
@@ -516,6 +526,8 @@ conn.close()
 - ✅ **Firebase integration ready**: Owner = Firebase UID
 - ✅ **Row-level security**: Every query includes namespace filter
 - ✅ **Audit trail**: Track who accessed what
+- ✅ **Encryption at rest**: OAuth tokens and API keys encrypted with Fernet (AES-128-CBC + HMAC)
+- ✅ **Key separation**: Encryption key in Railway, encrypted data in Supabase (neither alone can decrypt)
 
 ### Developer Experience
 
