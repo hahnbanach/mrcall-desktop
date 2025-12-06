@@ -88,10 +88,11 @@ When user says:
 
 | Namespace | Purpose | Key Files |
 |-----------|---------|-----------|
-| `zylch` | Main backend/CLI | `/zylch`, `/src` |
+| `zylch` | Main backend/API | `/zylch`, `/src` |
+| `zylch-cli` | CLI thin client | `/zylch-cli` (separate repo) |
 | `zylch-memory` | Avatar architecture research | `/zylch_memory` |
 | `zylch-frontend` | Vue dashboard | `/frontend` |
-| `zylch-frontend-debug` | Frontend debugging | — |
+| `zylch-website` | Marketing website | `/zylch-website` |
 | `zylch-planning` | Development planning | `/.claude/DEVELOPMENT_PLAN.md`, `/.claude/ARCHITECTURE.md` |
 | `zylch-deploy` | Deployment | `/docs/DEPLOYMENT.md` |
 | `zylch-execution` | Plan execution | — |
@@ -212,6 +213,35 @@ When user works on external integrations:
 3. Check `/spec` for integration requirements
 4. Follow security rules: NEVER bypass authentication, ALWAYS use REST APIs
 5. Store integration patterns in `zylch` namespace
+
+### CLI Development
+When user works on CLI (zylch-cli):
+1. Query memory: `zylch-cli`, `zylch`
+2. Remember: CLI is a **thin client** - all business logic is on the server
+3. CLI only handles: UI rendering, local auth, HTTP calls to API
+4. OAuth tokens stored in Supabase (not local filesystem)
+5. Store CLI patterns in `zylch-cli` namespace
+
+**CLI Commands:**
+- `--login`, `--logout`, `--status`: Firebase authentication
+- `--chat`: Interactive chat mode with server
+- `/connect google`: Connect Google OAuth for Gmail/Calendar API
+- `/connect --reset`: Disconnect all integrations
+
+**CLI Architecture:**
+- Location: `/zylch-cli/` (separate directory)
+- Config: `~/.zylch/cli_config.json`
+- API server: `https://api.zylchai.com`
+
+---
+
+## 🌐 Production URLs
+
+| Service | URL |
+|---------|-----|
+| Frontend | https://app.zylchai.com |
+| Backend API | https://api.zylchai.com |
+| Website | https://zylchai.com |
 
 ---
 

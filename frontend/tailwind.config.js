@@ -13,7 +13,9 @@ export default {
           'link': '#666666',
           'accent': '#4a9eff',
           'bg': '#ffffff',
-        }
+        },
+        // Shorthand for common usage (bg-accent, text-accent, etc.)
+        'accent': '#4a9eff',
       },
       fontFamily: {
         'sans': ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
