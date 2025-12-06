@@ -692,6 +692,69 @@ class SupabaseStorage:
 
         return None
 
+    # ==========================================
+    # Anthropic API Key Management
+    # ==========================================
+
+    def save_anthropic_key(self, owner_id: str, api_key: str) -> bool:
+        """Save Anthropic API key for a user.
+
+        Uses 'anthropic' as the provider in oauth_tokens table.
+
+        Args:
+            owner_id: Firebase UID
+            api_key: Anthropic API key (sk-ant-...)
+
+        Returns:
+            True if saved successfully
+        """
+        data = {
+            'owner_id': owner_id,
+            'provider': 'anthropic',
+            'email': '',  # Not applicable for Anthropic
+            'anthropic_api_key': api_key,
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        # Upsert to handle both insert and update
+        self.client.table('oauth_tokens').upsert(
+            data,
+            on_conflict='owner_id,provider'
+        ).execute()
+
+        logger.info(f"Saved Anthropic API key for owner {owner_id}")
+        return True
+
+    def get_anthropic_key(self, owner_id: str) -> Optional[str]:
+        """Get Anthropic API key for a user.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            Anthropic API key or None if not found
+        """
+        token = self.get_oauth_token(owner_id, 'anthropic')
+        if token:
+            return token.get('anthropic_api_key')
+        return None
+
+    def delete_anthropic_key(self, owner_id: str) -> bool:
+        """Delete Anthropic API key for a user.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            True if deleted
+        """
+        self.client.table('oauth_tokens').delete().eq(
+            'owner_id', owner_id
+        ).eq('provider', 'anthropic').execute()
+
+        logger.info(f"Deleted Anthropic API key for owner {owner_id}")
+        return True
+
 
 # Create search_emails function in Supabase (run once via SQL Editor):
 """
