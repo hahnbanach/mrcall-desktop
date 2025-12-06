@@ -2,11 +2,22 @@
 import { ref, onMounted } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
+import api from '@/services/api'
 
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 
 const activeTab = ref('assistant')
+
+// Google OAuth state
+const googleStatus = ref<{
+  has_credentials: boolean
+  email?: string
+  valid?: boolean
+  expired?: boolean
+} | null>(null)
+const googleLoading = ref(false)
+const googleError = ref<string | null>(null)
 
 const tabs = [
   { id: 'assistant', label: 'Assistant', icon: '🤖' },
@@ -18,7 +29,52 @@ const tabs = [
 
 onMounted(() => {
   settingsStore.fetchAssistant()
+  fetchGoogleStatus()
 })
+
+async function fetchGoogleStatus() {
+  try {
+    const response = await api.get('/auth/google/status')
+    googleStatus.value = response.data
+  } catch (error: any) {
+    console.error('Failed to fetch Google status:', error)
+    googleStatus.value = { has_credentials: false }
+  }
+}
+
+async function connectGoogle() {
+  googleLoading.value = true
+  googleError.value = null
+  try {
+    const response = await api.get('/auth/google/authorize')
+    const { auth_url } = response.data
+    if (auth_url) {
+      // Open Google OAuth in same window (will redirect back after auth)
+      window.location.href = auth_url
+    }
+  } catch (error: any) {
+    console.error('Failed to start Google OAuth:', error)
+    googleError.value = error.response?.data?.detail || 'Failed to connect Google'
+    googleLoading.value = false
+  }
+}
+
+async function disconnectGoogle() {
+  if (!confirm('Are you sure you want to disconnect Google? You will need to re-authorize to sync emails and calendar.')) {
+    return
+  }
+  googleLoading.value = true
+  googleError.value = null
+  try {
+    await api.post('/auth/google/revoke')
+    googleStatus.value = { has_credentials: false }
+  } catch (error: any) {
+    console.error('Failed to disconnect Google:', error)
+    googleError.value = error.response?.data?.detail || 'Failed to disconnect'
+  } finally {
+    googleLoading.value = false
+  }
+}
 
 async function updateSetting(key: string, value: any) {
   await settingsStore.updateAssistantSettings({ [key]: value })
@@ -260,20 +316,65 @@ async function handleLogout() {
           <div>
             <h2 class="text-lg font-semibold text-gray-900 mb-4">Connected Services</h2>
 
+            <!-- Error message -->
+            <div v-if="googleError" class="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+              {{ googleError }}
+            </div>
+
             <div class="space-y-4">
-              <div class="p-4 border border-gray-200 rounded-xl flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                    <span class="text-red-600 text-lg">G</span>
+              <!-- Google Integration -->
+              <div class="p-4 border border-gray-200 rounded-xl">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                      <span class="text-red-600 text-lg">G</span>
+                    </div>
+                    <div>
+                      <h3 class="font-medium text-gray-900">Google</h3>
+                      <p class="text-sm text-gray-500">Gmail, Calendar, Tasks</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 class="font-medium text-gray-900">Google</h3>
-                    <p class="text-sm text-gray-500">Gmail, Calendar, Tasks</p>
-                  </div>
+
+                  <!-- Loading state -->
+                  <span v-if="googleLoading" class="text-sm text-gray-500">
+                    Loading...
+                  </span>
+
+                  <!-- Connected state -->
+                  <template v-else-if="googleStatus?.has_credentials">
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">Connected</span>
+                      <button
+                        @click="disconnectGoogle"
+                        class="text-sm text-red-600 hover:underline"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  </template>
+
+                  <!-- Not connected state -->
+                  <button
+                    v-else
+                    @click="connectGoogle"
+                    class="text-sm text-white bg-accent hover:bg-accent/90 px-4 py-2 rounded-lg transition-colors"
+                  >
+                    Connect Google
+                  </button>
                 </div>
-                <span class="text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">Connected</span>
+
+                <!-- Show connected email if available -->
+                <div v-if="googleStatus?.has_credentials && googleStatus?.email" class="mt-2 ml-13 text-sm text-gray-500">
+                  Connected as: {{ googleStatus.email }}
+                </div>
+
+                <!-- Show warning if expired -->
+                <div v-if="googleStatus?.expired" class="mt-2 ml-13 text-sm text-amber-600">
+                  Token expired. Please reconnect.
+                </div>
               </div>
 
+              <!-- Microsoft Integration -->
               <div class="p-4 border border-gray-200 rounded-xl flex items-center justify-between">
                 <div class="flex items-center gap-3">
                   <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
