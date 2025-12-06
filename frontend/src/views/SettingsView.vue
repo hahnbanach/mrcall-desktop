@@ -357,7 +357,7 @@ async function handleLogout() {
                   <button
                     v-else
                     @click="connectGoogle"
-                    class="text-sm text-white bg-accent hover:bg-accent/90 px-4 py-2 rounded-lg transition-colors"
+                    class="text-sm text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors font-medium"
                   >
                     Connect Google
                   </button>
