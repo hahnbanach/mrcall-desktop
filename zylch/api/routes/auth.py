@@ -1179,7 +1179,8 @@ def _oauth_success_page() -> str:
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Authorization Successful</title>
+        <title>Connected to Google - Zylch</title>
+        <link rel="icon" href="https://app.zylchai.com/favicon.ico" type="image/x-icon">
         <style>
             body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -1188,40 +1189,126 @@ def _oauth_success_page() -> str:
                 align-items: center;
                 min-height: 100vh;
                 margin: 0;
-                background: #f9fafb;
+                background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
             }
             .container {
                 text-align: center;
-                padding: 40px;
+                padding: 48px 40px;
                 background: white;
-                border-radius: 12px;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                border-radius: 16px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+                max-width: 440px;
+            }
+            .logo {
+                margin-bottom: 24px;
+            }
+            .logo img {
+                height: 40px;
             }
             .success-icon {
-                font-size: 64px;
-                margin-bottom: 20px;
+                width: 72px;
+                height: 72px;
+                background: #dcfce7;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 24px;
+            }
+            .success-icon svg {
+                width: 36px;
+                height: 36px;
+                color: #16a34a;
             }
             h1 {
-                color: #166534;
-                margin-bottom: 10px;
+                color: #111827;
+                font-size: 24px;
+                font-weight: 600;
+                margin: 0 0 16px;
             }
-            p {
+            .message {
+                color: #4b5563;
+                font-size: 16px;
+                line-height: 1.6;
+                margin-bottom: 24px;
+            }
+            .privacy-note {
                 color: #6b7280;
+                font-size: 13px;
+                line-height: 1.5;
+                padding: 16px;
+                background: #f9fafb;
+                border-radius: 8px;
+                margin-bottom: 24px;
+            }
+            .privacy-note a {
+                color: #2563eb;
+                text-decoration: none;
+            }
+            .privacy-note a:hover {
+                text-decoration: underline;
+            }
+            .redirect-info {
+                color: #9ca3af;
+                font-size: 14px;
+                margin-bottom: 16px;
+            }
+            .countdown {
+                font-weight: 600;
+                color: #6b7280;
+            }
+            .return-link {
+                display: inline-block;
+                color: #2563eb;
+                font-size: 14px;
+                font-weight: 500;
+                text-decoration: none;
+            }
+            .return-link:hover {
+                text-decoration: underline;
             }
         </style>
     </head>
     <body>
         <div class="container">
-            <div class="success-icon">✓</div>
-            <h1>Authorization Successful!</h1>
-            <p>Your Google account has been connected.</p>
-            <p>You can close this window and return to Zylch.</p>
+            <div class="logo">
+                <img src="https://app.zylchai.com/logo/zylch-horizontal.svg" alt="Zylch" onerror="this.style.display='none'">
+            </div>
+            <div class="success-icon">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </div>
+            <h1>Google Connected</h1>
+            <p class="message">
+                Zylch now has access to your email messages and calendar.
+            </p>
+            <div class="privacy-note">
+                Your data is stored securely and encrypted, used only to provide the service.
+                <br><a href="https://zylchai.com/privacy" target="_blank">Learn more about our privacy policy</a>
+            </div>
+            <p class="redirect-info">
+                Redirecting to Zylch in <span class="countdown" id="countdown">5</span> seconds...
+            </p>
+            <a href="https://app.zylchai.com/settings" class="return-link">Click here to return now</a>
         </div>
         <script>
+            const redirectUrl = 'https://app.zylchai.com/settings';
+            let seconds = 5;
+            const countdownEl = document.getElementById('countdown');
+
+            const interval = setInterval(() => {
+                seconds--;
+                countdownEl.textContent = seconds;
+                if (seconds <= 0) {
+                    clearInterval(interval);
+                    window.location.href = redirectUrl;
+                }
+            }, 1000);
+
             // Notify parent window if in popup
             if (window.opener) {
                 window.opener.postMessage({ type: 'google-oauth-success' }, '*');
-                setTimeout(() => window.close(), 2000);
             }
         </script>
     </body>
