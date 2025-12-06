@@ -74,6 +74,15 @@ STARCHAT_BUSINESS_ID=xxx
 SENDGRID_API_KEY=SG.xxx
 ```
 
+**Encryption (for sensitive data at rest):**
+```
+ENCRYPTION_KEY=<fernet-key>
+```
+
+Generate with: `python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'`
+
+This key encrypts OAuth tokens and API keys stored in Supabase. Only store in Railway - NOT in Supabase or local dev.
+
 **Vonage SMS:**
 ```
 VONAGE_API_KEY=xxx
@@ -202,6 +211,23 @@ Railway provides:
 2. Use Railway Volume for persistence
 3. Consider migrating to Supabase (Phase I)
 
+## Security: Encryption at Rest
+
+Sensitive credentials (OAuth tokens, API keys) are encrypted before storage in Supabase using Fernet symmetric encryption (AES-128-CBC with HMAC).
+
+**Architecture:**
+- Railway has `ENCRYPTION_KEY` environment variable
+- Python backend encrypts data before sending to Supabase
+- Supabase stores encrypted blobs (cannot read without key)
+- Neither Railway nor Supabase alone can access plaintext credentials
+
+**What's encrypted:**
+- Google OAuth tokens (`google_token_data`)
+- Microsoft Graph tokens (`graph_access_token`, `graph_refresh_token`)
+- Anthropic API keys (`anthropic_api_key`)
+
+**Local development:** Encryption is optional. If `ENCRYPTION_KEY` not set, data stored unencrypted (acceptable for single-tenant local dev).
+
 ## Architecture
 
 ```
@@ -255,4 +281,4 @@ After Railway deployment:
 
 ---
 
-*Last updated: 2025-12-03*
+*Last updated: 2025-12-06*
