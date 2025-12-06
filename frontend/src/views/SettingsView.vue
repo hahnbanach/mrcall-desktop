@@ -34,7 +34,7 @@ onMounted(() => {
 
 async function fetchGoogleStatus() {
   try {
-    const response = await api.get('/auth/google/status')
+    const response = await api.get('/api/auth/google/status')
     googleStatus.value = response.data
   } catch (error: any) {
     console.error('Failed to fetch Google status:', error)
@@ -46,7 +46,7 @@ async function connectGoogle() {
   googleLoading.value = true
   googleError.value = null
   try {
-    const response = await api.get('/auth/google/authorize')
+    const response = await api.get('/api/auth/google/authorize')
     const { auth_url } = response.data
     if (auth_url) {
       // Open Google OAuth in same window (will redirect back after auth)
@@ -66,7 +66,7 @@ async function disconnectGoogle() {
   googleLoading.value = true
   googleError.value = null
   try {
-    await api.post('/auth/google/revoke')
+    await api.post('/api/auth/google/revoke')
     googleStatus.value = { has_credentials: false }
   } catch (error: any) {
     console.error('Failed to disconnect Google:', error)
