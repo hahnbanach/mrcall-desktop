@@ -151,17 +151,28 @@ class ToolFactory:
 
             else:
                 # Gmail client (default)
+                # Pass owner_id to enable Supabase token storage
                 email_client = GmailClient(
                     credentials_path=config.google_credentials_path,
                     token_dir=config.google_token_path,
                     account=config.user_email,  # Isolate tokens per user account
+                    owner_id=config.owner_id if config.owner_id != "owner_default" else None,
                 )
                 logger.info("Using Gmail for email")
 
                 # Try to authenticate Google services silently
                 try:
-                    token_path = Path(config.google_token_path) / "token.pickle"
-                    if token_path.exists():
+                    # Check Supabase first if owner_id is set, then fallback to local
+                    from ..api import token_storage
+                    has_creds = False
+                    if config.owner_id and config.owner_id != "owner_default":
+                        has_creds = token_storage.has_google_credentials(config.owner_id)
+                    if not has_creds:
+                        # Fallback to local token file
+                        token_path = Path(config.google_token_path) / "token.pickle"
+                        has_creds = token_path.exists()
+
+                    if has_creds:
                         email_client.authenticate()
                         logger.info("Google services authenticated (Gmail)")
                     else:
@@ -173,11 +184,13 @@ class ToolFactory:
             calendar = None
             if config.auth_provider == "google.com":
                 # Gmail users get Google Calendar automatically
+                # Pass owner_id to enable Supabase token storage
                 calendar = GoogleCalendarClient(
                     credentials_path=config.google_credentials_path,
                     token_dir=config.google_token_path,
                     calendar_id=config.calendar_id,
                     account=config.user_email,
+                    owner_id=config.owner_id if config.owner_id != "owner_default" else None,
                 )
                 logger.info("Google Calendar initialized for Gmail user")
             elif config.auth_provider == "microsoft.com":
