@@ -527,7 +527,7 @@ class SupabaseStorage:
         return len(result.data) if result.data else 0
 
     # ==========================================
-    # OAUTH TOKENS
+    # OAUTH TOKENS (with encryption for sensitive data)
     # ==========================================
 
     def store_oauth_token(
@@ -541,7 +541,7 @@ class SupabaseStorage:
         graph_expires_at: Optional[str] = None,
         scopes: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Store OAuth token for a user.
+        """Store OAuth token for a user (encrypted at rest).
 
         Args:
             owner_id: Firebase UID
@@ -556,6 +556,8 @@ class SupabaseStorage:
         Returns:
             Stored record
         """
+        from zylch.utils.encryption import encrypt
+
         data = {
             'owner_id': owner_id,
             'provider': provider,
@@ -563,12 +565,14 @@ class SupabaseStorage:
             'updated_at': datetime.now(timezone.utc).isoformat()
         }
 
+        # Encrypt sensitive token data
         if google_token_data:
-            data['google_token_data'] = google_token_data
+            data['google_token_data'] = encrypt(google_token_data)
 
         if graph_access_token:
-            data['graph_access_token'] = graph_access_token
-            data['graph_refresh_token'] = graph_refresh_token
+            data['graph_access_token'] = encrypt(graph_access_token)
+            if graph_refresh_token:
+                data['graph_refresh_token'] = encrypt(graph_refresh_token)
             data['graph_expires_at'] = graph_expires_at
 
         if scopes:
@@ -602,7 +606,7 @@ class SupabaseStorage:
         return None
 
     def get_google_token(self, owner_id: str) -> Optional[str]:
-        """Get Google OAuth token data (base64-encoded pickle).
+        """Get Google OAuth token data (base64-encoded pickle, decrypted).
 
         Args:
             owner_id: Firebase UID
@@ -610,13 +614,17 @@ class SupabaseStorage:
         Returns:
             Base64-encoded pickled Credentials or None
         """
+        from zylch.utils.encryption import decrypt
+
         token = self.get_oauth_token(owner_id, 'google.com')
         if token:
-            return token.get('google_token_data')
+            encrypted_data = token.get('google_token_data')
+            if encrypted_data:
+                return decrypt(encrypted_data)
         return None
 
     def get_graph_token(self, owner_id: str) -> Optional[Dict[str, Any]]:
-        """Get Microsoft Graph token.
+        """Get Microsoft Graph token (decrypted).
 
         Args:
             owner_id: Firebase UID
@@ -624,11 +632,15 @@ class SupabaseStorage:
         Returns:
             Dict with access_token, refresh_token, expires_at or None
         """
+        from zylch.utils.encryption import decrypt
+
         token = self.get_oauth_token(owner_id, 'microsoft.com')
         if token:
+            access_token = token.get('graph_access_token')
+            refresh_token = token.get('graph_refresh_token')
             return {
-                'access_token': token.get('graph_access_token'),
-                'refresh_token': token.get('graph_refresh_token'),
+                'access_token': decrypt(access_token) if access_token else None,
+                'refresh_token': decrypt(refresh_token) if refresh_token else None,
                 'expires_at': token.get('graph_expires_at')
             }
         return None
@@ -697,7 +709,7 @@ class SupabaseStorage:
     # ==========================================
 
     def save_anthropic_key(self, owner_id: str, api_key: str) -> bool:
-        """Save Anthropic API key for a user.
+        """Save Anthropic API key for a user (encrypted at rest).
 
         Uses 'anthropic' as the provider in oauth_tokens table.
 
@@ -708,11 +720,13 @@ class SupabaseStorage:
         Returns:
             True if saved successfully
         """
+        from zylch.utils.encryption import encrypt
+
         data = {
             'owner_id': owner_id,
             'provider': 'anthropic',
             'email': '',  # Not applicable for Anthropic
-            'anthropic_api_key': api_key,
+            'anthropic_api_key': encrypt(api_key),
             'updated_at': datetime.now(timezone.utc).isoformat()
         }
 
@@ -726,7 +740,7 @@ class SupabaseStorage:
         return True
 
     def get_anthropic_key(self, owner_id: str) -> Optional[str]:
-        """Get Anthropic API key for a user.
+        """Get Anthropic API key for a user (decrypted).
 
         Args:
             owner_id: Firebase UID
@@ -734,9 +748,13 @@ class SupabaseStorage:
         Returns:
             Anthropic API key or None if not found
         """
+        from zylch.utils.encryption import decrypt
+
         token = self.get_oauth_token(owner_id, 'anthropic')
         if token:
-            return token.get('anthropic_api_key')
+            encrypted_key = token.get('anthropic_api_key')
+            if encrypted_key:
+                return decrypt(encrypted_key)
         return None
 
     def delete_anthropic_key(self, owner_id: str) -> bool:

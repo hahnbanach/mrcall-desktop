@@ -106,6 +106,12 @@ class Settings(BaseSettings):
         description="Supabase service role key (secret, for backend)"
     )
 
+    # Encryption (for sensitive data at rest)
+    encryption_key: str = Field(
+        default="",
+        description="Fernet encryption key for OAuth tokens and API keys. Generate with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+    )
+
     # Microsoft Graph API (for Outlook email)
     graph_token: str = Field(
         default="",
