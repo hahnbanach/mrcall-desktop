@@ -13,7 +13,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Header, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token
@@ -928,7 +928,10 @@ _oauth_states: dict = {}
 
 
 @router.get("/google/authorize")
-async def google_oauth_authorize(user: dict = Depends(get_current_user)):
+async def google_oauth_authorize(
+    user: dict = Depends(get_current_user),
+    cli_callback: Optional[str] = None
+):
     """Initiate Google OAuth flow for Gmail/Calendar API access.
 
     This endpoint generates a Google OAuth authorization URL with the necessary
@@ -938,16 +941,20 @@ async def google_oauth_authorize(user: dict = Depends(get_current_user)):
     **Authentication:**
     - Requires Firebase ID token in Authorization header
 
+    **Query Parameters:**
+    - cli_callback: Optional callback URL for CLI-based OAuth (e.g., http://localhost:8766/callback)
+
     **Response:**
     - auth_url: URL to redirect user to for Google OAuth consent
 
     **Flow:**
-    1. Frontend calls this endpoint with Firebase token
+    1. Frontend/CLI calls this endpoint with Firebase token
     2. Backend generates OAuth URL with state parameter
-    3. Frontend redirects user to auth_url
+    3. Frontend/CLI redirects user to auth_url
     4. User grants permissions on Google consent screen
     5. Google redirects to /api/auth/google/callback with code
     6. Backend exchanges code for tokens and stores in Supabase
+    7. For CLI: redirects to cli_callback with success/error
     """
     import secrets
     from urllib.parse import urlencode
@@ -969,7 +976,8 @@ async def google_oauth_authorize(user: dict = Depends(get_current_user)):
     _oauth_states[state] = {
         'owner_id': owner_id,
         'email': user_email,
-        'created_at': datetime.now(timezone.utc).isoformat()
+        'created_at': datetime.now(timezone.utc).isoformat(),
+        'cli_callback': cli_callback  # Store CLI callback URL if provided
     }
 
     # Build authorization URL
@@ -991,7 +999,7 @@ async def google_oauth_authorize(user: dict = Depends(get_current_user)):
 
     auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
-    logger.info(f"Generated Google OAuth URL for user {owner_id}")
+    logger.info(f"Generated Google OAuth URL for user {owner_id} (cli_callback: {cli_callback})")
 
     return {
         "auth_url": auth_url,
@@ -1037,6 +1045,7 @@ async def google_oauth_callback(
     state_data = _oauth_states.pop(state)
     owner_id = state_data['owner_id']
     user_email = state_data['email']
+    cli_callback = state_data.get('cli_callback')  # CLI callback URL if present
 
     # Check if state is expired (10 minutes)
     created_at = datetime.fromisoformat(state_data['created_at'])
@@ -1096,7 +1105,18 @@ async def google_oauth_callback(
 
         logger.info(f"Saved Google OAuth credentials for user {owner_id}")
 
-        # Return success page that closes popup
+        # If CLI callback is present, redirect to it
+        if cli_callback:
+            from urllib.parse import urlencode
+            callback_params = urlencode({
+                'token': 'success',
+                'email': user_email,
+                'owner_id': owner_id
+            })
+            redirect_url = f"{cli_callback}?{callback_params}"
+            return RedirectResponse(url=redirect_url)
+
+        # Return success page that closes popup (web flow)
         return HTMLResponse(content=_oauth_success_page())
 
     except Exception as e:
@@ -1171,6 +1191,95 @@ async def google_oauth_revoke(user: dict = Depends(get_current_user)):
     logger.info(f"Revoked Google credentials for user {owner_id}")
 
     return {"success": True, "message": "Google credentials revoked"}
+
+
+# ============================================================================
+# Anthropic API Key Endpoints
+# ============================================================================
+
+class AnthropicKeyRequest(BaseModel):
+    """Request to set Anthropic API key."""
+    api_key: str = Field(..., description="Anthropic API key (sk-ant-...)")
+
+
+@router.get("/anthropic/status")
+async def anthropic_status(user: dict = Depends(get_current_user)):
+    """Check if user has Anthropic API key configured.
+
+    **Authentication:**
+    - Requires Firebase ID token in Authorization header
+
+    **Response:**
+    - has_key: Whether user has an API key set
+    """
+    from zylch.api.token_storage import get_anthropic_key
+
+    owner_id = get_user_id_from_token(user)
+
+    api_key = get_anthropic_key(owner_id)
+    has_key = bool(api_key)
+
+    return {
+        "has_key": has_key,
+        "owner_id": owner_id
+    }
+
+
+@router.post("/anthropic/key")
+async def set_anthropic_key(
+    request: AnthropicKeyRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Set Anthropic API key for the user.
+
+    **Authentication:**
+    - Requires Firebase ID token in Authorization header
+
+    **Request Body:**
+    - api_key: Anthropic API key
+
+    **Response:**
+    - success: Whether key was saved
+    """
+    from zylch.api.token_storage import save_anthropic_key
+
+    owner_id = get_user_id_from_token(user)
+
+    # Basic validation
+    if not request.api_key or len(request.api_key) < 10:
+        raise HTTPException(status_code=400, detail="Invalid API key")
+
+    # Save the key
+    try:
+        save_anthropic_key(owner_id, request.api_key)
+        logger.info(f"Saved Anthropic API key for user {owner_id}")
+        return {"success": True, "message": "API key saved"}
+    except Exception as e:
+        logger.error(f"Failed to save Anthropic key: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save API key")
+
+
+@router.post("/anthropic/revoke")
+async def revoke_anthropic_key(user: dict = Depends(get_current_user)):
+    """Revoke/delete Anthropic API key.
+
+    **Authentication:**
+    - Requires Firebase ID token in Authorization header
+
+    **Response:**
+    - success: Whether revocation succeeded
+    """
+    from zylch.api.token_storage import delete_anthropic_key
+
+    owner_id = get_user_id_from_token(user)
+
+    try:
+        delete_anthropic_key(owner_id)
+        logger.info(f"Deleted Anthropic API key for user {owner_id}")
+        return {"success": True, "message": "API key deleted"}
+    except Exception as e:
+        logger.error(f"Failed to delete Anthropic key: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete API key")
 
 
 def _oauth_success_page() -> str:

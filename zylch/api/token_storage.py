@@ -395,3 +395,77 @@ def has_google_credentials(owner_id: str) -> bool:
     google_dir = get_google_tokens_dir(owner_id)
     token_file = google_dir / "token.pickle"
     return token_file.exists()
+
+
+# ==========================================
+# Anthropic API Key Management
+# ==========================================
+
+def save_anthropic_key(owner_id: str, api_key: str) -> bool:
+    """Save Anthropic API key for a user.
+
+    Args:
+        owner_id: Firebase UID
+        api_key: Anthropic API key (sk-ant-...)
+
+    Returns:
+        True if saved successfully
+    """
+    supabase = _get_supabase()
+    if supabase:
+        return supabase.save_anthropic_key(owner_id, api_key)
+
+    # Filesystem fallback
+    user_dir = get_user_credentials_dir(owner_id)
+    key_file = user_dir / "anthropic_key.txt"
+    key_file.write_text(api_key)
+    logger.info(f"Saved Anthropic API key for owner {owner_id}")
+    return True
+
+
+def get_anthropic_key(owner_id: str) -> Optional[str]:
+    """Get Anthropic API key for a user.
+
+    Args:
+        owner_id: Firebase UID
+
+    Returns:
+        Anthropic API key or None if not found
+    """
+    supabase = _get_supabase()
+    if supabase:
+        key = supabase.get_anthropic_key(owner_id)
+        if key:
+            return key
+
+    # Filesystem fallback
+    user_dir = get_user_credentials_dir(owner_id)
+    key_file = user_dir / "anthropic_key.txt"
+
+    if key_file.exists():
+        return key_file.read_text().strip()
+    return None
+
+
+def delete_anthropic_key(owner_id: str) -> bool:
+    """Delete Anthropic API key for a user.
+
+    Args:
+        owner_id: Firebase UID
+
+    Returns:
+        True if deleted
+    """
+    supabase = _get_supabase()
+    if supabase:
+        supabase.delete_anthropic_key(owner_id)
+        logger.info(f"Deleted Anthropic API key for owner {owner_id} (Supabase)")
+
+    # Also clean up filesystem
+    user_dir = get_user_credentials_dir(owner_id)
+    key_file = user_dir / "anthropic_key.txt"
+    if key_file.exists():
+        key_file.unlink()
+        logger.info(f"Deleted Anthropic API key for owner {owner_id}")
+
+    return True
