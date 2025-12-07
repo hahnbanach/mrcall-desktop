@@ -194,12 +194,13 @@ async def handle_archive(args: List[str], config: ToolConfig, owner_id: str) -> 
 Outlook archiving will be added in a future update."""
 
     from zylch.tools.email_archive import EmailArchiveManager
-    from zylch.api.token_storage import get_provider
+    from zylch.api.token_storage import get_provider, get_email, get_google_tokens_dir
+    from zylch.tools.gmail import GmailClient
 
     try:
         # Check provider - only Gmail is supported for archiving
         provider = get_provider(owner_id)
-        if provider == 'microsoft':
+        if provider == 'microsoft.com':
             return """**⏭️ Email Archive**
 
 Email archiving is currently only supported for Gmail accounts.
@@ -208,11 +209,21 @@ Outlook/Microsoft archiving will be added in a future update.
 For now, Microsoft users can use natural language to search emails:
 "Show emails from last week about contracts" """
 
-        # Create email client for archive
-        from zylch.tools.factory import ToolFactory
-        email_client = await ToolFactory.create_email_client(config, owner_id)
-        if not email_client:
-            return "**❌ Error:** Could not initialize email client. Please run `/sync` first to authenticate."
+        # Create Gmail client for archive
+        email = get_email(owner_id)
+        google_tokens_dir = get_google_tokens_dir(owner_id)
+        email_client = GmailClient(
+            credentials_path=config.google_credentials_path,
+            token_dir=str(google_tokens_dir),
+            account=email,
+            owner_id=owner_id
+        )
+
+        # Authenticate
+        try:
+            email_client.authenticate()
+        except Exception as auth_error:
+            return f"**❌ Error:** Could not authenticate with Gmail. Please reconnect Google via `/connect google`.\n\nDetails: {auth_error}"
 
         # Create archive manager
         archive = EmailArchiveManager(gmail_client=email_client)

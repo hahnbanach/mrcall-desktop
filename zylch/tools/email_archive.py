@@ -229,10 +229,21 @@ class EmailArchiveManager:
             sync_state = self.backend.get_sync_state()
 
         if not sync_state or not sync_state.get('history_id'):
-            logger.warning("No sync state found. Run initial_full_sync() first.")
+            logger.info("No sync state found. Auto-initializing archive with 1 month of history...")
+            # Auto-initialize with 1 month of history for first-time users
+            init_result = self.initial_full_sync(months_back=1)
+            if not init_result.get('success'):
+                return {
+                    'success': False,
+                    'error': f"Auto-initialization failed: {init_result.get('error', 'Unknown error')}"
+                }
+            # Return the init result as the sync result
             return {
-                'success': False,
-                'error': 'No history_id found. Run initial sync first.'
+                'success': True,
+                'messages_added': init_result.get('total_stored', 0),
+                'messages_deleted': 0,
+                'auto_initialized': True,
+                'months_synced': 1
             }
 
         start_history_id = sync_state['history_id']
