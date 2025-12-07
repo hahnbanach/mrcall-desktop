@@ -94,6 +94,7 @@ class ChatService:
             }
         """
         start_time = time.time()
+        logger.info(f"process_message: user_message={repr(user_message)}, user_id={user_id}")
 
         try:
             # INTERCEPT SLASH COMMANDS - NEVER SEND TO ANTHROPIC
