@@ -62,7 +62,7 @@ class GmailClient:
         # Use Supabase token storage if owner_id is provided
         self._use_token_storage = bool(owner_id)
 
-        logger.info(f"Initialized Gmail client for account: {account or 'default'}, owner_id: {owner_id or 'none'}")
+        logger.info(f"GmailClient.__init__: account={account or 'default'}, owner_id={owner_id}, _use_token_storage={self._use_token_storage}")
 
     def _get_token_path(self) -> Path:
         """Get token file path for this account."""
