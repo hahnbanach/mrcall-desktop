@@ -37,10 +37,10 @@ class EmailArchiveManager:
         self.gmail = gmail_client
         self.owner_id = owner_id
         self.supabase = supabase_storage
+        self._authenticated = False
 
-        # Ensure Gmail client is authenticated
-        if not self.gmail.service:
-            self.gmail.authenticate()
+        # NOTE: Gmail authentication is now LAZY - only when actually needed
+        # This allows the agent to initialize without valid Gmail credentials
 
         # Use Supabase if provided, otherwise fall back to SQLite
         if self.supabase and self.owner_id:
@@ -52,6 +52,12 @@ class EmailArchiveManager:
             self.backend.initialize()
             self._use_supabase = False
             logger.info("EmailArchiveManager using SQLite backend")
+
+    def _ensure_authenticated(self) -> None:
+        """Ensure Gmail client is authenticated (lazy authentication)."""
+        if not self._authenticated and not self.gmail.service:
+            self.gmail.authenticate()
+            self._authenticated = True
 
     def _create_backend(self) -> EmailArchiveBackend:
         """Create storage backend based on configuration."""
@@ -109,6 +115,9 @@ class EmailArchiveManager:
         after_date_str = after_date.strftime('%Y/%m/%d')
 
         logger.info(f"Fetching emails after {after_date_str}")
+
+        # Ensure Gmail is authenticated before fetching
+        self._ensure_authenticated()
 
         # Fetch emails in batches
         batch_size = settings.email_archive_batch_size
@@ -214,13 +223,8 @@ class EmailArchiveManager:
         """
         logger.info("🔄 Starting incremental sync...")
 
-        # Check Gmail is authenticated
-        if not self.gmail.service:
-            logger.error("Gmail not authenticated - cannot sync")
-            return {
-                'success': False,
-                'error': 'Gmail not authenticated. Please authenticate first.'
-            }
+        # Ensure Gmail is authenticated (lazy)
+        self._ensure_authenticated()
 
         # Get last sync state
         if self._use_supabase:

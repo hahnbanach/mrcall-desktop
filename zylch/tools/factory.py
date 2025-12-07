@@ -223,16 +223,22 @@ class ToolFactory:
                 ttl_days=7  # Freshness TTL for contacts
             )
 
-            # Email archive manager
-            email_archive = EmailArchiveManager(gmail_client=email_client)
+            # Email archive manager (lazy auth - won't fail if Gmail not configured)
+            email_archive = None
+            try:
+                email_archive = EmailArchiveManager(gmail_client=email_client)
+            except Exception as e:
+                logger.warning(f"EmailArchiveManager initialization skipped: {e}")
 
             # Email sync manager
-            email_sync = EmailSyncManager(
-                email_archive=email_archive,
-                cache_dir=config.cache_dir + "/emails",
-                anthropic_api_key=config.anthropic_api_key,
-                days_back=30,
-            )
+            email_sync = None
+            if email_archive:
+                email_sync = EmailSyncManager(
+                    email_archive=email_archive,
+                    cache_dir=config.cache_dir + "/emails",
+                    anthropic_api_key=config.anthropic_api_key,
+                    days_back=30,
+                )
 
             # Pipedrive CRM client (optional)
             pipedrive = None
