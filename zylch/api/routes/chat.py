@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
-from zylch.api.firebase_auth import get_current_user, get_user_id_from_token
+from zylch.api.firebase_auth import get_current_user, get_user_id_from_token, get_user_email_from_token
 from zylch.services.chat_service import ChatService
 from zylch.services.chat_session import get_session_manager, ChatMessage
 
@@ -103,9 +103,10 @@ async def send_message(
     - metadata: Execution details (time, tools used, etc.)
     """
     try:
-        # Extract user ID from Firebase token
+        # Extract user ID and email from Firebase token
         user_id = get_user_id_from_token(user)
-        logger.info(f"Processing message from user {user_id}")
+        user_email = get_user_email_from_token(user)
+        logger.info(f"Processing message from user {user_id} ({user_email})")
 
         # Get session manager
         session_manager = get_session_manager()
@@ -139,7 +140,7 @@ async def send_message(
             user_id=user_id,
             conversation_history=history[:-1],  # Exclude current message
             session_id=session.session_id,
-            context={"source": "dashboard"}
+            context={"source": "dashboard", "user_id": user_id, "email": user_email}
         )
 
         # Extract response from result

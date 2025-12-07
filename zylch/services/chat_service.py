@@ -112,6 +112,7 @@ class ChatService:
                     # Get owner_id and email from context
                     owner_id = (context.get("user_id") if context else None) or user_id
                     user_email = context.get("email") if context else None
+                    logger.info(f"Command {cmd}: owner_id={owner_id}, user_email={user_email}, context={context}")
 
                     # Call handler based on required parameters
                     if cmd == '/sync':
