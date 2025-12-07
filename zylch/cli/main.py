@@ -348,6 +348,15 @@ class ZylchAICLI:
 
         while self.running:
             try:
+                # Auto-refresh token if expiring soon
+                if self.auth.needs_refresh():
+                    if self.auth.refresh_firebase_token():
+                        logger.info("Token auto-refreshed")
+                        # Update settings with new token
+                        creds = self.auth.get_credentials()
+                        if creds:
+                            settings.auth_provider = creds.get("provider", "google.com")
+
                 # Get user input
                 user_input = await self.session.prompt_async(
                     "You: ",

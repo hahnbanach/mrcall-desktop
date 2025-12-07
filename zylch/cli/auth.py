@@ -281,6 +281,90 @@ class CLIAuthManager:
             logger.warning(f"Error checking token refresh: {e}")
             return False
 
+    def refresh_firebase_token(self) -> bool:
+        """Refresh Firebase ID token using stored refresh token.
+
+        Calls Firebase's token refresh API to get a new ID token.
+
+        Returns:
+            True if refresh successful, False otherwise
+        """
+        import requests
+        from datetime import timedelta
+
+        creds = self.get_credentials()
+        if not creds:
+            logger.warning("No credentials to refresh")
+            return False
+
+        refresh_token = creds.get("refresh_token")
+        if not refresh_token:
+            logger.warning("No refresh token available")
+            return False
+
+        try:
+            # Call Firebase's token refresh API
+            response = requests.post(
+                f"https://securetoken.googleapis.com/v1/token?key={settings.firebase_api_key}",
+                json={
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token
+                },
+                timeout=10
+            )
+
+            if response.status_code != 200:
+                logger.error(f"Token refresh failed: {response.status_code} {response.text}")
+                return False
+
+            data = response.json()
+            new_token = data.get("id_token")
+            new_refresh_token = data.get("refresh_token")
+
+            if not new_token:
+                logger.error("No id_token in refresh response")
+                return False
+
+            # Update credentials
+            creds["token"] = new_token
+            if new_refresh_token:
+                creds["refresh_token"] = new_refresh_token
+
+            # Update expiry (Firebase tokens expire in 1 hour)
+            creds["expires_at"] = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+
+            # Save updated credentials
+            self._save_credentials(creds)
+
+            logger.info("Token refreshed successfully")
+            return True
+
+        except requests.RequestException as e:
+            logger.error(f"Token refresh request failed: {e}")
+            return False
+        except Exception as e:
+            logger.exception(f"Token refresh error: {e}")
+            return False
+
+    def ensure_valid_token(self) -> bool:
+        """Ensure token is valid, refreshing if needed.
+
+        Call this before making API requests to auto-refresh expiring tokens.
+
+        Returns:
+            True if token is valid (or was refreshed), False if auth needed
+        """
+        if not self.is_authenticated():
+            return False
+
+        if self.needs_refresh():
+            logger.info("Token expiring soon, refreshing...")
+            if not self.refresh_firebase_token():
+                logger.warning("Token refresh failed")
+                return False
+
+        return True
+
     def _save_credentials(self, credentials: dict):
         """Save credentials to provider-specific file.
 

@@ -204,6 +204,7 @@ class AuthCallbackHandler(BaseHTTPRequestHandler):
 
             # Extract credentials
             token = data.get("token")
+            refresh_token = data.get("refreshToken")  # Firebase refresh token
             uid = data.get("uid")
             email = data.get("email")
             display_name = data.get("displayName") or data.get("display_name") or email
@@ -220,6 +221,7 @@ class AuthCallbackHandler(BaseHTTPRequestHandler):
             # Store credentials
             creds = {
                 "token": token,
+                "refresh_token": refresh_token,  # For auto-refresh
                 "owner_id": uid,
                 "email": email,
                 "display_name": display_name,
@@ -589,9 +591,11 @@ class AuthCallbackHandler(BaseHTTPRequestHandler):
         async function sendTokenToServer(user, graphToken = null, provider = null) {{
             try {{
                 const token = await user.getIdToken();
+                const refreshToken = user.refreshToken;  // Firebase refresh token for auto-refresh
 
                 const payload = {{
                     token: token,
+                    refreshToken: refreshToken,
                     uid: user.uid,
                     email: user.email,
                     displayName: user.displayName || user.email

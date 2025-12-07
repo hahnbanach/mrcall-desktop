@@ -25,8 +25,8 @@ Zylch AI is a multi-channel sales intelligence system that helps sales professio
 1. **Person-centric architecture** — A person is NOT an email address; memory system reflects this reality
 2. **Human-in-the-loop** — AI assists and recommends, human makes final decisions
 3. **Multi-provider support** — Works with Gmail AND Outlook (provider-agnostic)
-4. **Database-only backend** — All server data in Supabase, no local filesystem
-5. **Local-first email storage** — Email content stored in browser IndexedDB (encrypted), never on Zylch servers (like Superhuman)
+4. **Cloud-based storage** — All data in Supabase (scoped by owner_id with RLS)
+5. **Multi-platform goal** — CLI now, desktop and mobile apps in the future
 
 ---
 
@@ -96,9 +96,7 @@ Zylch AI is a multi-channel sales intelligence system that helps sales professio
 |-----------|---------|--------|-------|
 | **Language** | Python 3.11+ | — | FastAPI, async throughout |
 | **LLM** | Anthropic Claude | — | Haiku/Sonnet/Opus tiering |
-| **Email Storage** | IndexedDB (browser) | — | Local-first, encrypted (like Superhuman) |
-| **Email Encryption** | Web Crypto API | — | AES-GCM 256-bit, PBKDF2 key derivation |
-| **Server Database** | Supabase (Postgres) | — | AI summaries & metadata only (no email content) |
+| **Data Storage** | Supabase (Postgres) | — | All data (emails, AI summaries, tokens) |
 | **User Auth** | Firebase Auth | — | Separate project per product |
 | **Backend Hosting** | Railway | — | ✅ Live at api.zylchai.com |
 | **Frontend Hosting** | Vercel | — | ✅ Live at app.zylchai.com |
@@ -108,6 +106,8 @@ Zylch AI is a multi-channel sales intelligence system that helps sales professio
 | **Telephony** | StarChat/MrCall | — | Outbound calls |
 | **SMS** | Vonage | — | Campaigns + webhooks |
 | **Email Campaigns** | SendGrid | — | Bulk email |
+| **Desktop App** | — | Tauri / Electron | Future consideration |
+| **Mobile App** | — | Capacitor / Flutter | Future consideration |
 
 ---
 
@@ -250,26 +250,14 @@ MY_EMAILS=mario@example.com,*@mrcall.ai
 
 ## Data Storage Architecture
 
-### Browser Storage (IndexedDB) - Email Content
+### Current: Supabase (Cloud-Based)
 
-**Email content stored locally, encrypted** (like Superhuman):
-
-| Store | Content | Encryption |
-|-------|---------|------------|
-| `emails` | Full email bodies (HTML, plaintext) | AES-GCM 256-bit |
-| `email_metadata` | From, to, subject, date, thread_id | AES-GCM 256-bit |
-| `attachments` | Cached attachment content | AES-GCM 256-bit |
-| `crypto_keys` | Non-extractable CryptoKey | Browser-protected |
-
-**Encryption**: Web Crypto API, key derived from user auth via PBKDF2.
-
-### Server Storage (Supabase) - Metadata & AI Only
-
-**NO email content on server.** Only AI summaries and sync state:
+**All data stored in Supabase**, scoped by `owner_id` (Firebase UID):
 
 | Table | Purpose |
 |-------|---------|
-| `thread_analysis` | AI-generated summaries (no raw email) |
+| `email_archive` | Email metadata and content |
+| `thread_analysis` | AI-generated summaries and analysis |
 | `calendar_events` | Calendar events |
 | `sync_state` | Gmail/Outlook history IDs |
 | `relationship_gaps` | Detected gaps |
@@ -277,10 +265,29 @@ MY_EMAILS=mario@example.com,*@mrcall.ai
 | `triggers` | Triggered instructions |
 | `trigger_events` | Event queue |
 | `sharing_auth` | Sharing authorizations |
+| `memories` | Avatar/memory system (pg_vector) |
 
-All Supabase tables use UUID primary keys, RLS for multi-tenant isolation, indexes on `owner_id`.
+**Security**:
+- All tables use UUID primary keys
+- Row Level Security (RLS) for multi-tenant isolation
+- Indexes on `owner_id` for performance
+- Sensitive tokens encrypted with Fernet before storage
 
-See `zylch/storage/supabase_client.py` for server storage operations.
+See `zylch/storage/supabase_client.py` for storage operations.
+
+### Future: Local-First Options (Not Yet Implemented)
+
+When desktop/mobile apps are developed, we may explore local-first storage:
+
+| Approach | Technology | Use Case |
+|----------|------------|----------|
+| **SQLite (Local)** | SQLite + sqlcipher | CLI, Desktop apps |
+| **IndexedDB** | Web Crypto AES-GCM | Web app (PWA) |
+| **Tauri + SQLite** | Tauri (Rust) + SQLite | Desktop app |
+| **Capacitor + SQLite** | Capacitor plugin | Mobile app |
+| **Flutter + SQLite** | sqflite / Hive | Cross-platform mobile |
+
+**Decision pending**: Will evaluate when building desktop/mobile apps.
 
 ---
 

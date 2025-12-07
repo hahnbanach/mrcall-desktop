@@ -10,8 +10,9 @@ const error = ref<string | null>(null)
 
 onMounted(async () => {
   try {
-    // Get token from URL query params (backend redirects with ?token=xxx)
+    // Get token from URL query params (backend redirects with ?token=xxx&refresh_token=xxx)
     const token = route.query.token as string
+    const refreshToken = route.query.refresh_token as string
     const errorParam = route.query.error as string
     const allowed = route.query.allowed as string
     const email = route.query.email as string
@@ -33,8 +34,8 @@ onMounted(async () => {
       return
     }
 
-    // Handle the callback with the token
-    const success = await authStore.handleCallback(token)
+    // Handle the callback with the token and refresh token
+    const success = await authStore.handleCallback(token, refreshToken)
 
     if (success) {
       // Get redirect URL from query or default to dashboard
