@@ -64,7 +64,7 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
         try:
             days_back = int(args[0])
         except ValueError:
-            return f"❌ **Errore:** `{args[0]}` non è un numero valido\n\n**Usage:** `/sync [days]`"
+            return f"❌ **Error:** `{args[0]}` is not a valid number\n\n**Usage:** `/sync [days]`"
 
     try:
         # Get user's auth provider
@@ -73,14 +73,14 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
         email = get_email(owner_id)
 
         if not provider:
-            return f"❌ **Errore:** Provider non trovato per owner {owner_id}. Fai login prima."
+            return f"❌ **Error:** Provider not found for owner {owner_id}. Please login first."
 
         # Create appropriate email client based on provider
         if provider == "microsoft.com":
             # Microsoft Outlook client
             graph_token_data = get_graph_token(owner_id)
             if not graph_token_data:
-                return f"❌ **Errore:** Microsoft Graph token non trovato. Fai login di nuovo."
+                return f"❌ **Error:** Microsoft Graph token not found. Please login again."
 
             email_client = OutlookClient(
                 graph_token=graph_token_data["access_token"],
@@ -95,12 +95,15 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
             email_client = GmailClient(
                 credentials_path=config.google_credentials_path,
                 token_dir=str(google_tokens_dir),
-                account=email
+                account=email,
+                owner_id=owner_id
             )
             calendar_client = GoogleCalendarClient(
                 credentials_path=config.google_credentials_path,
                 token_dir=str(google_tokens_dir),
-                calendar_id="primary"
+                calendar_id="primary",
+                account=email,
+                owner_id=owner_id
             )
             logger.info(f"Using Gmail for owner {owner_id}")
 
@@ -112,35 +115,43 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
         # Skip gap analysis to avoid Anthropic API calls for slash commands
         results = await sync_service.run_full_sync(days_back=days_back, skip_gap_analysis=True)
 
-        lines = [f"**🌅 Morning Sync** (ultimi {days_back} giorni)\n"]
+        lines = [f"**🌅 Morning Sync** (last {days_back} days)\n"]
+
+        has_failures = False
 
         if results['email_sync']['success']:
             email_data = results['email_sync']
-            lines.append(f"✅ **Email:** {email_data['new_threads']} nuovi, {email_data['updated_threads']} aggiornati")
+            lines.append(f"✅ **Email:** {email_data['new_threads']} new, {email_data['updated_threads']} updated")
         else:
+            has_failures = True
             lines.append(f"❌ **Email:** {results['email_sync'].get('error')}")
 
         if results['calendar_sync']['success']:
             cal_data = results['calendar_sync']
-            lines.append(f"✅ **Calendar:** {cal_data['new_events']} nuovi, {cal_data['updated_events']} aggiornati")
+            lines.append(f"✅ **Calendar:** {cal_data['new_events']} new, {cal_data['updated_events']} updated")
         else:
+            has_failures = True
             lines.append(f"❌ **Calendar:** {results['calendar_sync'].get('error')}")
 
         if results['gap_analysis']['success']:
             gap_data = results['gap_analysis']
-            lines.append(f"\n✅ **Tasks:** {gap_data['total_tasks']} trovati")
+            lines.append(f"\n✅ **Tasks:** {gap_data['total_tasks']} found")
             lines.append(f"   • Email: {gap_data['email_tasks']}")
             lines.append(f"   • Meeting: {gap_data['meeting_tasks']}")
-            lines.append(f"   • Silenziosi: {gap_data['silent_contacts']}")
+            lines.append(f"   • Silent contacts: {gap_data['silent_contacts']}")
         else:
+            has_failures = True
             lines.append(f"❌ **Gap analysis:** {results['gap_analysis'].get('error')}")
 
-        lines.append("\n✅ **Sync completo!** Usa `/gaps` per il briefing.")
+        if has_failures:
+            lines.append("\n⚠️ **Sync completed with errors.** Check the issues above.")
+        else:
+            lines.append("\n✅ **Sync complete!** Use `/gaps` for briefing.")
         return "\n".join(lines)
 
     except Exception as e:
         logger.error(f"Sync failed: {e}")
-        return f"❌ **Sync fallito:** {str(e)}"
+        return f"❌ **Sync failed:** {str(e)}"
 
 
 async def handle_clear() -> str:
