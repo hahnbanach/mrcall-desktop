@@ -67,7 +67,7 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
 
     try:
         # Get user's auth provider
-        logger.info(f"handle_sync called with owner_id: {owner_id}")
+        logger.info(f"handle_sync: owner_id={owner_id}, type={type(owner_id)}")
         provider = get_provider(owner_id)
         email = get_email(owner_id)
 
