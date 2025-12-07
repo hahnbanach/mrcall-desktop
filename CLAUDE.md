@@ -1,276 +1,352 @@
-# Zylch Development - Claude Configuration
+# Claude Code Configuration - SPARC Development Environment
 
-## 🎯 What Zylch Is
+## 🚨 CRITICAL: CONCURRENT EXECUTION & FILE MANAGEMENT
 
-**Zylch is a research lab building relational memory infrastructure, with a commercial product as bridge to sustainability.**
+**ABSOLUTE RULES**:
+1. ALL operations MUST be concurrent/parallel in a single message
+2. **NEVER save working files, text/mds and tests to the root folder**
+3. ALWAYS organize files in appropriate subdirectories
+4. **USE CLAUDE CODE'S TASK TOOL** for spawning agents concurrently, not just MCP
 
-The thesis: LLMs are perfect for relational intelligence because professional relationships are already encoded in language. LeCun is right about world models for physical intelligence, but the "world of professional relationships" is already made of text. The missing piece is persistent relational memory — that's what Zylch builds.
+### ⚡ GOLDEN RULE: "1 MESSAGE = ALL RELATED OPERATIONS"
 
-**Core architecture concepts:**
-- **Avatar**: A vector-based representation of a person, built from interaction history
-- **Small-world topology**: Retrieval optimized for relational networks
-- **Reconsolidation**: Similar memories update (not duplicate), mimicking human memory
-- **Shareable avatars**: When employees leave, relational knowledge stays
+**MANDATORY PATTERNS:**
+- **TodoWrite**: ALWAYS batch ALL todos in ONE call (5-10+ todos minimum)
+- **Task tool (Claude Code)**: ALWAYS spawn ALL agents in ONE message with full instructions
+- **File operations**: ALWAYS batch ALL reads/writes/edits in ONE message
+- **Bash commands**: ALWAYS batch ALL terminal operations in ONE message
+- **Memory operations**: ALWAYS batch ALL memory store/retrieve in ONE message
 
-The commercial product (email/phone/WhatsApp assistant) generates revenue and data. The research bet is avatar architecture ready for continuous training when LLMs support it (3-5 year horizon).
+### 🎯 CRITICAL: Claude Code Task Tool for Agent Execution
 
----
-
-## 🚨 Critical Rules
-
-### NO LOCAL FILESYSTEM - DATABASE ONLY
-
-**CRITICAL: The backend uses Supabase for ALL data storage. NO local filesystem.**
-
-- **OAuth tokens** → Supabase `oauth_tokens` table (encrypted)
-- **Email metadata** → Supabase `thread_analysis` table
-- **User data** → Supabase (scoped by `owner_id`)
-- **Memory/Avatars** → Supabase pg_vector
-
-**NEVER:**
-- Store tokens in local files
-- Use pickle files on filesystem
-- Reference `credentials/` directory for runtime data
-- Fall back to filesystem storage
-
-**The `credentials/` and `cache/` directories are LEGACY and UNUSED.**
-
-### Execution Rules
-
-**NEVER ask questions about methodology or approach. Execute immediately.**
-
-When user says:
-- "Initialize hive-mind" → Query memory, read context, start execution
-- "Resume hive-mind" → Load namespace memory, continue work
-- "Use swarm" → Execute with claude-flow swarm
-- Any explicit instruction → Execute immediately, no questions
-
----
-
-## 🐝 Claude-Flow Integration
-
-**This project uses claude-flow for orchestration:**
-- Memory stored in `.swarm/memory.db`
-- Namespace isolation (zylch, zylch-frontend, zylch-deploy, etc.)
-- MCP tools: `swarm_init`, `agent_spawn`, `task_orchestrate`, `memory_usage`
-- Always query relevant namespaces BEFORE starting work
-- Always store decisions/implementations in specified namespace AFTER work
-
-**Memory Query Pattern:**
-```bash
-# Before any task:
-1. Query namespace memory for context
-2. Read relevant docs if mentioned
-3. Execute task
-4. Store results in namespace
+**Claude Code's Task tool is the PRIMARY way to spawn agents:**
+```javascript
+// ✅ CORRECT: Use Claude Code's Task tool for parallel agent execution
+[Single Message]:
+  Task("Research agent", "Analyze requirements and patterns...", "researcher")
+  Task("Coder agent", "Implement core features...", "coder")
+  Task("Tester agent", "Create comprehensive tests...", "tester")
+  Task("Reviewer agent", "Review code quality...", "reviewer")
+  Task("Architect agent", "Design system architecture...", "system-architect")
 ```
 
----
+**MCP tools are ONLY for coordination setup:**
+- `mcp__claude-flow__swarm_init` - Initialize coordination topology
+- `mcp__claude-flow__agent_spawn` - Define agent types for coordination
+- `mcp__claude-flow__task_orchestrate` - Orchestrate high-level workflows
 
-## 📁 File Organization
+### 📁 File Organization Rules
 
-**NEVER save to root directory.**
+**NEVER save to root folder. Use these directories:**
+- `/src` - Source code files
+- `/tests` - Test files
+- `/docs` - Documentation and markdown files
+- `/config` - Configuration files
+- `/scripts` - Utility scripts
+- `/examples` - Example code
 
-| Directory | Purpose |
-|-----------|---------|
-| `/src`, `/zylch` | Backend Python code |
-| `/zylch_memory` | Avatar/memory system (core research) |
-| `/frontend` | Vue.js dashboard |
-| `/tests` | Test files |
-| `/docs` | User documentation |
-| `/spec` | Technical specifications, business model |
-| `/scripts` | Utility scripts |
-| `/.claude` | Architecture, development plan, conventions |
+## Project Overview
 
----
+This project uses SPARC (Specification, Pseudocode, Architecture, Refinement, Completion) methodology with Claude-Flow orchestration for systematic Test-Driven Development.
 
-## 🔄 Technology Stack
+## SPARC Commands
 
-**Backend:**
-- Python 3.11+, FastAPI, async throughout
-- Supabase Postgres (all server data)
-- Firebase Auth (multi-tenant, Google/Microsoft OAuth)
-- Anthropic Claude (Haiku/Sonnet/Opus tiering)
-- Railway hosting (api.zylchai.com)
+### Core Commands
+- `npx claude-flow sparc modes` - List available modes
+- `npx claude-flow sparc run <mode> "<task>"` - Execute specific mode
+- `npx claude-flow sparc tdd "<feature>"` - Run complete TDD workflow
+- `npx claude-flow sparc info <mode>` - Get mode details
 
-**Frontend:**
-- Vue 3, Vite, TypeScript, Pinia, TailwindCSS
-- Axios → Backend FastAPI
-- Vercel hosting (app.zylchai.com)
+### Batchtools Commands
+- `npx claude-flow sparc batch <modes> "<task>"` - Parallel execution
+- `npx claude-flow sparc pipeline "<task>"` - Full pipeline processing
+- `npx claude-flow sparc concurrent <mode> "<tasks-file>"` - Multi-task processing
 
-**Email Storage (Local-First, like Superhuman):**
-- IndexedDB (browser) — encrypted with Web Crypto API (AES-GCM 256-bit)
-- Email content NEVER on Zylch servers
-- Only AI summaries stored in Supabase
+### Build Commands
+- `npm run build` - Build project
+- `npm run test` - Run tests
+- `npm run lint` - Linting
+- `npm run typecheck` - Type checking
 
-**Avatar/Memory Architecture:**
-- Supabase pg_vector + sentence-transformers
-- Small-world topology for retrieval
-- Reconsolidation (update, not duplicate)
-- Namespace isolation per person/entity
+## SPARC Workflow Phases
 
-**Integrations:**
-- Gmail & Outlook (OAuth 2.0)
-- Google & Outlook Calendar
-- StarChat/MrCall (contacts, telephony)
-- SendGrid (email campaigns), Vonage (SMS)
+1. **Specification** - Requirements analysis (`sparc run spec-pseudocode`)
+2. **Pseudocode** - Algorithm design (`sparc run spec-pseudocode`)
+3. **Architecture** - System design (`sparc run architect`)
+4. **Refinement** - TDD implementation (`sparc tdd`)
+5. **Completion** - Integration (`sparc run integration`)
 
----
+## Code Style & Best Practices
 
-## 🎯 Hive-Mind Namespaces
+- **Modular Design**: Files under 500 lines
+- **Environment Safety**: Never hardcode secrets
+- **Test-First**: Write tests before implementation
+- **Clean Architecture**: Separate concerns
+- **Documentation**: Keep updated
 
-| Namespace | Purpose | Key Files |
-|-----------|---------|-----------|
-| `zylch` | Backend, API, planning, research, execution | `/zylch`, `/.claude`, `/spec` |
-| `zylch-cli` | CLI thin client | `/zylch-cli` (separate repo) |
-| `zylch-frontend` | Vue dashboard | `/frontend` |
-| `zylch-memory` | Avatar architecture research | `/zylch_memory` |
-| `zylch-deploy` | Deployment configs | `/docs/DEPLOYMENT.md` |
+## 🚀 Available Agents (54 Total)
 
----
+### Core Development
+`coder`, `reviewer`, `tester`, `planner`, `researcher`
 
-## 💡 Quick Commands Reference
+### Swarm Coordination
+`hierarchical-coordinator`, `mesh-coordinator`, `adaptive-coordinator`, `collective-intelligence-coordinator`, `swarm-memory-manager`
+
+### Consensus & Distributed
+`byzantine-coordinator`, `raft-manager`, `gossip-coordinator`, `consensus-builder`, `crdt-synchronizer`, `quorum-manager`, `security-manager`
+
+### Performance & Optimization
+`perf-analyzer`, `performance-benchmarker`, `task-orchestrator`, `memory-coordinator`, `smart-agent`
+
+### GitHub & Repository
+`github-modes`, `pr-manager`, `code-review-swarm`, `issue-tracker`, `release-manager`, `workflow-automation`, `project-board-sync`, `repo-architect`, `multi-repo-swarm`
+
+### SPARC Methodology
+`sparc-coord`, `sparc-coder`, `specification`, `pseudocode`, `architecture`, `refinement`
+
+### Specialized Development
+`backend-dev`, `mobile-dev`, `ml-developer`, `cicd-engineer`, `api-docs`, `system-architect`, `code-analyzer`, `base-template-generator`
+
+### Testing & Validation
+`tdd-london-swarm`, `production-validator`
+
+### Migration & Planning
+`migration-planner`, `swarm-init`
+
+## 🎯 Claude Code vs MCP Tools
+
+### Claude Code Handles ALL EXECUTION:
+- **Task tool**: Spawn and run agents concurrently for actual work
+- File operations (Read, Write, Edit, MultiEdit, Glob, Grep)
+- Code generation and programming
+- Bash commands and system operations
+- Implementation work
+- Project navigation and analysis
+- TodoWrite and task management
+- Git operations
+- Package management
+- Testing and debugging
+
+### MCP Tools ONLY COORDINATE:
+- Swarm initialization (topology setup)
+- Agent type definitions (coordination patterns)
+- Task orchestration (high-level planning)
+- Memory management
+- Neural features
+- Performance tracking
+- GitHub integration
+
+**KEY**: MCP coordinates the strategy, Claude Code's Task tool executes with real agents.
+
+## 🚀 Quick Setup
+
 ```bash
-# Memory operations
-npx claude-flow@alpha memory query "[topic]" --namespace [ns]
-npx claude-flow@alpha memory list --namespace [ns]
-npx claude-flow@alpha memory status
-
-# Hive-mind operations
-npx claude-flow@alpha hive-mind status
-npx claude-flow@alpha hive-mind spawn "[task]" --claude
+# Add MCP servers (Claude Flow required, others optional)
+claude mcp add claude-flow npx claude-flow@alpha mcp start
+claude mcp add ruv-swarm npx ruv-swarm mcp start  # Optional: Enhanced coordination
+claude mcp add flow-nexus npx flow-nexus@latest mcp start  # Optional: Cloud features
 ```
 
+## MCP Tool Categories
+
+### Coordination
+`swarm_init`, `agent_spawn`, `task_orchestrate`
+
+### Monitoring
+`swarm_status`, `agent_list`, `agent_metrics`, `task_status`, `task_results`
+
+### Memory & Neural
+`memory_usage`, `neural_status`, `neural_train`, `neural_patterns`
+
+### GitHub Integration
+`github_swarm`, `repo_analyze`, `pr_enhance`, `issue_triage`, `code_review`
+
+### System
+`benchmark_run`, `features_detect`, `swarm_monitor`
+
+### Flow-Nexus MCP Tools (Optional Advanced Features)
+Flow-Nexus extends MCP capabilities with 70+ cloud-based orchestration tools:
+
+**Key MCP Tool Categories:**
+- **Swarm & Agents**: `swarm_init`, `swarm_scale`, `agent_spawn`, `task_orchestrate`
+- **Sandboxes**: `sandbox_create`, `sandbox_execute`, `sandbox_upload` (cloud execution)
+- **Templates**: `template_list`, `template_deploy` (pre-built project templates)
+- **Neural AI**: `neural_train`, `neural_patterns`, `seraphina_chat` (AI assistant)
+- **GitHub**: `github_repo_analyze`, `github_pr_manage` (repository management)
+- **Real-time**: `execution_stream_subscribe`, `realtime_subscribe` (live monitoring)
+- **Storage**: `storage_upload`, `storage_list` (cloud file management)
+
+**Authentication Required:**
+- Register: `mcp__flow-nexus__user_register` or `npx flow-nexus@latest register`
+- Login: `mcp__flow-nexus__user_login` or `npx flow-nexus@latest login`
+- Access 70+ specialized MCP tools for advanced orchestration
+
+## 🚀 Agent Execution Flow with Claude Code
+
+### The Correct Pattern:
+
+1. **Optional**: Use MCP tools to set up coordination topology
+2. **REQUIRED**: Use Claude Code's Task tool to spawn agents that do actual work
+3. **REQUIRED**: Each agent runs hooks for coordination
+4. **REQUIRED**: Batch all operations in single messages
+
+### Example Full-Stack Development:
+
+```javascript
+// Single message with all agent spawning via Claude Code's Task tool
+[Parallel Agent Execution]:
+  Task("Backend Developer", "Build REST API with Express. Use hooks for coordination.", "backend-dev")
+  Task("Frontend Developer", "Create React UI. Coordinate with backend via memory.", "coder")
+  Task("Database Architect", "Design PostgreSQL schema. Store schema in memory.", "code-analyzer")
+  Task("Test Engineer", "Write Jest tests. Check memory for API contracts.", "tester")
+  Task("DevOps Engineer", "Setup Docker and CI/CD. Document in memory.", "cicd-engineer")
+  Task("Security Auditor", "Review authentication. Report findings via hooks.", "reviewer")
+  
+  // All todos batched together
+  TodoWrite { todos: [...8-10 todos...] }
+  
+  // All file operations together
+  Write "backend/server.js"
+  Write "frontend/App.jsx"
+  Write "database/schema.sql"
+```
+
+## 📋 Agent Coordination Protocol
+
+### Every Agent Spawned via Task Tool MUST:
+
+**1️⃣ BEFORE Work:**
+```bash
+npx claude-flow@alpha hooks pre-task --description "[task]"
+npx claude-flow@alpha hooks session-restore --session-id "swarm-[id]"
+```
+
+**2️⃣ DURING Work:**
+```bash
+npx claude-flow@alpha hooks post-edit --file "[file]" --memory-key "swarm/[agent]/[step]"
+npx claude-flow@alpha hooks notify --message "[what was done]"
+```
+
+**3️⃣ AFTER Work:**
+```bash
+npx claude-flow@alpha hooks post-task --task-id "[task]"
+npx claude-flow@alpha hooks session-end --export-metrics true
+```
+
+## 🎯 Concurrent Execution Examples
+
+### ✅ CORRECT WORKFLOW: MCP Coordinates, Claude Code Executes
+
+```javascript
+// Step 1: MCP tools set up coordination (optional, for complex tasks)
+[Single Message - Coordination Setup]:
+  mcp__claude-flow__swarm_init { topology: "mesh", maxAgents: 6 }
+  mcp__claude-flow__agent_spawn { type: "researcher" }
+  mcp__claude-flow__agent_spawn { type: "coder" }
+  mcp__claude-flow__agent_spawn { type: "tester" }
+
+// Step 2: Claude Code Task tool spawns ACTUAL agents that do the work
+[Single Message - Parallel Agent Execution]:
+  // Claude Code's Task tool spawns real agents concurrently
+  Task("Research agent", "Analyze API requirements and best practices. Check memory for prior decisions.", "researcher")
+  Task("Coder agent", "Implement REST endpoints with authentication. Coordinate via hooks.", "coder")
+  Task("Database agent", "Design and implement database schema. Store decisions in memory.", "code-analyzer")
+  Task("Tester agent", "Create comprehensive test suite with 90% coverage.", "tester")
+  Task("Reviewer agent", "Review code quality and security. Document findings.", "reviewer")
+  
+  // Batch ALL todos in ONE call
+  TodoWrite { todos: [
+    {id: "1", content: "Research API patterns", status: "in_progress", priority: "high"},
+    {id: "2", content: "Design database schema", status: "in_progress", priority: "high"},
+    {id: "3", content: "Implement authentication", status: "pending", priority: "high"},
+    {id: "4", content: "Build REST endpoints", status: "pending", priority: "high"},
+    {id: "5", content: "Write unit tests", status: "pending", priority: "medium"},
+    {id: "6", content: "Integration tests", status: "pending", priority: "medium"},
+    {id: "7", content: "API documentation", status: "pending", priority: "low"},
+    {id: "8", content: "Performance optimization", status: "pending", priority: "low"}
+  ]}
+  
+  // Parallel file operations
+  Bash "mkdir -p app/{src,tests,docs,config}"
+  Write "app/package.json"
+  Write "app/src/server.js"
+  Write "app/tests/server.test.js"
+  Write "app/docs/API.md"
+```
+
+### ❌ WRONG (Multiple Messages):
+```javascript
+Message 1: mcp__claude-flow__swarm_init
+Message 2: Task("agent 1")
+Message 3: TodoWrite { todos: [single todo] }
+Message 4: Write "file.js"
+// This breaks parallel coordination!
+```
+
+## Performance Benefits
+
+- **84.8% SWE-Bench solve rate**
+- **32.3% token reduction**
+- **2.8-4.4x speed improvement**
+- **27+ neural models**
+
+## Hooks Integration
+
+### Pre-Operation
+- Auto-assign agents by file type
+- Validate commands for safety
+- Prepare resources automatically
+- Optimize topology by complexity
+- Cache searches
+
+### Post-Operation
+- Auto-format code
+- Train neural patterns
+- Update memory
+- Analyze performance
+- Track token usage
+
+### Session Management
+- Generate summaries
+- Persist state
+- Track metrics
+- Restore context
+- Export workflows
+
+## Advanced Features (v2.0.0)
+
+- 🚀 Automatic Topology Selection
+- ⚡ Parallel Execution (2.8-4.4x speed)
+- 🧠 Neural Training
+- 📊 Bottleneck Analysis
+- 🤖 Smart Auto-Spawning
+- 🛡️ Self-Healing Workflows
+- 💾 Cross-Session Memory
+- 🔗 GitHub Integration
+
+## Integration Tips
+
+1. Start with basic swarm init
+2. Scale agents gradually
+3. Use memory for context
+4. Monitor progress regularly
+5. Train patterns from success
+6. Enable hooks automation
+7. Use GitHub tools first
+
+## Support
+
+- Documentation: https://github.com/ruvnet/claude-flow
+- Issues: https://github.com/ruvnet/claude-flow/issues
+- Flow-Nexus Platform: https://flow-nexus.ruv.io (registration required for cloud features)
+
 ---
 
-## 🐛 Common Tasks
+Remember: **Claude Flow coordinates, Claude Code creates!**
 
-### Debug Session
-When user says "debug" or reports bugs:
-1. Query memory: `zylch`, `zylch-frontend`
-2. Read `./frontend/ARCHITECTURE.md` if frontend issue
-3. For each bug: Analyze → Propose → Get approval → Fix → Test
-4. Store patterns in `zylch-frontend-debug` namespace
-
-### Execute Development Plan
-When user references DEVELOPMENT_PLAN.md:
-1. Query memory: `zylch`
-2. Read `.claude/DEVELOPMENT_PLAN.md`
-3. Assess current status from memory
-4. Prioritize and get approval
-5. Execute approved phases
-6. Store progress in `zylch` namespace
-
-### Deploy Task
-When user mentions deployment:
-1. Query memory: `zylch`, `zylch-deploy`
-2. Read deployment docs
-3. Plan infrastructure
-4. Execute deployment steps
-5. Store config in `zylch-deploy` namespace
-
-### Research/Architecture Work
-When user discusses vision, avatars, memory architecture:
-1. Query memory: `zylch`, `zylch-memory`
-2. Read `/spec/ZYLCH_BUSINESS_MODEL.md` and `/.claude/ARCHITECTURE.md`
-3. Ensure changes align with strategic vision (research lab, not SaaS)
-4. Store decisions in `zylch` namespace
-
-### Planning Session
-When user discusses roadmap, priorities, or says "planning":
-1. Query memory: `zylch`
-2. Read `/.claude/DEVELOPMENT_PLAN.md` and `/spec/ZYLCH_BUSINESS_MODEL.md`
-3. Assess: what's done, what's blocked, what's next
-4. Propose prioritized plan with rationale
-5. After approval, update `DEVELOPMENT_PLAN.md`
-6. Store decisions in `zylch` namespace
-
-### Architecture Review
-When user discusses system design, memory system, or avatars:
-1. Query memory: `zylch`, `zylch-memory`
-2. Read `/.claude/ARCHITECTURE.md` and `/zylch_memory/README.md`
-3. Validate changes against strategic vision (avatar architecture, not just features)
-4. Update `ARCHITECTURE.md` if structural decisions made
-5. Store rationale in `zylch-memory` namespace
-
-### Business Model / Investor Prep
-When user discusses pitch, investors, funding, or business:
-1. Query memory: `zylch`
-2. Read `/spec/ZYLCH_BUSINESS_MODEL.md`
-3. Search web if needed (market data, competitor analysis, LLM trends)
-4. Ensure framing is "research lab with commercial bridge", not "SaaS startup"
-5. Store insights in `zylch` namespace
-
-### Documentation Update
-When user says "update docs" or documentation is stale:
-1. Query memory: `zylch`
-2. Read `/.claude/DOCUMENTATION.md` for standards
-3. Identify gaps between code and docs
-4. Update relevant docs in `/docs` (user-facing) or `/.claude` (developer)
-5. Store what was updated in `zylch` namespace
-
-### Full Sync / Status Report
-When user says "status", "where are we", or "sync":
-1. Query namespaces: `zylch`, `zylch-frontend`, `zylch-cli`, `zylch-deploy`
-2. Read `DEVELOPMENT_PLAN.md` for milestones
-3. Compile: completed phases, current blockers, next priorities
-4. Output concise status report
-5. No storage needed (read-only task)
-
-### New Feature Implementation
-When user requests a new feature:
-1. Query memory: `zylch`
-2. Check if feature aligns with `DEVELOPMENT_PLAN.md` phases
-3. If not in plan: flag and ask if it should be added
-4. Implement following patterns in `/.claude/CONVENTIONS.md`
-5. Store implementation decisions in `zylch` namespace
-
-### Memory/Avatar System Work
-When user specifically works on memory, avatars, or reconsolidation:
-1. Query memory: `zylch`, `zylch-memory`
-2. Read `/zylch_memory/ZYLCH_MEMORY_ARCHITECTURE.md`
-3. This is core research — document WHY, not just WHAT
-4. Ensure small-world topology and reconsolidation principles preserved
-5. Store architectural decisions in `zylch-memory` namespace
-6. Update `/.claude/ARCHITECTURE.md` "Memory System Philosophy" section
-
-### Integration Work (MrCall, StarChat, external APIs)
-When user works on external integrations:
-1. Query memory: `zylch`, `zylch-deploy`
-2. Read relevant tool files in `/zylch/tools/`
-3. Check `/spec` for integration requirements
-4. Follow security rules: NEVER bypass authentication, ALWAYS use REST APIs
-5. Store integration patterns in `zylch` namespace
-
-### CLI Development
-When user works on CLI (zylch-cli):
-1. Query memory: `zylch-cli`, `zylch`
-2. Remember: CLI is a **thin client** - all business logic is on the server
-3. CLI only handles: UI rendering, local auth, HTTP calls to API
-4. OAuth tokens stored in Supabase (not local filesystem)
-5. Store CLI patterns in `zylch-cli` namespace
-
-**CLI Commands:**
-- `--login`, `--logout`, `--status`: Firebase authentication
-- `--chat`: Interactive chat mode with server
-- `/connect google`: Connect Google OAuth for Gmail/Calendar API
-- `/connect --reset`: Disconnect all integrations
-
-**CLI Architecture:**
-- Location: `/zylch-cli/` (separate directory)
-- Config: `~/.zylch/cli_config.json`
-- API server: `https://api.zylchai.com`
-
----
-
-## 🌐 Production URLs
-
-| Service | URL |
-|---------|-----|
-| Frontend | https://app.zylchai.com |
-| Backend API | https://api.zylchai.com |
-| Website | https://zylchai.com |
-
----
-
-**Remember: Execute immediately. Query memory first. Store results after. Align with research vision.**
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+Never save working files, text/mds and tests to the root folder.

@@ -138,7 +138,7 @@ class CalendarSyncManager:
             'status': '',
             'html_link': '',
             'created_at': supabase_event.get('created_at', ''),
-            'updated_at': supabase_event.get('updated_at', ''),
+            'updated_at': supabase_event.get('google_updated_at', ''),  # Google Calendar's timestamp, not Supabase's
             'cached_at': supabase_event.get('updated_at', ''),
         }
 
@@ -156,6 +156,7 @@ class CalendarSyncManager:
             'is_external': bool(cache_event.get('external_attendees')),
             'meet_link': cache_event.get('html_link'),
             'calendar_id': 'primary',
+            'google_updated_at': cache_event.get('updated_at'),  # Google Calendar's updated timestamp
         }
 
     def sync_events(self, force_full: bool = False) -> Dict[str, Any]:

@@ -2,17 +2,54 @@
 
 import json
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import anthropic
+from bs4 import BeautifulSoup
 
 if TYPE_CHECKING:
     from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)
+
+
+def clean_html(html: str) -> str:
+    """Strip HTML tags, styles, scripts and return clean text.
+
+    Args:
+        html: Raw HTML or plain text email body
+
+    Returns:
+        Clean plain text
+    """
+    if not html:
+        return ""
+
+    # Quick check - if no HTML tags, return as-is
+    if '<' not in html:
+        return html
+
+    try:
+        soup = BeautifulSoup(html, 'html.parser')
+
+        # Remove style, script, head tags entirely (including contents)
+        for tag in soup(['style', 'script', 'head', 'meta', 'link']):
+            tag.decompose()
+
+        # Get text, collapse whitespace
+        text = soup.get_text(separator=' ', strip=True)
+
+        # Collapse multiple spaces/newlines
+        text = re.sub(r'\s+', ' ', text)
+
+        return text.strip()
+    except Exception:
+        # Fallback: simple regex strip
+        return re.sub(r'<[^>]+>', '', html)
 
 
 class EmailSyncManager:
@@ -68,6 +105,7 @@ class EmailSyncManager:
         if self._use_supabase:
             # Load from Supabase
             analyses = self.supabase.get_thread_analyses(self.owner_id)
+            logger.info(f"Loaded {len(analyses)} existing analyses from Supabase")
             threads = {}
             for analysis in analyses:
                 thread_id = analysis['thread_id']
@@ -102,12 +140,27 @@ class EmailSyncManager:
             json.dump(cache, f, indent=2)
         logger.info(f"Saved {len(cache['threads'])} threads to cache")
 
+    def _save_analyzed_threads(self, threads: Dict[str, Any]) -> None:
+        """Save only the threads that were analyzed (not all cached threads)."""
+        if self._use_supabase:
+            for thread_id, thread_data in threads.items():
+                self._save_thread_to_supabase(thread_data)
+        else:
+            # For local JSON, we still need to save the full cache
+            # This is a no-op here since local JSON saves the whole file
+            pass
+
     def _save_thread_to_supabase(self, thread_data: Dict[str, Any]) -> None:
         """Save a single thread analysis to Supabase."""
+        # Extract contact email and name from 'from' field (format: "Name <email@example.com>")
+        from_field = thread_data.get('last_email', {}).get('from', '')
+        contact_email = self._extract_email(from_field)
+        contact_name = self._extract_name_from_from(from_field)
+
         analysis = {
             'thread_id': thread_data['thread_id'],
-            'contact_email': thread_data.get('last_email', {}).get('from_email'),
-            'contact_name': thread_data.get('last_email', {}).get('from_name'),
+            'contact_email': contact_email,
+            'contact_name': contact_name,
             'last_email_date': thread_data.get('last_message_date'),
             'last_email_direction': thread_data.get('last_email', {}).get('direction'),
             'analysis': {
@@ -116,6 +169,7 @@ class EmailSyncManager:
                 'priority_score': thread_data.get('priority_score'),
                 'email_count': thread_data.get('email_count'),
                 'participants': thread_data.get('participants', []),
+                'last_email_id': thread_data.get('last_email', {}).get('id'),
             },
             'needs_action': thread_data.get('open', False),
             'task_description': thread_data.get('expected_action'),
@@ -140,6 +194,7 @@ class EmailSyncManager:
             'manually_closed': supabase_analysis.get('manually_closed', False),
             'last_message_date': supabase_analysis.get('last_email_date'),
             'last_email': {
+                'id': analysis.get('last_email_id'),
                 'from_email': supabase_analysis.get('contact_email'),
                 'from_name': supabase_analysis.get('contact_name'),
             }
@@ -200,6 +255,7 @@ class EmailSyncManager:
         new_threads = 0
         updated_threads = 0
         processed = 0
+        analyzed_threads = {}  # Only track threads we actually analyze
 
         for thread_id, thread_messages in threads_map.items():
             # Sort by date (newest last) - MUST use datetime parsing, NOT alphabetic sort!
@@ -223,11 +279,23 @@ class EmailSyncManager:
                 existing_last_id = existing.get('last_email', {}).get('id')
                 current_last_id = last_message.get('id')
 
-                if (existing_email_count == current_msg_count and
-                    existing_last_id == current_last_id):
-                    needs_analysis = False
-                    # Don't log for each skip (too verbose)
-                    # logger.debug(f"Skipping thread {thread_id} (unchanged)")
+                logger.debug(f"Thread {thread_id}: existing_count={existing_email_count}, current_count={current_msg_count}, existing_last_id={existing_last_id}, current_last_id={current_last_id}")
+
+                # Skip if message count matches AND either:
+                # - last_email_id matches, OR
+                # - existing has no last_email_id (legacy data) but count matches
+                if existing_email_count == current_msg_count:
+                    if existing_last_id and existing_last_id == current_last_id:
+                        needs_analysis = False
+                        logger.debug(f"Skipping thread {thread_id} (unchanged)")
+                    elif not existing_last_id:
+                        # Legacy entry without last_email_id - trust email_count
+                        needs_analysis = False
+                        logger.debug(f"Skipping thread {thread_id} (legacy, count matches)")
+                    else:
+                        logger.debug(f"Re-analyzing thread {thread_id} (last_id mismatch)")
+                else:
+                    logger.debug(f"Re-analyzing thread {thread_id} (count mismatch: {existing_email_count} vs {current_msg_count})")
 
             if not needs_analysis:
                 processed += 1
@@ -237,6 +305,7 @@ class EmailSyncManager:
             try:
                 thread_data = self._analyze_thread(thread_id, last_message, thread_messages)
                 cache['threads'][thread_id] = thread_data
+                analyzed_threads[thread_id] = thread_data  # Track for saving
 
                 if existing:
                     updated_threads += 1
@@ -245,20 +314,19 @@ class EmailSyncManager:
 
                 processed += 1
 
-                # Save cache every 10 threads (incremental save for safety)
-                if processed % 10 == 0:
-                    logger.info(f"Progress: {processed}/{len(threads_map)} threads processed...")
-                    self._save_cache(cache)
+                # Save analyzed threads every 10 (incremental save for safety)
+                if len(analyzed_threads) % 10 == 0:
+                    logger.info(f"Progress: {processed}/{len(threads_map)} threads processed, {len(analyzed_threads)} analyzed...")
+                    self._save_analyzed_threads(analyzed_threads)
 
             except Exception as e:
                 logger.error(f"Failed to analyze thread {thread_id}: {e}")
                 continue
 
-        # Update sync timestamp
-        cache['last_sync'] = datetime.now(timezone.utc).isoformat()
-
-        # Save cache
-        self._save_cache(cache)
+        # Save only the threads we analyzed (not all 245)
+        if analyzed_threads:
+            self._save_analyzed_threads(analyzed_threads)
+            logger.info(f"Saved {len(analyzed_threads)} analyzed threads to Supabase")
 
         # Count total messages
         total_messages = sum(len(msgs) for msgs in threads_map.values())
@@ -328,7 +396,7 @@ class EmailSyncManager:
 
         # Analyze with SONNET if available (precision > cost)
         if self.anthropic_client:
-            analysis = self._haiku_analyze(last_message, all_messages)  # Note: still called _haiku_analyze but uses Sonnet now
+            analysis = self._agent_analyze(last_message, all_messages)
         else:
             # Fallback: basic analysis without AI
             analysis = {
@@ -383,12 +451,14 @@ class EmailSyncManager:
 
         return thread_data
 
-    def _haiku_analyze(
+    def _agent_analyze(
         self,
         last_message: Dict[str, Any],
         all_messages: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Use SONNET to analyze email thread (NOT Haiku anymore - precision > cost).
+        """Use Claude to analyze email thread and detect tasks.
+
+        Uses tool_use for guaranteed structured output.
 
         Args:
             last_message: Most recent message
@@ -397,174 +467,86 @@ class EmailSyncManager:
         Returns:
             Analysis with summary, open status, expected_action
         """
-        # Prepare context for Sonnet
-        # Get ONLY the actual last message body, not quoted replies
-        body_full = last_message.get('body', '')
-
-        # Simple heuristic: cut at common quote markers
-        body = body_full
-        for marker in ['\n\nOn ', '\n\nDa: ', '\n\nFrom: ', '\n\n>', '________________________________']:
-            if marker in body:
-                body = body.split(marker)[0]
-                break
-
-        # Still limit to reasonable size
-        body = body[:5000]  # Sonnet can handle more
+        # Prepare context for analysis
+        # Include full body with quoted replies for conversation context
+        # Clean HTML to reduce tokens and improve analysis
+        raw_body = last_message.get('body', '')
+        body = clean_html(raw_body)[:8000]
 
         from_addr = last_message.get('from', '')
         subject = last_message.get('subject', '')
 
-        prompt = f"""You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.
+        # Load prompt template from file
+        prompt_path = Path(__file__).parent.parent / 'prompts' / 'thread_analysis.txt'
+        with open(prompt_path, 'r') as f:
+            prompt_template = f.read()
 
-CONTEXT:
-Subject: {subject}
-From: {from_addr}
-Number of messages in conversation: {len(all_messages)}
+        prompt = prompt_template.format(
+            subject=subject,
+            from_addr=from_addr,
+            message_count=len(all_messages),
+            body=body
+        )
 
-LAST MESSAGE RECEIVED:
-{body}
-
-THE QUESTION IS SIMPLE:
-DOES THE USER NEED TO CREATE A TASK?
-
-A TASK is needed when the user must do ANYTHING:
-- Reply to a question
-- Send documents/information
-- Keep a promise made ("I'll send you the pptx by tonight")
-- Do an action they said they'd do ("I'll see if we can find a workaround")
-- Fix something they promised to fix ("we can do this right away")
-
-CLASSIFICATION RULES:
-
-1. "answer" - User needs to reply because:
-   - Someone asked them a question
-   - Someone requested information, documents, feedback
-   - Someone is waiting for their confirmation or decision
-   - There's a pending meeting/collaboration proposal
-
-2. "reminder" - User needs to do something they promised:
-   - They said "I'll send you X by Y" and haven't sent it yet
-   - They said "I'll try to do X" and haven't done it yet
-   - They promised "we'll fix this right away" and haven't fixed it
-   - They're waiting for a reply to their question (reminder to follow up)
-
-3. null - No task needed:
-   - Conversation concluded without pending actions
-   - Automated notification that doesn't require a response
-   - Exchange of courtesies concluded
-
-PRACTICAL EXAMPLES:
-
-Example 1:
-Client: "Can you send me the quote?"
-→ {{"summary": "Client requesting quote", "open": true, "expected_action": "answer"}}
-TASK: Reply with quote
-
-Example 2:
-User: "I'll send you the pptx by tonight"
-Client: "Perfect, thanks!"
-→ {{"summary": "User promised pptx by tonight, not yet sent", "open": true, "expected_action": "reminder"}}
-TASK: Send the promised pptx
-
-Example 3:
-User: "I'll see if we can find some workaround"
-[A week passed, no response]
-→ {{"summary": "User needs to find promised workaround", "open": true, "expected_action": "reminder"}}
-TASK: Find workaround and respond
-
-Example 4:
-Client: "Would you prefer not to ask for first and last name right away"
-User: "We can do this right away :-)"
-[Never responded]
-→ {{"summary": "User needs to fix assistant to not ask for name", "open": true, "expected_action": "reminder"}}
-TASK: Fix assistant configuration
-
-Example 5:
-Automated notification: "Your subscription has been renewed"
-→ {{"summary": "Subscription renewal notification", "open": false, "expected_action": null}}
-NO TASK needed
-
-CRITICAL INSTRUCTIONS:
-- YOUR RESPONSE MUST BE VALID JSON ONLY
-- DO NOT USE MARKDOWN CODE BLOCKS
-- THE RESPONSE MUST START WITH {{ AND END WITH }}
-- NO TEXT BEFORE OR AFTER THE JSON
-
-IF THERE'S SOMETHING TO DO → open: true, expected_action: "answer" or "reminder"
-IF THERE'S NOTHING TO DO → open: false, expected_action: null
-
-Respond EXACTLY in this format:
-{{
-  "summary": "brief summary in English (1-2 sentences, explain what user needs to do)",
-  "open": true,
-  "expected_action": "answer"
-}}
-
-RETURN ONLY THE JSON, NOTHING ELSE."""
-
-        # Try up to 2 times
-        for attempt in range(2):
-            try:
-                response = self.anthropic_client.messages.create(
-                    model="claude-sonnet-4-20250514",  # SONNET, not Haiku!
-                    max_tokens=800,  # More tokens for better analysis
-                    messages=[{
-                        "role": "user",
-                        "content": prompt
-                    }]
-                )
-
-                # Parse JSON response
-                result_text = response.content[0].text.strip()
-
-                # Skip empty responses
-                if not result_text:
-                    raise ValueError("Empty response from Haiku")
-
-                # Extract JSON from response (multiple strategies)
-                json_text = result_text
-
-                # Strategy 1: Look for markdown code blocks
-                if '```json' in result_text:
-                    json_text = result_text.split('```json')[1].split('```')[0].strip()
-                elif '```' in result_text:
-                    json_text = result_text.split('```')[1].split('```')[0].strip()
-
-                # Strategy 2: Find first { and last }
-                if '{' in json_text and '}' in json_text:
-                    start = json_text.find('{')
-                    end = json_text.rfind('}') + 1
-                    json_text = json_text[start:end]
-                else:
-                    raise ValueError("No JSON object found in response")
-
-                # Try to parse
-                result = json.loads(json_text)
-
-                # Validate required fields
-                if 'summary' not in result or 'open' not in result:
-                    raise ValueError("Missing required fields")
-
-                logger.debug(f"Sonnet analysis (attempt {attempt + 1}): {result}")
-                return result
-
-            except Exception as e:
-                if attempt == 0:
-                    # Retry once
-                    logger.debug(f"Sonnet attempt {attempt + 1} failed: {e}, retrying...")
-                    continue
-                else:
-                    # Final failure - use fallback
-                    logger.warning(f"Sonnet analysis failed after {attempt + 1} attempts: {e}, using fallback")
-                    if 'response' in locals() and hasattr(response, 'content') and response.content:
-                        logger.debug(f"Failed text: {response.content[0].text[:200]}")
-
-                    # Fallback to basic analysis
-                    return {
-                        "summary": last_message.get('snippet', '')[:200],
-                        "open": True,
-                        "expected_action": None
+        # Define tool for structured output
+        classify_tool = {
+            "name": "classify_thread",
+            "description": "Classify an email thread to determine if user action is needed",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "summary": {
+                        "type": "string",
+                        "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+                    },
+                    "open": {
+                        "type": "boolean",
+                        "description": "True if user has a pending task, False if conversation is concluded"
+                    },
+                    "expected_action": {
+                        "type": ["string", "null"],
+                        "enum": ["answer", "reminder", None],
+                        "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
                     }
+                },
+                "required": ["summary", "open", "expected_action"]
+            }
+        }
+
+        try:
+            response = self.anthropic_client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=800,
+                tools=[classify_tool],
+                tool_choice={"type": "tool", "name": "classify_thread"},
+                messages=[{
+                    "role": "user",
+                    "content": prompt
+                }]
+            )
+
+            # Extract tool use result
+            for block in response.content:
+                if block.type == "tool_use" and block.name == "classify_thread":
+                    result = block.input
+                    logger.debug(f"Thread analysis: {result}")
+                    return result
+
+            # Fallback if no tool use found (shouldn't happen with tool_choice)
+            logger.warning("No tool_use block found in response, using fallback")
+            return {
+                "summary": last_message.get('snippet', '')[:200],
+                "open": True,
+                "expected_action": None
+            }
+
+        except Exception as e:
+            logger.warning(f"Thread analysis failed: {e}, using fallback")
+            return {
+                "summary": last_message.get('snippet', '')[:200],
+                "open": True,
+                "expected_action": None
+            }
 
     def _estimate_sync_time(self, days_back: int) -> int:
         """Estimate sync time in minutes.
@@ -585,7 +567,7 @@ RETURN ONLY THE JSON, NOTHING ELSE."""
         # Threads: ~40% of emails are in threads
         threads = int(total_emails * 0.4)
 
-        # SONNET analysis: ~3 sec/thread (slower than Haiku but more accurate)
+        # Claude analysis: ~3 sec/thread
         analysis_minutes = (threads * 3) / 60
 
         # Total with buffer
@@ -604,6 +586,19 @@ RETURN ONLY THE JSON, NOTHING ELSE."""
         else:
             # Already just email
             return email_field.strip()
+
+    def _extract_name_from_from(self, from_field: str) -> Optional[str]:
+        """Extract name from 'Name <email>' format."""
+        if not from_field:
+            return None
+
+        if '<' in from_field:
+            # Format: "Name <email@example.com>"
+            name = from_field.split('<')[0].strip().strip('"')
+            return name if name else None
+        else:
+            # No name, just email
+            return None
 
     def _extract_emails(self, email_field: str) -> set:
         """Extract multiple email addresses from 'Name <email>, Name2 <email2>' format.

@@ -46,33 +46,37 @@ Modular tools for agent capabilities:
 
 **Key Pattern**: Tools are stateless classes with `execute()` method
 
-### 3. Two-Tier Email System (Local-First, like Superhuman)
+### 3. Two-Tier Email System (Cloud-Based)
 
-**Tier 1: Local Email Archive (IndexedDB, encrypted)**
-- **Purpose**: Permanent storage of ALL emails on user's device
-- **Technology**: IndexedDB + Web Crypto API encryption
-- **Privacy**: Email content NEVER stored on Zylch servers
+**Current Implementation: Supabase-Only**
+
+All email data is stored in Supabase, scoped by `owner_id` (Firebase UID).
+
+**Tier 1: Email Archive (Supabase)**
+- **Purpose**: Permanent storage of email metadata and content
+- **Technology**: Supabase Postgres
+- **Tables**: `email_archive`, `email_messages`
 - **Sync**: Gmail/Outlook History API (incremental, <1s)
-- **Features**: Complete history, offline access, maximum privacy
+- **Features**: Complete history, cross-device access
 
 **Tier 2: Intelligence Cache (Supabase `thread_analysis`)**
-- **Purpose**: AI-generated analysis and summaries only
+- **Purpose**: AI-generated analysis and summaries
 - **Technology**: Supabase Postgres
-- **Content**: Analysis text, needs_action, priority, contact info (NO raw email bodies)
+- **Content**: Analysis text, needs_action, priority, contact info
 - **Window**: 30-day rolling analysis
 
 **Data Flow**:
 ```
 Gmail/Outlook API
        ↓
-IndexedDB (local, encrypted) ← Email bodies stored here
+Supabase (email_archive) ← Email metadata/content stored here
        ↓
 Claude AI (on-demand analysis)
        ↓
-Supabase (thread_analysis) ← Only AI summaries stored here
+Supabase (thread_analysis) ← AI summaries stored here
 ```
 
-**Privacy Guarantee**: Your emails never leave your device. Like Superhuman, Zylch stores email content locally in your browser, encrypted. We only store AI-generated summaries on our servers - never your actual emails.
+**Privacy Note**: Email content is stored encrypted at rest by Supabase. All data is scoped by `owner_id` with Row Level Security (RLS).
 
 ### 4. Service Layer (`zylch/services/`)
 
@@ -117,6 +121,20 @@ services/      # Business logic layer (shared with CLI)
 - `/api/archive` - Email archive operations
 - `/api/sync` - Email/calendar sync
 - `/api/gaps` - Relationship gap analysis
+- `/api/commands` - Command discovery and help (see below)
+
+### Commands API (`/api/commands`)
+
+**Purpose**: Expose command metadata so any frontend (CLI, web, mobile) can discover available commands and their help text. The backend is the single source of truth.
+
+**Endpoints**:
+- `GET /api/commands` - List all commands with summaries
+- `GET /api/commands/help` - Get help for all commands
+- `GET /api/commands/help?cmd=gaps` - Get detailed help for specific command
+
+**Source of Truth**: `COMMAND_HELP` dict in `zylch/services/command_handlers.py`
+
+**Help via Chat**: Sending `/gaps --help` (or any command with `--help`) returns help text without executing the command. This is handled by the dispatcher in `chat_service.py` before routing to handlers.
 
 ### 6. CLI (`zylch/cli/main.py`)
 Interactive command-line interface:
@@ -192,37 +210,62 @@ for contact_email, threads in person_threads.items():
 
 ## Data Storage
 
-### Browser Storage (IndexedDB) - Email Content
+### Current: Supabase (Cloud-Based)
 
-**Email bodies and metadata stored locally** on user's device, encrypted:
-
-| Store | Content | Encrypted? |
-|-------|---------|------------|
-| `emails` | Full email bodies, HTML, plaintext | ✅ Web Crypto AES-GCM |
-| `email_metadata` | From, to, subject, date, thread_id, labels | ✅ Web Crypto AES-GCM |
-| `attachments` | Cached attachment content | ✅ Web Crypto AES-GCM |
-| `crypto_keys` | Non-extractable CryptoKey for encryption | 🔒 Protected by browser |
-
-**Encryption approach**:
-- Web Crypto API (AES-GCM 256-bit)
-- Key derived from user auth via PBKDF2
-- Non-extractable CryptoKey stored in IndexedDB
-- Key never leaves browser, never sent to server
-
-### Server Storage (Supabase) - Metadata & AI Analysis Only
-
-**NO email content stored on server.** Only:
+**All data stored in Supabase**, scoped by `owner_id` (Firebase UID):
 
 | Table | Purpose |
 |-------|---------|
-| `thread_analysis` | AI-generated summaries (no raw email bodies) |
+| `email_archive` | Email metadata and content |
+| `thread_analysis` | AI-generated summaries and analysis |
 | `calendar_events` | Calendar events |
 | `sync_state` | Gmail/Outlook history IDs, last sync timestamps |
 | `relationship_gaps` | Detected relationship gaps |
-| `oauth_tokens` | All tokens (Google, Microsoft, Anthropic, MrCall) |
+| `oauth_tokens` | All tokens (Google, Microsoft, Anthropic, MrCall) - encrypted |
 | `triggers` | Triggered instructions |
 | `trigger_events` | Event queue for trigger processing |
 | `sharing_auth` | Sharing authorizations |
+| `memories` | Avatar/memory system (pg_vector) |
+
+**Security**:
+- All tables use Row Level Security (RLS) scoped by `owner_id`
+- Sensitive tokens encrypted with Fernet before storage
+- Supabase provides encryption at rest
+
+### Future: Local-First Options
+
+When desktop/mobile apps are developed, we may explore local-first storage:
+
+| Approach | Technology | Use Case | Pros | Cons |
+|----------|------------|----------|------|------|
+| **SQLite (Local)** | SQLite + sqlcipher | CLI, Desktop apps | Fast, offline, private | No cross-device sync |
+| **IndexedDB (Browser)** | Web Crypto AES-GCM | Web app (PWA) | Browser-native, encrypted | Browser storage limits |
+| **Tauri + SQLite** | Tauri (Rust) + SQLite | Desktop app | Lightweight, secure | Desktop only |
+| **Capacitor + SQLite** | Capacitor plugin | Mobile app | Cross-platform | Wrapper overhead |
+| **Hybrid** | Local + Supabase sync | All platforms | Best of both | Complex sync logic |
+
+**Potential local-first architecture** (not yet implemented):
+```
+┌─────────────────────────────────────────────────────┐
+│                    Local Device                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │
+│  │    CLI      │  │  Desktop    │  │   Mobile    │  │
+│  │  (Python)   │  │  (Tauri)    │  │ (Capacitor) │  │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  │
+│         └────────────────┼────────────────┘         │
+│                          ▼                          │
+│                 ┌─────────────────┐                 │
+│                 │  Local SQLite   │ ← emails, sync  │
+│                 └────────┬────────┘                 │
+└──────────────────────────┼──────────────────────────┘
+                           │ (AI summaries, cross-device)
+                           ▼
+                    ┌─────────────┐
+                    │  Supabase   │
+                    └─────────────┘
+```
+
+**Decision pending**: Will evaluate when building desktop/mobile apps.
 
 ### Token Storage (`oauth_tokens` table)
 
@@ -313,35 +356,85 @@ Backend decodes automatically on startup (`zylch/api/firebase_auth.py`).
 
 ## Security & Privacy
 
-### Email Privacy Guarantee (Local-First Architecture)
+### Current: Cloud-Based Storage
 
-**Your emails never leave your device.**
-
-Like Superhuman, Zylch follows a local-first architecture:
-
-| Data | Where Stored | On Zylch Servers? |
-|------|--------------|-------------------|
-| Email bodies | Browser IndexedDB (encrypted) | ❌ Never |
-| Email metadata | Browser IndexedDB (encrypted) | ❌ Never |
-| Attachments | Browser IndexedDB (encrypted) | ❌ Never |
-| AI summaries | Supabase | ✅ Yes (no raw content) |
-| Sync state | Supabase | ✅ Yes (history IDs only) |
+| Data | Where Stored | Security |
+|------|--------------|----------|
+| Email content | Supabase | RLS + encryption at rest |
+| Email metadata | Supabase | RLS + encryption at rest |
+| AI summaries | Supabase | RLS + encryption at rest |
+| OAuth tokens | Supabase | RLS + Fernet encryption |
+| Sync state | Supabase | RLS |
 
 **How it works**:
-1. Emails fetched from Gmail/Outlook API directly to browser
-2. Encrypted with Web Crypto API (AES-GCM 256-bit) before storing in IndexedDB
-3. When AI analysis needed, content sent to Claude on-demand
-4. Only AI-generated summaries stored on Supabase (never raw email content)
+1. Emails fetched from Gmail/Outlook API by backend
+2. Stored in Supabase with `owner_id` scoping (Row Level Security)
+3. AI analysis performed on-demand, summaries stored in `thread_analysis`
+4. All sensitive tokens (OAuth, API keys) encrypted with Fernet before storage
 
-**Competitive comparison**:
-- **Superhuman**: Local-first (WebSQL) ← Zylch follows this model
-- **Shortwave**: Server-side (stores emails on their servers)
-- **Fyxer**: Server-side (stores emails on Google Cloud)
+**Privacy model**:
+- All data scoped by Firebase UID (`owner_id`)
+- Row Level Security ensures users only access their own data
+- Supabase provides encryption at rest
+- No data shared between users
+
+**Future consideration**: Local-first architecture (see "Future: Local-First Options" above) would provide stronger privacy guarantees by keeping email content on user devices only.
 
 ### Authentication
 - **Firebase Auth**: JWT tokens validated on all API endpoints
 - **OAuth Tokens**: Stored encrypted in Supabase (Google, Microsoft)
 - **Per-user isolation**: All data scoped by `owner_id` (Firebase UID)
+
+### Token Auto-Refresh (Frontend)
+
+Firebase ID tokens expire after 1 hour. The frontend implements automatic token refresh:
+
+**Flow**:
+1. On OAuth callback, backend redirects with `?token=xxx&refresh_token=xxx`
+2. Frontend stores both in localStorage (`zylch_token`, `zylch_refresh_token`)
+3. `scheduleRefresh()` parses JWT expiry and sets timer for 5 minutes before expiration
+4. When timer fires, `doRefreshToken()` calls Firebase's token refresh API
+5. New tokens stored, new timer scheduled
+
+**Implementation** (`frontend/src/stores/auth.ts`):
+```typescript
+// Firebase token refresh API
+POST https://securetoken.googleapis.com/v1/token?key={FIREBASE_API_KEY}
+Body: { grant_type: 'refresh_token', refresh_token: '...' }
+Response: { id_token: '...', refresh_token: '...' }
+```
+
+**Key files**:
+- `frontend/src/stores/auth.ts` - `scheduleRefresh()`, `doRefreshToken()`, `getTokenExpiry()`
+- `frontend/src/views/AuthCallbackView.vue` - Extracts `refresh_token` from URL
+- `zylch/api/routes/auth.py` - Includes `refresh_token` in OAuth callback redirect
+
+### Token Auto-Refresh (CLI)
+
+The CLI also implements automatic token refresh:
+
+**Flow**:
+1. On login, the local auth server receives `refreshToken` from Firebase SDK
+2. Stored in `~/.zylch/credentials/{provider}/credentials.json`
+3. Before each prompt in the main loop, `needs_refresh()` checks if token expires within 5 minutes
+4. If expiring, `refresh_firebase_token()` calls Firebase's token refresh API
+5. New tokens saved to credentials file
+
+**Implementation** (`zylch/cli/auth.py`):
+```python
+def refresh_firebase_token(self) -> bool:
+    # Call Firebase API with stored refresh_token
+    response = requests.post(
+        f"https://securetoken.googleapis.com/v1/token?key={FIREBASE_API_KEY}",
+        json={"grant_type": "refresh_token", "refresh_token": refresh_token}
+    )
+    # Update credentials with new id_token
+```
+
+**Key files**:
+- `zylch/cli/auth.py` - `refresh_firebase_token()`, `needs_refresh()`, `ensure_valid_token()`
+- `zylch/cli/auth_server.py` - Captures `refreshToken` from Firebase SDK during login
+- `zylch/cli/main.py` - Auto-refresh check in main loop
 
 ### Sensitive Data Encryption
 
@@ -378,10 +471,11 @@ if is_encryption_enabled():
 - **Never commit** encryption keys to git
 
 ### Data Privacy
-- All user data scoped by Firebase UID
+- All user data scoped by Firebase UID (`owner_id`)
 - Email content stored in Supabase (encrypted at rest by Supabase)
-- Anthropic API keys encrypted with application-level encryption
-- No data sent to third parties (except Claude for analysis with user's own API key)
+- Anthropic API keys encrypted with Fernet (application-level encryption)
+- No data shared between users (RLS enforced)
+- Data sent to Claude for analysis uses user's own API key (BYOK model)
 
 ## Performance Characteristics
 

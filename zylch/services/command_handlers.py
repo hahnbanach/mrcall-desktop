@@ -11,6 +11,7 @@ import sqlite3
 import uuid
 
 from zylch.tools.config import ToolConfig
+from zylch.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +68,13 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
 
     try:
         # Get user's auth provider
-        logger.info(f"handle_sync: owner_id={owner_id}, type={type(owner_id)}")
+        logger.info(f"[/sync] Starting sync for owner_id={owner_id}, days_back={days_back}")
         provider = get_provider(owner_id)
         email = get_email(owner_id)
+        logger.debug(f"[/sync] provider={provider}, email={email}")
 
         if not provider:
+            logger.warning(f"[/sync] No provider found for owner_id={owner_id}")
             return f"❌ **Error:** Provider not found for owner {owner_id}. Please login first."
 
         # Create appropriate email client based on provider
@@ -86,11 +89,12 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
                 account=email
             )
             calendar_client = None  # TODO: Microsoft Calendar support
-            logger.info(f"Using Microsoft Outlook for owner {owner_id}")
+            logger.info(f"[/sync] Using Microsoft Outlook for {email}")
 
         else:
             # Google Gmail client
             google_tokens_dir = get_google_tokens_dir(owner_id)
+            logger.debug(f"[/sync] Google tokens dir: {google_tokens_dir}")
             email_client = GmailClient(
                 credentials_path=config.google_credentials_path,
                 token_dir=str(google_tokens_dir),
@@ -104,23 +108,32 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
                 account=email,
                 owner_id=owner_id
             )
-            logger.info(f"Using Gmail for owner {owner_id}")
+            logger.info(f"[/sync] Using Gmail for {email}")
+
+        from zylch.storage.supabase_client import SupabaseStorage
+        supabase_storage = SupabaseStorage()
 
         sync_service = SyncService(
             email_client=email_client,
-            calendar_client=calendar_client
+            calendar_client=calendar_client,
+            owner_id=owner_id,
+            supabase_storage=supabase_storage
         )
 
-        # Skip gap analysis to avoid Anthropic API calls for slash commands
+        # Run sync (archive only, no AI analysis)
+        logger.info(f"[/sync] Running archive sync...")
         results = await sync_service.run_full_sync(days_back=days_back, skip_gap_analysis=True)
+        logger.info(f"[/sync] Sync complete: email={results['email_sync']['success']}, calendar={results['calendar_sync']['success']}")
 
-        lines = [f"**🌅 Morning Sync** (last {days_back} days)\n"]
+        lines = ["**🔄 Sync Complete**\n"]
 
         has_failures = False
 
         if results['email_sync']['success']:
             email_data = results['email_sync']
-            lines.append(f"✅ **Email:** {email_data['new_threads']} new, {email_data['updated_threads']} updated")
+            new_msgs = email_data.get('new_messages', 0)
+            del_msgs = email_data.get('deleted_messages', 0)
+            lines.append(f"✅ **Email:** +{new_msgs} new, -{del_msgs} deleted")
         else:
             has_failures = True
             lines.append(f"❌ **Email:** {results['email_sync'].get('error')}")
@@ -132,20 +145,10 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
             has_failures = True
             lines.append(f"❌ **Calendar:** {results['calendar_sync'].get('error')}")
 
-        if results['gap_analysis']['success']:
-            gap_data = results['gap_analysis']
-            lines.append(f"\n✅ **Tasks:** {gap_data['total_tasks']} found")
-            lines.append(f"   • Email: {gap_data['email_tasks']}")
-            lines.append(f"   • Meeting: {gap_data['meeting_tasks']}")
-            lines.append(f"   • Silent contacts: {gap_data['silent_contacts']}")
-        else:
-            has_failures = True
-            lines.append(f"❌ **Gap analysis:** {results['gap_analysis'].get('error')}")
-
         if has_failures:
             lines.append("\n⚠️ **Sync completed with errors.** Check the issues above.")
         else:
-            lines.append("\n✅ **Sync complete!** Use `/gaps` for briefing.")
+            lines.append("\n✅ **Done!** Run `/gaps [days]` to analyze tasks.")
         return "\n".join(lines)
 
     except Exception as e:
@@ -161,16 +164,95 @@ async def handle_clear() -> str:
 Clear your local `conversation_history` array."""
 
 
-async def handle_gaps() -> str:
-    """Handle /gaps or /briefing command."""
-    return """**⚠️ Gap Analysis**
+async def handle_gaps(args: List[str], config, memory, owner_id: str) -> str:
+    """Handle /gaps command - AI analysis of email threads.
 
-This command analyzes unanswered emails and meeting follow-ups.
+    Usage: /gaps [days]
 
-**Note:** Gap analysis is currently integrated in `/sync`.
-Use `/sync` to run full sync including gap analysis with Anthropic API.
+    This analyzes email threads and detects tasks (answer/reminder needed).
+    """
+    from zylch.tools.email_sync import EmailSyncManager
+    from zylch.tools.email_archive import EmailArchiveManager
+    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.api.token_storage import get_provider, get_email, get_graph_token, get_google_tokens_dir
+    from zylch.tools.gmail import GmailClient
+    from zylch.tools.outlook import OutlookClient
 
-For instant gap overview without Anthropic calls, this feature is coming soon."""
+    # Parse days argument
+    days_back = 7  # default
+    if args:
+        try:
+            days_back = int(args[0])
+        except ValueError:
+            return f"❌ **Error:** `{args[0]}` is not a valid number\n\n**Usage:** `/gaps [days]`"
+
+    logger.info(f"[/gaps] Starting AI analysis for owner_id={owner_id}, days_back={days_back}")
+
+    try:
+        # Get user's auth provider
+        provider = get_provider(owner_id)
+        email = get_email(owner_id)
+
+        if not provider:
+            return f"❌ **Error:** No email provider connected. Use `/sync` first or connect via settings."
+
+        # Create appropriate email client based on provider
+        if provider == "microsoft.com":
+            graph_token_data = get_graph_token(owner_id)
+            if not graph_token_data:
+                return f"❌ **Error:** Microsoft Graph token not found. Please login again."
+            email_client = OutlookClient(
+                graph_token=graph_token_data["access_token"],
+                account=email
+            )
+        else:
+            # Google Gmail client
+            google_tokens_dir = get_google_tokens_dir(owner_id)
+            email_client = GmailClient(
+                credentials_path=config.google_credentials_path,
+                token_dir=str(google_tokens_dir),
+                account=email,
+                owner_id=owner_id
+            )
+
+        supabase_storage = SupabaseStorage()
+
+        # Initialize email archive with gmail client
+        archive = EmailArchiveManager(
+            gmail_client=email_client,
+            owner_id=owner_id,
+            supabase_storage=supabase_storage
+        )
+
+        # Initialize sync manager with Anthropic for AI analysis
+        email_sync = EmailSyncManager(
+            email_archive=archive,
+            cache_dir=settings.cache_dir + "/emails",
+            anthropic_api_key=settings.anthropic_api_key,
+            days_back=days_back,
+            owner_id=owner_id,
+            supabase_storage=supabase_storage
+        )
+
+        # Run AI analysis on threads
+        results = email_sync.sync_emails(days_back=days_back)
+
+        # Get task stats
+        stats = email_sync.get_stats()
+
+        lines = [f"**📊 Gap Analysis** (last {days_back} days)\n"]
+        lines.append(f"✅ **Threads analyzed:** {results.get('new_threads', 0)} new, {results.get('updated_threads', 0)} updated")
+        lines.append(f"\n**Tasks found:**")
+        lines.append(f"   • Need answer: {stats.get('need_answer', 0)}")
+        lines.append(f"   • Need reminder: {stats.get('need_reminder', 0)}")
+        lines.append(f"   • Open threads: {stats.get('open_threads', 0)}")
+        lines.append(f"   • Closed: {stats.get('closed_threads', 0)}")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        logger.error(f"Gap analysis failed: {e}", exc_info=True)
+        return f"❌ **Gap analysis failed:** {str(e)}"
 
 
 async def handle_archive(args: List[str], config: ToolConfig, owner_id: str) -> str:
@@ -1348,13 +1430,113 @@ contact, email, calendar, sync, memory
 Use `/tutorial --help` to see all topics."""
 
 
+# Command help texts - source of truth for all clients (CLI, web, mobile)
+COMMAND_HELP = {
+    '/help': {
+        'summary': 'Show available commands',
+        'usage': '/help',
+        'description': 'Lists all available slash commands.',
+    },
+    '/sync': {
+        'summary': 'Sync emails and calendar',
+        'usage': '/sync',
+        'description': '''Fetches new emails from Gmail and calendar events from Google Calendar.
+
+This only syncs data - no AI analysis. Run `/gaps` after to analyze tasks.''',
+    },
+    '/gaps': {
+        'summary': 'Analyze email threads for tasks',
+        'usage': '/gaps [days]',
+        'description': '''Analyzes email threads to detect tasks you need to act on.
+
+**Arguments:**
+- `days` - Number of days to analyze (default: 7)
+
+**Examples:**
+- `/gaps` - Analyze last 7 days
+- `/gaps 1` - Analyze last 1 day
+- `/gaps 30` - Analyze last 30 days
+
+**Task types detected:**
+- **answer** - Someone asked you a question
+- **reminder** - You promised to do something
+
+Run `/sync` first to fetch latest emails.''',
+    },
+    '/archive': {
+        'summary': 'Email archive management',
+        'usage': '/archive [--stats|--sync|--init|--search]',
+        'description': '''Manage the local email archive.
+
+**Options:**
+- `/archive` or `/archive --stats` - Show archive statistics
+- `/archive --sync` - Run incremental sync
+- `/archive --init [months]` - Initialize archive (download history)
+- `/archive --search <query> --limit N` - Search emails''',
+    },
+    '/cache': {
+        'summary': 'View cache statistics',
+        'usage': '/cache [email|calendar|gaps]',
+        'description': 'Shows statistics about cached emails, calendar events, or gap analysis.',
+    },
+    '/model': {
+        'summary': 'Switch AI model',
+        'usage': '/model [haiku|sonnet|opus]',
+        'description': 'Switch between Claude models for different speed/quality tradeoffs.',
+    },
+    '/memory': {
+        'summary': 'Manage conversation memory',
+        'usage': '/memory [--list|--clear|--export]',
+        'description': 'View, clear, or export conversation memory and preferences.',
+    },
+    '/trigger': {
+        'summary': 'Manage event triggers',
+        'usage': '/trigger [--list|--add|--remove]',
+        'description': 'Configure automated triggers for events like new emails.',
+    },
+    '/assistant': {
+        'summary': 'Configure AI assistant behavior',
+        'usage': '/assistant [--config]',
+        'description': 'Configure how the AI assistant responds and behaves.',
+    },
+    '/mrcall': {
+        'summary': 'MrCall integration',
+        'usage': '/mrcall [--status|--sync]',
+        'description': 'Manage MrCall telephony integration.',
+    },
+    '/share': {
+        'summary': 'Share access with others',
+        'usage': '/share <email>',
+        'description': 'Share your Zylch data with another user.',
+    },
+    '/revoke': {
+        'summary': 'Revoke shared access',
+        'usage': '/revoke <email>',
+        'description': 'Remove shared access from a user.',
+    },
+    '/sharing': {
+        'summary': 'View sharing settings',
+        'usage': '/sharing',
+        'description': 'List all users with shared access to your data.',
+    },
+    '/clear': {
+        'summary': 'Clear conversation history',
+        'usage': '/clear',
+        'description': 'Clears the conversation history. Note: Server is stateless, this clears client-side history.',
+    },
+    '/tutorial': {
+        'summary': 'Interactive tutorials',
+        'usage': '/tutorial [topic]',
+        'description': 'Learn how to use Zylch with interactive tutorials.',
+    },
+}
+
 # Export all handlers
 COMMAND_HANDLERS = {
     '/help': handle_help,
     '/sync': handle_sync,
     '/clear': handle_clear,
     '/gaps': handle_gaps,
-    '/briefing': handle_gaps,  # Alias
     '/archive': handle_archive,
     '/cache': handle_cache,
     '/model': handle_model,

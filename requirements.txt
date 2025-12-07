@@ -41,5 +41,8 @@ hnswlib>=0.7.0
 requests>=2.31.0
 supabase
 
+# HTML parsing
+beautifulsoup4>=4.12.0
+
 # Encryption
 cryptography>=41.0.0

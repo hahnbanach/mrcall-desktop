@@ -79,21 +79,21 @@ class EmailArchiveManager:
                 "Supported: sqlite"
             )
 
-    def initial_full_sync(self, months_back: Optional[int] = None) -> Dict[str, Any]:
+    def initial_full_sync(self, days_back: Optional[int] = None) -> Dict[str, Any]:
         """One-time initial sync to build archive.
 
         Fetches emails from Gmail and stores in archive.
 
         Args:
-            months_back: How many months of history to fetch (default from settings)
+            days_back: How many days of history to fetch (default: 30)
 
         Returns:
             Sync results with stats
         """
-        if months_back is None:
-            months_back = settings.email_archive_initial_months
+        if days_back is None:
+            days_back = settings.email_archive_initial_months * 30  # Default from settings (in months)
 
-        logger.info(f"🔄 Starting initial full sync ({months_back} months)...")
+        logger.info(f"🔄 Starting initial full sync ({days_back} days)...")
 
         # Check if already completed
         if self._use_supabase:
@@ -111,7 +111,7 @@ class EmailArchiveManager:
 
         # Calculate date range
         now = datetime.now(timezone.utc)
-        after_date = now - timedelta(days=months_back * 30)
+        after_date = now - timedelta(days=days_back)
         after_date_str = after_date.strftime('%Y/%m/%d')
 
         logger.info(f"Fetching emails after {after_date_str}")
@@ -199,7 +199,7 @@ class EmailArchiveManager:
                 'total_fetched': total_fetched,
                 'total_stored': total_stored,
                 'errors': errors,
-                'months_back': months_back,
+                'days_back': days_back,
                 'date_range': f"{after_date_str} to {now.strftime('%Y/%m/%d')}"
             }
 
@@ -235,7 +235,7 @@ class EmailArchiveManager:
         if not sync_state or not sync_state.get('history_id'):
             logger.info("No sync state found. Auto-initializing archive with 1 month of history...")
             # Auto-initialize with 1 month of history for first-time users
-            init_result = self.initial_full_sync(months_back=1)
+            init_result = self.initial_full_sync(days_back=30)
             if not init_result.get('success'):
                 return {
                     'success': False,
@@ -470,15 +470,19 @@ class EmailArchiveManager:
         Returns:
             Message in archive format
         """
-        # Parse date to timestamp
+        # Parse date to timestamp and ISO format
         date_timestamp = None
+        date_iso = None
         if gmail_msg.get('date'):
             try:
                 dt = parsedate_to_datetime(gmail_msg['date'])
                 date_timestamp = int(dt.timestamp())
+                date_iso = dt.isoformat()
             except:
                 # Fallback to current time if parsing fails
-                date_timestamp = int(datetime.now(timezone.utc).timestamp())
+                now = datetime.now(timezone.utc)
+                date_timestamp = int(now.timestamp())
+                date_iso = now.isoformat()
 
         # Extract email from "Name <email>" format
         from_email = None
@@ -502,7 +506,7 @@ class EmailArchiveManager:
             'to_emails': gmail_msg.get('to', ''),
             'cc_emails': gmail_msg.get('cc', ''),
             'subject': gmail_msg.get('subject', ''),
-            'date': gmail_msg['date'],
+            'date': date_iso,
             'date_timestamp': date_timestamp,
             'snippet': gmail_msg.get('snippet', ''),
             'body_plain': gmail_msg.get('body', ''),

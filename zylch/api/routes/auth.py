@@ -689,8 +689,9 @@ async def oauth_initiate(callback_url: str, request: Request):
                 showStatus('✓ Signed in successfully! Getting Microsoft Graph token...', 'success');
 
                 try {{
-                    // Get Firebase ID token
+                    // Get Firebase ID token and refresh token
                     const token = await user.getIdToken();
+                    const refreshToken = user.refreshToken;  // For auto-refresh on client
                     const email = user.email;
                     const uid = user.uid;
 
@@ -765,6 +766,7 @@ async def oauth_initiate(callback_url: str, request: Request):
                     // Build callback URL with token
                     const params = new URLSearchParams({{
                         token: token,
+                        refresh_token: refreshToken,
                         owner_id: uid,
                         email: email,
                         allowed: isAllowed ? 'true' : 'false'
@@ -772,7 +774,7 @@ async def oauth_initiate(callback_url: str, request: Request):
 
                     const redirectUrl = savedCallbackUrl + '?' + params.toString();
 
-                    // Redirect to CLI callback
+                    // Redirect to callback (CLI or frontend)
                     setTimeout(() => {{
                         window.location.href = redirectUrl;
                     }}, 1000);
@@ -844,6 +846,7 @@ async def oauth_initiate(callback_url: str, request: Request):
                     showStatus('Signing in to Firebase...', 'loading');
                     const userCredential = await auth.signInWithCustomToken(data.firebase_token);
                     const firebaseToken = await userCredential.user.getIdToken();
+                    const firebaseRefreshToken = userCredential.user.refreshToken;
 
                     console.log('Signed in to Firebase successfully');
 
@@ -852,9 +855,10 @@ async def oauth_initiate(callback_url: str, request: Request):
                     const allowlistData = await checkResponse.json();
                     const isAllowed = allowlistData.allowed;
 
-                    // Redirect to CLI callback
+                    // Redirect to callback (CLI or frontend)
                     const params = new URLSearchParams({{
                         token: firebaseToken,
+                        refresh_token: firebaseRefreshToken,
                         owner_id: data.owner_id,
                         email: data.email,
                         allowed: isAllowed ? 'true' : 'false'

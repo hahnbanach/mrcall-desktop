@@ -91,21 +91,20 @@ class SyncService:
     async def sync_emails(self, days_back: Optional[int] = None, force_full: bool = False) -> Dict[str, Any]:
         """Sync emails (provider-agnostic: Gmail or Outlook).
 
-        This method:
-        1. Runs incremental archive sync (fetches new emails from provider)
-        2. Builds intelligence cache from archive
+        This method ONLY fetches emails from provider into archive.
+        AI analysis is done separately via /gaps command.
 
         NOTE: Currently only Gmail is supported for email archiving.
         Outlook email sync will be added in a future update.
 
         Args:
-            days_back: Number of days to sync for intelligence cache (default: 30)
-            force_full: Force full cache rebuild ignoring existing cache
+            days_back: Unused (kept for API compatibility)
+            force_full: Unused (kept for API compatibility)
 
         Returns:
             Sync results with stats
         """
-        logger.info(f"Starting email sync (days_back={days_back}, force_full={force_full})")
+        logger.info(f"[email_sync] Starting archive sync")
 
         # Check email client type
         email_client = await self._ensure_email_client()
@@ -113,17 +112,16 @@ class SyncService:
 
         if isinstance(email_client, OutlookClient):
             # Outlook email archiving not yet implemented
-            logger.info("⏭️  Skipping email sync (Outlook archiving not yet implemented)")
+            logger.info("[email_sync] Skipping - Outlook archiving not yet implemented")
             return {
                 "success": True,
                 "skipped": True,
                 "reason": "Outlook email archiving not yet implemented",
-                "new_threads": 0,
-                "updated_threads": 0
+                "new_messages": 0,
+                "deleted_messages": 0
             }
 
-        # Gmail email sync
-        # Step 1: Ensure archive is synced
+        # Gmail email sync - ONLY archive, no AI analysis
         archive = await self._ensure_email_archive()
         archive_result = archive.incremental_sync()
 
@@ -135,33 +133,15 @@ class SyncService:
             }
 
         logger.info(
-            f"Archive sync: +{archive_result['messages_added']} "
-            f"-{archive_result['messages_deleted']}"
+            f"[email_sync] Complete: +{archive_result['messages_added']} "
+            f"-{archive_result['messages_deleted']} messages"
         )
 
-        # Step 2: Build intelligence cache from archive
-        email_sync = EmailSyncManager(
-            email_archive=archive,
-            cache_dir=settings.cache_dir + "/emails",
-            anthropic_api_key=self.anthropic_api_key,
-            days_back=days_back or 30,
-            owner_id=self.owner_id,
-            supabase_storage=self.supabase
-        )
-
-        results = email_sync.sync_emails(force_full=force_full, days_back=days_back)
-        logger.info(
-            f"Email sync complete: {results.get('new_threads', 0)} new, "
-            f"{results.get('updated_threads', 0)} updated"
-        )
-
-        # Add archive sync results to return value
-        results['archive_sync'] = {
-            "messages_added": archive_result['messages_added'],
-            "messages_deleted": archive_result['messages_deleted']
+        return {
+            "success": True,
+            "new_messages": archive_result['messages_added'],
+            "deleted_messages": archive_result['messages_deleted']
         }
-
-        return results
 
     def sync_calendar(self) -> Dict[str, Any]:
         """Sync calendar events from Google Calendar.
@@ -169,12 +149,12 @@ class SyncService:
         Returns:
             Sync results with stats
         """
-        logger.info("Starting calendar sync")
+        logger.info("[calendar_sync] Starting")
 
         # Skip calendar sync if no calendar client provided
         # (e.g., Microsoft users - calendar sync not yet implemented)
         if not self.calendar_client:
-            logger.info("⏭️  Skipping calendar sync (no calendar client provided)")
+            logger.info("[calendar_sync] Skipping - no calendar client provided")
             return {
                 "success": True,
                 "new_events": 0,
@@ -197,7 +177,7 @@ class SyncService:
         )
 
         results = calendar_sync.sync_events()
-        logger.info(f"Calendar sync complete: {results.get('new_events', 0)} new, {results.get('updated_events', 0)} updated")
+        logger.info(f"[calendar_sync] Complete: {results.get('new_events', 0)} new, {results.get('updated_events', 0)} updated events")
 
         return results
 
@@ -211,7 +191,7 @@ class SyncService:
         Returns:
             Combined sync results
         """
-        logger.info(f"Starting full sync workflow (days_back={days_back}, skip_gap_analysis={skip_gap_analysis})")
+        logger.info(f"[full_sync] Starting (days_back={days_back}, skip_gap_analysis={skip_gap_analysis})")
 
         results = {
             "email_sync": {"success": False, "error": "Not started"},
@@ -255,7 +235,7 @@ class SyncService:
 
         # Run gap analysis (unless skipped)
         if skip_gap_analysis:
-            logger.info("⏭️  Skipping gap analysis (skip_gap_analysis=True)")
+            logger.info("[full_sync] Skipping gap analysis (skip_gap_analysis=True)")
             results["gap_analysis"] = {
                 "success": True,
                 "total_tasks": 0,
@@ -268,7 +248,7 @@ class SyncService:
             try:
                 from zylch.services.gap_service import GapService
 
-                logger.info("Starting gap analysis")
+                logger.info("[gap_analysis] Starting")
                 gap_service = GapService(
                     owner_id=self.owner_id,
                     supabase_storage=self.supabase
@@ -289,7 +269,7 @@ class SyncService:
                     "silent_contacts": silent_contacts_count,
                     "analyzed_at": gap_result.get('analyzed_at')
                 }
-                logger.info(f"Gap analysis complete: {total_tasks} tasks found")
+                logger.info(f"[gap_analysis] Complete: {total_tasks} tasks found")
             except Exception as e:
                 logger.error(f"Gap analysis failed: {e}")
                 results["gap_analysis"] = {

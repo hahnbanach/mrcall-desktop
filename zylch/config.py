@@ -18,6 +18,12 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Logging
+    log_level: str = Field(
+        default="INFO",
+        description="Log level: DEBUG, INFO, WARNING, ERROR"
+    )
+
     # Anthropic
     anthropic_api_key: str = Field(default="", description="Anthropic API key")
     default_model: str = Field(

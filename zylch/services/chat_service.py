@@ -42,8 +42,8 @@ class ChatService:
         # Create tool configuration from settings
         config = ToolConfig.from_settings()
 
-        # Create all tools using factory
-        tools = await ToolFactory.create_all_tools(config, current_business_id=None)
+        # Create all tools using factory (returns tuple: tools, session_state, persona_analyzer)
+        tools, session_state, persona_analyzer = await ToolFactory.create_all_tools(config, current_business_id=None)
         logger.info(f"Created {len(tools)} tools")
 
         # Create memory system
@@ -59,6 +59,7 @@ class ChatService:
             model_selector=model_selector,
             email_style_prompt=config.email_style_prompt,
             memory_system=memory,
+            persona_analyzer=persona_analyzer,
         )
 
         self._initialized = True
@@ -99,12 +100,28 @@ class ChatService:
         try:
             # INTERCEPT SLASH COMMANDS - NEVER SEND TO ANTHROPIC
             if user_message.strip().startswith('/'):
-                from zylch.services.command_handlers import COMMAND_HANDLERS
+                from zylch.services.command_handlers import COMMAND_HANDLERS, COMMAND_HELP
 
                 parts = user_message.strip().split()
                 cmd = parts[0].lower()
                 args = parts[1:] if len(parts) > 1 else []
                 execution_time_ms = (time.time() - start_time) * 1000
+
+                # Check --help first (before dispatching to handler)
+                if '--help' in args and cmd in COMMAND_HELP:
+                    help_info = COMMAND_HELP[cmd]
+                    response_text = f"**{help_info['summary']}**\n\n**Usage:** `{help_info['usage']}`\n\n{help_info['description']}"
+                    return {
+                        "response": response_text,
+                        "tool_calls": [],
+                        "metadata": {
+                            "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                            "command": cmd,
+                            "help": True,
+                            "instant": True
+                        },
+                        "session_id": session_id
+                    }
 
                 # Check if command is implemented
                 if cmd in COMMAND_HANDLERS:
@@ -116,8 +133,8 @@ class ChatService:
                     logger.info(f"Command {cmd}: owner_id={owner_id}, user_email={user_email}, context={context}")
 
                     # Call handler based on required parameters
-                    if cmd == '/sync':
-                        # /sync needs config, memory, and owner_id
+                    if cmd in ['/sync', '/gaps']:
+                        # These need config, memory, and owner_id
                         config = ToolConfig.from_settings()
                         memory = await ToolFactory.create_memory_system(config)
                         response_text = await handler(args, config, memory, owner_id)
@@ -128,7 +145,7 @@ class ChatService:
                     elif cmd in ['/trigger', '/mrcall', '/share', '/revoke', '/sharing']:
                         # These need args, owner_id, and optionally email
                         response_text = await handler(args, owner_id, user_email)
-                    elif cmd in ['/cache', '/model', '/tutorial', '/gaps', '/help', '/clear', '/briefing']:
+                    elif cmd in ['/cache', '/model', '/tutorial', '/help', '/clear']:
                         # These only need args (or nothing)
                         response_text = await handler(args) if args else await handler()
                     else:
