@@ -8,6 +8,37 @@ Triggered Instructions are event-driven automation rules that execute when speci
 - **Triggered Instructions** (`/trigger`): "Do X **when** Y happens" (event-driven)
 - **Behavioral Memory** (`/memory`): "**Always** do X" (always-on)
 
+## Architecture
+
+Triggered instructions are stored in **Supabase** and processed by the backend. This allows:
+- Multi-client access (CLI, web app, mobile)
+- Persistent storage across sessions
+- Background processing via trigger service worker
+
+### Storage
+
+| Component | Details |
+|-----------|---------|
+| **Database** | Supabase PostgreSQL |
+| **Table** | `triggers` |
+| **Isolation** | Per `owner_id` (multi-tenant) |
+
+### Data Model
+
+```sql
+CREATE TABLE triggers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    owner_id TEXT NOT NULL,
+    trigger_type TEXT NOT NULL,
+    instruction TEXT NOT NULL,
+    active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_triggers_owner ON triggers(owner_id);
+CREATE INDEX idx_triggers_type ON triggers(owner_id, trigger_type);
+```
+
 ## Trigger Types
 
 ### 1. session_start
@@ -19,7 +50,7 @@ Executes when a new CLI or API session starts.
 - "Check for urgent emails and summarize"
 
 ### 2. email_received
-Executes when a new email arrives.
+Executes when a new email arrives (via sync or webhook).
 
 **Examples:**
 - "When a new email arrives from unknown sender, create a contact"
@@ -27,363 +58,179 @@ Executes when a new email arrives.
 - "Auto-categorize newsletters"
 
 ### 3. sms_received
-Executes when a new SMS arrives.
+Executes when a new SMS arrives (via MrCall integration).
 
 **Examples:**
 - "Log all SMS in calendar"
 - "Alert for messages from family"
 
 ### 4. call_received
-Executes when a new phone call is received.
+Executes when a new phone call is received (via MrCall integration).
 
 **Examples:**
 - "Send follow-up email after sales calls"
 - "Log call duration in CRM"
+- "Summarize call and email transcript"
 
 ## CLI Commands
 
-### Basic Commands
-
+### Help
 ```bash
-# Show help
 /trigger --help
-
-# List all triggered instructions
-/trigger --list
-
-# Show available trigger types
-/trigger --types
-
-# Add new triggered instruction (interactive)
-/trigger --add
-
-# Remove a triggered instruction
-/trigger --remove trigger_abc123
 ```
 
-### Validation Mode (--check flag)
-
-Validate commands without executing them:
-
+### List Triggers
 ```bash
-# Validate new instruction without saving
-/trigger --add --check
-
-# Validate removal without removing
-/trigger --remove trigger_abc123 --check
-```
-
-**Example Interactive Session:**
-```
-$ /trigger --add --check
-
-=== 🔍 Validate Triggered Instruction (Check Mode) ===
-
-Available trigger types:
-  1. session_start    - When a new session starts
-  2. email_received   - When a new email arrives
-  3. sms_received     - When a new SMS arrives
-  4. call_received    - When a new call is received
-
-Select trigger type (1-4): 1
-Enter instruction: Greet me at the start of every session
-Enter name (optional): Morning greeting
-
-✅ Validation Result:
-  This instruction is valid for session_start trigger.
-  It will execute when a new CLI or API session starts.
-
-  Preview:
-    trigger: session_start
-    instruction: Greet me at the start of every session
-    will_execute_on: When a new CLI or API session starts
-    example_scenario: You open Zylch CLI → instruction executes
-```
-
-## Storage & Data Structure
-
-### Storage Location
-- **System**: ZylchMemory with semantic search
-- **Namespace**: `{owner_id}:{zylch_assistant_id}:triggers`
-- **Category**: `trigger`
-- **Format**: JSON stored in pattern field
-
-### Data Structure
-
-```json
-{
-  "id": "trigger_abc123",
-  "instruction": "Greet me when session starts",
-  "trigger": "session_start",
-  "name": "Morning greeting",
-  "created_at": "2024-01-15T10:30:00",
-  "active": true,
-  "namespace": "user123:zylch_main:triggers",
-  "will_execute_on": "When a new CLI or API session starts",
-  "example_scenario": "You open Zylch CLI → instruction executes"
-}
-```
-
-### Fields
-
-- **id**: Unique identifier (format: `trigger_xxxxxxxx`)
-- **instruction**: What Zylch should do when trigger fires
-- **trigger**: Event type (session_start, email_received, etc.)
-- **name**: Short descriptive name (optional, defaults to first 50 chars of instruction)
-- **created_at**: ISO timestamp of creation
-- **active**: Boolean (true = active, false = deactivated)
-- **namespace**: User/assistant namespace for isolation
-- **will_execute_on**: Human-readable event description
-- **example_scenario**: Example of when it executes
-
-## Execution Flow
-
-### Session Start Triggers
-
-1. **Loading at CLI Initialization** (`cli/main.py:213-224`)
-   ```python
-   all_triggers_data = await load_triggered_instructions(
-       zylch_memory=self.memory,
-       owner_id=self.owner_id,
-       zylch_assistant_id=self.zylch_assistant_id,
-       trigger_filter=None  # Get all triggers
-   )
-   triggered_instructions = [t["instruction"] for t in all_triggers_data]
-   ```
-
-2. **Prompt Injection**
-   - Instructions injected into system prompt
-   - Claude executes them automatically on first interaction
-
-3. **Example Flow**
-   ```
-   User opens CLI → Triggers loaded → Instructions in prompt →
-   User sends first message → Claude executes session_start triggers →
-   Claude greets with date/time/priorities
-   ```
-
-### Email/SMS/Call Triggers (Future Implementation)
-
-**Planned Flow:**
-1. Event occurs (email/SMS/call received via API webhook)
-2. System loads triggers with filter: `trigger_filter="email_received"`
-3. For each matching trigger:
-   - Extract instruction
-   - Build context (sender, subject, body, etc.)
-   - Execute via agent with context
-4. Agent performs action (create contact, send reply, log event)
-
-## Lifecycle Management
-
-### Create
-```bash
-/trigger --add
-> Select trigger type: session_start
-> Instruction: Greet me when session starts
-> Name: Morning greeting
-```
-
-**What happens:**
-1. Tool validates required parameters (instruction + trigger)
-2. Generates unique trigger_id: `trigger_abc123`
-3. Stores in ZylchMemory with `active=True`
-4. Loads on next session (session_start) or event (others)
-
-### List
-```bash
+/trigger
+# or
 /trigger --list
 ```
 
 **Output:**
 ```
-=== 🎯 Triggered Instructions (2) ===
+**Your Triggers** (2 total)
 
-ID: trigger_abc123
-   Name: Morning greeting
-   Trigger: session_start
-   Instruction: Greet me at the start of every session...
+ **session_start** (ID: `abc12345`)
+   Say good morning and list my meetings...
 
-ID: trigger_def456
-   Name: Auto-create contacts
-   Trigger: email_received
-   Instruction: When email from unknown sender, create contact...
+ **email_received** (ID: `def67890`)
+   Summarize important emails from unknow...
+
+**Commands:** `/trigger --remove <id>` | `/trigger --toggle <id>`
 ```
 
-### Deactivate
+### Show Trigger Types
 ```bash
-/trigger --remove trigger_abc123
+/trigger --types
 ```
 
-**What happens:**
-1. Tool finds trigger by ID
-2. Sets `active=False` (not deleted!)
-3. Adds `deactivated_at` timestamp
-4. Trigger no longer loads or executes
-5. Still retrievable for audit
+### Add Trigger
+```bash
+/trigger --add <type> <instruction>
+```
 
-**Why deactivate vs delete?**
-- Audit trail preservation
-- Undo capability (can reactivate manually)
-- Historical analysis
+**Examples:**
+```bash
+/trigger --add session_start "Say good morning and list my meetings for today"
+/trigger --add email_received "Summarize important emails from unknown senders"
+/trigger --add call_received "Send a follow-up email summarizing the call"
+```
+
+### Remove Trigger
+```bash
+/trigger --remove <id>
+```
+
+The ID is the first 8 characters shown in `/trigger --list`.
+
+### Toggle Trigger
+```bash
+/trigger --toggle <id>
+```
+
+Enables/disables a trigger without deleting it.
+
+## Execution Flow
+
+### Session Start Triggers
+
+1. User starts a new session (CLI or web app)
+2. Chat service loads active `session_start` triggers for `owner_id`
+3. Trigger instructions are injected into the system prompt
+4. Claude executes them on first interaction
+
+### Event-Based Triggers (email/sms/call)
+
+1. Event occurs (webhook or sync detects new item)
+2. System queues a trigger event in `trigger_events` table
+3. Trigger service worker picks up pending events
+4. For each matching trigger:
+   - Builds context message with event data
+   - Executes via AI agent
+   - Marks event as completed/failed
+5. Results logged for audit
+
+### Trigger Event Queue
+
+```sql
+CREATE TABLE trigger_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    owner_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    event_data JSONB NOT NULL,
+    status TEXT DEFAULT 'pending',  -- pending, processing, completed, failed
+    error_message TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    processed_at TIMESTAMPTZ
+);
+```
 
 ## Implementation Files
 
-### Tools (`zylch/tools/instruction_tools.py`)
+### Backend Services
 
-**AddTriggeredInstructionTool** (lines 24-173)
-- `execute(validation_only, instruction, trigger, name)`
-- Validates required parameters
-- Returns preview in validation_only mode
-- Saves to ZylchMemory in execution mode
-- Helpers: `_get_trigger_description()`, `_get_example_scenario()`
+| File | Purpose |
+|------|---------|
+| `zylch/services/command_handlers.py` | `/trigger` command handler |
+| `zylch/services/trigger_service.py` | Background trigger processor |
+| `zylch/storage/supabase_client.py` | Database operations |
 
-**ListTriggeredInstructionsTool** (lines 175-241)
-- `execute()` - no parameters
-- Retrieves all active triggers from memory
-- Filters out deactivated triggers (`active=False`)
+### Key Functions
 
-**RemoveTriggeredInstructionTool** (lines 244-367)
-- `execute(validation_only, trigger_id)`
-- Finds trigger by ID in memory
-- Returns preview in validation_only mode
-- Deactivates in execution mode
+**Command Handler** (`command_handlers.py`):
+- `handle_trigger(args, owner_id, user_email)` - Routes trigger commands
 
-**load_triggered_instructions()** (lines 370-424)
-- Helper function for loading triggers
-- Optional `trigger_filter` parameter
-- Used by CLI and chat service
+**Trigger Service** (`trigger_service.py`):
+- `TriggerService.queue_event(owner_id, event_type, event_data)` - Queue trigger event
+- `TriggerService.process_pending_events(limit)` - Process queued events
+- `TriggerService._execute_with_agent(context)` - Execute trigger via AI
+- `TriggerService._build_context_message(event_type, event_data, instruction)` - Build prompt
 
-### CLI Integration (`zylch/cli/main.py`)
+**Storage** (`supabase_client.py`):
+- `list_triggers(owner_id)` - Get user's triggers
+- `add_trigger(owner_id, trigger_type, instruction)` - Create trigger
+- `remove_trigger(owner_id, trigger_id)` - Delete trigger
+- `toggle_trigger(owner_id, trigger_id)` - Enable/disable
+- `get_triggers_by_type(owner_id, trigger_type)` - Get triggers for event
+- `queue_trigger_event(owner_id, event_type, event_data)` - Queue event
+- `get_pending_events(limit)` - Get pending events
+- `mark_event_processing(event_id)` - Lock event
+- `mark_event_completed(event_id, result)` - Mark success
+- `mark_event_failed(event_id, error)` - Mark failure
 
-**Handler** (lines 540-627)
-- `_handle_trigger_command()`: Parse flags and route
-- Flag parsing with shlex
-- Routing to appropriate sub-handler
+## Integration Points
 
-**Sub-handlers**
-- `_trigger_add_interactive()` (lines 724-772): Interactive add
-- `_trigger_list()` (lines 703-723): Display list
-- `_trigger_remove()` (lines 774-783): Remove by ID
-- `_trigger_check_add()` (lines 785-853): Validation mode for add
-- `_trigger_check_remove()` (lines 855-886): Validation mode for remove
-- `_print_trigger_help()` (lines 679-701): Help text
-
-**Initialization** (lines 213-224)
-- Load triggers at startup
-- Extract instructions for prompt injection
-
-### Tutorial (`zylch/tutorial/steps/triggers_demo.py`)
-
-Educational step explaining:
-- What are triggered instructions
-- Available trigger types
-- Examples for each type
-- Difference from behavioral memory
-- Managing commands
-
-## Semantic Validation
-
-### Detecting Misuse
-
-The validation system (with `--check` flag) detects semantic issues:
-
-**❌ WRONG: Always-on behavior in /trigger**
-```bash
-/trigger --add
-> Instruction: "always use formal tone"
-
-❌ Semantic issue: No event trigger detected
-💡 Suggestion: Use /memory --add "always use formal tone" instead
-```
-
-**❌ WRONG: Event-driven behavior in /memory**
-```bash
-/memory --add "when email arrives, alert me"
-
-❌ Semantic issue: Event trigger detected
-💡 Suggestion: Use /trigger --add instead
-```
-
-**✅ CORRECT: Event-driven in /trigger**
-```bash
-/trigger --add
-> Trigger: session_start
-> Instruction: "greet me when session starts"
-
-✅ Valid: Has event trigger (session_start)
-```
-
-### Keyword Detection
-
-**Trigger Keywords** (event-driven):
-- when, if, after, before, on, whenever
-- arrives, starts, ends, happens, occurs
-
-**Memory Keywords** (always-on):
-- always, never, all, every (without event context)
-- prefer, avoid, use, don't use
-
-## API Usage (Future)
-
-### REST Endpoints (Planned)
-
-```bash
-# Create triggered instruction
-POST /api/v1/triggers
-{
-  "instruction": "Greet me when session starts",
-  "trigger": "session_start",
-  "name": "Morning greeting"
-}
-
-# List triggered instructions
-GET /api/v1/triggers
-
-# Get specific trigger
-GET /api/v1/triggers/trigger_abc123
-
-# Update trigger
-PATCH /api/v1/triggers/trigger_abc123
-{
-  "active": false
-}
-
-# Delete (deactivate) trigger
-DELETE /api/v1/triggers/trigger_abc123
-
-# Validate before creating
-POST /api/v1/triggers/validate
-{
-  "instruction": "always use formal tone",
-  "trigger": "session_start"
-}
-# Returns: { "valid": false, "issues": [...], "suggestion": "..." }
-```
-
-### Programmatic Usage
+### Email Sync
+When `/sync` detects new emails, it can queue `email_received` events:
 
 ```python
-from zylch.tools.instruction_tools import AddTriggeredInstructionTool, load_triggered_instructions
+from zylch.services.trigger_service import queue_trigger_event
 
-# Add trigger
-tool = AddTriggeredInstructionTool(
-    zylch_memory=memory,
-    owner_id="user123",
-    zylch_assistant_id="zylch_main"
+# After syncing new email
+await queue_trigger_event(
+    owner_id=owner_id,
+    event_type='email_received',
+    event_data={
+        'from': sender_email,
+        'subject': email_subject,
+        'snippet': email_snippet[:500]
+    }
 )
+```
 
-result = await tool.execute(
-    instruction="Greet me when session starts",
-    trigger="session_start",
-    name="Morning greeting"
-)
+### MrCall Webhooks
+When MrCall sends webhook for SMS/call:
 
-# Load triggers
-triggers = await load_triggered_instructions(
-    zylch_memory=memory,
-    owner_id="user123",
-    zylch_assistant_id="zylch_main",
-    trigger_filter="session_start"  # Optional filter
+```python
+# In webhook handler
+await queue_trigger_event(
+    owner_id=owner_id,
+    event_type='call_received',
+    event_data={
+        'caller': caller_phone,
+        'duration_seconds': call_duration,
+        'transcript': call_transcript
+    }
 )
 ```
 
@@ -391,45 +238,44 @@ triggers = await load_triggered_instructions(
 
 ### When to Use Triggered Instructions
 
-**✅ Use /trigger for:**
+** Use /trigger for:**
 - Event-driven automation: "Do X when Y happens"
 - One-time actions on events: "Create contact when email arrives"
 - Time-based greetings: "Greet me at session start"
 - Automated workflows: "Send follow-up after calls"
 
-**❌ Don't use /trigger for:**
-- Always-on behavior: "Always use formal tone" → Use /memory
-- Continuous preferences: "Prefer short emails" → Use /memory
-- Global settings: "Never mention competitors" → Use /memory
+** Don't use /trigger for:**
+- Always-on behavior: "Always use formal tone"  Use /memory
+- Continuous preferences: "Prefer short emails"  Use /memory
+- Global settings: "Never mention competitors"  Use /memory
 
 ### Writing Good Instructions
 
 **Clear and Specific:**
 ```
-✅ "Greet me at the start of every session with today's date"
-❌ "Say hi sometimes"
+ "Greet me at the start of every session with today's date"
+ "Say hi sometimes"
 ```
 
 **Include Context:**
 ```
-✅ "When email arrives from unknown sender, create a contact with their email and name"
-❌ "Make contacts"
+ "When email arrives from unknown sender, create a contact with their email and name"
+ "Make contacts"
 ```
 
 **Action-Oriented:**
 ```
-✅ "Check for urgent emails and summarize them"
-❌ "Emails are important"
+ "Check for urgent emails and summarize them"
+ "Emails are important"
 ```
 
-### Naming Triggers
+### Naming Patterns
 
+Keep instructions concise but descriptive:
 ```
-✅ "Morning greeting"
-✅ "Auto-create contacts"
-✅ "VIP email alerts"
-❌ "trigger1"
-❌ "test"
+ "Say good morning and list today's meetings"
+ "Check urgent emails from VIPs and alert me"
+ "After sales calls, draft a follow-up email"
 ```
 
 ## Troubleshooting
@@ -438,58 +284,79 @@ triggers = await load_triggered_instructions(
 
 **For session_start:**
 1. Check trigger is active: `/trigger --list`
-2. Restart CLI to reload triggers
-3. Check logs for loading confirmation
+2. Start a new session (triggers only fire once per session)
+3. Check backend logs for loading confirmation
 
-**For email_received (future):**
-1. Verify webhook is configured
-2. Check email integration is active
-3. Review logs for event reception
+**For email_received:**
+1. Verify trigger is active: `/trigger --list`
+2. Run `/sync` to trigger email processing
+3. Check that webhooks are configured (for real-time)
 
-### Wrong Command Type
-
-If you get semantic validation errors:
-- "Always" behavior → Use `/memory` instead
-- No event context → Use `/memory` instead
-- Event-driven → Correct, use `/trigger`
+**For sms_received / call_received:**
+1. Verify MrCall integration is linked: `/mrcall`
+2. Check webhook endpoint is accessible
+3. Review trigger service logs
 
 ### Finding Trigger IDs
 
 ```bash
-# List shows all IDs
+# List shows all IDs (first 8 chars)
 /trigger --list
 
-# IDs format: trigger_xxxxxxxx
-# Copy ID from list output for --remove command
+# IDs format: abc12345 (full UUID in database)
+# Use the displayed ID for --remove or --toggle
+```
+
+### Debugging Trigger Events
+
+Check the `trigger_events` table in Supabase for:
+- `status = 'pending'` - Events waiting to be processed
+- `status = 'failed'` - Events that failed with `error_message`
+- `status = 'completed'` - Successfully processed events
+
+## API Endpoints (Future)
+
+REST endpoints for programmatic access:
+
+```bash
+# List triggers
+GET /api/triggers
+
+# Create trigger
+POST /api/triggers
+{
+  "trigger_type": "session_start",
+  "instruction": "Say good morning"
+}
+
+# Delete trigger
+DELETE /api/triggers/{id}
+
+# Toggle trigger
+PATCH /api/triggers/{id}
+{
+  "active": false
+}
 ```
 
 ## Migration Notes
 
-### Renaming from "Standing Instructions"
+### From Old CLI to Backend
 
-This system was originally called "Standing Instructions" but was renamed to "Triggered Instructions" for clarity.
+The trigger system was migrated from the monolithic CLI (`zylch/cli/main.py`) to backend services. Key changes:
 
-**If you see old references:**
-- "Standing instructions" = Triggered instructions
-- Same functionality, just renamed
-- Old comments may still use old name
+| Old (CLI) | New (Backend) |
+|-----------|---------------|
+| ZylchMemory storage | Supabase PostgreSQL |
+| Local execution | Backend trigger service |
+| Single client | Multi-client support |
+| Sync processing | Async event queue |
 
-### ChatService Integration Bug (Fixed)
+### Behavioral Memory Separation
 
-**Issue:** When integrating triggered instructions into chat service, there was a tuple unpacking bug.
+Triggered instructions are separate from behavioral memory (`/memory`):
 
-**Error:** `AttributeError: 'list' object has no attribute 'name'`
+- `/trigger` = Event-driven, fires once per event
+- `/memory` = Always-on, affects all interactions
 
-**Cause:**
-```python
-# Wrong
-tools = await ToolFactory.create_all_tools(...)
-```
-
-**Fix:**
-```python
-# Correct
-tools, session_state, persona_analyzer = await ToolFactory.create_all_tools(...)
-```
-
-This has been fixed in the codebase.
+If you previously stored event-driven rules in `/memory`, migrate them to `/trigger` for proper execution.

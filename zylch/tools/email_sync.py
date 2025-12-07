@@ -414,75 +414,75 @@ class EmailSyncManager:
         from_addr = last_message.get('from', '')
         subject = last_message.get('subject', '')
 
-        prompt = f"""Sei un assistente che analizza conversazioni email per determinare se Mario deve creare un TASK.
+        prompt = f"""You are an assistant that analyzes email conversations to determine if the user needs to create a TASK.
 
-CONTESTO:
-Oggetto: {subject}
-Da: {from_addr}
-Numero messaggi nella conversazione: {len(all_messages)}
+CONTEXT:
+Subject: {subject}
+From: {from_addr}
+Number of messages in conversation: {len(all_messages)}
 
-ULTIMO MESSAGGIO RICEVUTO:
+LAST MESSAGE RECEIVED:
 {body}
 
-LA DOMANDA È UNA SOLA:
-C'È BISOGNO DI CREARE UN TASK PER MARIO?
+THE QUESTION IS SIMPLE:
+DOES THE USER NEED TO CREATE A TASK?
 
-Un TASK serve quando Mario deve fare QUALSIASI COSA:
-- Rispondere a una domanda
-- Inviare documenti/informazioni
-- Mantenere una promessa fatta ("ti mando il pptx entro stasera")
-- Fare un'azione che ha detto di fare ("vedo se riusciamo a trovare un workaround")
-- Sistemare qualcosa che ha promesso di sistemare ("questo possiamo farlo subito")
+A TASK is needed when the user must do ANYTHING:
+- Reply to a question
+- Send documents/information
+- Keep a promise made ("I'll send you the pptx by tonight")
+- Do an action they said they'd do ("I'll see if we can find a workaround")
+- Fix something they promised to fix ("we can do this right away")
 
-REGOLE DI CLASSIFICAZIONE:
+CLASSIFICATION RULES:
 
-1. "answer" - Mario deve rispondere perché:
-   - Qualcuno gli ha fatto una domanda
-   - Qualcuno gli ha chiesto informazioni, documenti, feedback
-   - Qualcuno aspetta una sua conferma o decisione
-   - C'è una proposta di meeting/collaborazione in sospeso
+1. "answer" - User needs to reply because:
+   - Someone asked them a question
+   - Someone requested information, documents, feedback
+   - Someone is waiting for their confirmation or decision
+   - There's a pending meeting/collaboration proposal
 
-2. "reminder" - Mario deve fare qualcosa che ha promesso:
-   - Ha detto "ti mando X entro Y" e non l'ha ancora mandato
-   - Ha detto "vedo di fare X" e non l'ha ancora fatto
-   - Ha promesso "lo sistemiamo subito" e non l'ha sistemato
-   - Sta aspettando risposta a una sua domanda (promemoria per ricontattare)
+2. "reminder" - User needs to do something they promised:
+   - They said "I'll send you X by Y" and haven't sent it yet
+   - They said "I'll try to do X" and haven't done it yet
+   - They promised "we'll fix this right away" and haven't fixed it
+   - They're waiting for a reply to their question (reminder to follow up)
 
-3. null - Nessun task necessario:
-   - Conversazione conclusa senza azioni pendenti
-   - Notifica automatica che non richiede risposta
-   - Scambio di cortesie concluso
+3. null - No task needed:
+   - Conversation concluded without pending actions
+   - Automated notification that doesn't require a response
+   - Exchange of courtesies concluded
 
-ESEMPI PRATICI:
+PRACTICAL EXAMPLES:
 
-Esempio 1:
-Cliente: "Puoi mandarmi il preventivo?"
-→ {{"summary": "Cliente chiede preventivo", "open": true, "expected_action": "answer"}}
-TASK: Rispondere con preventivo
+Example 1:
+Client: "Can you send me the quote?"
+→ {{"summary": "Client requesting quote", "open": true, "expected_action": "answer"}}
+TASK: Reply with quote
 
-Esempio 2:
-Mario: "Ti mando il pptx entro stasera"
-Cliente: "Perfetto, grazie!"
-→ {{"summary": "Mario ha promesso pptx entro stasera, non ancora inviato", "open": true, "expected_action": "reminder"}}
-TASK: Inviare il pptx promesso
+Example 2:
+User: "I'll send you the pptx by tonight"
+Client: "Perfect, thanks!"
+→ {{"summary": "User promised pptx by tonight, not yet sent", "open": true, "expected_action": "reminder"}}
+TASK: Send the promised pptx
 
-Esempio 3:
-Mario: "Vedo se riusciamo a trovare qualche workaround"
-[Passata una settimana, nessuna risposta]
-→ {{"summary": "Mario deve trovare workaround promesso", "open": true, "expected_action": "reminder"}}
-TASK: Trovare workaround e rispondere
+Example 3:
+User: "I'll see if we can find some workaround"
+[A week passed, no response]
+→ {{"summary": "User needs to find promised workaround", "open": true, "expected_action": "reminder"}}
+TASK: Find workaround and respond
 
-Esempio 4:
-Cliente: "Preferireste che non chieda subito nome e cognome"
-Mario: "Questo possiamo farlo subito :-)"
-[Non ha mai risposto]
-→ {{"summary": "Mario deve sistemare assistente per non chiedere nome e cognome", "open": true, "expected_action": "reminder"}}
-TASK: Sistemare configurazione assistente
+Example 4:
+Client: "Would you prefer not to ask for first and last name right away"
+User: "We can do this right away :-)"
+[Never responded]
+→ {{"summary": "User needs to fix assistant to not ask for name", "open": true, "expected_action": "reminder"}}
+TASK: Fix assistant configuration
 
-Esempio 5:
-Notifica automatica: "Il tuo abbonamento è stato rinnovato"
-→ {{"summary": "Notifica rinnovo abbonamento", "open": false, "expected_action": null}}
-NESSUN TASK necessario
+Example 5:
+Automated notification: "Your subscription has been renewed"
+→ {{"summary": "Subscription renewal notification", "open": false, "expected_action": null}}
+NO TASK needed
 
 CRITICAL INSTRUCTIONS:
 - YOUR RESPONSE MUST BE VALID JSON ONLY
@@ -490,12 +490,12 @@ CRITICAL INSTRUCTIONS:
 - THE RESPONSE MUST START WITH {{ AND END WITH }}
 - NO TEXT BEFORE OR AFTER THE JSON
 
-SE C'È QUALCOSA DA FARE → open: true, expected_action: "answer" o "reminder"
-SE NON C'È NIENTE DA FARE → open: false, expected_action: null
+IF THERE'S SOMETHING TO DO → open: true, expected_action: "answer" or "reminder"
+IF THERE'S NOTHING TO DO → open: false, expected_action: null
 
-Rispondi ESATTAMENTE in questo formato:
+Respond EXACTLY in this format:
 {{
-  "summary": "riassunto breve in italiano (1-2 frasi, spiega cosa Mario deve fare)",
+  "summary": "brief summary in English (1-2 sentences, explain what user needs to do)",
   "open": true,
   "expected_action": "answer"
 }}

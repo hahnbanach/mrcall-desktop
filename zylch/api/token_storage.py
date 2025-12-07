@@ -352,15 +352,22 @@ def get_google_credentials(owner_id: str):
     """
     supabase = _get_supabase()
     if supabase:
+        logger.info(f"Looking up Google credentials for owner {owner_id} in Supabase")
         token_data = supabase.get_google_token(owner_id)
         if token_data:
+            logger.info(f"Found Google token data for owner {owner_id} (length: {len(token_data)})")
             try:
                 pickled = base64.b64decode(token_data)
                 credentials = pickle.loads(pickled)
+                logger.info(f"Successfully loaded Google credentials for owner {owner_id}")
                 return credentials
             except Exception as e:
                 logger.error(f"Failed to unpickle Google credentials for owner {owner_id}: {e}")
                 return None
+        else:
+            logger.warning(f"No Google token data found in Supabase for owner {owner_id}")
+    else:
+        logger.warning(f"Supabase not configured, falling back to filesystem for owner {owner_id}")
 
     # Filesystem fallback
     google_dir = get_google_tokens_dir(owner_id)

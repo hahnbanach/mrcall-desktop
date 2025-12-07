@@ -109,22 +109,28 @@ class ChatService:
                 if cmd in COMMAND_HANDLERS:
                     handler = COMMAND_HANDLERS[cmd]
 
-                    # Call handler (some need config/memory, some don't)
-                    if cmd in ['/sync', '/archive', '/memory']:
-                        # Get owner_id from context, fall back to user_id
-                        owner_id = (context.get("user_id") if context else None) or user_id
+                    # Get owner_id and email from context
+                    owner_id = (context.get("user_id") if context else None) or user_id
+                    user_email = context.get("email") if context else None
 
-                        # Create temporary config objects
+                    # Call handler based on required parameters
+                    if cmd == '/sync':
+                        # /sync needs config, memory, and owner_id
                         config = ToolConfig.from_settings()
-
-                        if cmd == '/sync':
-                            # /sync needs config, memory, and owner_id
-                            memory = await ToolFactory.create_memory_system(config)
-                            response_text = await handler(args, config, memory, owner_id)
-                        else:
-                            # /archive and /memory need config and owner_id
-                            response_text = await handler(args, config, owner_id)
+                        memory = await ToolFactory.create_memory_system(config)
+                        response_text = await handler(args, config, memory, owner_id)
+                    elif cmd in ['/archive', '/memory']:
+                        # /archive and /memory need config and owner_id
+                        config = ToolConfig.from_settings()
+                        response_text = await handler(args, config, owner_id)
+                    elif cmd in ['/trigger', '/mrcall', '/share', '/revoke', '/sharing']:
+                        # These need args, owner_id, and optionally email
+                        response_text = await handler(args, owner_id, user_email)
+                    elif cmd in ['/cache', '/model', '/tutorial', '/gaps', '/help', '/clear', '/briefing']:
+                        # These only need args (or nothing)
+                        response_text = await handler(args) if args else await handler()
                     else:
+                        # Default: no args
                         response_text = await handler()
 
                     return {
@@ -140,7 +146,7 @@ class ChatService:
 
                 # Return error for unknown commands
                 return {
-                    "response": f"❌ **Command not found:** `{cmd}`\n\nUsa `/help` per vedere i comandi disponibili.",
+                    "response": f"❌ **Command not found:** `{cmd}`\n\nUse `/help` to see available commands.",
                     "tool_calls": [],
                     "metadata": {
                         "execution_time_ms": round(execution_time_ms, 2),

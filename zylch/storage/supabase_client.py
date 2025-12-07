@@ -618,9 +618,17 @@ class SupabaseStorage:
 
         token = self.get_oauth_token(owner_id, 'google.com')
         if token:
+            logger.info(f"Found oauth_tokens record for owner {owner_id}, provider google.com")
             encrypted_data = token.get('google_token_data')
             if encrypted_data:
-                return decrypt(encrypted_data)
+                logger.info(f"google_token_data present (length: {len(encrypted_data)}), decrypting...")
+                decrypted = decrypt(encrypted_data)
+                logger.info(f"Decrypted data length: {len(decrypted) if decrypted else 0}")
+                return decrypted
+            else:
+                logger.warning(f"oauth_tokens record exists but google_token_data is NULL for owner {owner_id}")
+        else:
+            logger.warning(f"No oauth_tokens record found for owner {owner_id}, provider google.com")
         return None
 
     def get_graph_token(self, owner_id: str) -> Optional[Dict[str, Any]]:
@@ -772,6 +780,366 @@ class SupabaseStorage:
 
         logger.info(f"Deleted Anthropic API key for owner {owner_id}")
         return True
+
+    # ==========================================
+    # TRIGGERS
+    # ==========================================
+
+    def list_triggers(self, owner_id: str, active_only: bool = False) -> List[Dict[str, Any]]:
+        """List all triggers for a user.
+
+        Args:
+            owner_id: Firebase UID
+            active_only: If True, only return active triggers
+
+        Returns:
+            List of trigger records
+        """
+        query = self.client.table('triggers').select('*').eq('owner_id', owner_id)
+        if active_only:
+            query = query.eq('active', True)
+        result = query.order('created_at', desc=True).execute()
+        return result.data or []
+
+    def get_triggers_by_type(self, owner_id: str, trigger_type: str) -> List[Dict[str, Any]]:
+        """Get active triggers of a specific type for a user.
+
+        Args:
+            owner_id: Firebase UID
+            trigger_type: One of: session_start, email_received, sms_received, call_received
+
+        Returns:
+            List of active triggers of that type
+        """
+        result = self.client.table('triggers').select('*').eq(
+            'owner_id', owner_id
+        ).eq('trigger_type', trigger_type).eq('active', True).execute()
+        return result.data or []
+
+    def add_trigger(self, owner_id: str, trigger_type: str, instruction: str) -> Dict[str, Any]:
+        """Add a new trigger.
+
+        Args:
+            owner_id: Firebase UID
+            trigger_type: One of: session_start, email_received, sms_received, call_received
+            instruction: Natural language instruction to execute
+
+        Returns:
+            Created trigger record
+        """
+        data = {
+            'owner_id': owner_id,
+            'trigger_type': trigger_type,
+            'instruction': instruction,
+            'active': True,
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+        result = self.client.table('triggers').insert(data).execute()
+        logger.info(f"Created trigger {trigger_type} for owner {owner_id}")
+        return result.data[0] if result.data else {}
+
+    def remove_trigger(self, owner_id: str, trigger_id: str) -> bool:
+        """Remove a trigger.
+
+        Args:
+            owner_id: Firebase UID
+            trigger_id: UUID of trigger to remove
+
+        Returns:
+            True if removed
+        """
+        self.client.table('triggers').delete().eq(
+            'owner_id', owner_id
+        ).eq('id', trigger_id).execute()
+        logger.info(f"Deleted trigger {trigger_id} for owner {owner_id}")
+        return True
+
+    def update_trigger_active(self, owner_id: str, trigger_id: str, active: bool) -> bool:
+        """Enable or disable a trigger.
+
+        Args:
+            owner_id: Firebase UID
+            trigger_id: UUID of trigger
+            active: New active state
+
+        Returns:
+            True if updated
+        """
+        self.client.table('triggers').update({
+            'active': active,
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }).eq('owner_id', owner_id).eq('id', trigger_id).execute()
+        logger.info(f"Updated trigger {trigger_id} active={active} for owner {owner_id}")
+        return True
+
+    # ==========================================
+    # SHARING
+    # ==========================================
+
+    def register_share_recipient(self, sender_id: str, sender_email: str, recipient_email: str) -> Dict[str, Any]:
+        """Register a recipient for sharing (creates pending request).
+
+        Args:
+            sender_id: Firebase UID of sender
+            sender_email: Email of sender
+            recipient_email: Email of recipient
+
+        Returns:
+            Created sharing record
+        """
+        data = {
+            'sender_id': sender_id,
+            'sender_email': sender_email,
+            'recipient_email': recipient_email,
+            'status': 'pending',
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        result = self.client.table('sharing_auth').upsert(
+            data,
+            on_conflict='sender_id,recipient_email'
+        ).execute()
+        logger.info(f"Registered share recipient {recipient_email} for sender {sender_id}")
+        return result.data[0] if result.data else {}
+
+    def revoke_sharing(self, sender_id: str, recipient_email: str) -> bool:
+        """Revoke sharing access for a recipient.
+
+        Args:
+            sender_id: Firebase UID of sender
+            recipient_email: Email of recipient to revoke
+
+        Returns:
+            True if revoked
+        """
+        self.client.table('sharing_auth').update({
+            'status': 'revoked'
+        }).eq('sender_id', sender_id).eq('recipient_email', recipient_email).execute()
+        logger.info(f"Revoked sharing for {recipient_email} from sender {sender_id}")
+        return True
+
+    def get_sharing_status(self, user_id: str, user_email: str) -> Dict[str, Any]:
+        """Get sharing status for a user.
+
+        Args:
+            user_id: Firebase UID
+            user_email: User's email
+
+        Returns:
+            Dict with: pending_requests, authorized_senders, registered_recipients
+        """
+        # Pending requests (others wanting to share with me)
+        pending = self.client.table('sharing_auth').select('*').eq(
+            'recipient_email', user_email
+        ).eq('status', 'pending').execute()
+
+        # Authorized senders (who can share with me - I accepted)
+        authorized = self.client.table('sharing_auth').select('*').eq(
+            'recipient_email', user_email
+        ).eq('status', 'authorized').execute()
+
+        # My recipients (who I'm sharing with)
+        recipients = self.client.table('sharing_auth').select('*').eq(
+            'sender_id', user_id
+        ).neq('status', 'revoked').execute()
+
+        return {
+            'pending_requests': pending.data or [],
+            'authorized_senders': authorized.data or [],
+            'registered_recipients': recipients.data or []
+        }
+
+    def authorize_sender(self, recipient_email: str, sender_email: str) -> bool:
+        """Authorize a sender (accept their sharing request).
+
+        Args:
+            recipient_email: Email of recipient (the one accepting)
+            sender_email: Email of sender (the one who requested)
+
+        Returns:
+            True if authorized
+        """
+        self.client.table('sharing_auth').update({
+            'status': 'authorized',
+            'authorized_at': datetime.now(timezone.utc).isoformat()
+        }).eq('recipient_email', recipient_email).eq('sender_email', sender_email).execute()
+        logger.info(f"Authorized sender {sender_email} for recipient {recipient_email}")
+        return True
+
+    # ==========================================
+    # MRCALL LINKING
+    # ==========================================
+
+    def set_mrcall_link(self, owner_id: str, mrcall_business_id: str) -> bool:
+        """Link user to MrCall business ID.
+
+        Args:
+            owner_id: Firebase UID
+            mrcall_business_id: MrCall business ID to link
+
+        Returns:
+            True if linked
+        """
+        # Store in oauth_tokens table with provider='mrcall'
+        data = {
+            'owner_id': owner_id,
+            'provider': 'mrcall',
+            'email': mrcall_business_id,  # Store business_id in email field
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+        self.client.table('oauth_tokens').upsert(
+            data,
+            on_conflict='owner_id,provider'
+        ).execute()
+        logger.info(f"Linked MrCall business {mrcall_business_id} for owner {owner_id}")
+        return True
+
+    def get_mrcall_link(self, owner_id: str) -> Optional[str]:
+        """Get MrCall business ID for user.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            MrCall business ID or None
+        """
+        result = self.client.table('oauth_tokens').select('email').eq(
+            'owner_id', owner_id
+        ).eq('provider', 'mrcall').execute()
+
+        if result.data and result.data[0].get('email'):
+            return result.data[0]['email']
+        return None
+
+    def remove_mrcall_link(self, owner_id: str) -> bool:
+        """Remove MrCall link for user.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            True if removed
+        """
+        self.client.table('oauth_tokens').delete().eq(
+            'owner_id', owner_id
+        ).eq('provider', 'mrcall').execute()
+        logger.info(f"Removed MrCall link for owner {owner_id}")
+        return True
+
+    # ==================== Trigger Events (Queue) ====================
+
+    def queue_trigger_event(self, owner_id: str, event_type: str, event_data: dict) -> dict:
+        """Queue a trigger event for background processing.
+
+        Args:
+            owner_id: Firebase UID
+            event_type: email_received, sms_received, call_received
+            event_data: Event payload (from, subject, body, etc.)
+
+        Returns:
+            Created event record or None
+        """
+        result = self.client.table('trigger_events').insert({
+            'owner_id': owner_id,
+            'event_type': event_type,
+            'event_data': event_data,
+            'status': 'pending'
+        }).execute()
+
+        if result.data:
+            logger.info(f"Queued {event_type} event for owner {owner_id}")
+            return result.data[0]
+        return None
+
+    def get_pending_events(self, limit: int = 10) -> list:
+        """Get pending trigger events to process.
+
+        Args:
+            limit: Max events to fetch
+
+        Returns:
+            List of pending events (oldest first)
+        """
+        result = self.client.table('trigger_events').select('*').eq(
+            'status', 'pending'
+        ).order('created_at').limit(limit).execute()
+
+        return result.data if result.data else []
+
+    def mark_event_processing(self, event_id: str) -> bool:
+        """Mark event as being processed (prevents duplicate processing).
+
+        Args:
+            event_id: Event UUID
+
+        Returns:
+            True if updated
+        """
+        result = self.client.table('trigger_events').update({
+            'status': 'processing',
+            'attempts': self.client.table('trigger_events').select('attempts').eq('id', event_id).execute().data[0]['attempts'] + 1
+        }).eq('id', event_id).eq('status', 'pending').execute()
+
+        return bool(result.data)
+
+    def mark_event_completed(self, event_id: str, trigger_id: str, result_data: dict) -> bool:
+        """Mark event as completed.
+
+        Args:
+            event_id: Event UUID
+            trigger_id: Which trigger was executed
+            result_data: Execution result
+
+        Returns:
+            True if updated
+        """
+        from datetime import datetime
+
+        update_result = self.client.table('trigger_events').update({
+            'status': 'completed',
+            'trigger_id': trigger_id,
+            'result': result_data,
+            'processed_at': datetime.utcnow().isoformat()
+        }).eq('id', event_id).execute()
+
+        return bool(update_result.data)
+
+    def mark_event_failed(self, event_id: str, error: str) -> bool:
+        """Mark event as failed.
+
+        Args:
+            event_id: Event UUID
+            error: Error message
+
+        Returns:
+            True if updated
+        """
+        from datetime import datetime
+
+        update_result = self.client.table('trigger_events').update({
+            'status': 'failed',
+            'last_error': error,
+            'processed_at': datetime.utcnow().isoformat()
+        }).eq('id', event_id).execute()
+
+        return bool(update_result.data)
+
+    def get_event_history(self, owner_id: str, limit: int = 20) -> list:
+        """Get trigger event history for user.
+
+        Args:
+            owner_id: Firebase UID
+            limit: Max events to return
+
+        Returns:
+            List of events (newest first)
+        """
+        result = self.client.table('trigger_events').select('*').eq(
+            'owner_id', owner_id
+        ).order('created_at', desc=True).limit(limit).execute()
+
+        return result.data if result.data else []
 
 
 # Create search_emails function in Supabase (run once via SQL Editor):

@@ -4,6 +4,18 @@
 
 ---
 
+## Critical: No Local Filesystem
+
+**The backend uses Supabase for ALL data storage. NO local filesystem.**
+
+- OAuth tokens → Supabase `oauth_tokens` (encrypted with Fernet)
+- All user data → Supabase (scoped by `owner_id`)
+- Memory/Avatars → Supabase pg_vector
+
+**NEVER use `credentials/`, `cache/`, or local pickle files. These are LEGACY and UNUSED.**
+
+---
+
 ## Project Overview
 
 Zylch AI is a multi-channel sales intelligence system that helps sales professionals manage email communications, track relationships, and automate follow-up actions through an AI-powered assistant.
@@ -13,7 +25,8 @@ Zylch AI is a multi-channel sales intelligence system that helps sales professio
 1. **Person-centric architecture** — A person is NOT an email address; memory system reflects this reality
 2. **Human-in-the-loop** — AI assists and recommends, human makes final decisions
 3. **Multi-provider support** — Works with Gmail AND Outlook (provider-agnostic)
-4. **Local-first, cloud-ready** — SQLite now, Supabase migration planned
+4. **Database-only backend** — All server data in Supabase, no local filesystem
+5. **Local-first email storage** — Email content stored in browser IndexedDB (encrypted), never on Zylch servers (like Superhuman)
 
 ---
 
@@ -48,10 +61,10 @@ Zylch AI is a multi-channel sales intelligence system that helps sales professio
 - Event management with Meet/Teams links
 
 **Memory System**
-- ZylchMemory (SQLite + semantic search)
+- ZylchMemory (Supabase pg_vector + semantic search)
 - Person-centric architecture with reconsolidation
 - Behavioral memory and corrections
-- Identifier map cache for O(1) lookups
+- Identifier map for O(1) lookups
 
 **Integrations**
 - StarChat/MrCall (contacts, telephony)
@@ -83,10 +96,12 @@ Zylch AI is a multi-channel sales intelligence system that helps sales professio
 |-----------|---------|--------|-------|
 | **Language** | Python 3.11+ | — | FastAPI, async throughout |
 | **LLM** | Anthropic Claude | — | Haiku/Sonnet/Opus tiering |
-| **Database** | SQLite (local) | Supabase (Postgres) | Migration planned |
+| **Email Storage** | IndexedDB (browser) | — | Local-first, encrypted (like Superhuman) |
+| **Email Encryption** | Web Crypto API | — | AES-GCM 256-bit, PBKDF2 key derivation |
+| **Server Database** | Supabase (Postgres) | — | AI summaries & metadata only (no email content) |
 | **User Auth** | Firebase Auth | — | Separate project per product |
-| **Backend Hosting** | Docker (local) | Railway | Migration planned |
-| **Frontend Hosting** | — | Vercel | For dashboard |
+| **Backend Hosting** | Railway | — | ✅ Live at api.zylchai.com |
+| **Frontend Hosting** | Vercel | — | ✅ Live at app.zylchai.com |
 | **Payments** | — | Stripe | To be implemented |
 | **Queues** | — | Upstash Redis | For scaling |
 | **Email Providers** | Gmail, Outlook | — | Provider-agnostic |
@@ -124,7 +139,7 @@ zylch/
 │   │   ├── main.py              # ZylchAICLI
 │   │   ├── auth.py              # CLIAuthManager
 │   │   ├── auth_server.py       # OAuth callback server
-│   │   ├── local_storage.py     # Offline cache
+│   │   ├── local_storage.py     # Legacy (unused)
 │   │   └── modifier_queue.py    # Offline operations
 │   ├── memory/
 │   │   ├── pattern_store.py
@@ -133,10 +148,12 @@ zylch/
 │   │   ├── archive_service.py
 │   │   ├── assistant_manager.py
 │   │   ├── chat_service.py
+│   │   ├── command_handlers.py    # Slash command handlers
 │   │   ├── gap_service.py
 │   │   ├── persona_analyzer.py
 │   │   ├── scheduler.py
 │   │   ├── sync_service.py
+│   │   ├── trigger_service.py     # Event-driven trigger worker
 │   │   ├── validation_service.py
 │   │   └── webhook_processor.py
 │   ├── sharing/
@@ -165,8 +182,8 @@ zylch/
 ├── zylch-cli/                    # Thin client (separate)
 ├── zylch-website/                # Marketing site
 ├── tests/
-├── cache/                        # Local cache (gitignored)
-├── credentials/                  # OAuth tokens (gitignored)
+├── cache/                        # Legacy (unused, gitignored)
+├── credentials/                  # Legacy (unused, gitignored)
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pyproject.toml
@@ -190,14 +207,10 @@ ANTHROPIC_API_KEY=sk-ant-xxx
 FIREBASE_PROJECT_ID=zylch-xxx
 FIREBASE_API_KEY=xxx
 FIREBASE_AUTH_DOMAIN=zylch-xxx.firebaseapp.com
-FIREBASE_SERVICE_ACCOUNT_PATH=credentials/firebase-service-account.json
+# Firebase (Base64-encoded service account JSON)
+FIREBASE_SERVICE_ACCOUNT_BASE64=eyJ0eXBlIjoic2VydmljZV9hY2NvdW50Ii...
 
-# Google OAuth (Gmail, Calendar)
-GOOGLE_CREDENTIALS_PATH=credentials/google_oauth.json
-GOOGLE_TOKEN_PATH=~/.zylch/credentials/google/
-
-# Microsoft Graph API (Outlook)
-# Tokens stored in ~/.zylch/credentials/microsoft/
+# Google/Microsoft OAuth tokens stored in Supabase oauth_tokens table (encrypted)
 
 # StarChat/MrCall
 STARCHAT_API_URL=https://api.starchat.com
@@ -235,65 +248,39 @@ MY_EMAILS=mario@example.com,*@mrcall.ai
 
 ---
 
-## Database Schema
+## Data Storage Architecture
 
-### Current: SQLite (Local)
+### Browser Storage (IndexedDB) - Email Content
 
-**Email Archive** (`cache/emails/archive.db`)
-```sql
-CREATE TABLE emails (
-    id TEXT PRIMARY KEY,
-    thread_id TEXT,
-    subject TEXT,
-    from_email TEXT,
-    to_emails TEXT,  -- JSON array
-    date TIMESTAMP,
-    body TEXT,
-    labels TEXT,     -- JSON array
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+**Email content stored locally, encrypted** (like Superhuman):
 
-CREATE VIRTUAL TABLE emails_fts USING fts5(
-    subject, body, from_email,
-    content='emails', content_rowid='rowid'
-);
-```
+| Store | Content | Encryption |
+|-------|---------|------------|
+| `emails` | Full email bodies (HTML, plaintext) | AES-GCM 256-bit |
+| `email_metadata` | From, to, subject, date, thread_id | AES-GCM 256-bit |
+| `attachments` | Cached attachment content | AES-GCM 256-bit |
+| `crypto_keys` | Non-extractable CryptoKey | Browser-protected |
 
-**Memory** (`zylch_memory.db`)
-```sql
-CREATE TABLE memories (
-    id INTEGER PRIMARY KEY,
-    namespace TEXT,
-    category TEXT,
-    context TEXT,
-    pattern TEXT,
-    examples TEXT,   -- JSON
-    confidence REAL,
-    embedding BLOB,  -- Vector
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP
-);
-```
+**Encryption**: Web Crypto API, key derived from user auth via PBKDF2.
 
-**Sharing** (`cache/sharing.db`)
-```sql
-CREATE TABLE authorizations (
-    id TEXT PRIMARY KEY,
-    owner_id TEXT,
-    recipient_id TEXT,
-    permissions TEXT,  -- JSON
-    created_at TIMESTAMP,
-    expires_at TIMESTAMP
-);
-```
+### Server Storage (Supabase) - Metadata & AI Only
 
-### Future: Supabase (Postgres)
+**NO email content on server.** Only AI summaries and sync state:
 
-Migration will preserve same schema structure with:
-- UUID primary keys
-- Row-level security (RLS) for multi-tenant
-- Indexes on owner_id, timestamps
-- pg_vector extension for embeddings
+| Table | Purpose |
+|-------|---------|
+| `thread_analysis` | AI-generated summaries (no raw email) |
+| `calendar_events` | Calendar events |
+| `sync_state` | Gmail/Outlook history IDs |
+| `relationship_gaps` | Detected gaps |
+| `oauth_tokens` | Encrypted tokens (Google, Microsoft, Anthropic) |
+| `triggers` | Triggered instructions |
+| `trigger_events` | Event queue |
+| `sharing_auth` | Sharing authorizations |
+
+All Supabase tables use UUID primary keys, RLS for multi-tenant isolation, indexes on `owner_id`.
+
+See `zylch/storage/supabase_client.py` for server storage operations.
 
 ---
 
@@ -373,7 +360,7 @@ Migration will preserve same schema structure with:
 
 ### ✅ Phase B: Memory System (Complete)
 
-- ZylchMemory (SQLite + semantic search)
+- ZylchMemory (Supabase pg_vector + semantic search)
 - Person-centric architecture
 - Behavioral corrections
 - Pattern learning
@@ -386,12 +373,11 @@ Migration will preserve same schema structure with:
 - Consent-based sharing
 - CLI commands: /share, /revoke, /sharing
 
-### ✅ Phase D: Multi-Tenant + Docker (Complete)
+### ✅ Phase D: Multi-Tenant + Supabase (Complete)
 
-- CLI Firebase Authentication (browser OAuth)
+- Firebase Authentication (Google, Microsoft OAuth)
 - owner_id from Firebase UID
-- Dockerfile + docker-compose.yml
-- Persistent volumes for cache/data
+- All data in Supabase (no local storage)
 - Microsoft Outlook integration
 
 ### ✅ Phase E: Webhook Server (Complete)
@@ -402,27 +388,77 @@ Migration will preserve same schema structure with:
 - Vonage SMS webhooks
 - Firebase JWT validation
 
-### Phase G: Dashboard (Frontend) (Completed)
+### ✅ Phase E.5: CLI Migration to Backend (Complete)
+
+**Goal**: Migrate old monolithic CLI to thin client with backend command handlers.
+
+**Completed**:
+- [x] Backend command handlers for all slash commands
+- [x] Trigger system with Supabase storage
+- [x] Trigger service worker for event-driven automation
+- [x] MrCall integration handler (`/mrcall`)
+- [x] Sharing system (`/share`, `/revoke`, `/sharing`)
+- [x] All tests passing (163 tests, 7 skipped)
+
+**Command Handlers** (`zylch/services/command_handlers.py`):
+| Command | Status | Handler |
+|---------|--------|---------|
+| `/help` | ✅ | `handle_help()` |
+| `/sync` | ✅ | `handle_sync()` |
+| `/gaps` | ✅ | `handle_gaps()` |
+| `/archive` | ✅ | `handle_archive()` |
+| `/cache` | ✅ | `handle_cache()` |
+| `/memory` | ✅ | `handle_memory()` |
+| `/model` | ✅ | `handle_model()` |
+| `/trigger` | ✅ | `handle_trigger()` |
+| `/mrcall` | ✅ | `handle_mrcall()` |
+| `/share` | ✅ | `handle_share()` |
+| `/revoke` | ✅ | `handle_revoke()` |
+| `/sharing` | ✅ | `handle_sharing()` |
+| `/tutorial` | ✅ | `handle_tutorial()` |
+
+**Trigger Service** (`zylch/services/trigger_service.py`):
+- Event queue with Supabase storage
+- Background worker for processing
+- Support for: `session_start`, `email_received`, `sms_received`, `call_received`
+
+**Documentation**:
+- `docs/TRIGGERED_INSTRUCTIONS.md` - Updated for new architecture
+- `docs/SHARING.md` - New documentation for sharing system
+
+### ✅ Phase G: Dashboard (Frontend) (Complete & Deployed)
 
 **Goal**: Web dashboard for non-CLI users.
 
+**Status**: ✅ **DEPLOYED ON VERCEL** at https://app.zylchai.com
+
 **Tasks**:
-- [ ] Set up Vue 3 + Vite + TypeScript project
-- [ ] Configure Vercel deployment
-- [ ] Implement Firebase Auth (same project as backend)
-- [ ] Build core views:
-    - [ ] Login/Signup
-    - [ ] Dashboard (overview, status)
-    - [ ] Email view (gaps, threads)
-    - [ ] Calendar view
-    - [ ] Settings
-- [ ] Connect to backend API
-- [ ] Mobile-responsive design
+- [x] Set up Vue 3 + Vite + TypeScript project
+- [x] Configure Tailwind CSS and component architecture
+- [x] Implement Firebase Auth (Google, Microsoft OAuth)
+- [x] Build core views:
+    - [x] Login/Signup with OAuth
+    - [x] Dashboard (chat interface)
+    - [x] Email view (threads, drafts, archive)
+    - [x] Tasks view (Kanban board)
+    - [x] Calendar view
+    - [x] Contacts view
+    - [x] Memory management
+    - [x] Settings (integrations, API keys)
+    - [x] Sync status
+    - [x] MrCall integration
+- [x] Connect to backend API with Axios + interceptors
+- [x] Pinia state management with persistence
+- [x] Mobile-responsive design
+- [x] Deploy to Vercel
 
 **Deliverables**:
-- Dashboard at app.zylch.com (Vercel)
-- Full feature parity with CLI
-- Mobile-friendly
+- ✅ Complete Vue 3 dashboard with ~58 components
+- ✅ Full feature parity with CLI
+- ✅ Firebase authentication
+- ✅ Real-time sync status
+- ✅ BYOK (Bring Your Own Key) for Anthropic API
+- ✅ **Live at https://app.zylchai.com**
 
 ---
 
@@ -430,11 +466,11 @@ Migration will preserve same schema structure with:
 
 ## Remaining Phases
 
-### Phase F: Railway Deployment (Configuration Complete)
+### ✅ Phase F: Railway Deployment (Complete & Deployed)
 
 **Goal**: Deploy backend to Railway for production hosting.
 
-**Status**: ✅ Configuration files created. Ready for Railway project creation.
+**Status**: ✅ **DEPLOYED ON RAILWAY** at https://api.zylchai.com
 
 **Tasks**:
 - [x] Create railway.json configuration
@@ -443,22 +479,15 @@ Migration will preserve same schema structure with:
 - [x] Create .env.example with all environment variables
 - [x] Configure health checks in railway.json
 - [x] Create deployment documentation (docs/DEPLOYMENT.md)
-- [ ] Create Railway project (manual step)
-- [ ] Configure environment variables in Railway (manual step)
-- [ ] Set up custom domain api.zylch.com (manual step)
-- [ ] Configure persistent volume for SQLite (manual step)
-
-**Files Created**:
-- `railway.json` - Railway build and deploy configuration
-- `Procfile` - Process definition (uvicorn with 2 workers)
-- `requirements.txt` - Python dependencies
-- `.env.example` - Complete environment variable template
-- `docs/DEPLOYMENT.md` - Full deployment guide
+- [x] Create Railway project
+- [x] Configure environment variables in Railway
+- [x] Set up custom domain api.zylchai.com
+- [x] Deploy and verify health check
 
 **Deliverables**:
-- Backend running on Railway
-- API accessible via custom domain
-- Automatic deploys from main branch
+- ✅ Backend running on Railway
+- ✅ API accessible at https://api.zylchai.com
+- ✅ Health check: `GET /health` returns `{"status": "healthy"}`
 
 ---
 
@@ -492,24 +521,21 @@ Migration will preserve same schema structure with:
 
 ---
 
-### Phase I: Supabase Migration
+### ✅ Phase I: Supabase Migration (Complete)
 
-**Goal**: Migrate from local SQLite to Supabase Postgres.
+**Goal**: All data in Supabase Postgres.
 
-**Tasks**:
-- [ ] Set up Supabase project
-- [ ] Design schema with RLS (row-level security)
-- [ ] Create migration scripts
-- [ ] Add SQLAlchemy + asyncpg
-- [ ] Update storage layer to use Postgres
-- [ ] Migrate memory system to pg_vector
-- [ ] Test multi-tenant isolation
-- [ ] Data migration from SQLite
+**Status**: ✅ **COMPLETE** - All data stored in Supabase.
 
-**Deliverables**:
-- All data in Supabase
-- Multi-tenant RLS working
-- Local SQLite as optional fallback
+**Completed**:
+- [x] Supabase project configured
+- [x] Schema with RLS (row-level security)
+- [x] All storage via `supabase_client.py`
+- [x] pg_vector for semantic memory
+- [x] Multi-tenant isolation by owner_id
+- [x] Encrypted token storage (Fernet)
+
+**No local filesystem storage.**
 
 ---
 
@@ -538,7 +564,7 @@ Migration will preserve same schema structure with:
 ## Future Enhancements
 
 ### Reasoning Bank (Pattern Learning)
-- SQLite-based pattern storage
+- Supabase-based pattern storage
 - Cross-contact learning
 - Strategy recommendations
 - Confidence scoring
@@ -565,10 +591,12 @@ Migration will preserve same schema structure with:
 
 - [x] **M1: Core Working** — Agent + tools + CLI (Phases A-B)
 - [x] **M2: Multi-Tenant** — Auth + sharing + webhooks (Phases C-E)
-- [~] **M3: Production** — Railway deployment (Phase F) — *Config complete, manual steps pending*
-- [ ] **M4: Dashboard** — Web UI on Vercel (Phase G)
+- [x] **M2.5: CLI Migration** — Backend command handlers (Phase E.5) — *Complete*
+- [x] **M3: Production Backend** — Railway deployment (Phase F) — *Complete & deployed at api.zylchai.com*
+- [x] **M4: Dashboard** — Web UI (Phase G) — *Complete & deployed on Vercel*
 - [ ] **M5: Monetization** — Stripe billing (Phase H)
-- [ ] **M6: Scale** — Supabase + Redis (Phases I-J)
+- [x] **M6: Supabase** — Database migration (Phase I) — *Complete*
+- [ ] **M7: Scale** — Redis for caching (Phase J)
 
 ---
 

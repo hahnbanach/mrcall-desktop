@@ -17,36 +17,35 @@ logger = logging.getLogger(__name__)
 
 async def handle_help() -> str:
     """Return help message."""
-    return """**📋 Comandi Zylch AI:**
+    return """**📋 Zylch AI Commands**
 
-**📧 Gestione Dati:**
-• `/sync [days]` - Sincronizza email e calendario ✅
-• `/gaps` o `/briefing` - Analizza conversazioni senza risposta ✅
-• `/archive [--help]` - Gestione archivio email ✅
-• `/cache [--help]` - Gestione cache ✅
+**📧 Data Management:**
+• `/sync [days]` - Sync email and calendar
+• `/gaps` or `/briefing` - Analyze unanswered conversations
+• `/archive [--help]` - Email archive management
+• `/cache [--help]` - Cache management
 
-**🧠 Memoria & Automazione:**
-• `/memory [--help]` - Gestione memoria comportamentale ✅
-• `/trigger [--help]` - Istruzioni automatiche 🚧
+**🧠 Memory & Automation:**
+• `/memory [--help]` - Behavioral memory management
+• `/trigger [--help]` - Event-driven automation
 
-**🎯 Assistenti & Condivisione:**
-• `/assistant [--help]` - Gestione assistenti Zylch 🚧
-• `/mrcall [--help]` - Link assistente MrCall 🚧
-• `/share <email>` - Condividi dati con qualcuno 🚧
-• `/revoke <email>` - Revoca accesso condivisione 🚧
-• `/sharing` - Mostra stato condivisione 🚧
+**📞 Integrations:**
+• `/mrcall [--help]` - MrCall/StarChat phone integration
 
-**🔧 Configurazione:**
-• `/model [haiku|sonnet|opus|auto]` - Cambia modello AI ✅
+**🔗 Sharing:**
+• `/share <email>` - Share data with someone
+• `/revoke <email>` - Revoke sharing access
+• `/sharing` - Show sharing status
+
+**🔧 Configuration:**
+• `/model [haiku|sonnet|opus|auto]` - Change AI model
 
 **📚 Utility:**
-• `/tutorial [topic]` - Guide rapide ✅
-• `/clear` - Pulisci cronologia conversazione ✅
-• `/help` - Mostra questo messaggio
+• `/tutorial [topic]` - Quick guides
+• `/clear` - Clear conversation history
+• `/help` - Show this message
 
-**💡 Suggerimento:** Puoi anche chattare normalmente! Chiedi "chi mi ha scritto oggi?" o "aiutami con le email".
-
-✅ = Implementato | 🚧 = In sviluppo (help available)"""
+**💡 Tip:** You can also chat naturally! Ask "who emailed me today?" or "help me with my emails"."""
 
 
 async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
@@ -156,10 +155,10 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
 
 async def handle_clear() -> str:
     """Handle /clear command."""
-    return """✅ **Cronologia pulita**
+    return """✅ **History Cleared**
 
-**📝 Nota Client:** Il server non mantiene cronologia.
-Cancella il tuo array `conversation_history` locale."""
+**📝 Client Note:** The server doesn't maintain history.
+Clear your local `conversation_history` array."""
 
 
 async def handle_gaps() -> str:
@@ -523,10 +522,10 @@ async def handle_model(args: List[str]) -> str:
         return f"""**🤖 AI Model Selection**
 
 **Available models:**
-• `haiku` - Claude 3.5 Haiku (veloce, economico)
-• `sonnet` - Claude 3.5 Sonnet (bilanciato) ⭐ default
-• `opus` - Claude 3 Opus (potente, costoso)
-• `auto` - Selezione automatica
+• `haiku` - Claude 3.5 Haiku (fast, economical)
+• `sonnet` - Claude 3.5 Sonnet (balanced) ⭐ default
+• `opus` - Claude 3 Opus (powerful, expensive)
+• `auto` - Automatic selection
 
 **Usage:** `/model sonnet`
 
@@ -542,7 +541,7 @@ Pass `forced_model` in context for subsequent requests:
 
     model_choice = args[0].lower()
     if model_choice not in model_map:
-        return f"❌ Modello sconosciuto: `{model_choice}`\n\nUsa: haiku, sonnet, opus, auto"
+        return f"❌ Unknown model: `{model_choice}`\n\nUse: haiku, sonnet, opus, auto"
 
     model_id = model_map[model_choice]
 
@@ -723,16 +722,21 @@ Use `/memory --help` to see available commands.
         return f"**❌ Error:** {str(e)}\n\nUse `/memory --help` for usage information."
 
 
-async def handle_trigger(args: List[str]) -> str:
+async def handle_trigger(args: List[str], owner_id: str, user_email: str = None) -> str:
     """Handle /trigger command - triggered instructions."""
+    from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
+
+    TRIGGER_TYPES = ['session_start', 'email_received', 'sms_received', 'call_received']
+
     if '--help' in args or not args:
         return """**⚡ Triggered Instructions**
 
 **Usage:**
-• `/trigger --list` - List all triggers
+• `/trigger` or `/trigger --list` - List all triggers
 • `/trigger --types` - Show trigger types
-• `/trigger --add --name X --type Y --instruction Z` - Add trigger
+• `/trigger --add <type> <instruction>` - Add trigger
 • `/trigger --remove <id>` - Remove trigger
+• `/trigger --toggle <id>` - Enable/disable trigger
 
 **Trigger types:**
 • `session_start` - When starting conversation
@@ -740,24 +744,129 @@ async def handle_trigger(args: List[str]) -> str:
 • `sms_received` - When SMS arrives
 • `call_received` - When call comes in
 
-**Example:**
+**Examples:**
 ```
-/trigger --add --name "Morning greeting" --type session_start --instruction "Say good morning"
+/trigger --add session_start "Say good morning and list my meetings for today"
+/trigger --add email_received "Summarize important emails from unknown senders"
+/trigger --remove abc123
 ```"""
 
-    # Placeholder - requires full implementation
-    return """**⚡ Triggered Instructions**
+    try:
+        client = SupabaseClient()
 
-**Status:** Trigger system coming soon.
+        if '--types' in args:
+            return """**⚡ Available Trigger Types**
 
-**Current workaround:** Use natural language instructions:
-• "Always greet me when I start a conversation"
-• "When unknown people email me, create a contact"
+• `session_start` - Fires when you start a new conversation
+• `email_received` - Fires when new email arrives (via /sync)
+• `sms_received` - Fires when SMS arrives (via MrCall)
+• `call_received` - Fires when phone call comes in (via MrCall)
 
-**Future features:**
-• Event-based automation
-• Custom trigger types
-• Conditional logic"""
+**Usage:** `/trigger --add <type> <instruction>`"""
+
+        elif '--list' in args or len(args) == 0:
+            # List triggers
+            triggers = client.list_triggers(owner_id)
+
+            if not triggers:
+                return """**⚡ No Triggers**
+
+You haven't created any triggers yet.
+
+**Get started:**
+`/trigger --add session_start "Summarize my unread emails"`
+
+Use `/trigger --help` for more options."""
+
+            output = f"**⚡ Your Triggers** ({len(triggers)} total)\n\n"
+            for t in triggers:
+                status = "✅" if t.get('active', True) else "❌"
+                trigger_type = t.get('trigger_type', 'unknown')
+                instruction = t.get('instruction', '')[:50]
+                if len(t.get('instruction', '')) > 50:
+                    instruction += "..."
+                trigger_id = t.get('id', '')[:8]
+
+                output += f"{status} **{trigger_type}** (ID: `{trigger_id}`)\n"
+                output += f"   {instruction}\n\n"
+
+            output += "**Commands:** `/trigger --remove <id>` | `/trigger --toggle <id>`"
+            return output
+
+        elif '--add' in args:
+            # Add trigger
+            add_idx = args.index('--add') + 1
+
+            if len(args) < add_idx + 2:
+                return "❌ **Error:** Missing arguments\n\n**Usage:** `/trigger --add <type> <instruction>`\n\nExample: `/trigger --add session_start \"Say good morning\"`"
+
+            trigger_type = args[add_idx]
+            # Join remaining args as instruction
+            instruction = ' '.join(args[add_idx + 1:])
+
+            if trigger_type not in TRIGGER_TYPES:
+                return f"❌ **Error:** Invalid trigger type: `{trigger_type}`\n\n**Valid types:** {', '.join(TRIGGER_TYPES)}"
+
+            result = client.add_trigger(owner_id, trigger_type, instruction)
+
+            if result:
+                return f"""✅ **Trigger Created**
+
+**Type:** {trigger_type}
+**Instruction:** {instruction}
+**ID:** `{result.get('id', 'N/A')[:8]}`
+
+This trigger will fire automatically when the event occurs."""
+            else:
+                return "❌ **Error:** Failed to create trigger. Please try again."
+
+        elif '--remove' in args:
+            # Remove trigger
+            remove_idx = args.index('--remove') + 1
+
+            if len(args) <= remove_idx:
+                return "❌ **Error:** Missing trigger ID\n\n**Usage:** `/trigger --remove <id>`"
+
+            trigger_id = args[remove_idx]
+            success = client.remove_trigger(owner_id, trigger_id)
+
+            if success:
+                return f"✅ **Trigger Removed** (ID: `{trigger_id[:8]}`)"
+            else:
+                return f"❌ **Error:** Could not find trigger with ID `{trigger_id[:8]}`"
+
+        elif '--toggle' in args:
+            # Toggle trigger active status
+            toggle_idx = args.index('--toggle') + 1
+
+            if len(args) <= toggle_idx:
+                return "❌ **Error:** Missing trigger ID\n\n**Usage:** `/trigger --toggle <id>`"
+
+            trigger_id = args[toggle_idx]
+
+            # Get current status
+            triggers = client.list_triggers(owner_id)
+            current_trigger = next((t for t in triggers if t['id'].startswith(trigger_id)), None)
+
+            if not current_trigger:
+                return f"❌ **Error:** Could not find trigger with ID `{trigger_id[:8]}`"
+
+            new_status = not current_trigger.get('active', True)
+            success = client.update_trigger_active(owner_id, current_trigger['id'], new_status)
+
+            if success:
+                status_text = "enabled" if new_status else "disabled"
+                return f"✅ **Trigger {status_text}** (ID: `{trigger_id[:8]}`)"
+            else:
+                return f"❌ **Error:** Could not update trigger"
+
+        else:
+            # Default: list triggers
+            return await handle_trigger(['--list'], owner_id, user_email)
+
+    except Exception as e:
+        logger.error(f"Error in /trigger command: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}\n\nUse `/trigger --help` for usage information."
 
 
 async def handle_assistant(args: List[str]) -> str:
@@ -793,43 +902,109 @@ Your current assistant maintains all memories and context.
 • Shared memories"""
 
 
-async def handle_mrcall(args: List[str]) -> str:
+async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) -> str:
     """Handle /mrcall command - MrCall integration."""
-    if '--help' in args or not args:
+    from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
+
+    if '--help' in args:
         return """**📞 MrCall Integration**
 
 **Usage:**
 • `/mrcall` - Show current MrCall link
 • `/mrcall <business_id>` - Link to MrCall business
-• `/mrcall --list` - Browse available businesses
+• `/mrcall --unlink` - Remove MrCall link
 
 **Example:**
 • `/mrcall 3002475397`
 
 **What it does:**
-Links your Zylch assistant to a MrCall business for phone call handling."""
+Links your Zylch assistant to a MrCall/StarChat business for:
+• Phone call handling with AI
+• SMS automation
+• Call transcript sync
+• Trigger automation (sms_received, call_received)"""
 
-    # Placeholder
-    return """**📞 MrCall Integration**
+    try:
+        client = SupabaseClient()
 
-**Status:** MrCall linking coming soon.
+        if '--unlink' in args:
+            # Remove link
+            success = client.remove_mrcall_link(owner_id)
+            if success:
+                return "✅ **MrCall Unlinked**\n\nYour Zylch is no longer connected to a MrCall business."
+            else:
+                return "❌ **Error:** No MrCall link found to remove."
 
-**What it will do:**
-• Link Zylch to MrCall businesses
-• Handle phone calls with AI
-• Sync call transcripts and contacts
+        elif len(args) == 0:
+            # Show current link
+            link = client.get_mrcall_link(owner_id)
 
-**Current:** Contact sharing with MrCall is manual.
+            if link:
+                return f"""**📞 MrCall Status**
 
-**Future features:**
-• Auto-link to business
-• Call history sync
-• Smart call routing"""
+**Linked Business:** `{link.get('mrcall_business_id', 'N/A')}`
+**Connected Since:** {link.get('created_at', 'N/A')[:10] if link.get('created_at') else 'N/A'}
+
+**Features enabled:**
+• Phone call handling
+• SMS automation
+• `call_received` triggers
+• `sms_received` triggers
+
+**Commands:**
+• `/mrcall --unlink` - Disconnect
+• `/trigger --add call_received "..."` - Add call automation"""
+            else:
+                return """**📞 MrCall Status**
+
+**Status:** Not linked
+
+Connect your Zylch to a MrCall business to enable:
+• AI-powered phone call handling
+• SMS automation
+• Call/SMS triggers
+
+**Usage:** `/mrcall <business_id>`
+
+**Example:** `/mrcall 3002475397`
+
+Contact support@zylchai.com to get your MrCall business ID."""
+
+        else:
+            # Link to business
+            business_id = args[0]
+
+            # Validate business_id (should be numeric or alphanumeric)
+            if not business_id.replace('-', '').replace('_', '').isalnum():
+                return f"❌ **Error:** Invalid business ID format: `{business_id}`"
+
+            result = client.set_mrcall_link(owner_id, business_id)
+
+            if result:
+                return f"""✅ **MrCall Linked**
+
+**Business ID:** `{business_id}`
+
+Your Zylch is now connected to MrCall!
+
+**Next steps:**
+1. Configure your MrCall assistant to forward to Zylch
+2. Add triggers: `/trigger --add call_received "Summarize the call"`
+3. Test with a phone call
+
+**Need help?** Contact support@zylchai.com"""
+            else:
+                return "❌ **Error:** Failed to link MrCall business. Please try again."
+
+    except Exception as e:
+        logger.error(f"Error in /mrcall command: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}\n\nUse `/mrcall --help` for usage information."
 
 
-async def handle_share(args: List[str]) -> str:
+async def handle_share(args: List[str], owner_id: str, user_email: str = None) -> str:
     """Handle /share command - data sharing."""
     import re
+    from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
 
     if '--help' in args or not args:
         return """**🔗 Data Sharing**
@@ -841,36 +1016,77 @@ Registers a recipient to receive shared data from you.
 **Example:** `/share colleague@example.com`
 
 **What gets shared:**
-• Contact information
+• Contact information (avatars)
 • Email intelligence
-• Calendar availability
+• Relationship context
 
-**Note:** Recipient must also authorize to receive."""
+**How it works:**
+1. You send a share request with `/share <email>`
+2. Recipient sees the request in their `/sharing`
+3. They authorize with their Zylch
+4. Your relational data flows to them
 
-    recipient_email = args[0]
+**Commands:**
+• `/share <email>` - Send share request
+• `/revoke <email>` - Cancel sharing
+• `/sharing` - View all sharing status"""
 
-    # Validate email
-    email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    if not re.match(email_regex, recipient_email):
-        return f"❌ Invalid email format: {recipient_email}"
+    try:
+        client = SupabaseClient()
 
-    # Placeholder for actual implementation
-    return f"""✅ **Sharing request sent**
+        recipient_email = args[0].lower()
 
-Recipient: {recipient_email}
+        # Validate email
+        email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_regex, recipient_email):
+            return f"❌ **Error:** Invalid email format: `{recipient_email}`"
 
-**Status:** Sharing system coming soon.
+        # Can't share with yourself
+        if user_email and recipient_email == user_email.lower():
+            return "❌ **Error:** You can't share with yourself."
 
-**What will happen:**
-1. Recipient receives notification
-2. They authorize the sharing
-3. Your data flows to their Zylch
+        # Check if sender_email is available
+        if not user_email:
+            return "❌ **Error:** Your email is not available. Please re-authenticate."
 
-**Current workaround:** Manual export/import of contacts."""
+        result = client.register_share_recipient(owner_id, user_email, recipient_email)
+
+        if result:
+            status = result.get('status', 'pending')
+            if status == 'pending':
+                return f"""✅ **Share Request Sent**
+
+**Recipient:** {recipient_email}
+**Status:** Pending authorization
+
+The recipient needs to authorize this sharing from their Zylch account.
+
+Once authorized, they will receive:
+• Your contact intelligence
+• Relationship context
+• Avatar data
+
+**Manage:** `/sharing` | `/revoke {recipient_email}`"""
+            else:
+                return f"""ℹ️ **Sharing Already Exists**
+
+**Recipient:** {recipient_email}
+**Status:** {status}
+
+Use `/revoke {recipient_email}` to cancel this sharing."""
+        else:
+            return "❌ **Error:** Failed to create share request. Please try again."
+
+    except Exception as e:
+        logger.error(f"Error in /share command: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}\n\nUse `/share --help` for usage information."
 
 
-async def handle_revoke(args: List[str]) -> str:
+async def handle_revoke(args: List[str], owner_id: str, user_email: str = None) -> str:
     """Handle /revoke command - revoke sharing access."""
+    import re
+    from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
+
     if '--help' in args or not args:
         return """**❌ Revoke Sharing**
 
@@ -878,36 +1094,153 @@ async def handle_revoke(args: List[str]) -> str:
 
 Revokes data sharing access for a recipient.
 
-**Example:** `/revoke colleague@example.com`"""
+**Example:** `/revoke colleague@example.com`
 
-    recipient_email = args[0]
+This stops sharing your data with the specified user.
+They will no longer receive updates from you."""
 
-    return f"""✅ **Sharing revoked**
+    try:
+        client = SupabaseClient()
 
-Recipient: {recipient_email}
+        recipient_email = args[0].lower()
 
-**Status:** Sharing system coming soon.
+        # Validate email
+        email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_regex, recipient_email):
+            return f"❌ **Error:** Invalid email format: `{recipient_email}`"
 
-They will no longer receive your data updates."""
+        success = client.revoke_sharing(owner_id, recipient_email)
+
+        if success:
+            return f"""✅ **Sharing Revoked**
+
+**Recipient:** {recipient_email}
+
+They will no longer receive your data updates.
+
+**Note:** Any data already shared remains with them, but no new updates will be sent.
+
+**Restore:** Use `/share {recipient_email}` to share again."""
+        else:
+            return f"""❌ **Error:** No active sharing found
+
+Could not find sharing with `{recipient_email}`.
+
+Use `/sharing` to see your current sharing connections."""
+
+    except Exception as e:
+        logger.error(f"Error in /revoke command: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}\n\nUse `/revoke --help` for usage information."
 
 
-async def handle_sharing(args: List[str]) -> str:
+async def handle_sharing(args: List[str], owner_id: str, user_email: str = None) -> str:
     """Handle /sharing command - show sharing status."""
-    return """**📊 Sharing Status**
+    from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
 
-**Status:** Sharing system coming soon.
+    if '--help' in args:
+        return """**📊 Sharing Status**
 
-**What you'll see here:**
-• Pending sharing requests
-• Authorized recipients (who receives your data)
-• Authorized senders (whose data you receive)
+**Usage:** `/sharing`
 
-**Current:** No active sharing connections.
+Shows your current sharing connections:
+• **Pending requests** - Awaiting authorization
+• **Authorized recipients** - Who receives your data
+• **Incoming shares** - Whose data you receive
 
-**Future features:**
-• Granular permission control
-• Sharing analytics
-• Temporary sharing links"""
+**Related commands:**
+• `/share <email>` - Share with someone
+• `/revoke <email>` - Stop sharing
+• `/sharing --authorize <email>` - Accept incoming share"""
+
+    try:
+        client = SupabaseClient()
+
+        # Handle authorize action
+        if '--authorize' in args:
+            auth_idx = args.index('--authorize') + 1
+            if len(args) <= auth_idx:
+                return "❌ **Error:** Missing email\n\n**Usage:** `/sharing --authorize <sender_email>`"
+
+            sender_email = args[auth_idx].lower()
+
+            if not user_email:
+                return "❌ **Error:** Your email is not available. Please re-authenticate."
+
+            success = client.authorize_sender(user_email, sender_email)
+
+            if success:
+                return f"""✅ **Sharing Authorized**
+
+**From:** {sender_email}
+
+You will now receive their shared data:
+• Contact intelligence
+• Relationship context
+• Avatar data"""
+            else:
+                return f"""❌ **Error:** Could not authorize
+
+No pending share request found from `{sender_email}`.
+
+Use `/sharing` to see pending requests."""
+
+        # Get sharing status
+        status = client.get_sharing_status(owner_id, user_email)
+
+        if not status:
+            return """**📊 Sharing Status**
+
+**No sharing connections**
+
+Share your relational intelligence with colleagues:
+`/share colleague@example.com`
+
+**Benefits of sharing:**
+• Contacts know about relationships across your team
+• Better meeting prep with shared context
+• Seamless handoffs when colleagues leave"""
+
+        outgoing = status.get('outgoing', [])
+        incoming = status.get('incoming', [])
+
+        output = "**📊 Sharing Status**\n\n"
+
+        # Outgoing shares (you → others)
+        if outgoing:
+            output += "**📤 Your Recipients** (you share with them)\n"
+            for share in outgoing:
+                recipient = share.get('recipient_email', 'Unknown')
+                status_text = share.get('status', 'unknown')
+                status_icon = {'pending': '⏳', 'authorized': '✅', 'revoked': '❌'}.get(status_text, '❓')
+                output += f"{status_icon} {recipient} ({status_text})\n"
+            output += "\n"
+        else:
+            output += "**📤 Your Recipients:** None\n\n"
+
+        # Incoming shares (others → you)
+        if incoming:
+            output += "**📥 Sharing With You** (you receive their data)\n"
+            for share in incoming:
+                sender = share.get('sender_email', 'Unknown')
+                status_text = share.get('status', 'unknown')
+                status_icon = {'pending': '⏳', 'authorized': '✅', 'revoked': '❌'}.get(status_text, '❓')
+
+                if status_text == 'pending':
+                    output += f"{status_icon} {sender} - **Pending your authorization**\n"
+                    output += f"   → `/sharing --authorize {sender}`\n"
+                else:
+                    output += f"{status_icon} {sender} ({status_text})\n"
+            output += "\n"
+        else:
+            output += "**📥 Sharing With You:** None\n\n"
+
+        output += "**Commands:** `/share <email>` | `/revoke <email>`"
+
+        return output
+
+    except Exception as e:
+        logger.error(f"Error in /sharing command: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}\n\nUse `/sharing --help` for usage information."
 
 
 async def handle_tutorial(args: List[str]) -> str:

@@ -293,6 +293,14 @@ class WebhookProcessor:
     def __init__(self):
         """Initialize webhook processor."""
         self.store = WebhookEventStore()
+        self._trigger_service = None
+
+    def _get_trigger_service(self):
+        """Lazy-load trigger service to avoid circular imports."""
+        if self._trigger_service is None:
+            from .trigger_service import TriggerService
+            self._trigger_service = TriggerService()
+        return self._trigger_service
 
     async def process_starchat_event(self, payload: Dict[str, Any]):
         """Process StarChat/MrCall call event.
@@ -340,6 +348,26 @@ class WebhookProcessor:
             # If call ended with transcript, could trigger follow-up suggestion
             if event_type == "call_ended" and payload.get("transcript"):
                 await self._suggest_call_followup(payload)
+
+            # Queue trigger event for user automation
+            if event_type in ["call_ended", "call_missed", "voicemail"] and business_id:
+                # Find owner_id from business_id (MrCall link)
+                owner_id = await self._get_owner_for_business(business_id)
+                if owner_id:
+                    trigger_service = self._get_trigger_service()
+                    await trigger_service.queue_event(
+                        owner_id=owner_id,
+                        event_type='call_received',
+                        event_data={
+                            'caller': caller_number,
+                            'caller_name': caller_name,
+                            'duration_seconds': payload.get('duration_seconds'),
+                            'transcript': payload.get('transcript'),
+                            'direction': payload.get('direction'),
+                            'sentiment': payload.get('sentiment'),
+                            'call_type': event_type  # call_ended, call_missed, voicemail
+                        }
+                    )
 
             # Mark processed
             self.store.mark_processed(f"starchat_{call_id}")
@@ -518,8 +546,22 @@ class WebhookProcessor:
                 }
             )
 
-            # Could trigger notification to user here
-            # await self._notify_inbound_sms(payload)
+            # Queue trigger event for user automation
+            # Note: For Vonage, we need a way to map from phone number to owner_id
+            # This could be done via a lookup table or the phone number in oauth_tokens
+            # For now, we'll skip unless we have owner context in payload
+            owner_id = payload.get("owner_id")  # Must be passed from routing logic
+            if owner_id:
+                trigger_service = self._get_trigger_service()
+                await trigger_service.queue_event(
+                    owner_id=owner_id,
+                    event_type='sms_received',
+                    event_data={
+                        'from': from_number,
+                        'body': text,
+                        'keyword': payload.get('keyword')
+                    }
+                )
 
             # Mark processed
             self.store.mark_processed(f"vonage_inbound_{message_id}")
@@ -560,3 +602,32 @@ class WebhookProcessor:
         """
         # Placeholder for future implementation
         logger.info(f"Could trigger email sync for notification: {notification}")
+
+    async def _get_owner_for_business(self, business_id: str) -> Optional[str]:
+        """Look up owner_id from MrCall business_id.
+
+        Args:
+            business_id: MrCall/StarChat business ID
+
+        Returns:
+            owner_id (Firebase UID) or None if not found
+        """
+        try:
+            from ..storage.supabase_client import SupabaseStorage as SupabaseClient
+            client = SupabaseClient()
+
+            # Look up in oauth_tokens where provider='mrcall' and email=business_id
+            # (we store business_id in the email field for mrcall provider)
+            result = client.client.table('oauth_tokens').select('owner_id').eq(
+                'provider', 'mrcall'
+            ).eq('email', business_id).execute()
+
+            if result.data:
+                return result.data[0]['owner_id']
+
+            logger.warning(f"No owner found for MrCall business_id: {business_id}")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error looking up owner for business {business_id}: {e}")
+            return None

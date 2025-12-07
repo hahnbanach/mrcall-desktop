@@ -178,39 +178,54 @@ zylch/
 └── pyproject.toml          # Dependencies
 ```
 
-## What Works Right Now (Phase 1)
+## What Works Now
 
 ✅ **Core Infrastructure**
 - Configuration loading from .env
-- JSON cache with 30-day TTL
-- StarChat client (BasicAuth)
-- Model selection (Haiku/Sonnet/Opus)
+- Multi-tenant architecture with Firebase Auth
+- Email archive with SQLite + FTS5 full-text search
+- Model selection (Haiku/Sonnet/Opus tiering)
 
-✅ **Agent**
-- Anthropic SDK integration
-- Native function calling
-- Conversation history
-- Tool execution loop
+✅ **Agent System**
+- ZylchAIAgent with Claude API and 30+ tools
+- Native function calling with tool orchestration
+- Behavioral memory with semantic search (ZylchMemory)
+- Person-centric relationship intelligence
 
-✅ **Tools (Basic)**
-- query_contacts - Search StarChat contacts
-- update_contact - Update contact variables
-- enrich_contact - Enrich from Gmail + cache
-- list_all_contacts - **NEW** - List all contacts for a business
+✅ **Email Intelligence**
+- Gmail OAuth (read, send, drafts)
+- Microsoft Outlook integration (Graph API)
+- Two-tier caching: Archive (permanent) + Intelligence (30-day)
+- Thread analysis, task detection, gap analysis
+- AI-generated email detection
 
-✅ **Clients**
-- Gmail (OAuth, search, send, drafts)
-- SendGrid (mass email)
-- Vonage (SMS campaigns)
-- StarChat (contacts)
+✅ **Calendar**
+- Google Calendar integration with Meet links
+- Outlook Calendar integration
+- Email-to-event with automatic invites
 
-## Known Limitations (Current Phase)
+✅ **Integrations**
+- StarChat/MrCall (contacts, telephony)
+- SendGrid (email campaigns)
+- Vonage (SMS)
+- Pipedrive CRM (optional)
 
-⚠️ **StarChat Contact API**: May need Firebase realm configuration for production
-⚠️ **Gmail OAuth**: Requires manual Google Cloud Console setup
-⚠️ **Web Search**: Not yet implemented (needed for contact enrichment)
-⚠️ **Calendar**: Not yet implemented (Phase 3)
-⚠️ **Campaign Management**: Not yet implemented (Phase 5)
+✅ **Web Dashboard**
+- Vue 3 + TypeScript + Tailwind CSS
+- Firebase authentication (Google, Microsoft)
+- Full feature parity with CLI
+- BYOK (Bring Your Own Key) for Anthropic API
+
+✅ **Automation**
+- Triggered instructions system
+- Webhook server (StarChat, SendGrid, Vonage)
+- APScheduler for reminders
+
+## Current Limitations
+
+⚠️ **Single-Assistant Mode**: One assistant per owner (v0.2.0 - architecture ready for multi-assistant)
+⚠️ **Local SQLite**: Supabase migration planned for production scaling
+⚠️ **WhatsApp Integration**: Pending StarChat REST API endpoint
 
 ## Troubleshooting
 
@@ -234,29 +249,25 @@ zylch/
 
 ## Next Steps
 
-### Immediate (Phase 1 completion)
-1. ✅ **Test agent conversation** - Chat with Zylch AI in CLI
-2. 🔲 Configure StarChat realm properly
-3. 🔲 Add web search for enrichment
-4. 🔲 Set up Gmail OAuth
+### Production Deployment
+- [ ] Deploy backend to Railway
+- [ ] Deploy frontend to Vercel
+- [ ] Configure production domains (api.zylchai.com, app.zylchai.com)
 
-### Phase 2 (Enrichment & Classification)
-- Contact classification logic
-- Priority scoring
-- Humanized descriptions
-- Email exchange history tracking
+### Phase H: Billing (Stripe)
+- [ ] Set up Stripe subscription billing
+- [ ] Implement pricing tiers (Starter $29, Pro $79, Business $199)
+- [ ] Add feature gating based on subscription
 
-### Phase 3 (Email Drafting & Calendar)
-- Google Calendar integration
-- Email draft generation
-- Daily digest
-- Task scheduling
+### Phase I: Supabase Migration
+- [ ] Migrate from SQLite to Supabase Postgres
+- [ ] Enable Row-Level Security for multi-tenant
+- [ ] Migrate vector search to pg_vector
 
-### Phase 4+ (Advanced Features)
-- Multi-account Gmail
-- Mass email campaigns
-- Campaign automation (email open → call)
-- CRM integration
+### Phase J: Scaling
+- [ ] Add Upstash Redis for rate limiting
+- [ ] Set up Sentry for error tracking
+- [ ] Load testing and performance optimization
 
 ## Development
 
@@ -284,23 +295,22 @@ python -m zylch.cli.main
 
 ## Resources
 
-- **Spec**: `MRPARK_SPEC.md` - Complete implementation specification
-- **Status**: `IMPLEMENTATION_STATUS.md` - Current progress tracking
-- **Memory System**: `REASONING_BANK_DESIGN.md` - Memory architecture
-- **Memory Usage**: `MEMORY_USAGE.md` - CLI commands and workflows
-- **Tasks**: `TASK_MANAGEMENT.md` - Person-centric task system
-- **API Catalog**: `../STARCHAT_COMPLETE_API_CATALOG.md` - StarChat API reference
+- **Architecture**: `.claude/ARCHITECTURE.md` - System design and key decisions
+- **Development Plan**: `.claude/DEVELOPMENT_PLAN.md` - Current roadmap
+- **API Reference**: `docs/api/API_REFERENCE.md` - Complete REST API documentation
+- **Multi-Tenant**: `docs/features/multi-tenant-architecture.md` - Multi-tenant guide
+- **Memory System**: `zylch_memory/ZYLCH_MEMORY_ARCHITECTURE.md` - Memory architecture
 - **Anthropic Docs**: https://docs.anthropic.com/
 
 ## Support
 
 For issues or questions:
-1. Check `IMPLEMENTATION_STATUS.md` for known issues
+1. Check `.claude/DEVELOPMENT_PLAN.md` for current status
 2. Review logs for error messages
-3. Consult `MRPARK_SPEC.md` for architecture details
+3. Consult `.claude/ARCHITECTURE.md` for design decisions
 
 ---
 
-**Current Status: Phase 1 Foundation - 80% Complete** 🎉
+**Current Status: Phases A-G Complete** 🎉
 
-Core architecture implemented. Agent is conversational and ready for tool development.
+Core agent, multi-tenant architecture, webhook server, and web dashboard are fully implemented. Ready for production deployment and billing integration.
