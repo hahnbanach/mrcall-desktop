@@ -1,6 +1,50 @@
 # Zylch Implementation Notes
 
-## Recent Changes (2025-11-27)
+## Recent Changes (2025-12-07)
+
+### CLI Migration to Backend (v0.3.0)
+
+**Objective**: Migrate all slash commands from the monolithic CLI to backend command handlers, enabling multi-client access (CLI, web app, mobile).
+
+**Implementation**:
+- Created `zylch/services/command_handlers.py` with handlers for all commands
+- Created `zylch/services/trigger_service.py` for event-driven automation
+- Storage migrated from local SQLite/ZylchMemory to Supabase
+
+**Commands Migrated**:
+| Command | Handler | Storage |
+|---------|---------|---------|
+| `/trigger` | `handle_trigger()` | Supabase `triggers` table |
+| `/mrcall` | `handle_mrcall()` | Supabase `oauth_tokens` |
+| `/share` | `handle_share()` | Supabase `sharing_auth` |
+| `/revoke` | `handle_revoke()` | Supabase `sharing_auth` |
+| `/sharing` | `handle_sharing()` | Supabase `sharing_auth` |
+
+**Trigger Service Architecture**:
+- Events queued in `trigger_events` table
+- Background worker processes pending events
+- Supports: `session_start`, `email_received`, `sms_received`, `call_received`
+- Agent execution with event context
+
+**Files Created/Modified**:
+- `zylch/services/command_handlers.py` - All slash command handlers
+- `zylch/services/trigger_service.py` - Event-driven trigger processor
+- `zylch/storage/supabase_client.py` - Added trigger/sharing methods
+- `tests/test_command_handlers.py` - 28 tests for handlers
+- `tests/test_trigger_service.py` - 14 tests for trigger service
+- `docs/TRIGGERED_INSTRUCTIONS.md` - Updated documentation
+- `docs/SHARING.md` - New documentation
+
+**Bug Fixes**:
+- Fixed `SupabaseClient` import error (class is `SupabaseStorage`)
+- Fixed test mocks to use correct import path
+- Fixed `create_all_tools()` tuple unpacking in tests
+
+**Test Results**: 163 passed, 7 skipped (FastAPI dependency overrides needed)
+
+---
+
+## Previous Changes (2025-11-27)
 
 ### Multi-Tenant Single-Assistant Constraint (v0.2.0)
 
@@ -129,4 +173,4 @@ When StarChat database supports multiple assistants per owner:
 
 ---
 
-*Last Updated: 2025-11-27*
+*Last Updated: 2025-12-07*

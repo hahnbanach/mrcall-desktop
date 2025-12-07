@@ -19,6 +19,17 @@ const googleStatus = ref<{
 const googleLoading = ref(false)
 const googleError = ref<string | null>(null)
 
+// Anthropic API key state
+const anthropicStatus = ref<{
+  has_key: boolean
+  key_preview?: string
+} | null>(null)
+const anthropicLoading = ref(false)
+const anthropicError = ref<string | null>(null)
+const anthropicSuccess = ref<string | null>(null)
+const anthropicKeyInput = ref('')
+const showAnthropicInput = ref(false)
+
 const tabs = [
   { id: 'assistant', label: 'Assistant', icon: '🤖' },
   { id: 'privacy', label: 'Privacy', icon: '🔒' },
@@ -30,6 +41,7 @@ const tabs = [
 onMounted(() => {
   settingsStore.fetchAssistant()
   fetchGoogleStatus()
+  fetchAnthropicStatus()
 })
 
 async function fetchGoogleStatus() {
@@ -73,6 +85,71 @@ async function disconnectGoogle() {
     googleError.value = error.response?.data?.detail || 'Failed to disconnect'
   } finally {
     googleLoading.value = false
+  }
+}
+
+// Anthropic API key functions
+async function fetchAnthropicStatus() {
+  try {
+    const response = await api.get('/api/auth/anthropic/status')
+    anthropicStatus.value = response.data
+  } catch (error: any) {
+    console.error('Failed to fetch Anthropic status:', error)
+    anthropicStatus.value = { has_key: false }
+  }
+}
+
+async function saveAnthropicKey() {
+  if (!anthropicKeyInput.value.trim()) {
+    anthropicError.value = 'Please enter an API key'
+    return
+  }
+
+  if (!anthropicKeyInput.value.startsWith('sk-ant-')) {
+    anthropicError.value = 'Invalid API key format. Key should start with sk-ant-'
+    return
+  }
+
+  anthropicLoading.value = true
+  anthropicError.value = null
+  anthropicSuccess.value = null
+
+  try {
+    await api.post('/api/auth/anthropic/key', { api_key: anthropicKeyInput.value })
+    anthropicStatus.value = {
+      has_key: true,
+      key_preview: anthropicKeyInput.value.slice(0, 10) + '...' + anthropicKeyInput.value.slice(-4)
+    }
+    anthropicKeyInput.value = ''
+    showAnthropicInput.value = false
+    anthropicSuccess.value = 'API key saved successfully'
+    setTimeout(() => { anthropicSuccess.value = null }, 3000)
+  } catch (error: any) {
+    console.error('Failed to save Anthropic key:', error)
+    anthropicError.value = error.response?.data?.detail || 'Failed to save API key'
+  } finally {
+    anthropicLoading.value = false
+  }
+}
+
+async function deleteAnthropicKey() {
+  if (!confirm('Are you sure you want to remove your Anthropic API key? The assistant will stop working until you add a new key.')) {
+    return
+  }
+
+  anthropicLoading.value = true
+  anthropicError.value = null
+
+  try {
+    await api.delete('/api/auth/anthropic/key')
+    anthropicStatus.value = { has_key: false }
+    anthropicSuccess.value = 'API key removed'
+    setTimeout(() => { anthropicSuccess.value = null }, 3000)
+  } catch (error: any) {
+    console.error('Failed to delete Anthropic key:', error)
+    anthropicError.value = error.response?.data?.detail || 'Failed to remove API key'
+  } finally {
+    anthropicLoading.value = false
   }
 }
 
@@ -316,9 +393,15 @@ async function handleLogout() {
           <div>
             <h2 class="text-lg font-semibold text-gray-900 mb-4">Connected Services</h2>
 
-            <!-- Error message -->
+            <!-- Error messages -->
             <div v-if="googleError" class="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
               {{ googleError }}
+            </div>
+            <div v-if="anthropicError" class="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+              {{ anthropicError }}
+            </div>
+            <div v-if="anthropicSuccess" class="mb-4 p-3 bg-green-50 text-green-700 rounded-lg text-sm">
+              {{ anthropicSuccess }}
             </div>
 
             <div class="space-y-4">
@@ -386,6 +469,93 @@ async function handleLogout() {
                   </div>
                 </div>
                 <button class="text-sm text-accent hover:underline">Connect</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI Provider Section -->
+          <div>
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">AI Provider</h2>
+            <p class="text-sm text-gray-500 mb-4">Configure your AI API key to power Zylch's assistant features.</p>
+
+            <div class="space-y-4">
+              <!-- Anthropic Integration -->
+              <div class="p-4 border border-gray-200 rounded-xl">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <span class="text-orange-600 text-lg font-semibold">A</span>
+                    </div>
+                    <div>
+                      <h3 class="font-medium text-gray-900">Anthropic Claude</h3>
+                      <p class="text-sm text-gray-500">Powers the AI assistant</p>
+                    </div>
+                  </div>
+
+                  <!-- Loading state -->
+                  <span v-if="anthropicLoading" class="text-sm text-gray-500">
+                    Loading...
+                  </span>
+
+                  <!-- Connected state -->
+                  <template v-else-if="anthropicStatus?.has_key">
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">Connected</span>
+                      <button
+                        @click="deleteAnthropicKey"
+                        class="text-sm text-red-600 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </template>
+
+                  <!-- Not connected state -->
+                  <button
+                    v-else
+                    @click="showAnthropicInput = true"
+                    class="text-sm text-white bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-lg transition-colors font-medium"
+                  >
+                    Add API Key
+                  </button>
+                </div>
+
+                <!-- Show key preview if connected -->
+                <div v-if="anthropicStatus?.has_key && anthropicStatus?.key_preview" class="mt-2 ml-13 text-sm text-gray-500">
+                  Key: {{ anthropicStatus.key_preview }}
+                </div>
+
+                <!-- API Key input form -->
+                <div v-if="showAnthropicInput && !anthropicStatus?.has_key" class="mt-4 pt-4 border-t border-gray-100">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Anthropic API Key
+                  </label>
+                  <div class="flex gap-2">
+                    <input
+                      v-model="anthropicKeyInput"
+                      type="password"
+                      placeholder="sk-ant-..."
+                      class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 text-sm"
+                      @keyup.enter="saveAnthropicKey"
+                    />
+                    <button
+                      @click="saveAnthropicKey"
+                      :disabled="anthropicLoading"
+                      class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium disabled:opacity-50"
+                    >
+                      Save
+                    </button>
+                    <button
+                      @click="showAnthropicInput = false; anthropicKeyInput = ''; anthropicError = null"
+                      class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <p class="mt-2 text-xs text-gray-500">
+                    Get your API key from <a href="https://console.anthropic.com/settings/keys" target="_blank" class="text-orange-600 hover:underline">console.anthropic.com</a>
+                  </p>
+                </div>
               </div>
             </div>
           </div>

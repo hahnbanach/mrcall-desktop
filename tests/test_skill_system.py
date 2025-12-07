@@ -4,6 +4,8 @@ import asyncio
 import sys
 from pathlib import Path
 
+import pytest
+
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -15,7 +17,7 @@ from zylch.skills.cross_channel import CrossChannelOrchestratorSkill
 from zylch.router.intent_classifier import IntentRouter
 
 
-class TestSkill(BaseSkill):
+class SkillSystemTestSkill(BaseSkill):
     """Simple test skill for validation."""
 
     def __init__(self):
@@ -32,11 +34,12 @@ class TestSkill(BaseSkill):
         }
 
 
+@pytest.mark.asyncio
 async def test_base_skill():
     """Test basic skill execution."""
     print("\n=== Test 1: Base Skill ===")
 
-    skill = TestSkill()
+    skill = SkillSystemTestSkill()
     context = SkillContext(
         user_id="test_user",
         intent="test intent",
@@ -53,6 +56,7 @@ async def test_base_skill():
     return True
 
 
+@pytest.mark.asyncio
 async def test_registry():
     """Test skill registry."""
     print("\n=== Test 2: Skill Registry ===")
@@ -61,7 +65,7 @@ async def test_registry():
     registry._skills = {}
 
     # Register test skill
-    test_skill = TestSkill()
+    test_skill = SkillSystemTestSkill()
     registry.register_skill(test_skill)
 
     # Verify registration
@@ -81,6 +85,7 @@ async def test_registry():
     return True
 
 
+@pytest.mark.asyncio
 async def test_email_triage():
     """Test email triage skill (without actual email data)."""
     print("\n=== Test 3: Email Triage Skill ===")
@@ -103,6 +108,7 @@ async def test_email_triage():
     return True
 
 
+@pytest.mark.asyncio
 async def test_pattern_store():
     """Test pattern service with ZylchMemory."""
     print("\n=== Test 4: Pattern Service (ZylchMemory) ===")
@@ -150,6 +156,7 @@ async def test_pattern_store():
     return True
 
 
+@pytest.mark.asyncio
 async def test_full_system():
     """Test full skill system integration."""
     print("\n=== Test 5: Full System Integration ===")

@@ -15,7 +15,8 @@
   - [Daily Briefing](./user-features/daily-briefing.md) - Know what needs attention
   - [Memory & Learning](./user-features/memory-learning.md) - Zylch learns your style
   - [Task Management](./user-features/task-management.md) - See what needs doing
-  - [Sharing](./user-features/sharing.md) - Share intel with colleagues
+  - [Sharing](./SHARING.md) - Share relational intelligence with colleagues
+  - [Triggered Instructions](./TRIGGERED_INSTRUCTIONS.md) - Event-driven automation
   - [MrCall Integration](./user-features/mrcall-integration.md) - Phone assistant config
 
 ### Getting Started
@@ -443,5 +444,5 @@ See [main README](../README.md) for licensing information.
 
 ---
 
-**Last Updated:** November 2025
-**Version:** 0.2.0
+**Last Updated:** December 2025
+**Version:** 0.3.0

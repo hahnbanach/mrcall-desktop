@@ -1097,10 +1097,9 @@ async def google_oauth_callback(
         )
 
         # Save credentials using token_storage (saves to Supabase if configured)
-        from zylch.api.token_storage import save_google_credentials, save_provider, save_email
+        # NOTE: save_google_credentials handles provider and email in one upsert
+        from zylch.api.token_storage import save_google_credentials
 
-        save_provider(owner_id, "google.com", user_email)
-        save_email(owner_id, user_email)
         save_google_credentials(owner_id, creds, user_email)
 
         logger.info(f"Saved Google OAuth credentials for user {owner_id}")

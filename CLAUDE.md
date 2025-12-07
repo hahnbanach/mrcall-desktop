@@ -16,7 +16,26 @@ The commercial product (email/phone/WhatsApp assistant) generates revenue and da
 
 ---
 
-## 🚨 Critical Execution Rules
+## 🚨 Critical Rules
+
+### NO LOCAL FILESYSTEM - DATABASE ONLY
+
+**CRITICAL: The backend uses Supabase for ALL data storage. NO local filesystem.**
+
+- **OAuth tokens** → Supabase `oauth_tokens` table (encrypted)
+- **Email metadata** → Supabase `thread_analysis` table
+- **User data** → Supabase (scoped by `owner_id`)
+- **Memory/Avatars** → Supabase pg_vector
+
+**NEVER:**
+- Store tokens in local files
+- Use pickle files on filesystem
+- Reference `credentials/` directory for runtime data
+- Fall back to filesystem storage
+
+**The `credentials/` and `cache/` directories are LEGACY and UNUSED.**
+
+### Execution Rules
 
 **NEVER ask questions about methodology or approach. Execute immediately.**
 
@@ -69,18 +88,32 @@ When user says:
 
 **Backend:**
 - Python 3.11+, FastAPI, async throughout
-- SQLite (local) → Supabase (production)
-- Firebase Auth (multi-tenant)
+- Supabase Postgres (all server data)
+- Firebase Auth (multi-tenant, Google/Microsoft OAuth)
 - Anthropic Claude (Haiku/Sonnet/Opus tiering)
+- Railway hosting (api.zylchai.com)
 
 **Frontend:**
-- Vue 3, Vite, Pinia, TailwindCSS
+- Vue 3, Vite, TypeScript, Pinia, TailwindCSS
 - Axios → Backend FastAPI
+- Vercel hosting (app.zylchai.com)
 
-**Avatar Architecture:**
-- SQLite + HNSW index + sentence-transformers
+**Email Storage (Local-First, like Superhuman):**
+- IndexedDB (browser) — encrypted with Web Crypto API (AES-GCM 256-bit)
+- Email content NEVER on Zylch servers
+- Only AI summaries stored in Supabase
+
+**Avatar/Memory Architecture:**
+- Supabase pg_vector + sentence-transformers
 - Small-world topology for retrieval
+- Reconsolidation (update, not duplicate)
 - Namespace isolation per person/entity
+
+**Integrations:**
+- Gmail & Outlook (OAuth 2.0)
+- Google & Outlook Calendar
+- StarChat/MrCall (contacts, telephony)
+- SendGrid (email campaigns), Vonage (SMS)
 
 ---
 
@@ -88,15 +121,11 @@ When user says:
 
 | Namespace | Purpose | Key Files |
 |-----------|---------|-----------|
-| `zylch` | Main backend/API | `/zylch`, `/src` |
+| `zylch` | Backend, API, planning, research, execution | `/zylch`, `/.claude`, `/spec` |
 | `zylch-cli` | CLI thin client | `/zylch-cli` (separate repo) |
-| `zylch-memory` | Avatar architecture research | `/zylch_memory` |
 | `zylch-frontend` | Vue dashboard | `/frontend` |
-| `zylch-website` | Marketing website | `/zylch-website` |
-| `zylch-planning` | Development planning | `/.claude/DEVELOPMENT_PLAN.md`, `/.claude/ARCHITECTURE.md` |
-| `zylch-deploy` | Deployment | `/docs/DEPLOYMENT.md` |
-| `zylch-execution` | Plan execution | — |
-| `zylch-research` | Research roadmap, LLM evolution | `/spec` |
+| `zylch-memory` | Avatar architecture research | `/zylch_memory` |
+| `zylch-deploy` | Deployment configs | `/docs/DEPLOYMENT.md` |
 
 ---
 
@@ -125,16 +154,16 @@ When user says "debug" or reports bugs:
 
 ### Execute Development Plan
 When user references DEVELOPMENT_PLAN.md:
-1. Query memory: `zylch`, `zylch-planning`
+1. Query memory: `zylch`
 2. Read `.claude/DEVELOPMENT_PLAN.md`
 3. Assess current status from memory
 4. Prioritize and get approval
 5. Execute approved phases
-6. Store progress in `zylch-execution` namespace
+6. Store progress in `zylch` namespace
 
 ### Deploy Task
 When user mentions deployment:
-1. Query memory: `zylch`, `zylch-execution`, `zylch-deploy`
+1. Query memory: `zylch`, `zylch-deploy`
 2. Read deployment docs
 3. Plan infrastructure
 4. Execute deployment steps
@@ -142,23 +171,23 @@ When user mentions deployment:
 
 ### Research/Architecture Work
 When user discusses vision, avatars, memory architecture:
-1. Query memory: `zylch-memory`, `zylch-research`, `zylch-planning`
+1. Query memory: `zylch`, `zylch-memory`
 2. Read `/spec/ZYLCH_BUSINESS_MODEL.md` and `/.claude/ARCHITECTURE.md`
 3. Ensure changes align with strategic vision (research lab, not SaaS)
-4. Store decisions in `zylch-research` namespace
+4. Store decisions in `zylch` namespace
 
 ### Planning Session
 When user discusses roadmap, priorities, or says "planning":
-1. Query memory: `zylch-planning`, `zylch-research`, `zylch-execution`
+1. Query memory: `zylch`
 2. Read `/.claude/DEVELOPMENT_PLAN.md` and `/spec/ZYLCH_BUSINESS_MODEL.md`
 3. Assess: what's done, what's blocked, what's next
 4. Propose prioritized plan with rationale
 5. After approval, update `DEVELOPMENT_PLAN.md`
-6. Store decisions in `zylch-planning` namespace
+6. Store decisions in `zylch` namespace
 
 ### Architecture Review
 When user discusses system design, memory system, or avatars:
-1. Query memory: `zylch-memory`, `zylch-planning`
+1. Query memory: `zylch`, `zylch-memory`
 2. Read `/.claude/ARCHITECTURE.md` and `/zylch_memory/README.md`
 3. Validate changes against strategic vision (avatar architecture, not just features)
 4. Update `ARCHITECTURE.md` if structural decisions made
@@ -166,23 +195,23 @@ When user discusses system design, memory system, or avatars:
 
 ### Business Model / Investor Prep
 When user discusses pitch, investors, funding, or business:
-1. Query memory: `zylch-research`, `zylch-planning`
+1. Query memory: `zylch`
 2. Read `/spec/ZYLCH_BUSINESS_MODEL.md`
 3. Search web if needed (market data, competitor analysis, LLM trends)
 4. Ensure framing is "research lab with commercial bridge", not "SaaS startup"
-5. Store insights in `zylch-research` namespace
+5. Store insights in `zylch` namespace
 
 ### Documentation Update
 When user says "update docs" or documentation is stale:
-1. Query memory: `zylch-planning`, `zylch-execution`
+1. Query memory: `zylch`
 2. Read `/.claude/DOCUMENTATION.md` for standards
 3. Identify gaps between code and docs
 4. Update relevant docs in `/docs` (user-facing) or `/.claude` (developer)
-5. Store what was updated in `zylch-planning` namespace
+5. Store what was updated in `zylch` namespace
 
 ### Full Sync / Status Report
 When user says "status", "where are we", or "sync":
-1. Query ALL namespaces: `zylch`, `zylch-frontend`, `zylch-planning`, `zylch-execution`, `zylch-deploy`, `zylch-research`
+1. Query namespaces: `zylch`, `zylch-frontend`, `zylch-cli`, `zylch-deploy`
 2. Read `DEVELOPMENT_PLAN.md` for milestones
 3. Compile: completed phases, current blockers, next priorities
 4. Output concise status report
@@ -190,16 +219,15 @@ When user says "status", "where are we", or "sync":
 
 ### New Feature Implementation
 When user requests a new feature:
-1. Query memory: `zylch`, `zylch-planning`
+1. Query memory: `zylch`
 2. Check if feature aligns with `DEVELOPMENT_PLAN.md` phases
 3. If not in plan: flag and ask if it should be added
 4. Implement following patterns in `/.claude/CONVENTIONS.md`
 5. Store implementation decisions in `zylch` namespace
-6. Update `zylch-execution` with progress
 
 ### Memory/Avatar System Work
 When user specifically works on memory, avatars, or reconsolidation:
-1. Query memory: `zylch-memory`, `zylch-research`
+1. Query memory: `zylch`, `zylch-memory`
 2. Read `/zylch_memory/ZYLCH_MEMORY_ARCHITECTURE.md`
 3. This is core research — document WHY, not just WHAT
 4. Ensure small-world topology and reconsolidation principles preserved

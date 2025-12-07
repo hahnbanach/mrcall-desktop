@@ -1,5 +1,27 @@
 # Zylch Architecture
 
+## Critical: No Local Filesystem
+
+**The backend uses Supabase for ALL data storage. NO local filesystem.**
+
+| Data | Storage | Table |
+|------|---------|-------|
+| OAuth tokens (Google, Microsoft, Anthropic) | Supabase | `oauth_tokens` (encrypted) |
+| Email analysis | Supabase | `thread_analysis` |
+| Calendar events | Supabase | `calendar_events` |
+| Sync state | Supabase | `sync_state` |
+| Triggers | Supabase | `triggers`, `trigger_events` |
+| Memory/Avatars | Supabase | pg_vector tables |
+
+**NEVER use local filesystem for:**
+- Token storage (no pickle files)
+- Credentials (no `credentials/` directory)
+- Cache (no `cache/` directory)
+
+The `credentials/` and `cache/` directories are **LEGACY and UNUSED**.
+
+---
+
 ## System Overview
 
 Zylch is an AI-powered email assistant that provides relationship intelligence, task management, and automated email workflows through multiple interfaces (CLI, HTTP API).
@@ -15,33 +37,42 @@ Zylch is an AI-powered email assistant that provides relationship intelligence, 
 
 ### 2. Tools (`zylch/tools/`)
 Modular tools for agent capabilities:
-- **Email**: Gmail API wrapper, draft management, sending
-- **Archive**: SQLite-backed permanent email storage with FTS5 search
-- **Calendar**: Google Calendar integration with Meet links
+- **Email**: Gmail/Outlook API wrapper, draft management, sending
+- **Archive**: Permanent email storage in Supabase with full-text search
+- **Calendar**: Google/Outlook Calendar integration with Meet/Teams links
 - **Tasks**: Email-to-task extraction, relationship gap analysis
 - **CRM**: Pipedrive integration (optional)
 - **Contacts**: StarChat/MrCall integration
 
 **Key Pattern**: Tools are stateless classes with `execute()` method
 
-### 3. Two-Tier Email System
+### 3. Two-Tier Email System (Local-First, like Superhuman)
 
-**Tier 1: Archive (`email_archive.py` + `email_archive_backend.py`)**
-- **Purpose**: Permanent storage of ALL emails
-- **Technology**: SQLite with FTS5 full-text search
-- **Sync**: Gmail History API (incremental, <1s)
-- **Features**: Complete history, never loses data
+**Tier 1: Local Email Archive (IndexedDB, encrypted)**
+- **Purpose**: Permanent storage of ALL emails on user's device
+- **Technology**: IndexedDB + Web Crypto API encryption
+- **Privacy**: Email content NEVER stored on Zylch servers
+- **Sync**: Gmail/Outlook History API (incremental, <1s)
+- **Features**: Complete history, offline access, maximum privacy
 
-**Tier 2: Intelligence Cache (`email_sync.py`)**
-- **Purpose**: AI-analyzed threads for relationship intelligence
-- **Technology**: JSON cache (`threads.json`)
-- **Window**: 30-day rolling window
-- **Features**: AI enrichment, task extraction, gap analysis
+**Tier 2: Intelligence Cache (Supabase `thread_analysis`)**
+- **Purpose**: AI-generated analysis and summaries only
+- **Technology**: Supabase Postgres
+- **Content**: Analysis text, needs_action, priority, contact info (NO raw email bodies)
+- **Window**: 30-day rolling analysis
 
 **Data Flow**:
 ```
-Gmail → Archive (permanent) → Intelligence Cache (analyzed) → Gap Analysis
+Gmail/Outlook API
+       ↓
+IndexedDB (local, encrypted) ← Email bodies stored here
+       ↓
+Claude AI (on-demand analysis)
+       ↓
+Supabase (thread_analysis) ← Only AI summaries stored here
 ```
+
+**Privacy Guarantee**: Your emails never leave your device. Like Superhuman, Zylch stores email content locally in your browser, encrypted. We only store AI-generated summaries on our servers - never your actual emails.
 
 ### 4. Service Layer (`zylch/services/`)
 
@@ -54,6 +85,13 @@ Gmail → Archive (permanent) → Intelligence Cache (analyzed) → Gap Analysis
   - `analyze_gaps()`, `get_gaps_summary()`, `get_email_tasks()`
 - **ChatService**: Conversational AI (wraps CLI for tool access)
 - **ArchiveService**: Email archive operations
+- **CommandHandlers**: Slash command processing (v0.3.0+)
+  - All `/command` handlers in one module
+  - Returns markdown strings (no Anthropic API calls)
+  - Used by both CLI and web app
+- **TriggerService**: Event-driven automation (v0.3.0+)
+  - Queues and processes trigger events
+  - Background worker for async execution
 
 **Pattern**: CLI and API both use the same service layer functions
 
@@ -90,13 +128,13 @@ Interactive command-line interface:
 
 ## Key Architectural Decisions
 
-### Decision 1: Two-Tier Email Caching
+### Decision 1: Two-Tier Email Storage
 
 **Problem**: Old system re-fetched 600+ emails every sync (15-30 min), lost history outside 30-day window
 
 **Solution**:
-- **Archive**: Permanent SQLite storage (all emails forever)
-- **Intelligence Cache**: 30-day analyzed window (AI-enriched)
+- **Archive**: Permanent Supabase storage (all emails forever)
+- **Intelligence Cache**: 30-day analyzed window in Supabase (AI-enriched)
 
 **Benefits**:
 - 100x faster sync (<1s vs 15-30min)
@@ -154,15 +192,85 @@ for contact_email, threads in person_threads.items():
 
 ## Data Storage
 
-### Persistent Storage
-- **Archive DB**: `cache/emails/archive.db` (SQLite)
-- **Intelligence Cache**: `cache/emails/threads.json` (JSON)
-- **Calendar Cache**: `cache/calendar/` (JSON)
-- **OAuth Tokens**: `credentials/gmail_tokens/` (pickle)
+### Browser Storage (IndexedDB) - Email Content
+
+**Email bodies and metadata stored locally** on user's device, encrypted:
+
+| Store | Content | Encrypted? |
+|-------|---------|------------|
+| `emails` | Full email bodies, HTML, plaintext | ✅ Web Crypto AES-GCM |
+| `email_metadata` | From, to, subject, date, thread_id, labels | ✅ Web Crypto AES-GCM |
+| `attachments` | Cached attachment content | ✅ Web Crypto AES-GCM |
+| `crypto_keys` | Non-extractable CryptoKey for encryption | 🔒 Protected by browser |
+
+**Encryption approach**:
+- Web Crypto API (AES-GCM 256-bit)
+- Key derived from user auth via PBKDF2
+- Non-extractable CryptoKey stored in IndexedDB
+- Key never leaves browser, never sent to server
+
+### Server Storage (Supabase) - Metadata & AI Analysis Only
+
+**NO email content stored on server.** Only:
+
+| Table | Purpose |
+|-------|---------|
+| `thread_analysis` | AI-generated summaries (no raw email bodies) |
+| `calendar_events` | Calendar events |
+| `sync_state` | Gmail/Outlook history IDs, last sync timestamps |
+| `relationship_gaps` | Detected relationship gaps |
+| `oauth_tokens` | All tokens (Google, Microsoft, Anthropic, MrCall) |
+| `triggers` | Triggered instructions |
+| `trigger_events` | Event queue for trigger processing |
+| `sharing_auth` | Sharing authorizations |
+
+### Token Storage (`oauth_tokens` table)
+
+| Column | Purpose | Encrypted? |
+|--------|---------|------------|
+| `owner_id` | Firebase UID (partition key) | — |
+| `provider` | `google.com`, `microsoft.com`, `anthropic`, `mrcall` | — |
+| `email` | User's email (or MrCall business_id) | ❌ |
+| `google_token_data` | Base64 pickle of Google Credentials | ✅ Fernet |
+| `graph_access_token` | Microsoft Graph access token | ✅ Fernet |
+| `graph_refresh_token` | Microsoft Graph refresh token | ✅ Fernet |
+| `graph_expires_at` | Token expiration (ISO timestamp) | ❌ |
+| `anthropic_api_key` | Anthropic API key | ✅ Fernet |
+| `scopes` | OAuth scopes | ❌ |
+
+**Token Methods** (`zylch/storage/supabase_client.py`):
+```python
+# Store (encrypts automatically)
+store_oauth_token(owner_id, provider, email, google_token_data=..., graph_access_token=...)
+save_anthropic_key(owner_id, api_key)
+
+# Retrieve (decrypts automatically)
+get_google_token(owner_id)      # → base64 pickle string
+get_graph_token(owner_id)       # → {access_token, refresh_token, expires_at}
+get_anthropic_key(owner_id)     # → "sk-ant-..."
+
+# Delete
+delete_oauth_token(owner_id, provider)
+delete_anthropic_key(owner_id)
+```
 
 ### Configuration
-- **Environment**: `.env` file
+- **Environment**: Railway env vars (backend), Vercel env vars (frontend)
 - **Defaults**: `zylch/config.py` (Pydantic settings)
+
+### Firebase Service Account
+
+Stored as **Base64-encoded JSON** in Railway env vars:
+
+```bash
+# Encode the service account JSON:
+cat firebase-service-account.json | base64
+
+# Set in Railway:
+FIREBASE_SERVICE_ACCOUNT_BASE64=eyJ0eXBlIjoic2VydmljZV9hY2NvdW50Ii...
+```
+
+Backend decodes automatically on startup (`zylch/api/firebase_auth.py`).
 
 ## External Integrations
 
@@ -205,14 +313,75 @@ for contact_email, threads in person_threads.items():
 
 ## Security & Privacy
 
+### Email Privacy Guarantee (Local-First Architecture)
+
+**Your emails never leave your device.**
+
+Like Superhuman, Zylch follows a local-first architecture:
+
+| Data | Where Stored | On Zylch Servers? |
+|------|--------------|-------------------|
+| Email bodies | Browser IndexedDB (encrypted) | ❌ Never |
+| Email metadata | Browser IndexedDB (encrypted) | ❌ Never |
+| Attachments | Browser IndexedDB (encrypted) | ❌ Never |
+| AI summaries | Supabase | ✅ Yes (no raw content) |
+| Sync state | Supabase | ✅ Yes (history IDs only) |
+
+**How it works**:
+1. Emails fetched from Gmail/Outlook API directly to browser
+2. Encrypted with Web Crypto API (AES-GCM 256-bit) before storing in IndexedDB
+3. When AI analysis needed, content sent to Claude on-demand
+4. Only AI-generated summaries stored on Supabase (never raw email content)
+
+**Competitive comparison**:
+- **Superhuman**: Local-first (WebSQL) ← Zylch follows this model
+- **Shortwave**: Server-side (stores emails on their servers)
+- **Fyxer**: Server-side (stores emails on Google Cloud)
+
 ### Authentication
-- **Local**: Gmail OAuth tokens stored locally
-- **API**: No authentication (development mode)
+- **Firebase Auth**: JWT tokens validated on all API endpoints
+- **OAuth Tokens**: Stored encrypted in Supabase (Google, Microsoft)
+- **Per-user isolation**: All data scoped by `owner_id` (Firebase UID)
+
+### Sensitive Data Encryption
+
+**Anthropic API Keys (BYOK)**:
+- **Storage**: Supabase `oauth_tokens` table with `provider='anthropic'`
+- **Encryption**: Fernet (AES-128-CBC + HMAC) via `zylch/utils/encryption.py`
+- **Key**: `ENCRYPTION_KEY` environment variable (set in Railway)
+- **Flow**:
+  ```
+  User enters key → encrypt(api_key) → Supabase (encrypted blob)
+  API call needed → get_anthropic_key() → decrypt() → use with Claude
+  ```
+
+**OAuth Tokens (Google/Microsoft)**:
+- **Storage**: Supabase `oauth_tokens` table
+- **Encryption**: Same Fernet encryption for `google_token_data`, `graph_access_token`, `graph_refresh_token`
+- **Scopes stored**: Plaintext (not sensitive)
+
+**Encryption Implementation** (`zylch/utils/encryption.py`):
+```python
+from zylch.utils.encryption import encrypt, decrypt, is_encryption_enabled
+
+# Check if encryption is available
+if is_encryption_enabled():
+    encrypted = encrypt("sk-ant-xxx")  # Returns gAAA... (Fernet token)
+    decrypted = decrypt(encrypted)      # Returns original key
+
+# Graceful fallback: returns original if ENCRYPTION_KEY not set
+```
+
+**Key Management**:
+- Generate key once: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+- Store in Railway env vars as `ENCRYPTION_KEY`
+- **Never commit** encryption keys to git
 
 ### Data Privacy
-- All email data stored locally
-- No data sent to third parties (except Claude for analysis)
-- SQLite database encrypted if filesystem encrypted
+- All user data scoped by Firebase UID
+- Email content stored in Supabase (encrypted at rest by Supabase)
+- Anthropic API keys encrypted with application-level encryption
+- No data sent to third parties (except Claude for analysis with user's own API key)
 
 ## Performance Characteristics
 
@@ -230,13 +399,12 @@ for contact_email, threads in person_threads.items():
 ## Scalability Considerations
 
 ### Current Limits
-- **Emails**: Tested with 500 messages, scales to millions with SQLite
+- **Emails**: Tested with 500 messages, scales to millions with Supabase
 - **Threads**: 30-day intelligence window (~250-300 threads typical)
-- **Concurrent API**: Single worker (development)
+- **Concurrent API**: Railway auto-scaling
 
 ### Future Scaling
-- **Archive**: Migrate to PostgreSQL for multi-user
-- **API**: Add workers, load balancer
+- **API**: Add Railway replicas
 - **Cache**: Redis for session management
 - **Search**: Consider Elasticsearch for advanced queries
 
@@ -248,8 +416,8 @@ for contact_email, threads in person_threads.items():
 - **Auth expiry**: Automatic token refresh
 
 ### Database Errors
-- **Archive corruption**: Manual re-initialization required
-- **SQLite locks**: Use WAL mode for concurrent access
+- **Supabase connection**: Automatic retry with exponential backoff
+- **RLS violations**: Check owner_id scoping
 
 ## Development Patterns
 
@@ -312,15 +480,15 @@ This mirrors human memory reconsolidation.
 
 ### Two-Layer Memory Architecture
 
-**Layer 1: Identifier Map Cache (`zylch/cache/identifier_map.py`)**
+**Layer 1: Identifier Map Cache**
 - **Purpose**: O(1) lookup from any identifier to person
-- **Technology**: JSON file with normalized identifiers
+- **Technology**: Supabase with indexed lookups
 - **Key insight**: Maps email/phone/name → memory_id
 - **Benefit**: Avoids expensive remote API calls (Gmail 10+ seconds) when contact is already known
 
 **Layer 2: Semantic Memory (`zylch_memory/`)**
 - **Purpose**: Vector-based semantic storage with reconsolidation
-- **Technology**: SQLite + HNSW index + sentence-transformers
+- **Technology**: Supabase pg_vector + sentence-transformers
 - **Key insight**: Similar memories are the SAME memory (updated, not duplicated)
 
 ### Memory Lookup Flow
@@ -359,7 +527,7 @@ confidence_boost_on_update: float = 0.1  # Reinforce memory on reconsolidation
 - `zylch_memory/zylch_memory/core.py` - Added `_find_similar_memories()`, modified `store_memory()`
 
 **Files for person-centric lookup:**
-- `zylch/cache/identifier_map.py` - IdentifierMapCache class
+- `zylch/storage/supabase_client.py` - All data access methods
 - `zylch/tools/factory.py` - `_SearchLocalMemoryTool`, modified `_SaveContactTool`
 - `zylch/agent/prompts.py` - "LOCAL MEMORY FIRST" instructions
 

@@ -101,6 +101,16 @@ class GmailClient:
                 # Save refreshed credentials
                 self._save_credentials(creds)
             else:
+                # When using Supabase token storage (backend/server mode),
+                # we should NEVER start a new OAuth flow - that's the CLI's job.
+                # The backend only uses existing tokens from Supabase.
+                if self._use_token_storage:
+                    raise ValueError(
+                        f"Google credentials not found in Supabase for owner {self.owner_id}. "
+                        "Please connect your Google account using the CLI or dashboard: /connect google"
+                    )
+
+                # Filesystem fallback (local development only)
                 if not self.credentials_path.exists():
                     raise FileNotFoundError(
                         f"Gmail credentials not found at {self.credentials_path}. "

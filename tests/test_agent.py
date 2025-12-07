@@ -55,14 +55,18 @@ async def test_model_selector():
     """Test model selection logic."""
     selector = ModelSelector()
 
-    # Test classification
-    model = selector.select_model("who is john@example.com?")
+    # Test classification - uses haiku for explicit classification keywords
+    model = selector.select_model("classify this email priority")
     assert model == selector.classification_model
+
+    # Test "who is" queries - uses Sonnet (default) for tool calling intelligence
+    model = selector.select_model("who is john@example.com?")
+    assert model == selector.default_model
 
     # Test drafting
     model = selector.select_model("draft an email to jane@example.com")
     assert model == selector.default_model
 
-    # Test executive
-    model = selector.select_model("write to the CEO about urgent matter")
+    # Test executive (use message without "write" to avoid quality model trigger)
+    model = selector.select_model("urgent message for the CEO")
     assert model == selector.executive_model
