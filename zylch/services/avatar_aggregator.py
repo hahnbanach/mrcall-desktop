@@ -132,7 +132,7 @@ class AvatarAggregator:
         try:
             # Query emails where from_email matches OR to_emails contains any of the emails
             result = self.storage.client.table('emails')\
-                .select('gmail_id, thread_id, subject, snippet, date, date_timestamp, '
+                .select('gmail_id, thread_id, subject, snippet, body_plain, date, date_timestamp, '
                        'from_email, from_name, to_emails, cc_emails')\
                 .eq('owner_id', owner_id)\
                 .gte('date', cutoff_date.isoformat())\

@@ -213,15 +213,19 @@ class EmailArchiveManager:
                 'errors': errors
             }
 
-    def incremental_sync(self) -> Dict[str, Any]:
+    def incremental_sync(self, days_back: Optional[int] = None, force_full: bool = False) -> Dict[str, Any]:
         """Incremental sync using Gmail History API.
 
         Fetches only changes since last sync.
 
+        Args:
+            days_back: Number of days for initial sync (default: 30). Ignored for subsequent syncs unless force_full=True.
+            force_full: Force full sync ignoring history
+
         Returns:
             Sync results
         """
-        logger.info("🔄 Starting incremental sync...")
+        logger.info(f"🔄 Starting incremental sync (days_back={days_back}, force_full={force_full})...")
 
         # Ensure Gmail is authenticated (lazy)
         self._ensure_authenticated()
@@ -232,10 +236,11 @@ class EmailArchiveManager:
         else:
             sync_state = self.backend.get_sync_state()
 
-        if not sync_state or not sync_state.get('history_id'):
-            logger.info("No sync state found. Auto-initializing archive with 1 month of history...")
-            # Auto-initialize with 1 month of history for first-time users
-            init_result = self.initial_full_sync(days_back=30)
+        if not sync_state or not sync_state.get('history_id') or force_full:
+            # First sync or forced full sync
+            init_days = days_back if days_back is not None else 30
+            logger.info(f"No sync state found or force_full=True. Initializing archive with {init_days} days of history...")
+            init_result = self.initial_full_sync(days_back=init_days)
             if not init_result.get('success'):
                 return {
                     'success': False,
@@ -251,6 +256,7 @@ class EmailArchiveManager:
             }
 
         start_history_id = sync_state['history_id']
+        first_sync_date = sync_state.get('last_sync', 'previous sync')
         logger.info(f"Syncing from history_id: {start_history_id}")
 
         try:
@@ -328,7 +334,9 @@ class EmailArchiveManager:
                 'success': True,
                 'messages_added': len(messages_added),
                 'messages_deleted': len(messages_deleted),
-                'new_history_id': new_history_id
+                'new_history_id': new_history_id,
+                'incremental': True,
+                'first_sync_date': first_sync_date
             }
 
         except Exception as e:
