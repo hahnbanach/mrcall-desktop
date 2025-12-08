@@ -178,6 +178,72 @@ class EmailSyncManager:
         }
         self.supabase.store_thread_analysis(self.owner_id, analysis)
 
+    def _trigger_avatar_updates(self, analyzed_threads: Dict[str, Any]) -> int:
+        """Trigger avatar computation for contacts with new/updated threads.
+
+        Args:
+            analyzed_threads: Dict of thread_id -> thread_data that were just analyzed
+
+        Returns:
+            Number of avatar updates queued
+        """
+        # Import here to avoid circular dependency
+        from zylch.services.avatar_aggregator import generate_contact_id
+
+        # Extract unique contacts from analyzed threads
+        contacts = set()
+        for thread_data in analyzed_threads.values():
+            # Get all participants from thread
+            participants = thread_data.get('participants', [])
+
+            # Also get contact from last_email
+            from_field = thread_data.get('last_email', {}).get('from', '')
+            contact_email = self._extract_email(from_field)
+            if contact_email:
+                participants.append(contact_email)
+
+            # Filter out user's own emails (we don't create avatars for ourselves)
+            for email in participants:
+                if email and '@' in email:
+                    # TODO: Add logic to filter out user's own email addresses
+                    # For now, add all non-empty emails
+                    contacts.add(email.lower())
+
+        logger.info(f"Found {len(contacts)} unique contacts to update avatars for")
+
+        # Queue avatar computation for each contact
+        queued = 0
+        for email in contacts:
+            try:
+                # Generate stable contact_id from email
+                contact_id = generate_contact_id(email=email)
+
+                # Also store identifier mapping
+                self.supabase.store_identifier(
+                    owner_id=self.owner_id,
+                    identifier=email,
+                    identifier_type='email',
+                    contact_id=contact_id,
+                    confidence=1.0,
+                    source='email'
+                )
+
+                # Queue avatar computation (priority=7 for email_sync trigger)
+                self.supabase.queue_avatar_compute(
+                    owner_id=self.owner_id,
+                    contact_id=contact_id,
+                    trigger_type='email_sync',
+                    priority=7  # High priority for email updates
+                )
+
+                queued += 1
+
+            except Exception as e:
+                logger.error(f"Failed to queue avatar update for {email}: {e}")
+                continue
+
+        return queued
+
     def _convert_supabase_to_cache(self, supabase_analysis: Dict[str, Any]) -> Dict[str, Any]:
         """Convert Supabase thread_analysis format to cache format."""
         analysis = supabase_analysis.get('analysis', {}) or {}
@@ -328,6 +394,11 @@ class EmailSyncManager:
             self._save_analyzed_threads(analyzed_threads)
             logger.info(f"Saved {len(analyzed_threads)} analyzed threads to Supabase")
 
+            # Trigger avatar updates for contacts with new/updated threads
+            if self._use_supabase:
+                avatar_updates = self._trigger_avatar_updates(analyzed_threads)
+                logger.info(f"Queued {avatar_updates} avatar updates")
+
         # Count total messages
         total_messages = sum(len(msgs) for msgs in threads_map.values())
 
@@ -336,7 +407,8 @@ class EmailSyncManager:
             "total_threads": len(threads_map),
             "new_threads": new_threads,
             "updated_threads": updated_threads,
-            "cache_size": len(cache['threads'])
+            "cache_size": len(cache['threads']),
+            "avatar_updates_queued": avatar_updates if analyzed_threads and self._use_supabase else 0
         }
 
     def _convert_archive_message(self, archive_msg: Dict[str, Any]) -> Dict[str, Any]:

@@ -1141,6 +1141,318 @@ class SupabaseStorage:
 
         return result.data if result.data else []
 
+    # ==========================================
+    # AVATARS (Relational Memory)
+    # ==========================================
+
+    def store_avatar(self, owner_id: str, avatar: Dict[str, Any]) -> Dict[str, Any]:
+        """Store or update an avatar.
+
+        Args:
+            owner_id: Firebase UID
+            avatar: Avatar data dict with contact_id, display_name, relationship_summary, etc.
+
+        Returns:
+            Stored avatar record
+        """
+        data = {
+            'owner_id': owner_id,
+            'contact_id': avatar['contact_id'],
+            'display_name': avatar.get('display_name'),
+            'identifiers': avatar.get('identifiers'),
+            'relationship_summary': avatar.get('relationship_summary'),
+            'relationship_status': avatar.get('relationship_status'),
+            'relationship_score': avatar.get('relationship_score'),
+            'suggested_action': avatar.get('suggested_action'),
+            'interaction_summary': avatar.get('interaction_summary'),
+            'preferred_tone': avatar.get('preferred_tone'),
+            'response_latency': avatar.get('response_latency'),
+            'relationship_strength': avatar.get('relationship_strength'),
+            'last_computed': avatar.get('last_computed'),
+            'compute_trigger': avatar.get('compute_trigger'),
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        result = self.client.table('avatars').upsert(
+            data,
+            on_conflict='owner_id,contact_id'
+        ).execute()
+
+        logger.info(f"Stored avatar for contact {avatar['contact_id']} (owner: {owner_id})")
+        return result.data[0] if result.data else {}
+
+    def get_avatar(self, owner_id: str, contact_id: str) -> Optional[Dict[str, Any]]:
+        """Get a single avatar by contact ID.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID (MD5 hash)
+
+        Returns:
+            Avatar record or None if not found
+        """
+        result = self.client.table('avatars')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('contact_id', contact_id)\
+            .limit(1)\
+            .execute()
+
+        return result.data[0] if result.data else None
+
+    def get_avatars(
+        self,
+        owner_id: str,
+        status: Optional[str] = None,
+        min_score: Optional[int] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """Get avatars with optional filters.
+
+        Args:
+            owner_id: Firebase UID
+            status: Filter by relationship_status ('open', 'waiting', 'closed')
+            min_score: Filter by minimum relationship_score (1-10)
+            limit: Max results to return
+            offset: Pagination offset
+
+        Returns:
+            List of avatar records, ordered by relationship_score descending
+        """
+        query = self.client.table('avatars')\
+            .select('*')\
+            .eq('owner_id', owner_id)
+
+        if status:
+            query = query.eq('relationship_status', status)
+
+        if min_score:
+            query = query.gte('relationship_score', min_score)
+
+        result = query\
+            .order('relationship_score', desc=True)\
+            .range(offset, offset + limit - 1)\
+            .execute()
+
+        return result.data or []
+
+    def queue_avatar_compute(
+        self,
+        owner_id: str,
+        contact_id: str,
+        trigger_type: str = 'manual',
+        priority: int = 5
+    ) -> Dict[str, Any]:
+        """Add avatar to compute queue.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID
+            trigger_type: 'email_sync', 'manual', 'scheduled', 'new_contact'
+            priority: 1-10 (10 = highest priority)
+
+        Returns:
+            Queued item record
+        """
+        data = {
+            'owner_id': owner_id,
+            'contact_id': contact_id,
+            'trigger_type': trigger_type,
+            'priority': priority,
+            'scheduled_at': datetime.now(timezone.utc).isoformat(),
+            'retry_count': 0
+        }
+
+        result = self.client.table('avatar_compute_queue').upsert(
+            data,
+            on_conflict='owner_id,contact_id'
+        ).execute()
+
+        logger.info(f"Queued avatar compute for {contact_id} (owner: {owner_id}, trigger: {trigger_type})")
+        return result.data[0] if result.data else {}
+
+    def remove_from_compute_queue(self, owner_id: str, contact_id: str) -> bool:
+        """Remove avatar from compute queue.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID
+
+        Returns:
+            True if removed
+        """
+        result = self.client.table('avatar_compute_queue')\
+            .delete()\
+            .eq('owner_id', owner_id)\
+            .eq('contact_id', contact_id)\
+            .execute()
+
+        return len(result.data) > 0 if result.data else False
+
+    def update_avatar_embedding(
+        self,
+        owner_id: str,
+        contact_id: str,
+        embedding: List[float]
+    ) -> bool:
+        """Update avatar's profile embedding for semantic search.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID
+            embedding: 384-dimensional vector from sentence-transformers
+
+        Returns:
+            True if updated
+        """
+        result = self.client.table('avatars')\
+            .update({
+                'profile_embedding': embedding,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            })\
+            .eq('owner_id', owner_id)\
+            .eq('contact_id', contact_id)\
+            .execute()
+
+        return len(result.data) > 0 if result.data else False
+
+    def get_stale_avatars(
+        self,
+        owner_id: str,
+        days_stale: int = 7
+    ) -> List[Dict[str, Any]]:
+        """Get avatars that need recomputation (not updated in N days).
+
+        Args:
+            owner_id: Firebase UID
+            days_stale: Number of days since last_computed to consider stale
+
+        Returns:
+            List of stale avatar records
+        """
+        from datetime import timedelta
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days_stale)
+
+        result = self.client.table('avatars')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .lt('last_computed', cutoff.isoformat())\
+            .execute()
+
+        return result.data or []
+
+    def search_avatars_semantic(
+        self,
+        owner_id: str,
+        query_embedding: List[float],
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Semantic search avatars using vector similarity.
+
+        Args:
+            owner_id: Firebase UID
+            query_embedding: 384-dimensional query vector
+            limit: Max results to return
+
+        Returns:
+            List of avatars ordered by cosine similarity (most similar first)
+        """
+        # Use Supabase RPC function for vector similarity search
+        result = self.client.rpc('match_avatars', {
+            'query_embedding': query_embedding,
+            'match_owner_id': owner_id,
+            'match_count': limit
+        }).execute()
+
+        return result.data or []
+
+    def store_identifier(
+        self,
+        owner_id: str,
+        identifier: str,
+        identifier_type: str,
+        contact_id: str,
+        confidence: float = 1.0,
+        source: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Store identifier mapping for contact resolution.
+
+        Args:
+            owner_id: Firebase UID
+            identifier: Email, phone, or name
+            identifier_type: 'email', 'phone', or 'name'
+            contact_id: Contact's stable ID (MD5 hash)
+            confidence: 0.0-1.0 confidence score
+            source: Where identifier was discovered ('email', 'calendar', 'manual')
+
+        Returns:
+            Stored identifier record
+        """
+        data = {
+            'owner_id': owner_id,
+            'identifier': identifier,
+            'identifier_type': identifier_type,
+            'contact_id': contact_id,
+            'confidence': confidence,
+            'source': source,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        result = self.client.table('identifier_map').upsert(
+            data,
+            on_conflict='owner_id,identifier'
+        ).execute()
+
+        return result.data[0] if result.data else {}
+
+    def get_contact_identifiers(
+        self,
+        owner_id: str,
+        contact_id: str
+    ) -> List[Dict[str, Any]]:
+        """Get all identifiers for a contact.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID
+
+        Returns:
+            List of identifier records
+        """
+        result = self.client.table('identifier_map')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('contact_id', contact_id)\
+            .execute()
+
+        return result.data or []
+
+    def resolve_contact_id(
+        self,
+        owner_id: str,
+        identifier: str
+    ) -> Optional[str]:
+        """Resolve identifier to contact ID.
+
+        Args:
+            owner_id: Firebase UID
+            identifier: Email, phone, or name to look up
+
+        Returns:
+            Contact ID or None if not found
+        """
+        result = self.client.table('identifier_map')\
+            .select('contact_id')\
+            .eq('owner_id', owner_id)\
+            .eq('identifier', identifier)\
+            .order('confidence', desc=True)\
+            .limit(1)\
+            .execute()
+
+        return result.data[0]['contact_id'] if result.data else None
+
 
 # Create search_emails function in Supabase (run once via SQL Editor):
 """
