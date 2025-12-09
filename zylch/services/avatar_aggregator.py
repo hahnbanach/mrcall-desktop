@@ -44,6 +44,7 @@ class AvatarAggregator:
         Returns:
             Dict with aggregated context:
             - contact_id: Contact ID
+            - owner_emails: Owner's email addresses (for perspective)
             - identifiers: List of emails/phones
             - display_name: Best guess name
             - thread_count: Number of email threads
@@ -53,14 +54,19 @@ class AvatarAggregator:
             - response_latency: Response time stats
             - communication_frequency: Interaction frequency
             - relationship_strength: Computed strength score
+            - last_email_from_owner: Whether owner sent the last email
         """
         logger.info(f"Building context for contact {contact_id} (owner: {owner_id})")
+
+        # Get owner's email addresses for perspective
+        from zylch.config import settings
+        owner_emails = set(e.strip().lower() for e in settings.my_emails.split(',') if e.strip())
 
         # Get contact identifiers
         identifiers = self._get_identifiers(owner_id, contact_id)
         if not identifiers:
             logger.warning(f"No identifiers found for contact {contact_id}")
-            return self._empty_context(contact_id)
+            return self._empty_context(contact_id, owner_emails)
 
         emails = [i['identifier'] for i in identifiers if i['identifier_type'] == 'email']
         phones = [i['identifier'] for i in identifiers if i['identifier_type'] == 'phone']
@@ -86,8 +92,16 @@ class AvatarAggregator:
         # Extract display name
         display_name = self._extract_name(threads, identifiers)
 
+        # Determine who sent the last email (for open vs waiting status)
+        last_email_from_owner = False
+        if threads:
+            last_email = threads[0]  # threads are ordered by date DESC
+            last_sender = last_email.get('from_email', '').lower()
+            last_email_from_owner = last_sender in owner_emails
+
         context = {
             'contact_id': contact_id,
+            'owner_emails': list(owner_emails),  # For perspective
             'identifiers': {'emails': emails, 'phones': phones},
             'display_name': display_name,
             'thread_count': len(set(t['thread_id'] for t in threads)),
@@ -96,7 +110,8 @@ class AvatarAggregator:
             'calendar_events': calendar_events[:5],  # Last 5 meetings
             'response_latency': response_latency,
             'communication_frequency': frequency,
-            'relationship_strength': strength
+            'relationship_strength': strength,
+            'last_email_from_owner': last_email_from_owner,  # True = waiting for contact, False = need to respond
         }
 
         logger.info(f"Context built: {context['email_count']} emails, "
@@ -363,10 +378,11 @@ class AvatarAggregator:
 
         return "Unknown"
 
-    def _empty_context(self, contact_id: str) -> Dict:
+    def _empty_context(self, contact_id: str, owner_emails: set = None) -> Dict:
         """Return empty context for contact with no data."""
         return {
             'contact_id': contact_id,
+            'owner_emails': list(owner_emails) if owner_emails else [],
             'identifiers': {'emails': [], 'phones': []},
             'display_name': 'Unknown',
             'thread_count': 0,
@@ -375,7 +391,8 @@ class AvatarAggregator:
             'calendar_events': [],
             'response_latency': None,
             'communication_frequency': {'emails_per_week': 0, 'events_per_month': 0},
-            'relationship_strength': 0.0
+            'relationship_strength': 0.0,
+            'last_email_from_owner': False
         }
 
 

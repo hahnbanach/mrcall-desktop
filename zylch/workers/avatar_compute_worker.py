@@ -183,11 +183,22 @@ class AvatarComputeWorker:
         user_api_key = self.storage.get_anthropic_key(owner_id)
         if not user_api_key:
             logger.warning(f"No Anthropic key for owner {owner_id}, skipping avatar {contact_id}")
-            # Remove from queue but don't process
-            self.storage.client.table('avatar_compute_queue')\
-                .delete()\
-                .eq('id', queue_item['id'])\
-                .execute()
+            # Create notification for user (only once per owner)
+            try:
+                existing = self.storage.get_unread_notifications(owner_id)
+                already_notified = any(
+                    'Anthropic API key' in n.get('message', '')
+                    for n in existing
+                )
+                if not already_notified:
+                    self.storage.create_notification(
+                        owner_id=owner_id,
+                        message="Avatar computation skipped: No Anthropic API key configured. Add your key in Settings to enable relationship analysis.",
+                        notification_type='warning'
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to create notification: {e}")
+            # Keep in queue - will retry when key is added
             return
 
         # Create per-user Anthropic client
@@ -352,10 +363,28 @@ class AvatarComputeWorker:
 
         combined_content = "\n---\n".join(all_email_content) if all_email_content else "No email content available"
 
-        prompt = f"""Analyze this professional relationship and provide a concise summary.
+        # Determine perspective hint based on last email sender
+        owner_emails_str = ', '.join(context.get('owner_emails', []))
+        last_email_from_owner = context.get('last_email_from_owner', False)
 
-**Contact:** {context['display_name']}
-**Emails:** {', '.join(context['identifiers']['emails'])}
+        if last_email_from_owner:
+            perspective_hint = f"""
+**⚠️ IMPORTANT:** The LAST email was sent BY THE OWNER ({owner_emails_str}).
+This means the owner is WAITING for {context['display_name']} to respond.
+Status should likely be "waiting" unless the conversation is clearly concluded."""
+        else:
+            perspective_hint = f"""
+**⚠️ IMPORTANT:** The LAST email was sent BY THE CONTACT ({context['display_name']}).
+This means the owner needs to respond to {context['display_name']}.
+Status should likely be "open" unless the email requires no response."""
+
+        prompt = f"""Analyze this professional relationship FROM THE OWNER'S PERSPECTIVE.
+
+**Owner (analyzing their relationships):** {owner_emails_str}
+**Contact being analyzed:** {context['display_name']}
+**Contact's Emails:** {', '.join(context['identifiers']['emails'])}
+
+{perspective_hint}
 
 **Communication Stats:**
 - Email threads: {context['thread_count']}
@@ -379,27 +408,28 @@ class AvatarComputeWorker:
 
 ---
 
-Please provide:
-1. **Name:** Best guess for their name (if different from {context['display_name']})
+Please provide analysis FROM THE OWNER'S PERSPECTIVE (what the owner needs to do about this contact):
+
+1. **Name:** Best guess for the contact's name (if different from {context['display_name']})
 2. **Phone:** Any phone numbers found in email signatures/content (format: +1234567890 or comma-separated)
 3. **LinkedIn:** LinkedIn profile URL if found in emails (format: linkedin.com/in/username)
 4. **Summary:** 2-3 sentence narrative of the relationship context and recent interactions
 5. **Status:** One of:
-   - "open" - needs action from me (I need to respond/follow up)
-   - "waiting" - waiting for them (I responded, ball in their court)
+   - "open" - owner needs to respond/take action (contact sent last email or owner has pending commitment)
+   - "waiting" - owner sent last email, waiting for contact's response
    - "closed" - no action needed (conversation complete or no pending items)
 6. **Priority:** 1-10 score (10 = most urgent/important)
-7. **Action:** Suggested next step (or "No action needed")
-8. **Tone:** Their preferred communication style: "formal", "casual", or "professional"
+7. **Action:** What the OWNER should do next (e.g., "Follow up - sent proposal 3 days ago, no response yet")
+8. **Tone:** Contact's preferred communication style: "formal", "casual", or "professional"
 
 Format your response as:
-NAME: [name]
+NAME: [contact's name]
 PHONE: [phone numbers, comma-separated, or "Not found"]
 LINKEDIN: [linkedin.com/in/username or "Not found"]
 SUMMARY: [relationship summary]
 STATUS: [open/waiting/closed]
 PRIORITY: [1-10]
-ACTION: [suggested action]
+ACTION: [what owner should do]
 TONE: [formal/casual/professional]
 """
 

@@ -194,24 +194,38 @@ Zylch AI provides HTTP API endpoints for web/mobile integration. See `docs/api/c
 
 ## Documentation
 
-### Core Documentation
-- `docs/README.md` - **Complete documentation index** (start here!)
-- `docs/features/multi-tenant-architecture.md` - Multi-tenant system guide
-- `docs/features/memory-system.md` - Behavioral memory system
-- `docs/features/email-archive.md` - Email archive system
-- `docs/api/chat-api.md` - Chat API endpoints
-- `docs/setup/quick-start.md` - Getting started guide
+📚 **[Complete Documentation Index](docs/README.md)** - Start here for comprehensive guides!
 
-### Developer Documentation
-- `.claude/ARCHITECTURE.md` - System design and key decisions
-- `.claude/CONVENTIONS.md` - Code style and patterns
-- `.claude/TESTING.md` - Testing strategy
+### Quick Links
 
-### Legacy Documentation (Root)
-- `MRPARK_SPEC.md` - Complete implementation specification
-- `TASK_MANAGEMENT.md` - Person-centric task system design
-- `REASONING_BANK_DESIGN.md` - Behavioral memory architecture
-- `MEMORY_USAGE.md` - Memory CLI commands
+**🚀 Getting Started**
+- [Quick Start Guide](docs/guides/quick-start.md) - Get up and running quickly
+- [Gmail OAuth Setup](docs/guides/gmail-oauth.md) - Configure Google authentication
+- [CLI Commands Reference](docs/guides/cli-commands.md) - Complete command guide
+
+**✨ Core Features**
+- [Email Archive](docs/features/email-archive.md) - Two-tier email storage system
+- [Relationship Intelligence](docs/features/relationship-intelligence.md) - Person-centric gap detection
+- [Avatar Aggregation](docs/features/avatar-aggregation.md) - Contact intelligence system
+- [Memory System](docs/features/memory-system.md) - Behavioral memory with reconsolidation
+- [Triggers & Automation](docs/features/triggers-automation.md) - Event-driven automation
+- [Sharing System](docs/features/sharing-system.md) - Team intelligence sharing
+- [MrCall Integration](docs/features/mrcall-integration.md) - Telephony & WhatsApp
+
+**🏗️ Architecture**
+- [Architecture Overview](docs/architecture/overview.md) - System design and philosophy
+- [.claude/ARCHITECTURE.md](.claude/ARCHITECTURE.md) - Detailed technical architecture
+- [.claude/DEVELOPMENT_PLAN.md](.claude/DEVELOPMENT_PLAN.md) - Development roadmap
+
+**🔮 Future Development**
+- [Billing System](docs/features/BILLING_SYSTEM_TODO.md) - Stripe subscriptions (Phase H)
+- [WhatsApp Integration](docs/features/WHATSAPP_INTEGRATION_TODO.md) - Multi-channel messaging
+- [Desktop App](docs/features/DESKTOP_APP_TODO.md) - Tauri local-first application
+- [Mobile App](docs/features/MOBILE_APP_TODO.md) - React Native iOS + Android
+
+**📦 Legacy Documentation**
+- Archived documentation can be found in `ARCHIVE/docs/`
+- Old specifications: `MRPARK_SPEC.md`, `TASK_MANAGEMENT.md`, `REASONING_BANK_DESIGN.md`
 
 ## Costs
 

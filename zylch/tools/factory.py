@@ -16,11 +16,12 @@ from .base import Tool, ToolResult, ToolStatus
 class SessionState:
     """Shared session state that can be updated at runtime.
 
-    This allows tools to access current values (like business_id) that may
+    This allows tools to access current values (like business_id, owner_id) that may
     change during the session (e.g., when user runs /mrcall <id>).
     """
-    def __init__(self, business_id: Optional[str] = None):
+    def __init__(self, business_id: Optional[str] = None, owner_id: Optional[str] = None):
         self.business_id = business_id
+        self.owner_id = owner_id
 
     def set_business_id(self, business_id: Optional[str]):
         """Update the current business ID."""
@@ -29,6 +30,14 @@ class SessionState:
     def get_business_id(self) -> Optional[str]:
         """Get the current business ID."""
         return self.business_id
+
+    def set_owner_id(self, owner_id: Optional[str]):
+        """Update the current owner ID."""
+        self.owner_id = owner_id
+
+    def get_owner_id(self) -> Optional[str]:
+        """Get the current owner ID."""
+        return self.owner_id
 
 
 from .config import ToolConfig
@@ -53,7 +62,7 @@ from ..cache.json_cache import JSONCache
 from ..cache.identifier_map import IdentifierMapCache, normalize_phone, normalize_name
 from .email_archive import EmailArchiveManager
 from .email_sync import EmailSyncManager
-from .task_manager import TaskManager
+# TaskManager removed - legacy file-based system replaced by Supabase avatars
 from ..memory import ZylchMemory, ZylchMemoryConfig
 from ..agent.models import ModelSelector
 from .instruction_tools import (
@@ -117,7 +126,7 @@ class ToolFactory:
         logger.info("Initializing Zylch AI tools...")
 
         # Create shared session state
-        session_state = SessionState(business_id=current_business_id)
+        session_state = SessionState(business_id=current_business_id, owner_id=config.owner_id)
         ToolFactory._session_state = session_state
 
         # Initialize external service clients
@@ -267,21 +276,8 @@ class ToolFactory:
             # Initialize zylch_memory for person-centric memory
             zylch_memory = await ToolFactory.create_memory_system(config)
 
-            # Task manager
-            my_emails_list = [email.strip() for email in config.my_emails.split(',') if email.strip()]
-            bot_emails_list = [email.strip() for email in config.bot_emails.split(',') if email.strip()]
-            task_manager = TaskManager(
-                email_sync_manager=email_sync,
-                starchat_client=starchat,
-                anthropic_api_key=config.anthropic_api_key,
-                my_emails=my_emails_list,
-                bot_emails=bot_emails_list,
-                cache_dir=config.cache_dir,
-                zylch_memory=zylch_memory,
-                owner_id=config.owner_id,
-                zylch_assistant_id=config.zylch_assistant_id
-            )
-            logger.info(f"Task Manager initialized ({len(my_emails_list)} my_emails, {len(bot_emails_list)} bot_emails patterns)")
+            # TaskManager removed - legacy file-based system replaced by Supabase avatars
+            # Tasks are now served by get_tasks tool which queries pre-computed avatars
 
         except Exception as e:
             logger.error(f"Failed to initialize service clients: {e}")
@@ -299,8 +295,8 @@ class ToolFactory:
         # Email sync tools (4 tools)
         tools.extend(ToolFactory._create_email_sync_tools(email_sync))
 
-        # Task management tools (4 tools)
-        tools.extend(ToolFactory._create_task_tools(task_manager))
+        # Task management tools removed - legacy file-based system
+        # Tasks now served by get_tasks tool (line ~380) which queries Supabase avatars
 
         # Contact tools (5 tools) - use session_state for dynamic business_id
         # Includes search_local_memory for person-centric lookups
@@ -381,6 +377,11 @@ class ToolFactory:
         tools.extend(ToolFactory._create_scheduler_tools(scheduler))
         logger.info("Scheduler tools initialized (APScheduler)")
 
+        # Get Tasks tool - returns pre-formatted task list from avatars
+        # Much faster than having Claude format the list (~5s vs 27s)
+        tools.append(_GetTasksTool(session_state=session_state))
+        logger.info("Get Tasks tool initialized (pre-computed avatars)")
+
         # Initialize PersonaAnalyzer for user persona learning
         from ..services.persona_analyzer import PersonaAnalyzer
         persona_analyzer = PersonaAnalyzer(
@@ -396,7 +397,6 @@ class ToolFactory:
         # Store service client references for CLI access
         ToolFactory._starchat_client = starchat
         ToolFactory._email_archive = email_archive
-        ToolFactory._task_manager = task_manager
         ToolFactory._persona_analyzer = persona_analyzer
 
         logger.info(f"Initialized {len(tools)} tools")
@@ -480,15 +480,8 @@ class ToolFactory:
             _EmailStatsTool(email_sync_manager),
         ]
 
-    @staticmethod
-    def _create_task_tools(task_manager) -> List[Tool]:
-        """Create task management tools."""
-        return [
-            _BuildTasksTool(task_manager),
-            _GetContactTaskTool(task_manager),
-            _SearchTasksTool(task_manager),
-            _TaskStatsTool(task_manager),
-        ]
+    # _create_task_tools removed - legacy file-based system replaced by Supabase avatars
+    # Tasks are now served by get_tasks tool which queries pre-computed avatars
 
     @staticmethod
     def _create_contact_tools(
@@ -1905,249 +1898,77 @@ class _EmailStatsTool(Tool):
         }
 
 
-class _BuildTasksTool(Tool):
-    """Build tasks.json from threads.json."""
-    def __init__(self, task_manager):
+# Legacy task tools removed (_BuildTasksTool, _GetContactTaskTool, _SearchTasksTool, _TaskStatsTool)
+# These used the old file-based tasks.json system which has been replaced by Supabase avatars
+# The get_tasks tool below queries pre-computed avatars for instant task retrieval
+
+
+class _GetTasksTool(Tool):
+    """Get open tasks from pre-computed avatars.
+
+    Returns formatted task list instantly from Supabase avatars.
+    Much faster than having Claude format the list (~5s vs 27s).
+    """
+
+    def __init__(self, session_state: SessionState):
         super().__init__(
-            name="build_tasks",
-            description="Build person-centric tasks from email threads"
+            name="get_tasks",
+            description="ALWAYS use this tool when user asks about tasks, to-dos, what they need to do, pending actions, what needs attention, or anything related to their task list. Returns pre-computed task data instantly. Do NOT answer from memory - ALWAYS call this tool for task queries."
         )
-        self.task_manager = task_manager
+        self.session_state = session_state
 
-    async def execute(self, force_rebuild: bool = False):
+    async def execute(self, days_back: int = 7):
+        from zylch.storage.supabase_client import SupabaseStorage
+        from zylch.services.task_formatter import filter_own_emails, format_task_list
+
+        # Get owner_id from session state (runtime value)
+        owner_id = self.session_state.get_owner_id()
+        if not owner_id:
+            return ToolResult(
+                status=ToolStatus.ERROR,
+                data={},
+                message="❌ No owner_id available. Please log in first."
+            )
+
         try:
-            logger.info("Building tasks from threads...")
-            results = self.task_manager.build_tasks_from_threads(force_rebuild=force_rebuild)
+            supabase = SupabaseStorage()
 
-            if results.get('cached'):
-                message = f"Tasks already cached: {results['task_count']} tasks. Use force_rebuild=true to rebuild."
-            else:
-                message = f"✅ Tasks created: {results['tasks_created']} out of {results['total_contacts']} contacts. "
-                if results['tasks_failed'] > 0:
-                    message += f"Failed: {results['tasks_failed']}. "
-                message += f"Last build: {results['last_build']}"
+            result = supabase.client.table('avatars')\
+                .select('*')\
+                .eq('owner_id', owner_id)\
+                .or_('relationship_status.eq.open,relationship_status.eq.waiting')\
+                .gte('relationship_score', 3)\
+                .order('relationship_score', desc=True)\
+                .execute()
+
+            avatars = result.data or []
+            avatars = filter_own_emails(avatars)
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
-                data=results,
-                message=message
+                data={'count': len(avatars)},
+                message=format_task_list(avatars, include_stale_warning=False)
             )
         except Exception as e:
-            logger.error(f"Build tasks failed: {e}")
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
-                error=f"Error building tasks: {str(e)}"
+                error=f"Failed to get tasks: {str(e)}"
             )
 
     def get_schema(self):
         return {
             "name": self.name,
-            "description": "Builds tasks.json aggregating all threads per person. Slow operation (uses Sonnet), run periodically. If cache exists, won't rebuild unless force_rebuild.",
+            "description": "ALWAYS use this tool when user asks about tasks, to-dos, what they need to do, pending actions, what needs attention, or anything related to their task list. Returns current pre-computed task data. Do NOT answer task queries from conversation history - ALWAYS call this tool.",
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "force_rebuild": {
-                        "type": "boolean",
-                        "description": "Forza rebuild anche se cache esiste",
-                        "default": False
-                    }
-                },
-                "required": []
-            }
-        }
-
-
-class _GetContactTaskTool(Tool):
-    """Get task for specific contact."""
-    def __init__(self, task_manager):
-        super().__init__(
-            name="get_contact_task",
-            description="Get task view for a specific contact by email"
-        )
-        self.task_manager = task_manager
-
-    async def execute(self, contact_email: str):
-        try:
-            logger.info(f"Getting task for {contact_email}...")
-            task = self.task_manager.get_task_by_contact_email(contact_email)
-
-            if not task:
-                return ToolResult(
-                    status=ToolStatus.SUCCESS,
-                    data=None,
-                    message=f"No task found for {contact_email}"
-                )
-
-            message = f"📋 **Task: {task['contact_name']}**\n\n"
-            message += f"Email: {task['contact_email']}\n"
-            if task.get('contact_phone'):
-                message += f"Phone: {task['contact_phone']}\n"
-            message += f"Status: {task['status']}\n"
-            message += f"Priority: {task['score']}/10\n"
-            message += f"Threads: {task['thread_count']}\n\n"
-            message += f"**View:**\n{task['view']}\n\n"
-            message += f"**Action:**\n{task['action']}"
-
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data=task,
-                message=message
-            )
-        except Exception as e:
-            logger.error(f"Get contact task failed: {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=f"Error retrieving task: {str(e)}"
-            )
-
-    def get_schema(self):
-        return {
-            "name": self.name,
-            "description": "Ottieni task completo per un contatto specifico (rianalizza i thread on-demand se necessario). Usa quando l'utente chiede 'status di [persona]' o 'cosa devo fare con [persona]'.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "contact_email": {
-                        "type": "string",
-                        "description": "Contact email address"
-                    }
-                },
-                "required": ["contact_email"]
-            }
-        }
-
-
-class _SearchTasksTool(Tool):
-    """Search tasks with filters."""
-    def __init__(self, task_manager):
-        super().__init__(
-            name="search_tasks",
-            description="Search and filter tasks by status, priority, or query"
-        )
-        self.task_manager = task_manager
-
-    async def execute(
-        self,
-        status: Optional[str] = None,
-        min_score: Optional[int] = None,
-        query: Optional[str] = None
-    ):
-        try:
-            tasks = self.task_manager.search_tasks(
-                status=status,
-                min_score=min_score,
-                query=query
-            )
-
-            if not tasks:
-                message = "No tasks found"
-                if status:
-                    message += f" with status '{status}'"
-                if min_score:
-                    message += f" and priority >={min_score}"
-                return ToolResult(
-                    status=ToolStatus.SUCCESS,
-                    data={"tasks": []},
-                    message=message
-                )
-
-            # Format results
-            results = []
-            for task in tasks[:20]:  # Limit to 20
-                results.append({
-                    "contact_name": task.get("contact_name"),
-                    "contact_email": task.get("contact_email"),
-                    "status": task.get("status"),
-                    "score": task.get("score"),
-                    "action": task.get("action"),
-                    "view": task.get("view")[:200] + "..." if len(task.get("view", "")) > 200 else task.get("view"),
-                    "thread_count": task.get("thread_count")
-                })
-
-            message = f"Trovati {len(tasks)} tasks"
-            if status:
-                message += f" (status: {status})"
-            if min_score:
-                message += f" (score >= {min_score})"
-
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data={"tasks": results, "total": len(tasks)},
-                message=message
-            )
-        except Exception as e:
-            logger.error(f"Search tasks failed: {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=f"Error searching tasks: {str(e)}"
-            )
-
-    def get_schema(self):
-        return {
-            "name": self.name,
-            "description": "Cerca tasks con filtri. Usa per 'mostra task urgenti' (min_score=8), 'task aperti' (status=open), 'cosa devo fare oggi?' (status=open, min_score=7).",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "status": {
-                        "type": "string",
-                        "description": "Filter by status: open, closed, waiting"
-                    },
-                    "min_score": {
+                    "days_back": {
                         "type": "integer",
-                        "description": "Minimum priority score (1-10)"
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Search in name, email, view"
+                        "description": "Days to look back (default 7)",
+                        "default": 7
                     }
                 },
-                "required": []
-            }
-        }
-
-
-class _TaskStatsTool(Tool):
-    """Get task statistics."""
-    def __init__(self, task_manager):
-        super().__init__(
-            name="task_stats",
-            description="Get statistics about tasks"
-        )
-        self.task_manager = task_manager
-
-    async def execute(self):
-        try:
-            stats = self.task_manager.get_stats()
-
-            message = f"Tasks: {stats['total_tasks']} totali. "
-            message += f"Aperti: {stats['open_tasks']}, "
-            message += f"Urgenti (score>=8): {stats['urgent_tasks']}. "
-            message += f"Average score: {stats['average_score']:.1f}/10. "
-            message += f"Ultimo build: {stats['last_build'] or 'mai'}"
-
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data=stats,
-                message=message
-            )
-        except Exception as e:
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=str(e)
-            )
-
-    def get_schema(self):
-        return {
-            "name": self.name,
-            "description": "Mostra statistiche sui tasks: quanti totali, aperti, urgenti, average priority. Usa quando l'utente chiede 'overview tasks' o 'situazione generale'.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
                 "required": []
             }
         }

@@ -252,13 +252,15 @@ async def handle_clear() -> str:
 Clear your local `conversation_history` array."""
 
 
-async def handle_gaps(args: List[str], config, memory, owner_id: str) -> str:
+async def handle_gaps(args: List[str], owner_id: str) -> str:
     """Handle /gaps command - Query pre-computed avatars for tasks.
 
     Usage: /gaps [days]
 
     This queries pre-computed avatars (NOT real-time LLM calls).
     Avatars are updated in background after each /sync.
+
+    Note: config and memory parameters removed - not needed for avatar query.
     """
     from zylch.storage.supabase_client import SupabaseStorage
     from datetime import datetime, timedelta, timezone
@@ -275,53 +277,21 @@ async def handle_gaps(args: List[str], config, memory, owner_id: str) -> str:
 
     try:
         supabase = SupabaseStorage()
+        from .task_formatter import filter_own_emails, format_task_list
 
-        # Query avatars with open status or waiting action (priority >= 7)
-        # This is 400x faster than calling LLM for each contact
-        cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days_back)).isoformat()
-
+        # Query avatars with open status or waiting action (score >= 3 for all priorities)
         result = supabase.client.table('avatars')\
             .select('*')\
             .eq('owner_id', owner_id)\
             .or_('relationship_status.eq.open,relationship_status.eq.waiting')\
-            .gte('relationship_score', 7)\
+            .gte('relationship_score', 3)\
+            .order('relationship_score', desc=True)\
             .execute()
 
         avatars = result.data if result.data else []
+        avatars = filter_own_emails(avatars)
 
-        # Count by action type
-        need_answer = len([a for a in avatars if 'answer' in (a.get('suggested_action') or '').lower()])
-        need_reminder = len([a for a in avatars if 'reminder' in (a.get('suggested_action') or '').lower() or 'follow' in (a.get('suggested_action') or '').lower()])
-
-        # Check avatar freshness
-        stale_avatars = 0
-        if avatars:
-            for avatar in avatars:
-                last_computed = avatar.get('last_computed')
-                if last_computed:
-                    computed_dt = datetime.fromisoformat(last_computed.replace('Z', '+00:00'))
-                    age_days = (datetime.now(timezone.utc) - computed_dt).days
-                    if age_days > 7:
-                        stale_avatars += 1
-
-        lines = [f"**📊 Gap Analysis** (last {days_back} days)\n"]
-        lines.append(f"✅ **Avatars queried:** {len(avatars)} contacts need attention")
-        lines.append(f"\n**Tasks found:**")
-        lines.append(f"   • Need answer: {need_answer}")
-        lines.append(f"   • Need reminder: {need_reminder}")
-        lines.append(f"   • High priority: {len(avatars)}")
-
-        if stale_avatars > 0:
-            lines.append(f"\n⚠️  {stale_avatars} avatars are >7 days old. Run `/sync` to refresh.")
-
-        if len(avatars) == 0:
-            lines.append(f"\n✨ **No urgent tasks!** All caught up.")
-            lines.append(f"\nℹ️  Run `/sync` first to fetch and analyze emails.")
-
-        lines.append(f"\n💡 **Tip:** Avatars are pre-computed (400x faster than old system)")
-        lines.append(f"   Data updated after each `/sync` (ready in ~5 min)")
-
-        return "\n".join(lines)
+        return format_task_list(avatars, include_stale_warning=True)
 
     except Exception as e:
         logger.error(f"Gap analysis failed: {e}", exc_info=True)
