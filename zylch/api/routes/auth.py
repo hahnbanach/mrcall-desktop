@@ -927,8 +927,13 @@ GOOGLE_SCOPES = [
     'https://www.googleapis.com/auth/userinfo.profile',
 ]
 
-# In-memory state storage (use Redis in production for multi-instance)
-_oauth_states: dict = {}
+# OAuth state storage - use Supabase for multi-instance support
+# Import SupabaseStorage for persistent state storage
+from zylch.storage.supabase_client import SupabaseStorage
+
+def _get_storage() -> SupabaseStorage:
+    """Get SupabaseStorage singleton."""
+    return SupabaseStorage.get_instance()
 
 
 @router.get("/google/authorize")
@@ -976,13 +981,15 @@ async def google_oauth_authorize(
     # Generate state parameter for CSRF protection
     state = secrets.token_urlsafe(32)
 
-    # Store state with user info (expires in 10 minutes)
-    _oauth_states[state] = {
-        'owner_id': owner_id,
-        'email': user_email,
-        'created_at': datetime.now(timezone.utc).isoformat(),
-        'cli_callback': cli_callback  # Store CLI callback URL if provided
-    }
+    # Store state in Supabase (expires in 10 minutes, supports multi-instance)
+    storage = _get_storage()
+    storage.store_oauth_state(
+        state=state,
+        owner_id=owner_id,
+        email=user_email,
+        cli_callback=cli_callback,
+        expires_minutes=10
+    )
 
     # Build authorization URL
     redirect_uri = settings.google_oauth_redirect_uri
@@ -1041,21 +1048,17 @@ async def google_oauth_callback(
     if not code or not state:
         return HTMLResponse(content=_oauth_error_page("Missing code or state parameter"))
 
-    # Validate state
-    if state not in _oauth_states:
-        logger.error(f"Invalid OAuth state: {state}")
+    # Validate state from Supabase (get_oauth_state also handles expiry and one-time use)
+    storage = _get_storage()
+    state_data = storage.get_oauth_state(state)
+
+    if not state_data:
+        logger.error(f"Invalid or expired OAuth state: {state}")
         return HTMLResponse(content=_oauth_error_page("Invalid or expired state. Please try again."))
 
-    state_data = _oauth_states.pop(state)
     owner_id = state_data['owner_id']
     user_email = state_data['email']
     cli_callback = state_data.get('cli_callback')  # CLI callback URL if present
-
-    # Check if state is expired (10 minutes)
-    created_at = datetime.fromisoformat(state_data['created_at'])
-    if datetime.now(timezone.utc) - created_at > timedelta(minutes=10):
-        logger.error(f"Expired OAuth state for user {owner_id}")
-        return HTMLResponse(content=_oauth_error_page("OAuth session expired. Please try again."))
 
     # Exchange code for tokens
     redirect_uri = settings.google_oauth_redirect_uri
