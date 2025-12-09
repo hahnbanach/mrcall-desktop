@@ -967,6 +967,115 @@ class SupabaseStorage:
         return True
 
     # ==========================================
+    # OAUTH STATES (for multi-instance support)
+    # ==========================================
+
+    def store_oauth_state(
+        self,
+        state: str,
+        owner_id: str,
+        email: str,
+        cli_callback: Optional[str] = None,
+        expires_minutes: int = 10
+    ) -> bool:
+        """Store OAuth state for CSRF protection.
+
+        Args:
+            state: Random state token
+            owner_id: Firebase UID
+            email: User's email
+            cli_callback: Optional CLI callback URL
+            expires_minutes: Minutes until state expires
+
+        Returns:
+            True if stored successfully
+        """
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+
+        data = {
+            'state': state,
+            'owner_id': owner_id,
+            'email': email,
+            'cli_callback': cli_callback,
+            'expires_at': expires_at.isoformat(),
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        try:
+            self.client.table('oauth_states').upsert(
+                data,
+                on_conflict='state'
+            ).execute()
+            logger.debug(f"Stored OAuth state for owner {owner_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to store OAuth state: {e}")
+            return False
+
+    def get_oauth_state(self, state: str) -> Optional[Dict[str, Any]]:
+        """Get and consume OAuth state (one-time use).
+
+        Args:
+            state: State token to look up
+
+        Returns:
+            State data dict or None if not found/expired
+        """
+        try:
+            result = self.client.table('oauth_states')\
+                .select('*')\
+                .eq('state', state)\
+                .limit(1)\
+                .execute()
+
+            if not result.data:
+                return None
+
+            state_data = result.data[0]
+
+            # Check if expired
+            expires_at = datetime.fromisoformat(state_data['expires_at'].replace('Z', '+00:00'))
+            if datetime.now(timezone.utc) > expires_at:
+                # Delete expired state
+                self.client.table('oauth_states').delete().eq('state', state).execute()
+                logger.warning(f"OAuth state expired for {state_data.get('owner_id')}")
+                return None
+
+            # Delete state (one-time use)
+            self.client.table('oauth_states').delete().eq('state', state).execute()
+
+            return {
+                'owner_id': state_data['owner_id'],
+                'email': state_data['email'],
+                'cli_callback': state_data.get('cli_callback'),
+                'created_at': state_data['created_at']
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get OAuth state: {e}")
+            return None
+
+    def cleanup_expired_oauth_states(self) -> int:
+        """Clean up expired OAuth states.
+
+        Returns:
+            Number of states deleted
+        """
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            result = self.client.table('oauth_states')\
+                .delete()\
+                .lt('expires_at', now)\
+                .execute()
+            deleted = len(result.data) if result.data else 0
+            if deleted > 0:
+                logger.info(f"Cleaned up {deleted} expired OAuth states")
+            return deleted
+        except Exception as e:
+            logger.error(f"Failed to cleanup OAuth states: {e}")
+            return 0
+
+    # ==========================================
     # MRCALL LINKING
     # ==========================================
 
