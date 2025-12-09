@@ -4,7 +4,7 @@ Tests the complete avatar workflow:
 1. Email sync triggers avatar queue
 2. Worker processes queue
 3. API returns avatars
-4. TaskManager uses fast queries
+4. get_tasks tool uses fast avatar queries
 """
 
 import pytest

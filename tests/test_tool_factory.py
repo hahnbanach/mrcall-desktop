@@ -107,14 +107,6 @@ def mock_email_sync():
     return mock_sync
 
 
-@pytest.fixture
-def mock_task_manager():
-    """Mock TaskManager."""
-    mock_tm = MagicMock()
-    mock_tm.build_tasks = AsyncMock(return_value=[])
-    return mock_tm
-
-
 @pytest.mark.asyncio
 async def test_create_all_tools_success(
     mock_config,
@@ -122,8 +114,7 @@ async def test_create_all_tools_success(
     mock_gmail_client,
     mock_calendar_client,
     mock_email_archive,
-    mock_email_sync,
-    mock_task_manager
+    mock_email_sync
 ):
     """Test successful creation of all tools."""
 
@@ -132,7 +123,6 @@ async def test_create_all_tools_success(
          patch('zylch.tools.factory.GoogleCalendarClient', return_value=mock_calendar_client), \
          patch('zylch.tools.factory.EmailArchiveManager', return_value=mock_email_archive), \
          patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync), \
-         patch('zylch.tools.factory.TaskManager', return_value=mock_task_manager), \
          patch('zylch.tools.factory.JSONCache'):
 
         result = await ToolFactory.create_all_tools(mock_config, current_business_id="test_business_123")
@@ -157,8 +147,7 @@ async def test_create_all_tools_with_pipedrive(
     mock_gmail_client,
     mock_calendar_client,
     mock_email_archive,
-    mock_email_sync,
-    mock_task_manager
+    mock_email_sync
 ):
     """Test tool creation with Pipedrive enabled."""
 
@@ -174,7 +163,6 @@ async def test_create_all_tools_with_pipedrive(
          patch('zylch.tools.factory.GoogleCalendarClient', return_value=mock_calendar_client), \
          patch('zylch.tools.factory.EmailArchiveManager', return_value=mock_email_archive), \
          patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync), \
-         patch('zylch.tools.factory.TaskManager', return_value=mock_task_manager), \
          patch('zylch.tools.factory.PipedriveClient', return_value=mock_pipedrive), \
          patch('zylch.tools.factory.JSONCache'):
 
@@ -196,8 +184,7 @@ async def test_create_all_tools_without_business_id(
     mock_gmail_client,
     mock_calendar_client,
     mock_email_archive,
-    mock_email_sync,
-    mock_task_manager
+    mock_email_sync
 ):
     """Test tool creation without current_business_id (should use config default)."""
 
@@ -206,7 +193,6 @@ async def test_create_all_tools_without_business_id(
          patch('zylch.tools.factory.GoogleCalendarClient', return_value=mock_calendar_client), \
          patch('zylch.tools.factory.EmailArchiveManager', return_value=mock_email_archive), \
          patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync), \
-         patch('zylch.tools.factory.TaskManager', return_value=mock_task_manager), \
          patch('zylch.tools.factory.JSONCache'):
 
         result = await ToolFactory.create_all_tools(mock_config, current_business_id=None)
@@ -262,8 +248,7 @@ async def test_tool_categories(
     mock_gmail_client,
     mock_calendar_client,
     mock_email_archive,
-    mock_email_sync,
-    mock_task_manager
+    mock_email_sync
 ):
     """Test that tools are created in the correct categories."""
 
@@ -272,7 +257,6 @@ async def test_tool_categories(
          patch('zylch.tools.factory.GoogleCalendarClient', return_value=mock_calendar_client), \
          patch('zylch.tools.factory.EmailArchiveManager', return_value=mock_email_archive), \
          patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync), \
-         patch('zylch.tools.factory.TaskManager', return_value=mock_task_manager), \
          patch('zylch.tools.factory.JSONCache'):
 
         result = await ToolFactory.create_all_tools(mock_config)
@@ -295,11 +279,8 @@ async def test_tool_categories(
         assert "close_email_threads" in tool_names
         assert "email_stats" in tool_names
 
-        # Task Management tools (4)
-        assert "build_tasks" in tool_names
-        assert "get_contact_task" in tool_names
-        assert "search_tasks" in tool_names
-        assert "task_stats" in tool_names
+        # Task tool (1) - uses pre-computed avatars from Supabase
+        assert "get_tasks" in tool_names
 
         # Contact tools (3)
         assert "save_contact" in tool_names

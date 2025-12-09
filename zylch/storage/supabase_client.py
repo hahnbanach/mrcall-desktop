@@ -1453,6 +1453,83 @@ class SupabaseStorage:
 
         return result.data[0]['contact_id'] if result.data else None
 
+    # ==========================================
+    # USER NOTIFICATIONS
+    # ==========================================
+
+    def create_notification(
+        self,
+        owner_id: str,
+        message: str,
+        notification_type: str = 'warning'
+    ) -> Dict[str, Any]:
+        """Create a notification for a user.
+
+        Args:
+            owner_id: Firebase UID
+            message: Notification message text
+            notification_type: 'info', 'warning', or 'error'
+
+        Returns:
+            Created notification record
+        """
+        data = {
+            'owner_id': owner_id,
+            'message': message,
+            'notification_type': notification_type,
+            'read': False,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        result = self.client.table('user_notifications').insert(data).execute()
+
+        logger.info(f"Created {notification_type} notification for user {owner_id}")
+        return result.data[0] if result.data else {}
+
+    def get_unread_notifications(self, owner_id: str) -> List[Dict[str, Any]]:
+        """Get all unread notifications for a user.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            List of unread notification records (oldest first)
+        """
+        result = self.client.table('user_notifications')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('read', False)\
+            .order('created_at', desc=False)\
+            .execute()
+
+        return result.data or []
+
+    def mark_notifications_read(
+        self,
+        owner_id: str,
+        notification_ids: List[str]
+    ) -> bool:
+        """Mark notifications as read.
+
+        Args:
+            owner_id: Firebase UID
+            notification_ids: List of notification UUIDs to mark as read
+
+        Returns:
+            True if successful
+        """
+        if not notification_ids:
+            return True
+
+        result = self.client.table('user_notifications')\
+            .update({'read': True})\
+            .eq('owner_id', owner_id)\
+            .in_('id', notification_ids)\
+            .execute()
+
+        logger.info(f"Marked {len(notification_ids)} notifications as read for user {owner_id}")
+        return bool(result.data)
+
 
 # Create search_emails function in Supabase (run once via SQL Editor):
 """

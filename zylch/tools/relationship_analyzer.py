@@ -513,6 +513,10 @@ class RelationshipAnalyzer:
         contact_name = person_data['contact_name']
         threads = person_data['threads']
 
+        # Compute relationship signals BEFORE calling Claude
+        signals = self._compute_relationship_signals(contact_email, threads)
+        logger.info(f"Relationship signals for {contact_email}: {signals}")
+
         # Sort threads by date (oldest first for chronological story)
         threads_sorted = sorted(threads, key=lambda t: t.get('last_message_date', ''))
 
@@ -537,6 +541,17 @@ Last message preview: {last_body}
 
         threads_text = "\n".join(thread_summaries)
 
+        # Build relationship signals section
+        signals_text = f"""=== RELATIONSHIP SIGNALS (FACTS - pre-computed) ===
+
+1. **Has Mario ever contacted this person?** {'YES' if signals['has_prior_contact'] else 'NO — This is someone who contacted Mario first, Mario has NEVER replied or initiated contact'}
+2. **Does this look like a sales/marketing message?** {'YES — Contains sales language (case studies, ROI, schedule a call, etc.)' if signals['looks_like_sales'] else 'NO'}
+3. **Does this look AI-generated?** {'YES — Writing style suggests AI/template generation' if signals['looks_ai_generated'] else 'NO'}
+4. **Has unsubscribe/opt-out language?** {'YES — Contains "unsubscribe", "reply no if not interested", etc.' if signals['has_unsubscribe_language'] else 'NO'}
+
+⚠️ CRITICAL: If #1 is NO (Mario never contacted them) AND (#2 OR #3 is YES), this is COLD OUTREACH and should almost certainly be has_task=false.
+"""
+
         prompt = f"""You are an assistant helping Mario manage customer relationships.
 
 CONTACT: {contact_name} <{contact_email}>
@@ -544,12 +559,14 @@ CONTACT: {contact_name} <{contact_email}>
 Mario has had {len(threads)} email conversations with this person in recent days.
 You must analyze ALL communications and understand the evolution of the relationship.
 
+{signals_text}
+
 CONVERSATIONS (in chronological order):
 {threads_text}
 
-=== PRELIMINARY ANALYSIS: AI-GENERATED EMAIL ===
+=== ADDITIONAL CONTEXT: AI-GENERATED EMAIL PATTERNS ===
 
-FIRST, verify if this email was AI-generated:
+Beyond the pre-computed signals above, also look for these patterns:
 
 SIGNALS OF AI-GENERATED COLD OUTREACH:
 1. **Marketing buzzwords**: "unit economics", "pipeline", "LTV:CAC", "inputs and outputs", "hundreds of thousands"
@@ -1142,3 +1159,195 @@ REMEMBER: RETURN ONLY THE JSON OBJECT, NOTHING ELSE. NO MARKDOWN, NO EXPLANATION
 
         # Fallback to extracting from email
         return self._extract_name_from_email(email)
+
+    # === RELATIONSHIP SIGNAL DETECTION ===
+
+    def _has_prior_contact(self, contact_email: str) -> bool:
+        """Check if user has ever sent an email TO this contact.
+
+        Args:
+            contact_email: Contact's email address
+
+        Returns:
+            True if user has sent at least one email to this contact
+        """
+        if not self._use_supabase:
+            return True  # Assume yes if we can't check
+
+        try:
+            # Query email_archive for outbound emails to this contact
+            # Check if contact_email appears in to_emails where user is sender
+            result = self.supabase.client.table('email_archive')\
+                .select('id')\
+                .eq('owner_id', self.owner_id)\
+                .contains('to_emails', [contact_email])\
+                .limit(1)\
+                .execute()
+
+            return bool(result.data)
+        except Exception as e:
+            logger.warning(f"Failed to check prior contact for {contact_email}: {e}")
+            return True  # Assume yes on error (conservative)
+
+    def _detect_sales_signals(self, email_body: str) -> bool:
+        """Detect if email looks like a sales/marketing message.
+
+        Args:
+            email_body: Email body text
+
+        Returns:
+            True if email appears to be sales/marketing
+        """
+        if not email_body:
+            return False
+
+        body_lower = email_body.lower()
+
+        # Sales phrases
+        sales_phrases = [
+            'schedule a call',
+            'schedule a demo',
+            'book a meeting',
+            'book a call',
+            'would you be open to',
+            'would that be worth',
+            'brief discussion',
+            'quick chat',
+            'happy to discuss',
+            'let me know if you\'d like',
+            'interested in learning',
+            'help you grow',
+            'help you scale',
+            'increase your',
+            'boost your',
+            'roi',
+            'pipeline',
+            'revenue',
+            'case study',
+            'client success',
+            'we helped',
+            'we\'ve helped',
+            'raised $',
+            'raised funding',
+            'arr',
+            'mrr',
+        ]
+
+        matches = sum(1 for phrase in sales_phrases if phrase in body_lower)
+        return matches >= 2  # Need at least 2 sales signals
+
+    def _detect_unsubscribe_signals(self, email_body: str) -> bool:
+        """Detect if email has unsubscribe or opt-out language.
+
+        Args:
+            email_body: Email body text
+
+        Returns:
+            True if email has unsubscribe/opt-out signals
+        """
+        if not email_body:
+            return False
+
+        body_lower = email_body.lower()
+
+        unsubscribe_phrases = [
+            'unsubscribe',
+            'opt out',
+            'opt-out',
+            'remove me',
+            'stop receiving',
+            'not interested',
+            'reply stop',
+            'reply no',
+            'just reply no',
+            'say no',
+            'let me know if not',
+            'no worries if not',
+            'feel free to ignore',
+            'manage preferences',
+            'email preferences',
+            'subscription',
+        ]
+
+        return any(phrase in body_lower for phrase in unsubscribe_phrases)
+
+    def _detect_ai_generated_signals(self, email_body: str) -> bool:
+        """Detect if email appears to be AI-generated.
+
+        Args:
+            email_body: Email body text
+
+        Returns:
+            True if email appears AI-generated
+        """
+        if not email_body:
+            return False
+
+        body_lower = email_body.lower()
+
+        # AI writing patterns
+        ai_signals = [
+            'i hope this email finds you',
+            'i wanted to reach out',
+            'i came across',
+            'i noticed that',
+            'i\'d love to connect',
+            'i\'d love to learn more',
+            'leverage',
+            'synergy',
+            'cutting-edge',
+            'game-changing',
+            'revolutionary',
+            'transform your',
+            'unlock',
+            'empower',
+            'streamline',
+            'optimize',
+            'innovative solution',
+            'best regards',
+            'warm regards',
+            'kind regards',
+        ]
+
+        # Count matches
+        matches = sum(1 for signal in ai_signals if signal in body_lower)
+
+        # Also check for perfect structure (greeting + pitch + CTA + signature)
+        has_greeting = any(g in body_lower[:100] for g in ['hi ', 'hello ', 'dear ', 'hey '])
+        has_cta = any(cta in body_lower for cta in ['let me know', 'would you be', 'interested?', 'thoughts?'])
+
+        return matches >= 3 or (matches >= 2 and has_greeting and has_cta)
+
+    def _compute_relationship_signals(self, contact_email: str, threads: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Compute all relationship signals for a contact.
+
+        Args:
+            contact_email: Contact's email address
+            threads: List of threads with this contact
+
+        Returns:
+            Dict with signal flags and metadata
+        """
+        # Get all email bodies from threads
+        all_bodies = []
+        for thread in threads:
+            body = thread.get('last_email', {}).get('body', '')
+            if body:
+                all_bodies.append(body)
+
+        combined_body = '\n'.join(all_bodies)
+
+        # Compute signals
+        has_prior_contact = self._has_prior_contact(contact_email)
+        looks_like_sales = self._detect_sales_signals(combined_body)
+        has_unsubscribe = self._detect_unsubscribe_signals(combined_body)
+        looks_ai_generated = self._detect_ai_generated_signals(combined_body)
+
+        return {
+            'has_prior_contact': has_prior_contact,
+            'looks_like_sales': looks_like_sales,
+            'has_unsubscribe_language': has_unsubscribe,
+            'looks_ai_generated': looks_ai_generated,
+            # Summary for prompt
+            'is_cold_outreach': not has_prior_contact and (looks_like_sales or looks_ai_generated),
+        }

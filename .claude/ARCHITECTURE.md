@@ -97,6 +97,58 @@ Supabase (thread_analysis) ← AI summaries stored here
   - Queues and processes trigger events
   - Background worker for async execution
 
+### User Notification System
+
+**Purpose**: Notify users of background worker failures or system events in the chat.
+
+**Problem solved**: Background workers (e.g., avatar computation) can fail silently. Users need to know when something requires their attention (e.g., missing API key).
+
+**How it works**:
+```
+Background Worker (e.g., AvatarComputeWorker)
+       │
+       │ (failure detected, e.g., missing Anthropic key)
+       ▼
+storage.create_notification(owner_id, message, type='warning')
+       │
+       │ (notification stored in user_notifications table)
+       ▼
+User sends any message in chat
+       │
+       ▼
+ChatService.process_message()
+       │
+       ├─ Check for unread notifications
+       ├─ Format as markdown banner
+       ├─ Mark as read
+       └─ Prepend to response
+       │
+       ▼
+User sees: "⚠️ Avatar computation skipped: No Anthropic API key..."
+           ---
+           [normal response]
+```
+
+**Behavior**:
+- **Show once, mark as read**: Notification appears on first message after creation, then disappears
+- **Non-blocking**: Notifications are prepended to response, don't interrupt normal flow
+- **Deduplication**: Workers check for existing notifications before creating duplicates
+
+**Table**: `user_notifications`
+| Column | Type | Purpose |
+|--------|------|---------|
+| `id` | UUID | Primary key |
+| `owner_id` | TEXT | Firebase UID |
+| `message` | TEXT | Notification text |
+| `notification_type` | TEXT | `info`, `warning`, `error` |
+| `read` | BOOLEAN | Whether user has seen it |
+| `created_at` | TIMESTAMPTZ | When created |
+
+**Files**:
+- `zylch/storage/supabase_client.py`: `create_notification()`, `get_unread_notifications()`, `mark_notifications_read()`
+- `zylch/services/chat_service.py`: Checks and injects notifications in `process_message()`
+- `zylch/workers/avatar_compute_worker.py`: Creates notification on missing API key
+
 **Pattern**: CLI and API both use the same service layer functions
 
 ```python
@@ -143,6 +195,36 @@ Interactive command-line interface:
 - `/archive` - Archive management
 - `/memory` - Memory system
 - Natural conversation with agent
+
+### Task Display: `get_tasks` Tool
+
+**Problem**: `/gaps` is fast (3.5s) but only shows counts. Asking "show me tasks" in natural language triggers full agent initialization + Claude API formatting (27s).
+
+**Solution**: `get_tasks` tool that returns pre-formatted task list from avatars.
+
+**How it works**:
+```
+User: "show me tasks"
+       │
+       ▼
+Agent recognizes task query → calls get_tasks tool
+       │
+       ▼
+Tool queries Supabase avatars (pre-computed) → formats markdown
+       │
+       ▼
+Returns formatted list in ~3-5s (1 LLM call to decide tool, instant data)
+```
+
+**Tool location**: `zylch/tools/factory.py` → `_GetTasksTool`
+
+**Performance comparison**:
+| Query | Before | After |
+|-------|--------|-------|
+| `/gaps` | 3.5s (counts only) | 3.5s (full list) |
+| "show me tasks" | 27s (LLM formats) | ~5s (tool returns pre-formatted) |
+
+**Why this matters**: Avatars are pre-computed by background worker after `/sync`. The data exists — we just need to display it without asking Claude to format it every time.
 
 ## Key Architectural Decisions
 
@@ -226,6 +308,7 @@ for contact_email, threads in person_threads.items():
 | `trigger_events` | Event queue for trigger processing |
 | `sharing_auth` | Sharing authorizations |
 | `memories` | Avatar/memory system (pg_vector) |
+| `user_notifications` | System notifications for users |
 
 **Security**:
 - All tables use Row Level Security (RLS) scoped by `owner_id`
@@ -377,6 +460,31 @@ Backend decodes automatically on startup (`zylch/api/firebase_auth.py`).
 - Row Level Security ensures users only access their own data
 - Supabase provides encryption at rest
 - No data shared between users
+
+### RLS & Service Role Key
+
+**Important**: The backend uses Supabase's **service role key**, which **bypasses RLS entirely**.
+
+```python
+# From supabase_client.py
+# Use service_role key for backend (bypasses RLS, we enforce owner_id manually)
+```
+
+**Why?**
+- We use **Firebase Auth** (not Supabase Auth)
+- `owner_id` is a Firebase UID (text string like `"abc123xyz"`), not a Supabase UUID
+- Supabase's `auth.uid()` returns Supabase UUIDs, which don't match Firebase UIDs
+- RLS policies using `auth.uid()` won't work with Firebase tokens
+
+**How we enforce security instead**:
+- Every query manually filters by `owner_id`
+- The backend validates Firebase JWT before any operation
+- Service role key is never exposed to frontend
+
+**RLS policies in migrations**:
+- Still defined for defense-in-depth
+- Would protect if someone accidentally used the anon key
+- Use `current_setting('request.jwt.claims', true)::json->>'sub'` pattern for JWT-based RLS (not `auth.uid()`)
 
 **Future consideration**: Local-first architecture (see "Future: Local-First Options" above) would provide stronger privacy guarantees by keeping email content on user devices only.
 
@@ -667,6 +775,40 @@ For cases where you WANT to create a distinct memory even if similar exists:
 ```python
 mem.store_memory(..., force_new=True)  # Bypasses similarity check
 ```
+
+## Future Development TODOs
+
+The following future development plans are documented in detail in `docs/features/`:
+
+### 🔴 Critical Priority
+- **[BILLING_SYSTEM_TODO.md](../docs/features/BILLING_SYSTEM_TODO.md)** - Stripe integration, subscription tiers (Free/Pro/Team), feature gating, revenue generation (Phase H)
+- **[WHATSAPP_INTEGRATION_TODO.md](../docs/features/WHATSAPP_INTEGRATION_TODO.md)** - WhatsApp integration via StarChat API, multi-channel threading, 6.9B user market
+
+### 🟡 Medium-High Priority
+- **[MICROSOFT_CALENDAR_TODO.md](../docs/features/MICROSOFT_CALENDAR_TODO.md)** - Complete Outlook Calendar implementation, Teams meeting links, feature parity (Phase I.5)
+
+### 🟡 Medium Priority
+- **[DESKTOP_APP_TODO.md](../docs/features/DESKTOP_APP_TODO.md)** - Tauri desktop application (Rust + Vue 3), local SQLite, hybrid sync
+- **[MOBILE_APP_TODO.md](../docs/features/MOBILE_APP_TODO.md)** - React Native cross-platform (iOS + Android), push notifications, biometric auth
+- **[REAL_TIME_PUSH_TODO.md](../docs/features/REAL_TIME_PUSH_TODO.md)** - Gmail Pub/Sub push notifications, <5 second latency, WebSocket updates
+
+### 🟢 Low Priority (Scaling)
+- **[REDIS_SCALING_TODO.md](../docs/features/REDIS_SCALING_TODO.md)** - Upstash Redis caching, rate limiting, session management (Phase J)
+
+Each TODO file contains:
+- Business impact analysis and market sizing
+- Current state and what's missing
+- Detailed implementation phases with timelines
+- Success metrics (technical, business, UX)
+- Open questions and technical decisions
+
+**Triggers for Implementation**:
+- Billing: Required for revenue generation and monetization
+- WhatsApp: Waiting for StarChat API endpoint availability
+- Microsoft Calendar: When Outlook users exceed 40% of user base
+- Desktop/Mobile: When user requests justify development effort
+- Real-time Push: When real-time features become competitive requirement
+- Redis Scaling: When API P95 >500ms OR database costs >$200/month
 
 ## Known Limitations
 

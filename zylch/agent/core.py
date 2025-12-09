@@ -61,7 +61,10 @@ class ZylchAIAgent:
         Returns:
             List of tool schemas
         """
-        return [tool.get_schema() for tool in self.tools]
+        schemas = [tool.get_schema() for tool in self.tools]
+        tool_names = [s['name'] for s in schemas]
+        logger.info(f"Tools available to Claude: {tool_names}")
+        return schemas
 
     async def process_message(
         self,
@@ -149,7 +152,23 @@ class ZylchAIAgent:
         # Handle tool use loop
         while response.stop_reason == "tool_use":
             # Extract tool calls from response
-            tool_results = await self._execute_tools(response.content)
+            tool_results, direct_response = await self._execute_tools(response.content)
+
+            # Check for direct response tools (e.g., get_tasks)
+            # These tools return pre-formatted output that should be returned as-is
+            if direct_response:
+                logger.info(f"Direct response from tool, skipping second LLM call")
+                # Add assistant's tool use to history
+                self.conversation_history.append({
+                    "role": "assistant",
+                    "content": response.content
+                })
+                # Add the direct response as assistant message
+                self.conversation_history.append({
+                    "role": "assistant",
+                    "content": direct_response
+                })
+                return direct_response
 
             # Add assistant's tool use to history
             self.conversation_history.append({
@@ -194,16 +213,21 @@ class ZylchAIAgent:
 
         return assistant_message
 
-    async def _execute_tools(self, content: List[Any]) -> List[Dict[str, Any]]:
+    # Tools that return pre-formatted output and should bypass the second LLM call
+    DIRECT_RESPONSE_TOOLS = {'get_tasks'}
+
+    async def _execute_tools(self, content: List[Any]) -> tuple[List[Dict[str, Any]], str | None]:
         """Execute tool calls from response.
 
         Args:
             content: Response content blocks
 
         Returns:
-            Tool results for Anthropic API
+            Tuple of (tool_results for Anthropic API, direct_response if applicable)
+            If direct_response is not None, skip the second LLM call and return it directly.
         """
         results = []
+        direct_response = None
 
         for block in content:
             if block.type == "tool_use":
@@ -224,6 +248,13 @@ class ZylchAIAgent:
                     if "fresh contact" in tool_result.message.lower():
                         logger.warning(f"⚠️  FRESH CONTACT DETECTED - Agent should NOT call Gmail/web search!")
 
+                # Check if this is a direct response tool (bypass second LLM call)
+                if tool_name in self.DIRECT_RESPONSE_TOOLS and tool_result.status == ToolStatus.SUCCESS:
+                    logger.info(f"Tool {tool_name} is a direct response tool - will skip second LLM call")
+                    direct_response = tool_result.message
+                    # Don't add to results - we're returning directly
+                    continue
+
                 # Format result for Anthropic
                 formatted_result = self._format_tool_result(tool_result)
                 logger.debug(f"Formatted tool result sent to agent:\n{formatted_result}")
@@ -234,7 +265,7 @@ class ZylchAIAgent:
                     "content": formatted_result
                 })
 
-        return results
+        return results, direct_response
 
     async def _call_tool(self, name: str, input_data: Dict[str, Any]) -> ToolResult:
         """Call a registered tool.

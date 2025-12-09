@@ -1,448 +1,269 @@
 # Zylch AI Documentation
 
-**Complete technical documentation for Zylch AI - AI-powered communication assistant**
+Welcome to Zylch AI - your AI-powered email assistant for relationship intelligence, task management, and automated workflows.
 
----
+## 📚 Documentation Overview
 
-## 📚 Documentation Index
+This documentation is organized into the following sections:
 
-### User Guide (Non-Technical)
-
-- **[User Features](./user-features/README.md)** - What Zylch can do for you (no technical jargon!)
-  - [Contact Intelligence](./user-features/contact-intelligence.md) - Know everyone you know
-  - [Email Management](./user-features/email-management.md) - Draft and find emails fast
-  - [Calendar Integration](./user-features/calendar-integration.md) - Schedule with context
-  - [Daily Briefing](./user-features/daily-briefing.md) - Know what needs attention
-  - [Memory & Learning](./user-features/memory-learning.md) - Zylch learns your style
-  - [Task Management](./user-features/task-management.md) - See what needs doing
-  - [Sharing](./SHARING.md) - Share relational intelligence with colleagues
-  - [Triggered Instructions](./TRIGGERED_INSTRUCTIONS.md) - Event-driven automation
-  - [MrCall Integration](./user-features/mrcall-integration.md) - Phone assistant config
-
-### Getting Started
-
-- **[Quick Start Guide](./setup/quick-start.md)** - Get Zylch AI up and running in minutes
-- **[Gmail OAuth Setup](./setup/gmail-oauth.md)** - Configure Google authentication for Gmail and Calendar
-- **[Email Sending Setup](./setup/email-sending-setup.md)** - Configure email sending capabilities
+### Quick Start
+- **[Gmail OAuth Setup](guides/gmail-oauth.md)** - Configure Google OAuth for Gmail access
+- **[Getting Started Guide](../ZYLCH_BUSINESS_MODEL.md)** - Business model and product vision
 
 ### Core Features
+- **[Email Archive](features/email-archive.md)** - Permanent email storage with full-text search
+- **[Email Archive](features/email-archive.md)** - Two-tier email storage and AI-powered analysis
+- **[Calendar Integration](features/calendar-integration.md)** - Google Calendar with Meet links
+- **[Relationship Intelligence](features/relationship-intelligence.md)** - Gap detection and task extraction
+- **[Avatar Aggregation](features/avatar-aggregation.md)** - Person-centric contact intelligence *(coming soon)*
+- **[Triggers & Automation](features/triggers-automation.md)** - Event-driven workflow automation *(coming soon)*
+- **[Sharing System](features/sharing-system.md)** - Consent-based intelligence sharing *(coming soon)*
+- **[Memory System](features/memory-system.md)** - Persistent memory and pattern learning *(coming soon)*
+- **[MrCall Integration](features/mrcall-integration.md)** - Telephony and WhatsApp integration *(coming soon)*
 
-- **[Multi-Tenant Architecture](./features/multi-tenant-architecture.md)** - Complete isolation per owner with multiple assistants support
-- **[User Persona Learning](./features/user-persona-learning.md)** - ⭐ NEW! Background AI that learns about the user from conversations
-- **[Email Archive System](./features/email-archive.md)** - Permanent email storage with full-text search and incremental sync
-- **[Relationship Intelligence](./features/relationship-intelligence.md)** - Cross-channel communication gap analysis
-- **[Task Management](./features/task-management.md)** - AI-powered task tracking and prioritization
-- **[Calendar & Meet Integration](./features/calendar-integration.md)** - Google Calendar with automatic Meet link generation
-- **[Memory System](./features/memory-system.md)** - Channel-based behavioral learning from user corrections
-- **[Cache Management](./features/cache-management.md)** - Data caching and performance optimization
+### Future Development
+- **[Billing System](features/BILLING_SYSTEM_TODO.md)** 🔴 Critical - Stripe integration and subscription tiers
+- **[WhatsApp Integration](features/WHATSAPP_INTEGRATION_TODO.md)** 🔴 High - Multi-channel messaging
+- **[Microsoft Calendar](features/MICROSOFT_CALENDAR_TODO.md)** 🟡 Medium-High - Outlook Calendar feature parity
+- **[Desktop Application](features/DESKTOP_APP_TODO.md)** 🟡 Medium - Tauri desktop app
+- **[Mobile Application](features/MOBILE_APP_TODO.md)** 🟡 Medium - React Native iOS/Android
+- **[Real-Time Push](features/REAL_TIME_PUSH_TODO.md)** 🟡 Medium - Gmail Pub/Sub notifications
+- **[Redis Scaling](features/REDIS_SCALING_TODO.md)** 🟢 Low - Caching and performance optimization
 
-### API Documentation
+### Architecture & Development
+- **[Architecture Overview](architecture/overview.md)** - System architecture and design patterns *(coming soon)*
+- **[Development Plan](../.claude/DEVELOPMENT_PLAN.md)** - Project roadmap and phases
+- **[Technical Architecture](../.claude/ARCHITECTURE.md)** - Detailed technical specifications
+- **[Conventions](../.claude/CONVENTIONS.md)** - Code style and development standards
+- **[Testing Strategy](../.claude/TESTING.md)** - Testing approach and guidelines
+- **[Documentation Guide](../.claude/DOCUMENTATION.md)** - How to write documentation
 
-- **[Chat API](./api/chat-api.md)** - Conversational AI HTTP endpoint with 25+ tools
+### User Guides
+- **[CLI Commands](guides/cli-commands.md)** - Complete CLI command reference *(coming soon)*
 
-### Developer Documentation
-
-- **[Implementation Notes](./implementation-notes.md)** - ⭐ Recent changes and implementation decisions (Nov 2025)
-- **[Architecture](./.claude/ARCHITECTURE.md)** - System design and key decisions
-- **[Conventions](./.claude/CONVENTIONS.md)** - Code style and patterns
-- **[Testing](./.claude/TESTING.md)** - Testing strategy and examples
-- **[Documentation](./.claude/DOCUMENTATION.md)** - How to document
-
-### Root Documentation
-
-Essential documents in the project root:
-
-- **[README.md](../README.md)** - Project overview and main entry point
-- **[ZYLCH_SPEC.md](../spec/ZYLCH_SPEC.md)** - Complete technical specification
-- **[ZYLCH_BUSINESS_MODEL.md](../ZYLCH_BUSINESS_MODEL.md)** - Business context and model
-- **[CHANGELOG.md](../CHANGELOG.md)** - Version history and changes
-
----
+### Archive
+- **[Archived Documentation](../ARCHIVE/)** - Old documentation and completion reports
 
 ## 🎯 Quick Navigation
 
-### I want to...
+### For Users
+1. Start with [Gmail OAuth Setup](guides/gmail-oauth.md) to configure authentication
+2. Learn about [Email Archive](features/email-archive.md) to understand AI analysis
+3. Explore [Relationship Intelligence](features/relationship-intelligence.md) for gap detection
 
-**Get started with Zylch AI**
-→ [Quick Start Guide](./setup/quick-start.md)
+### For Developers
+1. Review [Architecture Overview](../.claude/ARCHITECTURE.md) for system design
+2. Check [Development Plan](../.claude/DEVELOPMENT_PLAN.md) for current phase and roadmap
+3. Follow [Conventions](../.claude/CONVENTIONS.md) for code style guidelines
+4. Reference [Testing Strategy](../.claude/TESTING.md) before writing tests
 
-**Set up Gmail integration**
-→ [Gmail OAuth Setup](./setup/gmail-oauth.md)
+### For Product Managers
+1. Read [Business Model](../ZYLCH_BUSINESS_MODEL.md) for product vision
+2. Review [Future Development](features/) TODO files for upcoming features
+3. Check [Development Plan](../.claude/DEVELOPMENT_PLAN.md) for timeline and milestones
 
-**Search my email archive**
-→ [Email Archive System](./features/email-archive.md)
+## 🔍 Finding Information
 
-**Build a chatbot with Zylch**
-→ [Chat API](./api/chat-api.md)
+### By Feature
+- **Email**: See [Email Archive](features/email-archive.md) and [Relationship Intelligence](features/relationship-intelligence.md)
+- **Calendar**: See [Calendar Integration](features/calendar-integration.md) and [Microsoft Calendar TODO](features/MICROSOFT_CALENDAR_TODO.md)
+- **Tasks**: See [Relationship Intelligence](features/relationship-intelligence.md)
+- **Automation**: See [Triggers & Automation](features/triggers-automation.md) *(coming soon)*
+- **Sharing**: See [Sharing System](features/sharing-system.md) *(coming soon)*
+- **Memory**: See [Memory System](features/memory-system.md) *(coming soon)*
 
-**Teach Zylch AI my preferences**
-→ [Memory System - Usage Guide](./features/memory-system.md#usage-guide)
+### By Technology
+- **Gmail API**: [Gmail OAuth](guides/gmail-oauth.md), [Email Archive](features/email-archive.md)
+- **Google Calendar API**: [Calendar Integration](features/calendar-integration.md)
+- **Microsoft Graph API**: [Microsoft Calendar TODO](features/MICROSOFT_CALENDAR_TODO.md)
+- **Anthropic Claude**: [Email Archive](features/email-archive.md), [Relationship Intelligence](features/relationship-intelligence.md)
+- **Supabase**: [Architecture](../.claude/ARCHITECTURE.md#data-storage)
+- **Firebase Auth**: [Architecture](../.claude/ARCHITECTURE.md#authentication)
 
-**Understand relationship gaps**
-→ [Relationship Intelligence](./features/relationship-intelligence.md)
+### By User Type
+- **CLI Users**: [CLI Commands](guides/cli-commands.md) *(coming soon)*
+- **Web Dashboard Users**: See deployed app at https://app.zylchai.com
+- **API Users**: API documentation *(coming soon)*
+- **Mobile Users**: [Mobile App TODO](features/MOBILE_APP_TODO.md) (future)
+- **Desktop Users**: [Desktop App TODO](features/DESKTOP_APP_TODO.md) (future)
 
-**Learn about system architecture**
-→ [Architecture](./.claude/ARCHITECTURE.md)
+## 📊 Documentation Status
 
-**Integrate Zylch AI with my workflow**
-→ [Task Management](./features/task-management.md)
+| Category | Status | Files |
+|----------|--------|-------|
+| **Core Features** | 🟡 Partial | 4/9 complete |
+| **Future Development** | ✅ Complete | 7/7 TODO files |
+| **Architecture** | ✅ Complete | All files updated |
+| **User Guides** | 🔴 In Progress | 1/2 complete |
+| **API Documentation** | 🔴 Not Started | 0/4 planned |
 
-**Understand the complete system**
-→ [Technical Specification](../spec/ZYLCH_SPEC.md)
+### Completion Legend
+- ✅ **Complete** - Documentation finished and reviewed
+- 🟡 **Partial** - Some documentation exists, needs completion
+- 🔴 **In Progress** - Currently being written
+- ⚪ **Planned** - Documented in TODO files, not yet started
 
----
+## 🚀 Getting Started
 
-## 📖 Feature Documentation
+### Prerequisites
+- Python 3.11+
+- Google Cloud project with Gmail API enabled
+- Anthropic Claude API key (or user brings their own)
 
-### Email Archive System
-
-**What it does:** Permanent email storage with incremental sync and full-text search.
-
-**Key features:**
-- 💾 Complete history preservation (never lose old emails)
-- ⚡ Incremental sync (<1 second daily)
-- 🔍 Full-text search (FTS5-powered)
-- 🗄️ SQLite backend with optional PostgreSQL
-- 📊 Two-tier architecture (Archive + Intelligence Cache)
-
-**Read more:** [Email Archive Documentation](./features/email-archive.md)
-
-### User Persona Learning ⭐ NEW
-
-**What it does:** Background AI system that learns about the user from conversations and uses this proactively.
-
-**Key features:**
-- 🧠 **Background Learning**: Extracts facts without blocking conversation
-- 👤 **Personal Knowledge**: Relationships, preferences, work context, patterns
-- 🔄 **Reconsolidation**: Similar facts merged, not duplicated
-- 💬 **Proactive Usage**: AI references facts naturally ("Since Francesca is your sister...")
-- 💰 **Economical**: Uses Haiku model for fast, low-cost extraction
-
-**Example:**
-```
-User: "Scrivi a mia sorella Francesca"
-Zylch: [learns: user has sister named Francesca]
-
-# Later...
-User: "Manda un messaggio a Francesca"
-Zylch: "Scrivo a tua sorella Francesca?"
-```
-
-**Read more:** [User Persona Learning Documentation](./features/user-persona-learning.md)
-
-### Multi-Tenant Architecture
-
-**What it does:** Complete data isolation per owner with support for multiple completely isolated assistants.
-
-**Key features:**
-- 🏢 **Multi-Tenant**: Complete isolation per owner (Firebase UID)
-- 🤖 **Multiple Assistants**: Each owner can run completely different businesses
-- 👤 **Person-Centric Memory**: Semantic memory per contact with HNSW vector search
-- 🔒 **Zero Data Leakage**: `{owner}:{assistant}:{contact}` namespace structure
-- 📊 **Scalable**: Works with thousands of users
-
-**Example use case:**
-```
-owner_mario:mrcall_assistant    → Telecom business
-owner_mario:caffe_assistant     → Coffee shop (ISOLATED!)
-```
-
-**CLI commands:**
-```bash
-# Manage assistants
-/assistant --create "MrCall Business"
-/assistant --list
-
-# Link MrCall assistant for contacts
-/mrcall --id hahnbanach_personal
-```
-
-**Read more:** [Multi-Tenant Architecture Documentation](./features/multi-tenant-architecture.md)
-
-### Chat API
-
-**What it does:** Conversational AI HTTP endpoint for web/mobile integration.
-
-**Key features:**
-- 💬 Natural language conversation
-- 🔧 25+ tools (email, calendar, tasks, CRM, web search)
-- 🤖 Automatic model selection (Haiku/Sonnet/Opus)
-- 📡 RESTful API with OpenAPI docs
-
-**Read more:** [Chat API Documentation](./api/chat-api.md)
-
-### Memory System
-
-**What it does:** Zylch AI learns from your corrections and automatically applies them in future interactions.
-
-**Key concepts:**
-- 📡 Channel-based organization (email, calendar, WhatsApp, phone, tasks)
-- 👤 Personal memory (user-specific preferences)
-- 🌍 Global memory (system-wide improvements, admin only)
-- 📈 Confidence scoring (rules improve over time)
-- 🔄 Automatic application (injected into AI prompts)
-
-**Read more:** [Memory System Documentation](./features/memory-system.md)
-
-### Relationship Intelligence
-
-**What it does:** Analyzes communication across email and calendar to identify gaps and opportunities.
-
-**Key features:**
-- 🤖 AI semantic filtering (distinguishes genuine emails from newsletters)
-- 🧠 Memory-based personalization (learns your filtering preferences)
-- 🚫 Automated bot detection
-- ✅ Meeting acceptance filtering
-- 📊 Cross-channel gap analysis
-
-**Gap types detected:**
-1. **Meetings without follow-up** - You had a meeting but didn't send follow-up email
-2. **Urgent emails without meeting** - Important email but no meeting scheduled
-3. **Silent contacts** - Contacts with past interactions but no recent communication
-
-**Read more:** [Relationship Intelligence Documentation](./features/relationship-intelligence.md)
-
-### Task Management
-
-**What it does:** AI-powered task tracking integrated with email and calendar context.
-
-**Read more:** [Task Management Documentation](./features/task-management.md)
-
----
-
-## 🚀 Quick Start
+### Quick Setup
 
 ```bash
-# 1. Clone and setup
+# 1. Clone and install
 cd /path/to/zylch
-source venv/bin/activate
+python -m venv venv
+source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+pip install -e .
 
-# 2. Configure OAuth (first time only)
-# Follow: docs/setup/gmail-oauth.md
+# 2. Configure OAuth
+# Follow: docs/guides/gmail-oauth.md
 
-# 3. Start Zylch AI
-python -m zylch.cli.main
+# 3. Start CLI
+./zylch-cli
 
 # 4. Try these commands
-/tutorial           # Interactive tour of all features
-/sync               # Sync emails and calendar
-/gaps               # See relationship intelligence briefing
-/memory --list      # View your learned preferences
+/help                # Show all commands
+/sync                # Sync emails and calendar
+/gaps                # See relationship gaps
 ```
 
----
+### Web Dashboard
 
-## 🏗️ Architecture Overview
+Visit https://app.zylchai.com for the web interface.
+
+## 💡 Key Concepts
+
+### Two-Tier Email System
+- **Archive**: Permanent storage of all emails (Supabase)
+- **Intelligence Cache**: 30-day AI-analyzed window for active intelligence
+
+### Person-Centric Architecture
+A person is NOT an email address - they can have multiple emails, phones, and names. Zylch's memory system reflects this reality.
+
+### Memory Reconsolidation
+Like human memory, Zylch updates existing memories rather than creating duplicates when new information arrives.
+
+### Relationship Intelligence
+Goes beyond inbox management by correlating email + calendar data to identify communication gaps and opportunities.
+
+## 🏗️ System Architecture
 
 ```
 Zylch AI
-├── Communication Sync
-│   ├── Email (Gmail API)
-│   ├── Calendar (Google Calendar API)
-│   └── Cache (threads.json, events.json)
+├── Email Layer
+│   ├── Gmail/Outlook API sync
+│   ├── Archive (permanent Supabase storage)
+│   └── Intelligence Cache (30-day analyzed window)
 │
 ├── Intelligence Layer
-│   ├── Memory System (behavioral learning)
+│   ├── Memory System (person-centric with reconsolidation)
 │   ├── Relationship Analyzer (gap detection)
-│   └── AI Filtering (Sonnet semantic analysis)
+│   ├── Task Manager (person-centric task extraction)
+│   └── Avatar Aggregator (multi-source contact enrichment)
 │
-├── Task Management
-│   ├── Task extraction from communications
-│   ├── Priority scoring
-│   └── Context enrichment
+├── Automation Layer
+│   ├── Trigger Service (event-driven workflows)
+│   ├── Webhook Handlers (StarChat, SendGrid, Vonage)
+│   └── Scheduler (APScheduler for reminders)
 │
 └── User Interface
     ├── CLI (interactive commands)
-    ├── Morning sync (cron automation)
-    └── API (future: web interface)
+    ├── Web Dashboard (Vue 3 at app.zylchai.com)
+    └── API (FastAPI at api.zylchai.com)
 ```
-
----
-
-## 📁 File Structure
-
-```
-zylch/
-├── docs/                           # 📚 This directory
-│   ├── README.md                   # Documentation index (you are here)
-│   ├── features/                   # Feature documentation
-│   │   ├── user-persona-learning.md # ⭐ NEW! User persona learning
-│   │   ├── email-archive.md        # Email archive system
-│   │   ├── relationship-intelligence.md
-│   │   ├── task-management.md
-│   │   ├── calendar-integration.md
-│   │   ├── memory-system.md
-│   │   └── cache-management.md
-│   ├── api/                        # API documentation
-│   │   └── chat-api.md             # Chat API endpoint
-│   ├── setup/                      # Setup guides
-│   │   ├── quick-start.md
-│   │   ├── gmail-oauth.md
-│   │   └── email-sending-setup.md
-│   ├── admin/                      # Admin documentation
-│   └── archive/                    # Historical docs
-│
-├── .claude/                        # 🔧 Developer guidelines
-│   ├── ARCHITECTURE.md             # System design
-│   ├── CONVENTIONS.md              # Code standards
-│   ├── TESTING.md                  # Test strategy
-│   └── DOCUMENTATION.md            # Documentation guide
-│
-├── spec/                           # 📋 Technical specifications
-│   ├── ZYLCH_SPEC.md
-│   ├── ZYLCH_DEVELOPMENT_PLAN.md
-│   └── MEMORY_GAP_ANALYSIS.md
-│
-├── zylch/                          # 💻 Source code
-│   ├── cli/                        # CLI interface
-│   ├── api/                        # HTTP API (FastAPI)
-│   ├── services/                   # Business logic
-│   ├── tools/                      # Gmail, Calendar, Archive, etc.
-│   ├── agent/                      # AI agent core
-│   └── tutorial/                   # Interactive tutorial system
-│       ├── tutorial_manager.py     # Tutorial orchestrator
-│       ├── sandbox/                # Mock data for demos
-│       └── steps/                  # Tutorial step definitions
-│
-├── cache/                          # 💾 Data storage
-│   ├── emails/
-│   │   ├── archive.db              # SQLite email archive (permanent)
-│   │   └── threads.json            # Intelligence cache (30-day)
-│   ├── calendar/events.json        # Calendar events
-│   ├── relationship_gaps.json      # Detected gaps
-│   └── memory_mario.json           # User memory
-│
-├── README.md                       # 📄 Main project README
-├── CLAUDE.md                       # 🤖 Claude Code instructions
-├── ZYLCH_BUSINESS_MODEL.md         # 💼 Business context
-└── CHANGELOG.md                    # 📝 Version history
-```
-
----
-
-## 🧪 Testing
-
-### Manual Testing
-
-```bash
-# Test email sync
-python -c "from zylch.tools.email_sync import EmailSyncManager; ..."
-
-# Test relationship analysis
-python test_relationship_intelligence.py
-
-# Test memory system
-python test_channel_memory.py
-```
-
-### End-to-End Testing
-
-```bash
-# Start Zylch AI and run full workflow
-python -m zylch.cli.main
-
-# In Zylch AI CLI:
-/sync 7        # Sync last 7 days
-/gaps          # View relationship briefing
-/memory --list # Check learned preferences
-```
-
----
 
 ## 🔗 External Integrations
 
 ### Current
-- ✅ Gmail (read, send, modify, draft management with thread preservation)
-- ✅ Google Calendar (read, create events, Google Meet link generation)
-- ✅ Claude AI (Haiku for analysis, Sonnet for semantic filtering and task aggregation)
-- ✅ AI-Generated Email Detection (filters low-priority sales emails)
+- ✅ Gmail (OAuth 2.0, read/send/drafts)
+- ✅ Google Calendar (OAuth 2.0, Meet link generation)
+- ✅ Microsoft Outlook (Graph API, email + calendar)
+- ✅ Anthropic Claude (Haiku/Sonnet/Opus tiering)
+- ✅ StarChat/MrCall (contacts, telephony)
+- ✅ SendGrid (email campaigns)
+- ✅ Vonage (SMS)
+- ✅ Pipedrive CRM (optional)
 
 ### Planned
-- ⏳ WhatsApp Business API
-- ⏳ MrCall phone assistant integration
-- ⏳ Slack integration
-- ⏳ Microsoft Teams
+- ⏳ WhatsApp Business API (awaiting StarChat endpoint)
+- ⏳ Real-time Gmail Push (Pub/Sub)
+- ⏳ Redis caching (Upstash)
+- ⏳ Stripe billing
+- ⏳ Mobile apps (React Native)
+- ⏳ Desktop app (Tauri)
+
+## 🧪 Testing
+
+See [Testing Strategy](../.claude/TESTING.md) for comprehensive testing approach.
+
+Quick test:
+```bash
+# Run all tests
+python -m pytest tests/ -v
+
+# Test specific component
+python -m pytest tests/test_email_archive.py -v
+```
+
+## 📁 Repository Structure
+
+```
+zylch/
+├── docs/                    # Documentation (you are here)
+│   ├── README.md            # This file
+│   ├── features/            # Feature documentation
+│   ├── guides/              # User guides
+│   ├── architecture/        # Architecture docs
+│   └── ARCHIVE/             # Old documentation
+├── .claude/                 # Development guidelines
+├── zylch/                   # Source code
+│   ├── agent/               # AI agent core
+│   ├── api/                 # FastAPI endpoints
+│   ├── cli/                 # CLI interface
+│   ├── services/            # Business logic
+│   ├── tools/               # Email, Calendar, Archive, etc.
+│   ├── storage/             # Supabase client
+│   └── workers/             # Background workers
+├── frontend/                # Vue 3 web dashboard
+├── zylch-cli/               # Thin CLI client (separate repo)
+├── tests/                   # Test suite
+└── cache/                   # Legacy (gitignored, unused)
+```
+
+## 🤝 Contributing to Documentation
+
+See [Documentation Guide](../.claude/DOCUMENTATION.md) for:
+- Documentation standards and style guide
+- How to structure feature documentation
+- Adding new documentation files
+- Keeping documentation in sync with code
+
+## 📞 Support
+
+- **Issues**: Report documentation issues at the project repository
+- **Questions**: Contact the development team
+- **Updates**: Check [Development Plan](../.claude/DEVELOPMENT_PLAN.md) for latest status
+- **Web App**: https://app.zylchai.com
+- **API**: https://api.zylchai.com
+
+## 📝 Recent Updates
+
+**December 2025**:
+- ✅ Created 7 comprehensive TODO files for future development
+- ✅ Updated ARCHITECTURE.md with TODOs section
+- ✅ Enhanced DEVELOPMENT_PLAN.md with detailed phases (H, I.5, J)
+- ✅ Fixed documentation references (calendar_sync.py → gcalendar.py)
+- ✅ Clarified credential paths in Gmail OAuth guide
+- ✅ Added command syntax clarification in relationship intelligence docs
+- ✅ Created ARCHIVE/ directory structure for old documentation
+
+See [CHANGELOG](../CHANGELOG.md) for complete version history.
 
 ---
 
-## 💡 Key Concepts
-
-### Communication Channels
-
-Zylch AI operates across 5 distinct channels:
-- **email** - Email drafting and responses
-- **calendar** - Event scheduling and management
-- **whatsapp** - WhatsApp messaging
-- **mrcall** - Phone assistant behavior
-- **task** - Task management (Zylch AI internal)
-
-Each channel has independent memory and rules.
-
-### Memory-Based Learning
-
-Instead of forgetting corrections, Zylch AI:
-1. Stores corrections in channel-specific memory
-2. Builds confidence scores based on outcomes
-3. Automatically applies learned rules
-4. Improves over time
-
-### Relationship Intelligence
-
-Goes beyond simple inbox management:
-- Correlates email + calendar data
-- Identifies communication gaps
-- Detects patterns (silent contacts, missing follow-ups)
-- Provides actionable insights
-
----
-
-## 🆘 Support
-
-### Getting Help
-
-- **Documentation Issues**: Check this index and linked docs
-- **Setup Problems**: See [Gmail OAuth Setup](./setup/gmail-oauth.md)
-- **Bug Reports**: File issue in project repository
-- **Feature Requests**: Discuss with maintainers
-
-### Common Issues
-
-**"OAuth not working"**
-→ Follow [Gmail OAuth Setup](./setup/gmail-oauth.md) carefully
-
-**"Memory rules not applied"**
-→ Check confidence threshold, see [Memory System](./features/memory-system.md#confidence-scoring)
-
-**"Gaps analysis showing wrong emails"**
-→ Teach the system with memory rules, see [Relationship Intelligence](./features/relationship-intelligence.md#personalized-filtering-with-memory-system)
-
-**"Email archive not syncing"**
-→ Check History ID expiration, see [Email Archive - Troubleshooting](./features/email-archive.md#troubleshooting)
-
----
-
-## 📝 Contributing
-
-When adding documentation:
-
-1. **Add to this index** - Update relevant sections
-2. **Use clear structure** - Follow existing doc patterns
-3. **Link between docs** - Create cross-references
-4. **Include examples** - Show, don't just tell
-5. **Update CHANGELOG** - Document significant changes
-
----
-
-## 📄 License & Credits
-
-See [main README](../README.md) for licensing information.
-
-**Inspiration:**
-- Google ReasoningBank (memory system)
-- Getting Things Done methodology (task management)
-- Inbox Zero philosophy (communication management)
-
----
-
-**Last Updated:** December 2025
-**Version:** 0.3.0
+**Last Updated**: December 2025
+**Version**: 0.3.0

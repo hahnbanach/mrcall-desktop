@@ -9,6 +9,7 @@ import anthropic
 from zylch.tools import ToolFactory, ToolConfig
 from zylch.agent.core import ZylchAIAgent
 from zylch.config import settings
+from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class ChatService:
         """
         self.agent = None  # Lazy initialization
         self._initialized = False
+        self.storage = SupabaseStorage.get_instance()
 
     async def _initialize_agent(self):
         """Initialize the agent with all tools (lazy initialization).
@@ -97,6 +99,19 @@ class ChatService:
         start_time = time.time()
         logger.info(f"process_message: user_message={repr(user_message)}, user_id={user_id}")
 
+        # Check for unread notifications FIRST
+        notification_banner = None
+        try:
+            notifications = self.storage.get_unread_notifications(user_id)
+            if notifications:
+                notification_banner = self._format_notifications(notifications)
+                self.storage.mark_notifications_read(
+                    user_id,
+                    [n['id'] for n in notifications]
+                )
+        except Exception as e:
+            logger.warning(f"Failed to check notifications: {e}")
+
         try:
             # INTERCEPT SLASH COMMANDS - NEVER SEND TO ANTHROPIC
             if user_message.strip().startswith('/'):
@@ -112,7 +127,7 @@ class ChatService:
                     help_info = COMMAND_HELP[cmd]
                     response_text = f"**{help_info['summary']}**\n\n**Usage:** `{help_info['usage']}`\n\n{help_info['description']}"
                     return {
-                        "response": response_text,
+                        "response": self._prepend_notification(response_text, notification_banner),
                         "tool_calls": [],
                         "metadata": {
                             "execution_time_ms": round((time.time() - start_time) * 1000, 2),
@@ -133,11 +148,14 @@ class ChatService:
                     logger.info(f"Command {cmd}: owner_id={owner_id}, user_email={user_email}, context={context}")
 
                     # Call handler based on required parameters
-                    if cmd in ['/sync', '/gaps']:
-                        # These need config, memory, and owner_id
+                    if cmd == '/sync':
+                        # /sync needs config, memory, and owner_id
                         config = ToolConfig.from_settings()
                         memory = await ToolFactory.create_memory_system(config)
                         response_text = await handler(args, config, memory, owner_id)
+                    elif cmd == '/gaps':
+                        # /gaps only needs args and owner_id (fast avatar query)
+                        response_text = await handler(args, owner_id)
                     elif cmd in ['/archive', '/memory']:
                         # /archive and /memory need config and owner_id
                         config = ToolConfig.from_settings()
@@ -153,7 +171,7 @@ class ChatService:
                         response_text = await handler()
 
                     return {
-                        "response": response_text,
+                        "response": self._prepend_notification(response_text, notification_banner),
                         "tool_calls": [],
                         "metadata": {
                             "execution_time_ms": round((time.time() - start_time) * 1000, 2),
@@ -164,8 +182,9 @@ class ChatService:
                     }
 
                 # Return error for unknown commands
+                error_response = f"❌ **Command not found:** `{cmd}`\n\nUse `/help` to see available commands."
                 return {
-                    "response": f"❌ **Command not found:** `{cmd}`\n\nUse `/help` to see available commands.",
+                    "response": self._prepend_notification(error_response, notification_banner),
                     "tool_calls": [],
                     "metadata": {
                         "execution_time_ms": round(execution_time_ms, 2),
@@ -182,6 +201,10 @@ class ChatService:
             agent_context = context or {}
             if "user_id" not in agent_context:
                 agent_context["user_id"] = user_id
+
+            # Update session state with current owner_id for tools
+            if ToolFactory._session_state:
+                ToolFactory._session_state.set_owner_id(user_id)
 
             # Restore conversation history if provided
             # This allows the agent to maintain context across API calls
@@ -201,9 +224,9 @@ class ChatService:
 
             execution_time_ms = (time.time() - start_time) * 1000
 
-            # Build response
+            # Build response with notification prepended if present
             result = {
-                "response": response,
+                "response": self._prepend_notification(response, notification_banner),
                 "tool_calls": [],  # Agent doesn't expose tool calls currently
                 "metadata": {
                     "execution_time_ms": round(execution_time_ms, 2),
@@ -221,9 +244,10 @@ class ChatService:
             # Invalid API key
             logger.error(f"Authentication error: {e}")
             execution_time_ms = (time.time() - start_time) * 1000
+            error_msg = "Authentication failed: Invalid Anthropic API key. Please check your .env file and ensure ANTHROPIC_API_KEY is set correctly."
 
             return {
-                "response": "Authentication failed: Invalid Anthropic API key. Please check your .env file and ensure ANTHROPIC_API_KEY is set correctly.",
+                "response": self._prepend_notification(error_msg, notification_banner),
                 "tool_calls": [],
                 "metadata": {
                     "execution_time_ms": round(execution_time_ms, 2),
@@ -237,9 +261,10 @@ class ChatService:
             # Rate limit exceeded
             logger.error(f"Rate limit error: {e}")
             execution_time_ms = (time.time() - start_time) * 1000
+            error_msg = "Rate limit exceeded. Please try again in a moment."
 
             return {
-                "response": "Rate limit exceeded. Please try again in a moment.",
+                "response": self._prepend_notification(error_msg, notification_banner),
                 "tool_calls": [],
                 "metadata": {
                     "execution_time_ms": round(execution_time_ms, 2),
@@ -253,9 +278,10 @@ class ChatService:
             # Network/connection issues
             logger.error(f"API connection error: {e}")
             execution_time_ms = (time.time() - start_time) * 1000
+            error_msg = "Unable to connect to Anthropic API. Please check your internet connection and try again."
 
             return {
-                "response": "Unable to connect to Anthropic API. Please check your internet connection and try again.",
+                "response": self._prepend_notification(error_msg, notification_banner),
                 "tool_calls": [],
                 "metadata": {
                     "execution_time_ms": round(execution_time_ms, 2),
@@ -269,9 +295,10 @@ class ChatService:
             # Catch-all for other errors
             logger.error(f"Error processing message: {e}", exc_info=True)
             execution_time_ms = (time.time() - start_time) * 1000
+            error_msg = f"I encountered an error processing your message: {str(e)}"
 
             return {
-                "response": f"I encountered an error processing your message: {str(e)}",
+                "response": self._prepend_notification(error_msg, notification_banner),
                 "tool_calls": [],
                 "metadata": {
                     "execution_time_ms": round(execution_time_ms, 2),
@@ -312,3 +339,33 @@ class ChatService:
                 "executive_model": settings.executive_model
             }
         }
+
+    def _format_notifications(self, notifications: List[Dict[str, Any]]) -> str:
+        """Format notifications as markdown banner.
+
+        Args:
+            notifications: List of notification records
+
+        Returns:
+            Formatted markdown string
+        """
+        icons = {'info': 'ℹ️', 'warning': '⚠️', 'error': '❌'}
+        lines = []
+        for n in notifications:
+            icon = icons.get(n.get('notification_type', 'info'), 'ℹ️')
+            lines.append(f"{icon} {n['message']}")
+        return "\n".join(lines)
+
+    def _prepend_notification(self, response: str, notification_banner: Optional[str]) -> str:
+        """Prepend notification banner to response if present.
+
+        Args:
+            response: Original response text
+            notification_banner: Notification banner to prepend (or None)
+
+        Returns:
+            Response with notification prepended (if any)
+        """
+        if notification_banner:
+            return f"{notification_banner}\n\n---\n\n{response}"
+        return response
