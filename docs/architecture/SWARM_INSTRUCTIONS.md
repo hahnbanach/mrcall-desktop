@@ -15,12 +15,20 @@ the Von Neumann model:
 - MEMORY (mass storage) = accumulated knowledge, the past
 - WORKING MEMORY/CRM (registers) = computed state, the present
 
+### New Architecture Flow
+1. **Email arrives** → triggers Memory Agent (memory_worker.py)
+2. **Memory Agent** → extracts facts/knowledge → writes to Memory table
+3. **CRM Agent** (crm_worker.py) → reads Memory + email_archive → computes Avatar state
+4. **Avatar state** → stored in avatars table (Working Memory/CRM)
+
+This replaces the old direct Email → Avatar computation pattern.
+
 ## REFERENCE FILES (READ THESE FIRST)
 1. Architecture overview: docs/architecture/VON_NEUMANN_MEMORY.md
 2. Current architecture: .claude/ARCHITECTURE.md
 3. Current memory system: zylch_memory/zylch_memory/core.py
-4. Current avatar worker: zylch/workers/avatar_compute_worker.py
-5. Current avatar aggregator: zylch/services/avatar_aggregator.py
+4. Memory Agent worker: zylch/workers/memory_worker.py
+5. CRM Agent worker: zylch/workers/crm_worker.py
 6. Memory documentation: docs/features/memory-system.md
 7. Avatar documentation: docs/features/avatar-aggregation.md
 
@@ -105,7 +113,8 @@ Design Von Neumann Memory Architecture for Zylch.
 - docs/architecture/VON_NEUMANN_MEMORY.md (START HERE)
 - .claude/ARCHITECTURE.md
 - zylch_memory/zylch_memory/core.py
-- zylch/workers/avatar_compute_worker.py
+- zylch/workers/memory_worker.py (Memory Agent)
+- zylch/workers/crm_worker.py (CRM Agent)
 
 ## DELIVERABLES
 
@@ -134,25 +143,29 @@ EOF
 
 The swarm should produce:
 
-1. **Memory Agent Specification**
+1. **Memory Agent Specification** (memory_worker.py)
    - Extraction rules for emails
    - Memory namespace strategy per contact
    - Owner profile detection approach
+   - What facts to store in Memory table
 
-2. **CRM Agent Specification**
+2. **CRM Agent Specification** (crm_worker.py)
    - Status/priority computation algorithms
-   - Memory query patterns
-   - Avatar update strategy
+   - Memory query patterns (how to read from Memory table)
+   - Avatar update strategy (how to compute Working Memory state)
+   - email_archive timestamp integration
 
 3. **Migration Plan**
-   - Phased approach to refactoring
-   - What code changes where
+   - Phased approach to refactoring from old avatar_compute_worker.py
+   - What code changes where (memory_worker.py + crm_worker.py)
    - Testing checkpoints
+   - Backward compatibility with existing Avatar aggregation
 
 4. **Integration Design**
-   - `/sync` command new flow
+   - `/sync` command new flow (Memory Agent → CRM Agent sequence)
    - API endpoint changes
    - Error handling
+   - Trigger coordination between Memory Agent and CRM Agent
 
 ## Post-Swarm Steps
 

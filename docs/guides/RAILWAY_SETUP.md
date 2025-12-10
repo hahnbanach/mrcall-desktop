@@ -1,13 +1,14 @@
 # Railway Deployment Setup for Avatar System
 
-This document explains how to deploy Zylch with the avatar compute worker on Railway.
+This document explains how to deploy Zylch with the Von Neumann Memory Architecture on Railway.
 
 ## Architecture
 
 Zylch uses Railway's multi-service deployment with:
 
 1. **API Service** (`web`) - FastAPI HTTP server
-2. **Avatar Worker** (`worker`) - Background cron job for avatar computation
+2. **Memory Worker** (`memory-worker`) - Background cron job for identifier extraction and memory storage
+3. **CRM Worker** (`crm-worker`) - Background cron job for avatar computation from memory
 
 ## Prerequisites
 
@@ -69,26 +70,43 @@ Railway will auto-detect the Procfile and create services.
 - **Port**: Railway auto-assigns (use `$PORT` variable)
 - **Health Check**: `/health` endpoint
 
-#### Avatar Worker Service
+#### Memory Worker Service
 
 Railway supports cron jobs in two ways:
 
 **Option A: Railway Cron (Recommended)**
 
-1. In Railway dashboard, create new service
+1. In Railway dashboard, create new service called "memory-worker"
 2. Select "Cron Job" type
 3. Configure:
    - **Schedule**: `*/5 * * * *` (every 5 minutes)
-   - **Command**: `python -m zylch.workers.avatar_compute_worker`
+   - **Command**: `python -m zylch.workers.memory_worker`
    - **Timeout**: 300 seconds (5 minutes)
 
 **Option B: Continuous Loop (Alternative)**
 
 If Railway doesn't support cron in your plan:
 
-1. Use the `scheduler` process from Procfile
-2. Command: `while true; do python -m zylch.workers.avatar_compute_worker; sleep 300; done`
+1. Use the `memory-scheduler` process from Procfile
+2. Command: `while true; do python -m zylch.workers.memory_worker; sleep 300; done`
 3. This runs the worker every 5 minutes in a loop
+
+#### CRM Worker Service
+
+**Option A: Railway Cron (Recommended)**
+
+1. In Railway dashboard, create new service called "crm-worker"
+2. Select "Cron Job" type
+3. Configure:
+   - **Schedule**: `*/10 * * * *` (every 10 minutes, runs after memory worker)
+   - **Command**: `python -m zylch.workers.crm_worker`
+   - **Timeout**: 600 seconds (10 minutes)
+
+**Option B: Continuous Loop (Alternative)**
+
+1. Use the `crm-scheduler` process from Procfile
+2. Command: `while true; do python -m zylch.workers.crm_worker; sleep 600; done`
+3. This runs the worker every 10 minutes in a loop
 
 ### 3. Configure Environment Variables
 
@@ -105,7 +123,7 @@ Before first deployment, run SQL migration:
 
 1. Connect to Supabase SQL Editor
 2. Run contents of `docs/migration/001_add_avatar_fields_v3.sql`
-3. Verify tables created: `avatars`, `identifier_map`, `avatar_compute_queue`
+3. Verify tables created: `avatars`, `identifier_map`, `memory` (replaces avatar_compute_queue)
 
 ### 5. Deploy
 
@@ -126,13 +144,21 @@ curl https://your-app.railway.app/health
 # Should return: {"status": "healthy", ...}
 ```
 
-#### Check Avatar Worker Logs
+#### Check Worker Logs
 
 In Railway dashboard:
-1. Go to "avatar-worker" service
+
+**Memory Worker:**
+1. Go to "memory-worker" service
 2. Check logs tab
-3. Look for: "Avatar Compute Worker Starting"
+3. Look for: "Memory Worker Starting"
 4. Verify it runs every 5 minutes
+
+**CRM Worker:**
+1. Go to "crm-worker" service
+2. Check logs tab
+3. Look for: "CRM Worker Starting"
+4. Verify it runs every 10 minutes
 
 #### Test Avatar API
 
@@ -149,40 +175,70 @@ curl https://your-app.railway.app/api/avatars \
 Check worker execution:
 
 ```bash
-# Railway CLI
-railway logs --service avatar-worker --tail
+# Railway CLI - Memory Worker
+railway logs --service memory-worker --tail
+
+# Railway CLI - CRM Worker
+railway logs --service crm-worker --tail
 ```
 
-Look for:
-- "Avatar compute worker starting..." (every 5 min)
-- "Processing {n} avatars..." (when queue has items)
+**Memory Worker logs** - Look for:
+- "Memory worker starting..." (every 5 min)
+- "Processing {n} emails..." (when new emails exist)
+- "Extracted identifiers: {n}" (on success)
+- Error messages (if any failures)
+
+**CRM Worker logs** - Look for:
+- "CRM worker starting..." (every 10 min)
+- "Computing avatars for {n} contacts..." (when memory has updates)
 - "Batch complete: {n} avatars updated" (on success)
 - Error messages (if any failures)
 
 ### Database Queue
 
-Check queue status in Supabase:
+Check memory and avatar status in Supabase:
 
 ```sql
--- Pending items in queue
-SELECT COUNT(*), trigger_type, priority
-FROM avatar_compute_queue
-GROUP BY trigger_type, priority
-ORDER BY priority DESC;
+-- Check memory entries by contact
+SELECT contact_id, COUNT(*) as memory_count,
+       MAX(created_at) as latest_memory
+FROM memory
+GROUP BY contact_id
+ORDER BY latest_memory DESC
+LIMIT 20;
 
 -- Recent avatar updates
 SELECT contact_id, display_name, last_computed, compute_trigger
 FROM avatars
 ORDER BY last_computed DESC
 LIMIT 20;
+
+-- Memory to Avatar flow status
+SELECT
+  m.contact_id,
+  COUNT(DISTINCT m.id) as memory_entries,
+  a.last_computed,
+  a.compute_trigger
+FROM memory m
+LEFT JOIN avatars a ON m.contact_id = a.contact_id
+GROUP BY m.contact_id, a.last_computed, a.compute_trigger
+ORDER BY MAX(m.created_at) DESC
+LIMIT 20;
 ```
 
 ### Performance Metrics
 
 Monitor in Railway dashboard:
-- **CPU usage**: Should spike every 5 minutes during worker execution
-- **Memory usage**: Should stay under 512MB (worker is lightweight)
-- **Execution time**: ~10-60 seconds per batch (depends on queue size)
+
+**Memory Worker:**
+- **CPU usage**: Should spike every 5 minutes during execution
+- **Memory usage**: Should stay under 256MB (very lightweight)
+- **Execution time**: ~5-30 seconds per batch (depends on new emails)
+
+**CRM Worker:**
+- **CPU usage**: Should spike every 10 minutes during execution
+- **Memory usage**: Should stay under 512MB (LLM processing)
+- **Execution time**: ~10-60 seconds per batch (depends on contacts with updated memory)
 
 ## Backfilling Existing Contacts
 
@@ -206,10 +262,11 @@ Or trigger via API (create endpoint if needed).
 
 ### No Avatars Being Created
 
-1. Check `avatar_compute_queue` table - is it populated?
-2. Check worker logs - are errors occurring?
-3. Verify Anthropic API key is valid
-4. Check queue priorities - low priority items may be delayed
+1. Check `memory` table - are identifiers being extracted?
+2. Check memory worker logs - is it processing emails?
+3. Check CRM worker logs - is it computing avatars from memory?
+4. Verify Anthropic API key is valid
+5. Check the flow: Emails → Memory Worker → Memory table → CRM Worker → Avatars
 
 ### Slow Avatar Computation
 
@@ -229,10 +286,15 @@ Or trigger via API (create endpoint if needed).
 
 ### Increase Worker Frequency
 
-Change cron schedule:
+**Memory Worker** (identifier extraction):
 - Every 2 minutes: `*/2 * * * *`
 - Every minute: `* * * * *`
 - Every 10 minutes: `*/10 * * * *`
+
+**CRM Worker** (avatar computation):
+- Every 5 minutes: `*/5 * * * *`
+- Every 15 minutes: `*/15 * * * *`
+- Every 30 minutes: `*/30 * * * *`
 
 ### Multiple Workers
 
@@ -243,11 +305,16 @@ For high-volume deployments:
 
 ### Optimize Batch Size
 
-In `avatar_compute_worker.py`:
+**Memory Worker** (in `memory_worker.py`):
+```python
+# Default: Process all new emails per run
+# Adjust email fetch limit in sync_service.py if needed
+```
 
+**CRM Worker** (in `crm_worker.py`):
 ```python
 # Default: 10 avatars per batch
-worker = AvatarComputeWorker(storage, anthropic_client, batch_size=20)
+worker = CRMWorker(storage, anthropic_client, batch_size=20)
 ```
 
 Balance between:
