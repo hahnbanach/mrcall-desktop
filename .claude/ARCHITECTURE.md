@@ -1,5 +1,17 @@
 # Zylch Architecture
 
+> **⚠️ PRE-ALPHA DEVELOPMENT**
+>
+> This project is in active pre-alpha development. There are NO production users, NO data to migrate, and NO backward compatibility requirements.
+>
+> **Guidelines:**
+> - Delete legacy code freely - don't preserve unused columns/tables
+> - No dual-write patterns - use the new unified approach only
+> - No migration scripts needed - just update the schema directly
+> - Break things fast, fix things fast
+
+---
+
 ## Critical: No Local Filesystem
 
 **The backend uses Supabase for ALL data storage. NO local filesystem.**
@@ -43,6 +55,7 @@ Modular tools for agent capabilities:
 - **Tasks**: Email-to-task extraction, relationship gap analysis
 - **CRM**: Pipedrive integration (optional)
 - **Contacts**: StarChat/MrCall integration
+- **SMS**: Vonage SMS sending (requires `/connect vonage` in CLI)
 
 **Key Pattern**: Tools are stateless classes with `execute()` method
 

@@ -1203,7 +1203,30 @@ LIMIT 10;
 
 ---
 
-## 14. Next Steps
+## 14. SMS Testing (Vonage)
+
+### Connect Vonage
+```bash
+> /connect vonage
+```
+Enter your Vonage API key, API secret, and sender number when prompted.
+
+### Test SMS Sending
+In chat mode, ask the agent:
+```
+Send an SMS to +1234567890 saying "Hello from Zylch"
+```
+
+### Verify in Supabase
+```sql
+SELECT credentials FROM oauth_tokens
+WHERE owner_id = 'YOUR_OWNER_ID' AND provider = 'vonage';
+```
+Should show encrypted JSONB with `api_key`, `api_secret`, `from_number`.
+
+---
+
+## 15. Next Steps
 
 After completing QA testing:
 

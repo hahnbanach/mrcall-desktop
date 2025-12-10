@@ -260,13 +260,28 @@ class ToolFactory:
                     pipedrive = None
 
             # Vonage SMS client (optional)
+            # Try per-user credentials from Supabase first, fallback to env vars
             vonage = None
-            if config.vonage_api_key and config.vonage_api_secret:
+            vonage_api_key = config.vonage_api_key
+            vonage_api_secret = config.vonage_api_secret
+            vonage_from_number = config.vonage_from_number
+
+            # Load per-user Vonage credentials from Supabase
+            if config.owner_id and config.owner_id != "owner_default":
+                from zylch.api import token_storage
+                vonage_keys = token_storage.get_vonage_keys(config.owner_id)
+                if vonage_keys:
+                    vonage_api_key = vonage_keys.get('api_key') or vonage_api_key
+                    vonage_api_secret = vonage_keys.get('api_secret') or vonage_api_secret
+                    vonage_from_number = vonage_keys.get('from_number') or vonage_from_number
+                    logger.info(f"Loaded Vonage credentials from Supabase for owner {config.owner_id}")
+
+            if vonage_api_key and vonage_api_secret:
                 try:
                     vonage = VonageClient(
-                        api_key=config.vonage_api_key,
-                        api_secret=config.vonage_api_secret,
-                        from_number=config.vonage_from_number or "Zylch"
+                        api_key=vonage_api_key,
+                        api_secret=vonage_api_secret,
+                        from_number=vonage_from_number or "Zylch"
                     )
                     logger.info("Vonage SMS client connected")
                 except Exception as e:

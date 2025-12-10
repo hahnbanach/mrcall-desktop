@@ -875,46 +875,13 @@ class SupabaseStorage:
         return True
 
     # ==========================================
-    # Vonage API Key Management
+    # Vonage API Key Management (wrapper for unified storage)
     # ==========================================
-
-    def save_vonage_keys(self, owner_id: str, api_key: str, api_secret: str, from_number: str) -> bool:
-        """Save Vonage API credentials for a user (encrypted at rest).
-
-        Uses 'vonage' as the provider in oauth_tokens table.
-
-        Args:
-            owner_id: Firebase UID
-            api_key: Vonage API key
-            api_secret: Vonage API secret
-            from_number: Vonage sender number
-
-        Returns:
-            True if saved successfully
-        """
-        from zylch.utils.encryption import encrypt
-
-        data = {
-            'owner_id': owner_id,
-            'provider': 'vonage',
-            'email': '',  # Not applicable for Vonage
-            'vonage_api_key': encrypt(api_key),
-            'vonage_api_secret': encrypt(api_secret),
-            'vonage_from_number': from_number,  # Not encrypted (public sender ID)
-            'updated_at': datetime.now(timezone.utc).isoformat()
-        }
-
-        # Upsert to handle both insert and update
-        self.client.table('oauth_tokens').upsert(
-            data,
-            on_conflict='owner_id,provider'
-        ).execute()
-
-        logger.info(f"Saved Vonage API credentials for owner {owner_id}")
-        return True
 
     def get_vonage_keys(self, owner_id: str) -> Optional[Dict[str, str]]:
         """Get Vonage API credentials for a user (decrypted).
+
+        Wrapper for get_provider_credentials('vonage').
 
         Args:
             owner_id: Firebase UID
@@ -922,37 +889,7 @@ class SupabaseStorage:
         Returns:
             Dict with api_key, api_secret, from_number or None if not found
         """
-        from zylch.utils.encryption import decrypt
-
-        token = self.get_oauth_token(owner_id, 'vonage')
-        if token:
-            encrypted_key = token.get('vonage_api_key')
-            encrypted_secret = token.get('vonage_api_secret')
-            from_number = token.get('vonage_from_number')
-
-            if encrypted_key and encrypted_secret:
-                return {
-                    'api_key': decrypt(encrypted_key),
-                    'api_secret': decrypt(encrypted_secret),
-                    'from_number': from_number or ''
-                }
-        return None
-
-    def delete_vonage_keys(self, owner_id: str) -> bool:
-        """Delete Vonage API credentials for a user.
-
-        Args:
-            owner_id: Firebase UID
-
-        Returns:
-            True if deleted
-        """
-        self.client.table('oauth_tokens').delete().eq(
-            'owner_id', owner_id
-        ).eq('provider', 'vonage').execute()
-
-        logger.info(f"Deleted Vonage API credentials for owner {owner_id}")
-        return True
+        return self.get_provider_credentials(owner_id, 'vonage')
 
     # ==========================================
     # UNIFIED CREDENTIALS STORAGE (JSONB)
@@ -1037,32 +974,10 @@ class SupabaseStorage:
         data = {
             'owner_id': owner_id,
             'provider': provider_key,
+            'email': '',  # Required field, empty for non-email providers (Vonage, Pipedrive)
             'credentials': credentials_json,
             'updated_at': datetime.now(timezone.utc).isoformat()
         }
-
-        # DUAL-WRITE: Also write to legacy columns for backward compatibility
-        # This will be removed in Phase 6 after migration
-        if provider_key == 'google' and 'token_data' in credentials_dict:
-            data['google_token_data'] = credentials_dict['token_data']
-        elif provider_key == 'microsoft':
-            if 'access_token' in credentials_dict:
-                data['graph_access_token'] = f"encrypted:{encrypt(credentials_dict['access_token'])}"
-            if 'refresh_token' in credentials_dict:
-                data['graph_refresh_token'] = f"encrypted:{encrypt(credentials_dict['refresh_token'])}"
-            if 'expires_at' in credentials_dict:
-                data['graph_expires_at'] = credentials_dict['expires_at']
-        elif provider_key == 'anthropic' and 'api_key' in credentials_dict:
-            data['anthropic_api_key'] = f"encrypted:{encrypt(credentials_dict['api_key'])}"
-        elif provider_key == 'pipedrive' and 'api_token' in credentials_dict:
-            data['pipedrive_api_token'] = f"encrypted:{encrypt(credentials_dict['api_token'])}"
-        elif provider_key == 'vonage':
-            if 'api_key' in credentials_dict:
-                data['vonage_api_key'] = f"encrypted:{encrypt(credentials_dict['api_key'])}"
-            if 'api_secret' in credentials_dict:
-                data['vonage_api_secret'] = f"encrypted:{encrypt(credentials_dict['api_secret'])}"
-            if 'from_number' in credentials_dict:
-                data['vonage_from_number'] = credentials_dict['from_number']
 
         # Upsert
         self.client.table('oauth_tokens').upsert(
@@ -1131,43 +1046,6 @@ class SupabaseStorage:
                     return decrypted_creds
             except Exception as e:
                 logger.error(f"Failed to decrypt credentials for {provider_key}: {e}")
-                # Fall through to legacy columns
-
-        # FALLBACK: Try legacy columns (backward compatibility)
-        if provider_key == 'google' or provider_key == 'google.com':
-            google_data = token_row.get('google_token_data')
-            if google_data:
-                return {'token_data': decrypt(google_data) if google_data.startswith('encrypted:') else google_data}
-
-        elif provider_key == 'microsoft' or provider_key == 'microsoft.com':
-            access_token = token_row.get('graph_access_token')
-            refresh_token = token_row.get('graph_refresh_token')
-            if access_token:
-                return {
-                    'access_token': decrypt(access_token[10:]) if access_token.startswith('encrypted:') else access_token,
-                    'refresh_token': decrypt(refresh_token[10:]) if refresh_token and refresh_token.startswith('encrypted:') else refresh_token,
-                    'expires_at': token_row.get('graph_expires_at')
-                }
-
-        elif provider_key == 'anthropic':
-            api_key = token_row.get('anthropic_api_key')
-            if api_key:
-                return {'api_key': decrypt(api_key[10:]) if api_key.startswith('encrypted:') else api_key}
-
-        elif provider_key == 'pipedrive':
-            api_token = token_row.get('pipedrive_api_token')
-            if api_token:
-                return {'api_token': decrypt(api_token[10:]) if api_token.startswith('encrypted:') else api_token}
-
-        elif provider_key == 'vonage':
-            api_key = token_row.get('vonage_api_key')
-            api_secret = token_row.get('vonage_api_secret')
-            if api_key and api_secret:
-                return {
-                    'api_key': decrypt(api_key[10:]) if api_key.startswith('encrypted:') else api_key,
-                    'api_secret': decrypt(api_secret[10:]) if api_secret.startswith('encrypted:') else api_secret,
-                    'from_number': token_row.get('vonage_from_number', '')
-                }
 
         return None
 
