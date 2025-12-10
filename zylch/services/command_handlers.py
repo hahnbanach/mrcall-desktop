@@ -32,7 +32,8 @@ async def handle_help() -> str:
 • `/memory` - Behavioral memory management
 • `/trigger` - Event-driven automation
 
-**📞 Integrations:**
+**📡 Integrations:**
+• `/connections` - View and manage external connections
 • `/mrcall` - MrCall/StarChat phone integration
 
 **🔗 Sharing:**
@@ -151,7 +152,9 @@ Run `/sync [days]` to sync more data."""
 
         if not provider:
             logger.warning(f"[/sync] No provider found for owner_id={owner_id}")
-            return f"❌ **Error:** Provider not found for owner {owner_id}. Please login first."
+            return """❌ **Error:** Zylch has no access to any channel!
+  Run /connect to see available connections
+  Run /connect {provider} to connect"""
 
         # Create appropriate email client based on provider
         if provider == "microsoft.com":
@@ -1473,6 +1476,93 @@ contact, email, calendar, sync, memory
 Use `/tutorial --help` to see all topics."""
 
 
+async def handle_connect(args: List[str], owner_id: str, user_email: str = None) -> str:
+    """Handle /connect command - list available connections and initiate connection flow.
+
+    Usage:
+    - /connect - List all available providers
+    - /connect <provider> - Initiate connection for specific provider
+    """
+    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.integrations.registry import get_available_providers, get_category_emoji
+
+    try:
+        supabase = SupabaseStorage()
+
+        # If no args, show all available providers
+        if not args:
+            providers = get_available_providers(supabase, include_unavailable=False)
+
+            if not providers:
+                return "❌ **Error:** No providers available"
+
+            output = "**📡 Available Connections**\n\n"
+            output += "Select a provider to connect:\n\n"
+
+            for i, provider in enumerate(providers, 1):
+                emoji = get_category_emoji(provider['category'])
+                output += f"{i}. {emoji} **{provider['display_name']}** - `/connect {provider['provider_key']}`\n"
+
+            return output
+
+        # Connect to specific provider
+        provider_key = args[0].lower()
+
+        # Get provider info
+        result = supabase.client.table('integration_providers')\
+            .select('*')\
+            .eq('provider_key', provider_key)\
+            .execute()
+
+        if not result.data:
+            return f"❌ **Error:** Provider '{provider_key}' not found\n\nRun `/connect` to see available providers"
+
+        provider = result.data[0]
+
+        if not provider['is_available']:
+            return f"⏳ **{provider['display_name']}** is coming soon!\n\nRun `/connect` to see available providers"
+
+        # OAuth provider - return authorization URL
+        if provider['requires_oauth']:
+            oauth_url = provider.get('oauth_url', f'/api/auth/{provider_key}/authorize')
+
+            return f"""**🔗 Connect {provider['display_name']}**
+
+**OAuth Authorization Required**
+
+For API clients, redirect user to:
+```
+{oauth_url}?owner_id={owner_id}
+```
+
+After authorization, tokens will be stored automatically.
+
+Run `/connections` to verify connection."""
+
+        # API key provider - show configuration instructions
+        else:
+            config_fields = provider.get('config_fields', {})
+            fields_list = '\n'.join([f"• `{field}`: {info.get('label', field)}" for field, info in config_fields.items()])
+
+            return f"""**🔧 Configure {provider['display_name']}**
+
+This integration requires manual configuration.
+
+**Required fields:**
+{fields_list}
+
+**Setup:**
+1. Get your credentials from {provider['display_name']}
+2. Store them securely in environment variables or database
+3. Run `/connections` to verify connection
+
+**Documentation:** {provider.get('documentation_url', 'Contact support for setup help')}"""
+
+    except Exception as e:
+        logger.error(f"Error in /connect command: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}"
+
+
 # Command help texts - source of truth for all clients (CLI, web, mobile)
 COMMAND_HELP = {
     '/help': {
@@ -1599,6 +1689,7 @@ COMMAND_HANDLERS = {
     '/trigger': handle_trigger,
     '/assistant': handle_assistant,
     '/mrcall': handle_mrcall,
+    '/connect': handle_connect,
     '/share': handle_share,
     '/revoke': handle_revoke,
     '/sharing': handle_sharing,

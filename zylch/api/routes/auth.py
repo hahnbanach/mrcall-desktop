@@ -1011,6 +1011,8 @@ async def google_oauth_authorize(
     auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
     logger.info(f"Generated Google OAuth URL for user {owner_id} (cli_callback: {cli_callback})")
+    logger.info(f"OAuth redirect_uri: {redirect_uri}")
+    logger.info(f"Settings: google_oauth_redirect_uri={settings.google_oauth_redirect_uri}, api_server_url={settings.api_server_url}")
 
     return {
         "auth_url": auth_url,
@@ -1107,9 +1109,13 @@ async def google_oauth_callback(
         # NOTE: save_google_credentials handles provider and email in one upsert
         from zylch.api.token_storage import save_google_credentials
 
-        save_google_credentials(owner_id, creds, user_email)
-
-        logger.info(f"Saved Google OAuth credentials for user {owner_id}")
+        logger.info(f"About to save Google credentials for owner {owner_id}, email={user_email}")
+        try:
+            save_google_credentials(owner_id, creds, user_email)
+            logger.info(f"✅ Successfully saved Google OAuth credentials for user {owner_id}")
+        except Exception as e:
+            logger.error(f"❌ Failed to save Google credentials: {e}", exc_info=True)
+            return HTMLResponse(content=_oauth_error_page(f"Failed to save credentials: {str(e)}"))
 
         # If CLI callback is present, redirect to it
         if cli_callback:

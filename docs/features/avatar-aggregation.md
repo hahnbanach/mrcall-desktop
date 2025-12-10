@@ -224,9 +224,18 @@ CREATE INDEX idx_contact_lookup ON identifier_map(owner_id, contact_id);
 
 ## Usage Example
 
-### CLI Integration
+### Von Neumann Architecture Integration
 
-The avatar aggregator is used by the background worker after `/sync`:
+**IMPORTANT**: In the new Von Neumann Memory Architecture, avatar aggregation is orchestrated by specialized agents:
+
+**Flow**:
+1. **Memory Agent** extracts identifiers from synced data → stores in `identifier_map`
+2. **CRM Agent** calls `AvatarAggregator.build_context()` → gets aggregated context
+3. **CRM Agent** generates avatar via LLM → stores in `avatars` table
+
+### Direct Usage (for testing/debugging)
+
+The avatar aggregator can be used directly:
 
 ```python
 from zylch.services.avatar_aggregator import AvatarAggregator
@@ -290,21 +299,45 @@ storage.client.table('identifier_map').insert({
 
 ## Integration with Avatar Generation
 
-### Two-Stage Process
+### Von Neumann Memory Architecture Integration
 
-**Stage 1: Aggregation** (This service, no LLM)
+**IMPORTANT**: Avatar aggregation now integrates with the **Von Neumann Memory Agent** architecture:
+
+**Architecture Flow**:
 ```
-Raw data → AvatarAggregator → Aggregated context
+Raw data → Memory Agent (extracts/stores identifiers) → CRM Agent (computes avatars) → Avatar aggregation (pulls computed state)
 ```
 
-**Stage 2: Avatar Generation** (Separate service, uses LLM)
+**Three-Stage Process**:
+
+**Stage 1: Memory Agent** (Identifier extraction and storage)
 ```
-Aggregated context → Claude Haiku → Avatar JSON
+Raw emails/events → Memory Agent → identifier_map table
 ```
+- Memory Agent extracts all identifiers (emails, phones, names)
+- Stores normalized identifiers in `identifier_map`
+- Maintains contact_id linkages automatically
+
+**Stage 2: CRM Agent** (Avatar computation, uses LLM)
+```
+Identifier context → CRM Agent + Claude Haiku → avatars table
+```
+- CRM Agent fetches context via AvatarAggregator
+- Generates avatar intelligence using LLM
+- Stores in `avatars` table with pg_vector
+
+**Stage 3: Aggregation** (This service, no LLM)
+```
+Stored identifiers + Raw data → AvatarAggregator → Aggregated context
+```
+- Pulls identifiers from Memory Agent's storage
+- Aggregates communication data deterministically
+- Returns context ready for CRM Agent
 
 **Separation rationale**:
+- Memory Agent handles identifier management (deterministic)
 - Aggregation is deterministic, fast, free
-- Avatar generation uses LLM, slower, costs money
+- Avatar generation uses LLM via CRM Agent, slower, costs money
 - Aggregation can be cached/pre-computed
 - Avatar generation only when context changes
 
@@ -368,8 +401,11 @@ The generated avatar (from Stage 2) includes:
 
 **Source Code**:
 - `zylch/services/avatar_aggregator.py` - Main aggregation service (382 lines)
-- `zylch/workers/avatar_compute_worker.py` - Background worker that uses aggregator
+- `zylch/agents/memory_agent.py` - Von Neumann Memory Agent (extracts/stores identifiers)
+- `zylch/agents/crm_agent.py` - CRM Agent (computes avatars using aggregated context)
 - `zylch/storage/supabase_client.py` - Database access layer
+
+**Note**: The original `avatar_compute_worker.py` has been replaced by the **Von Neumann Memory Architecture**. Avatar computation is now handled by the **CRM Agent** (`crm_agent.py`), which pulls identifier data from the **Memory Agent** (`memory_agent.py`) and uses `AvatarAggregator` to build context.
 
 **Database Tables**:
 - `identifier_map` - Email/phone to contact_id mapping
@@ -379,4 +415,4 @@ The generated avatar (from Stage 2) includes:
 
 ---
 
-**Last Updated**: December 2025
+**Last Updated**: December 2025 (Updated for Von Neumann Memory Architecture)

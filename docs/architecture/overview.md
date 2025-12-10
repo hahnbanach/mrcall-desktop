@@ -40,7 +40,8 @@ Zylch is an AI-powered relationship intelligence platform that provides:
         │  │  • SyncService                   │  │
         │  │  • ChatService                   │  │
         │  │  • TriggerService (background)   │  │
-        │  │  • AvatarComputeWorker           │  │
+        │  │  • Memory Agent Pipeline         │  │
+        │  │  • CRM Agent Pipeline            │  │
         │  └──────────────────────────────────┘  │
         │  ┌──────────────────────────────────┐  │
         │  │       Tool System                │  │
@@ -236,6 +237,98 @@ Gmail/Outlook API
 - Gap analysis: <100ms (queries pre-computed avatars)
 
 **See**: [Email Archive](../features/email-archive.md)
+
+---
+
+### Von Neumann Memory Architecture
+
+**Philosophy**: Memory as single source of truth, Avatar as computed view
+
+Zylch implements a **Von Neumann-inspired architecture** where the Memory system is the authoritative data store, and Avatar (contact intelligence) is a computed/cached view derived from Memory.
+
+**Core Principle**:
+- **Memory** = Source of Truth (I/O events, raw data, facts)
+- **Avatar** = Computed View (aggregated intelligence, formatted for display)
+
+**Data Flow**:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│         Von Neumann Memory Architecture                  │
+└─────────────────────────────────────────────────────────┘
+
+I/O Events (Email, Calendar, StarChat)
+       │
+       ▼
+┌──────────────────┐
+│  Memory Agent    │ ← Processes raw I/O events
+│   Pipeline       │ • Extracts facts and patterns
+│                  │ • Stores to Memory (source of truth)
+│                  │ • Reconsolidates existing memories
+└─────────┬────────┘
+          │
+          │ (Facts stored in Memory)
+          ▼
+┌──────────────────┐
+│     Memory       │ ← Single Source of Truth
+│   (Supabase)     │ • All raw facts and patterns
+│                  │ • Vector embeddings (semantic search)
+│  Table: memories │ • Never deleted
+└─────────┬────────┘
+          │
+          │ (On-demand or scheduled computation)
+          ▼
+┌──────────────────┐
+│   CRM Agent      │ ← Computes Avatar from Memory
+│    Pipeline      │ • Reads from Memory
+│                  │ • Aggregates by contact
+│                  │ • Formats for display
+└─────────┬────────┘
+          │
+          │ (Computed intelligence)
+          ▼
+┌──────────────────┐
+│     Avatar       │ ← Computed View (Cache)
+│   (Supabase)     │ • Pre-computed contact intelligence
+│                  │ • Relationship status & score
+│  Table: avatars  │ • Suggested actions (formatted)
+└──────────────────┘ • 30-day TTL (recomputed as needed)
+```
+
+**Key Differences from Old System**:
+
+| Aspect | Old System (AvatarComputeWorker) | New System (Von Neumann) |
+|--------|----------------------------------|--------------------------|
+| **Source of Truth** | Avatars (mixed raw + computed) | Memory (only raw facts) |
+| **Data Flow** | I/O → Avatar (direct) | I/O → Memory → Avatar (computed) |
+| **Avatar Role** | Primary storage | Cached view |
+| **Recomputation** | Difficult (data mixed) | Easy (recompute from Memory) |
+| **Consistency** | Prone to drift | Always consistent with Memory |
+
+**Benefits**:
+- **Separation of Concerns**: Raw data (Memory) vs computed view (Avatar)
+- **Recomputable**: Avatar can always be regenerated from Memory
+- **Flexible**: Change Avatar format without losing data
+- **Auditable**: Memory contains complete history of facts
+- **Scalable**: Avatar computation can be parallelized or distributed
+
+**Pipeline Triggers**:
+1. **Memory Agent Pipeline** (after I/O events):
+   - Email sync → Extract facts → Store to Memory
+   - Calendar sync → Extract meetings → Store to Memory
+   - StarChat call → Extract contact info → Store to Memory
+
+2. **CRM Agent Pipeline** (scheduled or on-demand):
+   - Nightly: Recompute all Avatars from Memory
+   - On-demand: Recompute specific Avatar when requested
+   - After Memory update: Mark affected Avatars as stale
+
+**Performance**:
+- Memory storage: <100ms (with reconsolidation)
+- Avatar computation: ~5 min for 15 contacts (background)
+- Avatar retrieval: <100ms (cached, pre-computed)
+
+**See**: [Von Neumann Architecture](../features/von-neumann-architecture.md) (if exists)
 
 ---
 
@@ -839,24 +932,32 @@ def sync_full(request: SyncRequest):
 
 ---
 
-### Decision 7: Pre-Computed Avatars
+### Decision 7: Von Neumann Memory Architecture
 
-**Problem**: `/gaps` shows counts but "show me tasks" takes 27s (LLM formatting)
+**Problem**: Mixed raw data and computed intelligence in Avatars, making recomputation difficult
 
-**Solution**: Background worker pre-computes avatars with formatted tasks
+**Solution**: Separate Memory (source of truth) and Avatar (computed view) with agent pipelines
 
 **Benefits**:
-- `/gaps` returns full list (not just counts) in 3.5s
-- Natural language "show tasks" uses tool (5s, not 27s)
-- No repeated LLM calls for same data
+- Memory as single source of truth (never lose raw data)
+- Avatar can be recomputed from Memory at any time
+- Flexible Avatar format (change without data loss)
+- Clear separation: Memory Agent (I/O → Memory) and CRM Agent (Memory → Avatar)
 
-**Implementation**: `AvatarComputeWorker` after each `/sync`
+**Implementation**:
+- **Memory Agent Pipeline**: Processes I/O events → stores facts to Memory
+- **CRM Agent Pipeline**: Reads Memory → computes Avatar intelligence
+- **Data Flow**: I/O → Memory Agent → Memory → CRM Agent → Avatar
 
 **Performance**:
-| Query | Before | After |
-|-------|--------|-------|
-| `/gaps` | 3.5s (counts only) | 3.5s (full list) |
-| "show me tasks" | 27s (LLM formats) | ~5s (tool returns pre-formatted) |
+| Operation | Time |
+|-----------|------|
+| Memory storage | <100ms (with reconsolidation) |
+| Avatar computation | ~5 min for 15 contacts (background) |
+| Avatar retrieval | <100ms (cached) |
+| Avatar recomputation | On-demand or scheduled (nightly) |
+
+**See**: [Von Neumann Architecture](#von-neumann-memory-architecture)
 
 ---
 

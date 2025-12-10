@@ -160,7 +160,7 @@ class ChatService:
                         # /archive and /memory need config and owner_id
                         config = ToolConfig.from_settings()
                         response_text = await handler(args, config, owner_id)
-                    elif cmd in ['/trigger', '/mrcall', '/share', '/revoke', '/sharing']:
+                    elif cmd in ['/trigger', '/mrcall', '/share', '/revoke', '/sharing', '/connect']:
                         # These need args, owner_id, and optionally email
                         response_text = await handler(args, owner_id, user_email)
                     elif cmd in ['/cache', '/model', '/tutorial', '/help', '/clear']:

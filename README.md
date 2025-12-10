@@ -40,7 +40,8 @@ Unlike traditional email clients that show thread-by-thread views, Zylch AI aggr
 - **AI-Generated Email Detection**: Automatically filters low-priority AI-generated sales emails
 - **Email Archive**: Permanent SQLite storage with full-text search (FTS5)
 
-### Task Management
+### Task Management & Contact Intelligence
+- **Von Neumann Memory Architecture**: Intelligent contact management with persistent memory storage and computed avatar views (see `docs/architecture/VON_NEUMANN_IMPLEMENTATION_COMPLETE.md`)
 - **Person-Centric Tasks**: Aggregate all email threads per contact into unified view
 - **Priority Scoring**: 1-10 urgency score based on relationship context
 - **Status Tracking**: Open, waiting, closed - know what needs action

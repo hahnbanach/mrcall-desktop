@@ -21,8 +21,7 @@ wheels/
 *.egg
 
 zylch-website/
-zylch-website
-
+zylch-cli/
 
 # Virtual environments
 venv/

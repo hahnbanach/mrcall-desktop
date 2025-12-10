@@ -1,7 +1,7 @@
 """Supabase storage client for multi-tenant data access."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
 from supabase import create_client, Client
@@ -557,6 +557,7 @@ class SupabaseStorage:
             Stored record
         """
         from zylch.utils.encryption import encrypt
+        import json
 
         data = {
             'owner_id': owner_id,
@@ -565,18 +566,34 @@ class SupabaseStorage:
             'updated_at': datetime.now(timezone.utc).isoformat()
         }
 
-        # Encrypt sensitive token data
+        # Build unified credentials dict for JSONB storage
+        # Use short keys to match integration_providers.provider_key
+        unified_creds = {}
+
         if google_token_data:
-            data['google_token_data'] = encrypt(google_token_data)
+            unified_creds['google'] = {
+                'token_data': google_token_data,
+                'provider': 'google',
+                'email': email
+            }
 
         if graph_access_token:
-            data['graph_access_token'] = encrypt(graph_access_token)
-            if graph_refresh_token:
-                data['graph_refresh_token'] = encrypt(graph_refresh_token)
-            data['graph_expires_at'] = graph_expires_at
+            unified_creds['microsoft'] = {
+                'access_token': graph_access_token,
+                'refresh_token': graph_refresh_token,
+                'expires_at': graph_expires_at,
+                'provider': 'microsoft',
+                'email': email
+            }
 
         if scopes:
             data['scopes'] = scopes
+
+        # Write to unified credentials JSONB column (encrypted as whole JSON)
+        if unified_creds:
+            creds_json = json.dumps(unified_creds)
+            data['credentials'] = encrypt(creds_json)
+            logger.info(f"Storing credentials in unified JSONB for provider {provider}")
 
         # Upsert (insert or update)
         result = self.client.table('oauth_tokens').upsert(
@@ -584,7 +601,7 @@ class SupabaseStorage:
             on_conflict='owner_id,provider'
         ).execute()
 
-        logger.info(f"Stored OAuth token for owner {owner_id} provider {provider}")
+        logger.info(f"✅ Stored OAuth token for owner {owner_id} provider {provider}")
         return result.data[0] if result.data else {}
 
     def get_oauth_token(self, owner_id: str, provider: str) -> Optional[Dict[str, Any]]:
@@ -601,8 +618,15 @@ class SupabaseStorage:
             'owner_id', owner_id
         ).eq('provider', provider).execute()
 
+        logger.info(f"get_oauth_token query for owner={owner_id}, provider={provider}")
+        logger.info(f"  result.data: {result.data}")
+        logger.info(f"  result.count: {getattr(result, 'count', 'N/A')}")
+
         if result.data:
+            logger.info(f"  Found {len(result.data)} rows")
             return result.data[0]
+
+        logger.info(f"  No rows found")
         return None
 
     def get_google_token(self, owner_id: str) -> Optional[str]:
@@ -700,14 +724,14 @@ class SupabaseStorage:
         Returns:
             'google.com' or 'microsoft.com' or None
         """
-        # Check Google
+        # Check Google - verify token data exists
         token = self.get_oauth_token(owner_id, 'google.com')
-        if token:
+        if token and token.get('google_token_data'):
             return 'google.com'
 
-        # Check Microsoft
+        # Check Microsoft - verify token data exists
         token = self.get_oauth_token(owner_id, 'microsoft.com')
-        if token:
+        if token and (token.get('graph_access_token') or token.get('graph_refresh_token')):
             return 'microsoft.com'
 
         return None
@@ -779,6 +803,391 @@ class SupabaseStorage:
         ).eq('provider', 'anthropic').execute()
 
         logger.info(f"Deleted Anthropic API key for owner {owner_id}")
+        return True
+
+    # ==========================================
+    # Pipedrive API Key Management
+    # ==========================================
+
+    def save_pipedrive_key(self, owner_id: str, api_token: str) -> bool:
+        """Save Pipedrive API token for a user (encrypted at rest).
+
+        Uses 'pipedrive' as the provider in oauth_tokens table.
+
+        Args:
+            owner_id: Firebase UID
+            api_token: Pipedrive API token
+
+        Returns:
+            True if saved successfully
+        """
+        from zylch.utils.encryption import encrypt
+
+        data = {
+            'owner_id': owner_id,
+            'provider': 'pipedrive',
+            'email': '',  # Not applicable for Pipedrive
+            'pipedrive_api_token': encrypt(api_token),
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        # Upsert to handle both insert and update
+        self.client.table('oauth_tokens').upsert(
+            data,
+            on_conflict='owner_id,provider'
+        ).execute()
+
+        logger.info(f"Saved Pipedrive API token for owner {owner_id}")
+        return True
+
+    def get_pipedrive_key(self, owner_id: str) -> Optional[str]:
+        """Get Pipedrive API token for a user (decrypted).
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            Pipedrive API token or None if not found
+        """
+        from zylch.utils.encryption import decrypt
+
+        token = self.get_oauth_token(owner_id, 'pipedrive')
+        if token:
+            encrypted_key = token.get('pipedrive_api_token')
+            if encrypted_key:
+                return decrypt(encrypted_key)
+        return None
+
+    def delete_pipedrive_key(self, owner_id: str) -> bool:
+        """Delete Pipedrive API token for a user.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            True if deleted
+        """
+        self.client.table('oauth_tokens').delete().eq(
+            'owner_id', owner_id
+        ).eq('provider', 'pipedrive').execute()
+
+        logger.info(f"Deleted Pipedrive API token for owner {owner_id}")
+        return True
+
+    # ==========================================
+    # Vonage API Key Management
+    # ==========================================
+
+    def save_vonage_keys(self, owner_id: str, api_key: str, api_secret: str, from_number: str) -> bool:
+        """Save Vonage API credentials for a user (encrypted at rest).
+
+        Uses 'vonage' as the provider in oauth_tokens table.
+
+        Args:
+            owner_id: Firebase UID
+            api_key: Vonage API key
+            api_secret: Vonage API secret
+            from_number: Vonage sender number
+
+        Returns:
+            True if saved successfully
+        """
+        from zylch.utils.encryption import encrypt
+
+        data = {
+            'owner_id': owner_id,
+            'provider': 'vonage',
+            'email': '',  # Not applicable for Vonage
+            'vonage_api_key': encrypt(api_key),
+            'vonage_api_secret': encrypt(api_secret),
+            'vonage_from_number': from_number,  # Not encrypted (public sender ID)
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        # Upsert to handle both insert and update
+        self.client.table('oauth_tokens').upsert(
+            data,
+            on_conflict='owner_id,provider'
+        ).execute()
+
+        logger.info(f"Saved Vonage API credentials for owner {owner_id}")
+        return True
+
+    def get_vonage_keys(self, owner_id: str) -> Optional[Dict[str, str]]:
+        """Get Vonage API credentials for a user (decrypted).
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            Dict with api_key, api_secret, from_number or None if not found
+        """
+        from zylch.utils.encryption import decrypt
+
+        token = self.get_oauth_token(owner_id, 'vonage')
+        if token:
+            encrypted_key = token.get('vonage_api_key')
+            encrypted_secret = token.get('vonage_api_secret')
+            from_number = token.get('vonage_from_number')
+
+            if encrypted_key and encrypted_secret:
+                return {
+                    'api_key': decrypt(encrypted_key),
+                    'api_secret': decrypt(encrypted_secret),
+                    'from_number': from_number or ''
+                }
+        return None
+
+    def delete_vonage_keys(self, owner_id: str) -> bool:
+        """Delete Vonage API credentials for a user.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            True if deleted
+        """
+        self.client.table('oauth_tokens').delete().eq(
+            'owner_id', owner_id
+        ).eq('provider', 'vonage').execute()
+
+        logger.info(f"Deleted Vonage API credentials for owner {owner_id}")
+        return True
+
+    # ==========================================
+    # UNIFIED CREDENTIALS STORAGE (JSONB)
+    # ==========================================
+
+    def save_provider_credentials(
+        self,
+        owner_id: str,
+        provider_key: str,
+        credentials_dict: Dict[str, Any],
+        metadata_dict: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """Save credentials for any provider using unified JSONB storage.
+
+        This is the new generic method that replaces provider-specific save functions.
+        Credentials are encrypted based on config_fields.encrypted flag.
+
+        Args:
+            owner_id: Firebase UID
+            provider_key: Provider identifier (google, microsoft, anthropic, pipedrive, vonage, etc.)
+            credentials_dict: Dict of credential fields and values
+            metadata_dict: Optional metadata (scopes, token_uri, etc.)
+
+        Returns:
+            True if saved successfully
+
+        Example:
+            save_provider_credentials(
+                "user123",
+                "vonage",
+                {
+                    "api_key": "abc123",
+                    "api_secret": "xyz789",
+                    "from_number": "+1234567890"
+                }
+            )
+        """
+        from zylch.utils.encryption import encrypt
+        import json
+
+        # Get existing oauth_tokens row or create new
+        token_row = self.get_oauth_token(owner_id, provider_key)
+        if token_row and token_row.get('credentials'):
+            # Decrypt and parse existing credentials
+            from zylch.utils.encryption import decrypt
+            existing_creds = json.loads(decrypt(token_row['credentials']))
+        else:
+            existing_creds = {}
+
+        # Get provider config to determine which fields need encryption
+        provider_config = self.client.table('integration_providers')\
+            .select('config_fields')\
+            .eq('provider_key', provider_key)\
+            .execute()
+
+        config_fields = {}
+        if provider_config.data:
+            config_fields = provider_config.data[0].get('config_fields', {})
+
+        # Encrypt sensitive fields based on config
+        encrypted_credentials = {}
+        for field_name, field_value in credentials_dict.items():
+            field_config = config_fields.get(field_name, {})
+            should_encrypt = field_config.get('encrypted', True)  # Default to encrypt for safety
+
+            if should_encrypt and field_value:
+                encrypted_credentials[field_name] = f"encrypted:{encrypt(str(field_value))}"
+            else:
+                encrypted_credentials[field_name] = field_value
+
+        # Build credentials JSONB structure
+        existing_creds[provider_key] = encrypted_credentials
+        if metadata_dict:
+            if 'metadata' not in existing_creds:
+                existing_creds['metadata'] = {}
+            existing_creds['metadata'][provider_key] = metadata_dict
+
+        # Encrypt entire JSONB blob
+        credentials_json = encrypt(json.dumps(existing_creds))
+
+        # Prepare data for upsert
+        data = {
+            'owner_id': owner_id,
+            'provider': provider_key,
+            'credentials': credentials_json,
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        # DUAL-WRITE: Also write to legacy columns for backward compatibility
+        # This will be removed in Phase 6 after migration
+        if provider_key == 'google' and 'token_data' in credentials_dict:
+            data['google_token_data'] = credentials_dict['token_data']
+        elif provider_key == 'microsoft':
+            if 'access_token' in credentials_dict:
+                data['graph_access_token'] = f"encrypted:{encrypt(credentials_dict['access_token'])}"
+            if 'refresh_token' in credentials_dict:
+                data['graph_refresh_token'] = f"encrypted:{encrypt(credentials_dict['refresh_token'])}"
+            if 'expires_at' in credentials_dict:
+                data['graph_expires_at'] = credentials_dict['expires_at']
+        elif provider_key == 'anthropic' and 'api_key' in credentials_dict:
+            data['anthropic_api_key'] = f"encrypted:{encrypt(credentials_dict['api_key'])}"
+        elif provider_key == 'pipedrive' and 'api_token' in credentials_dict:
+            data['pipedrive_api_token'] = f"encrypted:{encrypt(credentials_dict['api_token'])}"
+        elif provider_key == 'vonage':
+            if 'api_key' in credentials_dict:
+                data['vonage_api_key'] = f"encrypted:{encrypt(credentials_dict['api_key'])}"
+            if 'api_secret' in credentials_dict:
+                data['vonage_api_secret'] = f"encrypted:{encrypt(credentials_dict['api_secret'])}"
+            if 'from_number' in credentials_dict:
+                data['vonage_from_number'] = credentials_dict['from_number']
+
+        # Upsert
+        self.client.table('oauth_tokens').upsert(
+            data,
+            on_conflict='owner_id,provider'
+        ).execute()
+
+        logger.info(f"Saved credentials for provider {provider_key} for owner {owner_id}")
+        return True
+
+    def get_provider_credentials(
+        self,
+        owner_id: str,
+        provider_key: str,
+        include_metadata: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """Get credentials for any provider using unified JSONB storage.
+
+        This is the new generic method that replaces provider-specific get functions.
+        Credentials are automatically decrypted.
+
+        Args:
+            owner_id: Firebase UID
+            provider_key: Provider identifier (google, microsoft, anthropic, etc.)
+            include_metadata: If True, include metadata dict in response
+
+        Returns:
+            Dict with credential fields (decrypted) or None if not found
+
+        Example:
+            creds = get_provider_credentials("user123", "vonage")
+            # Returns: {"api_key": "abc123", "api_secret": "xyz789", "from_number": "+1234567890"}
+        """
+        from zylch.utils.encryption import decrypt
+        import json
+
+        # DUAL-READ: Try new credentials column first, fall back to legacy
+        token_row = self.get_oauth_token(owner_id, provider_key)
+        if not token_row:
+            return None
+
+        # Try new unified credentials column
+        if token_row.get('credentials'):
+            try:
+                decrypted_json = decrypt(token_row['credentials'])
+                all_credentials = json.loads(decrypted_json)
+
+                # Extract provider-specific credentials
+                provider_creds = all_credentials.get(provider_key, {})
+                if not provider_creds:
+                    # Fall through to legacy columns
+                    pass
+                else:
+                    # Decrypt individual fields marked with "encrypted:" prefix
+                    decrypted_creds = {}
+                    for field_name, field_value in provider_creds.items():
+                        if isinstance(field_value, str) and field_value.startswith('encrypted:'):
+                            decrypted_creds[field_name] = decrypt(field_value[10:])  # Remove "encrypted:" prefix
+                        else:
+                            decrypted_creds[field_name] = field_value
+
+                    # Include metadata if requested
+                    if include_metadata and 'metadata' in all_credentials:
+                        decrypted_creds['_metadata'] = all_credentials['metadata'].get(provider_key, {})
+
+                    return decrypted_creds
+            except Exception as e:
+                logger.error(f"Failed to decrypt credentials for {provider_key}: {e}")
+                # Fall through to legacy columns
+
+        # FALLBACK: Try legacy columns (backward compatibility)
+        if provider_key == 'google' or provider_key == 'google.com':
+            google_data = token_row.get('google_token_data')
+            if google_data:
+                return {'token_data': decrypt(google_data) if google_data.startswith('encrypted:') else google_data}
+
+        elif provider_key == 'microsoft' or provider_key == 'microsoft.com':
+            access_token = token_row.get('graph_access_token')
+            refresh_token = token_row.get('graph_refresh_token')
+            if access_token:
+                return {
+                    'access_token': decrypt(access_token[10:]) if access_token.startswith('encrypted:') else access_token,
+                    'refresh_token': decrypt(refresh_token[10:]) if refresh_token and refresh_token.startswith('encrypted:') else refresh_token,
+                    'expires_at': token_row.get('graph_expires_at')
+                }
+
+        elif provider_key == 'anthropic':
+            api_key = token_row.get('anthropic_api_key')
+            if api_key:
+                return {'api_key': decrypt(api_key[10:]) if api_key.startswith('encrypted:') else api_key}
+
+        elif provider_key == 'pipedrive':
+            api_token = token_row.get('pipedrive_api_token')
+            if api_token:
+                return {'api_token': decrypt(api_token[10:]) if api_token.startswith('encrypted:') else api_token}
+
+        elif provider_key == 'vonage':
+            api_key = token_row.get('vonage_api_key')
+            api_secret = token_row.get('vonage_api_secret')
+            if api_key and api_secret:
+                return {
+                    'api_key': decrypt(api_key[10:]) if api_key.startswith('encrypted:') else api_key,
+                    'api_secret': decrypt(api_secret[10:]) if api_secret.startswith('encrypted:') else api_secret,
+                    'from_number': token_row.get('vonage_from_number', '')
+                }
+
+        return None
+
+    def delete_provider_credentials(self, owner_id: str, provider_key: str) -> bool:
+        """Delete credentials for any provider.
+
+        Generic method that replaces provider-specific delete functions.
+
+        Args:
+            owner_id: Firebase UID
+            provider_key: Provider identifier
+
+        Returns:
+            True if deleted
+        """
+        self.client.table('oauth_tokens').delete().eq(
+            'owner_id', owner_id
+        ).eq('provider', provider_key).execute()
+
+        logger.info(f"Deleted credentials for provider {provider_key} for owner {owner_id}")
         return True
 
     # ==========================================
@@ -1002,14 +1411,16 @@ class SupabaseStorage:
         }
 
         try:
-            self.client.table('oauth_states').upsert(
+            logger.info(f"Storing OAuth state: {state[:20]}... for owner {owner_id}")
+            result = self.client.table('oauth_states').upsert(
                 data,
                 on_conflict='state'
             ).execute()
-            logger.debug(f"Stored OAuth state for owner {owner_id}")
+            logger.info(f"Successfully stored OAuth state. Result: {len(result.data) if result.data else 0} rows")
+            logger.debug(f"State data: {data}")
             return True
         except Exception as e:
-            logger.error(f"Failed to store OAuth state: {e}")
+            logger.error(f"Failed to store OAuth state: {e}", exc_info=True)
             return False
 
     def get_oauth_state(self, state: str) -> Optional[Dict[str, Any]]:
@@ -1022,16 +1433,21 @@ class SupabaseStorage:
             State data dict or None if not found/expired
         """
         try:
+            logger.info(f"Looking up OAuth state: {state[:20]}...")
             result = self.client.table('oauth_states')\
                 .select('*')\
                 .eq('state', state)\
                 .limit(1)\
                 .execute()
 
+            logger.info(f"OAuth state query result: {len(result.data) if result.data else 0} rows")
+
             if not result.data:
+                logger.warning(f"OAuth state not found in database: {state[:20]}...")
                 return None
 
             state_data = result.data[0]
+            logger.info(f"Found OAuth state for owner: {state_data['owner_id']}")
 
             # Check if expired
             expires_at = datetime.fromisoformat(state_data['expires_at'].replace('Z', '+00:00'))
@@ -1043,6 +1459,7 @@ class SupabaseStorage:
 
             # Delete state (one-time use)
             self.client.table('oauth_states').delete().eq('state', state).execute()
+            logger.info(f"OAuth state consumed (deleted) for owner: {state_data['owner_id']}")
 
             return {
                 'owner_id': state_data['owner_id'],
@@ -1052,7 +1469,7 @@ class SupabaseStorage:
             }
 
         except Exception as e:
-            logger.error(f"Failed to get OAuth state: {e}")
+            logger.error(f"Failed to get OAuth state: {e}", exc_info=True)
             return None
 
     def cleanup_expired_oauth_states(self) -> int:
@@ -1561,6 +1978,166 @@ class SupabaseStorage:
             .execute()
 
         return result.data[0]['contact_id'] if result.data else None
+
+    def get_unprocessed_emails(
+        self,
+        owner_id: str,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Get emails not yet processed by Memory Agent.
+
+        Uses LEFT JOIN to find emails not referenced in memory.examples[].
+
+        Args:
+            owner_id: Firebase UID
+            limit: Maximum number of emails to return
+
+        Returns:
+            List of email dicts with id, from_email, body_plain, snippet
+        """
+        # Use RPC function for complex LEFT JOIN query
+        result = self.client.rpc('get_unprocessed_emails', {
+            'p_owner_id': owner_id,
+            'p_limit': limit
+        }).execute()
+
+        return result.data or []
+
+    def upsert_identifier(
+        self,
+        owner_id: str,
+        identifier: str,
+        identifier_type: str,
+        contact_id: str,
+        source: Optional[str] = None,
+        confidence: float = 1.0
+    ) -> Dict[str, Any]:
+        """Store identifier mapping with confidence score.
+
+        Delegates to existing store_identifier() method.
+
+        Args:
+            owner_id: Firebase UID
+            identifier: Email, phone, linkedin URL, etc.
+            identifier_type: 'phone', 'linkedin', 'email'
+            contact_id: Contact's stable ID (MD5 hash)
+            source: Where identifier was discovered
+            confidence: 0.0-1.0 confidence score
+
+        Returns:
+            Stored identifier record
+        """
+        return self.store_identifier(
+            owner_id=owner_id,
+            identifier=identifier,
+            identifier_type=identifier_type,
+            contact_id=contact_id,
+            confidence=confidence,
+            source=source
+        )
+
+    def get_email_stats(
+        self,
+        owner_id: str,
+        contact_id: str
+    ) -> Dict[str, Any]:
+        """Get email statistics for CRM Agent avatar computation.
+
+        Calculates relationship strength as emails/week over 90 days.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID
+
+        Returns:
+            Dict with:
+                - last_email_from_owner: bool
+                - days_since_last_contact: int
+                - relationship_strength: float (0-1)
+                - last_email_snippet: str (100 chars)
+        """
+        # Use RPC function for complex CTE query
+        result = self.client.rpc('get_email_stats', {
+            'p_owner_id': owner_id,
+            'p_contact_id': contact_id
+        }).execute()
+
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+
+        # Return default values if no data
+        return {
+            'last_email_from_owner': False,
+            'days_since_last_contact': 999999,
+            'relationship_strength': 0.0,
+            'last_email_snippet': ''
+        }
+
+    def upsert_avatar(
+        self,
+        owner_id: str,
+        contact_id: str,
+        display_name: Optional[str] = None,
+        relationship_summary: Optional[str] = None,
+        status: Optional[str] = None,
+        priority: Optional[int] = None,
+        action: Optional[str] = None,
+        last_computed: Optional[datetime] = None
+    ) -> Dict[str, Any]:
+        """Store computed Avatar (volatile view).
+
+        Delegates to existing store_avatar() method if it exists, otherwise
+        directly updates the avatars table.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID
+            display_name: Contact's display name
+            relationship_summary: Summary of relationship
+            status: 'open', 'waiting', 'closed'
+            priority: 1-10 priority score
+            action: Suggested action text
+            last_computed: When avatar was last computed
+
+        Returns:
+            Stored avatar record
+        """
+        avatar_data = {
+            'contact_id': contact_id,
+            'display_name': display_name,
+            'relationship_summary': relationship_summary,
+            'relationship_status': status,
+            'relationship_score': priority,
+            'suggested_action': action,
+            'last_computed': last_computed.isoformat() if last_computed else datetime.now(timezone.utc).isoformat()
+        }
+
+        return self.store_avatar(owner_id, avatar_data)
+
+    def get_affected_contacts(
+        self,
+        email_ids: List[str]
+    ) -> List[str]:
+        """Get contact IDs affected by new emails.
+
+        Queries emails table WHERE id IN email_ids, extracts from_email addresses,
+        looks up contact_id from identifier_map, and returns unique list.
+
+        Args:
+            email_ids: List of email UUIDs
+
+        Returns:
+            Unique list of contact IDs
+        """
+        if not email_ids:
+            return []
+
+        # Use RPC function for efficient query
+        result = self.client.rpc('get_affected_contacts', {
+            'p_email_ids': email_ids
+        }).execute()
+
+        return result.data or []
 
     # ==========================================
     # USER NOTIFICATIONS

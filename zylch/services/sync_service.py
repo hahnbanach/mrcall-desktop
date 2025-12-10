@@ -363,7 +363,7 @@ class SyncService:
         return results
 
     async def run_full_sync(self, days_back: Optional[int] = None, skip_gap_analysis: bool = False) -> Dict[str, Any]:
-        """Run full sync workflow: emails + calendar + gap analysis.
+        """Run full sync workflow: emails + calendar + gap analysis + Von Neumann pipeline.
 
         Args:
             days_back: Optional number of days to sync emails (also used for gap analysis window)
@@ -376,6 +376,8 @@ class SyncService:
 
         results = {
             "email_sync": {"success": False, "error": "Not started"},
+            "memory_agent": {"success": False, "error": "Not started"},
+            "crm_agent": {"success": False, "error": "Not started"},
             "calendar_sync": {"success": False, "error": "Not started"},
             "gap_analysis": {"success": False, "error": "Not started"},
             "success": True,
@@ -397,6 +399,114 @@ class SyncService:
             }
             results["errors"].append(f"Email sync: {str(e)}")
             results["success"] = False
+
+        # Memory Agent phase - Process unprocessed emails into structured memory
+        try:
+            from zylch.agents.memory_worker import MemoryWorker
+            from zylch.storage.memory import ZylchMemory
+
+            logger.info("[memory_agent] Starting email processing")
+            start_time = datetime.now()
+
+            # Initialize memory system
+            memory = ZylchMemory(
+                owner_id=self.owner_id,
+                supabase_storage=self.supabase
+            )
+
+            # Get unprocessed emails
+            unprocessed_emails = memory.get_unprocessed_emails(limit=100)
+            email_count = len(unprocessed_emails)
+
+            if email_count > 0:
+                # Process batch
+                worker = MemoryWorker(memory=memory)
+                processed = await worker.process_batch(unprocessed_emails)
+
+                duration = (datetime.now() - start_time).total_seconds()
+                logger.info(f"Memory Agent: Processed {processed} emails in {duration:.1f}s")
+
+                results["memory_agent"] = {
+                    "success": True,
+                    "processed": processed,
+                    "duration_seconds": round(duration, 1)
+                }
+            else:
+                logger.info("[memory_agent] No unprocessed emails found")
+                results["memory_agent"] = {
+                    "success": True,
+                    "processed": 0,
+                    "duration_seconds": 0.0
+                }
+
+        except Exception as e:
+            logger.error(f"Memory Agent failed: {e}", exc_info=True)
+            results["memory_agent"] = {
+                "success": False,
+                "error": str(e)
+            }
+            results["errors"].append(f"Memory Agent: {str(e)}")
+            # Continue to CRM phase even if memory agent fails
+
+        # CRM Agent phase - Compute avatars for affected contacts
+        try:
+            from zylch.agents.crm_worker import CRMWorker
+
+            logger.info("[crm_agent] Starting avatar computation")
+            start_time = datetime.now()
+
+            # Get affected contacts from recent emails
+            affected_contacts = []
+            if self.supabase and self.owner_id:
+                cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days_back or 30)).isoformat()
+
+                # Query unique contact IDs from recent emails via identifier_map
+                recent_identifiers = self.supabase.client.table('identifier_map')\
+                    .select('contact_id')\
+                    .eq('owner_id', self.owner_id)\
+                    .eq('identifier_type', 'email')\
+                    .gte('updated_at', cutoff_date)\
+                    .execute()
+
+                # Extract unique contact_ids
+                affected_contacts = list(set(
+                    item['contact_id'] for item in (recent_identifiers.data or [])
+                    if item.get('contact_id')
+                ))
+
+            contact_count = len(affected_contacts)
+            if contact_count > 0:
+                # Compute avatars
+                worker = CRMWorker(
+                    owner_id=self.owner_id,
+                    supabase_storage=self.supabase
+                )
+                computed = await worker.compute_batch(affected_contacts)
+
+                duration = (datetime.now() - start_time).total_seconds()
+                logger.info(f"CRM Agent: Computed {computed} avatars in {duration:.1f}s")
+
+                results["crm_agent"] = {
+                    "success": True,
+                    "computed": computed,
+                    "duration_seconds": round(duration, 1)
+                }
+            else:
+                logger.info("[crm_agent] No affected contacts found")
+                results["crm_agent"] = {
+                    "success": True,
+                    "computed": 0,
+                    "duration_seconds": 0.0
+                }
+
+        except Exception as e:
+            logger.error(f"CRM Agent failed: {e}", exc_info=True)
+            results["crm_agent"] = {
+                "success": False,
+                "error": str(e)
+            }
+            results["errors"].append(f"CRM Agent: {str(e)}")
+            # Don't fail entire sync if CRM agent fails
 
         # Sync calendar
         try:
