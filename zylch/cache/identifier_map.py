@@ -54,6 +54,30 @@ def normalize_name(name: str) -> str:
     return " ".join(name.lower().split())
 
 
+def normalize_linkedin(url: str) -> str:
+    """Normalize LinkedIn URL for consistent storage.
+
+    Args:
+        url: LinkedIn profile URL
+
+    Returns:
+        Normalized format: linkedin.com/in/username
+    """
+    if not url:
+        return ""
+
+    # Remove protocol
+    url = url.replace('https://', '').replace('http://', '')
+    # Remove www
+    url = url.replace('www.', '')
+    # Remove trailing slash
+    url = url.rstrip('/')
+    # Lowercase
+    url = url.lower()
+
+    return url
+
+
 class IdentifierMapCache:
     """Cache for mapping identifiers (email, phone, name) to memory IDs.
 
@@ -131,10 +155,10 @@ class IdentifierMapCache:
     ) -> Optional[Dict[str, Any]]:
         """Look up a person by any identifier.
 
-        Tries to match as email, phone, then name.
+        Tries to match as email, phone, LinkedIn, then name.
 
         Args:
-            query: The search query (email, phone, or name)
+            query: The search query (email, phone, LinkedIn, or name)
             owner_id: Owner identifier
             assistant_id: Assistant/business identifier
 
@@ -163,6 +187,15 @@ class IdentifierMapCache:
             if phone_key in ns_data:
                 logger.debug(f"Found match by phone: {phone_normalized}")
                 return ns_data[phone_key]
+
+        # Try as LinkedIn URL
+        if 'linkedin.com' in query_lower:
+            linkedin_normalized = normalize_linkedin(query)
+            if linkedin_normalized:
+                linkedin_key = self._get_identifier_key("linkedin", linkedin_normalized)
+                if linkedin_key in ns_data:
+                    logger.debug(f"Found match by LinkedIn: {linkedin_normalized}")
+                    return ns_data[linkedin_key]
 
         # Try as name
         name_normalized = normalize_name(query)
@@ -213,6 +246,8 @@ class IdentifierMapCache:
                 normalized = id_value.lower().strip()
             elif id_type == "phone":
                 normalized = normalize_phone(id_value)
+            elif id_type == "linkedin":
+                normalized = normalize_linkedin(id_value)
             elif id_type == "name":
                 normalized = normalize_name(id_value)
             else:

@@ -20,18 +20,21 @@ async def handle_help() -> str:
     """Return help message."""
     return """**📋 Zylch AI Commands**
 
+💡 **Remember:** All commands accept `--help` for detailed usage
+
 **📧 Data Management:**
 • `/sync [days]` - Sync email and calendar
 • `/gaps` or `/briefing` - Analyze unanswered conversations
-• `/archive [--help]` - Email archive management
-• `/cache [--help]` - Cache management
+• `/archive` - Email archive management
+• `/cache` - Cache management
 
 **🧠 Memory & Automation:**
-• `/memory [--help]` - Behavioral memory management
-• `/trigger [--help]` - Event-driven automation
+• `/memory` - Behavioral memory management
+• `/trigger` - Event-driven automation
 
-**📞 Integrations:**
-• `/mrcall [--help]` - MrCall/StarChat phone integration
+**📡 Integrations:**
+• `/connections` - View and manage external connections
+• `/mrcall` - MrCall/StarChat phone integration
 
 **🔗 Sharing:**
 • `/share <email>` - Share data with someone
@@ -57,14 +60,88 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
     from zylch.tools.outlook import OutlookClient
     from zylch.tools.gmail import GmailClient
     from zylch.tools.gcalendar import GoogleCalendarClient
+    from zylch.storage.supabase_client import SupabaseStorage
 
-    # Parse days parameter
-    days_back = 30
-    if args:
+    # Check for --status flag
+    status_check = '--status' in args
+    if status_check:
+        logger.info(f"[/sync] Status check for owner_id={owner_id}")
         try:
-            days_back = int(args[0])
+            supabase = SupabaseStorage()
+            result = supabase.client.table('sync_state').select('*').eq('owner_id', owner_id).execute()
+
+            if not result.data:
+                return "📊 **Sync Status**\n\n❌ No sync state found - never synced.\n\nRun `/sync [days]` to start."
+
+            sync_state = result.data[0]
+            last_sync = sync_state.get('last_sync')
+
+            # Format last sync time or show "Never" if missing
+            if last_sync:
+                # Parse and format the timestamp nicely
+                from datetime import datetime
+                try:
+                    if isinstance(last_sync, str):
+                        dt = datetime.fromisoformat(last_sync.replace('Z', '+00:00'))
+                        last_sync_display = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+                    else:
+                        last_sync_display = str(last_sync)
+                except:
+                    last_sync_display = str(last_sync)
+            else:
+                last_sync_display = "Never"
+
+            # Count emails
+            email_count_result = supabase.client.table('emails').select('id', count='exact').eq('owner_id', owner_id).execute()
+            email_count = email_count_result.count if hasattr(email_count_result, 'count') else 0
+
+            # Count calendar events
+            event_count_result = supabase.client.table('calendar_events').select('id', count='exact').eq('owner_id', owner_id).execute()
+            event_count = event_count_result.count if hasattr(event_count_result, 'count') else 0
+
+            return f"""📊 **Sync Status**
+
+✅ **Last synced:** {last_sync_display}
+📧 **Emails archived:** {email_count:,}
+📅 **Calendar events:** {event_count:,}
+
+Run `/sync [days]` to sync more data."""
+        except Exception as e:
+            logger.error(f"[/sync] Failed to get sync status: {e}")
+            return f"❌ **Error getting sync status:** {str(e)}"
+
+    # Check for --reset flag
+    reset_sync = '--reset' in args
+    if reset_sync:
+        logger.info(f"[/sync] Reset flag detected, clearing all sync data for owner_id={owner_id}")
+        try:
+            supabase = SupabaseStorage()
+
+            # Clear sync state
+            supabase.client.table('sync_state').delete().eq('owner_id', owner_id).execute()
+            logger.info(f"[/sync] Cleared sync_state")
+
+            # Clear emails
+            email_result = supabase.client.table('emails').delete().eq('owner_id', owner_id).execute()
+            logger.info(f"[/sync] Cleared emails")
+
+            # Clear calendar events
+            cal_result = supabase.client.table('calendar_events').delete().eq('owner_id', owner_id).execute()
+            logger.info(f"[/sync] Cleared calendar_events")
+
+            return "✅ **Sync state reset!**\n\nAll emails and calendar events cleared.\nNext `/sync [days]` will perform a full re-sync from scratch."
+        except Exception as e:
+            logger.error(f"[/sync] Failed to reset sync state: {e}")
+            return f"❌ **Error resetting sync state:** {str(e)}"
+
+    # Parse days parameter (filter out flags)
+    days_back = 30
+    numeric_args = [arg for arg in args if not arg.startswith('--')]
+    if numeric_args:
+        try:
+            days_back = int(numeric_args[0])
         except ValueError:
-            return f"❌ **Error:** `{args[0]}` is not a valid number\n\n**Usage:** `/sync [days]`"
+            return f"❌ **Error:** `{numeric_args[0]}` is not a valid number\n\n**Usage:** `/sync [days] [--reset]`"
 
     try:
         # Get user's auth provider
@@ -75,7 +152,9 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
 
         if not provider:
             logger.warning(f"[/sync] No provider found for owner_id={owner_id}")
-            return f"❌ **Error:** Provider not found for owner {owner_id}. Please login first."
+            return """❌ **Error:** Zylch has no access to any channel!
+  Run /connect to see available connections
+  Run /connect {provider} to connect"""
 
         # Create appropriate email client based on provider
         if provider == "microsoft.com":
@@ -133,7 +212,19 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
             email_data = results['email_sync']
             new_msgs = email_data.get('new_messages', 0)
             del_msgs = email_data.get('deleted_messages', 0)
+            avatars_queued = email_data.get('avatars_queued', 0)
+
             lines.append(f"✅ **Email:** +{new_msgs} new, -{del_msgs} deleted")
+
+            # Show avatar queue status
+            if avatars_queued > 0:
+                lines.append(f"🔄 **Avatars:** {avatars_queued} contacts queued for analysis (~5 min)")
+
+            # Show warning if incremental sync
+            if email_data.get('incremental'):
+                first_sync = email_data.get('first_sync_date', 'previous sync')
+                lines.append(f"ℹ️  **Incremental sync** - fetching changes since {first_sync}")
+                lines.append(f"   If you want to go further in the past, run `/sync --reset` first, then `/sync [days]`")
         else:
             has_failures = True
             lines.append(f"❌ **Email:** {results['email_sync'].get('error')}")
@@ -164,19 +255,18 @@ async def handle_clear() -> str:
 Clear your local `conversation_history` array."""
 
 
-async def handle_gaps(args: List[str], config, memory, owner_id: str) -> str:
-    """Handle /gaps command - AI analysis of email threads.
+async def handle_gaps(args: List[str], owner_id: str) -> str:
+    """Handle /gaps command - Query pre-computed avatars for tasks.
 
     Usage: /gaps [days]
 
-    This analyzes email threads and detects tasks (answer/reminder needed).
+    This queries pre-computed avatars (NOT real-time LLM calls).
+    Avatars are updated in background after each /sync.
+
+    Note: config and memory parameters removed - not needed for avatar query.
     """
-    from zylch.tools.email_sync import EmailSyncManager
-    from zylch.tools.email_archive import EmailArchiveManager
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch.api.token_storage import get_provider, get_email, get_graph_token, get_google_tokens_dir
-    from zylch.tools.gmail import GmailClient
-    from zylch.tools.outlook import OutlookClient
+    from datetime import datetime, timedelta, timezone
 
     # Parse days argument
     days_back = 7  # default
@@ -186,69 +276,25 @@ async def handle_gaps(args: List[str], config, memory, owner_id: str) -> str:
         except ValueError:
             return f"❌ **Error:** `{args[0]}` is not a valid number\n\n**Usage:** `/gaps [days]`"
 
-    logger.info(f"[/gaps] Starting AI analysis for owner_id={owner_id}, days_back={days_back}")
+    logger.info(f"[/gaps] Querying avatars for owner_id={owner_id}, days_back={days_back}")
 
     try:
-        # Get user's auth provider
-        provider = get_provider(owner_id)
-        email = get_email(owner_id)
+        supabase = SupabaseStorage()
+        from .task_formatter import filter_own_emails, format_task_list
 
-        if not provider:
-            return f"❌ **Error:** No email provider connected. Use `/sync` first or connect via settings."
+        # Query avatars with open status or waiting action (score >= 3 for all priorities)
+        result = supabase.client.table('avatars')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .or_('relationship_status.eq.open,relationship_status.eq.waiting')\
+            .gte('relationship_score', 3)\
+            .order('relationship_score', desc=True)\
+            .execute()
 
-        # Create appropriate email client based on provider
-        if provider == "microsoft.com":
-            graph_token_data = get_graph_token(owner_id)
-            if not graph_token_data:
-                return f"❌ **Error:** Microsoft Graph token not found. Please login again."
-            email_client = OutlookClient(
-                graph_token=graph_token_data["access_token"],
-                account=email
-            )
-        else:
-            # Google Gmail client
-            google_tokens_dir = get_google_tokens_dir(owner_id)
-            email_client = GmailClient(
-                credentials_path=config.google_credentials_path,
-                token_dir=str(google_tokens_dir),
-                account=email,
-                owner_id=owner_id
-            )
+        avatars = result.data if result.data else []
+        avatars = filter_own_emails(avatars)
 
-        supabase_storage = SupabaseStorage()
-
-        # Initialize email archive with gmail client
-        archive = EmailArchiveManager(
-            gmail_client=email_client,
-            owner_id=owner_id,
-            supabase_storage=supabase_storage
-        )
-
-        # Initialize sync manager with Anthropic for AI analysis
-        email_sync = EmailSyncManager(
-            email_archive=archive,
-            cache_dir=settings.cache_dir + "/emails",
-            anthropic_api_key=settings.anthropic_api_key,
-            days_back=days_back,
-            owner_id=owner_id,
-            supabase_storage=supabase_storage
-        )
-
-        # Run AI analysis on threads
-        results = email_sync.sync_emails(days_back=days_back)
-
-        # Get task stats
-        stats = email_sync.get_stats()
-
-        lines = [f"**📊 Gap Analysis** (last {days_back} days)\n"]
-        lines.append(f"✅ **Threads analyzed:** {results.get('new_threads', 0)} new, {results.get('updated_threads', 0)} updated")
-        lines.append(f"\n**Tasks found:**")
-        lines.append(f"   • Need answer: {stats.get('need_answer', 0)}")
-        lines.append(f"   • Need reminder: {stats.get('need_reminder', 0)}")
-        lines.append(f"   • Open threads: {stats.get('open_threads', 0)}")
-        lines.append(f"   • Closed: {stats.get('closed_threads', 0)}")
-
-        return "\n".join(lines)
+        return format_task_list(avatars, include_stale_warning=True)
 
     except Exception as e:
         logger.error(f"Gap analysis failed: {e}", exc_info=True)
@@ -1430,6 +1476,93 @@ contact, email, calendar, sync, memory
 Use `/tutorial --help` to see all topics."""
 
 
+async def handle_connect(args: List[str], owner_id: str, user_email: str = None) -> str:
+    """Handle /connect command - list available connections and initiate connection flow.
+
+    Usage:
+    - /connect - List all available providers
+    - /connect <provider> - Initiate connection for specific provider
+    """
+    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.integrations.registry import get_available_providers, get_category_emoji
+
+    try:
+        supabase = SupabaseStorage()
+
+        # If no args, show all available providers
+        if not args:
+            providers = get_available_providers(supabase, include_unavailable=False)
+
+            if not providers:
+                return "❌ **Error:** No providers available"
+
+            output = "**📡 Available Connections**\n\n"
+            output += "Select a provider to connect:\n\n"
+
+            for i, provider in enumerate(providers, 1):
+                emoji = get_category_emoji(provider['category'])
+                output += f"{i}. {emoji} **{provider['display_name']}** - `/connect {provider['provider_key']}`\n"
+
+            return output
+
+        # Connect to specific provider
+        provider_key = args[0].lower()
+
+        # Get provider info
+        result = supabase.client.table('integration_providers')\
+            .select('*')\
+            .eq('provider_key', provider_key)\
+            .execute()
+
+        if not result.data:
+            return f"❌ **Error:** Provider '{provider_key}' not found\n\nRun `/connect` to see available providers"
+
+        provider = result.data[0]
+
+        if not provider['is_available']:
+            return f"⏳ **{provider['display_name']}** is coming soon!\n\nRun `/connect` to see available providers"
+
+        # OAuth provider - return authorization URL
+        if provider['requires_oauth']:
+            oauth_url = provider.get('oauth_url', f'/api/auth/{provider_key}/authorize')
+
+            return f"""**🔗 Connect {provider['display_name']}**
+
+**OAuth Authorization Required**
+
+For API clients, redirect user to:
+```
+{oauth_url}?owner_id={owner_id}
+```
+
+After authorization, tokens will be stored automatically.
+
+Run `/connections` to verify connection."""
+
+        # API key provider - show configuration instructions
+        else:
+            config_fields = provider.get('config_fields', {})
+            fields_list = '\n'.join([f"• `{field}`: {info.get('label', field)}" for field, info in config_fields.items()])
+
+            return f"""**🔧 Configure {provider['display_name']}**
+
+This integration requires manual configuration.
+
+**Required fields:**
+{fields_list}
+
+**Setup:**
+1. Get your credentials from {provider['display_name']}
+2. Store them securely in environment variables or database
+3. Run `/connections` to verify connection
+
+**Documentation:** {provider.get('documentation_url', 'Contact support for setup help')}"""
+
+    except Exception as e:
+        logger.error(f"Error in /connect command: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}"
+
+
 # Command help texts - source of truth for all clients (CLI, web, mobile)
 COMMAND_HELP = {
     '/help': {
@@ -1439,8 +1572,20 @@ COMMAND_HELP = {
     },
     '/sync': {
         'summary': 'Sync emails and calendar',
-        'usage': '/sync',
+        'usage': '/sync [days] [--status] [--reset]',
         'description': '''Fetches new emails from Gmail and calendar events from Google Calendar.
+
+**Arguments:**
+- `days` - Number of days to sync (default: 30 for first sync, incremental after)
+- `--status` - Show sync status (last sync time, email count, event count)
+- `--reset` - Clear sync state and force full re-sync from scratch
+
+**Examples:**
+- `/sync` - Sync with defaults (incremental after first sync)
+- `/sync 1` - Sync only last 1 day (useful for testing)
+- `/sync 300` - Sync last 300 days
+- `/sync --status` - Check sync status without syncing
+- `/sync --reset` - Reset sync state, then run `/sync [days]` to re-sync
 
 This only syncs data - no AI analysis. Run `/gaps` after to analyze tasks.''',
     },
@@ -1544,6 +1689,7 @@ COMMAND_HANDLERS = {
     '/trigger': handle_trigger,
     '/assistant': handle_assistant,
     '/mrcall': handle_mrcall,
+    '/connect': handle_connect,
     '/share': handle_share,
     '/revoke': handle_revoke,
     '/sharing': handle_sharing,

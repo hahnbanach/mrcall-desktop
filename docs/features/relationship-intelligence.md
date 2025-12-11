@@ -172,6 +172,8 @@ NOT a task:
 
 ## CLI Commands
 
+> **Note**: Commands shown below use slash syntax for clarity, but Zylch AI processes them through natural language conversation with the agent. You can also use phrases like "sync emails" or "show gaps" which work equivalently.
+
 ### `/sync` - Manual morning sync
 Runs the complete sync workflow:
 ```bash

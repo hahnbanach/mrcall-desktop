@@ -1,0 +1,84 @@
+{
+  "modes": {
+    "architect": {
+      "file": "architect.md",
+      "description": "System architecture and design",
+      "agents": ["researcher", "planner", "architect"]
+    },
+    "researcher": {
+      "file": "researcher.md",
+      "description": "Research and analysis",
+      "agents": ["researcher"]
+    },
+    "coder": {
+      "file": "coder.md",
+      "description": "Code implementation",
+      "agents": ["coder"]
+    },
+    "tdd": {
+      "file": "tdd.md",
+      "description": "Test-driven development",
+      "agents": ["tester", "coder"]
+    },
+    "analyzer": {
+      "file": "analyzer.md",
+      "description": "Code analysis",
+      "agents": ["analyzer"]
+    },
+    "optimizer": {
+      "file": "optimizer.md",
+      "description": "Performance optimization",
+      "agents": ["optimizer"]
+    },
+    "reviewer": {
+      "file": "reviewer.md",
+      "description": "Code review",
+      "agents": ["reviewer"]
+    },
+    "documenter": {
+      "file": "documenter.md",
+      "description": "Documentation generation",
+      "agents": ["documenter"]
+    },
+    "debugger": {
+      "file": "debugger.md",
+      "description": "Debugging and troubleshooting",
+      "agents": ["debugger"]
+    },
+    "designer": {
+      "file": "designer.md",
+      "description": "UI/UX design",
+      "agents": ["designer"]
+    },
+    "innovator": {
+      "file": "innovator.md",
+      "description": "Creative problem solving",
+      "agents": ["innovator"]
+    },
+    "memory-manager": {
+      "file": "memory-manager.md",
+      "description": "Memory system management",
+      "agents": ["memory-manager"]
+    },
+    "workflow-manager": {
+      "file": "workflow-manager.md",
+      "description": "Workflow orchestration",
+      "agents": ["workflow-manager"]
+    },
+    "swarm-coordinator": {
+      "file": "swarm-coordinator.md",
+      "description": "Multi-agent coordination",
+      "agents": ["swarm-coordinator"]
+    },
+    "batch-executor": {
+      "file": "batch-executor.md",
+      "description": "Batch task execution",
+      "agents": ["batch-executor"]
+    },
+    "tester": {
+      "file": "tester.md",
+      "description": "Testing and validation",
+      "agents": ["tester"]
+    }
+  }
+}

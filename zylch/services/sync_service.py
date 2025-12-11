@@ -3,6 +3,9 @@
 from typing import Dict, Any, Optional, Union, TYPE_CHECKING
 from pathlib import Path
 import logging
+import hashlib
+import re
+from datetime import datetime, timedelta, timezone
 
 from zylch.tools.gmail import GmailClient
 from zylch.tools.outlook import OutlookClient
@@ -19,6 +22,90 @@ if TYPE_CHECKING:
     from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)
+
+
+# Email filtering patterns
+BLACKLIST_PATTERNS = [
+    r'^noreply',
+    r'^no-reply',
+    r'^do-not-reply',
+    r'^donotreply',
+    r'mailer-daemon',
+    r'^bounce',
+    r'^postmaster',
+    r'^notifications?',
+    r'^automated',
+    r'^auto-reply',
+    r'^autoreply',
+]
+
+SUSPICIOUS_PATTERNS = [
+    r'^info@',
+    r'^hello@',
+    r'^hi@',
+    r'^support@',
+    r'^help@',
+    r'^contact@',
+    r'^admin@',
+    r'^webmaster@',
+    r'^sales@',
+    r'^marketing@',
+]
+
+
+def is_blacklisted_email(email: str) -> bool:
+    """Check if email is automated/system address.
+
+    Args:
+        email: Email address to check
+
+    Returns:
+        True if email should be filtered out entirely
+    """
+    email_lower = email.lower()
+    local_part = email_lower.split('@')[0] if '@' in email_lower else email_lower
+
+    for pattern in BLACKLIST_PATTERNS:
+        if re.search(pattern, local_part):
+            return True
+    return False
+
+
+def calculate_email_confidence(email: str, owner_domain: Optional[str] = None) -> float:
+    """Calculate confidence score for email address.
+
+    Args:
+        email: Email address to score
+        owner_domain: Optional owner's domain for business email detection
+
+    Returns:
+        Confidence score: 0.0 (blacklisted), 0.5 (suspicious), 0.8 (business), 1.0 (personal)
+    """
+    email_lower = email.lower()
+    local_part = email_lower.split('@')[0] if '@' in email_lower else ''
+    domain = email_lower.split('@')[1] if '@' in email_lower else ''
+
+    # Blacklisted
+    if is_blacklisted_email(email):
+        return 0.0
+
+    # Suspicious generic
+    for pattern in SUSPICIOUS_PATTERNS:
+        if re.search(pattern, email_lower):
+            return 0.5
+
+    # Trusted personal domains
+    TRUSTED_DOMAINS = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com',
+                       'icloud.com', 'me.com', 'mac.com']
+    if domain in TRUSTED_DOMAINS:
+        return 1.0
+
+    # Owner's organization (high confidence)
+    if owner_domain and domain == owner_domain:
+        return 0.9
+
+    # Default business email
+    return 0.8
 
 
 class SyncService:
@@ -98,13 +185,13 @@ class SyncService:
         Outlook email sync will be added in a future update.
 
         Args:
-            days_back: Unused (kept for API compatibility)
-            force_full: Unused (kept for API compatibility)
+            days_back: Number of days to sync (default: 30 for first sync, incremental for subsequent)
+            force_full: Force full sync ignoring history
 
         Returns:
             Sync results with stats
         """
-        logger.info(f"[email_sync] Starting archive sync")
+        logger.info(f"[email_sync] Starting archive sync (days_back={days_back}, force_full={force_full})")
 
         # Check email client type
         email_client = await self._ensure_email_client()
@@ -123,7 +210,7 @@ class SyncService:
 
         # Gmail email sync - ONLY archive, no AI analysis
         archive = await self._ensure_email_archive()
-        archive_result = archive.incremental_sync()
+        archive_result = archive.incremental_sync(days_back=days_back, force_full=force_full)
 
         if not archive_result['success']:
             logger.error(f"Archive sync failed: {archive_result.get('error')}")
@@ -137,10 +224,104 @@ class SyncService:
             f"-{archive_result['messages_deleted']} messages"
         )
 
+        # Queue avatar computation for affected contacts
+        avatars_queued = 0
+        if archive_result['messages_added'] > 0 and self.supabase:
+            logger.info(f"[email_sync] Queueing avatar computation for affected contacts...")
+            try:
+                # Get unique contact IDs from recent emails
+                cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days_back or 30)).isoformat()
+
+                # Query emails to get unique senders/recipients
+                recent_emails = self.supabase.client.table('emails')\
+                    .select('from_email,to_emails,cc_emails')\
+                    .eq('owner_id', self.owner_id)\
+                    .gte('date', cutoff_date)\
+                    .execute()
+
+                # Helper to extract clean email from "Name <email@domain.com>" format
+                def extract_email(raw: str) -> tuple:
+                    """Extract email and calculate confidence.
+
+                    Returns:
+                        (email, confidence) or (None, 0.0) if invalid
+                    """
+                    raw = raw.strip()
+                    # Match email in angle brackets: "Name <email@domain.com>" or "<email@domain.com>"
+                    match = re.search(r'<([^>]+@[^>]+)>', raw)
+                    if match:
+                        email = match.group(1).strip().lower()
+                    elif '@' in raw:
+                        email = raw.lower()
+                    else:
+                        return None, 0.0
+
+                    confidence = calculate_email_confidence(email)
+                    return email, confidence
+
+                # Extract unique email addresses with confidence
+                contact_emails = {}  # {email: confidence}
+                for email in recent_emails.data or []:
+                    # From address
+                    if email.get('from_email'):
+                        addr, conf = extract_email(email['from_email'])
+                        if addr and conf > 0.0:  # Skip blacklisted
+                            contact_emails[addr] = max(contact_emails.get(addr, 0), conf)
+
+                    # To addresses (comma-separated string)
+                    if email.get('to_emails'):
+                        for raw_addr in email['to_emails'].split(','):
+                            addr, conf = extract_email(raw_addr)
+                            if addr and conf > 0.0:
+                                contact_emails[addr] = max(contact_emails.get(addr, 0), conf)
+
+                    # CC addresses (comma-separated string)
+                    if email.get('cc_emails'):
+                        for raw_addr in email['cc_emails'].split(','):
+                            addr, conf = extract_email(raw_addr)
+                            if addr and conf > 0.0:
+                                contact_emails[addr] = max(contact_emails.get(addr, 0), conf)
+
+                # Create/update identifier_map entries and queue avatars
+                for email_addr, confidence in contact_emails.items():
+                    try:
+                        # Generate stable contact_id (MD5 of lowercase email)
+                        contact_id = hashlib.md5(email_addr.encode()).hexdigest()
+
+                        # Upsert identifier_map entry with calculated confidence
+                        self.supabase.client.table('identifier_map').upsert({
+                            'owner_id': self.owner_id,
+                            'identifier': email_addr,
+                            'identifier_type': 'email',
+                            'contact_id': contact_id,
+                            'confidence': confidence,
+                            'source': 'email_sync',
+                            'updated_at': datetime.now(timezone.utc).isoformat()
+                        }, on_conflict='owner_id,identifier').execute()
+
+                        # Queue avatar computation
+                        self.supabase.queue_avatar_compute(
+                            owner_id=self.owner_id,
+                            contact_id=contact_id,
+                            trigger_type='email_sync',
+                            priority=7
+                        )
+                        avatars_queued += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to queue avatar for {email_addr}: {e}")
+
+                logger.info(f"[email_sync] Queued {avatars_queued} avatars for computation")
+
+            except Exception as e:
+                logger.error(f"Failed to queue avatar computation: {e}")
+
         return {
             "success": True,
             "new_messages": archive_result['messages_added'],
-            "deleted_messages": archive_result['messages_deleted']
+            "deleted_messages": archive_result['messages_deleted'],
+            "incremental": archive_result.get('incremental', False),
+            "first_sync_date": archive_result.get('first_sync_date'),
+            "avatars_queued": avatars_queued
         }
 
     def sync_calendar(self) -> Dict[str, Any]:
@@ -182,7 +363,7 @@ class SyncService:
         return results
 
     async def run_full_sync(self, days_back: Optional[int] = None, skip_gap_analysis: bool = False) -> Dict[str, Any]:
-        """Run full sync workflow: emails + calendar + gap analysis.
+        """Run full sync workflow: emails + calendar + gap analysis + Von Neumann pipeline.
 
         Args:
             days_back: Optional number of days to sync emails (also used for gap analysis window)
@@ -195,6 +376,8 @@ class SyncService:
 
         results = {
             "email_sync": {"success": False, "error": "Not started"},
+            "memory_agent": {"success": False, "error": "Not started"},
+            "crm_agent": {"success": False, "error": "Not started"},
             "calendar_sync": {"success": False, "error": "Not started"},
             "gap_analysis": {"success": False, "error": "Not started"},
             "success": True,
@@ -216,6 +399,114 @@ class SyncService:
             }
             results["errors"].append(f"Email sync: {str(e)}")
             results["success"] = False
+
+        # Memory Agent phase - Process unprocessed emails into structured memory
+        try:
+            from zylch.agents.memory_worker import MemoryWorker
+            from zylch.storage.memory import ZylchMemory
+
+            logger.info("[memory_agent] Starting email processing")
+            start_time = datetime.now()
+
+            # Initialize memory system
+            memory = ZylchMemory(
+                owner_id=self.owner_id,
+                supabase_storage=self.supabase
+            )
+
+            # Get unprocessed emails
+            unprocessed_emails = memory.get_unprocessed_emails(limit=100)
+            email_count = len(unprocessed_emails)
+
+            if email_count > 0:
+                # Process batch
+                worker = MemoryWorker(memory=memory)
+                processed = await worker.process_batch(unprocessed_emails)
+
+                duration = (datetime.now() - start_time).total_seconds()
+                logger.info(f"Memory Agent: Processed {processed} emails in {duration:.1f}s")
+
+                results["memory_agent"] = {
+                    "success": True,
+                    "processed": processed,
+                    "duration_seconds": round(duration, 1)
+                }
+            else:
+                logger.info("[memory_agent] No unprocessed emails found")
+                results["memory_agent"] = {
+                    "success": True,
+                    "processed": 0,
+                    "duration_seconds": 0.0
+                }
+
+        except Exception as e:
+            logger.error(f"Memory Agent failed: {e}", exc_info=True)
+            results["memory_agent"] = {
+                "success": False,
+                "error": str(e)
+            }
+            results["errors"].append(f"Memory Agent: {str(e)}")
+            # Continue to CRM phase even if memory agent fails
+
+        # CRM Agent phase - Compute avatars for affected contacts
+        try:
+            from zylch.agents.crm_worker import CRMWorker
+
+            logger.info("[crm_agent] Starting avatar computation")
+            start_time = datetime.now()
+
+            # Get affected contacts from recent emails
+            affected_contacts = []
+            if self.supabase and self.owner_id:
+                cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days_back or 30)).isoformat()
+
+                # Query unique contact IDs from recent emails via identifier_map
+                recent_identifiers = self.supabase.client.table('identifier_map')\
+                    .select('contact_id')\
+                    .eq('owner_id', self.owner_id)\
+                    .eq('identifier_type', 'email')\
+                    .gte('updated_at', cutoff_date)\
+                    .execute()
+
+                # Extract unique contact_ids
+                affected_contacts = list(set(
+                    item['contact_id'] for item in (recent_identifiers.data or [])
+                    if item.get('contact_id')
+                ))
+
+            contact_count = len(affected_contacts)
+            if contact_count > 0:
+                # Compute avatars
+                worker = CRMWorker(
+                    owner_id=self.owner_id,
+                    supabase_storage=self.supabase
+                )
+                computed = await worker.compute_batch(affected_contacts)
+
+                duration = (datetime.now() - start_time).total_seconds()
+                logger.info(f"CRM Agent: Computed {computed} avatars in {duration:.1f}s")
+
+                results["crm_agent"] = {
+                    "success": True,
+                    "computed": computed,
+                    "duration_seconds": round(duration, 1)
+                }
+            else:
+                logger.info("[crm_agent] No affected contacts found")
+                results["crm_agent"] = {
+                    "success": True,
+                    "computed": 0,
+                    "duration_seconds": 0.0
+                }
+
+        except Exception as e:
+            logger.error(f"CRM Agent failed: {e}", exc_info=True)
+            results["crm_agent"] = {
+                "success": False,
+                "error": str(e)
+            }
+            results["errors"].append(f"CRM Agent: {str(e)}")
+            # Don't fail entire sync if CRM agent fails
 
         # Sync calendar
         try:

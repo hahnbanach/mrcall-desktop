@@ -424,6 +424,11 @@ When desktop/mobile apps are developed, we may explore local-first storage:
 | `/sharing` | ✅ | `handle_sharing()` |
 | `/tutorial` | ✅ | `handle_tutorial()` |
 
+**Performance Optimization** (Complete):
+- [x] `get_tasks` tool — Returns pre-formatted task list from avatars (avoids 27s LLM formatting)
+- [x] Update `/gaps` to show task details, not just counts
+- [x] `/gaps` no longer loads ZylchMemory (removed ~1min ML model load)
+
 **Trigger Service** (`zylch/services/trigger_service.py`):
 - Event queue with Supabase storage
 - Background worker for processing
@@ -498,16 +503,22 @@ When desktop/mobile apps are developed, we may explore local-first storage:
 
 ---
 
-### Phase H: Billing (Stripe) ()
+### Phase H: Billing (Stripe) (🔴 Critical - Revenue Generation)
 
 **Goal**: Subscription billing for paid features.
 
+**Status**: ❌ Not started - Required for monetization
+
+**Reference**: See `docs/features/BILLING_SYSTEM_TODO.md` for comprehensive implementation plan
+
+**Pricing Tiers**:
+- **Free**: $0/month - 500 emails, 50 calendar events, basic features
+- **Pro**: $29/month - 10K emails, 1K calendar events, advanced AI, priority support
+- **Team**: $99/month - 50K emails, 5K events, team features, API access
+
 **Tasks**:
 - [ ] Set up Stripe account and products
-- [ ] Create pricing tiers:
-  - Free: Limited emails/month
-  - Pro: Full access
-  - Team: Multi-user (future)
+- [ ] Create subscription products and pricing
 - [ ] Implement backend routes:
   - [ ] `POST /api/billing/checkout` — Create Stripe checkout
   - [ ] `GET /api/billing/portal` — Stripe customer portal
@@ -520,11 +531,23 @@ When desktop/mobile apps are developed, we may explore local-first storage:
 - [ ] Add subscription checking middleware
 - [ ] Build billing UI in dashboard
 - [ ] Implement trial logic (14 days)
+- [ ] Feature gating per tier
+- [ ] Usage tracking and quota enforcement
 
 **Deliverables**:
-- Stripe integration working
-- Users can subscribe and manage billing
-- Feature gating based on subscription
+- ✅ Stripe integration working
+- ✅ Users can subscribe and manage billing
+- ✅ Feature gating based on subscription
+- ✅ Usage tracking and quota limits
+- ✅ Trial period and conversion tracking
+
+**Business Impact**:
+- Revenue generation: Target $14,500/month by month 12
+- Customer acquisition: Free tier for onboarding
+- Retention: Pro tier value proposition
+- Growth: Team tier for enterprise
+
+**Timeline**: 5 weeks (see BILLING_SYSTEM_TODO.md for phases)
 
 ---
 
@@ -546,51 +569,153 @@ When desktop/mobile apps are developed, we may explore local-first storage:
 
 ---
 
-### Phase J: Scaling & Optimization
+### Phase I.5: Microsoft Calendar Feature Parity (🟡 Medium-High - Enterprise Adoption)
 
-**Goal**: Production hardening and performance.
+**Goal**: Complete Outlook Calendar implementation for feature parity with Google Calendar.
+
+**Status**: ❌ Not started - Partial implementation exists
+
+**Reference**: See `docs/features/MICROSOFT_CALENDAR_TODO.md` for comprehensive plan
+
+**Current State**:
+- ✅ `OutlookCalendarClient` class exists (partially implemented)
+- ✅ Microsoft OAuth flow working
+- ✅ Graph API access configured
+- ❌ Calendar tools not registered
+- ❌ No Teams meeting link generation
+- ❌ No calendar sync integration
+
+**Tasks**:
+- [ ] Complete `OutlookCalendarClient` implementation
+  - [ ] Finish `create_event()` method
+  - [ ] Implement `update_event()` method
+  - [ ] Implement `search_events()` method
+  - [ ] Add Teams meeting link generation
+- [ ] Create calendar tools:
+  - [ ] `ListOutlookCalendarEventsTool`
+  - [ ] `CreateOutlookCalendarEventTool`
+  - [ ] `SearchOutlookCalendarEventsTool`
+  - [ ] `UpdateOutlookCalendarEventTool`
+- [ ] Extend `SyncService` for Outlook calendar
+- [ ] Integrate with gap analysis (meeting without follow-up)
+- [ ] Add provider column to database schema
+
+**Deliverables**:
+- ✅ 100% feature parity with Google Calendar
+- ✅ Teams meeting links work
+- ✅ Outlook calendar syncs automatically
+- ✅ Gap analysis includes Outlook meetings
+
+**Business Impact**:
+- Target: 40%+ of users connect Outlook calendar
+- Enterprise adoption: 60%+ of enterprise users use Outlook
+- Multi-provider: 20%+ use both Google and Outlook
+
+**Timeline**: 2-3 weeks (see MICROSOFT_CALENDAR_TODO.md for phases)
+
+---
+
+### Phase J: Scaling & Optimization (🟢 Low - Triggered by Growth)
+
+**Goal**: Production hardening and performance for scale.
+
+**Status**: ❌ Not started - Waiting for scaling needs
+
+**Reference**: See `docs/features/REDIS_SCALING_TODO.md` for comprehensive plan
+
+**Trigger Conditions**:
+- API response times exceed 500ms P95
+- Database costs exceed $200/month
+- 1,000+ concurrent users
+- Performance degradation detected
 
 **Tasks**:
 - [ ] Add Upstash Redis for:
   - [ ] Session management
-  - [ ] Rate limiting
+  - [ ] Rate limiting (tier-based)
   - [ ] Webhook retry queue
-- [ ] Implement rate limiting per user
+  - [ ] Caching (80%+ hit rate target)
+- [ ] Implement caching strategy:
+  - [ ] Cache relationship gaps (5 min TTL)
+  - [ ] Cache tasks (10 min TTL)
+  - [ ] Cache contact avatars (1 hour TTL)
+- [ ] Implement rate limiting per user/tier
 - [ ] Add Sentry for error tracking
 - [ ] Set up logging and monitoring
 - [ ] Performance optimization
-- [ ] Load testing
+- [ ] Load testing with Locust
 
 **Deliverables**:
-- Production-ready infrastructure
-- Monitoring and alerting
-- Scalable architecture
+- ✅ Production-ready infrastructure
+- ✅ Monitoring and alerting
+- ✅ Scalable architecture (10,000+ users)
+- ✅ <100ms API response times (cached endpoints)
+- ✅ 80%+ cache hit rate
+- ✅ 5x reduction in database load
+
+**Business Impact**:
+- Cost savings: 50% reduction in Supabase costs
+- User experience: 3x faster perceived performance
+- Scalability: Support 10,000+ concurrent users
+
+**Timeline**: 3 weeks when triggered (see REDIS_SCALING_TODO.md for phases)
 
 ---
 
 ## Future Enhancements
 
-### Reasoning Bank (Pattern Learning)
+Detailed implementation plans for future features are documented in `docs/features/`:
+
+### 🔴 High Priority Future Features
+
+**WhatsApp Integration** (Reference: `WHATSAPP_INTEGRATION_TODO.md`)
+- **Market**: 6.9 billion WhatsApp users worldwide
+- **Status**: Tool structure ready, awaiting StarChat REST API endpoint
+- **Implementation**: Multi-channel conversation threading, WhatsApp gap analysis
+- **Timeline**: 2-3 weeks once API endpoint available
+- **Business Impact**: Reach 6.9B users, multi-channel intelligence
+
+### 🟡 Medium Priority Future Features
+
+**Desktop Application** (Reference: `DESKTOP_APP_TODO.md`)
+- **Technology**: Tauri (Rust + Vue 3) - 600KB vs 60MB Electron
+- **Features**: Local SQLite database, hybrid cloud sync, system tray, keyboard shortcuts
+- **Target Users**: Power users, privacy-conscious professionals, offline workers
+- **Timeline**: 5-6 weeks
+- **Business Impact**: 15%+ desktop adoption, premium positioning
+
+**Mobile Application** (Reference: `MOBILE_APP_TODO.md`)
+- **Technology**: React Native (iOS + Android)
+- **Features**: Push notifications, biometric auth (Face ID/Touch ID), offline support
+- **Market**: 5.3 billion smartphone users, 90% of internet time on mobile
+- **Timeline**: 6-8 weeks
+- **Business Impact**: 10,000+ downloads in 3 months, App Store presence
+
+**Real-Time Gmail Push** (Reference: `REAL_TIME_PUSH_TODO.md`)
+- **Technology**: Gmail Pub/Sub, WebSocket live updates
+- **Performance**: <5 second latency from email arrival to frontend update
+- **Features**: Instant relationship gaps, zero-latency intelligence
+- **Timeline**: 3 weeks
+- **Business Impact**: 2x increase in daily active users, 40% faster response time
+
+### Enhancement Priorities
+
+**Reasoning Bank (Pattern Learning)**
 - Supabase-based pattern storage
 - Cross-contact learning
 - Strategy recommendations
 - Confidence scoring
+- **Status**: Future consideration
 
-### Vector Search Scaling
+**Vector Search Scaling**
 - Migrate to dedicated vector DB when >5K contacts
-- Options: Pinecone, Weaviate, or Supabase pg_vector
+- Options: Pinecone, Weaviate, or continue with Supabase pg_vector
+- **Trigger**: When semantic search becomes bottleneck
 
-### WhatsApp Integration
-- Pending StarChat REST API endpoint (ApiZapi?)
-- Tool structure already in place
-
-### Real-Time Gmail Push
-- Gmail Pub/Sub notifications
-- Zero-latency email intelligence
-
-### Multi-Assistant Support
+**Multi-Assistant Support**
 - Multiple Zylch assistants per owner
-- Different contexts (work, personal)
+- Different contexts (work, personal, team)
+- **Status**: Future consideration for Team tier
 
 ---
 
