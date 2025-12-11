@@ -249,3 +249,59 @@ class PipedriveClient:
         except Exception as e:
             logger.error(f"Failed to get activities for person {person_id}: {e}")
             raise
+
+    def list_deals(
+        self,
+        status: str = "all_not_deleted",
+        limit: int = 500
+    ) -> List[Dict[str, Any]]:
+        """List all deals from Pipedrive.
+
+        Args:
+            status: Filter by status ('open', 'won', 'lost', 'deleted', 'all_not_deleted')
+            limit: Max deals to fetch (Pipedrive API max per page is 500)
+
+        Returns:
+            List of deal dictionaries
+        """
+        try:
+            all_deals = []
+            start = 0
+
+            while True:
+                result = self._request(
+                    'GET',
+                    'deals',
+                    params={
+                        'status': status,
+                        'start': start,
+                        'limit': min(limit - len(all_deals), 500)
+                    }
+                )
+
+                if not result.get('success'):
+                    break
+
+                deals = result.get('data', [])
+                if not deals:
+                    break
+
+                all_deals.extend(deals)
+
+                # Check if there are more pages
+                pagination = result.get('additional_data', {}).get('pagination', {})
+                if not pagination.get('more_items_in_collection'):
+                    break
+
+                start = pagination.get('next_start', start + len(deals))
+
+                # Respect limit
+                if len(all_deals) >= limit:
+                    break
+
+            logger.info(f"Fetched {len(all_deals)} deals from Pipedrive")
+            return all_deals[:limit]
+
+        except Exception as e:
+            logger.error(f"Failed to list deals: {e}")
+            raise

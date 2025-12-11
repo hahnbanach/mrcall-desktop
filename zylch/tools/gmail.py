@@ -94,8 +94,17 @@ class GmailClient:
                     creds = pickle.load(token)
 
         # If no valid credentials, request new ones
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
+        # Use try-except to handle timezone comparison errors in Google OAuth library
+        try:
+            creds_valid = creds and creds.valid
+            creds_expired = creds.expired if creds else False
+        except TypeError:
+            # Timezone-aware vs naive datetime comparison error
+            creds_valid = False
+            creds_expired = True
+
+        if not creds_valid:
+            if creds and creds_expired and creds.refresh_token:
                 logger.info("Refreshing expired credentials")
                 creds.refresh(Request())
                 # Save refreshed credentials

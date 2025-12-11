@@ -362,8 +362,99 @@ class SyncService:
 
         return results
 
+    async def sync_pipedrive(self) -> Dict[str, Any]:
+        """Sync deals from Pipedrive to memory.
+
+        Fetches all deals from Pipedrive and stores them in the
+        unstructured memory system for AI context.
+
+        Returns:
+            Sync results with deal count
+        """
+        logger.info("[pipedrive_sync] Starting")
+
+        # Check if Pipedrive is connected
+        if not self.supabase or not self.owner_id:
+            logger.info("[pipedrive_sync] Skipping - no Supabase/owner_id")
+            return {
+                "success": True,
+                "skipped": True,
+                "reason": "No storage configured",
+                "deals_synced": 0
+            }
+
+        # Get Pipedrive credentials
+        pipedrive_creds = self.supabase.get_provider_credentials(self.owner_id, 'pipedrive')
+        if not pipedrive_creds or not pipedrive_creds.get('api_token'):
+            logger.info("[pipedrive_sync] Skipping - Pipedrive not connected")
+            return {
+                "success": True,
+                "skipped": True,
+                "reason": "Pipedrive not connected",
+                "deals_synced": 0
+            }
+
+        try:
+            from zylch.tools.pipedrive import PipedriveClient
+            from zylch.memory import ZylchMemory
+
+            # Initialize clients
+            pipedrive = PipedriveClient(api_token=pipedrive_creds['api_token'])
+            memory = ZylchMemory()  # Uses default local config
+
+            # Fetch all deals
+            deals = pipedrive.list_deals(status="all_not_deleted", limit=500)
+            logger.info(f"[pipedrive_sync] Fetched {len(deals)} deals")
+
+            # Store each deal in memory
+            deals_synced = 0
+            for deal in deals:
+                try:
+                    # Build a human-readable summary
+                    person_name = deal.get('person_name') or deal.get('person_id', {}).get('name', 'Unknown')
+                    org_name = deal.get('org_name') or deal.get('org_id', {}).get('name', '')
+                    stage_name = deal.get('stage_id', 'Unknown stage')
+                    value = deal.get('value', 0)
+                    currency = deal.get('currency', 'USD')
+                    status = deal.get('status', 'open')
+
+                    # Create pattern (human-readable summary)
+                    pattern = f"Deal: {deal.get('title', 'Untitled')} | {person_name}"
+                    if org_name:
+                        pattern += f" ({org_name})"
+                    pattern += f" | Value: {value} {currency} | Status: {status}"
+
+                    # Store in memory
+                    memory.store_memory(
+                        namespace="pipedrive:deals",
+                        category="crm",
+                        context=f"Pipedrive deal ID {deal.get('id')}: {deal.get('title', 'Untitled')}",
+                        pattern=pattern,
+                        examples=[f"pipedrive_deal_{deal.get('id')}"],
+                        confidence=1.0
+                    )
+                    deals_synced += 1
+
+                except Exception as e:
+                    logger.warning(f"[pipedrive_sync] Failed to store deal {deal.get('id')}: {e}")
+
+            logger.info(f"[pipedrive_sync] Complete: {deals_synced} deals synced to memory")
+            return {
+                "success": True,
+                "deals_synced": deals_synced,
+                "total_deals": len(deals)
+            }
+
+        except Exception as e:
+            logger.error(f"[pipedrive_sync] Failed: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "deals_synced": 0
+            }
+
     async def run_full_sync(self, days_back: Optional[int] = None, skip_gap_analysis: bool = False) -> Dict[str, Any]:
-        """Run full sync workflow: emails + calendar + gap analysis + Von Neumann pipeline.
+        """Run full sync workflow: emails + calendar + Pipedrive + gap analysis.
 
         Args:
             days_back: Optional number of days to sync emails (also used for gap analysis window)
@@ -379,6 +470,7 @@ class SyncService:
             "memory_agent": {"success": False, "error": "Not started"},
             "crm_agent": {"success": False, "error": "Not started"},
             "calendar_sync": {"success": False, "error": "Not started"},
+            "pipedrive_sync": {"success": False, "error": "Not started"},
             "gap_analysis": {"success": False, "error": "Not started"},
             "success": True,
             "errors": []
@@ -402,17 +494,14 @@ class SyncService:
 
         # Memory Agent phase - Process unprocessed emails into structured memory
         try:
-            from zylch.agents.memory_worker import MemoryWorker
-            from zylch.storage.memory import ZylchMemory
+            from zylch.workers.memory_worker import MemoryWorker
+            from zylch.memory import ZylchMemory
 
             logger.info("[memory_agent] Starting email processing")
             start_time = datetime.now()
 
             # Initialize memory system
-            memory = ZylchMemory(
-                owner_id=self.owner_id,
-                supabase_storage=self.supabase
-            )
+            memory = ZylchMemory()  # Uses default local config
 
             # Get unprocessed emails
             unprocessed_emails = memory.get_unprocessed_emails(limit=100)
@@ -450,7 +539,7 @@ class SyncService:
 
         # CRM Agent phase - Compute avatars for affected contacts
         try:
-            from zylch.agents.crm_worker import CRMWorker
+            from zylch.workers.crm_worker import CRMWorker
 
             logger.info("[crm_agent] Starting avatar computation")
             start_time = datetime.now()
@@ -523,6 +612,21 @@ class SyncService:
             }
             results["errors"].append(f"Calendar sync: {str(e)}")
             results["success"] = False
+
+        # Sync Pipedrive (if connected)
+        try:
+            pipedrive_result = await self.sync_pipedrive()
+            results["pipedrive_sync"] = pipedrive_result
+            if not pipedrive_result.get("success"):
+                results["errors"].append(f"Pipedrive sync: {pipedrive_result.get('error', 'Unknown error')}")
+        except Exception as e:
+            logger.error(f"Pipedrive sync failed: {e}")
+            results["pipedrive_sync"] = {
+                "success": False,
+                "error": str(e)
+            }
+            results["errors"].append(f"Pipedrive sync: {str(e)}")
+            # Don't fail entire sync if Pipedrive fails
 
         # Run gap analysis (unless skipped)
         if skip_gap_analysis:

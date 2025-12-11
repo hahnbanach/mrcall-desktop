@@ -30,6 +30,7 @@ class ChatService:
         self.agent = None  # Lazy initialization
         self._initialized = False
         self.storage = SupabaseStorage.get_instance()
+        self._command_matcher = None  # Lazy init for semantic command matching
 
     async def _initialize_agent(self, owner_id: str = None):
         """Initialize the agent with all tools (lazy initialization).
@@ -84,6 +85,31 @@ class ChatService:
         self._initialized = True
         logger.info(f"Agent initialized with {len(tools)} tools")
 
+    def _get_command_matcher(self):
+        """Lazy initialize semantic command matcher."""
+        if self._command_matcher is None:
+            from zylch.services.command_matcher import SemanticCommandMatcher
+            self._command_matcher = SemanticCommandMatcher()
+        return self._command_matcher
+
+    def _match_semantic_command(self, user_message: str) -> Optional[str]:
+        """Match user message to command semantically.
+
+        Uses sentence embeddings to find if the user's natural language
+        matches any registered command triggers.
+
+        Args:
+            user_message: The user's message
+
+        Returns:
+            Matched command (e.g., "/sync") or None if no match
+        """
+        # Skip if already a slash command
+        if user_message.strip().startswith('/'):
+            return None
+        matcher = self._get_command_matcher()
+        return matcher.match(user_message)
+
     async def process_message(
         self,
         user_message: str,
@@ -130,6 +156,12 @@ class ChatService:
             logger.warning(f"Failed to check notifications: {e}")
 
         try:
+            # SEMANTIC COMMAND MATCHING - Check if natural language matches a command
+            matched_command = self._match_semantic_command(user_message)
+            if matched_command:
+                logger.info(f"Semantic match: '{user_message}' -> {matched_command}")
+                user_message = matched_command  # Rewrite as slash command
+
             # INTERCEPT SLASH COMMANDS - NEVER SEND TO ANTHROPIC
             if user_message.strip().startswith('/'):
                 from zylch.services.command_handlers import COMMAND_HANDLERS, COMMAND_HELP
