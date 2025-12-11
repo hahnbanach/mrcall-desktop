@@ -1,4 +1,15 @@
-"""Configuration for tool factory."""
+"""Configuration for tool factory.
+
+BYOK (Bring Your Own Key) Model:
+- Anthropic API key: Per-user via /connect anthropic (Supabase)
+- Pipedrive token: Per-user via /connect pipedrive (Supabase)
+- SendGrid key: Per-user via /connect sendgrid (Supabase)
+- Vonage credentials: Per-user via /connect vonage (Supabase)
+- Microsoft Graph tokens: Per-user via OAuth (Supabase oauth_tokens)
+- Google OAuth: Per-user via OAuth (Supabase oauth_tokens)
+
+These credentials are NOT read from env vars - they must be fetched from Supabase.
+"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,27 +24,25 @@ class ToolConfig:
 
     This dataclass contains all the configuration needed to initialize
     external services and tools, extracted from the global settings.
+
+    BYOK credentials (anthropic_api_key, pipedrive_api_token, sendgrid_api_key,
+    graph_token, graph_refresh_token) are NOT populated from settings.
+    Use from_settings_with_owner() to fetch them from Supabase.
     """
 
-    # Anthropic
-    anthropic_api_key: str
+    # ============================================
+    # Required fields (no defaults) - must come first
+    # ============================================
+
+    # Model configuration (from settings - shared)
     default_model: str
     classification_model: str
     executive_model: str
 
     # Google OAuth (Gmail, Calendar)
     google_credentials_path: str
-    google_token_path: str
     gmail_accounts: List[str]
     calendar_id: str
-
-    # StarChat (for contact management)
-    starchat_api_url: str
-    starchat_api_key: str
-    starchat_username: str
-    starchat_password: str
-    starchat_business_id: str
-    starchat_auth_method: str
 
     # Cache
     cache_dir: str
@@ -47,21 +56,35 @@ class ToolConfig:
     email_archive_batch_size: int
     email_archive_enable_fts: bool
 
-    # Pipedrive CRM (optional)
-    pipedrive_api_token: Optional[str] = ""
+    # ============================================
+    # Optional fields (with defaults) - must come after required
+    # ============================================
+
+    # Google token path (local fallback for dev, Supabase primary in prod)
+    google_token_path: str = "credentials/"
+
+    # BYOK Credentials (fetched from Supabase, not env vars)
+    # Anthropic (BYOK via /connect anthropic)
+    anthropic_api_key: str = ""
+
+    # Pipedrive CRM (BYOK via /connect pipedrive)
+    pipedrive_api_token: str = ""
     pipedrive_enabled: bool = False
 
-    # SendGrid (optional)
-    sendgrid_api_key: Optional[str] = ""
-    sendgrid_from_email: Optional[str] = ""
+    # SendGrid (BYOK via /connect sendgrid)
+    sendgrid_api_key: str = ""
+    sendgrid_from_email: str = ""
 
-    # Vonage SMS (optional)
-    vonage_api_key: Optional[str] = ""
-    vonage_api_secret: Optional[str] = ""
-    vonage_from_number: Optional[str] = ""
+    # Microsoft Graph API (BYOK via OAuth)
+    auth_provider: str = "google"
+    graph_token: str = ""
+    graph_refresh_token: str = ""
+
+    # Vonage SMS: credentials stored per-user in Supabase via /connect vonage
+    # (no fields here - fetched directly in sms_tools.py)
 
     # Email Style
-    email_style_prompt: Optional[str] = ""
+    email_style_prompt: str = ""
 
     # My Email Addresses
     my_emails: str = ""
@@ -75,38 +98,27 @@ class ToolConfig:
     user_email: str = ""
     user_display_name: str = ""
 
-    # Microsoft Graph API (for Outlook)
-    auth_provider: str = "google.com"
-    graph_token: str = ""
-    graph_refresh_token: str = ""
-
     @classmethod
     def from_settings(cls) -> 'ToolConfig':
-        """Create ToolConfig from global settings.
+        """Create ToolConfig from global settings (without BYOK credentials).
+
+        BYOK credentials (anthropic_api_key, pipedrive_api_token, etc.) are
+        left empty - use from_settings_with_owner() to fetch them from Supabase.
 
         Returns:
             ToolConfig instance with values from global settings
         """
         return cls(
-            # Anthropic
-            anthropic_api_key=settings.anthropic_api_key,
+            # Model configuration (shared)
             default_model=settings.default_model,
             classification_model=settings.classification_model,
             executive_model=settings.executive_model,
 
-            # Google OAuth
+            # Google OAuth (credentials path, tokens from Supabase or local fallback)
             google_credentials_path=settings.google_credentials_path,
-            google_token_path=settings.google_token_path,
+            google_token_path=getattr(settings, 'google_token_path', 'credentials/'),
             gmail_accounts=settings.gmail_accounts,
             calendar_id=settings.calendar_id,
-
-            # StarChat
-            starchat_api_url=settings.starchat_api_url,
-            starchat_api_key=settings.starchat_api_key,
-            starchat_username=settings.starchat_username,
-            starchat_password=settings.starchat_password,
-            starchat_business_id=settings.starchat_business_id,
-            starchat_auth_method=settings.starchat_auth_method,
 
             # Cache
             cache_dir=settings.cache_dir,
@@ -119,19 +131,6 @@ class ToolConfig:
             email_archive_initial_months=settings.email_archive_initial_months,
             email_archive_batch_size=settings.email_archive_batch_size,
             email_archive_enable_fts=settings.email_archive_enable_fts,
-
-            # Pipedrive
-            pipedrive_api_token=settings.pipedrive_api_token,
-            pipedrive_enabled=settings.pipedrive_enabled,
-
-            # SendGrid
-            sendgrid_api_key=settings.sendgrid_api_key,
-            sendgrid_from_email=settings.sendgrid_from_email,
-
-            # Vonage SMS
-            vonage_api_key=settings.vonage_api_key,
-            vonage_api_secret=settings.vonage_api_secret,
-            vonage_from_number=settings.vonage_from_number,
 
             # Email Style
             email_style_prompt=settings.email_style_prompt,
@@ -148,11 +147,65 @@ class ToolConfig:
             user_email=settings.user_email,
             user_display_name=settings.user_display_name,
 
-            # Microsoft Graph API (for Outlook)
-            auth_provider=settings.auth_provider,
-            graph_token=settings.graph_token,
-            graph_refresh_token=settings.graph_refresh_token,
+            # BYOK credentials left empty - use from_settings_with_owner()
+            # anthropic_api_key=""  (default)
+            # pipedrive_api_token=""  (default)
+            # sendgrid_api_key=""  (default)
+            # graph_token=""  (default)
+            # graph_refresh_token=""  (default)
         )
+
+    @classmethod
+    def from_settings_with_owner(cls, owner_id: str, storage=None) -> 'ToolConfig':
+        """Create ToolConfig from settings AND fetch BYOK credentials from Supabase.
+
+        This method fetches per-user credentials (Anthropic, Pipedrive, SendGrid,
+        MS Graph) from Supabase and populates them in the config.
+
+        Args:
+            owner_id: Firebase UID for the user
+            storage: Optional SupabaseStorage instance (creates new if not provided)
+
+        Returns:
+            ToolConfig instance with BYOK credentials populated
+        """
+        # Start with base settings
+        config = cls.from_settings()
+        config.owner_id = owner_id
+
+        # Get storage instance
+        if storage is None:
+            from ..storage.supabase_client import SupabaseStorage
+            storage = SupabaseStorage.get_instance()
+
+        # Fetch BYOK credentials from Supabase
+        # Anthropic
+        anthropic_key = storage.get_anthropic_key(owner_id)
+        if anthropic_key:
+            config.anthropic_api_key = anthropic_key
+
+        # Pipedrive
+        pipedrive_token = storage.get_pipedrive_key(owner_id)
+        if pipedrive_token:
+            config.pipedrive_api_token = pipedrive_token
+            config.pipedrive_enabled = True
+
+        # SendGrid
+        sendgrid_key = storage.get_sendgrid_key(owner_id)
+        if sendgrid_key:
+            config.sendgrid_api_key = sendgrid_key
+        sendgrid_from = storage.get_sendgrid_from_email(owner_id)
+        if sendgrid_from:
+            config.sendgrid_from_email = sendgrid_from
+
+        # Microsoft Graph tokens
+        ms_token = storage.get_oauth_token(owner_id, 'microsoft')
+        if ms_token:
+            config.auth_provider = 'microsoft'
+            config.graph_token = ms_token.get('access_token', '')
+            config.graph_refresh_token = ms_token.get('refresh_token', '')
+
+        return config
 
     def get_cache_path(self) -> Path:
         """Get cache directory as Path object."""

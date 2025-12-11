@@ -28,8 +28,9 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 SUPABASE_DB_PASSWORD=your_db_password
 
-# Anthropic
-ANTHROPIC_API_KEY=sk-ant-...
+# Anthropic - BYOK (users provide via /connect anthropic)
+# NOTE: ANTHROPIC_API_KEY is NOT in system .env
+# Each user provides their own key, stored in Supabase
 
 # Firebase (for auth)
 FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}

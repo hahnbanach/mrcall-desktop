@@ -24,6 +24,7 @@ Example:
 import argparse
 import asyncio
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -255,7 +256,11 @@ def main():
         # Run LLM benchmark if requested
         llm_metrics = None
         if args.include_llm:
-            anthropic_client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+            anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+            if not anthropic_api_key:
+                logger.error("ANTHROPIC_API_KEY env var required for --include-llm benchmark")
+                sys.exit(1)
+            anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key)
             llm_metrics = asyncio.run(
                 benchmark_llm_computation(storage, anthropic_client, args.owner_id, args.num_contacts)
             )

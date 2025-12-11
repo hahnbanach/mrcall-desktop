@@ -157,7 +157,7 @@ Run `/sync [days]` to sync more data."""
   Run /connect {provider} to connect"""
 
         # Create appropriate email client based on provider
-        if provider == "microsoft.com":
+        if provider == "microsoft":
             # Microsoft Outlook client
             graph_token_data = get_graph_token(owner_id)
             if not graph_token_data:
@@ -327,7 +327,7 @@ Outlook archiving will be added in a future update."""
     try:
         # Check provider - only Gmail is supported for archiving
         provider = get_provider(owner_id)
-        if provider == 'microsoft.com':
+        if provider == 'microsoft':
             return """**⏭️ Email Archive**
 
 Email archiving is currently only supported for Gmail accounts.

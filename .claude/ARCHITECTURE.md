@@ -16,27 +16,25 @@
 
 **The backend uses Supabase for ALL data storage. NO local filesystem.**
 
-| Data | Storage | Table |
-|------|---------|-------|
-| OAuth tokens (Google, Microsoft, Anthropic) | Supabase | `oauth_tokens` (encrypted) |
-| Email analysis | Supabase | `thread_analysis` |
-| Calendar events | Supabase | `calendar_events` |
-| Sync state | Supabase | `sync_state` |
-| Triggers | Supabase | `triggers`, `trigger_events` |
-| Memory/Avatars | Supabase | pg_vector tables |
+| Data                                                | Storage | Table |
+|-----------------------------------------------------|---------|-------|
+| OAuth tokens (Google, Microsoft, Anthropic, MrCall) | Supabase | `oauth_tokens` (encrypted) |
+| Email analysis                                      | Supabase | `thread_analysis` |
+| Calendar events                                     | Supabase | `calendar_events` |
+| Sync state                                          | Supabase | `sync_state` |
+| Triggers                                            | Supabase | `triggers`, `trigger_events` |
+| Memory/Avatars                                      | Supabase | pg_vector tables |
 
 **NEVER use local filesystem for:**
 - Token storage (no pickle files)
-- Credentials (no `credentials/` directory)
-- Cache (no `cache/` directory)
-
-The `credentials/` and `cache/` directories are **LEGACY and UNUSED**.
+- Credentials
+- Cache
 
 ---
 
 ## System Overview
 
-Zylch is an AI-powered email assistant that provides relationship intelligence, task management, and automated email workflows through multiple interfaces (CLI, HTTP API).
+Zylch is an AI-powered email assistant that provides relationship intelligence, task management, and automated communication workflows (email, whatsapp, phone, slack etc) through multiple interfaces (CLI, HTTP API).
 
 ## Core Components
 
@@ -57,7 +55,7 @@ Modular tools for agent capabilities:
 - **Contacts**: StarChat/MrCall integration
 - **SMS**: Vonage SMS sending (requires `/connect vonage` in CLI)
 
-**Key Pattern**: Tools are stateless classes with `execute()` method
+**Key Pattern**: Tools are identical for all users. Credentials are loaded per-user at execution time from Supabase. If a user hasn't connected a provider, the tool returns a helpful error (e.g., "Vonage not connected. Please use /connect vonage").
 
 ### 3. Two-Tier Email System (Cloud-Based)
 
@@ -367,6 +365,33 @@ When desktop/mobile apps are developed, we may explore local-first storage:
 
 **Unified Credentials Architecture** (December 2025):
 
+#### ⚠️ CRITICAL: Credential Storage Policy
+
+**1. NO FILESYSTEM FALLBACK**
+- All credentials are stored in Supabase **only**
+- The filesystem fallback has been **completely removed** from `token_storage.py`
+- If Supabase is not configured, the system raises `ValueError` (no silent degradation)
+- This applies to: OAuth tokens, API keys, all provider credentials
+
+**2. BYOK (Bring Your Own Key) ONLY**
+- User-specific API credentials are **NOT** loaded from system `.env`
+- Users must connect each service via `/connect <provider>` command
+- Credentials stored per-user in Supabase with Fernet encryption
+- **BYOK providers**: Anthropic, Pipedrive, Vonage, future integrations
+
+**3. System vs User Credentials**
+| Credential Type | Storage Location | Example |
+|-----------------|------------------|---------|
+| System config | `.env` / Railway | `SUPABASE_URL`, `FIREBASE_*`, `ENCRYPTION_KEY` |
+| User credentials | Supabase `oauth_tokens` | Anthropic API key, Vonage API key/secret |
+| OAuth tokens | Supabase `oauth_tokens` | Google OAuth, Microsoft Graph tokens |
+
+**Why BYOK?**
+- Multi-tenant security: Each user's data isolated
+- Cost transparency: Users pay for their own API usage
+- Privacy: No shared API keys across users
+- Compliance: Users control their own credentials
+
 All credentials are now stored in a single JSONB column for flexibility and ease of adding new providers.
 
 | Column | Purpose | Encrypted? |
@@ -452,6 +477,8 @@ if conn.get('credentials'):
 ### Configuration
 - **Environment**: Railway env vars (backend), Vercel env vars (frontend)
 - **Defaults**: `zylch/config.py` (Pydantic settings)
+- **System .env only contains**: Supabase config, Firebase config, Google OAuth client, encryption key
+- **NOT in .env**: User credentials (Anthropic, Pipedrive, Vonage) - these are BYOK via `/connect`
 
 ### Firebase Service Account
 
@@ -474,15 +501,18 @@ Backend decodes automatically on startup (`zylch/api/firebase_auth.py`).
 - **Calendar**: Events, Meet links (OAuth 2.0)
 - **Auth**: Shared credentials for Gmail + Calendar
 
-### Anthropic Claude
+### Anthropic Claude (BYOK)
+- **Credential Storage**: User provides their own API key via `/connect anthropic`
+- **No system .env fallback**: `ANTHROPIC_API_KEY` removed from `.env.example`
 - **Models**:
   - Haiku: Fast classification (~$0.92/1K emails)
   - Sonnet: Default analysis (~$7/1K emails)
   - Opus: Executive communications (high cost)
 - **Features**: Tool use, prompt caching
 
-### Optional Integrations
-- **Pipedrive**: CRM sync
+### Optional Integrations (All BYOK)
+- **Pipedrive**: CRM sync (user provides API token via `/connect pipedrive`)
+- **Vonage**: SMS sending (user provides API key/secret via `/connect vonage`)
 - **StarChat/MrCall**: Contact management, WhatsApp integration (pending API endpoint)
 - **SendGrid**: Bulk email (not currently used)
 
@@ -679,19 +709,28 @@ def refresh_firebase_token(self) -> bool:
 
 ### Sensitive Data Encryption
 
-**Anthropic API Keys (BYOK)**:
-- **Storage**: Supabase `oauth_tokens` table with `provider='anthropic'`
+**All User Credentials (BYOK)**:
+- **Storage**: Supabase `oauth_tokens` table in unified `credentials` JSONB column
 - **Encryption**: Fernet (AES-128-CBC + HMAC) via `zylch/utils/encryption.py`
 - **Key**: `ENCRYPTION_KEY` environment variable (set in Railway)
-- **Flow**:
-  ```
-  User enters key → encrypt(api_key) → Supabase (encrypted blob)
-  API call needed → get_anthropic_key() → decrypt() → use with Claude
-  ```
+- **No fallback**: If user hasn't connected a provider, tools return helpful error (not system default)
+- **Applies to**: Anthropic API key, Vonage credentials, Pipedrive token, OAuth tokens
+
+**Flow**:
+```
+User runs /connect <provider>
+  → User enters credentials
+  → encrypt(credentials_json) → Supabase (encrypted blob)
+
+Tool execution
+  → get_provider_credentials(owner_id, provider)
+  → decrypt() → use with provider API
+  → If not found: "Provider not connected. Use /connect <provider>"
+```
 
 **OAuth Tokens (Google/Microsoft)**:
-- **Storage**: Supabase `oauth_tokens` table
-- **Encryption**: Same Fernet encryption for `google_token_data`, `graph_access_token`, `graph_refresh_token`
+- **Storage**: Supabase `oauth_tokens` table in `credentials` JSONB
+- **Encryption**: Same Fernet encryption (whole JSONB encrypted)
 - **Scopes stored**: Plaintext (not sensitive)
 
 **Encryption Implementation** (`zylch/utils/encryption.py`):
@@ -898,22 +937,18 @@ That's it! No code changes, no migrations, no deployment needed. The universal A
 - Encrypt sensitive fields
 - Store in unified JSONB format
 
-#### Migration Strategy (Backward Compatibility)
+#### Migration Strategy (Pre-Alpha)
 
-**Phase 1-3**: Dual-write and dual-read
-- New credentials saved to BOTH `credentials` JSONB AND legacy columns
-- Read tries `credentials` first, falls back to legacy columns
-- No breaking changes
+**Current Status** (December 2025):
+- ✅ Legacy columns removed (no backward compatibility needed - pre-alpha)
+- ✅ All credentials use unified `credentials` JSONB column only
+- ✅ No dual-write/dual-read code
+- ✅ Filesystem fallback removed from `token_storage.py`
 
-**Phase 4**: Migration script (`scripts/migrate_to_unified_credentials.py`)
-- Converts existing legacy columns to unified JSONB
-- Validates decryption before migrating
-- Preserves legacy columns for safety
-
-**Phase 5**: Drop legacy columns (2-4 weeks after Phase 4)
-- Remove dual-write/dual-read code
-- Drop unused columns: `google_token_data`, `graph_access_token`, etc.
-- Clean schema
+**Why no migration?**
+- Pre-alpha development (see warning at top of document)
+- No production users, no data to migrate
+- Clean slate approach: just use the new unified storage
 
 #### Key Files
 

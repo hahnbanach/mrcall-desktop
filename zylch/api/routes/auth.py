@@ -35,7 +35,7 @@ class LoginRequest(BaseModel):
     )
     graph_token: Optional[str] = Field(
         None,
-        description="Microsoft Graph API access token (for microsoft.com provider)"
+        description="Microsoft Graph API access token (for microsoft provider)"
     )
 
 
@@ -47,7 +47,7 @@ class LoginResponse(BaseModel):
     owner_id: str = Field(description="Firebase UID / owner_id")
     email: Optional[str] = Field(None, description="User email from Firebase")
     display_name: Optional[str] = Field(None, description="User display name from Firebase")
-    provider: Optional[str] = Field(None, description="Auth provider (google.com, microsoft.com)")
+    provider: Optional[str] = Field(None, description="Auth provider (google, microsoft)")
     expires_at: str = Field(description="ISO 8601 timestamp when token expires")
 
 
@@ -89,7 +89,7 @@ async def login(request: LoginRequest):
     - owner_id: Firebase UID for multi-tenant isolation
     - email: User email from Firebase auth
     - display_name: User display name
-    - provider: Auth provider (google.com, microsoft.com)
+    - provider: Auth provider (google, microsoft)
     - expires_at: Token expiration timestamp
 
     **No authentication required** - this endpoint creates the session
@@ -107,8 +107,9 @@ async def login(request: LoginRequest):
             email = decoded_token.get('email')
             display_name = decoded_token.get('name')
 
-            # Extract provider from firebase data
-            provider_data = decoded_token.get('firebase', {}).get('sign_in_provider', 'google.com')
+            # Extract provider from firebase data and normalize (google.com -> google)
+            raw_provider = decoded_token.get('firebase', {}).get('sign_in_provider', 'google.com')
+            provider_data = raw_provider.replace('.com', '') if raw_provider else 'google'
 
             # Calculate expiration (Firebase tokens expire in 1 hour)
             expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
@@ -123,7 +124,7 @@ async def login(request: LoginRequest):
             save_email(owner_id, email)
 
             # Save Microsoft Graph token if provided
-            if request.graph_token and provider_data == "microsoft.com":
+            if request.graph_token and provider_data == "microsoft":
                 save_graph_token(owner_id, request.graph_token, expires_at.isoformat())
                 logger.info(f"Saved Microsoft Graph token for owner {owner_id}")
             else:
@@ -221,10 +222,10 @@ async def microsoft_login(request: MicrosoftLoginRequest):
         uid = get_or_create_user(email, display_name)
 
         # Create Firebase custom token
-        firebase_token = create_custom_token(uid, {"provider": "microsoft.com"})
+        firebase_token = create_custom_token(uid, {"provider": "microsoft"})
 
         # Save Microsoft Graph token for future API calls
-        save_provider(uid, "microsoft.com")
+        save_provider(uid, "microsoft")
         save_email(uid, email)
         save_graph_token(uid, request.graph_token)
 
@@ -1093,6 +1094,9 @@ async def google_oauth_callback(
         if not access_token:
             return HTMLResponse(content=_oauth_error_page("No access token received from Google"))
 
+        # Calculate token expiry time (critical for refresh logic to work)
+        token_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+
         # Create Google Credentials object
         from google.oauth2.credentials import Credentials
 
@@ -1102,7 +1106,8 @@ async def google_oauth_callback(
             token_uri='https://oauth2.googleapis.com/token',
             client_id=settings.google_client_id,
             client_secret=settings.google_client_secret,
-            scopes=GOOGLE_SCOPES
+            scopes=GOOGLE_SCOPES,
+            expiry=token_expiry  # Required for creds.expired to work properly
         )
 
         # Save credentials using token_storage (saves to Supabase if configured)

@@ -14,6 +14,7 @@ Or add to crontab:
     0 5 * * * cd /path/to/zylch && python morning_sync.py >> logs/morning_sync.log 2>&1
 """
 
+import os
 import sys
 import json
 import logging
@@ -24,6 +25,13 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent))
 
 from zylch.config import settings
+
+# Get Anthropic API key from environment (local dev scripts)
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+if not ANTHROPIC_API_KEY:
+    print("❌ ANTHROPIC_API_KEY environment variable required for morning_sync.py")
+    print("   Set it in your .env file or export ANTHROPIC_API_KEY=your-key")
+    sys.exit(1)
 from zylch.tools.gmail import GmailClient
 from zylch.tools.gcalendar import GoogleCalendarClient
 from zylch.tools.email_archive import EmailArchiveManager
@@ -77,7 +85,7 @@ def main():
         logger.info("\n🧠 STEP 2: Building intelligence cache...")
         email_sync = EmailSyncManager(
             email_archive=archive,  # CHANGED: pass archive instead of gmail
-            anthropic_api_key=settings.anthropic_api_key
+            anthropic_api_key=ANTHROPIC_API_KEY
         )
 
         email_results = email_sync.sync_emails()
@@ -103,7 +111,7 @@ def main():
 
         calendar_sync = CalendarSyncManager(
             calendar_client=calendar,
-            anthropic_api_key=settings.anthropic_api_key
+            anthropic_api_key=ANTHROPIC_API_KEY
         )
 
         calendar_results = calendar_sync.sync_events()
@@ -129,7 +137,7 @@ def main():
         memory = ZylchMemory(config=memory_config)
 
         analyzer = RelationshipAnalyzer(
-            anthropic_api_key=settings.anthropic_api_key,
+            anthropic_api_key=ANTHROPIC_API_KEY,
             memory_bank=memory
         )
 

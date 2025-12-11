@@ -272,23 +272,23 @@ curl "http://localhost:8000/api/connections/providers/google"
 
 ## API Key Configuration
 
-### Pipedrive CRM
+### Pipedrive CRM (BYOK)
 
-**Environment Variables**:
+**Credentials are NOT stored in .env** - each user provides their own via `/connect pipedrive`.
+
+**Via CLI:**
 ```bash
-PIPEDRIVE_API_TOKEN=your_api_token_here
-PIPEDRIVE_ENABLED=true
+> /connect pipedrive
+# Enter your Pipedrive API token when prompted
+# Token is stored encrypted in Supabase per-user
 ```
 
-**Or store in database** (recommended for multi-tenant):
+**Via API:**
 ```python
-from zylch.api.token_storage import save_api_key_credentials
-
-save_api_key_credentials(
-    owner_id="user123",
-    provider_key="pipedrive",
-    credentials={"api_token": "your_api_token_here"}
-)
+# POST /api/connections/provider/pipedrive/credentials
+{
+    "credentials": {"api_token": "your_api_token_here"}
+}
 ```
 
 ### MrCall/StarChat
@@ -305,13 +305,27 @@ STARCHAT_BUSINESS_ID=3002475397
 > /mrcall 3002475397
 ```
 
-### Vonage SMS
+### Vonage SMS (BYOK)
 
-**Environment Variables**:
+**Credentials are NOT stored in .env** - each user provides their own via `/connect vonage`.
+
+**Via CLI:**
 ```bash
-VONAGE_API_KEY=your_api_key
-VONAGE_API_SECRET=your_api_secret
-VONAGE_FROM_NUMBER=+15551234567
+> /connect vonage
+# Enter your Vonage API key, secret, and from number when prompted
+# Credentials are stored encrypted in Supabase per-user
+```
+
+**Via API:**
+```python
+# POST /api/connections/provider/vonage/credentials
+{
+    "credentials": {
+        "api_key": "your_api_key",
+        "api_secret": "your_api_secret",
+        "from_number": "+15551234567"
+    }
+}
 ```
 
 ---

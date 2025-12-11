@@ -126,14 +126,14 @@ class SyncService:
             email_client: Email client (GmailClient or OutlookClient) - REQUIRED for sync
             calendar_client: Optional Calendar client (will create if not provided)
             email_archive: Optional EmailArchiveManager (will create if not provided)
-            anthropic_api_key: Anthropic API key (uses settings if not provided)
+            anthropic_api_key: Anthropic API key (BYOK - from Supabase, required)
             owner_id: Firebase UID for multi-tenant Supabase storage
             supabase_storage: SupabaseStorage instance for cloud storage
         """
         self.email_client = email_client
         self.calendar_client = calendar_client
         self.email_archive = email_archive
-        self.anthropic_api_key = anthropic_api_key or settings.anthropic_api_key
+        self.anthropic_api_key = anthropic_api_key  # BYOK - no env var fallback
 
         # Multi-tenant Supabase support
         self.owner_id = owner_id

@@ -9,8 +9,19 @@ from zylch.config import settings
 class IntentRouter:
     """Routes user input to appropriate skill(s)."""
 
-    def __init__(self, skill_registry):
-        self.client = Anthropic(api_key=settings.anthropic_api_key)
+    def __init__(self, skill_registry, anthropic_api_key: str = ""):
+        """Initialize IntentRouter.
+
+        Args:
+            skill_registry: Registry of available skills
+            anthropic_api_key: Anthropic API key (BYOK - from Supabase)
+        """
+        if not anthropic_api_key:
+            raise ValueError(
+                "Anthropic API key required for IntentRouter. "
+                "Please run `/connect anthropic` to configure your API key."
+            )
+        self.client = Anthropic(api_key=anthropic_api_key)
         self.skill_registry = skill_registry
         self.router_model = settings.skill_router_model  # From config!
 
