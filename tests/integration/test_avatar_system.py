@@ -7,6 +7,7 @@ Tests the complete avatar workflow:
 4. get_tasks tool uses fast avatar queries
 """
 
+import os
 import pytest
 import asyncio
 from datetime import datetime, timezone
@@ -33,8 +34,11 @@ def storage():
 
 @pytest.fixture
 def anthropic_client():
-    """Get Anthropic client."""
-    return anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    """Get Anthropic client from env var (integration tests require ANTHROPIC_API_KEY)."""
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        pytest.skip("ANTHROPIC_API_KEY env var required for integration tests")
+    return anthropic.Anthropic(api_key=api_key)
 
 
 @pytest.fixture
@@ -265,8 +269,7 @@ async def test_avatar_worker_process_queue(storage, anthropic_client, test_owner
     Note: This test requires Anthropic API key and makes real API calls.
     Skip if API key is not available or to save costs.
     """
-    if not settings.anthropic_api_key:
-        pytest.skip("Anthropic API key not configured")
+    # API key check handled by anthropic_client fixture
 
     # Create worker
     worker = AvatarComputeWorker(storage, anthropic_client, batch_size=1)

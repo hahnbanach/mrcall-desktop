@@ -78,11 +78,6 @@ def get_user_connections(supabase_client, owner_id: str) -> List[Dict[str, Any]]
             .eq('owner_id', owner_id)\
             .execute()
 
-        logger.info(f"get_user_connections for owner {owner_id}: found {len(result.data) if result.data else 0} rows")
-
-        if result.data:
-            logger.info(f"All providers found in oauth_tokens: {[r.get('provider') for r in result.data]}")
-
         if not result.data:
             return []
 
@@ -92,41 +87,23 @@ def get_user_connections(supabase_client, owner_id: str) -> List[Dict[str, Any]]
             provider = conn['provider']
             has_credentials = False
 
-            logger.info(f"Checking connection for provider {provider}")
-            creds_value = conn.get('credentials')
-            logger.info(f"  credentials field present: {creds_value is not None}")
-            if creds_value:
-                logger.info(f"  credentials length: {len(creds_value)}")
-            else:
-                logger.info(f"  credentials is None/empty")
-
             # Check unified credentials JSONB
             if conn.get('credentials'):
                 try:
                     from zylch.utils.encryption import decrypt
                     import json
 
-                    logger.info(f"  Decrypting credentials...")
                     decrypted_json = decrypt(conn['credentials'])
-                    logger.info(f"  Decrypted length: {len(decrypted_json)}")
-                    logger.info(f"  Parsing JSON...")
                     all_creds = json.loads(decrypted_json)
-                    logger.info(f"  Parsed creds keys: {list(all_creds.keys())}")
-
-                    # Check if provider exists in credentials
                     has_credentials = bool(all_creds.get(provider))
-                    logger.info(f"  Provider {provider} in creds: {has_credentials}")
                 except Exception as e:
                     logger.error(f"Failed to decrypt credentials for {provider}: {e}", exc_info=True)
                     has_credentials = False
 
             if has_credentials:
-                logger.info(f"  ✅ Provider {provider} has valid credentials")
                 # Remove credential fields from response (security)
                 conn.pop('credentials', None)
                 valid_connections.append(conn)
-            else:
-                logger.info(f"  ❌ Provider {provider} has no valid credentials")
 
         return valid_connections
 
@@ -169,17 +146,11 @@ def get_connection_status(
             for conn in user_connections
         }
 
-        logger.info(f"Connected lookup keys: {list(connected_lookup.keys())}")
-
         # Combine data
         connections = []
         for provider in available:
             provider_key = provider['provider_key']
-            logger.info(f"Checking provider_key: {provider_key}")
-
-            # Check if user has this connection
             user_conn = connected_lookup.get(provider_key)
-            logger.info(f"  Found user_conn: {user_conn is not None}")
 
             connection_data = {
                 'provider_key': provider_key,

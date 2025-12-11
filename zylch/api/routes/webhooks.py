@@ -63,6 +63,9 @@ async def starchat_webhook(
 ):
     """Receive call event notifications from StarChat/MrCall.
 
+    NOTE: StarChat integration is DISABLED pending OAuth2.0 implementation.
+    This endpoint will return 503 until StarChat OAuth2.0 is configured.
+
     Events:
     - call_started: Inbound/outbound call initiated
     - call_ended: Call completed with transcript
@@ -74,14 +77,23 @@ async def starchat_webhook(
     2. Store event in database
     3. Queue for processing (extract contact intel, suggest follow-ups)
     """
+    # StarChat integration disabled pending OAuth2.0 implementation
+    # Credentials will be per-user via /connect starchat (OAuth2.0)
+    starchat_webhook_secret = getattr(settings, 'starchat_webhook_secret', None)
+    if not starchat_webhook_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="StarChat integration disabled - pending OAuth2.0 implementation"
+        )
+
     try:
         body = await request.body()
         payload = json.loads(body)
 
         # Validate signature if secret is configured
-        if settings.starchat_webhook_secret and x_starchat_signature:
+        if starchat_webhook_secret and x_starchat_signature:
             expected = hmac.new(
-                settings.starchat_webhook_secret.encode(),
+                starchat_webhook_secret.encode(),
                 body,
                 hashlib.sha256
             ).hexdigest()

@@ -230,7 +230,7 @@ async def get_user_connection_list(owner_id: str):
 async def save_provider_credentials(
     provider_key: str,
     request: CredentialsSaveRequest,
-    owner_id: str = Depends(get_current_user)
+    user: dict = Depends(get_current_user)
 ):
     """
     Save credentials for any provider using unified JSONB storage.
@@ -292,6 +292,7 @@ async def save_provider_credentials(
     }
     ```
     """
+    owner_id = user['uid']
     try:
         supabase = SupabaseStorage()
 
@@ -356,7 +357,7 @@ async def save_provider_credentials(
 @router.get("/provider/{provider_key}/credentials")
 async def get_provider_credentials_endpoint(
     provider_key: str,
-    owner_id: str = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
     include_metadata: bool = Query(False, description="Include metadata in response")
 ):
     """
@@ -385,6 +386,7 @@ async def get_provider_credentials_endpoint(
 
     **Note:** Sensitive fields are automatically decrypted.
     """
+    owner_id = user['uid']
     try:
         supabase = SupabaseStorage()
 
@@ -415,7 +417,7 @@ async def get_provider_credentials_endpoint(
 @router.delete("/provider/{provider_key}/credentials", response_model=CredentialsResponse)
 async def delete_provider_credentials_endpoint(
     provider_key: str,
-    owner_id: str = Depends(get_current_user)
+    user: dict = Depends(get_current_user)
 ):
     """
     Delete credentials for a specific provider.
@@ -433,6 +435,7 @@ async def delete_provider_credentials_endpoint(
     }
     ```
     """
+    owner_id = user['uid']
     try:
         supabase = SupabaseStorage()
 

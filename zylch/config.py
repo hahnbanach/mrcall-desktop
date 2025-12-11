@@ -24,8 +24,8 @@ class Settings(BaseSettings):
         description="Log level: DEBUG, INFO, WARNING, ERROR"
     )
 
-    # Anthropic
-    anthropic_api_key: str = Field(default="", description="Anthropic API key")
+    # Anthropic - REMOVED from .env, now BYOK only via Supabase
+    # Users set their Anthropic API key via /connect anthropic command
     default_model: str = Field(
         default="claude-sonnet-4-20250514",
         description="Default model for general tasks"
@@ -44,10 +44,7 @@ class Settings(BaseSettings):
         default="credentials/google_oauth.json",
         description="Path to Google OAuth credentials (used for Gmail, Calendar, etc.)"
     )
-    google_token_path: str = Field(
-        default=str(Path.home() / ".zylch" / "credentials" / "google"),
-        description="Directory for Google OAuth tokens (isolated per-user)"
-    )
+    # google_token_path: REMOVED - all tokens stored in Supabase, no filesystem
     google_client_id: str = Field(
         default="",
         description="Google OAuth client ID (for server-side OAuth flow)"
@@ -128,8 +125,8 @@ class Settings(BaseSettings):
         description="Microsoft Graph API refresh token"
     )
     auth_provider: str = Field(
-        default="google.com",
-        description="Authentication provider (google.com or microsoft.com)"
+        default="google",
+        description="Authentication provider (google or microsoft)"
     )
 
     # CORS Configuration (for dashboard integration)
@@ -155,13 +152,8 @@ class Settings(BaseSettings):
         description="Webhook signature verification secret"
     )
 
-    # Vonage SMS
-    vonage_api_key: str = Field(default="", description="Vonage API key")
-    vonage_api_secret: str = Field(default="", description="Vonage API secret")
-    vonage_from_number: str = Field(
-        default="",
-        description="Vonage sender phone number"
-    )
+    # Vonage SMS: credentials are stored per-user in Supabase via /connect vonage
+    # No env vars needed - credentials loaded at tool execution time
 
     # API Server (for thin client)
     api_server_url: str = Field(
@@ -177,23 +169,9 @@ class Settings(BaseSettings):
         description="Public URL for webhooks"
     )
 
-    # StarChat
-    starchat_api_url: str = Field(
-        default="https://mrcall-0.scw.hbsrv.net:443",
-        description="StarChat API base URL"
-    )
-    starchat_api_key: str = Field(default="", description="StarChat API key")
-    starchat_username: str = Field(default="admin", description="StarChat username")
-    starchat_password: str = Field(default="", description="StarChat password")
-    starchat_business_id: str = Field(default="", description="StarChat business ID")
-    starchat_auth_method: str = Field(
-        default="basic",
-        description="Auth method: basic or jwt"
-    )
-    starchat_webhook_secret: str = Field(
-        default="",
-        description="Secret for validating StarChat webhook signatures"
-    )
+    # StarChat - REMOVED (future: OAuth2.0 integration)
+    # StarChat credentials will be per-user via /connect starchat (OAuth2.0)
+    # For now, StarChat features are disabled until OAuth2.0 is implemented
 
     # Multi-tenant Configuration
     owner_id: str = Field(
@@ -229,8 +207,8 @@ class Settings(BaseSettings):
         description="Email templates file"
     )
 
-    # CRM (Optional)
-    pipedrive_api_token: str = Field(default="", description="Pipedrive API token")
+    # CRM (Optional) - Pipedrive API token REMOVED from .env, now BYOK via Supabase
+    # Users set their Pipedrive API key via /connect pipedrive command
     pipedrive_enabled: bool = Field(default=False, description="Enable Pipedrive")
 
     # Apollo (Future)

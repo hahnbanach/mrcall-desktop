@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Zylch CLI - Command line interface for email archive and sync."""
 
+import os
 import sys
 import logging
 from pathlib import Path
 from datetime import datetime
 
 from zylch.config import settings
+
+# Get Anthropic API key from environment (local dev CLI)
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 from zylch.tools.gmail import GmailClient
 from zylch.tools.email_archive import EmailArchiveManager
 from zylch.tools.email_sync import EmailSyncManager
@@ -262,7 +266,7 @@ def cmd_sync(args):
         print("\n🧠 Step 2: Building intelligence cache...")
         email_sync = EmailSyncManager(
             email_archive=archive,
-            anthropic_api_key=settings.anthropic_api_key
+            anthropic_api_key=ANTHROPIC_API_KEY
         )
 
         cache_result = email_sync.sync_emails()
@@ -300,7 +304,7 @@ def cmd_cache_rebuild(args):
         archive = EmailArchiveManager(gmail_client=gmail)
         email_sync = EmailSyncManager(
             email_archive=archive,
-            anthropic_api_key=settings.anthropic_api_key
+            anthropic_api_key=ANTHROPIC_API_KEY
         )
 
         result = email_sync.sync_emails(days_back=days)

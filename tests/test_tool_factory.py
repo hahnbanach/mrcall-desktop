@@ -324,24 +324,22 @@ async def test_error_handling_gmail_failure(mock_config, mock_starchat_client):
 
 @pytest.mark.asyncio
 async def test_config_from_settings():
-    """Test creating ToolConfig from global settings."""
+    """Test creating ToolConfig from global settings.
+
+    BYOK credentials (anthropic_api_key, pipedrive_api_token, etc.) are NOT
+    populated from settings - they're fetched from Supabase via from_settings_with_owner().
+    StarChat credentials removed - pending OAuth2.0 implementation.
+    """
 
     with patch('zylch.tools.config.settings') as mock_settings:
-        # Set up mock settings
-        mock_settings.anthropic_api_key = "test_key"
+        # Set up mock settings (only non-BYOK fields)
         mock_settings.default_model = "test_model"
         mock_settings.classification_model = "test_classification"
         mock_settings.executive_model = "test_executive"
         mock_settings.google_credentials_path = "/test/creds.json"
-        mock_settings.google_token_path = "/test/token.json"
+        mock_settings.google_token_path = "/test/tokens"  # Local fallback for dev
         mock_settings.gmail_accounts = ["test@example.com"]
         mock_settings.calendar_id = "primary"
-        mock_settings.starchat_api_url = "http://test.com"
-        mock_settings.starchat_api_key = "test_sc_key"
-        mock_settings.starchat_username = "test_user"
-        mock_settings.starchat_password = "test_pass"
-        mock_settings.starchat_business_id = "test_biz"
-        mock_settings.starchat_auth_method = "basic"
         mock_settings.cache_dir = "/test/cache"
         mock_settings.cache_ttl_days = 30
         mock_settings.email_archive_backend = "sqlite"
@@ -350,20 +348,25 @@ async def test_config_from_settings():
         mock_settings.email_archive_initial_months = 6
         mock_settings.email_archive_batch_size = 50
         mock_settings.email_archive_enable_fts = True
-        mock_settings.pipedrive_api_token = ""
-        mock_settings.pipedrive_enabled = False
-        mock_settings.sendgrid_api_key = ""
-        mock_settings.sendgrid_from_email = ""
         mock_settings.email_style_prompt = ""
         mock_settings.my_emails = "me@example.com"
         mock_settings.bot_emails = "bot@example.com"
+        mock_settings.owner_id = "test_owner"
+        mock_settings.zylch_assistant_id = "test_assistant"
+        mock_settings.user_email = ""
+        mock_settings.user_display_name = ""
 
         config = ToolConfig.from_settings()
 
-        assert config.anthropic_api_key == "test_key"
+        # Verify non-BYOK fields are populated from settings
         assert config.default_model == "test_model"
-        assert config.starchat_api_url == "http://test.com"
         assert config.gmail_accounts == ["test@example.com"]
+        assert config.cache_dir == "/test/cache"
+
+        # Verify BYOK credentials are empty (must use from_settings_with_owner)
+        assert config.anthropic_api_key == ""
+        assert config.pipedrive_api_token == ""
+        assert config.sendgrid_api_key == ""
 
 
 def test_get_cache_path(mock_config):

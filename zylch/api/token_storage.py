@@ -1,19 +1,14 @@
 """Token storage utility for multi-tenant OAuth tokens.
 
-Supports two backends:
-1. Supabase (production) - stores tokens in oauth_tokens table
-2. Filesystem (local dev) - stores in credentials/{owner_id}/
-
-The backend is automatically selected based on SUPABASE_URL configuration.
+All credentials stored in Supabase oauth_tokens table.
+NO filesystem fallback - Supabase is required.
 """
 
 import base64
 import json
 import logging
 import pickle
-from pathlib import Path
 from typing import Optional, Dict, Any, TYPE_CHECKING
-from datetime import datetime, timezone
 
 from zylch.config import settings
 
@@ -23,53 +18,33 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Base credentials directory (for filesystem fallback)
-CREDENTIALS_BASE = Path.home() / "zylch" / "credentials"
-
 # Shared Supabase storage instance
 _supabase_storage: Optional['SupabaseStorage'] = None
 
 
-def _get_supabase() -> Optional['SupabaseStorage']:
-    """Get Supabase storage instance if configured.
+def _get_supabase() -> 'SupabaseStorage':
+    """Get Supabase storage instance.
 
     Returns:
-        SupabaseStorage instance or None if not configured
+        SupabaseStorage instance
+
+    Raises:
+        ValueError: If Supabase is not configured
     """
     global _supabase_storage
 
     if not settings.supabase_url or not settings.supabase_service_role_key:
-        return None
+        raise ValueError(
+            "Supabase not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. "
+            "Filesystem fallback has been removed - Supabase is required."
+        )
 
     if _supabase_storage is None:
-        try:
-            from zylch.storage.supabase_client import SupabaseStorage
-            _supabase_storage = SupabaseStorage()
-            logger.info("Token storage using Supabase backend")
-        except Exception as e:
-            logger.error(f"Failed to initialize Supabase for token storage: {e}")
-            return None
+        from zylch.storage.supabase_client import SupabaseStorage
+        _supabase_storage = SupabaseStorage()
+        logger.info("Token storage using Supabase backend")
 
     return _supabase_storage
-
-
-def _use_supabase() -> bool:
-    """Check if Supabase backend should be used."""
-    return _get_supabase() is not None
-
-
-def get_user_credentials_dir(owner_id: str) -> Path:
-    """Get credentials directory for a specific owner.
-
-    Args:
-        owner_id: Firebase UID / owner_id
-
-    Returns:
-        Path to user's credentials directory
-    """
-    user_dir = CREDENTIALS_BASE / owner_id
-    user_dir.mkdir(parents=True, exist_ok=True)
-    return user_dir
 
 
 def save_provider(owner_id: str, provider: str, email: str = "") -> None:
@@ -77,21 +52,11 @@ def save_provider(owner_id: str, provider: str, email: str = "") -> None:
 
     Args:
         owner_id: Firebase UID
-        provider: 'google.com' or 'microsoft.com'
+        provider: 'google' or 'microsoft'
         email: User's email address (required for Supabase)
     """
     supabase = _get_supabase()
-    if supabase:
-        # Supabase stores provider as part of oauth_tokens record
-        # Just ensure a record exists with the provider
-        supabase.store_oauth_token(owner_id, provider, email or "")
-        logger.info(f"Saved provider '{provider}' for owner {owner_id} (Supabase)")
-        return
-
-    # Filesystem fallback
-    user_dir = get_user_credentials_dir(owner_id)
-    provider_file = user_dir / "provider.txt"
-    provider_file.write_text(provider)
+    supabase.store_oauth_token(owner_id, provider, email or "")
     logger.info(f"Saved provider '{provider}' for owner {owner_id}")
 
 
@@ -102,21 +67,10 @@ def get_provider(owner_id: str) -> Optional[str]:
         owner_id: Firebase UID
 
     Returns:
-        Provider string or None if not found
+        Provider string ('google' or 'microsoft') or None if not found
     """
     supabase = _get_supabase()
-    if supabase:
-        provider = supabase.get_user_provider(owner_id)
-        if provider:
-            return provider
-
-    # Filesystem fallback
-    user_dir = get_user_credentials_dir(owner_id)
-    provider_file = user_dir / "provider.txt"
-
-    if provider_file.exists():
-        return provider_file.read_text().strip()
-    return None
+    return supabase.get_user_provider(owner_id)
 
 
 def save_email(owner_id: str, email: str) -> None:
@@ -127,17 +81,8 @@ def save_email(owner_id: str, email: str) -> None:
         email: User email address
     """
     supabase = _get_supabase()
-    if supabase:
-        # Email is stored as part of oauth_tokens, get existing provider
-        provider = get_provider(owner_id) or "unknown"
-        supabase.store_oauth_token(owner_id, provider, email)
-        logger.info(f"Saved email '{email}' for owner {owner_id} (Supabase)")
-        return
-
-    # Filesystem fallback
-    user_dir = get_user_credentials_dir(owner_id)
-    email_file = user_dir / "email.txt"
-    email_file.write_text(email)
+    provider = get_provider(owner_id) or "unknown"
+    supabase.store_oauth_token(owner_id, provider, email)
     logger.info(f"Saved email '{email}' for owner {owner_id}")
 
 
@@ -151,18 +96,7 @@ def get_email(owner_id: str) -> Optional[str]:
         Email string or None if not found
     """
     supabase = _get_supabase()
-    if supabase:
-        email = supabase.get_user_email_from_token(owner_id)
-        if email:
-            return email
-
-    # Filesystem fallback
-    user_dir = get_user_credentials_dir(owner_id)
-    email_file = user_dir / "email.txt"
-
-    if email_file.exists():
-        return email_file.read_text().strip()
-    return None
+    return supabase.get_user_email_from_token(owner_id)
 
 
 def save_graph_token(owner_id: str, access_token: str, expires_at: Optional[str] = None, refresh_token: Optional[str] = None) -> None:
@@ -175,31 +109,15 @@ def save_graph_token(owner_id: str, access_token: str, expires_at: Optional[str]
         refresh_token: Microsoft Graph refresh token (optional)
     """
     supabase = _get_supabase()
-    if supabase:
-        email = get_email(owner_id) or ""
-        supabase.store_oauth_token(
-            owner_id=owner_id,
-            provider="microsoft.com",
-            email=email,
-            graph_access_token=access_token,
-            graph_refresh_token=refresh_token,
-            graph_expires_at=expires_at
-        )
-        logger.info(f"Saved Microsoft Graph token for owner {owner_id} (Supabase)")
-        return
-
-    # Filesystem fallback
-    user_dir = get_user_credentials_dir(owner_id)
-    token_file = user_dir / "graph_token.json"
-
-    token_data = {
-        "access_token": access_token,
-        "expires_at": expires_at or (datetime.now(timezone.utc).isoformat()),
-        "refresh_token": refresh_token,
-        "saved_at": datetime.now(timezone.utc).isoformat()
-    }
-
-    token_file.write_text(json.dumps(token_data, indent=2))
+    email = get_email(owner_id) or ""
+    supabase.store_oauth_token(
+        owner_id=owner_id,
+        provider="microsoft",
+        email=email,
+        graph_access_token=access_token,
+        graph_refresh_token=refresh_token,
+        graph_expires_at=expires_at
+    )
     logger.info(f"Saved Microsoft Graph token for owner {owner_id}")
 
 
@@ -213,38 +131,7 @@ def get_graph_token(owner_id: str) -> Optional[Dict[str, Any]]:
         Dict with 'access_token', 'expires_at', 'refresh_token' or None if not found
     """
     supabase = _get_supabase()
-    if supabase:
-        token_data = supabase.get_graph_token(owner_id)
-        if token_data:
-            return token_data
-
-    # Filesystem fallback
-    user_dir = get_user_credentials_dir(owner_id)
-    token_file = user_dir / "graph_token.json"
-
-    if token_file.exists():
-        try:
-            return json.loads(token_file.read_text())
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse graph token for owner {owner_id}: {e}")
-            return None
-
-    return None
-
-
-def get_google_tokens_dir(owner_id: str) -> Path:
-    """Get Google tokens directory for user.
-
-    Args:
-        owner_id: Firebase UID
-
-    Returns:
-        Path to google_tokens directory
-    """
-    user_dir = get_user_credentials_dir(owner_id)
-    google_dir = user_dir / "google_tokens"
-    google_dir.mkdir(parents=True, exist_ok=True)
-    return google_dir
+    return supabase.get_graph_token(owner_id)
 
 
 def delete_user_credentials(owner_id: str) -> None:
@@ -254,18 +141,10 @@ def delete_user_credentials(owner_id: str) -> None:
         owner_id: Firebase UID
     """
     supabase = _get_supabase()
-    if supabase:
-        # Delete from Supabase for both providers
-        supabase.delete_oauth_token(owner_id, "google.com")
-        supabase.delete_oauth_token(owner_id, "microsoft.com")
-        logger.info(f"Deleted OAuth tokens for owner {owner_id} (Supabase)")
-
-    # Also clean up filesystem (for local dev or migration)
-    user_dir = get_user_credentials_dir(owner_id)
-    if user_dir.exists():
-        import shutil
-        shutil.rmtree(user_dir)
-        logger.info(f"Deleted all credentials for owner {owner_id}")
+    # Delete from Supabase for both providers
+    supabase.delete_oauth_token(owner_id, "google")
+    supabase.delete_oauth_token(owner_id, "microsoft")
+    logger.info(f"Deleted OAuth tokens for owner {owner_id}")
 
 
 def get_user_token_info(owner_id: str) -> Dict[str, Any]:
@@ -286,27 +165,19 @@ def get_user_token_info(owner_id: str) -> Dict[str, Any]:
         "email": email,
         "has_graph_token": False,
         "has_google_tokens": False,
-        "storage_backend": "supabase" if _use_supabase() else "filesystem"
+        "storage_backend": "supabase"
     }
 
-    if provider == "microsoft.com":
+    if provider == "microsoft":
         graph_token = get_graph_token(owner_id)
         info["has_graph_token"] = graph_token is not None
         if graph_token:
             info["graph_token_expires_at"] = graph_token.get("expires_at")
 
-    if provider == "google.com":
-        # Check Supabase first
+    if provider == "google":
         supabase = _get_supabase()
-        if supabase:
-            google_token = supabase.get_google_token(owner_id)
-            info["has_google_tokens"] = google_token is not None
-        else:
-            # Filesystem fallback
-            google_dir = get_google_tokens_dir(owner_id)
-            pickle_files = list(google_dir.glob("*.pickle"))
-            info["has_google_tokens"] = len(pickle_files) > 0
-            info["google_token_count"] = len(pickle_files)
+        google_token = supabase.get_google_token(owner_id)
+        info["has_google_tokens"] = google_token is not None
 
     return info
 
@@ -322,39 +193,24 @@ def save_google_credentials(owner_id: str, credentials, email: str = "") -> None
     logger.info(f"save_google_credentials called for owner {owner_id}, email={email}")
 
     supabase = _get_supabase()
-    logger.info(f"Supabase client available: {supabase is not None}")
 
-    if supabase:
-        try:
-            # Pickle and base64 encode credentials
-            logger.info("Pickling credentials...")
-            pickled = pickle.dumps(credentials)
-            logger.info(f"Pickled data length: {len(pickled)}")
+    # Pickle and base64 encode credentials
+    logger.info("Pickling credentials...")
+    pickled = pickle.dumps(credentials)
+    logger.info(f"Pickled data length: {len(pickled)}")
 
-            logger.info("Base64 encoding...")
-            token_data = base64.b64encode(pickled).decode('utf-8')
-            logger.info(f"Token data length: {len(token_data)}")
+    logger.info("Base64 encoding...")
+    token_data = base64.b64encode(pickled).decode('utf-8')
+    logger.info(f"Token data length: {len(token_data)}")
 
-            logger.info(f"Calling store_oauth_token for owner {owner_id}...")
-            supabase.store_oauth_token(
-                owner_id=owner_id,
-                provider="google",  # Use short key to match integration_providers.provider_key
-                email=email or get_email(owner_id) or "",
-                google_token_data=token_data
-            )
-            logger.info(f"✅ Saved Google credentials for owner {owner_id} (Supabase)")
-            return
-        except Exception as e:
-            logger.error(f"Failed to save Google credentials to Supabase: {e}", exc_info=True)
-            raise
-
-    # Filesystem fallback - save to token.pickle in google_tokens dir
-    logger.info("Using filesystem fallback (no Supabase)")
-    google_dir = get_google_tokens_dir(owner_id)
-    token_file = google_dir / "token.pickle"
-    with open(token_file, 'wb') as f:
-        pickle.dump(credentials, f)
-    logger.info(f"Saved Google credentials for owner {owner_id}")
+    logger.info(f"Calling store_oauth_token for owner {owner_id}...")
+    supabase.store_oauth_token(
+        owner_id=owner_id,
+        provider="google",
+        email=email or get_email(owner_id) or "",
+        google_token_data=token_data
+    )
+    logger.info(f"✅ Saved Google credentials for owner {owner_id}")
 
 
 def get_google_credentials(owner_id: str):
@@ -367,36 +223,20 @@ def get_google_credentials(owner_id: str):
         google.oauth2.credentials.Credentials object or None if not found
     """
     supabase = _get_supabase()
-    if supabase:
-        logger.info(f"Looking up Google credentials for owner {owner_id} in Supabase")
-        token_data = supabase.get_google_token(owner_id)
-        if token_data:
-            logger.info(f"Found Google token data for owner {owner_id} (length: {len(token_data)})")
-            try:
-                pickled = base64.b64decode(token_data)
-                credentials = pickle.loads(pickled)
-                logger.info(f"Successfully loaded Google credentials for owner {owner_id}")
-                return credentials
-            except Exception as e:
-                logger.error(f"Failed to unpickle Google credentials for owner {owner_id}: {e}")
-                return None
-        else:
-            logger.warning(f"No Google token data found in Supabase for owner {owner_id}")
-    else:
-        logger.warning(f"Supabase not configured, falling back to filesystem for owner {owner_id}")
-
-    # Filesystem fallback
-    google_dir = get_google_tokens_dir(owner_id)
-    token_file = google_dir / "token.pickle"
-
-    if token_file.exists():
+    logger.info(f"Looking up Google credentials for owner {owner_id} in Supabase")
+    token_data = supabase.get_google_token(owner_id)
+    if token_data:
+        logger.info(f"Found Google token data for owner {owner_id} (length: {len(token_data)})")
         try:
-            with open(token_file, 'rb') as f:
-                return pickle.load(f)
+            pickled = base64.b64decode(token_data)
+            credentials = pickle.loads(pickled)
+            logger.info(f"Successfully loaded Google credentials for owner {owner_id}")
+            return credentials
         except Exception as e:
-            logger.error(f"Failed to load Google credentials for owner {owner_id}: {e}")
+            logger.error(f"Failed to unpickle Google credentials for owner {owner_id}: {e}")
             return None
-
+    else:
+        logger.warning(f"No Google token data found in Supabase for owner {owner_id}")
     return None
 
 
@@ -410,14 +250,8 @@ def has_google_credentials(owner_id: str) -> bool:
         True if credentials exist
     """
     supabase = _get_supabase()
-    if supabase:
-        token_data = supabase.get_google_token(owner_id)
-        return token_data is not None
-
-    # Filesystem fallback
-    google_dir = get_google_tokens_dir(owner_id)
-    token_file = google_dir / "token.pickle"
-    return token_file.exists()
+    token_data = supabase.get_google_token(owner_id)
+    return token_data is not None
 
 
 # ==========================================
@@ -435,15 +269,7 @@ def save_anthropic_key(owner_id: str, api_key: str) -> bool:
         True if saved successfully
     """
     supabase = _get_supabase()
-    if supabase:
-        return supabase.save_anthropic_key(owner_id, api_key)
-
-    # Filesystem fallback
-    user_dir = get_user_credentials_dir(owner_id)
-    key_file = user_dir / "anthropic_key.txt"
-    key_file.write_text(api_key)
-    logger.info(f"Saved Anthropic API key for owner {owner_id}")
-    return True
+    return supabase.save_anthropic_key(owner_id, api_key)
 
 
 def get_anthropic_key(owner_id: str) -> Optional[str]:
@@ -456,18 +282,7 @@ def get_anthropic_key(owner_id: str) -> Optional[str]:
         Anthropic API key or None if not found
     """
     supabase = _get_supabase()
-    if supabase:
-        key = supabase.get_anthropic_key(owner_id)
-        if key:
-            return key
-
-    # Filesystem fallback
-    user_dir = get_user_credentials_dir(owner_id)
-    key_file = user_dir / "anthropic_key.txt"
-
-    if key_file.exists():
-        return key_file.read_text().strip()
-    return None
+    return supabase.get_anthropic_key(owner_id)
 
 
 def delete_anthropic_key(owner_id: str) -> bool:
@@ -480,17 +295,8 @@ def delete_anthropic_key(owner_id: str) -> bool:
         True if deleted
     """
     supabase = _get_supabase()
-    if supabase:
-        supabase.delete_anthropic_key(owner_id)
-        logger.info(f"Deleted Anthropic API key for owner {owner_id} (Supabase)")
-
-    # Also clean up filesystem
-    user_dir = get_user_credentials_dir(owner_id)
-    key_file = user_dir / "anthropic_key.txt"
-    if key_file.exists():
-        key_file.unlink()
-        logger.info(f"Deleted Anthropic API key for owner {owner_id}")
-
+    supabase.delete_anthropic_key(owner_id)
+    logger.info(f"Deleted Anthropic API key for owner {owner_id}")
     return True
 
 
@@ -509,15 +315,7 @@ def save_pipedrive_key(owner_id: str, api_token: str) -> bool:
         True if saved successfully
     """
     supabase = _get_supabase()
-    if supabase:
-        return supabase.save_pipedrive_key(owner_id, api_token)
-
-    # Filesystem fallback
-    user_dir = get_user_credentials_dir(owner_id)
-    key_file = user_dir / "pipedrive_token.txt"
-    key_file.write_text(api_token)
-    logger.info(f"Saved Pipedrive API token for owner {owner_id}")
-    return True
+    return supabase.save_pipedrive_key(owner_id, api_token)
 
 
 def get_pipedrive_key(owner_id: str) -> Optional[str]:
@@ -530,18 +328,7 @@ def get_pipedrive_key(owner_id: str) -> Optional[str]:
         Pipedrive API token or None if not found
     """
     supabase = _get_supabase()
-    if supabase:
-        key = supabase.get_pipedrive_key(owner_id)
-        if key:
-            return key
-
-    # Filesystem fallback
-    user_dir = get_user_credentials_dir(owner_id)
-    key_file = user_dir / "pipedrive_token.txt"
-
-    if key_file.exists():
-        return key_file.read_text().strip()
-    return None
+    return supabase.get_pipedrive_key(owner_id)
 
 
 def delete_pipedrive_key(owner_id: str) -> bool:
@@ -554,17 +341,8 @@ def delete_pipedrive_key(owner_id: str) -> bool:
         True if deleted
     """
     supabase = _get_supabase()
-    if supabase:
-        supabase.delete_pipedrive_key(owner_id)
-        logger.info(f"Deleted Pipedrive API token for owner {owner_id} (Supabase)")
-
-    # Also clean up filesystem
-    user_dir = get_user_credentials_dir(owner_id)
-    key_file = user_dir / "pipedrive_token.txt"
-    if key_file.exists():
-        key_file.unlink()
-        logger.info(f"Deleted Pipedrive API token for owner {owner_id}")
-
+    supabase.delete_pipedrive_key(owner_id)
+    logger.info(f"Deleted Pipedrive API token for owner {owner_id}")
     return True
 
 
@@ -585,20 +363,7 @@ def save_vonage_keys(owner_id: str, api_key: str, api_secret: str, from_number: 
         True if saved successfully
     """
     supabase = _get_supabase()
-    if supabase:
-        return supabase.save_vonage_keys(owner_id, api_key, api_secret, from_number)
-
-    # Filesystem fallback
-    user_dir = get_user_credentials_dir(owner_id)
-    keys_file = user_dir / "vonage_keys.json"
-    keys_data = {
-        'api_key': api_key,
-        'api_secret': api_secret,
-        'from_number': from_number
-    }
-    keys_file.write_text(json.dumps(keys_data, indent=2))
-    logger.info(f"Saved Vonage API credentials for owner {owner_id}")
-    return True
+    return supabase.save_vonage_keys(owner_id, api_key, api_secret, from_number)
 
 
 def get_vonage_keys(owner_id: str) -> Optional[Dict[str, str]]:
@@ -611,22 +376,7 @@ def get_vonage_keys(owner_id: str) -> Optional[Dict[str, str]]:
         Dict with api_key, api_secret, from_number or None if not found
     """
     supabase = _get_supabase()
-    if supabase:
-        keys = supabase.get_vonage_keys(owner_id)
-        if keys:
-            return keys
-
-    # Filesystem fallback
-    user_dir = get_user_credentials_dir(owner_id)
-    keys_file = user_dir / "vonage_keys.json"
-
-    if keys_file.exists():
-        try:
-            return json.loads(keys_file.read_text())
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse Vonage keys for owner {owner_id}: {e}")
-            return None
-    return None
+    return supabase.get_vonage_keys(owner_id)
 
 
 def delete_vonage_keys(owner_id: str) -> bool:
@@ -639,15 +389,6 @@ def delete_vonage_keys(owner_id: str) -> bool:
         True if deleted
     """
     supabase = _get_supabase()
-    if supabase:
-        supabase.delete_vonage_keys(owner_id)
-        logger.info(f"Deleted Vonage API credentials for owner {owner_id} (Supabase)")
-
-    # Also clean up filesystem
-    user_dir = get_user_credentials_dir(owner_id)
-    keys_file = user_dir / "vonage_keys.json"
-    if keys_file.exists():
-        keys_file.unlink()
-        logger.info(f"Deleted Vonage API credentials for owner {owner_id}")
-
+    supabase.delete_vonage_keys(owner_id)
+    logger.info(f"Deleted Vonage API credentials for owner {owner_id}")
     return True

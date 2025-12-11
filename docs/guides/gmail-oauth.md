@@ -47,7 +47,7 @@ This will:
 1. Open browser
 2. Ask you to sign in with Google
 3. Ask for permission to access Gmail
-4. Save token in `credentials/gmail_tokens/token.pickle`
+4. Save token in Supabase `oauth_tokens` table (encrypted)
 
 ### Step 4: Test Search
 

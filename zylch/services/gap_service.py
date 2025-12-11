@@ -29,12 +29,12 @@ class GapService:
 
         Args:
             memory_bank: Optional ZylchMemory instance
-            anthropic_api_key: Anthropic API key (uses settings if not provided)
+            anthropic_api_key: Anthropic API key (BYOK - from Supabase, required)
             owner_id: Firebase UID for multi-tenant Supabase storage
             supabase_storage: SupabaseStorage instance for cloud storage
         """
         self.memory_bank = memory_bank
-        self.anthropic_api_key = anthropic_api_key or settings.anthropic_api_key
+        self.anthropic_api_key = anthropic_api_key  # BYOK - no env var fallback
         self.cache_path = Path("cache/relationship_gaps.json")
 
         # Multi-tenant Supabase support

@@ -17,12 +17,12 @@ logger = logging.getLogger(__name__)
 class SendSMSTool(Tool):
     """Send an SMS message to a phone number."""
 
-    def __init__(self, vonage_client):
+    def __init__(self, session_state=None):
         super().__init__(
             name="send_sms",
-            description="Send an SMS text message to a phone number"
+            description="ALWAYS use this tool when user asks to send an SMS or text message. Actually sends the SMS via Vonage API. NEVER claim you sent an SMS without calling this tool."
         )
-        self.vonage = vonage_client
+        self.session_state = session_state
 
     async def execute(
         self,
@@ -41,11 +41,42 @@ class SendSMSTool(Tool):
             ToolResult with message ID on success
         """
         try:
+            # Get owner_id from session state
+            owner_id = None
+            if self.session_state:
+                owner_id = self.session_state.get_owner_id()
+
+            if not owner_id:
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error="User not authenticated"
+                )
+
+            # Load Vonage credentials from Supabase for this user
+            from zylch.api import token_storage
+            vonage_keys = token_storage.get_vonage_keys(owner_id)
+
+            if not vonage_keys or not vonage_keys.get('api_key'):
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error="Vonage not connected. Please use /connect vonage to set up SMS."
+                )
+
+            # Create Vonage client with user's credentials
+            from .vonage import VonageClient
+            vonage = VonageClient(
+                api_key=vonage_keys['api_key'],
+                api_secret=vonage_keys['api_secret'],
+                from_number=vonage_keys.get('from_number', 'Zylch')
+            )
+
             # Validate phone number format
             if not phone_number.startswith('+'):
                 phone_number = '+' + phone_number.lstrip('0')
 
-            result = await self.vonage.send_sms(
+            result = await vonage.send_sms(
                 recipient=phone_number,
                 text=message,
                 sender=sender_name
@@ -102,12 +133,12 @@ class SendVerificationCodeTool(Tool):
     This is useful for verifying phone ownership before making outbound calls.
     """
 
-    def __init__(self, vonage_client, zylch_memory, owner_id: str, zylch_assistant_id: str):
+    def __init__(self, session_state, zylch_memory, owner_id: str, zylch_assistant_id: str):
         super().__init__(
             name="send_verification_code",
             description="Send a 6-digit verification code to a phone number for phone ownership verification"
         )
-        self.vonage = vonage_client
+        self.session_state = session_state
         self.zylch_memory = zylch_memory
         self.owner_id = owner_id
         self.zylch_assistant_id = zylch_assistant_id
@@ -164,9 +195,40 @@ class SendVerificationCodeTool(Tool):
                 metadata={"phone": phone_number}
             )
 
+            # Get owner_id from session state
+            owner_id = None
+            if self.session_state:
+                owner_id = self.session_state.get_owner_id()
+
+            if not owner_id:
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error="User not authenticated"
+                )
+
+            # Load Vonage credentials from Supabase for this user
+            from zylch.api import token_storage
+            vonage_keys = token_storage.get_vonage_keys(owner_id)
+
+            if not vonage_keys or not vonage_keys.get('api_key'):
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error="Vonage not connected. Please use /connect vonage to set up SMS."
+                )
+
+            # Create Vonage client with user's credentials
+            from .vonage import VonageClient
+            vonage = VonageClient(
+                api_key=vonage_keys['api_key'],
+                api_secret=vonage_keys['api_secret'],
+                from_number=vonage_keys.get('from_number', 'Zylch')
+            )
+
             # Send SMS with code
             message = f"Your Zylch verification code is: {code}\n\nThis code expires in 10 minutes."
-            await self.vonage.send_sms(
+            await vonage.send_sms(
                 recipient=phone_number,
                 text=message
             )
