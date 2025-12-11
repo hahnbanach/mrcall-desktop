@@ -198,7 +198,7 @@ Run `/sync [days]` to sync more data."""
         # Run sync (archive only, no AI analysis)
         logger.info(f"[/sync] Running archive sync...")
         results = await sync_service.run_full_sync(days_back=days_back, skip_gap_analysis=True)
-        logger.info(f"[/sync] Sync complete: email={results['email_sync']['success']}, calendar={results['calendar_sync']['success']}")
+        logger.info(f"[/sync] Sync complete: email={results['email_sync']['success']}, calendar={results['calendar_sync']['success']}, pipedrive={results.get('pipedrive_sync', {}).get('success', 'N/A')}")
 
         lines = ["**🔄 Sync Complete**\n"]
 
@@ -231,6 +231,16 @@ Run `/sync [days]` to sync more data."""
         else:
             has_failures = True
             lines.append(f"❌ **Calendar:** {results['calendar_sync'].get('error')}")
+
+        # Pipedrive sync (only show if connected)
+        pipedrive_data = results.get('pipedrive_sync', {})
+        if pipedrive_data.get('success'):
+            if not pipedrive_data.get('skipped'):
+                deals_synced = pipedrive_data.get('deals_synced', 0)
+                lines.append(f"✅ **Pipedrive:** {deals_synced} deals synced to memory")
+        elif pipedrive_data.get('error'):
+            has_failures = True
+            lines.append(f"❌ **Pipedrive:** {pipedrive_data.get('error')}")
 
         if has_failures:
             lines.append("\n⚠️ **Sync completed with errors.** Check the issues above.")
@@ -1688,4 +1698,101 @@ COMMAND_HANDLERS = {
     '/revoke': handle_revoke,
     '/sharing': handle_sharing,
     '/tutorial': handle_tutorial,
+}
+
+# Natural language triggers for semantic command matching
+# Maps commands to phrases that should trigger them
+COMMAND_TRIGGERS = {
+    '/sync': [
+        "sync my data",
+        "synchronize everything",
+        "fetch my emails",
+        "update my emails and calendar",
+        "get my latest emails",
+        "pull new messages",
+        "refresh my inbox",
+        "download my emails",
+        "sync emails and calendar",
+        "update my data",
+        "check for new emails",
+    ],
+    '/gaps': [
+        "what tasks do I have",
+        "show me unanswered emails",
+        "what needs my attention",
+        "briefing",
+        "what should I work on",
+        "pending tasks",
+        "what do I need to respond to",
+        "emails waiting for reply",
+        "show my open items",
+        "analyze my inbox",
+    ],
+    '/help': [
+        "what can you do",
+        "show me commands",
+        "help me",
+        "what commands are available",
+        "how do I use this",
+        "list available features",
+    ],
+    '/clear': [
+        "clear history",
+        "reset conversation",
+        "start fresh",
+        "new conversation",
+        "clear chat",
+    ],
+    '/model': [
+        "change AI model",
+        "switch model",
+        "use faster model",
+        "use smarter model",
+        "change to haiku",
+        "change to sonnet",
+    ],
+    '/memory': [
+        "show my memories",
+        "what have you learned",
+        "behavioral memory",
+        "list preferences",
+        "what do you remember",
+    ],
+    '/trigger': [
+        "set up automation",
+        "create trigger",
+        "automate",
+        "when email arrives",
+        "create rule",
+    ],
+    '/connect': [
+        "connect my account",
+        "link google",
+        "link outlook",
+        "set up integration",
+        "connect email",
+        "add calendar",
+    ],
+    '/sharing': [
+        "who can see my data",
+        "sharing status",
+        "who am I sharing with",
+    ],
+    '/archive': [
+        "email archive",
+        "search old emails",
+        "archive statistics",
+    ],
+    '/cache': [
+        "cache status",
+        "view cached data",
+        "what's in cache",
+    ],
+    '/tutorial': [
+        "show me how",
+        "tutorial",
+        "learn how to",
+        "guide me",
+        "getting started",
+    ],
 }
