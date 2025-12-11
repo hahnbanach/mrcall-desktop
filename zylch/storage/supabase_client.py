@@ -632,31 +632,30 @@ class SupabaseStorage:
     def get_google_token(self, owner_id: str) -> Optional[str]:
         """Get Google OAuth token data (base64-encoded pickle, decrypted).
 
+        Uses unified credentials JSONB storage.
+
         Args:
             owner_id: Firebase UID
 
         Returns:
             Base64-encoded pickled Credentials or None
         """
-        from zylch.utils.encryption import decrypt
-
-        token = self.get_oauth_token(owner_id, 'google')
-        if token:
-            logger.info(f"Found oauth_tokens record for owner {owner_id}, provider google")
-            encrypted_data = token.get('google_token_data')
-            if encrypted_data:
-                logger.info(f"google_token_data present (length: {len(encrypted_data)}), decrypting...")
-                decrypted = decrypt(encrypted_data)
-                logger.info(f"Decrypted data length: {len(decrypted) if decrypted else 0}")
-                return decrypted
+        creds = self.get_provider_credentials(owner_id, 'google')
+        if creds:
+            token_data = creds.get('token_data')
+            if token_data:
+                logger.info(f"Found Google token_data in credentials JSONB for owner {owner_id}")
+                return token_data
             else:
-                logger.warning(f"oauth_tokens record exists but google_token_data is NULL for owner {owner_id}")
+                logger.warning(f"credentials JSONB exists but token_data is missing for owner {owner_id}")
         else:
-            logger.warning(f"No oauth_tokens record found for owner {owner_id}, provider google")
+            logger.warning(f"No Google credentials found for owner {owner_id}")
         return None
 
     def get_graph_token(self, owner_id: str) -> Optional[Dict[str, Any]]:
         """Get Microsoft Graph token (decrypted).
+
+        Uses unified credentials JSONB storage.
 
         Args:
             owner_id: Firebase UID
@@ -664,16 +663,12 @@ class SupabaseStorage:
         Returns:
             Dict with access_token, refresh_token, expires_at or None
         """
-        from zylch.utils.encryption import decrypt
-
-        token = self.get_oauth_token(owner_id, 'microsoft')
-        if token:
-            access_token = token.get('graph_access_token')
-            refresh_token = token.get('graph_refresh_token')
+        creds = self.get_provider_credentials(owner_id, 'microsoft')
+        if creds:
             return {
-                'access_token': decrypt(access_token) if access_token else None,
-                'refresh_token': decrypt(refresh_token) if refresh_token else None,
-                'expires_at': token.get('graph_expires_at')
+                'access_token': creds.get('access_token'),
+                'refresh_token': creds.get('refresh_token'),
+                'expires_at': creds.get('expires_at')
             }
         return None
 
@@ -718,20 +713,22 @@ class SupabaseStorage:
     def get_user_provider(self, owner_id: str) -> Optional[str]:
         """Get user's OAuth provider.
 
+        Uses unified credentials JSONB storage.
+
         Args:
             owner_id: Firebase UID
 
         Returns:
             'google' or 'microsoft' or None
         """
-        # Check Google - verify token data exists
-        token = self.get_oauth_token(owner_id, 'google')
-        if token and token.get('google_token_data'):
+        # Check Google - verify credentials exist in JSONB
+        creds = self.get_provider_credentials(owner_id, 'google')
+        if creds and creds.get('token_data'):
             return 'google'
 
-        # Check Microsoft - verify token data exists
-        token = self.get_oauth_token(owner_id, 'microsoft')
-        if token and (token.get('graph_access_token') or token.get('graph_refresh_token')):
+        # Check Microsoft - verify credentials exist in JSONB
+        creds = self.get_provider_credentials(owner_id, 'microsoft')
+        if creds and (creds.get('access_token') or creds.get('refresh_token')):
             return 'microsoft'
 
         return None
@@ -743,7 +740,7 @@ class SupabaseStorage:
     def save_anthropic_key(self, owner_id: str, api_key: str) -> bool:
         """Save Anthropic API key for a user (encrypted at rest).
 
-        Uses 'anthropic' as the provider in oauth_tokens table.
+        Uses unified credentials JSONB storage.
 
         Args:
             owner_id: Firebase UID
@@ -752,24 +749,11 @@ class SupabaseStorage:
         Returns:
             True if saved successfully
         """
-        from zylch.utils.encryption import encrypt
-
-        data = {
-            'owner_id': owner_id,
-            'provider': 'anthropic',
-            'email': '',  # Not applicable for Anthropic
-            'anthropic_api_key': encrypt(api_key),
-            'updated_at': datetime.now(timezone.utc).isoformat()
-        }
-
-        # Upsert to handle both insert and update
-        self.client.table('oauth_tokens').upsert(
-            data,
-            on_conflict='owner_id,provider'
-        ).execute()
-
-        logger.info(f"Saved Anthropic API key for owner {owner_id}")
-        return True
+        return self.save_provider_credentials(
+            owner_id=owner_id,
+            provider_key='anthropic',
+            credentials_dict={'api_key': api_key}
+        )
 
     def get_anthropic_key(self, owner_id: str) -> Optional[str]:
         """Get Anthropic API key for a user (decrypted).
@@ -780,13 +764,9 @@ class SupabaseStorage:
         Returns:
             Anthropic API key or None if not found
         """
-        from zylch.utils.encryption import decrypt
-
-        token = self.get_oauth_token(owner_id, 'anthropic')
-        if token:
-            encrypted_key = token.get('anthropic_api_key')
-            if encrypted_key:
-                return decrypt(encrypted_key)
+        creds = self.get_provider_credentials(owner_id, 'anthropic')
+        if creds:
+            return creds.get('api_key')
         return None
 
     def delete_anthropic_key(self, owner_id: str) -> bool:
@@ -812,7 +792,7 @@ class SupabaseStorage:
     def save_pipedrive_key(self, owner_id: str, api_token: str) -> bool:
         """Save Pipedrive API token for a user (encrypted at rest).
 
-        Uses 'pipedrive' as the provider in oauth_tokens table.
+        Uses unified credentials JSONB storage.
 
         Args:
             owner_id: Firebase UID
@@ -821,24 +801,11 @@ class SupabaseStorage:
         Returns:
             True if saved successfully
         """
-        from zylch.utils.encryption import encrypt
-
-        data = {
-            'owner_id': owner_id,
-            'provider': 'pipedrive',
-            'email': '',  # Not applicable for Pipedrive
-            'pipedrive_api_token': encrypt(api_token),
-            'updated_at': datetime.now(timezone.utc).isoformat()
-        }
-
-        # Upsert to handle both insert and update
-        self.client.table('oauth_tokens').upsert(
-            data,
-            on_conflict='owner_id,provider'
-        ).execute()
-
-        logger.info(f"Saved Pipedrive API token for owner {owner_id}")
-        return True
+        return self.save_provider_credentials(
+            owner_id=owner_id,
+            provider_key='pipedrive',
+            credentials_dict={'api_token': api_token}
+        )
 
     def get_pipedrive_key(self, owner_id: str) -> Optional[str]:
         """Get Pipedrive API token for a user (decrypted).
@@ -849,13 +816,9 @@ class SupabaseStorage:
         Returns:
             Pipedrive API token or None if not found
         """
-        from zylch.utils.encryption import decrypt
-
-        token = self.get_oauth_token(owner_id, 'pipedrive')
-        if token:
-            encrypted_key = token.get('pipedrive_api_token')
-            if encrypted_key:
-                return decrypt(encrypted_key)
+        creds = self.get_provider_credentials(owner_id, 'pipedrive')
+        if creds:
+            return creds.get('api_token')
         return None
 
     def delete_pipedrive_key(self, owner_id: str) -> bool:
