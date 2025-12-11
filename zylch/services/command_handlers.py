@@ -56,7 +56,7 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
     """Handle /sync command without calling Anthropic."""
     from zylch.services.sync_service import SyncService
     from zylch.tools.factory import ToolFactory
-    from zylch.api.token_storage import get_provider, get_email, get_graph_token, get_google_tokens_dir
+    from zylch.api.token_storage import get_provider, get_email, get_graph_token
     from zylch.tools.outlook import OutlookClient
     from zylch.tools.gmail import GmailClient
     from zylch.tools.gcalendar import GoogleCalendarClient
@@ -171,18 +171,14 @@ Run `/sync [days]` to sync more data."""
             logger.info(f"[/sync] Using Microsoft Outlook for {email}")
 
         else:
-            # Google Gmail client
-            google_tokens_dir = get_google_tokens_dir(owner_id)
-            logger.debug(f"[/sync] Google tokens dir: {google_tokens_dir}")
+            # Google Gmail client (tokens stored in Supabase)
             email_client = GmailClient(
                 credentials_path=config.google_credentials_path,
-                token_dir=str(google_tokens_dir),
                 account=email,
                 owner_id=owner_id
             )
             calendar_client = GoogleCalendarClient(
                 credentials_path=config.google_credentials_path,
-                token_dir=str(google_tokens_dir),
                 calendar_id="primary",
                 account=email,
                 owner_id=owner_id
@@ -321,7 +317,7 @@ async def handle_archive(args: List[str], config: ToolConfig, owner_id: str) -> 
 Outlook archiving will be added in a future update."""
 
     from zylch.tools.email_archive import EmailArchiveManager
-    from zylch.api.token_storage import get_provider, get_email, get_google_tokens_dir
+    from zylch.api.token_storage import get_provider, get_email
     from zylch.tools.gmail import GmailClient
 
     try:
@@ -336,12 +332,10 @@ Outlook/Microsoft archiving will be added in a future update.
 For now, Microsoft users can use natural language to search emails:
 "Show emails from last week about contracts" """
 
-        # Create Gmail client for archive
+        # Create Gmail client for archive (tokens stored in Supabase)
         email = get_email(owner_id)
-        google_tokens_dir = get_google_tokens_dir(owner_id)
         email_client = GmailClient(
             credentials_path=config.google_credentials_path,
-            token_dir=str(google_tokens_dir),
             account=email,
             owner_id=owner_id
         )

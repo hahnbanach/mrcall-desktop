@@ -1170,8 +1170,14 @@ async def google_oauth_status(user: dict = Depends(get_current_user)):
         creds = get_google_credentials(owner_id)
         if creds:
             response["scopes"] = list(creds.scopes) if creds.scopes else GOOGLE_SCOPES
-            response["valid"] = creds.valid
-            response["expired"] = creds.expired
+            # Handle timezone-naive vs timezone-aware datetime comparison
+            try:
+                response["valid"] = creds.valid
+                response["expired"] = creds.expired
+            except TypeError:
+                # Credentials have mismatched timezone - assume expired, needs refresh
+                response["valid"] = False
+                response["expired"] = True
 
     return response
 
