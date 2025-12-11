@@ -108,7 +108,10 @@ This documentation is organized into the following sections:
 ### Prerequisites
 - Python 3.11+
 - Google Cloud project with Gmail API enabled
-- Anthropic Claude API key (or user brings their own)
+- User credentials (BYOK model - each user provides their own via `/connect`):
+  - Anthropic API key (`/connect anthropic`)
+  - Vonage SMS credentials (`/connect vonage`) - optional
+  - Pipedrive API token (`/connect pipedrive`) - optional
 
 ### Quick Setup
 
@@ -182,11 +185,11 @@ Zylch AI
 - ✅ Gmail (OAuth 2.0, read/send/drafts)
 - ✅ Google Calendar (OAuth 2.0, Meet link generation)
 - ✅ Microsoft Outlook (Graph API, email + calendar)
-- ✅ Anthropic Claude (Haiku/Sonnet/Opus tiering)
+- ✅ Anthropic Claude (BYOK - user provides key via `/connect anthropic`)
 - ✅ StarChat/MrCall (contacts, telephony)
 - ✅ SendGrid (email campaigns)
-- ✅ Vonage (SMS)
-- ✅ Pipedrive CRM (optional)
+- ✅ Vonage SMS (BYOK - user provides credentials via `/connect vonage`)
+- ✅ Pipedrive CRM (BYOK - user provides token via `/connect pipedrive`)
 
 ### Planned
 - ⏳ WhatsApp Business API (awaiting StarChat endpoint)

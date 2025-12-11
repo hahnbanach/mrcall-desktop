@@ -57,7 +57,7 @@ from .gcalendar import GoogleCalendarClient
 from .outlook_calendar import OutlookCalendarClient
 from .starchat import StarChatClient
 from .pipedrive import PipedriveClient
-from .vonage import VonageClient
+# VonageClient imported dynamically in SMS tools at execution time
 from ..cache.json_cache import JSONCache
 from ..cache.identifier_map import IdentifierMapCache, normalize_phone, normalize_name
 from .email_archive import EmailArchiveManager
@@ -131,16 +131,14 @@ class ToolFactory:
 
         # Initialize external service clients
         try:
-            # StarChat client
-            starchat = StarChatClient(
-                base_url=config.starchat_api_url,
-                username=config.starchat_username,
-                password=config.starchat_password,
-                realm="default",
-            )
+            # StarChat client - DISABLED pending OAuth2.0 implementation
+            # Credentials will be per-user via /connect starchat (OAuth2.0)
+            # For now, StarChat features are disabled
+            starchat = None
+            logger.info("StarChat disabled - pending OAuth2.0 implementation")
 
             # Email client - choose based on auth provider
-            if config.auth_provider == "microsoft.com":
+            if config.auth_provider == "microsoft":
                 # Microsoft Outlook client
                 email_client = OutlookClient(
                     graph_token=config.graph_token,
@@ -191,7 +189,7 @@ class ToolFactory:
 
             # Calendar client (conditional based on provider)
             calendar = None
-            if config.auth_provider == "google.com":
+            if config.auth_provider == "google":
                 # Gmail users get Google Calendar automatically
                 # Pass owner_id to enable Supabase token storage
                 calendar = GoogleCalendarClient(
@@ -202,7 +200,7 @@ class ToolFactory:
                     owner_id=config.owner_id if config.owner_id != "owner_default" else None,
                 )
                 logger.info("Google Calendar initialized for Gmail user")
-            elif config.auth_provider == "microsoft.com":
+            elif config.auth_provider == "microsoft":
                 # Microsoft users get Outlook Calendar automatically
                 # Use the graph_token from OutlookClient for authentication
                 if isinstance(email_client, OutlookClient) and email_client.graph_token:
@@ -259,34 +257,8 @@ class ToolFactory:
                     logger.warning(f"Pipedrive connection failed: {e}")
                     pipedrive = None
 
-            # Vonage SMS client (optional)
-            # Try per-user credentials from Supabase first, fallback to env vars
-            vonage = None
-            vonage_api_key = config.vonage_api_key
-            vonage_api_secret = config.vonage_api_secret
-            vonage_from_number = config.vonage_from_number
-
-            # Load per-user Vonage credentials from Supabase
-            if config.owner_id and config.owner_id != "owner_default":
-                from zylch.api import token_storage
-                vonage_keys = token_storage.get_vonage_keys(config.owner_id)
-                if vonage_keys:
-                    vonage_api_key = vonage_keys.get('api_key') or vonage_api_key
-                    vonage_api_secret = vonage_keys.get('api_secret') or vonage_api_secret
-                    vonage_from_number = vonage_keys.get('from_number') or vonage_from_number
-                    logger.info(f"Loaded Vonage credentials from Supabase for owner {config.owner_id}")
-
-            if vonage_api_key and vonage_api_secret:
-                try:
-                    vonage = VonageClient(
-                        api_key=vonage_api_key,
-                        api_secret=vonage_api_secret,
-                        from_number=vonage_from_number or "Zylch"
-                    )
-                    logger.info("Vonage SMS client connected")
-                except Exception as e:
-                    logger.warning(f"Vonage connection failed: {e}")
-                    vonage = None
+            # Vonage SMS: credentials are loaded dynamically per-user in SendSMSTool.execute()
+            # No client initialization needed here - tool is always available
 
             # Initialize zylch_memory for person-centric memory
             zylch_memory = await ToolFactory.create_memory_system(config)
@@ -304,7 +276,8 @@ class ToolFactory:
         # Email tools (7-8 tools, +1 if zylch_memory) - Gmail or Outlook
         tools.extend(ToolFactory._create_gmail_tools(
             email_client, calendar, email_sync, zylch_memory,
-            starchat, identifier_cache, config.owner_id, config.zylch_assistant_id
+            starchat, identifier_cache, config.owner_id, config.zylch_assistant_id,
+            anthropic_api_key=config.anthropic_api_key
         ))
 
         # Email sync tools (4 tools)
@@ -335,7 +308,7 @@ class ToolFactory:
             tools.extend(ToolFactory._create_pipedrive_tools(pipedrive))
 
         # MrCall configuration tools (3 tools) - requires StarChat
-        if config.starchat_api_url:
+        if starchat:
             tools.extend(ToolFactory._create_mrcall_tools(
                 starchat_client=starchat,
                 session_state=session_state,
@@ -363,15 +336,14 @@ class ToolFactory:
         ))
         logger.info("Triggered instruction tools initialized")
 
-        # SMS tools (3 tools) - optional, requires Vonage config
-        if vonage:
-            tools.extend(ToolFactory._create_sms_tools(
-                vonage_client=vonage,
-                zylch_memory=zylch_memory,
-                owner_id=config.owner_id,
-                zylch_assistant_id=config.zylch_assistant_id
-            ))
-            logger.info("SMS tools initialized (Vonage)")
+        # SMS tools (always available - credentials loaded per-user at execution time)
+        tools.extend(ToolFactory._create_sms_tools(
+            session_state=session_state,
+            zylch_memory=zylch_memory,
+            owner_id=config.owner_id,
+            zylch_assistant_id=config.zylch_assistant_id
+        ))
+        logger.info("SMS tools initialized (credentials loaded per-user)")
 
         # Call tools (1 tool) - for outbound calls via MrCall
         if starchat:
@@ -460,7 +432,8 @@ class ToolFactory:
         starchat_client=None,
         identifier_cache=None,
         owner_id: str = "owner_default",
-        zylch_assistant_id: str = "default_assistant"
+        zylch_assistant_id: str = "default_assistant",
+        anthropic_api_key: str = ""
     ) -> List[Tool]:
         """Create Gmail-related tools."""
         tools = [
@@ -473,14 +446,15 @@ class ToolFactory:
             _RefreshGoogleAuthTool(gmail_client, calendar_client),
         ]
 
-        # Add memory-based draft tool if zylch_memory available
-        if zylch_memory and starchat_client:
+        # Add memory-based draft tool if zylch_memory available and API key present
+        if zylch_memory and starchat_client and anthropic_api_key:
             tools.append(_DraftEmailFromMemoryTool(
                 gmail_client,
                 zylch_memory,
                 starchat_client,
                 owner_id,
-                zylch_assistant_id
+                zylch_assistant_id,
+                anthropic_api_key=anthropic_api_key
             ))
 
         return tools
@@ -669,12 +643,14 @@ class ToolFactory:
 
     @staticmethod
     def _create_sms_tools(
-        vonage_client,
+        session_state,
         zylch_memory,
         owner_id: str,
         zylch_assistant_id: str
     ) -> List[Tool]:
         """Create SMS tools for sending messages via Vonage.
+
+        Credentials are loaded per-user at execution time from Supabase.
 
         Tools:
         - send_sms: Send a text message to a phone number
@@ -682,9 +658,9 @@ class ToolFactory:
         - verify_sms_code: Verify a code that was sent via SMS
         """
         return [
-            SendSMSTool(vonage_client=vonage_client),
+            SendSMSTool(session_state=session_state),
             SendVerificationCodeTool(
-                vonage_client=vonage_client,
+                session_state=session_state,
                 zylch_memory=zylch_memory,
                 owner_id=owner_id,
                 zylch_assistant_id=zylch_assistant_id
@@ -1455,7 +1431,15 @@ class _RefreshGoogleAuthTool(Tool):
 
 class _DraftEmailFromMemoryTool(Tool):
     """Draft email using person-centric memory (relationship + business context)."""
-    def __init__(self, gmail_client, zylch_memory, starchat_client, owner_id: str = "owner_default", zylch_assistant_id: str = "default_assistant"):
+    def __init__(
+        self,
+        gmail_client,
+        zylch_memory,
+        starchat_client,
+        owner_id: str = "owner_default",
+        zylch_assistant_id: str = "default_assistant",
+        anthropic_api_key: str = ""
+    ):
         super().__init__(
             name="draft_email_from_memory",
             description="Draft personalized email using relationship memory, business info, and user style"
@@ -1465,7 +1449,7 @@ class _DraftEmailFromMemoryTool(Tool):
         self.starchat = starchat_client
         self.owner_id = owner_id
         self.zylch_assistant_id = zylch_assistant_id
-        self.anthropic_client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        self.anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key)
 
     async def execute(
         self,

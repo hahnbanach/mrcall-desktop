@@ -31,18 +31,35 @@ class ChatService:
         self._initialized = False
         self.storage = SupabaseStorage.get_instance()
 
-    async def _initialize_agent(self):
+    async def _initialize_agent(self, owner_id: str = None):
         """Initialize the agent with all tools (lazy initialization).
 
         Uses ToolFactory to create tools, removing CLI dependency.
+        Fetches BYOK credentials (Anthropic, Pipedrive, etc.) from Supabase.
+
+        Args:
+            owner_id: Firebase UID for loading per-user credentials
+
+        Raises:
+            ValueError: If Anthropic API key is not configured for the user
         """
         if self._initialized:
             return
 
         logger.info("Initializing Zylch AI agent for API service...")
 
-        # Create tool configuration from settings
-        config = ToolConfig.from_settings()
+        # Create tool configuration with BYOK credentials from Supabase
+        if owner_id:
+            config = ToolConfig.from_settings_with_owner(owner_id, storage=self.storage)
+        else:
+            config = ToolConfig.from_settings()
+
+        # Check for Anthropic API key - required for chat
+        if not config.anthropic_api_key:
+            raise ValueError(
+                "Anthropic API key not configured. "
+                "Please run `/connect anthropic` to set up your API key."
+            )
 
         # Create all tools using factory (returns tuple: tools, session_state, persona_analyzer)
         tools, session_state, persona_analyzer = await ToolFactory.create_all_tools(config, current_business_id=None)
@@ -194,8 +211,8 @@ class ChatService:
                     "session_id": session_id
                 }
 
-            # Ensure agent is initialized
-            await self._initialize_agent()
+            # Ensure agent is initialized with user's owner_id for per-user tools
+            await self._initialize_agent(owner_id=user_id)
 
             # Build context for agent
             agent_context = context or {}
@@ -240,11 +257,28 @@ class ChatService:
             logger.info(f"Message processed successfully in {execution_time_ms:.0f}ms")
             return result
 
+        except ValueError as e:
+            # Missing BYOK credentials (e.g., Anthropic API key)
+            logger.warning(f"Missing credentials: {e}")
+            execution_time_ms = (time.time() - start_time) * 1000
+            error_msg = str(e)
+
+            return {
+                "response": self._prepend_notification(error_msg, notification_banner),
+                "tool_calls": [],
+                "metadata": {
+                    "execution_time_ms": round(execution_time_ms, 2),
+                    "error": "MISSING_CREDENTIALS",
+                    "error_detail": str(e)
+                },
+                "session_id": session_id if session_id else None
+            }
+
         except anthropic.AuthenticationError as e:
             # Invalid API key
             logger.error(f"Authentication error: {e}")
             execution_time_ms = (time.time() - start_time) * 1000
-            error_msg = "Authentication failed: Invalid Anthropic API key. Please check your .env file and ensure ANTHROPIC_API_KEY is set correctly."
+            error_msg = "Authentication failed: Invalid Anthropic API key. Please run `/connect anthropic` to update your API key."
 
             return {
                 "response": self._prepend_notification(error_msg, notification_banner),

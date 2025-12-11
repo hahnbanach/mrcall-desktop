@@ -156,16 +156,18 @@ class MemoryWorker:
     Optional: Uses Haiku to extract relationship context (cheap, best-effort).
     """
 
-    def __init__(self, storage: SupabaseStorage, memory: ZylchMemory):
+    def __init__(self, storage: SupabaseStorage, memory: ZylchMemory, anthropic_api_key: str = ""):
         """Initialize MemoryWorker.
 
         Args:
             storage: SupabaseStorage instance for email/identifier access
             memory: ZylchMemory instance for storing memories
+            anthropic_api_key: Anthropic API key (BYOK - from Supabase)
         """
         self.storage = storage
         self.memory = memory
-        self.anthropic = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        # Anthropic client is optional - memory extraction works without it
+        self.anthropic = anthropic.Anthropic(api_key=anthropic_api_key) if anthropic_api_key else None
 
         logger.info("MemoryWorker initialized")
 

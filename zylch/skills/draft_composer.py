@@ -14,12 +14,22 @@ logger = logging.getLogger(__name__)
 class DraftComposerSkill(BaseSkill):
     """Compose email drafts with personalized style and patterns."""
 
-    def __init__(self):
+    def __init__(self, anthropic_api_key: str = ""):
+        """Initialize DraftComposerSkill.
+
+        Args:
+            anthropic_api_key: Anthropic API key (BYOK - from Supabase)
+        """
         super().__init__(
             skill_name="draft_composer",
             description="Compose email drafts using memory rules and learned patterns (semantic search)"
         )
-        self.client = Anthropic(api_key=settings.anthropic_api_key)
+        if not anthropic_api_key:
+            raise ValueError(
+                "Anthropic API key required for DraftComposerSkill. "
+                "Please run `/connect anthropic` to configure your API key."
+            )
+        self.client = Anthropic(api_key=anthropic_api_key)
         self.pattern_service = PatternService() if settings.pattern_store_enabled else None
 
     async def pre_execute(self, context: SkillContext):

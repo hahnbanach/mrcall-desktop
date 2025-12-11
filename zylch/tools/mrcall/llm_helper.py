@@ -100,9 +100,13 @@ IMPORTANT:
 
 MODIFIED PROMPT:"""
 
-    # Call LLM
-    api_key = anthropic_api_key or os.getenv("ANTHROPIC_API_KEY")
-    client = Anthropic(api_key=api_key)
+    # Call LLM - BYOK only, no env var fallback
+    if not anthropic_api_key:
+        raise ValueError(
+            "Anthropic API key required. "
+            "Please run `/connect anthropic` to configure your API key."
+        )
+    client = Anthropic(api_key=anthropic_api_key)
 
     logger.info(f"Calling LLM to modify prompt (model: {model})")
 
