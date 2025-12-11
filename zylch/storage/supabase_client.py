@@ -2091,6 +2091,222 @@ class SupabaseStorage:
         logger.info(f"Marked {len(notification_ids)} notifications as read for user {owner_id}")
         return bool(result.data)
 
+    # ==========================================
+    # EMAIL TRIAGE
+    # ==========================================
+
+    def store_triage_verdict(
+        self,
+        owner_id: str,
+        thread_id: str,
+        verdict: dict
+    ) -> Dict[str, Any]:
+        """Store email triage verdict for a thread.
+
+        Args:
+            owner_id: Firebase UID
+            thread_id: Gmail thread ID
+            verdict: Triage decision dict with fields:
+                - needs_human_attention: bool
+                - reason: str
+                - triage_category: 'urgent' | 'normal' | 'low' | 'noise'
+                - classification: dict with bool flags
+                - suggested_action: str | None
+                - deadline_detected: str | None
+
+        Returns:
+            Stored triage verdict record
+        """
+        data = {
+            'owner_id': owner_id,
+            'thread_id': thread_id,
+            'needs_human_attention': verdict.get('needs_human_attention', False),
+            'reason': verdict.get('reason'),
+            'triage_category': verdict.get('triage_category', 'low'),
+            'classification': verdict.get('classification', {}),
+            'suggested_action': verdict.get('suggested_action'),
+            'deadline_detected': verdict.get('deadline_detected'),
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        result = self.client.table('email_triage').upsert(
+            data,
+            on_conflict='owner_id,thread_id'
+        ).execute()
+
+        logger.info(f"Stored triage verdict for thread {thread_id}: {verdict.get('triage_category')}")
+        return result.data[0] if result.data else {}
+
+    def get_triage_verdict(
+        self,
+        owner_id: str,
+        thread_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Get triage verdict for a specific thread.
+
+        Args:
+            owner_id: Firebase UID
+            thread_id: Gmail thread ID
+
+        Returns:
+            Triage verdict record or None if not found
+        """
+        result = self.client.table('email_triage')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('thread_id', thread_id)\
+            .limit(1)\
+            .execute()
+
+        return result.data[0] if result.data else None
+
+    def get_threads_needing_attention(
+        self,
+        owner_id: str,
+        category: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get threads that need human attention, optionally filtered by category.
+
+        Args:
+            owner_id: Firebase UID
+            category: Optional filter: 'urgent', 'normal', 'low' (excludes 'noise')
+
+        Returns:
+            List of triage verdicts ordered by priority (urgent first, then by deadline)
+        """
+        query = self.client.table('email_triage')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('needs_human_attention', True)
+
+        if category:
+            query = query.eq('triage_category', category)
+        else:
+            # Exclude noise by default when no category specified
+            query = query.neq('triage_category', 'noise')
+
+        # Order by category priority and deadline
+        result = query.order('triage_category', desc=False)\
+            .order('deadline_detected', desc=False)\
+            .order('created_at', desc=True)\
+            .execute()
+
+        return result.data or []
+
+    def store_training_sample(
+        self,
+        sample: dict
+    ) -> Dict[str, Any]:
+        """Store a training sample for triage model improvement.
+
+        Args:
+            sample: Training sample dict with fields:
+                - owner_id: str (Firebase UID)
+                - thread_id: str (Gmail thread ID)
+                - email_data: dict (email content used for triage)
+                - predicted_verdict: dict (what the model predicted)
+                - actual_verdict: dict (what the human corrected to)
+                - feedback_type: str ('correction' | 'confirmation')
+
+        Returns:
+            Stored training sample record
+        """
+        data = {
+            'owner_id': sample.get('owner_id'),
+            'thread_id': sample.get('thread_id'),
+            'email_data': sample.get('email_data', {}),
+            'predicted_verdict': sample.get('predicted_verdict', {}),
+            'actual_verdict': sample.get('actual_verdict'),
+            'feedback_type': sample.get('feedback_type', 'correction'),
+            'used_for_training': False,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        result = self.client.table('triage_training_samples').insert(data).execute()
+
+        logger.info(f"Stored training sample for thread {sample.get('thread_id')} ({sample.get('feedback_type')})")
+        return result.data[0] if result.data else {}
+
+    def get_training_samples(
+        self,
+        unused_only: bool = True,
+        limit: int = 1000
+    ) -> List[Dict[str, Any]]:
+        """Get training samples for model fine-tuning.
+
+        Args:
+            unused_only: If True, only return samples not yet used for training
+            limit: Maximum number of samples to return
+
+        Returns:
+            List of training sample records
+        """
+        query = self.client.table('triage_training_samples').select('*')
+
+        if unused_only:
+            query = query.eq('used_for_training', False)
+
+        result = query.order('created_at', desc=False)\
+            .limit(limit)\
+            .execute()
+
+        return result.data or []
+
+    def get_importance_rules(
+        self,
+        owner_id: str,
+        enabled_only: bool = True
+    ) -> List[Dict[str, Any]]:
+        """Get importance rules for a user.
+
+        Args:
+            owner_id: Firebase UID
+            enabled_only: If True, only return enabled rules
+
+        Returns:
+            List of importance rule records sorted by priority
+        """
+        query = self.client.table('importance_rules')\
+            .select('*')\
+            .eq('owner_id', owner_id)
+
+        if enabled_only:
+            query = query.eq('enabled', True)
+
+        result = query.order('priority', desc=True).execute()
+
+        return result.data or []
+
+    def get_contact_by_email(
+        self,
+        owner_id: str,
+        email: str
+    ) -> Optional[Dict[str, Any]]:
+        """Get contact metadata by email address.
+
+        Args:
+            owner_id: Firebase UID
+            email: Email address to look up
+
+        Returns:
+            Contact record with metadata, or None if not found
+        """
+        try:
+            result = self.client.table('contacts')\
+                .select('*')\
+                .eq('owner_id', owner_id)\
+                .eq('email', email)\
+                .limit(1)\
+                .execute()
+
+            if result.data:
+                return result.data[0]
+        except Exception as e:
+            logger.debug(f"Contact lookup failed for {email}: {e}")
+
+        return None
+
 
 # Create search_emails function in Supabase (run once via SQL Editor):
 """

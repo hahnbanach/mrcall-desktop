@@ -170,6 +170,147 @@ class RelationshipAnalyzer:
             'has_external': len(external_attendees) > 0 if external_attendees else False
         }
 
+    def _get_contact_importance(self, contact_email: str) -> Dict[str, Any]:
+        """Evaluate importance rules for a contact.
+
+        Loads user-configured importance rules and evaluates them against
+        contact metadata to determine priority level.
+
+        Args:
+            contact_email: Email address of the contact
+
+        Returns:
+            Dict with importance level, reason, and matched rule name
+        """
+        if not self._use_supabase:
+            return {"importance": "normal", "reason": "No rules configured", "rule": None}
+
+        try:
+            # Load importance rules for this owner
+            from zylch.models.importance_rules import evaluate_rules, ImportanceRule
+
+            rules_data = self.supabase.get_importance_rules(self.owner_id)
+            if not rules_data:
+                return {"importance": "normal", "reason": "No rules configured", "rule": None}
+
+            # Convert to ImportanceRule objects
+            rules = [ImportanceRule.from_dict(r) for r in rules_data if r.get('enabled', True)]
+
+            # Get contact metadata (if available from address book or CRM)
+            contact = self._get_contact_metadata(contact_email)
+
+            # Evaluate rules
+            return evaluate_rules(rules, contact)
+
+        except Exception as e:
+            logger.warning(f"Failed to evaluate importance rules: {e}")
+            return {"importance": "normal", "reason": "Rule evaluation failed", "rule": None}
+
+    def _get_contact_metadata(self, contact_email: str) -> Dict[str, Any]:
+        """Get metadata for a contact from address book or CRM.
+
+        Args:
+            contact_email: Email address of the contact
+
+        Returns:
+            Contact metadata dict (may include template, tier, etc.)
+        """
+        if not self._use_supabase:
+            return {"email": contact_email}
+
+        try:
+            # Check contacts table for metadata
+            contact = self.supabase.get_contact_by_email(self.owner_id, contact_email)
+            if contact:
+                return contact
+        except Exception as e:
+            logger.debug(f"No contact metadata for {contact_email}: {e}")
+
+        # Return minimal metadata
+        return {"email": contact_email}
+
+    def _collect_training_sample(
+        self,
+        person_data: Dict[str, Any],
+        claude_response: Dict[str, Any],
+        importance: Dict[str, Any]
+    ) -> None:
+        """Collect anonymized training sample for future model fine-tuning.
+
+        This stores Claude's decision along with anonymized email content
+        for training smaller models that can run on-device.
+
+        Args:
+            person_data: Contact and thread data that was analyzed
+            claude_response: Claude's task decision (has_task, reason, etc.)
+            importance: Importance rule evaluation result
+        """
+        if not self._use_supabase:
+            return
+
+        try:
+            from zylch.ml.anonymizer import TriageAnonymizer, create_sample_hash
+
+            # Build thread data for anonymization
+            threads = person_data.get('threads', [])
+            if not threads:
+                return
+
+            # Use most recent thread for the sample
+            thread = threads[-1]
+
+            # Build email data structure for anonymization
+            email_data = {
+                'subject': thread.get('subject', ''),
+                'messages': [{
+                    'from': person_data.get('contact_email', ''),
+                    'body': thread.get('last_email', {}).get('body', '')[:2000],
+                    'date': thread.get('last_message_date', '')
+                }],
+                'thread_id': thread.get('thread_id', ''),
+                'message_count': thread.get('email_count', 1),
+                'has_attachments': False
+            }
+
+            # Anonymize the email content
+            anonymizer = TriageAnonymizer()
+            anonymized_data = anonymizer.anonymize_email_thread(email_data)
+
+            # Remove entity map from stored data (keep it separate if needed)
+            entity_map = anonymized_data.pop('_entity_map', {})
+
+            # Check for duplicates using content hash
+            sample_hash = create_sample_hash(anonymized_data)
+
+            # Build the predicted verdict (Claude's decision)
+            predicted_verdict = {
+                'has_task': claude_response.get('has_task', False),
+                'task_description': claude_response.get('task_description', ''),
+                'reason': claude_response.get('reason', ''),
+                'is_ai_generated': claude_response.get('is_ai_generated', False),
+                'importance_level': importance.get('importance', 'normal'),
+                'importance_rule': importance.get('rule')
+            }
+
+            # Store the training sample
+            sample = {
+                'owner_id': self.owner_id,
+                'thread_id': thread.get('thread_id', ''),
+                'email_data': anonymized_data,
+                'predicted_verdict': predicted_verdict,
+                'actual_verdict': None,  # Will be set if user corrects
+                'feedback_type': 'auto_collected'
+            }
+
+            self.supabase.store_training_sample(sample)
+            logger.debug(f"Collected training sample for {person_data.get('contact_email')}")
+
+        except ImportError:
+            logger.debug("Anonymizer not available, skipping training sample collection")
+        except Exception as e:
+            # Don't fail the main analysis if training collection fails
+            logger.warning(f"Failed to collect training sample: {e}")
+
     def find_meeting_without_followup(
         self,
         days_back: int = 7,
@@ -285,6 +426,12 @@ class RelationshipAnalyzer:
         for thread in threads.values():
             # Skip manually closed threads (user explicitly closed them)
             if thread.get('manually_closed'):
+                continue
+
+            # Skip threads where last message is an auto-reply (the thread is still open,
+            # but the auto-reply itself shouldn't trigger task detection)
+            if thread.get('is_auto_reply'):
+                logger.debug(f"Skipping auto-reply thread: {thread.get('thread_id')}")
                 continue
 
             # Check if recent (include both open AND closed threads for full context)
@@ -517,6 +664,10 @@ class RelationshipAnalyzer:
         signals = self._compute_relationship_signals(contact_email, threads)
         logger.info(f"Relationship signals for {contact_email}: {signals}")
 
+        # Evaluate importance rules for this contact
+        importance = self._get_contact_importance(contact_email)
+        logger.debug(f"Contact importance for {contact_email}: {importance}")
+
         # Sort threads by date (oldest first for chronological story)
         threads_sorted = sorted(threads, key=lambda t: t.get('last_message_date', ''))
 
@@ -541,8 +692,23 @@ Last message preview: {last_body}
 
         threads_text = "\n".join(thread_summaries)
 
+        # Build importance rules context (if configured)
+        importance_text = ""
+        if importance.get('rule'):
+            importance_text = f"""=== ACCOUNT OWNER'S IMPORTANCE RULES ===
+
+**Rule matched:** {importance.get('rule')}
+**Importance level:** {importance.get('importance', 'normal').upper()}
+**Reason:** {importance.get('reason')}
+
+⚠️ IMPORTANT: The account owner has configured this contact as "{importance.get('importance', 'normal').upper()}" priority
+because "{importance.get('reason')}". Factor this into your task decision - high importance contacts
+should generally have tasks created even for borderline cases.
+
+"""
+
         # Build relationship signals section
-        signals_text = f"""=== RELATIONSHIP SIGNALS (FACTS - pre-computed) ===
+        signals_text = f"""{importance_text}=== RELATIONSHIP SIGNALS (FACTS - pre-computed) ===
 
 1. **Has Mario ever contacted this person?** {'YES' if signals['has_prior_contact'] else 'NO — This is someone who contacted Mario first, Mario has NEVER replied or initiated contact'}
 2. **Does this look like a sales/marketing message?** {'YES — Contains sales language (case studies, ROI, schedule a call, etc.)' if signals['looks_like_sales'] else 'NO'}
@@ -678,6 +844,9 @@ RETURN ONLY THE JSON, NOTHING ELSE."""
                 result_text = json_match.group(1)
 
             result = json.loads(result_text)
+
+            # Collect training sample (for both positive and negative verdicts)
+            self._collect_training_sample(person_data, result, importance)
 
             # If no task needed, return None
             if not result.get('has_task', False):
