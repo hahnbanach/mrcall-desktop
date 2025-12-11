@@ -1,0 +1,118 @@
+"""Shared task formatting utilities for /gaps and get_tasks tool."""
+
+from typing import List, Dict, Any, Set
+from ..config import settings
+
+
+def get_my_emails() -> Set[str]:
+    """Get set of user's own email addresses (lowercase)."""
+    return set(e.strip().lower() for e in settings.my_emails.split(',') if e.strip())
+
+
+def is_own_email(avatar: Dict[str, Any], my_emails: Set[str]) -> bool:
+    """Check if avatar belongs to user's own email.
+
+    Args:
+        avatar: Avatar dict from Supabase
+        my_emails: Set of user's email addresses (lowercase)
+
+    Returns:
+        True if avatar is for user's own email
+    """
+    # Check contact_email field
+    if avatar.get('contact_email', '').lower() in my_emails:
+        return True
+    # Check identifiers.emails array
+    identifiers = avatar.get('identifiers') or {}
+    avatar_emails = identifiers.get('emails') or []
+    for email in avatar_emails:
+        if email.lower() in my_emails:
+            return True
+    return False
+
+
+def filter_own_emails(avatars: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Filter out user's own emails from avatar list.
+
+    Args:
+        avatars: List of avatar dicts from Supabase
+
+    Returns:
+        Filtered list excluding user's own emails
+    """
+    my_emails = get_my_emails()
+    return [a for a in avatars if not is_own_email(a, my_emails)]
+
+
+def format_task_list(avatars: List[Dict[str, Any]], include_stale_warning: bool = False) -> str:
+    """Format avatars as numbered task list.
+
+    Args:
+        avatars: List of avatar dicts (already filtered)
+        include_stale_warning: Whether to check and warn about stale avatars
+
+    Returns:
+        Formatted markdown string
+    """
+    from datetime import datetime, timezone
+
+    if not avatars:
+        return "✨ **No open tasks!** All caught up.\n\nℹ️ Run `/sync` to fetch and analyze new emails."
+
+    # Group by priority
+    high = [a for a in avatars if a.get('relationship_score', 0) >= 7]
+    medium = [a for a in avatars if 4 <= a.get('relationship_score', 0) < 7]
+    low = [a for a in avatars if a.get('relationship_score', 0) < 4]
+
+    # Check avatar freshness if requested
+    stale_avatars = 0
+    if include_stale_warning:
+        for avatar in avatars:
+            last_computed = avatar.get('last_computed')
+            if last_computed:
+                computed_dt = datetime.fromisoformat(last_computed.replace('Z', '+00:00'))
+                age_days = (datetime.now(timezone.utc) - computed_dt).days
+                if age_days > 7:
+                    stale_avatars += 1
+
+    lines = ["## 📋 Open Tasks\n"]
+    task_num = 1  # Running counter for task numbers
+
+    if high:
+        lines.append("### 🔥 High Priority")
+        for a in high:
+            name = a.get('display_name') or a.get('contact_email', 'Unknown')
+            action = a.get('suggested_action', 'Follow up')
+            score = a.get('relationship_score', 0)
+            lines.append(f"{task_num}. **{name}** (score {score}): {action}")
+            task_num += 1
+        lines.append("")
+
+    if medium:
+        lines.append("### 📌 Medium Priority")
+        for a in medium:
+            name = a.get('display_name') or a.get('contact_email', 'Unknown')
+            action = a.get('suggested_action', 'Review')
+            score = a.get('relationship_score', 0)
+            lines.append(f"{task_num}. **{name}** (score {score}): {action}")
+            task_num += 1
+        lines.append("")
+
+    if low:
+        lines.append("### 📝 Low Priority")
+        for a in low[:10]:  # Limit to 10
+            name = a.get('display_name') or a.get('contact_email', 'Unknown')
+            action = a.get('suggested_action', 'Review')
+            lines.append(f"{task_num}. {name}: {action}")
+            task_num += 1
+        if len(low) > 10:
+            lines.append(f"   ... and {len(low) - 10} more")
+
+    lines.append(f"\n**Total: {len(avatars)} open tasks**")
+
+    if stale_avatars > 0:
+        lines.append(f"\n⚠️ {stale_avatars} avatars are >7 days old. Run `/sync` to refresh.")
+
+    lines.append("\n💡 Say \"more on #3\" or \"draft reply for #5\" to act on a task")
+
+    return "\n".join(lines)

@@ -319,21 +319,37 @@ def save_google_credentials(owner_id: str, credentials, email: str = "") -> None
         credentials: google.oauth2.credentials.Credentials object
         email: User's email address
     """
+    logger.info(f"save_google_credentials called for owner {owner_id}, email={email}")
+
     supabase = _get_supabase()
+    logger.info(f"Supabase client available: {supabase is not None}")
+
     if supabase:
-        # Pickle and base64 encode credentials
-        pickled = pickle.dumps(credentials)
-        token_data = base64.b64encode(pickled).decode('utf-8')
-        supabase.store_oauth_token(
-            owner_id=owner_id,
-            provider="google.com",
-            email=email or get_email(owner_id) or "",
-            google_token_data=token_data
-        )
-        logger.info(f"Saved Google credentials for owner {owner_id} (Supabase)")
-        return
+        try:
+            # Pickle and base64 encode credentials
+            logger.info("Pickling credentials...")
+            pickled = pickle.dumps(credentials)
+            logger.info(f"Pickled data length: {len(pickled)}")
+
+            logger.info("Base64 encoding...")
+            token_data = base64.b64encode(pickled).decode('utf-8')
+            logger.info(f"Token data length: {len(token_data)}")
+
+            logger.info(f"Calling store_oauth_token for owner {owner_id}...")
+            supabase.store_oauth_token(
+                owner_id=owner_id,
+                provider="google",  # Use short key to match integration_providers.provider_key
+                email=email or get_email(owner_id) or "",
+                google_token_data=token_data
+            )
+            logger.info(f"✅ Saved Google credentials for owner {owner_id} (Supabase)")
+            return
+        except Exception as e:
+            logger.error(f"Failed to save Google credentials to Supabase: {e}", exc_info=True)
+            raise
 
     # Filesystem fallback - save to token.pickle in google_tokens dir
+    logger.info("Using filesystem fallback (no Supabase)")
     google_dir = get_google_tokens_dir(owner_id)
     token_file = google_dir / "token.pickle"
     with open(token_file, 'wb') as f:
@@ -474,5 +490,164 @@ def delete_anthropic_key(owner_id: str) -> bool:
     if key_file.exists():
         key_file.unlink()
         logger.info(f"Deleted Anthropic API key for owner {owner_id}")
+
+    return True
+
+
+# ==========================================
+# Pipedrive API Key Management
+# ==========================================
+
+def save_pipedrive_key(owner_id: str, api_token: str) -> bool:
+    """Save Pipedrive API token for a user.
+
+    Args:
+        owner_id: Firebase UID
+        api_token: Pipedrive API token
+
+    Returns:
+        True if saved successfully
+    """
+    supabase = _get_supabase()
+    if supabase:
+        return supabase.save_pipedrive_key(owner_id, api_token)
+
+    # Filesystem fallback
+    user_dir = get_user_credentials_dir(owner_id)
+    key_file = user_dir / "pipedrive_token.txt"
+    key_file.write_text(api_token)
+    logger.info(f"Saved Pipedrive API token for owner {owner_id}")
+    return True
+
+
+def get_pipedrive_key(owner_id: str) -> Optional[str]:
+    """Get Pipedrive API token for a user.
+
+    Args:
+        owner_id: Firebase UID
+
+    Returns:
+        Pipedrive API token or None if not found
+    """
+    supabase = _get_supabase()
+    if supabase:
+        key = supabase.get_pipedrive_key(owner_id)
+        if key:
+            return key
+
+    # Filesystem fallback
+    user_dir = get_user_credentials_dir(owner_id)
+    key_file = user_dir / "pipedrive_token.txt"
+
+    if key_file.exists():
+        return key_file.read_text().strip()
+    return None
+
+
+def delete_pipedrive_key(owner_id: str) -> bool:
+    """Delete Pipedrive API token for a user.
+
+    Args:
+        owner_id: Firebase UID
+
+    Returns:
+        True if deleted
+    """
+    supabase = _get_supabase()
+    if supabase:
+        supabase.delete_pipedrive_key(owner_id)
+        logger.info(f"Deleted Pipedrive API token for owner {owner_id} (Supabase)")
+
+    # Also clean up filesystem
+    user_dir = get_user_credentials_dir(owner_id)
+    key_file = user_dir / "pipedrive_token.txt"
+    if key_file.exists():
+        key_file.unlink()
+        logger.info(f"Deleted Pipedrive API token for owner {owner_id}")
+
+    return True
+
+
+# ==========================================
+# Vonage API Key Management
+# ==========================================
+
+def save_vonage_keys(owner_id: str, api_key: str, api_secret: str, from_number: str) -> bool:
+    """Save Vonage API credentials for a user.
+
+    Args:
+        owner_id: Firebase UID
+        api_key: Vonage API key
+        api_secret: Vonage API secret
+        from_number: Vonage sender number
+
+    Returns:
+        True if saved successfully
+    """
+    supabase = _get_supabase()
+    if supabase:
+        return supabase.save_vonage_keys(owner_id, api_key, api_secret, from_number)
+
+    # Filesystem fallback
+    user_dir = get_user_credentials_dir(owner_id)
+    keys_file = user_dir / "vonage_keys.json"
+    keys_data = {
+        'api_key': api_key,
+        'api_secret': api_secret,
+        'from_number': from_number
+    }
+    keys_file.write_text(json.dumps(keys_data, indent=2))
+    logger.info(f"Saved Vonage API credentials for owner {owner_id}")
+    return True
+
+
+def get_vonage_keys(owner_id: str) -> Optional[Dict[str, str]]:
+    """Get Vonage API credentials for a user.
+
+    Args:
+        owner_id: Firebase UID
+
+    Returns:
+        Dict with api_key, api_secret, from_number or None if not found
+    """
+    supabase = _get_supabase()
+    if supabase:
+        keys = supabase.get_vonage_keys(owner_id)
+        if keys:
+            return keys
+
+    # Filesystem fallback
+    user_dir = get_user_credentials_dir(owner_id)
+    keys_file = user_dir / "vonage_keys.json"
+
+    if keys_file.exists():
+        try:
+            return json.loads(keys_file.read_text())
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse Vonage keys for owner {owner_id}: {e}")
+            return None
+    return None
+
+
+def delete_vonage_keys(owner_id: str) -> bool:
+    """Delete Vonage API credentials for a user.
+
+    Args:
+        owner_id: Firebase UID
+
+    Returns:
+        True if deleted
+    """
+    supabase = _get_supabase()
+    if supabase:
+        supabase.delete_vonage_keys(owner_id)
+        logger.info(f"Deleted Vonage API credentials for owner {owner_id} (Supabase)")
+
+    # Also clean up filesystem
+    user_dir = get_user_credentials_dir(owner_id)
+    keys_file = user_dir / "vonage_keys.json"
+    if keys_file.exists():
+        keys_file.unlink()
+        logger.info(f"Deleted Vonage API credentials for owner {owner_id}")
 
     return True

@@ -1,7 +1,7 @@
 """Supabase storage client for multi-tenant data access."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
 from supabase import create_client, Client
@@ -557,6 +557,7 @@ class SupabaseStorage:
             Stored record
         """
         from zylch.utils.encryption import encrypt
+        import json
 
         data = {
             'owner_id': owner_id,
@@ -565,18 +566,34 @@ class SupabaseStorage:
             'updated_at': datetime.now(timezone.utc).isoformat()
         }
 
-        # Encrypt sensitive token data
+        # Build unified credentials dict for JSONB storage
+        # Use short keys to match integration_providers.provider_key
+        unified_creds = {}
+
         if google_token_data:
-            data['google_token_data'] = encrypt(google_token_data)
+            unified_creds['google'] = {
+                'token_data': google_token_data,
+                'provider': 'google',
+                'email': email
+            }
 
         if graph_access_token:
-            data['graph_access_token'] = encrypt(graph_access_token)
-            if graph_refresh_token:
-                data['graph_refresh_token'] = encrypt(graph_refresh_token)
-            data['graph_expires_at'] = graph_expires_at
+            unified_creds['microsoft'] = {
+                'access_token': graph_access_token,
+                'refresh_token': graph_refresh_token,
+                'expires_at': graph_expires_at,
+                'provider': 'microsoft',
+                'email': email
+            }
 
         if scopes:
             data['scopes'] = scopes
+
+        # Write to unified credentials JSONB column (encrypted as whole JSON)
+        if unified_creds:
+            creds_json = json.dumps(unified_creds)
+            data['credentials'] = encrypt(creds_json)
+            logger.info(f"Storing credentials in unified JSONB for provider {provider}")
 
         # Upsert (insert or update)
         result = self.client.table('oauth_tokens').upsert(
@@ -584,7 +601,7 @@ class SupabaseStorage:
             on_conflict='owner_id,provider'
         ).execute()
 
-        logger.info(f"Stored OAuth token for owner {owner_id} provider {provider}")
+        logger.info(f"✅ Stored OAuth token for owner {owner_id} provider {provider}")
         return result.data[0] if result.data else {}
 
     def get_oauth_token(self, owner_id: str, provider: str) -> Optional[Dict[str, Any]]:
@@ -601,8 +618,15 @@ class SupabaseStorage:
             'owner_id', owner_id
         ).eq('provider', provider).execute()
 
+        logger.info(f"get_oauth_token query for owner={owner_id}, provider={provider}")
+        logger.info(f"  result.data: {result.data}")
+        logger.info(f"  result.count: {getattr(result, 'count', 'N/A')}")
+
         if result.data:
+            logger.info(f"  Found {len(result.data)} rows")
             return result.data[0]
+
+        logger.info(f"  No rows found")
         return None
 
     def get_google_token(self, owner_id: str) -> Optional[str]:
@@ -700,14 +724,14 @@ class SupabaseStorage:
         Returns:
             'google.com' or 'microsoft.com' or None
         """
-        # Check Google
+        # Check Google - verify token data exists
         token = self.get_oauth_token(owner_id, 'google.com')
-        if token:
+        if token and token.get('google_token_data'):
             return 'google.com'
 
-        # Check Microsoft
+        # Check Microsoft - verify token data exists
         token = self.get_oauth_token(owner_id, 'microsoft.com')
-        if token:
+        if token and (token.get('graph_access_token') or token.get('graph_refresh_token')):
             return 'microsoft.com'
 
         return None
@@ -779,6 +803,269 @@ class SupabaseStorage:
         ).eq('provider', 'anthropic').execute()
 
         logger.info(f"Deleted Anthropic API key for owner {owner_id}")
+        return True
+
+    # ==========================================
+    # Pipedrive API Key Management
+    # ==========================================
+
+    def save_pipedrive_key(self, owner_id: str, api_token: str) -> bool:
+        """Save Pipedrive API token for a user (encrypted at rest).
+
+        Uses 'pipedrive' as the provider in oauth_tokens table.
+
+        Args:
+            owner_id: Firebase UID
+            api_token: Pipedrive API token
+
+        Returns:
+            True if saved successfully
+        """
+        from zylch.utils.encryption import encrypt
+
+        data = {
+            'owner_id': owner_id,
+            'provider': 'pipedrive',
+            'email': '',  # Not applicable for Pipedrive
+            'pipedrive_api_token': encrypt(api_token),
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        # Upsert to handle both insert and update
+        self.client.table('oauth_tokens').upsert(
+            data,
+            on_conflict='owner_id,provider'
+        ).execute()
+
+        logger.info(f"Saved Pipedrive API token for owner {owner_id}")
+        return True
+
+    def get_pipedrive_key(self, owner_id: str) -> Optional[str]:
+        """Get Pipedrive API token for a user (decrypted).
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            Pipedrive API token or None if not found
+        """
+        from zylch.utils.encryption import decrypt
+
+        token = self.get_oauth_token(owner_id, 'pipedrive')
+        if token:
+            encrypted_key = token.get('pipedrive_api_token')
+            if encrypted_key:
+                return decrypt(encrypted_key)
+        return None
+
+    def delete_pipedrive_key(self, owner_id: str) -> bool:
+        """Delete Pipedrive API token for a user.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            True if deleted
+        """
+        self.client.table('oauth_tokens').delete().eq(
+            'owner_id', owner_id
+        ).eq('provider', 'pipedrive').execute()
+
+        logger.info(f"Deleted Pipedrive API token for owner {owner_id}")
+        return True
+
+    # ==========================================
+    # Vonage API Key Management (wrapper for unified storage)
+    # ==========================================
+
+    def get_vonage_keys(self, owner_id: str) -> Optional[Dict[str, str]]:
+        """Get Vonage API credentials for a user (decrypted).
+
+        Wrapper for get_provider_credentials('vonage').
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            Dict with api_key, api_secret, from_number or None if not found
+        """
+        return self.get_provider_credentials(owner_id, 'vonage')
+
+    # ==========================================
+    # UNIFIED CREDENTIALS STORAGE (JSONB)
+    # ==========================================
+
+    def save_provider_credentials(
+        self,
+        owner_id: str,
+        provider_key: str,
+        credentials_dict: Dict[str, Any],
+        metadata_dict: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """Save credentials for any provider using unified JSONB storage.
+
+        This is the new generic method that replaces provider-specific save functions.
+        Credentials are encrypted based on config_fields.encrypted flag.
+
+        Args:
+            owner_id: Firebase UID
+            provider_key: Provider identifier (google, microsoft, anthropic, pipedrive, vonage, etc.)
+            credentials_dict: Dict of credential fields and values
+            metadata_dict: Optional metadata (scopes, token_uri, etc.)
+
+        Returns:
+            True if saved successfully
+
+        Example:
+            save_provider_credentials(
+                "user123",
+                "vonage",
+                {
+                    "api_key": "abc123",
+                    "api_secret": "xyz789",
+                    "from_number": "+1234567890"
+                }
+            )
+        """
+        from zylch.utils.encryption import encrypt
+        import json
+
+        # Get existing oauth_tokens row or create new
+        token_row = self.get_oauth_token(owner_id, provider_key)
+        if token_row and token_row.get('credentials'):
+            # Decrypt and parse existing credentials
+            from zylch.utils.encryption import decrypt
+            existing_creds = json.loads(decrypt(token_row['credentials']))
+        else:
+            existing_creds = {}
+
+        # Get provider config to determine which fields need encryption
+        provider_config = self.client.table('integration_providers')\
+            .select('config_fields')\
+            .eq('provider_key', provider_key)\
+            .execute()
+
+        config_fields = {}
+        if provider_config.data:
+            config_fields = provider_config.data[0].get('config_fields', {})
+
+        # Encrypt sensitive fields based on config
+        encrypted_credentials = {}
+        for field_name, field_value in credentials_dict.items():
+            field_config = config_fields.get(field_name, {})
+            should_encrypt = field_config.get('encrypted', True)  # Default to encrypt for safety
+
+            if should_encrypt and field_value:
+                encrypted_credentials[field_name] = f"encrypted:{encrypt(str(field_value))}"
+            else:
+                encrypted_credentials[field_name] = field_value
+
+        # Build credentials JSONB structure
+        existing_creds[provider_key] = encrypted_credentials
+        if metadata_dict:
+            if 'metadata' not in existing_creds:
+                existing_creds['metadata'] = {}
+            existing_creds['metadata'][provider_key] = metadata_dict
+
+        # Encrypt entire JSONB blob
+        credentials_json = encrypt(json.dumps(existing_creds))
+
+        # Prepare data for upsert
+        data = {
+            'owner_id': owner_id,
+            'provider': provider_key,
+            'email': '',  # Required field, empty for non-email providers (Vonage, Pipedrive)
+            'credentials': credentials_json,
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        # Upsert
+        self.client.table('oauth_tokens').upsert(
+            data,
+            on_conflict='owner_id,provider'
+        ).execute()
+
+        logger.info(f"Saved credentials for provider {provider_key} for owner {owner_id}")
+        return True
+
+    def get_provider_credentials(
+        self,
+        owner_id: str,
+        provider_key: str,
+        include_metadata: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """Get credentials for any provider using unified JSONB storage.
+
+        This is the new generic method that replaces provider-specific get functions.
+        Credentials are automatically decrypted.
+
+        Args:
+            owner_id: Firebase UID
+            provider_key: Provider identifier (google, microsoft, anthropic, etc.)
+            include_metadata: If True, include metadata dict in response
+
+        Returns:
+            Dict with credential fields (decrypted) or None if not found
+
+        Example:
+            creds = get_provider_credentials("user123", "vonage")
+            # Returns: {"api_key": "abc123", "api_secret": "xyz789", "from_number": "+1234567890"}
+        """
+        from zylch.utils.encryption import decrypt
+        import json
+
+        # DUAL-READ: Try new credentials column first, fall back to legacy
+        token_row = self.get_oauth_token(owner_id, provider_key)
+        if not token_row:
+            return None
+
+        # Try new unified credentials column
+        if token_row.get('credentials'):
+            try:
+                decrypted_json = decrypt(token_row['credentials'])
+                all_credentials = json.loads(decrypted_json)
+
+                # Extract provider-specific credentials
+                provider_creds = all_credentials.get(provider_key, {})
+                if not provider_creds:
+                    # Fall through to legacy columns
+                    pass
+                else:
+                    # Decrypt individual fields marked with "encrypted:" prefix
+                    decrypted_creds = {}
+                    for field_name, field_value in provider_creds.items():
+                        if isinstance(field_value, str) and field_value.startswith('encrypted:'):
+                            decrypted_creds[field_name] = decrypt(field_value[10:])  # Remove "encrypted:" prefix
+                        else:
+                            decrypted_creds[field_name] = field_value
+
+                    # Include metadata if requested
+                    if include_metadata and 'metadata' in all_credentials:
+                        decrypted_creds['_metadata'] = all_credentials['metadata'].get(provider_key, {})
+
+                    return decrypted_creds
+            except Exception as e:
+                logger.error(f"Failed to decrypt credentials for {provider_key}: {e}")
+
+        return None
+
+    def delete_provider_credentials(self, owner_id: str, provider_key: str) -> bool:
+        """Delete credentials for any provider.
+
+        Generic method that replaces provider-specific delete functions.
+
+        Args:
+            owner_id: Firebase UID
+            provider_key: Provider identifier
+
+        Returns:
+            True if deleted
+        """
+        self.client.table('oauth_tokens').delete().eq(
+            'owner_id', owner_id
+        ).eq('provider', provider_key).execute()
+
+        logger.info(f"Deleted credentials for provider {provider_key} for owner {owner_id}")
         return True
 
     # ==========================================
@@ -967,6 +1254,123 @@ class SupabaseStorage:
         return True
 
     # ==========================================
+    # OAUTH STATES (for multi-instance support)
+    # ==========================================
+
+    def store_oauth_state(
+        self,
+        state: str,
+        owner_id: str,
+        email: str,
+        cli_callback: Optional[str] = None,
+        expires_minutes: int = 10
+    ) -> bool:
+        """Store OAuth state for CSRF protection.
+
+        Args:
+            state: Random state token
+            owner_id: Firebase UID
+            email: User's email
+            cli_callback: Optional CLI callback URL
+            expires_minutes: Minutes until state expires
+
+        Returns:
+            True if stored successfully
+        """
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+
+        data = {
+            'state': state,
+            'owner_id': owner_id,
+            'email': email,
+            'cli_callback': cli_callback,
+            'expires_at': expires_at.isoformat(),
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        try:
+            logger.info(f"Storing OAuth state: {state[:20]}... for owner {owner_id}")
+            result = self.client.table('oauth_states').upsert(
+                data,
+                on_conflict='state'
+            ).execute()
+            logger.info(f"Successfully stored OAuth state. Result: {len(result.data) if result.data else 0} rows")
+            logger.debug(f"State data: {data}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to store OAuth state: {e}", exc_info=True)
+            return False
+
+    def get_oauth_state(self, state: str) -> Optional[Dict[str, Any]]:
+        """Get and consume OAuth state (one-time use).
+
+        Args:
+            state: State token to look up
+
+        Returns:
+            State data dict or None if not found/expired
+        """
+        try:
+            logger.info(f"Looking up OAuth state: {state[:20]}...")
+            result = self.client.table('oauth_states')\
+                .select('*')\
+                .eq('state', state)\
+                .limit(1)\
+                .execute()
+
+            logger.info(f"OAuth state query result: {len(result.data) if result.data else 0} rows")
+
+            if not result.data:
+                logger.warning(f"OAuth state not found in database: {state[:20]}...")
+                return None
+
+            state_data = result.data[0]
+            logger.info(f"Found OAuth state for owner: {state_data['owner_id']}")
+
+            # Check if expired
+            expires_at = datetime.fromisoformat(state_data['expires_at'].replace('Z', '+00:00'))
+            if datetime.now(timezone.utc) > expires_at:
+                # Delete expired state
+                self.client.table('oauth_states').delete().eq('state', state).execute()
+                logger.warning(f"OAuth state expired for {state_data.get('owner_id')}")
+                return None
+
+            # Delete state (one-time use)
+            self.client.table('oauth_states').delete().eq('state', state).execute()
+            logger.info(f"OAuth state consumed (deleted) for owner: {state_data['owner_id']}")
+
+            return {
+                'owner_id': state_data['owner_id'],
+                'email': state_data['email'],
+                'cli_callback': state_data.get('cli_callback'),
+                'created_at': state_data['created_at']
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get OAuth state: {e}", exc_info=True)
+            return None
+
+    def cleanup_expired_oauth_states(self) -> int:
+        """Clean up expired OAuth states.
+
+        Returns:
+            Number of states deleted
+        """
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            result = self.client.table('oauth_states')\
+                .delete()\
+                .lt('expires_at', now)\
+                .execute()
+            deleted = len(result.data) if result.data else 0
+            if deleted > 0:
+                logger.info(f"Cleaned up {deleted} expired OAuth states")
+            return deleted
+        except Exception as e:
+            logger.error(f"Failed to cleanup OAuth states: {e}")
+            return 0
+
+    # ==========================================
     # MRCALL LINKING
     # ==========================================
 
@@ -1140,6 +1544,555 @@ class SupabaseStorage:
         ).order('created_at', desc=True).limit(limit).execute()
 
         return result.data if result.data else []
+
+    # ==========================================
+    # AVATARS (Relational Memory)
+    # ==========================================
+
+    def store_avatar(self, owner_id: str, avatar: Dict[str, Any]) -> Dict[str, Any]:
+        """Store or update an avatar.
+
+        Args:
+            owner_id: Firebase UID
+            avatar: Avatar data dict with contact_id, display_name, relationship_summary, etc.
+
+        Returns:
+            Stored avatar record
+        """
+        data = {
+            'owner_id': owner_id,
+            'contact_id': avatar['contact_id'],
+            'display_name': avatar.get('display_name'),
+            'identifiers': avatar.get('identifiers'),
+            'relationship_summary': avatar.get('relationship_summary'),
+            'relationship_status': avatar.get('relationship_status'),
+            'relationship_score': avatar.get('relationship_score'),
+            'suggested_action': avatar.get('suggested_action'),
+            'interaction_summary': avatar.get('interaction_summary'),
+            'preferred_tone': avatar.get('preferred_tone'),
+            'response_latency': avatar.get('response_latency'),
+            'relationship_strength': avatar.get('relationship_strength'),
+            'last_computed': avatar.get('last_computed'),
+            'compute_trigger': avatar.get('compute_trigger'),
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        result = self.client.table('avatars').upsert(
+            data,
+            on_conflict='owner_id,contact_id'
+        ).execute()
+
+        logger.info(f"Stored avatar for contact {avatar['contact_id']} (owner: {owner_id})")
+        return result.data[0] if result.data else {}
+
+    def get_avatar(self, owner_id: str, contact_id: str) -> Optional[Dict[str, Any]]:
+        """Get a single avatar by contact ID.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID (MD5 hash)
+
+        Returns:
+            Avatar record or None if not found
+        """
+        result = self.client.table('avatars')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('contact_id', contact_id)\
+            .limit(1)\
+            .execute()
+
+        return result.data[0] if result.data else None
+
+    def get_avatars(
+        self,
+        owner_id: str,
+        status: Optional[str] = None,
+        min_score: Optional[int] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """Get avatars with optional filters.
+
+        Args:
+            owner_id: Firebase UID
+            status: Filter by relationship_status ('open', 'waiting', 'closed')
+            min_score: Filter by minimum relationship_score (1-10)
+            limit: Max results to return
+            offset: Pagination offset
+
+        Returns:
+            List of avatar records, ordered by relationship_score descending
+        """
+        query = self.client.table('avatars')\
+            .select('*')\
+            .eq('owner_id', owner_id)
+
+        if status:
+            query = query.eq('relationship_status', status)
+
+        if min_score:
+            query = query.gte('relationship_score', min_score)
+
+        result = query\
+            .order('relationship_score', desc=True)\
+            .range(offset, offset + limit - 1)\
+            .execute()
+
+        return result.data or []
+
+    def queue_avatar_compute(
+        self,
+        owner_id: str,
+        contact_id: str,
+        trigger_type: str = 'manual',
+        priority: int = 5
+    ) -> Dict[str, Any]:
+        """Add avatar to compute queue.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID
+            trigger_type: 'email_sync', 'manual', 'scheduled', 'new_contact'
+            priority: 1-10 (10 = highest priority)
+
+        Returns:
+            Queued item record
+        """
+        data = {
+            'owner_id': owner_id,
+            'contact_id': contact_id,
+            'trigger_type': trigger_type,
+            'priority': priority,
+            'scheduled_at': datetime.now(timezone.utc).isoformat(),
+            'retry_count': 0
+        }
+
+        result = self.client.table('avatar_compute_queue').upsert(
+            data,
+            on_conflict='owner_id,contact_id'
+        ).execute()
+
+        logger.info(f"Queued avatar compute for {contact_id} (owner: {owner_id}, trigger: {trigger_type})")
+        return result.data[0] if result.data else {}
+
+    def remove_from_compute_queue(self, owner_id: str, contact_id: str) -> bool:
+        """Remove avatar from compute queue.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID
+
+        Returns:
+            True if removed
+        """
+        result = self.client.table('avatar_compute_queue')\
+            .delete()\
+            .eq('owner_id', owner_id)\
+            .eq('contact_id', contact_id)\
+            .execute()
+
+        return len(result.data) > 0 if result.data else False
+
+    def update_avatar_embedding(
+        self,
+        owner_id: str,
+        contact_id: str,
+        embedding: List[float]
+    ) -> bool:
+        """Update avatar's profile embedding for semantic search.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID
+            embedding: 384-dimensional vector from sentence-transformers
+
+        Returns:
+            True if updated
+        """
+        result = self.client.table('avatars')\
+            .update({
+                'profile_embedding': embedding,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            })\
+            .eq('owner_id', owner_id)\
+            .eq('contact_id', contact_id)\
+            .execute()
+
+        return len(result.data) > 0 if result.data else False
+
+    def get_stale_avatars(
+        self,
+        owner_id: str,
+        days_stale: int = 7
+    ) -> List[Dict[str, Any]]:
+        """Get avatars that need recomputation (not updated in N days).
+
+        Args:
+            owner_id: Firebase UID
+            days_stale: Number of days since last_computed to consider stale
+
+        Returns:
+            List of stale avatar records
+        """
+        from datetime import timedelta
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days_stale)
+
+        result = self.client.table('avatars')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .lt('last_computed', cutoff.isoformat())\
+            .execute()
+
+        return result.data or []
+
+    def search_avatars_semantic(
+        self,
+        owner_id: str,
+        query_embedding: List[float],
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Semantic search avatars using vector similarity.
+
+        Args:
+            owner_id: Firebase UID
+            query_embedding: 384-dimensional query vector
+            limit: Max results to return
+
+        Returns:
+            List of avatars ordered by cosine similarity (most similar first)
+        """
+        # Use Supabase RPC function for vector similarity search
+        result = self.client.rpc('match_avatars', {
+            'query_embedding': query_embedding,
+            'match_owner_id': owner_id,
+            'match_count': limit
+        }).execute()
+
+        return result.data or []
+
+    def store_identifier(
+        self,
+        owner_id: str,
+        identifier: str,
+        identifier_type: str,
+        contact_id: str,
+        confidence: float = 1.0,
+        source: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Store identifier mapping for contact resolution.
+
+        Args:
+            owner_id: Firebase UID
+            identifier: Email, phone, or name
+            identifier_type: 'email', 'phone', or 'name'
+            contact_id: Contact's stable ID (MD5 hash)
+            confidence: 0.0-1.0 confidence score
+            source: Where identifier was discovered ('email', 'calendar', 'manual')
+
+        Returns:
+            Stored identifier record
+        """
+        data = {
+            'owner_id': owner_id,
+            'identifier': identifier,
+            'identifier_type': identifier_type,
+            'contact_id': contact_id,
+            'confidence': confidence,
+            'source': source,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        result = self.client.table('identifier_map').upsert(
+            data,
+            on_conflict='owner_id,identifier'
+        ).execute()
+
+        return result.data[0] if result.data else {}
+
+    def get_contact_identifiers(
+        self,
+        owner_id: str,
+        contact_id: str
+    ) -> List[Dict[str, Any]]:
+        """Get all identifiers for a contact.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID
+
+        Returns:
+            List of identifier records
+        """
+        result = self.client.table('identifier_map')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('contact_id', contact_id)\
+            .execute()
+
+        return result.data or []
+
+    def resolve_contact_id(
+        self,
+        owner_id: str,
+        identifier: str
+    ) -> Optional[str]:
+        """Resolve identifier to contact ID.
+
+        Args:
+            owner_id: Firebase UID
+            identifier: Email, phone, or name to look up
+
+        Returns:
+            Contact ID or None if not found
+        """
+        result = self.client.table('identifier_map')\
+            .select('contact_id')\
+            .eq('owner_id', owner_id)\
+            .eq('identifier', identifier)\
+            .order('confidence', desc=True)\
+            .limit(1)\
+            .execute()
+
+        return result.data[0]['contact_id'] if result.data else None
+
+    def get_unprocessed_emails(
+        self,
+        owner_id: str,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Get emails not yet processed by Memory Agent.
+
+        Uses LEFT JOIN to find emails not referenced in memory.examples[].
+
+        Args:
+            owner_id: Firebase UID
+            limit: Maximum number of emails to return
+
+        Returns:
+            List of email dicts with id, from_email, body_plain, snippet
+        """
+        # Use RPC function for complex LEFT JOIN query
+        result = self.client.rpc('get_unprocessed_emails', {
+            'p_owner_id': owner_id,
+            'p_limit': limit
+        }).execute()
+
+        return result.data or []
+
+    def upsert_identifier(
+        self,
+        owner_id: str,
+        identifier: str,
+        identifier_type: str,
+        contact_id: str,
+        source: Optional[str] = None,
+        confidence: float = 1.0
+    ) -> Dict[str, Any]:
+        """Store identifier mapping with confidence score.
+
+        Delegates to existing store_identifier() method.
+
+        Args:
+            owner_id: Firebase UID
+            identifier: Email, phone, linkedin URL, etc.
+            identifier_type: 'phone', 'linkedin', 'email'
+            contact_id: Contact's stable ID (MD5 hash)
+            source: Where identifier was discovered
+            confidence: 0.0-1.0 confidence score
+
+        Returns:
+            Stored identifier record
+        """
+        return self.store_identifier(
+            owner_id=owner_id,
+            identifier=identifier,
+            identifier_type=identifier_type,
+            contact_id=contact_id,
+            confidence=confidence,
+            source=source
+        )
+
+    def get_email_stats(
+        self,
+        owner_id: str,
+        contact_id: str
+    ) -> Dict[str, Any]:
+        """Get email statistics for CRM Agent avatar computation.
+
+        Calculates relationship strength as emails/week over 90 days.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID
+
+        Returns:
+            Dict with:
+                - last_email_from_owner: bool
+                - days_since_last_contact: int
+                - relationship_strength: float (0-1)
+                - last_email_snippet: str (100 chars)
+        """
+        # Use RPC function for complex CTE query
+        result = self.client.rpc('get_email_stats', {
+            'p_owner_id': owner_id,
+            'p_contact_id': contact_id
+        }).execute()
+
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+
+        # Return default values if no data
+        return {
+            'last_email_from_owner': False,
+            'days_since_last_contact': 999999,
+            'relationship_strength': 0.0,
+            'last_email_snippet': ''
+        }
+
+    def upsert_avatar(
+        self,
+        owner_id: str,
+        contact_id: str,
+        display_name: Optional[str] = None,
+        relationship_summary: Optional[str] = None,
+        status: Optional[str] = None,
+        priority: Optional[int] = None,
+        action: Optional[str] = None,
+        last_computed: Optional[datetime] = None
+    ) -> Dict[str, Any]:
+        """Store computed Avatar (volatile view).
+
+        Delegates to existing store_avatar() method if it exists, otherwise
+        directly updates the avatars table.
+
+        Args:
+            owner_id: Firebase UID
+            contact_id: Contact's stable ID
+            display_name: Contact's display name
+            relationship_summary: Summary of relationship
+            status: 'open', 'waiting', 'closed'
+            priority: 1-10 priority score
+            action: Suggested action text
+            last_computed: When avatar was last computed
+
+        Returns:
+            Stored avatar record
+        """
+        avatar_data = {
+            'contact_id': contact_id,
+            'display_name': display_name,
+            'relationship_summary': relationship_summary,
+            'relationship_status': status,
+            'relationship_score': priority,
+            'suggested_action': action,
+            'last_computed': last_computed.isoformat() if last_computed else datetime.now(timezone.utc).isoformat()
+        }
+
+        return self.store_avatar(owner_id, avatar_data)
+
+    def get_affected_contacts(
+        self,
+        email_ids: List[str]
+    ) -> List[str]:
+        """Get contact IDs affected by new emails.
+
+        Queries emails table WHERE id IN email_ids, extracts from_email addresses,
+        looks up contact_id from identifier_map, and returns unique list.
+
+        Args:
+            email_ids: List of email UUIDs
+
+        Returns:
+            Unique list of contact IDs
+        """
+        if not email_ids:
+            return []
+
+        # Use RPC function for efficient query
+        result = self.client.rpc('get_affected_contacts', {
+            'p_email_ids': email_ids
+        }).execute()
+
+        return result.data or []
+
+    # ==========================================
+    # USER NOTIFICATIONS
+    # ==========================================
+
+    def create_notification(
+        self,
+        owner_id: str,
+        message: str,
+        notification_type: str = 'warning'
+    ) -> Dict[str, Any]:
+        """Create a notification for a user.
+
+        Args:
+            owner_id: Firebase UID
+            message: Notification message text
+            notification_type: 'info', 'warning', or 'error'
+
+        Returns:
+            Created notification record
+        """
+        data = {
+            'owner_id': owner_id,
+            'message': message,
+            'notification_type': notification_type,
+            'read': False,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        result = self.client.table('user_notifications').insert(data).execute()
+
+        logger.info(f"Created {notification_type} notification for user {owner_id}")
+        return result.data[0] if result.data else {}
+
+    def get_unread_notifications(self, owner_id: str) -> List[Dict[str, Any]]:
+        """Get all unread notifications for a user.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            List of unread notification records (oldest first)
+        """
+        result = self.client.table('user_notifications')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('read', False)\
+            .order('created_at', desc=False)\
+            .execute()
+
+        return result.data or []
+
+    def mark_notifications_read(
+        self,
+        owner_id: str,
+        notification_ids: List[str]
+    ) -> bool:
+        """Mark notifications as read.
+
+        Args:
+            owner_id: Firebase UID
+            notification_ids: List of notification UUIDs to mark as read
+
+        Returns:
+            True if successful
+        """
+        if not notification_ids:
+            return True
+
+        result = self.client.table('user_notifications')\
+            .update({'read': True})\
+            .eq('owner_id', owner_id)\
+            .in_('id', notification_ids)\
+            .execute()
+
+        logger.info(f"Marked {len(notification_ids)} notifications as read for user {owner_id}")
+        return bool(result.data)
 
 
 # Create search_emails function in Supabase (run once via SQL Editor):

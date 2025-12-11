@@ -165,7 +165,7 @@ class Settings(BaseSettings):
 
     # API Server (for thin client)
     api_server_url: str = Field(
-        default="http://localhost:9000",
+        default="http://localhost:8000",
         description="Zylch API server URL for CLI thin client"
     )
 
