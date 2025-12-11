@@ -273,9 +273,10 @@ You: Schedule call with Tokyo team tomorrow 9am JST with Meet link
 ## Troubleshooting
 
 ### "OAuth not working"
-- Ensure credentials are in `credentials/gmail_oauth.json`
+- Run `/connect google` to initiate OAuth flow
 - Google Calendar requires same OAuth as Gmail
-- Follow setup: `docs/setup/gmail-oauth.md`
+- Tokens are stored in Supabase `oauth_tokens` table (encrypted)
+- Follow setup: `docs/guides/gmail-oauth.md`
 
 ### "Meet link not generated"
 - Check `add_meet_link=True` is set

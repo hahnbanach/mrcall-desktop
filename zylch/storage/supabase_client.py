@@ -545,7 +545,7 @@ class SupabaseStorage:
 
         Args:
             owner_id: Firebase UID
-            provider: 'google.com' or 'microsoft.com'
+            provider: 'google' or 'microsoft'
             email: User's email address
             google_token_data: Base64-encoded pickled Google Credentials (for Google)
             graph_access_token: Microsoft Graph access token
@@ -609,7 +609,7 @@ class SupabaseStorage:
 
         Args:
             owner_id: Firebase UID
-            provider: 'google.com' or 'microsoft.com'
+            provider: 'google' or 'microsoft'
 
         Returns:
             Token record or None if not found
@@ -640,9 +640,9 @@ class SupabaseStorage:
         """
         from zylch.utils.encryption import decrypt
 
-        token = self.get_oauth_token(owner_id, 'google.com')
+        token = self.get_oauth_token(owner_id, 'google')
         if token:
-            logger.info(f"Found oauth_tokens record for owner {owner_id}, provider google.com")
+            logger.info(f"Found oauth_tokens record for owner {owner_id}, provider google")
             encrypted_data = token.get('google_token_data')
             if encrypted_data:
                 logger.info(f"google_token_data present (length: {len(encrypted_data)}), decrypting...")
@@ -652,7 +652,7 @@ class SupabaseStorage:
             else:
                 logger.warning(f"oauth_tokens record exists but google_token_data is NULL for owner {owner_id}")
         else:
-            logger.warning(f"No oauth_tokens record found for owner {owner_id}, provider google.com")
+            logger.warning(f"No oauth_tokens record found for owner {owner_id}, provider google")
         return None
 
     def get_graph_token(self, owner_id: str) -> Optional[Dict[str, Any]]:
@@ -666,7 +666,7 @@ class SupabaseStorage:
         """
         from zylch.utils.encryption import decrypt
 
-        token = self.get_oauth_token(owner_id, 'microsoft.com')
+        token = self.get_oauth_token(owner_id, 'microsoft')
         if token:
             access_token = token.get('graph_access_token')
             refresh_token = token.get('graph_refresh_token')
@@ -682,7 +682,7 @@ class SupabaseStorage:
 
         Args:
             owner_id: Firebase UID
-            provider: 'google.com' or 'microsoft.com'
+            provider: 'google' or 'microsoft'
 
         Returns:
             True if deleted
@@ -704,12 +704,12 @@ class SupabaseStorage:
             Email address or None
         """
         # Try Google first
-        token = self.get_oauth_token(owner_id, 'google.com')
+        token = self.get_oauth_token(owner_id, 'google')
         if token:
             return token.get('email')
 
         # Try Microsoft
-        token = self.get_oauth_token(owner_id, 'microsoft.com')
+        token = self.get_oauth_token(owner_id, 'microsoft')
         if token:
             return token.get('email')
 
@@ -722,17 +722,17 @@ class SupabaseStorage:
             owner_id: Firebase UID
 
         Returns:
-            'google.com' or 'microsoft.com' or None
+            'google' or 'microsoft' or None
         """
         # Check Google - verify token data exists
-        token = self.get_oauth_token(owner_id, 'google.com')
+        token = self.get_oauth_token(owner_id, 'google')
         if token and token.get('google_token_data'):
-            return 'google.com'
+            return 'google'
 
         # Check Microsoft - verify token data exists
-        token = self.get_oauth_token(owner_id, 'microsoft.com')
+        token = self.get_oauth_token(owner_id, 'microsoft')
         if token and (token.get('graph_access_token') or token.get('graph_refresh_token')):
-            return 'microsoft.com'
+            return 'microsoft'
 
         return None
 
@@ -890,6 +890,40 @@ class SupabaseStorage:
             Dict with api_key, api_secret, from_number or None if not found
         """
         return self.get_provider_credentials(owner_id, 'vonage')
+
+    # ==========================================
+    # SendGrid API Key Management (wrapper for unified storage)
+    # ==========================================
+
+    def get_sendgrid_key(self, owner_id: str) -> Optional[str]:
+        """Get SendGrid API key for a user (decrypted).
+
+        Wrapper for get_provider_credentials('sendgrid').
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            SendGrid API key or None if not found
+        """
+        creds = self.get_provider_credentials(owner_id, 'sendgrid')
+        if creds:
+            return creds.get('api_key')
+        return None
+
+    def get_sendgrid_from_email(self, owner_id: str) -> Optional[str]:
+        """Get SendGrid from_email for a user.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            SendGrid from_email or None if not found
+        """
+        creds = self.get_provider_credentials(owner_id, 'sendgrid')
+        if creds:
+            return creds.get('from_email')
+        return None
 
     # ==========================================
     # UNIFIED CREDENTIALS STORAGE (JSONB)

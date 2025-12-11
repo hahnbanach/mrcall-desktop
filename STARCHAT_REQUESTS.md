@@ -327,7 +327,7 @@ Grazie! 🙏
 Zylch AI supporta autenticazione Firebase (Google e Microsoft). Ogni utente Firebase ha:
 - **owner_id** (Firebase UID)
 - **zylch_assistant_id** (ID univoco dell'assistant)
-- **provider** (google.com o microsoft.com)
+- **provider** (google o microsoft)
 - **OAuth tokens** (per accesso email)
 
 **Attualmente:** Zylch CLI salva tutto in filesystem locale (~/.zylch/).

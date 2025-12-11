@@ -31,9 +31,10 @@ re-authenticate gmail
 ```
 
 The agent will:
-- Delete the current token file (`~/.config/zylch/google_token.json`)
+- Trigger OAuth re-authentication flow
 - Open your browser for OAuth consent
 - Request all scopes including `gmail.send`
+- Store new tokens in Supabase (encrypted)
 
 ### 3. Complete Browser OAuth Flow
 

@@ -28,18 +28,20 @@ source venv/bin/activate
 
 ### 1. Edit .env File
 
-The `.env` file is already created with credentials from mcp-gateway. Key settings:
+The `.env` file contains system configuration. Key settings:
 
 ```bash
-# Required
-ANTHROPIC_API_KEY=sk-ant-api03-...  # Already set ✅
-STARCHAT_USERNAME=admin              # Already set ✅
-STARCHAT_PASSWORD=ujoy4ZaiNieNeng6   # Already set ✅
+# System configuration
+STARCHAT_USERNAME=admin              # StarChat integration
+STARCHAT_PASSWORD=xxx                # StarChat integration
+SUPABASE_URL=https://xxx.supabase.co # Required for storage
+SUPABASE_SERVICE_ROLE_KEY=xxx        # Required for storage
 
-# Optional (for full functionality)
-SENDGRID_API_KEY=your_key_here
-VONAGE_API_KEY=your_key_here
-VONAGE_API_SECRET=your_secret_here
+# User credentials are NOT in .env (BYOK model)
+# Users connect services via CLI or web dashboard:
+#   /connect anthropic  - Anthropic API key
+#   /connect vonage     - Vonage SMS credentials
+#   /connect pipedrive  - Pipedrive CRM token
 ```
 
 ### 2. Gmail OAuth Setup (Optional)
@@ -229,10 +231,10 @@ zylch/
 
 ## Troubleshooting
 
-### "ANTHROPIC_API_KEY not set"
-- Check `.env` file exists
-- Check `ANTHROPIC_API_KEY=` has value
-- Restart after editing .env
+### "Anthropic API key not configured"
+- Run `/connect anthropic` in CLI or use web dashboard
+- Enter your Anthropic API key (BYOK model)
+- Key is stored encrypted in Supabase per-user
 
 ### "Gmail credentials not found"
 - Skip Gmail features for now, or

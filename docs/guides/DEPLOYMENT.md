@@ -48,11 +48,14 @@ In Railway Dashboard → Variables, add:
 
 **Required:**
 ```
-ANTHROPIC_API_KEY=sk-ant-xxx
+# System configuration (NOT user credentials)
 FIREBASE_PROJECT_ID=zylch-xxx
 FIREBASE_API_KEY=xxx
 FIREBASE_AUTH_DOMAIN=zylch-xxx.firebaseapp.com
 CORS_ALLOWED_ORIGINS=https://app.zylch.com,https://zylch.com
+
+# NOTE: ANTHROPIC_API_KEY is NOT in .env
+# Users provide their own key via /connect anthropic (BYOK model)
 ```
 
 **Google OAuth (for Gmail/Calendar):**
@@ -83,11 +86,11 @@ Generate with: `python -c 'from cryptography.fernet import Fernet; print(Fernet.
 
 This key encrypts OAuth tokens and API keys stored in Supabase. Only store in Railway - NOT in Supabase or local dev.
 
-**Vonage SMS:**
+**Vonage SMS (BYOK):**
 ```
-VONAGE_API_KEY=xxx
-VONAGE_API_SECRET=xxx
-VONAGE_FROM_NUMBER=+1xxx
+# NOTE: Vonage credentials are NOT in .env
+# Users provide their own credentials via /connect vonage
+# Credentials stored per-user in Supabase (encrypted)
 ```
 
 See `.env.example` for the complete list.
@@ -222,9 +225,12 @@ Sensitive credentials (OAuth tokens, API keys) are encrypted before storage in S
 - Neither Railway nor Supabase alone can access plaintext credentials
 
 **What's encrypted:**
-- Google OAuth tokens (`google_token_data`)
-- Microsoft Graph tokens (`graph_access_token`, `graph_refresh_token`)
-- Anthropic API keys (`anthropic_api_key`)
+- All credentials in unified JSONB `credentials` column
+- Google OAuth tokens
+- Microsoft Graph tokens
+- Anthropic API keys (BYOK - user provides via `/connect anthropic`)
+- Vonage credentials (BYOK - user provides via `/connect vonage`)
+- Pipedrive API token (BYOK - user provides via `/connect pipedrive`)
 
 **Local development:** Encryption is optional. If `ENCRYPTION_KEY` not set, data stored unencrypted (acceptable for single-tenant local dev).
 

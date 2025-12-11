@@ -422,20 +422,21 @@ CREATE TABLE memories (
 );
 CREATE INDEX idx_memories_namespace ON memories(owner_id, namespace);
 
--- OAuth tokens (encrypted)
+-- OAuth tokens (encrypted) - Unified JSONB credentials storage
 CREATE TABLE oauth_tokens (
   id UUID PRIMARY KEY,
   owner_id TEXT NOT NULL,
-  provider TEXT NOT NULL,  -- 'google.com', 'microsoft.com', 'anthropic', 'mrcall'
+  provider TEXT NOT NULL,  -- 'google', 'microsoft', 'anthropic', 'vonage', etc.
   email TEXT,
-  google_token_data TEXT,  -- Fernet-encrypted
-  graph_access_token TEXT,  -- Fernet-encrypted
-  graph_refresh_token TEXT,  -- Fernet-encrypted
-  anthropic_api_key TEXT,  -- Fernet-encrypted
+  credentials JSONB,  -- Unified encrypted credentials (Fernet)
+  connection_status TEXT DEFAULT 'connected',
   scopes TEXT[],
   created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(owner_id, provider)
 );
+-- NOTE: Legacy columns (google_token_data, graph_*, anthropic_api_key) removed
+-- All credentials now stored in unified JSONB 'credentials' column
 
 -- Sharing authorizations
 CREATE TABLE share_authorizations (
@@ -691,20 +692,24 @@ User Login (Google/Microsoft OAuth)
 - **Auto-refresh**: Tokens refreshed 5 minutes before expiry
 - **Scopes**: Stored plaintext (not sensitive)
 
-**Anthropic API Keys** (BYOK):
-- **Storage**: Same `oauth_tokens` table (`provider='anthropic'`)
-- **Encryption**: Fernet-encrypted before storage
-- **Usage**: Decrypted on-demand for Claude API calls
+**All User Credentials** (BYOK):
+- **Storage**: Supabase `oauth_tokens` table in unified `credentials` JSONB column
+- **Encryption**: Fernet-encrypted (whole JSONB blob)
+- **No .env fallback**: Users MUST connect via `/connect <provider>` command
+- **Providers**: Anthropic, Vonage, Pipedrive (all BYOK - user provides their own keys)
 
 **Token Storage Pattern**:
 ```python
 # Store (encrypts automatically)
-storage.save_anthropic_key(owner_id, "sk-ant-...")
-# → Fernet.encrypt("sk-ant-...") → Supabase
+storage.store_oauth_token(owner_id, "anthropic", email, anthropic_api_key="sk-ant-...")
+# → credentials JSONB updated → Fernet.encrypt(whole_json) → Supabase
 
 # Retrieve (decrypts automatically)
-api_key = storage.get_anthropic_key(owner_id)
-# → Supabase → Fernet.decrypt() → "sk-ant-..."
+creds = storage.get_oauth_token(owner_id, "anthropic")
+# → Supabase → Fernet.decrypt() → {"api_key": "sk-ant-..."}
+
+# If user hasn't connected provider:
+# → Returns None, tool shows "Provider not connected. Use /connect <provider>"
 ```
 
 **Encryption Key Management**:

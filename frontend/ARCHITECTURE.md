@@ -589,7 +589,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const googleProvider = new GoogleAuthProvider()
-export const microsoftProvider = new OAuthProvider('microsoft.com')
+export const microsoftProvider = new OAuthProvider('microsoft')  // Note: Firebase uses 'microsoft.com' internally, but Zylch normalizes to 'microsoft'
 
 // Add scopes
 googleProvider.addScope('https://www.googleapis.com/auth/gmail.readonly')
