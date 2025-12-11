@@ -506,6 +506,16 @@ class EmailArchiveManager:
                 # Just email
                 from_email = from_str.strip()
 
+        # Detect auto-reply based on headers and from email
+        from zylch.utils.auto_reply_detector import detect_auto_reply
+        auto_reply_headers = {
+            'Auto-Submitted': gmail_msg.get('auto_submitted'),
+            'X-Autoreply': gmail_msg.get('x_autoreply'),
+            'Precedence': gmail_msg.get('precedence'),
+            'X-Auto-Response-Suppress': gmail_msg.get('x_auto_response_suppress'),
+        }
+        is_auto_reply = detect_auto_reply(auto_reply_headers, from_email)
+
         return {
             'id': gmail_msg['id'],
             'thread_id': gmail_msg['thread_id'],
@@ -522,7 +532,8 @@ class EmailArchiveManager:
             'labels': gmail_msg.get('labels', []),
             'message_id_header': gmail_msg.get('message_id', ''),
             'in_reply_to': gmail_msg.get('in_reply_to', ''),
-            'references': gmail_msg.get('references', '')
+            'references': gmail_msg.get('references', ''),
+            'is_auto_reply': is_auto_reply,
         }
 
     def get_thread_messages(self, thread_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:

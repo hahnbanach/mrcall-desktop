@@ -435,7 +435,8 @@ class EmailSyncManager:
             'date': archive_msg.get('date', ''),
             'snippet': archive_msg.get('snippet', ''),
             'body': archive_msg.get('body_plain', ''),
-            'labels': json.loads(archive_msg.get('labels', '[]')) if isinstance(archive_msg.get('labels'), str) else archive_msg.get('labels', [])
+            'labels': json.loads(archive_msg.get('labels', '[]')) if isinstance(archive_msg.get('labels'), str) else archive_msg.get('labels', []),
+            'is_auto_reply': archive_msg.get('is_auto_reply', False),
         }
 
     def _analyze_thread(
@@ -454,6 +455,11 @@ class EmailSyncManager:
         Returns:
             Thread data with analysis
         """
+        # Early-exit for auto-reply threads - skip Claude analysis to save API costs
+        if last_message.get('is_auto_reply'):
+            logger.debug(f"Thread {thread_id}: skipping analysis - last message is auto-reply")
+            return self._build_auto_reply_thread_data(thread_id, last_message, all_messages)
+
         # Extract participants (from, to, cc)
         participants = set()
         for msg in all_messages:
@@ -522,6 +528,61 @@ class EmailSyncManager:
         thread_data['priority_score'] = priority
 
         return thread_data
+
+    def _build_auto_reply_thread_data(
+        self,
+        thread_id: str,
+        last_message: Dict[str, Any],
+        all_messages: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Build thread data for auto-reply messages without Claude analysis.
+
+        Auto-replies don't need AI analysis - we know they:
+        - Don't resolve the thread (someone still needs to respond)
+        - Have low priority (the auto-reply itself isn't actionable)
+        - The thread remains "open" and needs human attention
+
+        Args:
+            thread_id: Thread ID
+            last_message: The auto-reply message
+            all_messages: All messages in thread
+
+        Returns:
+            Thread data with auto-reply flags
+        """
+        # Extract participants
+        participants = set()
+        for msg in all_messages:
+            from_addr = self._extract_email(msg.get('from', ''))
+            to_addrs = self._extract_emails(msg.get('to', ''))
+            cc_addrs = self._extract_emails(msg.get('cc', ''))
+            if from_addr:
+                participants.add(from_addr)
+            participants.update(to_addrs)
+            participants.update(cc_addrs)
+
+        return {
+            "thread_id": thread_id,
+            "subject": last_message.get('subject', '(No subject)'),
+            "participants": list(participants),
+            "email_count": len(all_messages),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "open": True,  # Auto-reply doesn't close the thread
+            "expected_action": "answer",  # Someone still needs to respond
+            "last_email": {
+                "id": last_message.get('id'),
+                "from": last_message.get('from'),
+                "to": last_message.get('to'),
+                "cc": last_message.get('cc', ''),
+                "date": last_message.get('date'),
+                "body": last_message.get('body', '')
+            },
+            "summary": "Auto-reply detected - thread awaiting human response",
+            "requires_action": True,  # Thread still needs attention
+            "last_message_date": last_message.get('date', ''),
+            "priority_score": 3,  # Low priority - auto-reply itself isn't urgent
+            "is_auto_reply": True,  # Flag for downstream processing
+        }
 
     def _agent_analyze(
         self,

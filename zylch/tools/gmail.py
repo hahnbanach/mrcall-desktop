@@ -291,6 +291,11 @@ class GmailClient:
             'message_id': headers.get('Message-ID', ''),
             'in_reply_to': headers.get('In-Reply-To', ''),
             'references': headers.get('References', ''),
+            # Auto-reply detection headers
+            'auto_submitted': headers.get('Auto-Submitted'),
+            'x_autoreply': headers.get('X-Autoreply'),
+            'precedence': headers.get('Precedence'),
+            'x_auto_response_suppress': headers.get('X-Auto-Response-Suppress'),
         }
 
     def get_message(self, message_id: str) -> Dict[str, Any]:
