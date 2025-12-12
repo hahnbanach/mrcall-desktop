@@ -24,7 +24,7 @@ async def handle_help() -> str:
 
 **📧 Data Management:**
 • `/sync [days]` - Sync email and calendar
-• `/gaps` or `/briefing` - Analyze unanswered conversations
+• `/briefing [days]` - Daily briefing of tasks and unanswered conversations
 • `/archive` - Email archive management
 • `/cache` - Cache management
 
@@ -33,7 +33,7 @@ async def handle_help() -> str:
 • `/trigger` - Event-driven automation
 
 **📡 Integrations:**
-• `/connections` - View and manage external connections
+• `/connect` - View and manage external connections
 • `/mrcall` - MrCall/StarChat phone integration
 
 **🔗 Sharing:**
@@ -261,10 +261,10 @@ async def handle_clear() -> str:
 Clear your local `conversation_history` array."""
 
 
-async def handle_gaps(args: List[str], owner_id: str) -> str:
-    """Handle /gaps command - Query pre-computed avatars for tasks.
+async def handle_briefing(args: List[str], owner_id: str) -> str:
+    """Handle /briefing command - Show daily briefing of tasks and unanswered conversations.
 
-    Usage: /gaps [days]
+    Usage: /briefing [days]
 
     This queries pre-computed avatars (NOT real-time LLM calls).
     Avatars are updated in background after each /sync.
@@ -280,9 +280,9 @@ async def handle_gaps(args: List[str], owner_id: str) -> str:
         try:
             days_back = int(args[0])
         except ValueError:
-            return f"❌ **Error:** `{args[0]}` is not a valid number\n\n**Usage:** `/gaps [days]`"
+            return f"❌ **Error:** `{args[0]}` is not a valid number\n\n**Usage:** `/briefing [days]`"
 
-    logger.info(f"[/gaps] Querying avatars for owner_id={owner_id}, days_back={days_back}")
+    logger.info(f"[/briefing] Querying avatars for owner_id={owner_id}, days_back={days_back}")
 
     try:
         supabase = SupabaseStorage()
@@ -303,8 +303,8 @@ async def handle_gaps(args: List[str], owner_id: str) -> str:
         return format_task_list(avatars, include_stale_warning=True)
 
     except Exception as e:
-        logger.error(f"Gap analysis failed: {e}", exc_info=True)
-        return f"❌ **Gap analysis failed:** {str(e)}"
+        logger.error(f"Briefing failed: {e}", exc_info=True)
+        return f"❌ **Briefing failed:** {str(e)}"
 
 
 async def handle_archive(args: List[str], config: ToolConfig, owner_id: str) -> str:
@@ -1591,20 +1591,22 @@ COMMAND_HELP = {
 - `/sync --status` - Check sync status without syncing
 - `/sync --reset` - Reset sync state, then run `/sync [days]` to re-sync
 
-This only syncs data - no AI analysis. Run `/gaps` after to analyze tasks.''',
+This only syncs data - no AI analysis. Run `/briefing` after to analyze tasks.''',
     },
-    '/gaps': {
-        'summary': 'Analyze email threads for tasks',
-        'usage': '/gaps [days]',
-        'description': '''Analyzes email threads to detect tasks you need to act on.
+    '/briefing': {
+        'summary': 'Daily briefing of tasks and unanswered conversations',
+        'usage': '/briefing [days]',
+        'description': '''Show your daily briefing of tasks and unanswered conversations.
+
+Analyzes email threads to detect tasks you need to act on.
 
 **Arguments:**
 - `days` - Number of days to analyze (default: 7)
 
 **Examples:**
-- `/gaps` - Analyze last 7 days
-- `/gaps 1` - Analyze last 1 day
-- `/gaps 30` - Analyze last 30 days
+- `/briefing` - Show today's briefing (last 7 days)
+- `/briefing 1` - Yesterday only
+- `/briefing 30` - Full month briefing
 
 **Task types detected:**
 - **answer** - Someone asked you a question
@@ -1678,6 +1680,21 @@ Run `/sync` first to fetch latest emails.''',
         'usage': '/tutorial [topic]',
         'description': 'Learn how to use Zylch with interactive tutorials.',
     },
+    '/connect': {
+        'summary': 'Manage external integrations',
+        'usage': '/connect [provider]',
+        'description': '''View and manage external service connections (Google, Microsoft, Anthropic, etc.).
+
+**Usage:**
+- `/connect` - List all available integrations and their status
+- `/connect google` - Connect Google (Gmail + Calendar)
+- `/connect microsoft` - Connect Microsoft (Outlook + Calendar)
+- `/connect anthropic` - Connect Anthropic Claude API
+
+**Examples:**
+- `/connect` - Show connection status
+- `/connect anthropic` - Add your Anthropic API key''',
+    },
 }
 
 # Export all handlers
@@ -1685,7 +1702,7 @@ COMMAND_HANDLERS = {
     '/help': handle_help,
     '/sync': handle_sync,
     '/clear': handle_clear,
-    '/gaps': handle_gaps,
+    '/briefing': handle_briefing,
     '/archive': handle_archive,
     '/cache': handle_cache,
     '/model': handle_model,
@@ -1704,6 +1721,8 @@ COMMAND_HANDLERS = {
 # Maps commands to phrases that should trigger them
 COMMAND_TRIGGERS = {
     '/sync': [
+        "sync",
+        "synchronize",
         "sync my data",
         "synchronize everything",
         "fetch my emails",
@@ -1715,33 +1734,34 @@ COMMAND_TRIGGERS = {
         "sync emails and calendar",
         "update my data",
         "check for new emails",
-    ],
-    '/gaps': [
-        "what tasks do I have",
-        "show me unanswered emails",
-        "what needs my attention",
-        "briefing",
-        "what should I work on",
-        "pending tasks",
-        "what do I need to respond to",
-        "emails waiting for reply",
-        "show my open items",
-        "analyze my inbox",
+        "refresh",
+        "update",
     ],
     '/help': [
+        "help",
+        "commands",
         "what can you do",
         "show me commands",
         "help me",
         "what commands are available",
         "how do I use this",
         "list available features",
+        "?",
+        "how to use",
+        "aiuto",  # Italian for "help"
+        "ayuda",  # Spanish for "help"
+        "aide",   # French for "help"
     ],
     '/clear': [
+        "clear",
+        "reset",
         "clear history",
         "reset conversation",
         "start fresh",
         "new conversation",
         "clear chat",
+        "erase",
+        "start over",
     ],
     '/model': [
         "change AI model",
@@ -1766,12 +1786,17 @@ COMMAND_TRIGGERS = {
         "create rule",
     ],
     '/connect': [
+        "connect",
+        "connections",
+        "integrations",
         "connect my account",
         "link google",
         "link outlook",
         "set up integration",
         "connect email",
         "add calendar",
+        "link",
+        "setup",
     ],
     '/sharing': [
         "who can see my data",
@@ -1794,5 +1819,55 @@ COMMAND_TRIGGERS = {
         "learn how to",
         "guide me",
         "getting started",
+    ],
+    '/briefing': [
+        "briefing",
+        "daily briefing",
+        "morning briefing",
+        "what's on my plate",
+        "today's tasks",
+        "show me my briefing",
+        "daily update",
+        "morning update",
+        "daily",
+        "today",
+        "gaps",
+        "tasks",
+        "what tasks do I have",
+        "show me unanswered emails",
+        "what needs my attention",
+        "what should I work on",
+        "pending tasks",
+        "what do I need to respond to",
+        "emails waiting for reply",
+        "show my open items",
+        "analyze my inbox",
+        "todos",
+        "to-dos",
+        "action items",
+    ],
+    '/assistant': [
+        "configure assistant",
+        "assistant settings",
+        "change assistant behavior",
+        "ai configuration",
+    ],
+    '/mrcall': [
+        "phone integration",
+        "mrcall status",
+        "telephone integration",
+        "starchat integration",
+    ],
+    '/share': [
+        "share my data",
+        "give someone access",
+        "share with",
+        "grant access",
+    ],
+    '/revoke': [
+        "revoke access",
+        "remove access",
+        "stop sharing",
+        "revoke sharing",
     ],
 }

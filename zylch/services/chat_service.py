@@ -202,8 +202,8 @@ class ChatService:
                         config = ToolConfig.from_settings()
                         memory = await ToolFactory.create_memory_system(config)
                         response_text = await handler(args, config, memory, owner_id)
-                    elif cmd == '/gaps':
-                        # /gaps only needs args and owner_id (fast avatar query)
+                    elif cmd == '/briefing':
+                        # /briefing only needs args and owner_id (fast avatar query)
                         response_text = await handler(args, owner_id)
                     elif cmd in ['/archive', '/memory']:
                         # /archive and /memory need config and owner_id

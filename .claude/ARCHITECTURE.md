@@ -36,6 +36,16 @@
 
 Zylch is an AI-powered email assistant that provides relationship intelligence, task management, and automated communication workflows (email, whatsapp, phone, slack etc) through multiple interfaces (CLI, HTTP API).
 
+## Local Development
+
+**Local development uses the SAME architecture as production:**
+- Firebase Auth for user authentication
+- Supabase for all data storage (emails, calendar, tokens, avatars)
+- Same OAuth flows as production (server-side, not InstalledAppFlow)
+- No separate local database or file-based token storage
+
+Run locally with `uvicorn zylch.api.main:app --reload --port 8000` - connects to Supabase directly.
+
 ## Core Components
 
 ### 1. Agent System (`zylch/agent/`)

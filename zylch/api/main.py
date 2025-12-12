@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
-from zylch.api.routes import sync, gaps, skills, patterns, archive, chat, admin, webhooks, data, auth, commands, avatars, connections
+from zylch.api.routes import sync, briefing, skills, patterns, archive, chat, admin, webhooks, data, auth, commands, avatars, connections
 from zylch.api.firebase_auth import initialize_firebase
 from zylch.config import settings
 
@@ -38,7 +38,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(data.router, prefix="/api/data", tags=["data"])
 app.include_router(avatars.router, prefix="/api", tags=["avatars"])
 app.include_router(sync.router, prefix="/api/sync", tags=["sync"])
-app.include_router(gaps.router, prefix="/api/gaps", tags=["gaps"])
+app.include_router(briefing.router, prefix="/api/briefing", tags=["briefing"])
 app.include_router(skills.router, prefix="/api/skills", tags=["skills"])
 app.include_router(patterns.router, prefix="/api/patterns", tags=["patterns"])
 app.include_router(archive.router, prefix="/api/archive", tags=["archive"])
