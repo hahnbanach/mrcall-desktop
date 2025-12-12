@@ -2308,6 +2308,281 @@ class SupabaseStorage:
         return None
 
 
+    # ==========================================
+    # EMAIL READ TRACKING
+    # ==========================================
+
+    def create_sendgrid_message_mapping(
+        self,
+        sendgrid_message_id: str,
+        message_id: str,
+        owner_id: str,
+        recipient_email: str,
+        campaign_id: str = None
+    ) -> Dict[str, Any]:
+        """Create mapping between SendGrid message ID and Zylch message ID.
+
+        Args:
+            sendgrid_message_id: SendGrid's message ID (from webhook)
+            message_id: Zylch's internal message ID
+            owner_id: Firebase UID
+            recipient_email: Recipient's email address
+            campaign_id: Optional campaign ID for grouping
+
+        Returns:
+            Created mapping record
+        """
+        data = {
+            'sendgrid_message_id': sendgrid_message_id,
+            'message_id': message_id,
+            'owner_id': owner_id,
+            'recipient_email': recipient_email,
+            'campaign_id': campaign_id,
+            'expires_at': (datetime.now(timezone.utc) + timedelta(days=90)).isoformat()
+        }
+
+        try:
+            result = self.client.table('sendgrid_message_mapping')\
+                .upsert(data, on_conflict='sendgrid_message_id')\
+                .execute()
+            logger.debug(f"Created SendGrid message mapping: {sendgrid_message_id} -> {message_id}")
+            return result.data[0] if result.data else data
+        except Exception as e:
+            logger.error(f"Failed to create SendGrid message mapping: {e}")
+            raise
+
+    def get_sendgrid_message_mapping(self, sendgrid_message_id: str) -> Optional[Dict[str, Any]]:
+        """Look up Zylch message ID from SendGrid message ID.
+
+        Args:
+            sendgrid_message_id: SendGrid's message ID
+
+        Returns:
+            Mapping record or None if not found
+        """
+        try:
+            result = self.client.table('sendgrid_message_mapping')\
+                .select('*')\
+                .eq('sendgrid_message_id', sendgrid_message_id)\
+                .maybe_single()\
+                .execute()
+            return result.data if result.data else None
+        except Exception as e:
+            logger.error(f"Failed to get SendGrid message mapping: {e}")
+            return None
+
+    def record_sendgrid_read_event(
+        self,
+        sendgrid_message_id: str,
+        message_id: str,
+        owner_id: str,
+        recipient_email: str,
+        timestamp: datetime,
+        user_agent: str = None,
+        ip_address: str = None,
+        event_data: Dict = None
+    ) -> Dict[str, Any]:
+        """Record email read event from SendGrid webhook.
+
+        Args:
+            sendgrid_message_id: SendGrid's message ID
+            message_id: Zylch's internal message ID
+            owner_id: Firebase UID
+            recipient_email: Recipient's email address
+            timestamp: When the email was opened
+            user_agent: User agent string from webhook
+            ip_address: IP address from webhook
+            event_data: Full SendGrid event payload
+
+        Returns:
+            Created/updated read event record
+        """
+        try:
+            # Check if record exists
+            existing = self.client.table('email_read_events')\
+                .select('id, read_count')\
+                .eq('sendgrid_message_id', sendgrid_message_id)\
+                .eq('recipient_email', recipient_email)\
+                .maybe_single()\
+                .execute()
+
+            if existing.data:
+                # Update existing record
+                record_id = existing.data['id']
+                read_count = existing.data['read_count'] + 1
+
+                update_data = {
+                    'read_count': read_count,
+                    'last_read_at': timestamp.isoformat(),
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                }
+
+                # Append to arrays if provided
+                if user_agent:
+                    # Note: Array append needs to be done via SQL function
+                    pass
+                if ip_address:
+                    pass
+
+                result = self.client.table('email_read_events')\
+                    .update(update_data)\
+                    .eq('id', record_id)\
+                    .execute()
+
+                logger.debug(f"Updated read event for {sendgrid_message_id}, count: {read_count}")
+            else:
+                # Create new record
+                data = {
+                    'sendgrid_message_id': sendgrid_message_id,
+                    'message_id': message_id,
+                    'owner_id': owner_id,
+                    'recipient_email': recipient_email,
+                    'tracking_source': 'sendgrid_webhook',
+                    'read_count': 1,
+                    'first_read_at': timestamp.isoformat(),
+                    'last_read_at': timestamp.isoformat(),
+                    'user_agents': [user_agent] if user_agent else [],
+                    'ip_addresses': [ip_address] if ip_address else [],
+                    'sendgrid_event_data': [event_data] if event_data else []
+                }
+
+                result = self.client.table('email_read_events')\
+                    .insert(data)\
+                    .execute()
+
+                logger.info(f"Created read event for {sendgrid_message_id}")
+
+            # Update messages.read_events JSONB field
+            self._update_message_read_events(message_id, recipient_email, timestamp, read_count if existing.data else 1)
+
+            return result.data[0] if result.data else {}
+
+        except Exception as e:
+            logger.error(f"Failed to record SendGrid read event: {e}")
+            raise
+
+    def record_custom_pixel_read_event(
+        self,
+        tracking_id: str,
+        user_agent: str = None,
+        ip_address: str = None,
+        timestamp: datetime = None
+    ) -> Dict[str, Any]:
+        """Record email read event from custom tracking pixel.
+
+        Args:
+            tracking_id: Custom tracking ID
+            user_agent: User agent string from request
+            ip_address: IP address from request
+            timestamp: When the pixel was loaded (defaults to now)
+
+        Returns:
+            Created/updated read event record
+        """
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
+
+        try:
+            # Check if record exists
+            existing = self.client.table('email_read_events')\
+                .select('id, read_count, message_id, recipient_email')\
+                .eq('tracking_id', tracking_id)\
+                .maybe_single()\
+                .execute()
+
+            if existing.data:
+                # Update existing record
+                record_id = existing.data['id']
+                read_count = existing.data['read_count'] + 1
+                message_id = existing.data['message_id']
+                recipient_email = existing.data['recipient_email']
+
+                update_data = {
+                    'read_count': read_count,
+                    'last_read_at': timestamp.isoformat(),
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                }
+
+                result = self.client.table('email_read_events')\
+                    .update(update_data)\
+                    .eq('id', record_id)\
+                    .execute()
+
+                logger.debug(f"Updated read event for tracking_id {tracking_id}, count: {read_count}")
+
+                # Update messages.read_events
+                self._update_message_read_events(message_id, recipient_email, timestamp, read_count)
+            else:
+                logger.warning(f"No existing record found for tracking_id: {tracking_id}")
+                return {}
+
+            return result.data[0] if result.data else {}
+
+        except Exception as e:
+            logger.error(f"Failed to record custom pixel read event: {e}")
+            raise
+
+    def _update_message_read_events(
+        self,
+        message_id: str,
+        recipient_email: str,
+        timestamp: datetime,
+        read_count: int
+    ):
+        """Update messages.read_events JSONB field with read summary.
+
+        Args:
+            message_id: Message ID
+            recipient_email: Recipient's email
+            timestamp: Read timestamp
+            read_count: Total read count
+        """
+        try:
+            # For now, use simple approach - could be optimized with SQL function
+            # Get current message
+            message = self.client.table('messages')\
+                .select('read_events')\
+                .eq('id', message_id)\
+                .maybe_single()\
+                .execute()
+
+            if not message.data:
+                logger.warning(f"Message not found: {message_id}")
+                return
+
+            read_events = message.data.get('read_events', [])
+
+            # Update or add recipient's read stats
+            updated = False
+            for event in read_events:
+                if event.get('recipient') == recipient_email:
+                    event['read_count'] = read_count
+                    event['last_read_at'] = timestamp.isoformat()
+                    if 'first_read_at' not in event:
+                        event['first_read_at'] = timestamp.isoformat()
+                    updated = True
+                    break
+
+            if not updated:
+                read_events.append({
+                    'recipient': recipient_email,
+                    'read_count': read_count,
+                    'first_read_at': timestamp.isoformat(),
+                    'last_read_at': timestamp.isoformat()
+                })
+
+            # Update message
+            self.client.table('messages')\
+                .update({'read_events': read_events, 'updated_at': datetime.now(timezone.utc).isoformat()})\
+                .eq('id', message_id)\
+                .execute()
+
+            logger.debug(f"Updated read_events for message {message_id}")
+
+        except Exception as e:
+            logger.error(f"Failed to update message read_events: {e}")
+
+
 # Create search_emails function in Supabase (run once via SQL Editor):
 """
 CREATE OR REPLACE FUNCTION search_emails(

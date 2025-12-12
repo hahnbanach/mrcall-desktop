@@ -13,6 +13,8 @@ This documentation is organized into the following sections:
 ### Core Features
 - **[Email Archive](features/email-archive.md)** - Permanent email storage with full-text search
 - **[Email Archive](features/email-archive.md)** - Two-tier email storage and AI-powered analysis
+- **[Email Read Tracking](features/email-read-tracking.md)** - SendGrid webhooks and tracking pixel for email engagement ✅ **NEW**
+  - [Implementation Guide](features/email-read-tracking-implementation.md) - Setup and configuration
 - **[Calendar Integration](features/calendar-integration.md)** - Google Calendar with Meet links
 - **[Relationship Intelligence](features/relationship-intelligence.md)** - Gap detection and task extraction
 - **[Avatar Aggregation](features/avatar-aggregation.md)** - Person-centric contact intelligence *(coming soon)*

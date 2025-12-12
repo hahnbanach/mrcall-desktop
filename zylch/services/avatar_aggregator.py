@@ -99,6 +99,9 @@ class AvatarAggregator:
             last_sender = last_email.get('from_email', '').lower()
             last_email_from_owner = last_sender in owner_emails
 
+        # Get read tracking data
+        read_tracking = self._get_read_tracking_data(owner_id, emails, owner_emails)
+
         context = {
             'contact_id': contact_id,
             'owner_emails': list(owner_emails),  # For perspective
@@ -112,6 +115,7 @@ class AvatarAggregator:
             'communication_frequency': frequency,
             'relationship_strength': strength,
             'last_email_from_owner': last_email_from_owner,  # True = waiting for contact, False = need to respond
+            'read_tracking': read_tracking,  # Email read tracking data
         }
 
         logger.info(f"Context built: {context['email_count']} emails, "
@@ -222,6 +226,129 @@ class AvatarAggregator:
         except Exception as e:
             logger.error(f"Failed to fetch calendar events: {e}")
             return []
+
+    def _get_read_tracking_data(
+        self,
+        owner_id: str,
+        contact_emails: List[str],
+        owner_emails: set
+    ) -> Optional[Dict]:
+        """Get email read tracking statistics for contact.
+
+        Args:
+            owner_id: User's Firebase UID
+            contact_emails: Contact's email addresses
+            owner_emails: Owner's email addresses (to filter sent emails)
+
+        Returns:
+            Dict with read tracking stats or None if no data:
+            - sent_count: Total emails sent from owner to contact
+            - read_count: Number of emails that were read
+            - unread_count: Number of emails not yet read
+            - last_sent: Timestamp of last sent email
+            - last_read: Timestamp of last read event
+            - avg_read_delay_hours: Average time to read (hours)
+            - last_unread_email: Details of most recent unread email
+        """
+        if not contact_emails:
+            return None
+
+        try:
+            # Get messages sent from owner to contact in last 30 days
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
+
+            # Query messages with left join to email_read_events
+            result = self.storage.client.table('messages')\
+                .select('id, subject, date, date_timestamp, from_email, to_emails, '
+                       'email_read_events(first_read_at, last_read_at, read_count)')\
+                .eq('owner_id', owner_id)\
+                .gte('date', cutoff_date.isoformat())\
+                .order('date_timestamp', desc=True)\
+                .limit(100)\
+                .execute()
+
+            if not result.data:
+                return None
+
+            # Filter to emails sent from owner to contact
+            sent_messages = []
+            for msg in result.data:
+                from_email = msg.get('from_email', '').lower()
+                to_emails = msg.get('to_emails', [])
+
+                if isinstance(to_emails, str):
+                    to_emails = [to_emails]
+
+                # Check if from owner and to contact
+                if from_email in owner_emails:
+                    if any(email in contact_emails for email in to_emails):
+                        sent_messages.append(msg)
+
+            if not sent_messages:
+                return None
+
+            # Calculate statistics
+            sent_count = len(sent_messages)
+            read_count = 0
+            unread_count = 0
+            read_delays = []
+            last_sent = None
+            last_read = None
+            last_unread_email = None
+
+            for msg in sent_messages:
+                msg_date = datetime.fromisoformat(msg['date'].replace('Z', '+00:00'))
+
+                if not last_sent:
+                    last_sent = msg['date']
+
+                # Check if message has read events
+                read_events = msg.get('email_read_events', [])
+                if read_events and len(read_events) > 0:
+                    # Message was read
+                    read_count += 1
+                    event = read_events[0]
+
+                    first_read = event.get('first_read_at')
+                    if first_read:
+                        first_read_dt = datetime.fromisoformat(first_read.replace('Z', '+00:00'))
+
+                        if not last_read or first_read_dt > datetime.fromisoformat(last_read.replace('Z', '+00:00')):
+                            last_read = first_read
+
+                        # Calculate read delay
+                        delay_hours = (first_read_dt - msg_date).total_seconds() / 3600
+                        if 0 < delay_hours < 720:  # Filter outliers (< 30 days)
+                            read_delays.append(delay_hours)
+                else:
+                    # Message not read yet
+                    unread_count += 1
+                    if not last_unread_email:
+                        last_unread_email = {
+                            'message_id': msg['id'],
+                            'subject': msg.get('subject', '(no subject)'),
+                            'sent_date': msg['date'],
+                            'days_unread': (datetime.now(timezone.utc) - msg_date).days
+                        }
+
+            # Calculate average read delay
+            avg_read_delay = None
+            if read_delays:
+                avg_read_delay = float(np.mean(read_delays))
+
+            return {
+                'sent_count': sent_count,
+                'read_count': read_count,
+                'unread_count': unread_count,
+                'last_sent': last_sent,
+                'last_read': last_read,
+                'avg_read_delay_hours': round(avg_read_delay, 1) if avg_read_delay else None,
+                'last_unread_email': last_unread_email
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to fetch read tracking data: {e}")
+            return None
 
     def _compute_response_latency(
         self,
@@ -392,7 +519,8 @@ class AvatarAggregator:
             'response_latency': None,
             'communication_frequency': {'emails_per_week': 0, 'events_per_month': 0},
             'relationship_strength': 0.0,
-            'last_email_from_owner': False
+            'last_email_from_owner': False,
+            'read_tracking': None
         }
 
 

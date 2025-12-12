@@ -44,6 +44,48 @@ def filter_own_emails(avatars: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [a for a in avatars if not is_own_email(a, my_emails)]
 
 
+def _get_read_indicator(avatar: Dict[str, Any]) -> str:
+    """Generate read tracking indicator for an avatar.
+
+    Args:
+        avatar: Avatar dict with read_tracking field
+
+    Returns:
+        Formatted indicator string (e.g., " 📧❌ (unread 5d)") or empty string
+    """
+    from datetime import datetime, timezone
+
+    read_tracking = avatar.get('read_tracking', {})
+    if not read_tracking:
+        return ""
+
+    last_unread = read_tracking.get('last_unread_email')
+    last_read = read_tracking.get('last_read_date')
+
+    # Priority 1: Show unread indicator
+    if last_unread:
+        days_unread = int(last_unread.get('days_since_sent', 0))
+        return f" 📧❌ (unread {days_unread}d)"
+
+    # Priority 2: Show read but no response indicator (3+ days)
+    if last_read:
+        try:
+            # Parse ISO timestamp
+            if isinstance(last_read, str):
+                last_read_dt = datetime.fromisoformat(last_read.replace('Z', '+00:00'))
+            else:
+                last_read_dt = last_read
+
+            days_since_read = (datetime.now(timezone.utc) - last_read_dt).days
+            if days_since_read >= 3:
+                return f" 📧✓ (read {days_since_read}d ago)"
+        except (ValueError, TypeError, AttributeError):
+            # Silently ignore parsing errors
+            pass
+
+    return ""
+
+
 def format_task_list(avatars: List[Dict[str, Any]], include_stale_warning: bool = False) -> str:
     """Format avatars as numbered task list.
 
@@ -84,7 +126,11 @@ def format_task_list(avatars: List[Dict[str, Any]], include_stale_warning: bool 
             name = a.get('display_name') or a.get('contact_email', 'Unknown')
             action = a.get('suggested_action', 'Follow up')
             score = a.get('relationship_score', 0)
-            lines.append(f"{task_num}. **{name}** (score {score}): {action}")
+
+            # Get read tracking indicator
+            read_indicator = _get_read_indicator(a)
+
+            lines.append(f"{task_num}. **{name}** (score {score}): {action}{read_indicator}")
             task_num += 1
         lines.append("")
 
@@ -94,7 +140,11 @@ def format_task_list(avatars: List[Dict[str, Any]], include_stale_warning: bool 
             name = a.get('display_name') or a.get('contact_email', 'Unknown')
             action = a.get('suggested_action', 'Review')
             score = a.get('relationship_score', 0)
-            lines.append(f"{task_num}. **{name}** (score {score}): {action}")
+
+            # Get read tracking indicator
+            read_indicator = _get_read_indicator(a)
+
+            lines.append(f"{task_num}. **{name}** (score {score}): {action}{read_indicator}")
             task_num += 1
         lines.append("")
 
@@ -103,7 +153,11 @@ def format_task_list(avatars: List[Dict[str, Any]], include_stale_warning: bool 
         for a in low[:10]:  # Limit to 10
             name = a.get('display_name') or a.get('contact_email', 'Unknown')
             action = a.get('suggested_action', 'Review')
-            lines.append(f"{task_num}. {name}: {action}")
+
+            # Get read tracking indicator
+            read_indicator = _get_read_indicator(a)
+
+            lines.append(f"{task_num}. {name}: {action}{read_indicator}")
             task_num += 1
         if len(low) > 10:
             lines.append(f"   ... and {len(low) - 10} more")

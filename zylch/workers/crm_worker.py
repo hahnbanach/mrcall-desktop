@@ -93,18 +93,21 @@ class CRMWorker:
             # Get memory context for this contact
             memory_context = await self._get_memory_context(owner_id, contact_id)
 
-            # Compute status based on last email and memory patterns
-            status = self._compute_status(last_email_from_owner, memory_context)
+            # Get read tracking data from context
+            read_tracking = context.get('read_tracking', {})
 
-            # Compute priority (1-10)
+            # Compute status based on last email, memory patterns, and read tracking
+            status = self._compute_status(last_email_from_owner, memory_context, read_tracking)
+
+            # Compute priority (1-10) with read tracking boost
             days_since_last = self._get_days_since_last_contact(threads)
             relationship_strength = self._get_relationship_strength(threads)
             topic_importance = self._get_topic_importance(memory_context)
-            priority = self._compute_priority(days_since_last, relationship_strength, topic_importance)
+            priority = self._compute_priority(days_since_last, relationship_strength, topic_importance, read_tracking)
 
-            # Generate suggested action (only if not closed)
+            # Generate suggested action (only if not closed) with read tracking context
             snippet = last_thread.get('snippet', '')
-            suggested_action = await self._generate_action(status, memory_context, snippet) if status != 'closed' else None
+            suggested_action = await self._generate_action(status, memory_context, snippet, read_tracking) if status != 'closed' else None
 
             # Get display name from memory patterns or fallback to email
             display_name = self._get_display_name(memory_context, contact_id)
@@ -163,20 +166,23 @@ class CRMWorker:
 
         logger.info(f"Batch complete: {succeeded} succeeded, {failed} failed")
 
-    def _compute_status(self, last_email_from_owner: bool, memory_context: List[Dict]) -> str:
-        """Compute relationship status based on last email and memory patterns.
+    def _compute_status(self, last_email_from_owner: bool, memory_context: List[Dict], read_tracking: Dict = None) -> str:
+        """Compute relationship status based on last email, memory patterns, and read tracking.
 
-        Status logic (MUST match plan exactly):
-        - "open": last_email_from_owner=False AND no "no response" in memory
-        - "waiting": last_email_from_owner=True
+        Status logic with read tracking:
         - "closed": "no response" pattern in memory OR manually closed
+        - "waiting_unread": last_email_from_owner=True AND email unread for 3+ days
+        - "waiting_acknowledged": last_email_from_owner=True AND email read 3+ days ago, no response
+        - "waiting": last_email_from_owner=True AND recently sent/read (<3 days)
+        - "open": last_email_from_owner=False (owner needs to respond)
 
         Args:
             last_email_from_owner: Whether owner sent the last email
             memory_context: List of memory patterns for this contact
+            read_tracking: Read tracking data from avatar context
 
         Returns:
-            Status string: "open", "waiting", or "closed"
+            Status string: "open", "waiting", "waiting_unread", "waiting_acknowledged", or "closed"
         """
         # Check for "no response" or "closed" patterns in memory
         for memory in memory_context:
@@ -184,25 +190,45 @@ class CRMWorker:
             if 'no response' in content or 'closed' in content or 'manually closed' in content:
                 return 'closed'
 
-        # If owner sent last email, they're waiting for a response
+        # If owner sent last email, check read tracking for refined status
         if last_email_from_owner:
+            if read_tracking:
+                last_unread = read_tracking.get('last_unread_email')
+                last_read = read_tracking.get('last_read_date')
+
+                # Check if email is unread for 3+ days
+                if last_unread:
+                    days_unread = last_unread.get('days_since_sent', 0)
+                    if days_unread >= 3:
+                        return 'waiting_unread'
+
+                # Check if email was read but no response for 3+ days
+                if last_read:
+                    from datetime import datetime, timezone
+                    days_since_read = (datetime.now(timezone.utc) - last_read).days
+                    if days_since_read >= 3:
+                        return 'waiting_acknowledged'
+
+            # Default: waiting for response (recently sent or read)
             return 'waiting'
 
         # Otherwise, it's open (owner needs to respond)
         return 'open'
 
-    def _compute_priority(self, days_since: int, rel_strength: float, topic_imp: float) -> int:
-        """Compute priority score (1-10) based on urgency and importance.
+    def _compute_priority(self, days_since: int, rel_strength: float, topic_imp: float, read_tracking: Dict = None) -> int:
+        """Compute priority score (1-10) based on urgency, importance, and read tracking.
 
-        Priority formula (MUST match plan exactly):
-        urgency = 4 if days_since > 7 else (2 if days_since > 3 else 0)
+        Priority formula with read tracking boost:
+        base_urgency = 4 if days_since > 7 else (2 if days_since > 3 else 0)
         importance = int(relationship_strength * 2) + int(topic_importance * 2)
-        priority = min(10, max(1, 2 + urgency + importance))
+        read_boost = +2 if unread 7+ days, +1 if unread 3+ days, +1 if read 5+ days no response
+        priority = min(10, max(1, 2 + urgency + importance + read_boost))
 
         Args:
             days_since: Days since last contact
             rel_strength: Relationship strength (0.0-1.0)
             topic_imp: Topic importance (0.0-1.0)
+            read_tracking: Read tracking data from avatar context
 
         Returns:
             Priority score (1-10)
@@ -218,8 +244,29 @@ class CRMWorker:
         # Importance component (relationship + topic)
         importance = int(rel_strength * 2) + int(topic_imp * 2)
 
+        # Read tracking boost
+        read_boost = 0
+        if read_tracking:
+            last_unread = read_tracking.get('last_unread_email')
+            last_read = read_tracking.get('last_read_date')
+
+            # Boost for unread emails
+            if last_unread:
+                days_unread = last_unread.get('days_since_sent', 0)
+                if days_unread >= 7:
+                    read_boost = 2  # High urgency: unread for a week
+                elif days_unread >= 3:
+                    read_boost = 1  # Moderate urgency: unread for 3 days
+
+            # Boost for read but no response
+            elif last_read:
+                from datetime import datetime, timezone
+                days_since_read = (datetime.now(timezone.utc) - last_read).days
+                if days_since_read >= 5:
+                    read_boost = 1  # Read but ignored for 5+ days
+
         # Combine with baseline of 2, cap at 1-10
-        priority = 2 + urgency + importance
+        priority = 2 + urgency + importance + read_boost
         priority = min(10, max(1, priority))
 
         return priority
@@ -228,20 +275,23 @@ class CRMWorker:
         self,
         status: str,
         memory_context: List[Dict],
-        snippet: str
+        snippet: str,
+        read_tracking: Dict = None
     ) -> Optional[str]:
-        """Generate suggested action using Claude Haiku.
+        """Generate suggested action using Claude Haiku with read tracking context.
 
         Action generation:
         - Use Claude Haiku (claude-3-5-haiku-20241022)
         - Max 100 tokens, 80 char output
         - Specific actions only (not vague "follow up")
+        - Include read tracking context in prompt
         - Return None if status == "closed"
 
         Args:
             status: Current relationship status
             memory_context: List of memory patterns
             snippet: Recent email snippet for context
+            read_tracking: Read tracking data from avatar context
 
         Returns:
             Suggested action string (max 80 chars) or None if closed
@@ -255,17 +305,35 @@ class CRMWorker:
             for m in memory_context[:3]  # Top 3 relevant patterns
         ])
 
+        # Build read tracking context for prompt
+        read_context = ""
+        if read_tracking:
+            last_unread = read_tracking.get('last_unread_email')
+            last_read = read_tracking.get('last_read_date')
+
+            if last_unread:
+                days_unread = int(last_unread.get('days_since_sent', 0))
+                subject = last_unread.get('subject', 'email')[:50]
+                read_context = f"\n⚠️ IMPORTANT: Recipient has NOT read your email sent {days_unread} days ago (subject: {subject})"
+            elif last_read:
+                from datetime import datetime, timezone
+                days_since_read = (datetime.now(timezone.utc) - last_read).days
+                if days_since_read >= 3:
+                    read_context = f"\n📖 Recipient READ your email {days_since_read} days ago but hasn't responded"
+
         prompt = f"""Based on this relationship context, suggest ONE specific action (max 80 chars).
 
 Status: {status}
 Recent email: {snippet[:200]}
+{read_context}
+
 Memory patterns:
 {memory_summary}
 
 Provide a SPECIFIC action, not vague advice. Examples:
-- "Follow up on proposal sent 5 days ago"
-- "Schedule quarterly review meeting"
-- "Send project status update"
+- "Follow up on proposal - unread for 5 days"
+- "Gentle reminder - they read it 4 days ago"
+- "Schedule meeting - email read, no response"
 
 Action (max 80 chars):"""
 
