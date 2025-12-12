@@ -172,13 +172,14 @@ Run `/sync [days]` to sync more data."""
 
         else:
             # Google Gmail client (tokens stored in Supabase)
+            # Note: credentials_path is not used when owner_id is provided (uses Supabase)
             email_client = GmailClient(
-                credentials_path=config.google_credentials_path,
+                credentials_path="credentials/gmail_oauth.json",  # Not used with owner_id
                 account=email,
                 owner_id=owner_id
             )
             calendar_client = GoogleCalendarClient(
-                credentials_path=config.google_credentials_path,
+                credentials_path="credentials/gmail_oauth.json",  # Not used with owner_id
                 calendar_id="primary",
                 account=email,
                 owner_id=owner_id
@@ -344,8 +345,9 @@ For now, Microsoft users can use natural language to search emails:
 
         # Create Gmail client for archive (tokens stored in Supabase)
         email = get_email(owner_id)
+        # Note: credentials_path is not used when owner_id is provided (uses Supabase)
         email_client = GmailClient(
-            credentials_path=config.google_credentials_path,
+            credentials_path="credentials/gmail_oauth.json",  # Not used with owner_id
             account=email,
             owner_id=owner_id
         )
