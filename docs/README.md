@@ -13,6 +13,7 @@ This documentation is organized into the following sections:
 ### Core Features
 - **[Email Archive](features/email-archive.md)** - Permanent email storage with full-text search
 - **[Email Archive](features/email-archive.md)** - Two-tier email storage and AI-powered analysis
+- **[Email Read Tracking](features/email-read-tracking.md)** - SendGrid webhooks and tracking pixel for email engagement *(in development)*
 - **[Calendar Integration](features/calendar-integration.md)** - Google Calendar with Meet links
 - **[Relationship Intelligence](features/relationship-intelligence.md)** - Gap detection and task extraction
 - **[Avatar Aggregation](features/avatar-aggregation.md)** - Person-centric contact intelligence *(coming soon)*
@@ -22,6 +23,7 @@ This documentation is organized into the following sections:
 - **[MrCall Integration](features/mrcall-integration.md)** - Telephony and WhatsApp integration *(coming soon)*
 
 ### Future Development
+- **[Email Read Tracking](features/EMAIL_READ_TRACKING_TODO.md)** 🔴 High Priority - SendGrid webhooks and tracking pixel for engagement metrics
 - **[Billing System](features/BILLING_SYSTEM_TODO.md)** 🔴 Critical - Stripe integration and subscription tiers
 - **[WhatsApp Integration](features/WHATSAPP_INTEGRATION_TODO.md)** 🔴 High - Multi-channel messaging
 - **[Microsoft Calendar](features/MICROSOFT_CALENDAR_TODO.md)** 🟡 Medium-High - Outlook Calendar feature parity
