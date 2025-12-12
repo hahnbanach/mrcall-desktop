@@ -19,12 +19,7 @@ def initialize_firebase():
     """Initialize Firebase Admin SDK.
 
     This should be called once at application startup.
-    Uses service account credentials from environment config.
-
-    Supports three methods (in priority order):
-    1. FIREBASE_SERVICE_ACCOUNT_BASE64 env var (Base64 encoded - recommended for cloud)
-    2. FIREBASE_SERVICE_ACCOUNT_JSON env var (raw JSON string)
-    3. FIREBASE_SERVICE_ACCOUNT_PATH file path (for local development)
+    Uses FIREBASE_SERVICE_ACCOUNT_BASE64 from environment (Base64-encoded service account JSON).
     """
     global _firebase_app
 
@@ -33,31 +28,17 @@ def initialize_firebase():
         return _firebase_app
 
     try:
-        cred = None
-
-        # Method 1: Base64 encoded JSON (recommended - avoids escaping issues)
-        if settings.firebase_service_account_base64:
-            logger.info("Initializing Firebase from FIREBASE_SERVICE_ACCOUNT_BASE64 env var")
-            decoded_json = base64.b64decode(settings.firebase_service_account_base64).decode('utf-8')
-            service_account_info = json.loads(decoded_json)
-            cred = credentials.Certificate(service_account_info)
-
-        # Method 2: JSON string from environment variable
-        elif settings.firebase_service_account_json:
-            logger.info("Initializing Firebase from FIREBASE_SERVICE_ACCOUNT_JSON env var")
-            service_account_info = json.loads(settings.firebase_service_account_json)
-            cred = credentials.Certificate(service_account_info)
-
-        # Method 3: File path (for local development)
-        elif settings.firebase_service_account_path:
-            logger.info(f"Initializing Firebase from file: {settings.firebase_service_account_path}")
-            cred = credentials.Certificate(settings.firebase_service_account_path)
-
-        else:
-            logger.warning("Firebase not configured - set FIREBASE_SERVICE_ACCOUNT_BASE64, FIREBASE_SERVICE_ACCOUNT_JSON, or FIREBASE_SERVICE_ACCOUNT_PATH")
+        if not settings.firebase_service_account_base64:
+            logger.warning("Firebase not configured - set FIREBASE_SERVICE_ACCOUNT_BASE64")
             return None
 
-        # Initialize Firebase Admin SDK with service account
+        # Decode Base64 service account JSON
+        logger.info("Initializing Firebase from FIREBASE_SERVICE_ACCOUNT_BASE64")
+        decoded_json = base64.b64decode(settings.firebase_service_account_base64).decode('utf-8')
+        service_account_info = json.loads(decoded_json)
+        cred = credentials.Certificate(service_account_info)
+
+        # Initialize Firebase Admin SDK
         _firebase_app = firebase_admin.initialize_app(cred)
 
         logger.info("Firebase Admin SDK initialized successfully")

@@ -39,9 +39,7 @@ class ToolConfig:
     classification_model: str
     executive_model: str
 
-    # Google OAuth (Gmail, Calendar)
-    google_credentials_path: str
-    gmail_accounts: List[str]
+    # Google Calendar
     calendar_id: str
 
     # Cache
@@ -59,9 +57,6 @@ class ToolConfig:
     # ============================================
     # Optional fields (with defaults) - must come after required
     # ============================================
-
-    # Google token path (local fallback for dev, Supabase primary in prod)
-    google_token_path: str = "credentials/"
 
     # BYOK Credentials (fetched from Supabase, not env vars)
     # Anthropic (BYOK via /connect anthropic)
@@ -114,10 +109,7 @@ class ToolConfig:
             classification_model=settings.classification_model,
             executive_model=settings.executive_model,
 
-            # Google OAuth (credentials path, tokens from Supabase or local fallback)
-            google_credentials_path=settings.google_credentials_path,
-            google_token_path=getattr(settings, 'google_token_path', 'credentials/'),
-            gmail_accounts=settings.gmail_accounts,
+            # Google Calendar
             calendar_id=settings.calendar_id,
 
             # Cache

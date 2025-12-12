@@ -40,11 +40,6 @@ class Settings(BaseSettings):
     )
 
     # Google OAuth (shared by Gmail, Calendar, etc.)
-    google_credentials_path: str = Field(
-        default="credentials/google_oauth.json",
-        description="Path to Google OAuth credentials (used for Gmail, Calendar, etc.)"
-    )
-    # google_token_path: REMOVED - all tokens stored in Supabase, no filesystem
     google_client_id: str = Field(
         default="",
         description="Google OAuth client ID (for server-side OAuth flow)"
@@ -57,28 +52,12 @@ class Settings(BaseSettings):
         default="",
         description="Google OAuth redirect URI (e.g., https://api.zylch.ai/api/auth/google/callback)"
     )
-
-    # Gmail
-    gmail_accounts: List[str] = Field(
-        default_factory=list,
-        description="List of authorized Gmail accounts"
-    )
-
-    # Google Calendar
     calendar_id: str = Field(default="primary", description="Calendar ID to use")
 
     # Firebase Authentication (for dashboard integration)
-    firebase_service_account_path: str = Field(
-        default="",
-        description="Path to Firebase service account JSON file"
-    )
-    firebase_service_account_json: str = Field(
-        default="",
-        description="Firebase service account JSON as string (for cloud deployments)"
-    )
     firebase_service_account_base64: str = Field(
         default="",
-        description="Firebase service account JSON as Base64 (for cloud deployments - avoids escaping issues)"
+        description="Firebase service account JSON as Base64 (for Railway - avoids escaping issues)"
     )
     firebase_project_id: str = Field(
         default="",
