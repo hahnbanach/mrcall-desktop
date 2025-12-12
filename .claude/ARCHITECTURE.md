@@ -54,6 +54,7 @@ Modular tools for agent capabilities:
 - **CRM**: Pipedrive integration (optional)
 - **Contacts**: StarChat/MrCall integration
 - **SMS**: Vonage SMS sending (requires `/connect vonage` in CLI)
+- **Read Tracking**: Email open tracking via SendGrid webhooks and custom pixels
 
 **Key Pattern**: Tools are identical for all users. Credentials are loaded per-user at execution time from Supabase. If a user hasn't connected a provider, the tool returns a helpful error (e.g., "Vonage not connected. Please use /connect vonage").
 
@@ -139,6 +140,8 @@ services/      # Business logic layer (shared with CLI)
 - `/api/sync` - Email/calendar sync
 - `/api/gaps` - Relationship gap analysis
 - `/api/commands` - Command discovery and help (see below)
+- `/api/webhooks/sendgrid` - Email read tracking webhooks
+- `/api/track/pixel/{tracking_id}` - Tracking pixel endpoint
 
 ### Commands API (`/api/commands`)
 
@@ -251,6 +254,8 @@ for contact_email, threads in person_threads.items():
 | `email_triage` | AI triage verdicts per thread |
 | `importance_rules` | User-configurable contact importance rules |
 | `triage_training_samples` | Anonymized training data + user corrections |
+| `email_read_events` | Email read tracking events (SendGrid + custom pixel) |
+| `sendgrid_message_mapping` | SendGrid message ID to Zylch message ID mapping |
 
 **Email Triage Tables** (December 2025):
 
@@ -266,6 +271,7 @@ for contact_email, threads in person_threads.items():
 |-------|--------|------|---------|
 | `emails` | `is_auto_reply` | BOOLEAN | RFC 3834 auto-reply flag |
 | `emails` | `auto_reply_headers` | JSONB | Raw headers for debugging |
+| `messages` | `read_events` | JSONB | Email read tracking events array |
 
 **Security**:
 - All tables use Row Level Security (RLS) scoped by `owner_id`
@@ -545,6 +551,52 @@ The Email Triage System solves a critical bug where support emails were incorrec
 - `zylch/api/routes/settings.py` - Importance rules CRUD API
 
 **Database tables**: `email_triage`, `importance_rules`, `triage_training_samples`
+
+## Email Read Tracking System (December 2025)
+
+**For complete read tracking documentation**, see [Email Read Tracking Feature Documentation](/docs/features/email-read-tracking.md)
+
+### Summary
+
+The Email Read Tracking System enables Zylch to detect when recipients open emails, providing critical intelligence for follow-up timing and relationship management. Key features:
+
+1. **Dual Tracking Approach**:
+   - **PRIMARY**: SendGrid webhooks for batch/campaign emails (no custom pixel injection needed)
+   - **SECONDARY**: Custom 1x1 tracking pixel for individual emails
+
+2. **Intelligence Integration**: Read tracking data flows into the avatar/briefing system:
+   - Status computation: New statuses `waiting_unread`, `waiting_acknowledged`
+   - Priority boosting: +2 for unread 7+ days, +1 for unread 3+ days
+   - LLM context: Enhanced action generation with read awareness
+   - Display indicators: `📧❌ (unread 5d)` or `📧✓ (read 4d ago)`
+
+3. **Privacy & Compliance**:
+   - US privacy laws (CAN-SPAM, CCPA) compliant
+   - Personal emails (Gmail/Outlook): No unsubscribe required
+   - IP collection disabled by default
+   - 90-day data retention with auto-cleanup
+
+4. **Performance**: SendGrid webhook processing <100ms, pixel endpoint <50ms
+
+**Components**:
+- `zylch/api/routes/webhooks.py` - SendGrid webhook handler with ECDSA signature verification
+- `zylch/api/routes/tracking.py` - Tracking pixel endpoint (1x1 transparent GIF)
+- `zylch/services/avatar_aggregator.py` - Read tracking data integration (lines 230-351)
+- `zylch/workers/crm_worker.py` - Status/priority/action generation with read awareness
+- `zylch/services/task_formatter.py` - Display indicators in briefing
+- `zylch/storage/supabase_client.py` - Database operations (lines 2311-2583)
+- `zylch/storage/migrations/003_email_read_tracking.sql` - Database schema (~400 lines)
+
+**Database tables**: `email_read_events`, `sendgrid_message_mapping`, `messages.read_events` (JSONB)
+
+**API Endpoints**:
+- `POST /api/webhooks/sendgrid` - Receive SendGrid open events
+- `GET /api/track/pixel/{tracking_id}` - Serve tracking pixel
+
+**Briefing Integration**: Read indicators appear in `/briefing` command output, showing:
+- Which emails have been read with timestamps
+- Which emails remain unread with days since sent
+- Enhanced LLM suggestions: "Follow up on proposal - unread for 5 days"
 
 ## Future Development TODOs
 
