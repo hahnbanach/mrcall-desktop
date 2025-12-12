@@ -11,6 +11,8 @@ import hashlib
 import hmac
 import json
 import logging
+import os
+import base64
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -139,28 +141,343 @@ class SendGridEvent(BaseModel):
     useragent: Optional[str] = None
 
 
+def verify_sendgrid_signature(
+    public_key: str,
+    payload: bytes,
+    signature: str,
+    timestamp: str
+) -> bool:
+    """Verify SendGrid webhook signature using ECDSA.
+
+    SendGrid uses ECDSA with SHA256 to sign webhook payloads.
+    Signature format: base64(ECDSA(timestamp + payload))
+
+    Args:
+        public_key: SendGrid's ECDSA public key in PEM format
+        payload: Raw request body bytes
+        signature: Signature from x-twilio-email-event-webhook-signature header
+        timestamp: Timestamp from x-twilio-email-event-webhook-timestamp header
+
+    Returns:
+        True if signature is valid, False otherwise
+    """
+    try:
+        from ecdsa import VerifyingKey, NIST256p, BadSignatureError
+        from ecdsa.util import sigdecode_der
+
+        # Decode public key
+        vk = VerifyingKey.from_pem(public_key)
+
+        # Decode signature from base64
+        signature_bytes = base64.b64decode(signature)
+
+        # Verify signature (timestamp + payload)
+        signed_payload = timestamp.encode() + payload
+        vk.verify(
+            signature_bytes,
+            signed_payload,
+            hashfunc=hashlib.sha256,
+            sigdecode=sigdecode_der
+        )
+        return True
+    except (BadSignatureError, Exception) as e:
+        logger.warning(f"SendGrid signature verification failed: {e}")
+        return False
+
+
+async def process_sendgrid_open_event(event: Dict[str, Any]) -> None:
+    """Process SendGrid 'open' event and record read tracking.
+
+    This function:
+    1. Extracts event data (sg_message_id, email, timestamp, etc.)
+    2. Looks up Zylch message_id from SendGrid message mapping
+    3. Records read event in email_read_events table
+    4. Updates messages.read_events JSON field
+
+    Args:
+        event: SendGrid event data dictionary
+    """
+    from ...storage.supabase_client import SupabaseStorage
+
+    try:
+        sg_message_id = event.get("sg_message_id")
+        recipient_email = event.get("email")
+        timestamp_unix = event.get("timestamp")
+        user_agent = event.get("useragent", "unknown")
+        ip_address = event.get("ip", "unknown")
+
+        if not sg_message_id or not recipient_email:
+            logger.warning(f"Missing required fields in SendGrid open event: {event}")
+            return
+
+        # Convert Unix timestamp to ISO datetime
+        event_timestamp = datetime.fromtimestamp(timestamp_unix, tz=timezone.utc)
+
+        # Look up Zylch message_id from SendGrid message mapping
+        storage = SupabaseStorage.get_instance()
+        mapping_result = storage.client.table('sendgrid_message_mapping')\
+            .select('message_id, owner_id')\
+            .eq('sendgrid_message_id', sg_message_id)\
+            .limit(1)\
+            .execute()
+
+        if not mapping_result.data:
+            logger.warning(f"No mapping found for SendGrid message ID: {sg_message_id}")
+            return
+
+        mapping = mapping_result.data[0]
+        message_id = mapping['message_id']
+        owner_id = mapping['owner_id']
+
+        # Record read event
+        await record_sendgrid_read_event(
+            sendgrid_message_id=sg_message_id,
+            message_id=message_id,
+            owner_id=owner_id,
+            recipient_email=recipient_email,
+            timestamp=event_timestamp,
+            user_agent=user_agent,
+            ip_address=ip_address,
+            event_data=event
+        )
+
+        logger.info(f"Recorded read event for message {message_id}, recipient {recipient_email}")
+
+    except Exception as e:
+        logger.exception(f"Error processing SendGrid open event: {e}")
+
+
+async def record_sendgrid_read_event(
+    sendgrid_message_id: str,
+    message_id: str,
+    owner_id: str,
+    recipient_email: str,
+    timestamp: datetime,
+    user_agent: str,
+    ip_address: str,
+    event_data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Record email read event from SendGrid webhook in database.
+
+    This function:
+    1. Checks if record exists for this sendgrid_message_id + recipient
+    2. If exists: Increments read_count, updates last_read_at, appends metadata
+    3. If new: Creates new record with first_read_at
+    4. Updates messages.read_events JSON field with summary
+
+    Args:
+        sendgrid_message_id: SendGrid message ID
+        message_id: Zylch internal message ID
+        owner_id: Owner ID (Firebase UID)
+        recipient_email: Email address of recipient
+        timestamp: When the email was opened
+        user_agent: Email client user agent
+        ip_address: IP address of opener
+        event_data: Full SendGrid event payload
+
+    Returns:
+        Dictionary with read event data
+    """
+    from ...storage.supabase_client import SupabaseStorage
+
+    storage = SupabaseStorage.get_instance()
+
+    # Check if record already exists
+    existing_result = storage.client.table('email_read_events')\
+        .select('id, read_count, user_agents, ip_addresses, first_read_at')\
+        .eq('sendgrid_message_id', sendgrid_message_id)\
+        .eq('recipient_email', recipient_email)\
+        .limit(1)\
+        .execute()
+
+    if existing_result.data:
+        # Update existing record (recipient opened email multiple times)
+        existing = existing_result.data[0]
+
+        # Append user_agent and ip_address to arrays
+        user_agents = existing.get('user_agents') or []
+        ip_addresses = existing.get('ip_addresses') or []
+
+        if user_agent not in user_agents:
+            user_agents.append(user_agent)
+        if ip_address not in ip_addresses:
+            ip_addresses.append(ip_address)
+
+        # Append event data to JSONB array
+        # Note: Supabase doesn't support array concatenation easily, so we'll replace
+        sendgrid_event_data = [event_data]
+
+        update_data = {
+            'read_count': existing['read_count'] + 1,
+            'last_read_at': timestamp.isoformat(),
+            'user_agents': user_agents,
+            'ip_addresses': ip_addresses,
+            'sendgrid_event_data': sendgrid_event_data,
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        result = storage.client.table('email_read_events')\
+            .update(update_data)\
+            .eq('id', existing['id'])\
+            .execute()
+
+        read_event = result.data[0] if result.data else {}
+        read_event['first_read_at'] = existing['first_read_at']
+
+    else:
+        # Create new record (first open)
+        insert_data = {
+            'sendgrid_message_id': sendgrid_message_id,
+            'message_id': message_id,
+            'owner_id': owner_id,
+            'recipient_email': recipient_email,
+            'tracking_source': 'sendgrid_webhook',
+            'read_count': 1,
+            'first_read_at': timestamp.isoformat(),
+            'last_read_at': timestamp.isoformat(),
+            'user_agents': [user_agent],
+            'ip_addresses': [ip_address],
+            'sendgrid_event_data': [event_data]
+        }
+
+        result = storage.client.table('email_read_events')\
+            .insert(insert_data)\
+            .execute()
+
+        read_event = result.data[0] if result.data else {}
+
+    # Update messages.read_events JSON field (summary)
+    await update_message_read_events(
+        message_id=message_id,
+        recipient_email=recipient_email,
+        read_count=read_event.get('read_count', 1),
+        first_read_at=read_event.get('first_read_at'),
+        last_read_at=timestamp.isoformat()
+    )
+
+    return read_event
+
+
+async def update_message_read_events(
+    message_id: str,
+    recipient_email: str,
+    read_count: int,
+    first_read_at: str,
+    last_read_at: str
+) -> None:
+    """Update read_events JSONB field in messages table with read summary.
+
+    The read_events field contains an array of read summaries per recipient:
+    [
+        {
+            "recipient": "email@example.com",
+            "read_count": 3,
+            "first_read_at": "2025-12-12T10:30:00Z",
+            "last_read_at": "2025-12-12T14:45:00Z"
+        },
+        ...
+    ]
+
+    Args:
+        message_id: Zylch message ID
+        recipient_email: Recipient email address
+        read_count: Total number of times opened
+        first_read_at: First read timestamp
+        last_read_at: Last read timestamp
+    """
+    from ...storage.supabase_client import SupabaseStorage
+
+    storage = SupabaseStorage.get_instance()
+
+    # Get current message with read_events
+    message_result = storage.client.table('messages')\
+        .select('read_events')\
+        .eq('id', message_id)\
+        .limit(1)\
+        .execute()
+
+    if not message_result.data:
+        logger.warning(f"Message not found: {message_id}")
+        return
+
+    current_read_events = message_result.data[0].get('read_events') or []
+
+    # Remove existing entry for this recipient
+    updated_events = [
+        event for event in current_read_events
+        if event.get('recipient') != recipient_email
+    ]
+
+    # Add updated entry
+    updated_events.append({
+        'recipient': recipient_email,
+        'read_count': read_count,
+        'first_read_at': first_read_at,
+        'last_read_at': last_read_at
+    })
+
+    # Update message
+    storage.client.table('messages')\
+        .update({'read_events': updated_events, 'updated_at': datetime.now(timezone.utc).isoformat()})\
+        .eq('id', message_id)\
+        .execute()
+
+
 @router.post("/sendgrid")
 async def sendgrid_webhook(
     request: Request,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    x_twilio_email_event_webhook_signature: Optional[str] = Header(None),
+    x_twilio_email_event_webhook_timestamp: Optional[str] = Header(None)
 ):
     """Receive email event notifications from SendGrid.
 
+    This endpoint handles SendGrid Event Webhook with ECDSA signature verification.
+    Processes email open events for read tracking analytics.
+
     Events:
     - delivered: Email successfully delivered
-    - open: Email opened
+    - open: Email opened (PRIMARY - triggers read tracking)
     - click: Link clicked in email
     - bounce: Email bounced
     - dropped: Email dropped
     - spam_report: Marked as spam
 
     Used for:
+    - Email read tracking (open events)
     - Campaign analytics
     - Contact engagement tracking
     - Bounce/spam handling
+
+    Security:
+    - Verifies ECDSA signature from SendGrid
+    - Returns 200 OK within 10 seconds (uses background tasks)
+    - Handles errors gracefully (still returns 200 to prevent retries)
+
+    Response:
+    - 200 OK: {"status": "success", "processed": N, "total": M}
+    - 401 Unauthorized: Invalid signature
     """
     try:
+        # Get raw body for signature verification
         body = await request.body()
+
+        # Verify SendGrid signature (ECDSA)
+        sendgrid_public_key = os.getenv("SENDGRID_WEBHOOK_PUBLIC_KEY")
+        if sendgrid_public_key and x_twilio_email_event_webhook_signature and x_twilio_email_event_webhook_timestamp:
+            is_valid = verify_sendgrid_signature(
+                public_key=sendgrid_public_key,
+                payload=body,
+                signature=x_twilio_email_event_webhook_signature,
+                timestamp=x_twilio_email_event_webhook_timestamp
+            )
+            if not is_valid:
+                logger.warning("Invalid SendGrid webhook signature")
+                raise HTTPException(status_code=401, detail="Invalid signature")
+        elif sendgrid_public_key:
+            logger.warning("SendGrid signature headers missing")
+
+        # Parse JSON body
         events = json.loads(body)
 
         if not isinstance(events, list):
@@ -168,26 +485,51 @@ async def sendgrid_webhook(
 
         logger.info(f"SendGrid webhook: {len(events)} events received")
 
-        # Process in background
-        processor = get_processor()
+        # Track processed count
+        processed_count = 0
+
+        # Process each event
         for event_data in events:
             try:
                 event = SendGridEvent(**event_data)
+                event_type = event.event
+
+                # Process "open" events for read tracking
+                if event_type == "open":
+                    background_tasks.add_task(
+                        process_sendgrid_open_event,
+                        event.model_dump()
+                    )
+                    processed_count += 1
+
+                # Process other events with existing processor
+                processor = get_processor()
                 background_tasks.add_task(
                     processor.process_sendgrid_event,
                     event.model_dump()
                 )
+
             except Exception as e:
-                logger.warning(f"Invalid SendGrid event: {e}")
+                logger.warning(f"Invalid SendGrid event: {e}", extra={"event": event_data})
                 continue
 
-        return {"status": "accepted", "events_count": len(events)}
+        return {
+            "status": "success",
+            "processed": processed_count,
+            "total": len(events)
+        }
 
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+        logger.error("Invalid JSON payload in SendGrid webhook")
+        # Return 200 to prevent SendGrid retries for malformed data
+        return {"status": "error", "message": "Invalid JSON payload"}
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 401)
+        raise
     except Exception as e:
         logger.exception(f"SendGrid webhook error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return 200 to prevent SendGrid retries for internal errors
+        return {"status": "error", "message": str(e)}
 
 
 # ============================================================================

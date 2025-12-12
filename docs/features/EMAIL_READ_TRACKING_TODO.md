@@ -274,17 +274,124 @@ TRACKING_DATA_RETENTION_DAYS=90   # Auto-delete after 90 days (CCPA compliance)
 
 ---
 
+## Briefing Integration (/gaps Command)
+
+### How Read Tracking Integrates with Intelligence
+
+**Goal**: Notify users in `/briefing` about email read status
+- "John read your email 3 days ago, time for a follow-up"
+- "Mario hasn't opened your proposal (sent 5 days ago)"
+
+### Integration Points
+
+**1. Avatar Context Building** (`avatar_aggregator.py`)
+- Add `_get_read_tracking_data()` method to query read events
+- Include read tracking in `build_context()` output:
+  ```python
+  'read_tracking': {
+      'sent_emails_count': N,
+      'read_count': N,
+      'unread_count': N,
+      'last_sent': timestamp,
+      'last_read': timestamp,
+      'avg_read_delay_hours': float,
+      'last_unread_email': {...}
+  }
+  ```
+
+**2. Status Computation** (`crm_worker.py`)
+- Enhance `_compute_status()` with read-aware logic:
+  - `waiting_unread`: Email sent but not read (3+ days)
+  - `waiting_acknowledged`: Email read but no response (3+ days)
+  - `waiting`: Recently sent/read, give them time
+  - `open`: Contact sent last, owner needs to respond
+
+**3. Priority Boosting** (`crm_worker.py`)
+- Update `_compute_priority()` to boost unread emails:
+  - +2 priority: Unread for 7+ days
+  - +1 priority: Unread for 3+ days
+  - +1 priority: Read 5+ days ago, no response
+
+**4. LLM Prompt Enhancement** (`crm_worker.py`)
+- Add read context to `_generate_suggested_action()` prompt:
+  ```
+  ⚠️ IMPORTANT: Recipient has NOT read your email sent 5 days ago
+  📖 Recipient READ your email 4 days ago but hasn't responded
+  ```
+
+**5. Briefing Display** (`task_formatter.py`)
+- Add read tracking indicators:
+  - `📧❌ (unread 5d)` - Email not opened
+  - `📧✓ (read 4d ago)` - Email opened but no response
+
+### Example Briefing Output
+
+**Before (Current)**:
+```
+## 📋 Open Tasks
+
+### 🔥 High Priority
+1. **John Doe** (score 8): Follow up on proposal sent 5 days ago
+```
+
+**After (With Read Tracking)**:
+```
+## 📋 Open Tasks
+
+### 🔥 High Priority
+1. **John Doe** (score 9): Follow up on proposal - unread for 5 days 📧❌
+2. **Mario Rossi** (score 7): Gentle reminder - they read it 4 days ago 📧✓
+```
+
+### Database Query for Read Tracking
+
+```sql
+-- Get read tracking stats for a contact
+SELECT
+    COUNT(*) FILTER (WHERE first_read_at IS NOT NULL) as read_count,
+    COUNT(*) FILTER (WHERE first_read_at IS NULL) as unread_count,
+    COUNT(*) as sent_count,
+    MAX(messages.date_timestamp) as last_sent_date,
+    MAX(email_read_events.first_read_at) as last_read_date,
+    AVG(EXTRACT(EPOCH FROM (first_read_at - messages.date)) / 3600) as avg_read_delay_hours
+FROM messages
+LEFT JOIN email_read_events ON messages.id = email_read_events.message_id
+WHERE messages.owner_id = $1
+    AND messages.from_email = ANY($2)  -- Owner's emails
+    AND messages.to_emails && $3       -- Contact's emails
+    AND messages.date > NOW() - INTERVAL '30 days'
+```
+
+---
+
+## Implementation Files
+
+| File | Modification | Purpose |
+|------|--------------|---------|
+| `zylch/services/avatar_aggregator.py` | Add `_get_read_tracking_data()` | Query read events |
+| `zylch/services/avatar_aggregator.py` | Update `build_context()` | Include read_tracking field |
+| `zylch/workers/crm_worker.py` | Update `_compute_status()` | Read-aware status logic |
+| `zylch/workers/crm_worker.py` | Update `_compute_priority()` | Priority boost for unread |
+| `zylch/workers/crm_worker.py` | Update `_generate_suggested_action()` | Enhanced LLM prompt |
+| `zylch/services/task_formatter.py` | Add read indicators | Display 📧❌ / 📧✓ |
+| `zylch/api/routes/webhooks.py` | New file | SendGrid webhook handler |
+| `zylch/api/routes/tracking.py` | New file | Tracking pixel endpoint |
+| `zylch/storage/supabase_client.py` | Add methods | Read tracking queries |
+
+---
+
 ## Next Steps
 
 1. ✅ Review and approve proposal
-2. ⏳ Allocate developer resources
+2. ✅ Design briefing integration
 3. ⏳ Start Phase 1 (Database Setup)
-4. ⏳ Configure SendGrid webhook
-5. ⏳ Implement and test
+4. ⏳ Implement avatar integration
+5. ⏳ Configure SendGrid webhook
+6. ⏳ Test end-to-end flow
 
 ---
 
 ## Questions?
 
-- **Full Proposal**: See `email-read-notification-proposal.md` for detailed technical specifications
-- **Feedback**: Please provide feedback on approach, timeline, or technical decisions
+- **Full Proposal**: See `email-read-tracking.md` for detailed technical specifications
+- **Briefing Integration**: See above for avatar system integration details
