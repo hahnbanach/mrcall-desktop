@@ -159,8 +159,9 @@ class ToolFactory:
             else:
                 # Gmail client (default)
                 # Pass owner_id to enable Supabase token storage
+                # Note: credentials_path is not used when owner_id is provided (uses Supabase)
                 email_client = GmailClient(
-                    credentials_path=config.google_credentials_path,
+                    credentials_path="credentials/gmail_oauth.json",  # Not used with owner_id
                     token_dir=config.google_token_path,
                     account=config.user_email,  # Isolate tokens per user account
                     owner_id=config.owner_id if config.owner_id != "owner_default" else None,
@@ -192,8 +193,9 @@ class ToolFactory:
             if config.auth_provider == "google":
                 # Gmail users get Google Calendar automatically
                 # Pass owner_id to enable Supabase token storage
+                # Note: credentials_path is not used when owner_id is provided (uses Supabase)
                 calendar = GoogleCalendarClient(
-                    credentials_path=config.google_credentials_path,
+                    credentials_path="credentials/gmail_oauth.json",  # Not used with owner_id
                     token_dir=config.google_token_path,
                     calendar_id=config.calendar_id,
                     account=config.user_email,
