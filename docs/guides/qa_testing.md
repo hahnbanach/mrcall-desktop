@@ -37,11 +37,19 @@ Zylch answers questions like:
 ```
 
 ### Data Flow
-1. User logs in via CLI → Firebase authentication
-2. User connects Google → OAuth flow stores tokens in Supabase
-3. User runs `/sync` → Backend fetches emails from Gmail API → Stores in Supabase
+1. User logs in via CLI → Firebase authentication → Session token stored in `~/.zylch/config.json`
+2. User connects Google → OAuth flow:
+   - Backend generates OAuth URL with Gmail/Calendar scopes
+   - User consents in browser
+   - Backend receives authorization code, exchanges for tokens
+   - Tokens encrypted with `ENCRYPTION_KEY` and stored in Supabase `oauth_tokens` table (per `owner_id`)
+3. User runs `/sync` → Backend:
+   - Retrieves encrypted tokens from Supabase
+   - Decrypts tokens using `ENCRYPTION_KEY`
+   - Fetches emails from Gmail API
+   - Stores emails in Supabase `emails` table with `owner_id` (Row-Level Security)
 4. Memory Agent processes emails → Extracts phone numbers, LinkedIn URLs → Stores in `identifier_map`
-5. User runs `/gaps` → RelationshipAnalyzer identifies action items → Returns gaps
+5. User runs `/gaps` → RelationshipAnalyzer identifies action items → Returns gaps with read tracking indicators
 
 ### Key Database Tables
 | Table | Purpose |
@@ -65,22 +73,58 @@ Zylch answers questions like:
 - Anthropic API key (get from https://console.anthropic.com/)
 
 ### Environment Variables (Backend)
-Create `/Users/mal/hb/zylch/.env` with:
+Create `.env` in your zylch directory with:
 
 ```bash
-# Required
-GOOGLE_CREDENTIALS_PATH=/Users/mal/hb/zylch/credentials/google-oauth.json
+# =============================================================================
+# REQUIRED: Core Configuration
+# =============================================================================
+
+# Supabase (Multi-Tenant Database)
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJ...your-key-here
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-# Firebase (for auth)
+# Firebase Authentication
 FIREBASE_PROJECT_ID=zylch-dev
-GOOGLE_APPLICATION_CREDENTIALS=/Users/mal/hb/zylch/credentials/firebase-admin.json
+FIREBASE_API_KEY=AIzaSy...your-firebase-api-key
+FIREBASE_AUTH_DOMAIN=your-project-id.firebaseapp.com
+FIREBASE_SERVICE_ACCOUNT_BASE64=base64-encoded-service-account-json
 
-# Optional
+# Google OAuth (System-Level)
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-your-client-secret
+
+# Encryption Key (for OAuth tokens)
+ENCRYPTION_KEY=your-fernet-encryption-key
+
+# =============================================================================
+# OPTIONAL: Advanced Configuration
+# =============================================================================
+
+# Webhook Server (for SendGrid email tracking)
+WEBHOOK_HOST=0.0.0.0
+WEBHOOK_PORT=8000
+WEBHOOK_PUBLIC_URL=http://localhost
+
+# CORS Settings (if using web frontend)
+CORS_ALLOWED_ORIGINS=http://localhost:8080,http://localhost:3000
+
+# Model Configuration
+DEFAULT_MODEL=claude-sonnet-4-20250514
+CLASSIFICATION_MODEL=claude-3-5-haiku-20241022
+
+# Optional: Log Level
 LOG_LEVEL=DEBUG
-PORT=8000
 ```
+
+**Notes**:
+- **Multi-tenant architecture**: User OAuth tokens stored in Supabase `oauth_tokens` table
+- **No more credential files**: `GOOGLE_CREDENTIALS_PATH` and `GOOGLE_APPLICATION_CREDENTIALS` are deprecated
+- **Per-user credentials**: Users connect via `/connect google` which stores tokens in database
+- **System OAuth**: `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` used for OAuth flow
+- **Firebase auth**: Service account now base64-encoded in env var (not file path)
+- **Encryption**: `ENCRYPTION_KEY` used to encrypt sensitive data in Supabase
 
 ### Environment Variables (CLI)
 The CLI auto-configures on first run. Config stored at `~/.zylch/config.json`.
@@ -114,11 +158,16 @@ The profile runs after successful `/login` and shows output for each command.
 
 ## 4. Setup Steps (Local Testing)
 
+**Note on Ports**:
+- **Local testing**: Use port `9000` (all examples in this guide)
+- **Webhook server**: Defaults to port `8000` (can override with `WEBHOOK_PORT` env var)
+- **Production**: Configure via environment variables or Railway/Docker settings
+
 ### Step 1: Launch Backend Locally
 
 ```bash
 # Terminal 1: Start the backend server
-cd /Users/mal/hb/zylch
+cd /path/to/your/zylch
 source venv/bin/activate
 uvicorn zylch.api.main:app --reload --port 9000
 ```
@@ -549,7 +598,283 @@ FROM avatars
 WHERE owner_id = 'YOUR_OWNER_ID';
 ```
 
-## 7. Troubleshooting
+## 7. Email Read Tracking Tests
+
+Email read tracking enables Zylch to detect when recipients open emails, providing intelligence for follow-up timing. There are two tracking methods:
+
+1. **SendGrid Webhooks** (PRIMARY) - For batch emails sent via SendGrid
+2. **Custom Tracking Pixel** (SECONDARY) - For individual emails
+
+### Scenario 1: SendGrid Webhook Email Tracking
+
+**Goal**: Verify SendGrid webhook correctly records email open event
+
+**Setup:**
+
+1. **Simulate SendGrid webhook** (testing without actual SendGrid):
+   ```bash
+   curl -X POST http://localhost:9000/api/webhooks/sendgrid \
+     -H "Content-Type: application/json" \
+     -H "X-Twilio-Email-Event-Webhook-Timestamp: 1702389000" \
+     -H "X-Twilio-Email-Event-Webhook-Signature: test_sig" \
+     -d '[{
+       "event": "open",
+       "email": "recipient@test.com",
+       "sg_message_id": "sendgrid_test_abc123",
+       "timestamp": 1702389000,
+       "useragent": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0)",
+       "ip": "192.168.1.1"
+     }]'
+   ```
+
+**Expected Output:**
+```json
+{"status": "success", "processed": 1, "total": 1}
+```
+
+**Behind the scenes:**
+1. Webhook handler receives SendGrid event
+2. Looks up `sendgrid_message_id` in `sendgrid_message_mapping` table
+3. If mapping exists, records read event in `email_read_events`
+4. Updates `emails.read_events` JSONB column with summary
+
+**Verification - Check read event recorded:**
+```sql
+SELECT
+    sendgrid_message_id,
+    recipient_email,
+    tracking_source,
+    read_count,
+    first_read_at,
+    last_read_at,
+    user_agents,
+    ip_addresses
+FROM email_read_events
+WHERE owner_id = 'YOUR_OWNER_ID'
+AND tracking_source = 'sendgrid_webhook'
+ORDER BY created_at DESC
+LIMIT 5;
+```
+
+**Expected Result:**
+```
+sendgrid_message_id    | recipient_email    | tracking_source  | read_count | first_read_at       | last_read_at        | user_agents                           | ip_addresses
+-----------------------|--------------------|------------------|-----------|---------------------|---------------------|---------------------------------------|-------------
+sendgrid_test_abc123   | recipient@test.com | sendgrid_webhook | 1         | 2025-12-12 10:30:00 | 2025-12-12 10:30:00 | {Mozilla/5.0 (iPhone...)}            | {192.168.1.1}
+```
+
+**Verification - Check mapping table:**
+```sql
+SELECT
+    sendgrid_message_id,
+    message_id,
+    recipient_email,
+    created_at
+FROM sendgrid_message_mapping
+WHERE owner_id = 'YOUR_OWNER_ID'
+ORDER BY created_at DESC
+LIMIT 3;
+```
+
+**Notes:**
+- SendGrid signature verification can be bypassed in development (set `SENDGRID_WEBHOOK_PUBLIC_KEY` to empty)
+- In production, webhook signature must be valid (ECDSA verification)
+- Webhook typically arrives within 1-5 seconds of email open
+- Multiple opens increment `read_count` and update `last_read_at`
+
+### Scenario 2: Custom Tracking Pixel
+
+**Goal**: Verify custom tracking pixel records email opens
+
+**Setup:**
+
+1. **Simulate pixel load** (as if recipient opened email):
+   ```bash
+   curl -i "http://localhost:9000/api/track/pixel/owner123_msg456_abc123_xyz789" \
+     -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
+   ```
+
+**Expected Response:**
+```
+HTTP/1.1 200 OK
+Content-Type: image/gif
+Content-Length: 43
+Cache-Control: no-store, no-cache, must-revalidate
+Pragma: no-cache
+Expires: 0
+
+R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7
+(Base64-encoded 1x1 transparent GIF)
+```
+
+**Behind the scenes:**
+1. Pixel endpoint extracts `tracking_id` from URL
+2. Parses tracking ID to get `owner_id`, `message_id`, recipient
+3. Records read event in `email_read_events` table
+4. Returns 1x1 transparent GIF (43 bytes)
+5. Processing happens in background task (non-blocking)
+
+**Verification - Check read event recorded:**
+```sql
+SELECT
+    tracking_id,
+    message_id,
+    recipient_email,
+    tracking_source,
+    read_count,
+    first_read_at,
+    last_read_at,
+    user_agents
+FROM email_read_events
+WHERE tracking_source = 'custom_pixel'
+AND owner_id = 'YOUR_OWNER_ID'
+ORDER BY created_at DESC
+LIMIT 1;
+```
+
+**Expected Result:**
+```
+tracking_id                      | message_id | recipient_email    | tracking_source | read_count | first_read_at       | last_read_at        | user_agents
+---------------------------------|------------|--------------------|-----------------|-----------|--------------------|---------------------|--------------
+owner123_msg456_abc123_xyz789    | msg456     | recipient@test.com | custom_pixel    | 1         | 2025-12-12 11:00:00 | 2025-12-12 11:00:00 | {Mozilla/5.0...}
+```
+
+**Notes:**
+- Pixel format: `{owner_id}_{message_id}_{random_8chars}_{random_6chars}`
+- Cache headers prevent caching to ensure accurate read tracking
+- Some email clients block images - pixel won't load in those cases
+- Privacy: IP addresses not collected by default for custom pixels
+
+### Scenario 3: Read Tracking in /gaps Command
+
+**Goal**: Verify read indicators appear in relationship gaps
+
+**Setup:**
+
+1. **Create test read event** (use Scenario 1 or 2 above)
+
+2. **Create test email with read_events** (simulating what the system does):
+   ```sql
+   -- Insert test email
+   INSERT INTO emails (id, owner_id, from_email, to_email, subject, date, date_timestamp, read_events)
+   VALUES (
+     'test_msg_001',
+     'YOUR_OWNER_ID',
+     'you@example.com',
+     'john.doe@example.com',
+     'Partnership Proposal',
+     '2025-12-08',
+     '2025-12-08 10:00:00',
+     '[{"recipient":"john.doe@example.com","read_count":2,"first_read_at":"2025-12-08T10:30:00Z","last_read_at":"2025-12-10T14:00:00Z"}]'::jsonb
+   );
+   ```
+
+3. **Run gaps command:**
+   ```
+   You: /gaps
+   ```
+
+**Expected Output:**
+```
+Zylch: 📋 Relationship Gaps Analysis
+
+🔴 Email Tasks (2 items):
+1. John Doe (john.doe@example.com) 📧✓ (read 4d ago)
+   - Last interaction: 5 days ago
+   - Action: Follow up on partnership proposal
+
+2. Jane Smith (jane@company.com) 📧❌ (unread 7d)
+   - Last interaction: 7 days ago
+   - Action: Gentle reminder - they haven't read yet
+```
+
+**Behind the scenes:**
+- **Avatar aggregator** queries `emails.read_events` JSONB to get read stats
+- **CRM worker** computes:
+  - Status: `waiting_unread` if email unread 3+ days
+  - Priority boost: +2 for unread 7+ days, +1 for unread 3+ days
+  - Action context: "Recipient has NOT read your email..." in LLM prompt
+- **Task formatter** adds indicators:
+  - `📧❌ (unread Xd)` - Email sent X days ago, not opened
+  - `📧✓ (read Xd ago)` - Email was opened X days ago
+
+**Verification - Check emails.read_events JSONB:**
+```sql
+SELECT
+    id,
+    from_email,
+    to_email,
+    subject,
+    date,
+    read_events
+FROM emails
+WHERE owner_id = 'YOUR_OWNER_ID'
+AND read_events IS NOT NULL
+AND read_events != '[]'::jsonb
+ORDER BY date_timestamp DESC
+LIMIT 3;
+```
+
+**Expected Result:**
+```
+id          | from_email        | to_email              | subject              | date       | read_events
+------------|-------------------|-----------------------|----------------------|------------|----------------------------------------------------------
+test_msg_001| you@example.com   | john.doe@example.com  | Partnership Proposal | 2025-12-08 | [{"recipient":"john.doe@example.com","read_count":2,...}]
+```
+
+### Scenario 4: Test Data Cleanup
+
+**After testing, clean up test data:**
+
+```sql
+-- WARNING: Only run in development/testing environment
+
+-- Delete test read events
+DELETE FROM email_read_events
+WHERE owner_id = 'YOUR_OWNER_ID'
+AND (
+    message_id LIKE 'test_%'
+    OR created_at > NOW() - INTERVAL '1 hour'
+);
+
+-- Delete test mappings
+DELETE FROM sendgrid_message_mapping
+WHERE owner_id = 'YOUR_OWNER_ID'
+AND (
+    message_id LIKE 'test_%'
+    OR created_at > NOW() - INTERVAL '1 hour'
+);
+
+-- Clear read_events from test emails
+UPDATE emails
+SET read_events = '[]'::jsonb
+WHERE owner_id = 'YOUR_OWNER_ID'
+AND (
+    id LIKE 'test_%'
+    OR date > NOW() - INTERVAL '1 hour'
+);
+
+-- Delete test emails
+DELETE FROM emails
+WHERE owner_id = 'YOUR_OWNER_ID'
+AND id LIKE 'test_%';
+
+-- Verify cleanup
+SELECT 'email_read_events' as table_name, COUNT(*) as remaining
+FROM email_read_events
+WHERE owner_id = 'YOUR_OWNER_ID' AND message_id LIKE 'test_%'
+UNION ALL
+SELECT 'sendgrid_message_mapping', COUNT(*)
+FROM sendgrid_message_mapping
+WHERE owner_id = 'YOUR_OWNER_ID' AND message_id LIKE 'test_%'
+UNION ALL
+SELECT 'emails', COUNT(*)
+FROM emails
+WHERE owner_id = 'YOUR_OWNER_ID' AND id LIKE 'test_%';
+-- Expected: All zeros
+```
+
+## 8. Troubleshooting
 
 ### Issue: /sync returns 0 emails
 
@@ -653,7 +978,7 @@ AND needs_action = true;
 SELECT * FROM relationship_gaps WHERE owner_id = 'YOUR_OWNER_ID';
 ```
 
-## 8. Performance Benchmarks
+## 9. Performance Benchmarks
 
 ### Expected Timings
 
@@ -673,7 +998,7 @@ SELECT * FROM relationship_gaps WHERE owner_id = 'YOUR_OWNER_ID';
 | Claude Haiku (relationship context) | ~$0.001 per email |
 | Claude Sonnet (gap analysis) | ~$0.01 per analysis |
 
-## 9. Success Criteria
+## 10. Success Criteria
 
 After testing, you should be able to:
 
@@ -692,7 +1017,7 @@ After testing, you should be able to:
   - `identifier_map` has email/phone/LinkedIn entries
 - [ ] Chat with AI about your emails: "Who do I need to respond to?"
 
-## 10. Common Commands Reference
+## 11. Common Commands Reference
 
 | Command | Description |
 |---------|-------------|
@@ -711,7 +1036,7 @@ After testing, you should be able to:
 | `/help` | Show all commands |
 | `/quit` | Exit CLI |
 
-## 11. Backend API Endpoints (for API testing)
+## 12. Backend API Endpoints (for API testing)
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
