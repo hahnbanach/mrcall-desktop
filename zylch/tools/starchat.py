@@ -794,7 +794,7 @@ async def create_starchat_client(owner_id: str, supabase_storage: Optional[Any] 
         if credentials and credentials.get("access_token"):
             logger.info(f"Creating StarChat client with OAuth for owner {owner_id}")
             return StarChatClient(
-                base_url=settings.mrcall_base_url,
+                base_url=settings.mrcall_base_url.rstrip('/'),
                 auth_type="oauth",
                 access_token=credentials["access_token"],
                 realm=settings.mrcall_realm,
@@ -809,7 +809,7 @@ async def create_starchat_client(owner_id: str, supabase_storage: Optional[Any] 
     if hasattr(settings, "starchat_username") and settings.starchat_username:
         logger.info(f"Creating StarChat client with Basic Auth (fallback) for owner {owner_id}")
         return StarChatClient(
-            base_url=settings.mrcall_base_url,
+            base_url=settings.mrcall_base_url.rstrip('/'),
             auth_type="basic",
             username=settings.starchat_username,
             password=settings.starchat_password,

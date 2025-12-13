@@ -420,7 +420,7 @@ async def refresh_mrcall_token(owner_id: str) -> Optional[Dict[str, Any]]:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{settings.mrcall_base_url}/oauth/token/refresh",
+                f"{settings.mrcall_base_url.rstrip('/')}/oauth/token/refresh",
                 data={
                     "grant_type": "refresh_token",
                     "refresh_token": credentials["refresh_token"],
