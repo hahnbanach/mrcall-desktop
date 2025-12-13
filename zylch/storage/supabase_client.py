@@ -1,5 +1,6 @@
 """Supabase storage client for multi-tenant data access."""
 
+import json
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
@@ -1260,6 +1261,8 @@ class SupabaseStorage:
         owner_id: str,
         email: str,
         cli_callback: Optional[str] = None,
+        provider: str = "google",
+        metadata: Optional[Dict[str, Any]] = None,
         expires_minutes: int = 10
     ) -> bool:
         """Store OAuth state for CSRF protection.
@@ -1269,6 +1272,8 @@ class SupabaseStorage:
             owner_id: Firebase UID
             email: User's email
             cli_callback: Optional CLI callback URL
+            provider: OAuth provider (google, mrcall, etc.)
+            metadata: Optional metadata dict (e.g., PKCE code_verifier)
             expires_minutes: Minutes until state expires
 
         Returns:
@@ -1281,6 +1286,8 @@ class SupabaseStorage:
             'owner_id': owner_id,
             'email': email,
             'cli_callback': cli_callback,
+            'provider': provider,
+            'metadata': json.dumps(metadata) if metadata else None,
             'expires_at': expires_at.isoformat(),
             'created_at': datetime.now(timezone.utc).isoformat()
         }
@@ -1336,10 +1343,20 @@ class SupabaseStorage:
             self.client.table('oauth_states').delete().eq('state', state).execute()
             logger.info(f"OAuth state consumed (deleted) for owner: {state_data['owner_id']}")
 
+            # Parse metadata JSON if present
+            metadata = None
+            if state_data.get('metadata'):
+                try:
+                    metadata = json.loads(state_data['metadata']) if isinstance(state_data['metadata'], str) else state_data['metadata']
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning(f"Failed to parse metadata for state: {state[:20]}...")
+
             return {
                 'owner_id': state_data['owner_id'],
                 'email': state_data['email'],
                 'cli_callback': state_data.get('cli_callback'),
+                'provider': state_data.get('provider', 'google'),
+                'metadata': metadata,
                 'created_at': state_data['created_at']
             }
 
