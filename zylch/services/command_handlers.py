@@ -1520,6 +1520,11 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
             .eq('provider_key', provider_key)\
             .execute()
 
+        # Debug logging
+        logger.info(f"🔍 Query for provider_key='{provider_key}'")
+        logger.info(f"🔍 Result.data: {result.data}")
+        logger.info(f"🔍 Result.count: {result.count if hasattr(result, 'count') else 'N/A'}")
+
         if not result.data:
             return f"❌ **Error:** Provider '{provider_key}' not found\n\nRun `/connect` to see available providers"
 
@@ -1529,6 +1534,8 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
             return f"⏳ **{provider['display_name']}** is coming soon!\n\nRun `/connect` to see available providers"
 
         # OAuth provider - return authorization URL
+        # Note: The CLI handles the local OAuth server and browser opening.
+        # The backend just returns the OAuth URL for the CLI to use.
         if provider['requires_oauth']:
             oauth_url = provider.get('oauth_url', f'/api/auth/{provider_key}/authorize')
 

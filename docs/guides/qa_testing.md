@@ -169,12 +169,12 @@ The profile runs after successful `/login` and shows output for each command.
 # Terminal 1: Start the backend server
 cd /path/to/your/zylch
 source venv/bin/activate
-uvicorn zylch.api.main:app --reload --port 9000
+uvicorn zylch.api.main:app --reload --port 8000
 ```
 
 **Expected Output:**
 ```
-INFO:     Uvicorn running on http://127.0.0.1:9000 (Press CTRL+C to quit)
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 INFO:     Started reloader process [12345]
 INFO:     Started server process [12346]
 INFO:     Waiting for application startup.
@@ -199,7 +199,7 @@ python -m zylch_cli.cli
 ```
 ✅ Server is running
 
-╭──────────────────────────── Zylch ────────────────────────────╮
+╭──────────────────────────── Zylch ─────────────────────────────╮
 │ Zylch AI Chat                                                  │
 │                                                                │
 │ Chat with your AI assistant.                                   │
@@ -224,7 +224,7 @@ Status:
 
 **Behind the scenes:**
 - CLI reads config from `~/.zylch/config.json`
-- Makes health check to `http://localhost:9000/health`
+- Makes health check to `http://localhost:8000/health`
 - Initializes prompt_toolkit for interactive input
 
 ### Step 3: Login
@@ -254,7 +254,7 @@ Zylch: [shows connection status from /connect]
 
 **Behind the scenes:**
 1. CLI starts local callback server on port 8765
-2. Opens browser to `http://localhost:9000/api/auth/login?cli_callback=http://localhost:8765`
+2. Opens browser to `http://localhost:8000/api/auth/login?cli_callback=http://localhost:8765`
 3. Backend redirects to Firebase auth
 4. User signs in with Google
 5. Backend receives Firebase token, generates session
@@ -1052,10 +1052,10 @@ After testing, you should be able to:
 **Example cURL:**
 ```bash
 # Health check
-curl http://localhost:9000/health
+curl http://localhost:8000/health
 
 # Start sync (requires auth token)
-curl -X POST http://localhost:9000/api/sync/start \
+curl -X POST http://localhost:8000/api/sync/start \
   -H "Authorization: Bearer YOUR_FIREBASE_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"days": 30}'

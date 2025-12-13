@@ -6,6 +6,277 @@ MrCall (via StarChat API) provides telephony and WhatsApp integration for Zylch,
 
 **Note**: WhatsApp integration is documented but not yet implemented, pending StarChat REST API endpoint (see [WhatsApp Integration TODO](WHATSAPP_INTEGRATION_TODO.md)).
 
+## Authentication
+
+### Overview
+
+StarChat API supports two authentication methods:
+
+1. **OAuth 2.0 (Recommended)**: Modern, secure authentication with automatic token refresh
+2. **Basic Auth (Legacy)**: Username/password authentication for backward compatibility
+
+### OAuth 2.0 Authentication
+
+**Authentication Flow**: Authorization Code with PKCE (Proof Key for Code Exchange)
+
+#### OAuth Flow Diagram
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                 MRCALL/STARCHAT OAUTH FLOW                       │
+│        (OAuth 2.0 Authorization Code with PKCE)                  │
+│           TWO SEPARATE FIREBASE IDENTITY SYSTEMS                 │
+└──────────────────────────────────────────────────────────────────┘
+
+┌─────────┐         ┌─────────┐         ┌─────────┐         ┌─────────┐
+│  User   │         │  Zylch  │         │  Zylch  │         │StarChat │
+│  (CLI)  │         │   CLI   │         │ Backend │         │  OAuth  │
+└────┬────┘         └────┬────┘         └────┬────┘         └────┬────┘
+     │                   │                   │                   │
+     │ /connect mrcall   │                   │                   │
+     │──────────────────>│                   │                   │
+     │                   │                   │                   │
+     │                   │ GET /api/auth/    │                   │
+     │                   │ mrcall/authorize  │                   │
+     │                   │ ?owner_id=abc123  │ (Zylch Firebase UID)
+     │                   │──────────────────>│                   │
+     │                   │                   │                   │
+     │                   │                   │ Generate PKCE:    │
+     │                   │                   │ - code_verifier   │
+     │                   │                   │ - code_challenge  │
+     │                   │                   │ - state (CSRF)    │
+     │                   │                   │                   │
+     │                   │   OAuth URL       │                   │
+     │                   │   with PKCE       │                   │
+     │                   │<──────────────────│                   │
+     │                   │                   │                   │
+     │                   │ Start local       │                   │
+     │                   │ server :8766      │                   │
+     │                   │                   │                   │
+     │ Open browser      │                   │                   │
+     │<──────────────────│                   │                   │
+     │                   │                   │                   │
+     │ ─────────────────────────────────────────────────────────>│
+     │                   Login + Consent Page                    │
+     │                   │                   │                   │
+     │   User logs in with MRCALL/STARCHAT account              │
+     │   (DIFFERENT Firebase identity: target_owner)             │
+     │<──────────────────────────────────────────────────────────│
+     │                   │                   │                   │
+     │ Approve           │                   │                   │
+     │───────────────────────────────────────────────────────────>│
+     │                   │                   │                   │
+     │                   │ Redirect to       │                   │
+     │                   │ localhost:8766/   │                   │
+     │                   │ callback?code=xyz │                   │
+     │                   │<─────────────────────────────────────│
+     │                   │                   │                   │
+     │                   │ POST /api/auth/   │                   │
+     │                   │ mrcall/callback   │                   │
+     │                   │ {code, state}     │                   │
+     │                   │──────────────────>│                   │
+     │                   │                   │                   │
+     │                   │                   │ Exchange code     │
+     │                   │                   │ + code_verifier   │
+     │                   │                   │──────────────────>│
+     │                   │                   │                   │
+     │                   │                   │<──────────────────│
+     │                   │                   │ access_token,     │
+     │                   │                   │ refresh_token,    │
+     │                   │                   │ target_owner      │
+     │                   │                   │                   │
+     │                   │                   │ Store tokens with │
+     │                   │                   │ BOTH identities   │
+     │                   │                   │                   │
+     │                   │   "Success!"      │                   │
+     │                   │<──────────────────│                   │
+     │                   │                   │                   │
+     │ "✅ MrCall        │                   │                   │
+     │ connected!"       │                   │                   │
+     │<──────────────────│                   │                   │
+     ▼                   ▼                   ▼                   ▼
+```
+
+**Key Points:**
+- User logs into MrCall/StarChat (separate Firebase app from Zylch)
+- Two identity systems: Zylch `owner_id` and MrCall `target_owner`
+- PKCE adds security layer (code_verifier/code_challenge)
+- Tokens stored with BOTH identities for mapping
+
+#### Setup
+
+**Required Configuration** (backend environment variables):
+
+```bash
+# OAuth Credentials
+MRCALL_CLIENT_ID=partner_e2e68f877b0722f7
+MRCALL_CLIENT_SECRET=<your-client-secret>
+MRCALL_REALM=mrcall0
+
+# StarChat API Base URL
+MRCALL_BASE_URL=https://test-env-0.scw.hbsrv.net/  # Test environment
+# MRCALL_BASE_URL=https://api.mrcall.ai  # Production (when available)
+```
+
+#### Connecting via CLI
+
+**Command**:
+```bash
+/connect mrcall
+```
+
+**Flow**:
+1. CLI initiates OAuth flow by requesting authorization URL from backend
+2. Backend generates authorization URL with:
+   - PKCE code challenge (SHA-256 hash of random verifier)
+   - State parameter for CSRF protection
+   - Scopes: `openid profile email mrcall.full_access`
+3. CLI starts local HTTP server on `http://localhost:8766` to handle callback
+4. CLI opens system browser to StarChat consent page
+5. User logs in to StarChat (if not already authenticated)
+6. User reviews and approves permissions
+7. StarChat redirects to `http://localhost:8766/callback?code=...&state=...`
+8. Local HTTP server captures authorization code
+9. CLI sends code + PKCE verifier to backend
+10. Backend exchanges code for access token and refresh token
+11. Backend encrypts tokens and stores in Supabase `oauth_tokens` table
+12. User authenticated and ready to use MrCall features
+
+**Security Features**:
+- **PKCE**: Prevents authorization code interception attacks
+- **State parameter**: Prevents CSRF attacks
+- **Local callback server**: Only accepts connections from localhost
+- **Encrypted storage**: Tokens encrypted with Fernet before database storage
+- **Short-lived server**: HTTP server automatically shuts down after receiving callback
+
+#### Token Management
+
+**Automatic Token Refresh**:
+- Tokens automatically refreshed when within 5 minutes of expiration
+- Refresh happens transparently during API calls
+- No user intervention required
+
+**Token Storage**:
+- Stored in Supabase `oauth_tokens` table
+- Encrypted with Fernet encryption
+- Scoped to user via `owner_id` (Firebase UID)
+- Structure:
+  ```json
+  {
+    "provider": "mrcall",
+    "owner_id": "firebase_uid_abc123",
+    "credentials": {
+      "access_token": "encrypted_access_token",
+      "refresh_token": "encrypted_refresh_token",
+      "expires_at": "2025-12-13T10:30:00Z"
+    }
+  }
+  ```
+
+**Checking Connection Status**:
+```bash
+# CLI command (upcoming)
+/connect status
+
+# Or via API
+GET /api/auth/mrcall/status
+Authorization: Bearer <firebase-jwt>
+
+# Response
+{
+  "connected": true,
+  "expires_at": "2025-12-13T10:30:00Z",
+  "realm": "mrcall0"
+}
+```
+
+**Revoking Access**:
+```bash
+# CLI command (upcoming)
+/disconnect mrcall
+
+# Or via API
+POST /api/auth/mrcall/revoke
+Authorization: Bearer <firebase-jwt>
+
+# This will:
+# 1. Revoke tokens with StarChat (if supported)
+# 2. Delete tokens from Supabase
+# 3. Clear any cached credentials
+```
+
+#### Implementation Details
+
+**Backend Files**:
+- `/zylch/config.py` - OAuth configuration (MRCALL_CLIENT_ID, MRCALL_CLIENT_SECRET, etc.)
+- `/zylch/api/routes/auth.py` - OAuth endpoints (/authorize, /callback, /status, /revoke)
+- `/zylch/api/token_storage.py` - Token storage and refresh functions
+- `/zylch/tools/starchat.py` - StarChat client with OAuth bearer token support
+
+**CLI Files** (in `zylch-cli` repository):
+- `zylch_cli/cli.py` - Service routing and `_connect_mrcall()` method
+- `zylch_cli/oauth_handler.py` - Local HTTP server on port 8766 for OAuth callback
+
+**OAuth Endpoints**:
+```
+GET  /api/auth/mrcall/authorize      # Generate authorization URL with PKCE
+POST /api/auth/mrcall/callback       # Exchange authorization code for tokens
+GET  /api/auth/mrcall/status         # Check if user has valid MrCall OAuth tokens
+POST /api/auth/mrcall/revoke         # Revoke and delete tokens
+```
+
+### Basic Auth (Legacy)
+
+**Use Case**: Backward compatibility for systems not yet migrated to OAuth
+
+**Configuration**:
+```python
+from zylch.tools.starchat import StarChatClient
+
+client = StarChatClient(
+    base_url="https://test-env-0.scw.hbsrv.net/",
+    username="your_username",
+    password="your_password",
+    realm="mrcall0"
+)
+```
+
+**Limitations**:
+- Credentials must be stored and managed by application
+- No automatic refresh
+- Less secure than OAuth (credentials in configuration)
+- Deprecated for new integrations
+
+### StarChat Client Authentication
+
+The `StarChatClient` class automatically handles authentication:
+
+**OAuth-First Strategy**:
+```python
+from zylch.tools.starchat import StarChatClient
+
+# Try OAuth first (if tokens exist for user)
+client = StarChatClient.from_oauth(
+    base_url="https://test-env-0.scw.hbsrv.net/",
+    owner_id="firebase_uid_abc123"
+)
+
+# Fallback to Basic Auth if OAuth not configured
+if not client.has_valid_token():
+    client = StarChatClient(
+        base_url="https://test-env-0.scw.hbsrv.net/",
+        username="username",
+        password="password",
+        realm="mrcall0"
+    )
+```
+
+**Automatic Token Refresh**:
+- Client automatically refreshes expired tokens
+- Refresh triggered when access token within 5 minutes of expiration
+- On 401 Unauthorized response, attempts refresh and retries request
+- If refresh fails, raises authentication error
+
 ## Key Concepts
 
 ### StarChat API
@@ -16,7 +287,7 @@ StarChat is the Firebase-backed API layer for MrCall services. It provides:
 - **Outbound Calls**: Trigger AI-powered phone calls
 - **WhatsApp** (pending): Access WhatsApp message history
 
-**Authentication**: Supports both JWT (Firebase) and Basic Auth.
+**Authentication**: OAuth 2.0 (recommended) or Basic Auth (legacy)
 
 ### MrCall Assistants
 
@@ -40,7 +311,8 @@ MrCall assistants are AI-powered phone agents with customizable behavior via var
 from zylch.tools.starchat import StarChatClient
 
 client = StarChatClient(
-    base_url="https://api.starchat.com",
+ #   base_url="https://api.mrcall.ai",   # production environment
+    base_url="https://test-env-0.scw.hbsrv.net/",  # testing environment
     username="user",
     password="pass",
     realm="default"
