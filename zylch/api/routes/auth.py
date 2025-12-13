@@ -1243,7 +1243,7 @@ async def fetch_mrcall_business_id(access_token: str) -> str:
     async with httpx.AsyncClient() as client:
         # Call StarChat API to get user's businesses
         response = await client.get(
-            f"{settings.mrcall_base_url}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business",
+            f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business",
             headers={"Authorization": f"Bearer {access_token}"}
         )
 
@@ -1350,7 +1350,7 @@ async def mrcall_oauth_authorize(
         "code_challenge_method": "S256"
     }
 
-    auth_url = f"{settings.mrcall_base_url}/oauth/authorize?{urlencode(auth_params)}"
+    auth_url = f"{settings.mrcall_base_url.rstrip('/')}/oauth/authorize?{urlencode(auth_params)}"
 
     logger.info(f"Generated MrCall OAuth URL for user {owner_id}")
 
@@ -1414,7 +1414,7 @@ async def mrcall_oauth_callback(
     try:
         async with httpx.AsyncClient() as client:
             token_response = await client.post(
-                f"{settings.mrcall_base_url}/oauth/token",
+                f"{settings.mrcall_base_url.rstrip('/')}/oauth/token",
                 data={
                     "grant_type": "authorization_code",
                     "code": code,
@@ -1542,7 +1542,7 @@ async def mrcall_oauth_revoke(user: dict = Depends(get_current_user)):
         try:
             async with httpx.AsyncClient() as client:
                 await client.post(
-                    f"{settings.mrcall_base_url}/oauth/token/revoke",
+                    f"{settings.mrcall_base_url.rstrip('/')}/oauth/token/revoke",
                     json={"token": credentials["access_token"]},
                     headers={"Content-Type": "application/json"}
                 )
