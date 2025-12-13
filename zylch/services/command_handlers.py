@@ -1533,33 +1533,10 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
         if not provider['is_available']:
             return f"⏳ **{provider['display_name']}** is coming soon!\n\nRun `/connect` to see available providers"
 
-        # OAuth provider - handle OAuth flow
+        # OAuth provider - return authorization URL
+        # Note: The CLI handles the local OAuth server and browser opening.
+        # The backend just returns the OAuth URL for the CLI to use.
         if provider['requires_oauth']:
-            # For MrCall, trigger local OAuth flow
-            if provider_key == "mrcall":
-                from zylch.cli.oauth_handlers import handle_mrcall_oauth_flow
-                from zylch.config import settings
-
-                try:
-                    logger.info(f"Initiating MrCall OAuth for owner_id={owner_id}")
-
-                    # Call the OAuth flow handler with owner_id
-                    # The OAuth handler will start a local HTTP server and open a browser
-                    success = await handle_mrcall_oauth_flow(
-                        api_base_url=settings.api_server_url,
-                        owner_id=owner_id
-                    )
-
-                    if success:
-                        return "✅ **MrCall connected successfully!** You can now use MrCall tools.\n\nRun `/connections` to verify."
-                    else:
-                        return "❌ **Failed to connect MrCall.** The OAuth flow was cancelled or encountered an error."
-
-                except Exception as e:
-                    logger.error(f"Error initiating MrCall OAuth: {e}", exc_info=True)
-                    return f"❌ **Error:** Failed to initiate OAuth flow: {str(e)}"
-
-            # For other OAuth providers, return authorization URL
             oauth_url = provider.get('oauth_url', f'/api/auth/{provider_key}/authorize')
 
             return f"""**🔗 Connect {provider['display_name']}**

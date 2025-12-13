@@ -1339,11 +1339,11 @@ async def mrcall_oauth_authorize(
     )
 
     # Build full OAuth authorization URL
-    # Using localhost:8765 for CLI local callback server (like Google OAuth pattern)
+    # Using localhost:8766 for CLI local callback server (matches initiate_service_connect port)
     auth_params = {
         "response_type": "code",
         "client_id": settings.mrcall_client_id,
-        "redirect_uri": "http://localhost:8765/callback",  # Local callback for CLI
+        "redirect_uri": "http://localhost:8766/callback",  # Local callback for CLI
         "scope": "business:read contacts:read",
         "state": state,
         "code_challenge": code_challenge,
@@ -1418,7 +1418,7 @@ async def mrcall_oauth_callback(
                 data={
                     "grant_type": "authorization_code",
                     "code": code,
-                    "redirect_uri": "http://localhost:8765/callback",
+                    "redirect_uri": "http://localhost:8766/callback",
                     "client_id": settings.mrcall_client_id,
                     "client_secret": settings.mrcall_client_secret,
                     "code_verifier": code_verifier
