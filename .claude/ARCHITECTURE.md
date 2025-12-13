@@ -428,8 +428,63 @@ Backend decodes automatically on startup (`zylch/api/firebase_auth.py`).
 
 **Summary**:
 - **Firebase Auth**: JWT tokens validated on all API endpoints
-- **OAuth 2.0**: Secure flow with CSRF protection for Google/Microsoft
+- **OAuth 2.0**: Secure flow with CSRF protection for Google/Microsoft/MrCall
 - **Token Auto-Refresh**: Automatic refresh before expiration (frontend & CLI)
+
+#### MrCall OAuth 2.0 Integration
+
+**Authentication Method**: Authorization Code flow with PKCE (Proof Key for Code Exchange)
+
+**OAuth Flow**:
+1. User runs `/connect mrcall` command in CLI
+2. Backend generates OAuth authorization URL with PKCE challenge
+3. CLI starts local HTTP server on port 8765 and opens browser
+4. User redirected to StarChat consent page (https://test-env-0.scw.hbsrv.net/)
+5. User logs in and approves permission on StarChat
+6. StarChat redirects to http://localhost:8765/callback with authorization code
+7. CLI sends code to backend which exchanges it for access/refresh tokens
+8. Backend stores encrypted tokens in Supabase `oauth_tokens` table
+9. Tokens automatically refreshed with 5-minute expiration buffer
+
+**Key Components**:
+- **Backend Endpoints** (`zylch/api/routes/auth.py`):
+  - `GET /api/auth/mrcall/authorize` - Generates OAuth URL with PKCE
+  - `POST /api/auth/mrcall/callback` - Exchanges code for tokens
+  - `GET /api/auth/mrcall/status` - Checks connection status
+  - `POST /api/auth/mrcall/revoke` - Revokes and deletes tokens
+
+- **CLI OAuth Handler** (`zylch/cli/oauth_handlers.py`):
+  - Local HTTP server on port 8765 for OAuth callback
+  - Browser automation for consent page
+  - PKCE verifier management
+
+- **Token Storage** (`zylch/api/token_storage.py`):
+  - Encrypted storage in Supabase `oauth_tokens.credentials` (JSONB)
+  - Automatic token refresh with 5-minute buffer
+  - Integration with StarChat client
+
+- **StarChat Client** (`zylch/tools/starchat.py`):
+  - Supports both Basic Auth (legacy) and OAuth bearer tokens (new)
+  - Automatic token refresh on 401 responses
+  - Fallback to Basic Auth if OAuth not configured
+
+**Configuration** (`zylch/config.py`):
+- `MRCALL_CLIENT_ID`: OAuth client ID (partner_e2e68f877b0722f7)
+- `MRCALL_CLIENT_SECRET`: OAuth client secret (encrypted)
+- `MRCALL_REALM`: MrCall realm (default: mrcall0)
+- `MRCALL_BASE_URL`: StarChat API base URL (test: https://test-env-0.scw.hbsrv.net/)
+
+**Security Features**:
+- PKCE prevents authorization code interception
+- State parameter prevents CSRF attacks
+- Tokens encrypted with Fernet before Supabase storage
+- Local callback server only accepts connections from localhost
+- Automatic token cleanup on revocation
+
+**Token Refresh Strategy**:
+- Tokens refreshed when within 5 minutes of expiration
+- Refresh happens automatically on API calls via StarChat client
+- Failed refresh triggers re-authentication prompt
 
 ### Sensitive Data Encryption
 
