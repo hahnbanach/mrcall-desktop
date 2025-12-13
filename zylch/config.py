@@ -169,6 +169,11 @@ class Settings(BaseSettings):
         env="MRCALL_BASE_URL",
         description="StarChat API base URL for MrCall"
     )
+    mrcall_oauth_authorize_url: str = Field(
+        default="https://dashboard-test.mrcall.ai/oauth/authorize",
+        env="MRCALL_OAUTH_AUTHORIZE_URL",
+        description="MrCall Dashboard OAuth authorize URL (consent page is served by Dashboard, not API)"
+    )
 
     # Multi-tenant Configuration
     owner_id: str = Field(

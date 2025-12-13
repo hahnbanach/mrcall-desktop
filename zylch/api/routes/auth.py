@@ -1350,7 +1350,9 @@ async def mrcall_oauth_authorize(
         "code_challenge_method": "S256"
     }
 
-    auth_url = f"{settings.mrcall_base_url.rstrip('/')}/oauth/authorize?{urlencode(auth_params)}"
+    # OAuth authorize endpoint is served by Dashboard, not API
+    # API endpoints (/oauth/token, etc.) use mrcall_base_url
+    auth_url = f"{settings.mrcall_oauth_authorize_url}?{urlencode(auth_params)}"
 
     logger.info(f"Generated MrCall OAuth URL for user {owner_id}")
 
