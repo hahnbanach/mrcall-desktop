@@ -77,7 +77,7 @@ class MrCallOAuthHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-async def handle_mrcall_oauth_flow(api_base_url: str, firebase_token: str) -> bool:
+async def handle_mrcall_oauth_flow(api_base_url: str, owner_id: str) -> bool:
     """
     Handle complete MrCall OAuth flow with local server.
 
@@ -90,7 +90,7 @@ async def handle_mrcall_oauth_flow(api_base_url: str, firebase_token: str) -> bo
 
     Args:
         api_base_url: Zylch API base URL (e.g., http://localhost:8000)
-        firebase_token: Firebase ID token for authentication
+        owner_id: Firebase UID of the user
 
     Returns:
         True if successful, False otherwise
@@ -107,7 +107,7 @@ async def handle_mrcall_oauth_flow(api_base_url: str, firebase_token: str) -> bo
         print("Initiating MrCall OAuth flow...")
         response = requests.get(
             f"{api_base_url}/api/auth/mrcall/authorize",
-            headers={"Authorization": f"Bearer {firebase_token}"},
+            params={"owner_id": owner_id},
             timeout=10
         )
 

@@ -1540,35 +1540,23 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
                 from zylch.cli.oauth_handlers import handle_mrcall_oauth_flow
                 from zylch.config import settings
 
-                # Get Firebase token (this is passed in from the CLI)
-                # For CLI context, we need the Firebase token to authenticate with backend
-                # This will be available in the CLI session
                 try:
-                    # In CLI context, firebase_token should be available from session
-                    # For now, return instructions for manual OAuth flow
-                    oauth_url = provider.get('oauth_url', f'/api/auth/{provider_key}/authorize')
+                    logger.info(f"Initiating MrCall OAuth for owner_id={owner_id}")
 
-                    return f"""**🔗 Connect {provider['display_name']}**
+                    # Call the OAuth flow handler with owner_id
+                    # The OAuth handler will start a local HTTP server and open a browser
+                    success = await handle_mrcall_oauth_flow(
+                        api_base_url=settings.api_server_url,
+                        owner_id=owner_id
+                    )
 
-**OAuth Authorization Required**
+                    if success:
+                        return "✅ **MrCall connected successfully!** You can now use MrCall tools.\n\nRun `/connections` to verify."
+                    else:
+                        return "❌ **Failed to connect MrCall.** The OAuth flow was cancelled or encountered an error."
 
-To connect MrCall, run this command from CLI or open in browser:
-
-```
-# CLI will automatically handle OAuth flow
-/connect mrcall
-```
-
-Or manually visit:
-```
-{settings.api_server_url}{oauth_url}
-```
-
-After authorization, your credentials will be stored securely.
-
-Run `/connections` to verify connection."""
                 except Exception as e:
-                    logger.error(f"Error initiating MrCall OAuth: {e}")
+                    logger.error(f"Error initiating MrCall OAuth: {e}", exc_info=True)
                     return f"❌ **Error:** Failed to initiate OAuth flow: {str(e)}"
 
             # For other OAuth providers, return authorization URL
