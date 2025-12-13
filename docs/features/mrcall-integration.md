@@ -19,6 +19,90 @@ StarChat API supports two authentication methods:
 
 **Authentication Flow**: Authorization Code with PKCE (Proof Key for Code Exchange)
 
+#### OAuth Flow Diagram
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                 MRCALL/STARCHAT OAUTH FLOW                       │
+│        (OAuth 2.0 Authorization Code with PKCE)                  │
+│           TWO SEPARATE FIREBASE IDENTITY SYSTEMS                 │
+└──────────────────────────────────────────────────────────────────┘
+
+┌─────────┐         ┌─────────┐         ┌─────────┐         ┌─────────┐
+│  User   │         │  Zylch  │         │  Zylch  │         │StarChat │
+│  (CLI)  │         │   CLI   │         │ Backend │         │  OAuth  │
+└────┬────┘         └────┬────┘         └────┬────┘         └────┬────┘
+     │                   │                   │                   │
+     │ /connect mrcall   │                   │                   │
+     │──────────────────>│                   │                   │
+     │                   │                   │                   │
+     │                   │ GET /api/auth/    │                   │
+     │                   │ mrcall/authorize  │                   │
+     │                   │ ?owner_id=abc123  │ (Zylch Firebase UID)
+     │                   │──────────────────>│                   │
+     │                   │                   │                   │
+     │                   │                   │ Generate PKCE:    │
+     │                   │                   │ - code_verifier   │
+     │                   │                   │ - code_challenge  │
+     │                   │                   │ - state (CSRF)    │
+     │                   │                   │                   │
+     │                   │   OAuth URL       │                   │
+     │                   │   with PKCE       │                   │
+     │                   │<──────────────────│                   │
+     │                   │                   │                   │
+     │                   │ Start local       │                   │
+     │                   │ server :8766      │                   │
+     │                   │                   │                   │
+     │ Open browser      │                   │                   │
+     │<──────────────────│                   │                   │
+     │                   │                   │                   │
+     │ ─────────────────────────────────────────────────────────>│
+     │                   Login + Consent Page                    │
+     │                   │                   │                   │
+     │   User logs in with MRCALL/STARCHAT account              │
+     │   (DIFFERENT Firebase identity: target_owner)             │
+     │<──────────────────────────────────────────────────────────│
+     │                   │                   │                   │
+     │ Approve           │                   │                   │
+     │───────────────────────────────────────────────────────────>│
+     │                   │                   │                   │
+     │                   │ Redirect to       │                   │
+     │                   │ localhost:8766/   │                   │
+     │                   │ callback?code=xyz │                   │
+     │                   │<─────────────────────────────────────│
+     │                   │                   │                   │
+     │                   │ POST /api/auth/   │                   │
+     │                   │ mrcall/callback   │                   │
+     │                   │ {code, state}     │                   │
+     │                   │──────────────────>│                   │
+     │                   │                   │                   │
+     │                   │                   │ Exchange code     │
+     │                   │                   │ + code_verifier   │
+     │                   │                   │──────────────────>│
+     │                   │                   │                   │
+     │                   │                   │<──────────────────│
+     │                   │                   │ access_token,     │
+     │                   │                   │ refresh_token,    │
+     │                   │                   │ target_owner      │
+     │                   │                   │                   │
+     │                   │                   │ Store tokens with │
+     │                   │                   │ BOTH identities   │
+     │                   │                   │                   │
+     │                   │   "Success!"      │                   │
+     │                   │<──────────────────│                   │
+     │                   │                   │                   │
+     │ "✅ MrCall        │                   │                   │
+     │ connected!"       │                   │                   │
+     │<──────────────────│                   │                   │
+     ▼                   ▼                   ▼                   ▼
+```
+
+**Key Points:**
+- User logs into MrCall/StarChat (separate Firebase app from Zylch)
+- Two identity systems: Zylch `owner_id` and MrCall `target_owner`
+- PKCE adds security layer (code_verifier/code_challenge)
+- Tokens stored with BOTH identities for mapping
+
 #### Setup
 
 **Required Configuration** (backend environment variables):
@@ -47,11 +131,11 @@ MRCALL_BASE_URL=https://test-env-0.scw.hbsrv.net/  # Test environment
    - PKCE code challenge (SHA-256 hash of random verifier)
    - State parameter for CSRF protection
    - Scopes: `openid profile email mrcall.full_access`
-3. CLI starts local HTTP server on `http://localhost:8765` to handle callback
+3. CLI starts local HTTP server on `http://localhost:8766` to handle callback
 4. CLI opens system browser to StarChat consent page
 5. User logs in to StarChat (if not already authenticated)
 6. User reviews and approves permissions
-7. StarChat redirects to `http://localhost:8765/callback?code=...&state=...`
+7. StarChat redirects to `http://localhost:8766/callback?code=...&state=...`
 8. Local HTTP server captures authorization code
 9. CLI sends code + PKCE verifier to backend
 10. Backend exchanges code for access token and refresh token
@@ -129,9 +213,9 @@ Authorization: Bearer <firebase-jwt>
 - `/zylch/api/token_storage.py` - Token storage and refresh functions
 - `/zylch/tools/starchat.py` - StarChat client with OAuth bearer token support
 
-**CLI Files**:
-- `/zylch/cli/oauth_handlers.py` - Local HTTP server on port 8765 for OAuth callback
-- `/zylch/services/command_handlers.py` - `/connect mrcall` command handler
+**CLI Files** (in `zylch-cli` repository):
+- `zylch_cli/cli.py` - Service routing and `_connect_mrcall()` method
+- `zylch_cli/oauth_handler.py` - Local HTTP server on port 8766 for OAuth callback
 
 **OAuth Endpoints**:
 ```
