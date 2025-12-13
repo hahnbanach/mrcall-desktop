@@ -1528,8 +1528,45 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
         if not provider['is_available']:
             return f"⏳ **{provider['display_name']}** is coming soon!\n\nRun `/connect` to see available providers"
 
-        # OAuth provider - return authorization URL
+        # OAuth provider - handle OAuth flow
         if provider['requires_oauth']:
+            # For MrCall, trigger local OAuth flow
+            if provider_key == "mrcall":
+                from zylch.cli.oauth_handlers import handle_mrcall_oauth_flow
+                from zylch.config import settings
+
+                # Get Firebase token (this is passed in from the CLI)
+                # For CLI context, we need the Firebase token to authenticate with backend
+                # This will be available in the CLI session
+                try:
+                    # In CLI context, firebase_token should be available from session
+                    # For now, return instructions for manual OAuth flow
+                    oauth_url = provider.get('oauth_url', f'/api/auth/{provider_key}/authorize')
+
+                    return f"""**🔗 Connect {provider['display_name']}**
+
+**OAuth Authorization Required**
+
+To connect MrCall, run this command from CLI or open in browser:
+
+```
+# CLI will automatically handle OAuth flow
+/connect mrcall
+```
+
+Or manually visit:
+```
+{settings.api_server_url}{oauth_url}
+```
+
+After authorization, your credentials will be stored securely.
+
+Run `/connections` to verify connection."""
+                except Exception as e:
+                    logger.error(f"Error initiating MrCall OAuth: {e}")
+                    return f"❌ **Error:** Failed to initiate OAuth flow: {str(e)}"
+
+            # For other OAuth providers, return authorization URL
             oauth_url = provider.get('oauth_url', f'/api/auth/{provider_key}/authorize')
 
             return f"""**🔗 Connect {provider['display_name']}**

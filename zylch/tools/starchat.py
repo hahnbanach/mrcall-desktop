@@ -19,31 +19,43 @@ class StarChatClient:
     def __init__(
         self,
         base_url: str,
+        auth_type: str = "basic",
         username: Optional[str] = None,
         password: Optional[str] = None,
         jwt_token: Optional[str] = None,
+        access_token: Optional[str] = None,
         realm: str = "default",
         timeout: int = 30,
         verify_ssl: bool = True,
+        owner_id: Optional[str] = None,
+        supabase_storage: Optional[Any] = None,
     ):
         """Initialize StarChat client.
 
         Args:
             base_url: StarChat API base URL
+            auth_type: Authentication type ("basic", "firebase", or "oauth")
             username: Username for Basic auth
             password: Password for Basic auth
             jwt_token: JWT token for Firebase auth
+            access_token: OAuth access token
             realm: Firebase realm/config group
             timeout: Request timeout in seconds
             verify_ssl: Whether to verify SSL certificates
+            owner_id: Firebase UID (for OAuth token refresh)
+            supabase_storage: SupabaseStorage instance (for OAuth token refresh)
         """
         self.base_url = base_url.rstrip("/")
+        self.auth_type = auth_type
         self.username = username
         self.password = password
         self.jwt_token = jwt_token
+        self.access_token = access_token
         self.realm = realm
         self.timeout = timeout
         self.verify_ssl = verify_ssl
+        self.owner_id = owner_id
+        self.supabase = supabase_storage
 
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
@@ -52,7 +64,7 @@ class StarChatClient:
             verify=self.verify_ssl,
         )
 
-        logger.info(f"Initialized StarChat client for {base_url}")
+        logger.info(f"Initialized StarChat client for {base_url} with {auth_type} auth")
 
     def _build_headers(self) -> Dict[str, str]:
         """Build HTTP headers with authentication."""
@@ -61,16 +73,58 @@ class StarChatClient:
             "User-Agent": "zylch/0.1.0",
         }
 
-        # Prefer JWT if provided
-        if self.jwt_token:
+        # Priority: OAuth > JWT (Firebase) > Basic Auth
+        if self.auth_type == "oauth" and self.access_token:
+            headers["Authorization"] = f"Bearer {self.access_token}"
+        elif self.auth_type == "firebase" and self.jwt_token:
             headers["auth"] = self.jwt_token
-        # Otherwise use Basic auth
+        elif self.auth_type == "basic" and self.username and self.password:
+            credentials = f"{self.username}:{self.password}"
+            encoded = base64.b64encode(credentials.encode()).decode()
+            headers["Authorization"] = f"Basic {encoded}"
+        # Backward compatibility: if no auth_type specified, use old logic
+        elif self.jwt_token:
+            headers["auth"] = self.jwt_token
         elif self.username and self.password:
             credentials = f"{self.username}:{self.password}"
             encoded = base64.b64encode(credentials.encode()).decode()
             headers["Authorization"] = f"Basic {encoded}"
 
         return headers
+
+    async def _refresh_token_if_needed(self):
+        """Check if OAuth token expired and refresh if needed."""
+        if self.auth_type != "oauth" or not self.supabase or not self.owner_id:
+            return
+
+        from zylch.api.token_storage import get_mrcall_credentials, refresh_mrcall_token
+        from datetime import datetime, timezone, timedelta
+
+        try:
+            credentials = get_mrcall_credentials(self.owner_id)
+
+            if not credentials:
+                raise ValueError("MrCall not connected")
+
+            expires_at = credentials.get("expires_at")
+            if expires_at:
+                if isinstance(expires_at, str):
+                    expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+
+                # Refresh if expiring within 5 minutes
+                if expires_at < datetime.now(timezone.utc) + timedelta(minutes=5):
+                    logger.info(f"MrCall token expiring soon, refreshing for owner {self.owner_id}")
+                    new_credentials = await refresh_mrcall_token(self.owner_id)
+
+                    if new_credentials:
+                        # Update access token and rebuild headers
+                        self.access_token = new_credentials["access_token"]
+                        self.client.headers.update(self._build_headers())
+                        logger.info("Successfully refreshed MrCall token")
+                    else:
+                        logger.error("Failed to refresh MrCall token")
+        except Exception as e:
+            logger.error(f"Error checking/refreshing MrCall token: {e}")
 
     async def get_contact(self, contact_id: str) -> Optional[Dict[str, Any]]:
         """Get contact by ID.
@@ -82,6 +136,9 @@ class StarChatClient:
             Contact data or None if not found
         """
         logger.debug(f"Getting contact: {contact_id}")
+
+        # Refresh token if needed before making request
+        await self._refresh_token_if_needed()
 
         response = await self.client.request(
             "GET",
@@ -698,3 +755,65 @@ class StarChatClient:
     async def close(self) -> None:
         """Close HTTP client."""
         await self.client.aclose()
+
+
+# =============================================================================
+# Factory Function for Creating StarChat Clients
+# =============================================================================
+
+async def create_starchat_client(owner_id: str, supabase_storage: Optional[Any] = None) -> StarChatClient:
+    """
+    Create StarChat client with appropriate auth method.
+
+    Priority:
+    1. OAuth (if mrcall credentials exist in Supabase)
+    2. Basic Auth (fallback to env vars if configured)
+
+    Args:
+        owner_id: Firebase UID
+        supabase_storage: SupabaseStorage instance (optional, will create if not provided)
+
+    Returns:
+        StarChatClient configured with best available auth method
+
+    Raises:
+        ValueError: If no auth method available
+    """
+    from zylch.config import settings
+    from zylch.api.token_storage import get_mrcall_credentials
+
+    # Get or create Supabase storage
+    if not supabase_storage:
+        from zylch.storage.supabase_client import SupabaseStorage
+        supabase_storage = SupabaseStorage()
+
+    # Try OAuth first (preferred method)
+    try:
+        credentials = get_mrcall_credentials(owner_id)
+
+        if credentials and credentials.get("access_token"):
+            logger.info(f"Creating StarChat client with OAuth for owner {owner_id}")
+            return StarChatClient(
+                base_url=settings.mrcall_base_url,
+                auth_type="oauth",
+                access_token=credentials["access_token"],
+                realm=settings.mrcall_realm,
+                owner_id=owner_id,
+                supabase_storage=supabase_storage
+            )
+    except Exception as e:
+        logger.debug(f"OAuth credentials not available: {e}")
+
+    # Fallback to Basic Auth (for backward compatibility)
+    # Only if STARCHAT_USERNAME and STARCHAT_PASSWORD are set
+    if hasattr(settings, "starchat_username") and settings.starchat_username:
+        logger.info(f"Creating StarChat client with Basic Auth (fallback) for owner {owner_id}")
+        return StarChatClient(
+            base_url=settings.mrcall_base_url,
+            auth_type="basic",
+            username=settings.starchat_username,
+            password=settings.starchat_password,
+            realm=settings.mrcall_realm
+        )
+
+    raise ValueError("MrCall not connected. Please use /connect mrcall to authorize.")
