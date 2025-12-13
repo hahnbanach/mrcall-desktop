@@ -1216,6 +1216,326 @@ async def google_oauth_revoke(user: dict = Depends(get_current_user)):
     return {"success": True, "message": "Google credentials revoked"}
 
 
+# =============================================================================
+# MrCall OAuth Flow (via StarChat API)
+# =============================================================================
+
+# PKCE Helper Functions
+def generate_code_verifier(length: int = 128) -> str:
+    """Generate PKCE code verifier (43-128 chars)."""
+    import secrets
+    import base64
+    return base64.urlsafe_b64encode(secrets.token_bytes(96)).decode('utf-8').rstrip('=')
+
+
+def generate_code_challenge(verifier: str) -> str:
+    """Generate PKCE code challenge (SHA256 hash of verifier)."""
+    import hashlib
+    import base64
+    digest = hashlib.sha256(verifier.encode('utf-8')).digest()
+    return base64.urlsafe_b64encode(digest).decode('utf-8').rstrip('=')
+
+
+async def fetch_mrcall_business_id(access_token: str) -> str:
+    """Fetch business_id from StarChat using access token."""
+    import httpx
+
+    async with httpx.AsyncClient() as client:
+        # Call StarChat API to get user's businesses
+        response = await client.get(
+            f"{settings.mrcall_base_url}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+
+        if response.status_code != 200:
+            logger.error(f"Failed to fetch business info: {response.status_code} - {response.text}")
+            raise HTTPException(status_code=400, detail="Failed to fetch business info")
+
+        data = response.json()
+        # Extract business_id from response
+        if isinstance(data, dict):
+            return data.get("businessId") or data.get("id") or data.get("business_id")
+        elif isinstance(data, list) and len(data) > 0:
+            return data[0].get("businessId") or data[0].get("id") or data[0].get("business_id")
+
+        raise HTTPException(status_code=400, detail="No business found")
+
+
+@router.get("/mrcall/authorize")
+async def mrcall_oauth_authorize(
+    user: dict = Depends(get_current_user)
+):
+    """Initiate MrCall OAuth flow - returns OAuth URL for StarChat consent.
+
+    Returns the OAuth authorization URL that the client (CLI/web) should open.
+    StarChat will handle login + consent on their hosted page.
+
+    **Authentication:**
+    - Requires Firebase ID token in Authorization header
+
+    **Response:**
+    - auth_url: URL to open in browser for StarChat OAuth consent
+    - state: State parameter for CSRF protection
+
+    **Flow:**
+    1. Generate PKCE code_verifier and code_challenge
+    2. Store state in oauth_states table (CSRF protection)
+    3. Build StarChat OAuth URL with all parameters
+    4. Return URL to client
+    5. Client opens URL in browser (or local webserver serves consent page)
+    6. User logs into MrCall and approves on StarChat's page
+    7. StarChat redirects to callback with code
+    """
+    import secrets
+    from urllib.parse import urlencode
+
+    owner_id = get_user_id_from_token(user)
+    user_email = user.get('email', '')
+
+    # Check if MrCall OAuth is configured
+    if not settings.mrcall_client_id or not settings.mrcall_client_secret:
+        raise HTTPException(
+            status_code=500,
+            detail="MrCall OAuth not configured. Set MRCALL_CLIENT_ID and MRCALL_CLIENT_SECRET."
+        )
+
+    # Generate PKCE parameters
+    code_verifier = generate_code_verifier()
+    code_challenge = generate_code_challenge(code_verifier)
+
+    # Generate state for CSRF protection
+    state = secrets.token_urlsafe(32)
+
+    # Store state + code_verifier in oauth_states table
+    storage = _get_storage()
+    storage.store_oauth_state(
+        state=state,
+        owner_id=owner_id,
+        email=user_email,
+        provider="mrcall",
+        metadata={"code_verifier": code_verifier},
+        expires_minutes=10
+    )
+
+    # Build full OAuth authorization URL
+    # Using localhost:8765 for CLI local callback server (like Google OAuth pattern)
+    auth_params = {
+        "response_type": "code",
+        "client_id": settings.mrcall_client_id,
+        "redirect_uri": "http://localhost:8765/callback",  # Local callback for CLI
+        "scope": "business:read contacts:read",
+        "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256"
+    }
+
+    auth_url = f"{settings.mrcall_base_url}/oauth/authorize?{urlencode(auth_params)}"
+
+    logger.info(f"Generated MrCall OAuth URL for user {owner_id}")
+
+    return {
+        "auth_url": auth_url,
+        "state": state
+    }
+
+
+@router.get("/mrcall/callback")
+async def mrcall_oauth_callback(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None
+):
+    """Handle OAuth callback from StarChat.
+
+    This endpoint receives the authorization code from StarChat after user
+    grants permissions. It exchanges the code for tokens and stores them
+    in Supabase.
+
+    **Query Parameters:**
+    - code: Authorization code from StarChat
+    - state: State parameter for CSRF validation
+    - error: Error message if authorization failed
+
+    **Flow:**
+    1. Validate state (CSRF check)
+    2. Exchange authorization code for access + refresh tokens
+    3. Validate tokens with StarChat
+    4. Fetch user's business_id from StarChat
+    5. Store encrypted tokens in Supabase
+    6. Return success HTML page
+    """
+    import httpx
+
+    # Handle errors
+    if error:
+        logger.error(f"MrCall OAuth error: {error}")
+        return HTMLResponse(content=_oauth_error_page(f"MrCall OAuth failed: {error}"))
+
+    if not code or not state:
+        return HTMLResponse(content=_oauth_error_page("Missing code or state parameter"))
+
+    # Validate state and get code_verifier
+    storage = _get_storage()
+    state_data = storage.get_oauth_state(state)
+
+    if not state_data or state_data.get("provider") != "mrcall":
+        logger.error(f"Invalid or expired OAuth state: {state}")
+        return HTMLResponse(content=_oauth_error_page("Invalid or expired state. Please try again."))
+
+    owner_id = state_data['owner_id']
+    code_verifier = state_data.get("metadata", {}).get("code_verifier")
+
+    if not code_verifier:
+        logger.error(f"Missing code_verifier in state data")
+        return HTMLResponse(content=_oauth_error_page("Invalid state data. Please try again."))
+
+    # Exchange code for tokens (POST /oauth/token)
+    try:
+        async with httpx.AsyncClient() as client:
+            token_response = await client.post(
+                f"{settings.mrcall_base_url}/oauth/token",
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": "http://localhost:8765/callback",
+                    "client_id": settings.mrcall_client_id,
+                    "client_secret": settings.mrcall_client_secret,
+                    "code_verifier": code_verifier
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"}
+            )
+
+            if token_response.status_code != 200:
+                logger.error(f"Token exchange failed: {token_response.status_code} - {token_response.text}")
+                return HTMLResponse(content=_oauth_error_page(f"Token exchange failed: {token_response.text}"))
+
+            tokens = token_response.json()
+            # tokens = {"access_token": "...", "refresh_token": "...", "expires_in": 3600, "target_owner": "firebase_uid"}
+
+        # Fetch business_id from StarChat using access token
+        try:
+            business_id = await fetch_mrcall_business_id(tokens["access_token"])
+        except Exception as e:
+            logger.error(f"Failed to fetch business_id: {e}")
+            # Continue anyway, business_id can be None
+            business_id = None
+
+        # Store credentials in Supabase (encrypted)
+        from zylch.api.token_storage import save_mrcall_credentials
+
+        save_mrcall_credentials(
+            owner_id=owner_id,
+            access_token=tokens["access_token"],
+            refresh_token=tokens.get("refresh_token"),
+            expires_in=tokens.get("expires_in", 3600),
+            token_type=tokens.get("token_type", "Bearer"),
+            business_id=business_id,
+            target_owner=tokens.get("target_owner"),
+            realm=settings.mrcall_realm
+        )
+
+        logger.info(f"Successfully saved MrCall OAuth credentials for user {owner_id}")
+
+        # Return success HTML page
+        return HTMLResponse(content=_oauth_success_page("MrCall"))
+
+    except Exception as e:
+        logger.error(f"MrCall OAuth callback error: {e}", exc_info=True)
+        return HTMLResponse(content=_oauth_error_page(f"Failed to complete OAuth: {str(e)}"))
+
+
+@router.get("/mrcall/status")
+async def mrcall_oauth_status(user: dict = Depends(get_current_user)):
+    """Check MrCall OAuth connection status.
+
+    **Authentication:**
+    - Requires Firebase ID token in Authorization header
+
+    **Response:**
+    - connected: Whether MrCall credentials exist and are valid
+    - business_id: MrCall business ID (if connected)
+    - realm: StarChat realm
+    - scopes: Granted OAuth scopes
+    - expired: Whether token is expired
+    """
+    from zylch.api.token_storage import get_mrcall_credentials
+
+    owner_id = get_user_id_from_token(user)
+
+    try:
+        credentials = get_mrcall_credentials(owner_id)
+
+        if not credentials:
+            return {
+                "connected": False,
+                "has_credentials": False
+            }
+
+        # Check if token is expired
+        from datetime import datetime, timezone
+        expires_at = credentials.get("expires_at")
+        is_expired = False
+        if expires_at:
+            if isinstance(expires_at, str):
+                expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+            is_expired = expires_at < datetime.now(timezone.utc)
+
+        return {
+            "connected": True,
+            "has_credentials": True,
+            "business_id": credentials.get("business_id"),
+            "realm": credentials.get("realm", settings.mrcall_realm),
+            "scopes": credentials.get("scopes", ["business:read", "contacts:read"]),
+            "expired": is_expired
+        }
+
+    except Exception as e:
+        logger.error(f"Error checking MrCall status: {e}")
+        return {
+            "connected": False,
+            "has_credentials": False,
+            "error": str(e)
+        }
+
+
+@router.post("/mrcall/revoke")
+async def mrcall_oauth_revoke(user: dict = Depends(get_current_user)):
+    """Revoke MrCall OAuth tokens.
+
+    **Authentication:**
+    - Requires Firebase ID token in Authorization header
+
+    **Response:**
+    - success: Whether revocation succeeded
+    """
+    import httpx
+    from zylch.api.token_storage import get_mrcall_credentials, delete_mrcall_credentials
+
+    owner_id = get_user_id_from_token(user)
+
+    # Get tokens before deletion
+    credentials = get_mrcall_credentials(owner_id)
+
+    if credentials and credentials.get("access_token"):
+        # Optionally: Call StarChat revoke endpoint
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{settings.mrcall_base_url}/oauth/token/revoke",
+                    json={"token": credentials["access_token"]},
+                    headers={"Content-Type": "application/json"}
+                )
+        except Exception as e:
+            logger.warning(f"Failed to revoke MrCall token with StarChat: {e}")
+
+    # Delete from Supabase
+    success = delete_mrcall_credentials(owner_id)
+
+    logger.info(f"Revoked MrCall credentials for user {owner_id}")
+
+    return {"success": success, "message": "MrCall disconnected"}
+
+
 # ============================================================================
 # Anthropic API Key Endpoints
 # ============================================================================

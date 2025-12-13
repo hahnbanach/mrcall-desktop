@@ -301,6 +301,162 @@ def delete_anthropic_key(owner_id: str) -> bool:
 
 
 # ==========================================
+# MrCall OAuth Token Management
+# ==========================================
+
+def save_mrcall_credentials(
+    owner_id: str,
+    access_token: str,
+    refresh_token: Optional[str] = None,
+    expires_in: int = 3600,
+    token_type: str = "Bearer",
+    business_id: Optional[str] = None,
+    target_owner: Optional[str] = None,
+    realm: str = "mrcall0"
+) -> bool:
+    """Save MrCall OAuth credentials for a user.
+
+    Args:
+        owner_id: Firebase UID
+        access_token: OAuth access token
+        refresh_token: OAuth refresh token
+        expires_in: Token lifetime in seconds
+        token_type: Token type (Bearer)
+        business_id: MrCall business ID
+        target_owner: StarChat Firebase UID for delegated access
+        realm: StarChat realm
+
+    Returns:
+        True if saved successfully
+    """
+    from datetime import datetime, timedelta, timezone
+
+    supabase = _get_supabase()
+
+    # Calculate expiration timestamp
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+
+    # Build credentials dict
+    credentials = {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": token_type,
+        "business_id": business_id,
+        "target_owner": target_owner,
+        "realm": realm
+    }
+
+    # Build metadata dict
+    metadata = {
+        "expires_at": expires_at.isoformat(),
+        "scopes": ["business:read", "contacts:read"],
+        "realm": realm
+    }
+
+    # Save to Supabase using provider credentials system
+    return supabase.save_provider_credentials(
+        owner_id=owner_id,
+        provider_key="mrcall",
+        credentials_dict=credentials,
+        metadata_dict=metadata
+    )
+
+
+def get_mrcall_credentials(owner_id: str) -> Optional[Dict[str, Any]]:
+    """Get MrCall OAuth credentials for a user.
+
+    Args:
+        owner_id: Firebase UID
+
+    Returns:
+        Dict with credentials or None if not found
+    """
+    supabase = _get_supabase()
+
+    credentials = supabase.get_provider_credentials(
+        owner_id=owner_id,
+        provider_key="mrcall",
+        include_metadata=True
+    )
+
+    return credentials
+
+
+def delete_mrcall_credentials(owner_id: str) -> bool:
+    """Delete MrCall OAuth credentials for a user.
+
+    Args:
+        owner_id: Firebase UID
+
+    Returns:
+        True if deleted
+    """
+    supabase = _get_supabase()
+    success = supabase.delete_provider_credentials(owner_id, "mrcall")
+    logger.info(f"Deleted MrCall credentials for owner {owner_id}")
+    return success
+
+
+async def refresh_mrcall_token(owner_id: str) -> Optional[Dict[str, Any]]:
+    """Refresh MrCall OAuth access token.
+
+    Args:
+        owner_id: Firebase UID
+
+    Returns:
+        New credentials dict or None if refresh failed
+    """
+    import httpx
+    from datetime import datetime, timedelta, timezone
+
+    supabase = _get_supabase()
+    credentials = get_mrcall_credentials(owner_id)
+
+    if not credentials or not credentials.get("refresh_token"):
+        logger.error(f"No refresh token for owner {owner_id}")
+        return None
+
+    # Make refresh request to StarChat
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{settings.mrcall_base_url}/oauth/token/refresh",
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": credentials["refresh_token"],
+                    "client_id": settings.mrcall_client_id,
+                    "client_secret": settings.mrcall_client_secret
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"}
+            )
+
+            if response.status_code != 200:
+                logger.error(f"Token refresh failed: {response.status_code} - {response.text}")
+                return None
+
+            tokens = response.json()
+
+            # Update credentials with new tokens
+            save_mrcall_credentials(
+                owner_id=owner_id,
+                access_token=tokens["access_token"],
+                refresh_token=tokens.get("refresh_token", credentials["refresh_token"]),
+                expires_in=tokens.get("expires_in", 3600),
+                token_type=tokens.get("token_type", "Bearer"),
+                business_id=credentials.get("business_id"),
+                target_owner=credentials.get("target_owner"),
+                realm=credentials.get("realm", settings.mrcall_realm)
+            )
+
+            logger.info(f"Successfully refreshed MrCall token for owner {owner_id}")
+            return get_mrcall_credentials(owner_id)
+
+    except Exception as e:
+        logger.error(f"Failed to refresh MrCall token: {e}")
+        return None
+
+
+# ==========================================
 # Pipedrive API Key Management
 # ==========================================
 

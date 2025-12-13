@@ -148,9 +148,27 @@ class Settings(BaseSettings):
         description="Public URL for webhooks"
     )
 
-    # StarChat - REMOVED (future: OAuth2.0 integration)
-    # StarChat credentials will be per-user via /connect starchat (OAuth2.0)
-    # For now, StarChat features are disabled until OAuth2.0 is implemented
+    # MrCall OAuth (via StarChat API)
+    mrcall_client_id: str = Field(
+        default="",
+        env="MRCALL_CLIENT_ID",
+        description="MrCall OAuth client ID"
+    )
+    mrcall_client_secret: str = Field(
+        default="",
+        env="MRCALL_CLIENT_SECRET",
+        description="MrCall OAuth client secret"
+    )
+    mrcall_realm: str = Field(
+        default="mrcall0",
+        env="MRCALL_REALM",
+        description="MrCall realm for StarChat API"
+    )
+    mrcall_base_url: str = Field(
+        default="https://test-env-0.scw.hbsrv.net",
+        env="MRCALL_BASE_URL",
+        description="StarChat API base URL for MrCall"
+    )
 
     # Multi-tenant Configuration
     owner_id: str = Field(
