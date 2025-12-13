@@ -1520,6 +1520,11 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
             .eq('provider_key', provider_key)\
             .execute()
 
+        # Debug logging
+        logger.info(f"🔍 Query for provider_key='{provider_key}'")
+        logger.info(f"🔍 Result.data: {result.data}")
+        logger.info(f"🔍 Result.count: {result.count if hasattr(result, 'count') else 'N/A'}")
+
         if not result.data:
             return f"❌ **Error:** Provider '{provider_key}' not found\n\nRun `/connect` to see available providers"
 
