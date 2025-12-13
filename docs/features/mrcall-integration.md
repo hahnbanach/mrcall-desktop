@@ -40,7 +40,8 @@ MrCall assistants are AI-powered phone agents with customizable behavior via var
 from zylch.tools.starchat import StarChatClient
 
 client = StarChatClient(
-    base_url="https://api.starchat.com",
+ #   base_url="https://api.mrcall.ai",   # production environment
+    base_url="https://test-env-0.scw.hbsrv.net/",  # testing environment
     username="user",
     password="pass",
     realm="default"
