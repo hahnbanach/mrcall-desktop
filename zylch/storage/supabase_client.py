@@ -1,5 +1,6 @@
 """Supabase storage client for multi-tenant data access."""
 
+import json
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
