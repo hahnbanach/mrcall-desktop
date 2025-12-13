@@ -21,7 +21,7 @@ CREATE TABLE email_read_events (
     owner_id TEXT NOT NULL,
 
     -- Email reference
-    message_id TEXT NOT NULL,  -- References messages table
+    message_id TEXT NOT NULL,  -- References emails table
     recipient_email TEXT NOT NULL,
 
     -- Tracking source
@@ -185,24 +185,24 @@ CREATE POLICY "Users can only insert their own mappings"
     WITH CHECK (owner_id = current_setting('app.owner_id', true));
 
 -- =====================================================================
--- SECTION 3: MODIFY messages TABLE
+-- SECTION 3: MODIFY emails TABLE
 -- Add read_events JSONB column for quick summary access
 -- =====================================================================
 
--- Add new column to messages table
-ALTER TABLE messages
+-- Add new column to emails table
+ALTER TABLE emails
 ADD COLUMN read_events JSONB DEFAULT '[]'::jsonb;
 
 -- Add comment to column
-COMMENT ON COLUMN messages.read_events IS 'Summary of read events per recipient. Format: [{"recipient": "email@example.com", "read_count": 3, "first_read_at": "2025-12-12T10:30:00Z", "last_read_at": "2025-12-12T14:45:00Z"}]';
+COMMENT ON COLUMN emails.read_events IS 'Summary of read events per recipient. Format: [{"recipient": "email@example.com", "read_count": 3, "first_read_at": "2025-12-12T10:30:00Z", "last_read_at": "2025-12-12T14:45:00Z"}]';
 
 -- =====================================================================
--- INDEX for messages.read_events
+-- INDEX for emails.read_events
 -- GIN index for efficient JSONB queries
 -- =====================================================================
 
-CREATE INDEX idx_messages_read_events
-    ON messages USING GIN (read_events);
+CREATE INDEX idx_emails_read_events
+    ON emails USING GIN (read_events);
 
 -- =====================================================================
 -- HELPER FUNCTIONS
@@ -232,7 +232,7 @@ BEGIN
             )
             ELSE 0
         END as read_rate
-    FROM messages m
+    FROM emails m
     CROSS JOIN LATERAL jsonb_array_elements(m.read_events) as event
     WHERE m.id = p_message_id
     GROUP BY m.id, m.read_events;
@@ -304,7 +304,7 @@ CREATE TRIGGER trigger_email_read_events_updated_at
 -- Note: Adjust these grants based on your actual user roles
 -- Example: GRANT SELECT, INSERT, UPDATE ON email_read_events TO authenticated;
 -- Example: GRANT SELECT, INSERT ON sendgrid_message_mapping TO authenticated;
--- Example: GRANT SELECT, UPDATE ON messages TO authenticated;
+-- Example: GRANT SELECT, UPDATE ON emails TO authenticated;
 
 -- =====================================================================
 -- MIGRATION COMPLETE
@@ -319,7 +319,7 @@ BEGIN
     ) THEN
         RAISE NOTICE 'Migration 003_email_read_tracking completed successfully';
         RAISE NOTICE 'Tables created: email_read_events, sendgrid_message_mapping';
-        RAISE NOTICE 'Column added: messages.read_events';
+        RAISE NOTICE 'Column added: emails.read_events';
     ELSE
         RAISE EXCEPTION 'Migration failed: Tables not created';
     END IF;
@@ -344,8 +344,8 @@ DROP FUNCTION IF EXISTS update_email_read_events_timestamp() CASCADE;
 DROP TABLE IF EXISTS email_read_events CASCADE;
 DROP TABLE IF EXISTS sendgrid_message_mapping CASCADE;
 
--- Remove column from messages table
-ALTER TABLE messages DROP COLUMN IF EXISTS read_events;
+-- Remove column from emails table
+ALTER TABLE emails DROP COLUMN IF EXISTS read_events;
 
 -- Verify rollback
 DO $$
@@ -356,7 +356,7 @@ BEGIN
     ) THEN
         RAISE NOTICE 'Rollback completed successfully';
         RAISE NOTICE 'Tables dropped: email_read_events, sendgrid_message_mapping';
-        RAISE NOTICE 'Column removed: messages.read_events';
+        RAISE NOTICE 'Column removed: emails.read_events';
     ELSE
         RAISE EXCEPTION 'Rollback failed: Tables still exist';
     END IF;
