@@ -12,7 +12,7 @@ Currently they work alongside Firebase auth (validate Firebase token + return se
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends, Header, Request
+from fastapi import APIRouter, HTTPException, Depends, Header, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
@@ -1263,7 +1263,8 @@ async def fetch_mrcall_business_id(access_token: str) -> str:
 
 @router.get("/mrcall/authorize")
 async def mrcall_oauth_authorize(
-    user: dict = Depends(get_current_user)
+    owner_id: Optional[str] = Query(None, description="Owner ID for CLI-initiated OAuth"),
+    authorization: Optional[str] = Header(None)
 ):
     """Initiate MrCall OAuth flow - returns OAuth URL for StarChat consent.
 
@@ -1271,7 +1272,8 @@ async def mrcall_oauth_authorize(
     StarChat will handle login + consent on their hosted page.
 
     **Authentication:**
-    - Requires Firebase ID token in Authorization header
+    - Option 1: Firebase ID token in Authorization header (for web/API)
+    - Option 2: owner_id query parameter (for CLI-initiated OAuth)
 
     **Response:**
     - auth_url: URL to open in browser for StarChat OAuth consent
@@ -1289,8 +1291,27 @@ async def mrcall_oauth_authorize(
     import secrets
     from urllib.parse import urlencode
 
-    owner_id = get_user_id_from_token(user)
-    user_email = user.get('email', '')
+    # Get owner_id from either query param (CLI) or Authorization header (web)
+    user_email = ''
+    if owner_id:
+        # CLI-initiated OAuth with owner_id parameter
+        logger.info(f"MrCall OAuth authorize via CLI for owner_id={owner_id}")
+    elif authorization and authorization.startswith('Bearer '):
+        # Web-initiated OAuth with Firebase token
+        try:
+            from zylch.api.firebase_auth import verify_firebase_token
+            token = authorization.split('Bearer ')[1]
+            decoded_token = verify_firebase_token(token)
+            owner_id = decoded_token.get('uid')
+            user_email = decoded_token.get('email', '')
+            logger.info(f"MrCall OAuth authorize via web for owner_id={owner_id}")
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Invalid Firebase token: {str(e)}")
+    else:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required. Provide either Firebase token or owner_id."
+        )
 
     # Check if MrCall OAuth is configured
     if not settings.mrcall_client_id or not settings.mrcall_client_secret:
