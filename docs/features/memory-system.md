@@ -35,7 +35,6 @@ Memories are organized into namespaces for privacy and scoping:
 | `user:{user_id}`              | User-specific preferences | `user:mario_123` |
 | `contact:{contact_id}`        | Informations about a contact | `contact:john_456` |
 | `shared:{recipient}:{sender}` | Shared intelligence | `shared:luigi_456:mario_123` |
-| `team:{team_id}`              | Team knowledge (future) | `team:sales_team` |
 
 **Privacy guarantee**: Users can only access their own namespaces. Cross-user access requires explicit authorization (see [Sharing System](sharing-system.md)).
 
@@ -194,7 +193,8 @@ Dear CEO,
 I hope this message finds you well...
 ```
 
-### 3. Pattern Learning
+### 3. Pattern Learning  /*MARIO  NOT YET, DELETE!!!! */
+/*MARIO  DELETED */
 
 **User behavior**: Agent suggests action → User approves/rejects → Confidence updated
 
@@ -206,8 +206,6 @@ User: "No, on Monday I prefer afternoon meetings, pls put that in memory!"
 # Pattern stored:
 pattern_id = zylch_memory.store_pattern(
     namespace="user:mario_123",
-#/*MARIO: DELETED!    skill="scheduling", */
-#/*MARIO: DELETED!    intent="schedule meeting",
     context="Scheduling meeting",
     pattern="
     outcome="rejected",
@@ -233,7 +231,7 @@ zylch_memory.update_confidence(
 - **Failure**: `new = current × beta` (beta=0.7)
 - Always clamped to [0, 1]
 
-### 4. Cascading Retrieval
+### 4. Cascading Retrieval  /*MARIO  DELETED */
 
 **User-specific patterns prioritized over global defaults**:
 
