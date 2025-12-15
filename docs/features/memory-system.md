@@ -57,19 +57,6 @@ Memories are organized into namespaces for privacy and scoping:
 - Configurable accuracy/speed tradeoff
 - Memory-efficient graph structure
 
-### Categories  <= /*MARIO: DELETED, NOT USED!!!!*/
-
-Memories are categorized for filtering and organization:
-
-| Category | Purpose | Examples |
-|----------|---------|----------|
-| `email` | Email preferences | "Always use formal tone with clients" |
-| `contacts` | Person knowledge | "Marco Ferrari is CEO of Acme Corp" |
-| `calendar` | Meeting preferences | "Prefer morning meetings" |
-| `task` | Task management | "Break large tasks into subtasks" |
-| `general` | General preferences | "Speak Italian by default" |
-| `contact_intel` | Shared contact info | "Marco signed the contract" (shared) |
-
 ## How It Works
 
 ### 1. Storing Memory (with Reconsolidation)
@@ -193,70 +180,6 @@ Dear CEO,
 I hope this message finds you well...
 ```
 
-### 3. Pattern Learning  /*MARIO  NOT YET, DELETE!!!! */
-/*MARIO  DELETED */
-
-**User behavior**: Agent suggests action → User approves/rejects → Confidence updated
-
-**Example**:
-```
-Agent: "Should I schedule the meeting next Monday for 9 AM?"
-User: "No, on Monday I prefer afternoon meetings, pls put that in memory!"
-
-# Pattern stored:
-pattern_id = zylch_memory.store_pattern(
-    namespace="user:mario_123",
-    context="Scheduling meeting",
-    pattern="
-    outcome="rejected",
-    confidence=0.3  # Low confidence (rejected)
-)
-
-# Next time:
-Agent: "Should I schedule the meeting for Monday morning?"
-User: "NO! As said, meeting on Monday should be in the afternoon, put that in memory pls"
-
-# Search pattern
-....
-# Confidence updated:
-zylch_memory.update_confidence(
-    pattern_id=pattern_id,
-    success=True  # Approved → Confidence increases
-)
-# Confidence: 0.3 → 0.51 (Bayesian update)
-```
-
-**Bayesian confidence update**:
-- **Success**: `new = current + (1 - current) × alpha` (alpha=0.3)
-- **Failure**: `new = current × beta` (beta=0.7)
-- Always clamped to [0, 1]
-
-### 4. Cascading Retrieval  /*MARIO  DELETED */
-
-**User-specific patterns prioritized over global defaults**:
-
-```python
-results = zylch_memory.retrieve_similar_patterns(
-    intent="schedule meeting",
-    skill="scheduling",
-    user_id="mario_123",
-    limit=5
-)
-```
-
-**Search order**:
-1. **User namespace** (`user:mario_123`) with 1.5x score boost
-2. **Global namespace** (`global:skills`) if fewer than limit results
-
-**Why**: Personal preferences override system defaults.
-
-
-
-
-
 ## Implementation Details
-/*MARIO REMAKE THIS COMPLETELY!!!! 
 
-WE NEED MIGRATION SQL QUERIES AS WELL
-
-*/
+*To be written - DEV MODE SQL and code structure per plan.*
