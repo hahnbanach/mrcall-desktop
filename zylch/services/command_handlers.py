@@ -2395,6 +2395,30 @@ COMMAND_TRIGGERS = {
         "get emails from the last {days:int} days",
         "fetch emails from the past {days:int} days",
     ],
+    '/sync --force': [
+        "sync force",
+        "force sync",
+        "reprocess emails",
+        "reprocess all emails",
+        "reprocess memory",
+        "rebuild memory",
+        "rebuild memory from emails",
+        "force reprocess",
+        "reanalyze emails",
+        "reanalyze all emails",
+    ],
+    '/memory --reset': [
+        "reset memory",
+        "clear memory",
+        "delete memory",
+        "delete all memory",
+        "wipe memory",
+        "erase memory",
+        "clear all memories",
+        "delete all blobs",
+        "forget everything",
+        "clear my memory",
+    ],
 
     # --- Help ---
     '/help': [
