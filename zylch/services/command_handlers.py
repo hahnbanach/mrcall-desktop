@@ -26,7 +26,6 @@ async def handle_help() -> str:
 • `/sync [days]` - Sync email and calendar
 • `/briefing [days]` - Daily briefing of tasks and unanswered conversations
 • `/archive` - Email archive management
-• `/cache` - Cache management
 
 **🧠 Memory & Automation:**
 • `/memory [search|store|stats|list]` - Entity memory with hybrid search
@@ -443,204 +442,6 @@ Use `/archive --help` for more commands."""
     except Exception as e:
         logger.error(f"Error in /archive command: {e}", exc_info=True)
         return f"**❌ Error:** {str(e)}\n\nUse `/archive --help` for usage information."
-
-
-async def handle_cache(args: List[str]) -> str:
-    """Handle /cache command - cache management."""
-    from pathlib import Path
-    import json
-    from datetime import datetime
-    from zylch.config import settings
-
-    cache_dir = Path(settings.cache_dir)
-
-    if '--help' in args:
-        return """**💾 Cache Management**
-
-**Usage:**
-• `/cache` - Show cache overview
-• `/cache emails` - Email cache details
-• `/cache calendar` - Calendar cache details
-• `/cache gaps` - Gaps cache details
-• `/cache --clear all|emails|calendar|gaps` - Clear caches
-
-**Examples:**
-• `/cache emails`
-• `/cache --clear all`"""
-
-    if '--clear' in args:
-        target_idx = args.index('--clear') + 1
-        target = args[target_idx] if len(args) > target_idx else None
-
-        if target == 'all':
-            count = 0
-            for cache_file in cache_dir.rglob('*.json'):
-                try:
-                    cache_file.unlink()
-                    count += 1
-                except Exception:
-                    pass
-            return f"✅ Cleared {count} cache files"
-
-        elif target == 'emails':
-            email_cache = cache_dir / 'emails' / 'email_threads.json'
-            if email_cache.exists():
-                email_cache.unlink()
-                return "✅ Email cache cleared"
-            return "📭 Email cache already empty"
-
-        elif target == 'calendar':
-            cal_cache = cache_dir / 'calendar_events.json'
-            if cal_cache.exists():
-                cal_cache.unlink()
-                return "✅ Calendar cache cleared"
-            return "📭 Calendar cache already empty"
-
-        elif target == 'gaps':
-            gaps_cache = cache_dir / 'relationship_gaps.json'
-            if gaps_cache.exists():
-                gaps_cache.unlink()
-                return "✅ Gaps cache cleared"
-            return "📭 Gaps cache already empty"
-
-        else:
-            return f"❌ Unknown cache target: {target}\n\nUse: all, emails, calendar, gaps"
-
-    elif 'emails' in args:
-        threads_file = cache_dir / 'emails' / 'email_threads.json'
-        if not threads_file.exists():
-            return "📭 **Email cache empty**\n\nRun `/sync` to populate cache."
-
-        try:
-            with open(threads_file) as f:
-                threads = json.load(f)
-
-            output = f"**📧 Email Cache** ({len(threads)} threads)\n\n"
-            for thread_id, data in list(threads.items())[:10]:
-                subject = data.get('subject', 'N/A')
-                from_addr = data.get('from', 'N/A')
-                date = data.get('date', 'N/A')
-                output += f"**{subject}**\n"
-                output += f"From: {from_addr} | {date}\n\n"
-
-            if len(threads) > 10:
-                output += f"_... and {len(threads) - 10} more threads_"
-
-            return output
-        except Exception as e:
-            return f"❌ Error reading cache: {str(e)}"
-
-    elif 'calendar' in args:
-        calendar_file = cache_dir / 'calendar_events.json'
-        if not calendar_file.exists():
-            return "📭 **Calendar cache empty**\n\nRun `/sync` to populate cache."
-
-        try:
-            with open(calendar_file) as f:
-                events = json.load(f)
-
-            output = f"**📅 Calendar Cache** ({len(events)} events)\n\n"
-
-            # Show upcoming events
-            now = datetime.now()
-            upcoming = []
-            for e in events:
-                try:
-                    start = datetime.fromisoformat(e.get('start', ''))
-                    if start > now:
-                        upcoming.append((start, e))
-                except:
-                    pass
-
-            upcoming.sort(key=lambda x: x[0])
-
-            for start, event in upcoming[:5]:
-                summary = event.get('summary', 'N/A')
-                output += f"**{summary}**\n"
-                output += f"When: {start.strftime('%Y-%m-%d %H:%M')}\n\n"
-
-            if len(upcoming) > 5:
-                output += f"_... and {len(upcoming) - 5} more upcoming events_"
-
-            return output
-        except Exception as e:
-            return f"❌ Error reading cache: {str(e)}"
-
-    elif 'gaps' in args:
-        gaps_file = cache_dir / 'relationship_gaps.json'
-        if not gaps_file.exists():
-            return "📭 **Gaps cache empty**\n\nRun `/sync` to analyze gaps."
-
-        try:
-            with open(gaps_file) as f:
-                gaps = json.load(f)
-
-            email_tasks = gaps.get('email_tasks', [])
-            meeting_tasks = gaps.get('meeting_followup_tasks', [])
-            silent = gaps.get('silent_contacts', [])
-
-            output = f"**⚠️ Relationship Gaps**\n\n"
-            output += f"Email tasks: {len(email_tasks)}\n"
-            output += f"Meeting follow-ups: {len(meeting_tasks)}\n"
-            output += f"Silent contacts: {len(silent)}\n\n"
-
-            if email_tasks:
-                output += "**Top Email Tasks:**\n"
-                for task in email_tasks[:5]:
-                    contact = task.get('contact_name', 'Unknown')
-                    subject = task.get('subject', 'N/A')
-                    output += f"• {contact}: {subject}\n"
-
-            return output
-        except Exception as e:
-            return f"❌ Error reading cache: {str(e)}"
-
-    else:
-        # Overview
-        email_count = 0
-        calendar_count = 0
-        gaps_count = 0
-
-        threads_file = cache_dir / 'emails' / 'email_threads.json'
-        if threads_file.exists():
-            try:
-                with open(threads_file) as f:
-                    email_count = len(json.load(f))
-            except:
-                pass
-
-        calendar_file = cache_dir / 'calendar_events.json'
-        if calendar_file.exists():
-            try:
-                with open(calendar_file) as f:
-                    calendar_count = len(json.load(f))
-            except:
-                pass
-
-        gaps_file = cache_dir / 'relationship_gaps.json'
-        if gaps_file.exists():
-            try:
-                with open(gaps_file) as f:
-                    data = json.load(f)
-                    gaps_count = (
-                        len(data.get('email_tasks', [])) +
-                        len(data.get('meeting_followup_tasks', [])) +
-                        len(data.get('silent_contacts', []))
-                    )
-            except:
-                pass
-
-        return f"""**💾 Cache Overview**
-
-📧 Email threads: {email_count}
-📅 Calendar events: {calendar_count}
-⚠️ Relationship gaps: {gaps_count}
-
-**Commands:**
-• `/cache emails` - View email cache
-• `/cache calendar` - View calendar cache
-• `/cache gaps` - View gaps cache
-• `/cache --clear all` - Clear all caches"""
 
 
 async def handle_model(args: List[str]) -> str:
@@ -1446,7 +1247,7 @@ async def handle_tutorial(args: List[str]) -> str:
 "Draft email to mario@example.com about meeting"
 
 **Search archive:**
-"/cache emails" to view cache
+"/archive --search query" to search emails
 
 **Sync:**
 "/sync" - Fetch latest emails
@@ -1475,9 +1276,9 @@ async def handle_tutorial(args: List[str]) -> str:
 3. Review: "Summarize today's emails"
 4. Respond: "Draft reply to Mario's email"
 
-**Quick workflow:** `/sync` → `/gaps` → respond
+**Quick workflow:** `/sync` → `/briefing` → respond
 
-**Pro tip:** Use `/cache` to inspect cached data.""",
+**Pro tip:** Use `/sync --status` to check sync status.""",
 
         'memory': """**🧠 Memory System Guide**
 
@@ -1659,11 +1460,6 @@ Run `/sync` first to fetch latest emails.''',
 - `/archive --init [months]` - Initialize archive (download history)
 - `/archive --search <query> --limit N` - Search emails''',
     },
-    '/cache': {
-        'summary': 'View cache statistics',
-        'usage': '/cache [email|calendar|gaps]',
-        'description': 'Shows statistics about cached emails, calendar events, or gap analysis.',
-    },
     '/model': {
         'summary': 'Switch AI model',
         'usage': '/model [haiku|sonnet|opus]',
@@ -1738,7 +1534,6 @@ COMMAND_HANDLERS = {
     '/clear': handle_clear,
     '/briefing': handle_briefing,
     '/archive': handle_archive,
-    '/cache': handle_cache,
     '/model': handle_model,
     '/memory': handle_memory,
     '/trigger': handle_trigger,
@@ -1841,11 +1636,6 @@ COMMAND_TRIGGERS = {
         "email archive",
         "search old emails",
         "archive statistics",
-    ],
-    '/cache': [
-        "cache status",
-        "view cached data",
-        "what's in cache",
     ],
     '/tutorial': [
         "show me how",
