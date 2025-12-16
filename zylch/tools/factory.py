@@ -42,6 +42,7 @@ class SessionState:
 
 from .config import ToolConfig
 from ..config import settings
+from zylch_memory import HybridSearchEngine
 from .gcalendar import (
     ListCalendarEventsTool,
     CreateCalendarEventTool,
@@ -265,6 +266,17 @@ class ToolFactory:
             # Initialize zylch_memory for person-centric memory
             zylch_memory = await ToolFactory.create_memory_system(config)
 
+            # Initialize hybrid search engine for better memory search
+            search_engine = None
+            if zylch_memory:
+                search_engine = HybridSearchEngine(
+                    supabase_client=zylch_memory.supabase,
+                    embedding_model=zylch_memory.embedding_model,
+                    fts_weight=0.3,
+                    semantic_weight=0.7
+                )
+                logger.info("Hybrid search engine initialized")
+
             # TaskManager removed - legacy file-based system replaced by Supabase avatars
             # Tasks are now served by get_tasks tool which queries pre-computed avatars
 
@@ -289,12 +301,13 @@ class ToolFactory:
         # Tasks now served by get_tasks tool (line ~380) which queries Supabase avatars
 
         # Contact tools (5 tools) - use session_state for dynamic business_id
-        # Includes search_local_memory for person-centric lookups
+        # Includes search_local_memory with hybrid FTS + semantic search
         tools.extend(ToolFactory._create_contact_tools(
             starchat,
             session_state,
             zylch_memory,
             identifier_cache,
+            search_engine,
             config.owner_id,
             config.zylch_assistant_id
         ))
@@ -480,6 +493,7 @@ class ToolFactory:
         session_state: SessionState,
         zylch_memory=None,
         identifier_cache: IdentifierMapCache = None,
+        search_engine: Optional[HybridSearchEngine] = None,
         owner_id: str = "owner_default",
         zylch_assistant_id: str = "default_assistant"
     ) -> List[Tool]:
@@ -489,7 +503,7 @@ class ToolFactory:
         search_local_memory provides fast O(1) lookup before expensive remote calls.
         """
         return [
-            _SearchLocalMemoryTool(zylch_memory, identifier_cache, owner_id, zylch_assistant_id),
+            _SearchLocalMemoryTool(zylch_memory, identifier_cache, search_engine, owner_id, zylch_assistant_id),
             _SaveContactTool(starchat_client, session_state, zylch_memory, identifier_cache, owner_id, zylch_assistant_id),
             _GetContactTool(starchat_client, session_state),
             _ListContactsTool(starchat_client, session_state),
@@ -1976,43 +1990,44 @@ class _GetTasksTool(Tool):
 
 
 class _SearchLocalMemoryTool(Tool):
-    """Search local ZylchMemory for person info BEFORE making expensive remote calls.
+    """Search local ZylchMemory for person info using hybrid FTS + semantic search.
 
     ZYLCH IS PERSON-CENTRIC: A person can have multiple emails/phones.
-    This tool provides O(1) lookup from any identifier to the person's cached data.
+    This tool uses hybrid search (FTS + semantic) for better recall and precision.
 
     Flow:
     1. User asks "info su Luigi"
-    2. This tool searches identifier_map for "luigi" (name match)
-    3. If found AND fresh (< 7 days): return cached data, skip remote calls
-    4. If found BUT stale: return cached data with needs_refresh=true
-    5. If not found: return not_found=true, proceed with remote searches
+    2. Hybrid search combines FTS and semantic search for best results
+    3. Returns top results ranked by hybrid_score (FTS + semantic)
+    4. Falls back to identifier_cache for O(1) lookup if needed
     """
 
     def __init__(
         self,
         zylch_memory,
         identifier_cache: IdentifierMapCache,
+        search_engine: Optional[HybridSearchEngine] = None,
         owner_id: str = "owner_default",
         zylch_assistant_id: str = "default_assistant"
     ):
         super().__init__(
             name="search_local_memory",
-            description="Search local memory for person/contact info. ALWAYS call this FIRST before remote searches (Gmail, StarChat, web). Returns cached data if fresh, avoiding expensive API calls."
+            description="Search local memory for person/contact info using hybrid FTS + semantic search. ALWAYS call this FIRST before remote searches (Gmail, StarChat, web). Returns ranked results by relevance."
         )
         self.zylch_memory = zylch_memory
         self.identifier_cache = identifier_cache
+        self.search_engine = search_engine
         self.owner_id = owner_id
         self.zylch_assistant_id = zylch_assistant_id
 
     async def execute(self, query: str) -> ToolResult:
-        """Search for a person in local memory.
+        """Search for a person in local memory using hybrid FTS + semantic search.
 
         Args:
             query: Search query - can be email, phone, or name
 
         Returns:
-            ToolResult with person data or not_found status
+            ToolResult with ranked person data or not_found status
         """
         if not query or not query.strip():
             return ToolResult(
@@ -2023,16 +2038,63 @@ class _SearchLocalMemoryTool(Tool):
 
         query = query.strip()
 
-        # Check if identifier_cache is available
-        if not self.identifier_cache:
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data={"not_found": True},
-                message="Identifier cache not initialized. Proceed with remote searches."
-            )
-
         try:
-            # Step 1: Fast lookup in identifier_map (O(1))
+            # Use hybrid search if available for better results
+            if self.search_engine:
+                contacts_namespace = f"{self.owner_id}:{self.zylch_assistant_id}:contacts"
+
+                results = self.search_engine.search(
+                    owner_id=self.owner_id,
+                    query=query,
+                    namespace=contacts_namespace,
+                    limit=5
+                )
+
+                if not results:
+                    return ToolResult(
+                        status=ToolStatus.SUCCESS,
+                        data={"not_found": True, "query": query},
+                        message=f"No contacts found for '{query}'. Proceed with remote searches."
+                    )
+
+                # Format results with hybrid scores
+                output = [f"Found {len(results)} contacts:"]
+                formatted_results = []
+
+                for r in results:
+                    # Extract person data from result
+                    person_data = {
+                        "namespace": r.namespace,
+                        "content": r.content[:200] + "..." if len(r.content) > 200 else r.content,
+                        "hybrid_score": round(r.hybrid_score, 2),
+                        "fts_score": round(r.fts_score, 2) if r.fts_score else None,
+                        "semantic_score": round(r.semantic_score, 2) if r.semantic_score else None,
+                    }
+
+                    formatted_results.append(person_data)
+                    output.append(f"\n**{r.namespace}** (score: {r.hybrid_score:.2f})")
+                    output.append(person_data["content"])
+
+                return ToolResult(
+                    status=ToolStatus.SUCCESS,
+                    data={
+                        "found": True,
+                        "results": formatted_results,
+                        "count": len(results),
+                        "query": query
+                    },
+                    message="\n".join(output)
+                )
+
+            # Fallback to identifier_cache if hybrid search not available
+            if not self.identifier_cache:
+                return ToolResult(
+                    status=ToolStatus.SUCCESS,
+                    data={"not_found": True},
+                    message="Search engines not initialized. Proceed with remote searches."
+                )
+
+            # Legacy O(1) lookup in identifier_map
             match = self.identifier_cache.lookup(
                 query=query,
                 owner_id=self.owner_id,
@@ -2044,25 +2106,20 @@ class _SearchLocalMemoryTool(Tool):
                 return ToolResult(
                     status=ToolStatus.SUCCESS,
                     data={"not_found": True, "query": query},
-                    message=f"Contact '{query}' not found in local memory. Proceed with remote searches (get_contact, search_emails, search_gmail, search_calendar_events)."
+                    message=f"Contact '{query}' not found in local memory. Proceed with remote searches."
                 )
 
             memory_id = match.get("memory_id")
-
-            # Step 2: Check freshness
             is_fresh = self.identifier_cache.is_fresh(
                 query=query,
                 owner_id=self.owner_id,
                 assistant_id=self.zylch_assistant_id
             )
 
-            # Step 3: Retrieve full data from ZylchMemory
+            # Retrieve full data from ZylchMemory
             person_data = None
             if self.zylch_memory:
-                # Use the contacts namespace
                 contacts_namespace = f"{self.owner_id}:{self.zylch_assistant_id}:contacts"
-
-                # Semantic search to get the actual memory content
                 memories = self.zylch_memory.retrieve_memories(
                     query=query,
                     category="person",
@@ -2078,7 +2135,6 @@ class _SearchLocalMemoryTool(Tool):
                         "updated_at": match.get("updated_at"),
                     }
 
-            # Step 4: Get all identifiers for this person
             all_identifiers = self.identifier_cache.get_all_for_memory(
                 memory_id=memory_id,
                 owner_id=self.owner_id,
@@ -2096,18 +2152,9 @@ class _SearchLocalMemoryTool(Tool):
             }
 
             if is_fresh:
-                message = f"Found fresh contact data for '{query}' in local memory. NO need for remote searches."
-                # TODO: STARCHAT_REQUEST - When available, use StarChat lookup_by_email
-                # to verify if the contact was updated remotely
-                # async def _check_starchat_freshness(self, email: str) -> Optional[datetime]:
-                #     result = await self.starchat.lookup_by_email(email, self.business_id)
-                #     if result and result.get("exists"):
-                #         return datetime.fromisoformat(result["last_updated"])
-                #     return None
+                message = f"Found fresh contact data for '{query}' in local memory."
             else:
-                message = f"Found STALE contact data for '{query}'. Show this data but consider refreshing with remote searches."
-
-            logger.info(f"Local memory search: query='{query}', found=True, fresh={is_fresh}")
+                message = f"Found contact data for '{query}' but it may be stale."
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,

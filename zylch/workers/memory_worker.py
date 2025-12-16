@@ -16,7 +16,9 @@ import anthropic
 
 from zylch.config import settings
 from zylch.storage.supabase_client import SupabaseStorage
-from zylch_memory.zylch_memory import ZylchMemory
+from zylch_memory import ZylchMemory
+from zylch_memory import BlobStorage
+from zylch_memory import HybridSearchEngine
 
 logger = logging.getLogger(__name__)
 
@@ -156,20 +158,28 @@ class MemoryWorker:
     Optional: Uses Haiku to extract relationship context (cheap, best-effort).
     """
 
-    def __init__(self, storage: SupabaseStorage, memory: ZylchMemory, anthropic_api_key: str = ""):
+    def __init__(
+        self,
+        storage: SupabaseStorage,
+        memory: ZylchMemory,
+        anthropic_api_key: str = "",
+        blob_storage: Optional[BlobStorage] = None
+    ):
         """Initialize MemoryWorker.
 
         Args:
             storage: SupabaseStorage instance for email/identifier access
-            memory: ZylchMemory instance for storing memories
+            memory: ZylchMemory instance for storing memories (legacy)
             anthropic_api_key: Anthropic API key (BYOK - from Supabase)
+            blob_storage: Optional BlobStorage instance for new entity-memory system
         """
         self.storage = storage
         self.memory = memory
+        self.blob_storage = blob_storage
         # Anthropic client is optional - memory extraction works without it
         self.anthropic = anthropic.Anthropic(api_key=anthropic_api_key) if anthropic_api_key else None
 
-        logger.info("MemoryWorker initialized")
+        logger.info("MemoryWorker initialized (blob_storage: %s)", "enabled" if blob_storage else "disabled")
 
     async def process_email(self, email_id: str, owner_id: str) -> None:
         """Process single email to extract and store identifiers.
@@ -411,16 +421,27 @@ class MemoryWorker:
             'updated_at': datetime.now(timezone.utc).isoformat()
         }, on_conflict='owner_id,identifier').execute()
 
-        # Store in ZylchMemory (with reconsolidation)
-        namespace = f"contact:{contact_id}"
-        self.memory.store_memory(
-            namespace=namespace,
-            category="contacts",
-            context=f"Phone number for contact {contact_id}",
-            pattern=f"Phone: {phone}",
-            examples=[email_id],
-            confidence=0.9
-        )
+        # Store in new blob system if available
+        if self.blob_storage:
+            namespace = f"user:{owner_id}"
+            content = f"Phone number for contact {contact_id}: {phone}"
+            self.blob_storage.store_blob(
+                owner_id=owner_id,
+                namespace=namespace,
+                content=content,
+                event_description=f"Extracted phone from email {email_id}"
+            )
+        else:
+            # Fallback to legacy ZylchMemory (with reconsolidation)
+            namespace = f"contact:{contact_id}"
+            self.memory.store_memory(
+                namespace=namespace,
+                category="contacts",
+                context=f"Phone number for contact {contact_id}",
+                pattern=f"Phone: {phone}",
+                examples=[email_id],
+                confidence=0.9
+            )
 
         logger.info(f"Stored phone identifier: {phone} -> {contact_id}")
 
@@ -450,16 +471,27 @@ class MemoryWorker:
             'updated_at': datetime.now(timezone.utc).isoformat()
         }, on_conflict='owner_id,identifier').execute()
 
-        # Store in ZylchMemory
-        namespace = f"contact:{contact_id}"
-        self.memory.store_memory(
-            namespace=namespace,
-            category="contacts",
-            context=f"LinkedIn profile for contact {contact_id}",
-            pattern=f"LinkedIn: {linkedin}",
-            examples=[email_id],
-            confidence=1.0
-        )
+        # Store in new blob system if available
+        if self.blob_storage:
+            namespace = f"user:{owner_id}"
+            content = f"LinkedIn profile for contact {contact_id}: {linkedin}"
+            self.blob_storage.store_blob(
+                owner_id=owner_id,
+                namespace=namespace,
+                content=content,
+                event_description=f"Extracted LinkedIn from email {email_id}"
+            )
+        else:
+            # Fallback to legacy ZylchMemory
+            namespace = f"contact:{contact_id}"
+            self.memory.store_memory(
+                namespace=namespace,
+                category="contacts",
+                context=f"LinkedIn profile for contact {contact_id}",
+                pattern=f"LinkedIn: {linkedin}",
+                examples=[email_id],
+                confidence=1.0
+            )
 
         logger.info(f"Stored LinkedIn identifier: {linkedin} -> {contact_id}")
 
@@ -518,7 +550,7 @@ Reply with ONLY the context phrase, nothing else."""
         context: str,
         email_id: str
     ) -> None:
-        """Store relationship context in ZylchMemory.
+        """Store relationship context in Memory system.
 
         Args:
             owner_id: Owner ID
@@ -527,15 +559,27 @@ Reply with ONLY the context phrase, nothing else."""
             email_id: Source email ID
         """
         try:
-            namespace = f"contact:{contact_email}"
-            self.memory.store_memory(
-                namespace=namespace,
-                category="relationships",
-                context=f"Relationship with {contact_email}",
-                pattern=context,
-                examples=[email_id],
-                confidence=0.7  # Moderate confidence (LLM-based)
-            )
+            # Store in new blob system if available
+            if self.blob_storage:
+                namespace = f"user:{owner_id}"
+                content = f"Relationship with {contact_email}: {context}"
+                self.blob_storage.store_blob(
+                    owner_id=owner_id,
+                    namespace=namespace,
+                    content=content,
+                    event_description=f"Extracted from email {email_id}"
+                )
+            else:
+                # Fallback to legacy ZylchMemory
+                namespace = f"contact:{contact_email}"
+                self.memory.store_memory(
+                    namespace=namespace,
+                    category="relationships",
+                    context=f"Relationship with {contact_email}",
+                    pattern=context,
+                    examples=[email_id],
+                    confidence=0.7  # Moderate confidence (LLM-based)
+                )
 
             logger.debug(f"Stored relationship memory for {contact_email}: {context}")
 

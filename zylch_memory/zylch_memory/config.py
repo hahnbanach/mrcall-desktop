@@ -80,6 +80,28 @@ class ZylchMemoryConfig(BaseSettings):
         description="Confidence increment when a memory is reinforced via reconsolidation"
     )
 
+    # Hybrid search settings
+    reconsolidation_threshold: float = Field(
+        default=0.65,
+        description="Minimum hybrid score to trigger reconsolidation"
+    )
+    fts_weight: float = Field(
+        default=0.5,
+        description="Default FTS weight (alpha) for hybrid search. 0=semantic only, 1=FTS only"
+    )
+    top_k_sentences: int = Field(
+        default=3,
+        description="Number of matching sentences to return per blob"
+    )
+    llm_merge_enabled: bool = Field(
+        default=True,
+        description="Enable LLM-assisted merge for reconsolidation"
+    )
+    llm_merge_model: str = Field(
+        default="claude-3-5-haiku-20241022",
+        description="Model for LLM merge"
+    )
+
     # Performance
     batch_size: int = Field(
         default=32,
