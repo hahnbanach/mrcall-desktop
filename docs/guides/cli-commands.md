@@ -144,16 +144,17 @@ Triggers support typed parameters using `{param:type}` syntax:
 
 ## 📧 Data Management Commands
 
-### `/sync [days] [--status] [--reset]`
+### `/sync [days] [--status] [--reset] [--force]`
 
 **Summary**: Sync emails and calendar from Google/Microsoft
 
-**Description**: Fetches new emails from Gmail/Outlook and calendar events from Google Calendar. Performs incremental sync after first run.
+**Description**: Fetches new emails from Gmail/Outlook and calendar events from Google Calendar. Performs incremental sync after first run. Also runs Memory Agent to extract facts from emails into entity blobs.
 
 **Arguments**:
 - `days` - Number of days to sync (default: 30 for first sync, incremental after)
 - `--status` - Show sync status without syncing
 - `--reset` - Clear sync state and force full re-sync
+- `--force` - Mark all emails for memory reprocessing (run `/memory --reset` first!)
 
 **Examples**:
 ```bash
@@ -171,6 +172,11 @@ Triggers support typed parameters using `{param:type}` syntax:
 
 # Reset sync state (then run /sync [days])
 /sync --reset
+
+# Reprocess all emails through Memory Agent
+/memory --reset   # Clear existing blobs first
+/sync --force     # Mark all emails for reprocessing
+/sync             # Process into fresh blobs
 ```
 
 **Output**:
@@ -694,10 +700,26 @@ Storage: Supabase (blobs + blob_sentences tables)
 /memory list 20
 ```
 
-**Reset memory** (`/memory reset`):
+**Reset memory** (`/memory --reset` or `/memory reset`):
 ```bash
-# Clear all memories (requires confirmation)
-/memory reset
+# Delete ALL blobs and sentences (irreversible!)
+/memory --reset
+```
+
+Output:
+```
+🗑️ Memory reset complete
+
+Deleted 156 memory blobs and all associated sentences.
+
+Your memory is now empty. Use /memory store <content> to add new memories.
+```
+
+**Reprocessing All Emails**: To rebuild memory from scratch:
+```bash
+/memory --reset   # Delete all blobs
+/sync --force     # Mark all emails for reprocessing
+/sync             # Run Memory Agent on all emails
 ```
 
 **Hybrid Search**: Combines PostgreSQL full-text search (FTS) with pgvector semantic search. Named entities (like "Mario Rossi") weight FTS higher (α=0.7), conceptual queries weight semantic higher (α=0.3).
