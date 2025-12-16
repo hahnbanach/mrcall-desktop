@@ -42,8 +42,9 @@ class SemanticCommandMatcher:
 
         try:
             logger.info("[CommandMatcher] Initializing SemanticCommandMatcher...")
-            from zylch_memory import EmbeddingEngine
-            embedding_engine = EmbeddingEngine()
+            from zylch_memory import EmbeddingEngine, ZylchMemoryConfig
+            config = ZylchMemoryConfig()
+            embedding_engine = EmbeddingEngine(config)
             logger.info("[CommandMatcher] EmbeddingEngine created")
             self._parser = TriggerParser(embedding_engine, COMMAND_TRIGGERS)
             self._parser.MIN_CONFIDENCE = self.MIN_CONFIDENCE

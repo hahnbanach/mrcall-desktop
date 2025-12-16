@@ -101,7 +101,7 @@ class TriggerParser:
                 self._parsed_templates[command].append(parsed)
 
                 # Compute embedding for stripped template
-                embedding = self.embedding_engine.embed(parsed.stripped)
+                embedding = self.embedding_engine.encode(parsed.stripped)
                 self._template_embeddings[command].append((template, embedding))
 
         self._initialized = True
@@ -156,7 +156,7 @@ class TriggerParser:
         logger.info(f"[TriggerParser] Matching input: '{user_input}'")
 
         # Compute embedding for user input
-        input_embedding = self.embedding_engine.embed(user_input)
+        input_embedding = self.embedding_engine.encode(user_input)
 
         best_match: Optional[MatchResult] = None
         best_score = 0.0
