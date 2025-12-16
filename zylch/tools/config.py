@@ -41,6 +41,7 @@ class ToolConfig:
 
     # Google Calendar
     calendar_id: str
+    google_token_path: str
 
     # Cache
     cache_dir: str
@@ -111,6 +112,7 @@ class ToolConfig:
 
             # Google Calendar
             calendar_id=settings.calendar_id,
+            google_token_path=settings.google_token_path,
 
             # Cache
             cache_dir=settings.cache_dir,

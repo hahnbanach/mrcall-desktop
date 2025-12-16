@@ -53,6 +53,10 @@ class Settings(BaseSettings):
         description="Google OAuth redirect URI (e.g., https://api.zylch.ai/api/auth/google/callback)"
     )
     calendar_id: str = Field(default="primary", description="Calendar ID to use")
+    google_token_path: str = Field(
+        default="~/.zylch/google_tokens",
+        description="Directory for Google OAuth token storage"
+    )
 
     # Firebase Authentication (for dashboard integration)
     firebase_service_account_base64: str = Field(
