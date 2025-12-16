@@ -1,0 +1,86 @@
+Create a comprehensive QA testing documentation at docs/guides/qa_testing.md
+
+  TARGET AUDIENCE: New programmer hired to test Zylch, knows NOTHING about the product.
+
+  REQUIRED RESEARCH:
+  1. Read:
+     ./claude/ARCHITECTURE.md
+     ./docs/**.md
+  2. Examine zylch-cli repository structure (../zylch-cli/zylch) - understand CLI entry point
+  3. Read zylch/services/**.py - understand /sync flow
+  4. Read zylch/workers/**.py - understand Memory Agent
+  5. Examine database schema in zylch/storage/
+
+  DOCUMENTATION STRUCTURE:
+
+  ## 1. Introduction: What is Zylch?
+
+  ## 2. Architecture Overview (for testers)
+
+  ## 3. Prerequisites
+
+  ## 4. Setup Steps (Local Testing)
+
+  ### Step 1: Launch Backend Locally
+
+
+  ###Step 2: Enter the CLI
+
+
+  ###Step 3: Login
+
+  ###Step 4: Try to Sync (WILL FAIL)
+
+  ###Step 5: Connect services
+
+  ###Step 6: Run Sync Successfully
+
+  ###Step 7: View Memory
+
+  ###Step 8: View Gaps (Action Items)
+
+  5. Manual Worker Testing (Production = Cron)
+
+  6. Test Scenarios
+
+  Scenario 1: New Email Arrives
+
+  Scenario 2: Phone Number in Email
+
+  Scenario 3: LinkedIn URL in Email
+
+  Scenario 4: Avatar Status Changes
+
+  8. Troubleshooting
+
+  Issue: /sync returns 0 emails
+
+  Issue: No identifiers in identifier_map
+
+  Issue: No avatars in avatars table
+
+  Issue: /gaps shows nothing
+
+  9. Performance Benchmarks
+
+  Expected Timings:
+
+  Expected Costs (per sync):
+
+  10. Success Criteria
+
+  After testing, you should be able to:
+
+  ---
+  CRITICAL REQUIREMENTS:
+  1. All commands must be EXACT and TESTED
+  2. All SQL queries must be CORRECT
+  3. All file paths must be ACCURATE
+  4. All "behind the scenes" explanations must be DETAILED and TECHNICAL
+  5. Include actual database queries with expected output
+  6. Include actual CLI commands with expected output
+  7. Research ../zylch-cli structure to understand CLI entry point
+  8. NO PLACEHOLDERS - everything must be specific
+
+  OUTPUT: Complete docs/guides/qa_testing.md ready for a new hire to follow step-by-step.
+  ```
