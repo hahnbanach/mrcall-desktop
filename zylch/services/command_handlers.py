@@ -117,6 +117,35 @@ Run `/sync [days]` to sync more data."""
             logger.error(f"[/sync] Failed to get sync status: {e}")
             return f"❌ **Error getting sync status:** {str(e)}"
 
+    # Check for --force flag (reprocess all emails through memory agent)
+    force_reprocess = '--force' in args
+    if force_reprocess:
+        logger.info(f"[/sync] Force flag detected, clearing memory_processed_at for owner_id={owner_id}")
+        try:
+            supabase = SupabaseStorage()
+
+            # Clear memory_processed_at on all emails to mark them for reprocessing
+            supabase.client.table('emails')\
+                .update({'memory_processed_at': None})\
+                .eq('owner_id', owner_id)\
+                .execute()
+
+            logger.info(f"[/sync] Cleared memory_processed_at - all emails will be reprocessed")
+
+            return """⚠️ **Force reprocess enabled**
+
+All emails marked for memory reprocessing.
+
+**Important:** This will create duplicate memory entries unless you reset memory first:
+```
+/memory --reset
+```
+
+Then run `/sync` to reprocess all emails with fresh memory."""
+        except Exception as e:
+            logger.error(f"[/sync] Failed to clear memory_processed_at: {e}")
+            return f"❌ **Error:** {str(e)}"
+
     # Check for --reset flag
     reset_sync = '--reset' in args
     if reset_sync:
@@ -1763,13 +1792,14 @@ COMMAND_HELP = {
     },
     '/sync': {
         'summary': 'Sync emails and calendar',
-        'usage': '/sync [days] [--status] [--reset]',
+        'usage': '/sync [days] [--status] [--reset] [--force]',
         'description': '''Fetches new emails from Gmail and calendar events from Google Calendar.
 
 **Arguments:**
 - `days` - Number of days to sync (default: 30 for first sync, incremental after)
 - `--status` - Show sync status (last sync time, email count, event count)
 - `--reset` - Clear sync state and force full re-sync from scratch
+- `--force` - Mark all emails for memory reprocessing (run `/memory --reset` first!)
 
 **Examples:**
 - `/sync` - Sync with defaults (incremental after first sync)
@@ -1777,6 +1807,7 @@ COMMAND_HELP = {
 - `/sync 300` - Sync last 300 days
 - `/sync --status` - Check sync status without syncing
 - `/sync --reset` - Reset sync state, then run `/sync [days]` to re-sync
+- `/sync --force` - Reprocess all emails through memory agent
 
 This only syncs data - no AI analysis. Run `/briefing` after to analyze tasks.''',
     },
