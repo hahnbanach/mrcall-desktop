@@ -20,7 +20,7 @@ This documentation is organized into the following sections:
 - **[Avatar Aggregation](features/avatar-aggregation.md)** - Person-centric contact intelligence *(coming soon)*
 - **[Triggers & Automation](features/triggers-automation.md)** - Event-driven workflow automation *(coming soon)*
 - **[Sharing System](features/sharing-system.md)** - Consent-based intelligence sharing *(coming soon)*
-- **[Memory System](features/memory-system.md)** - Persistent memory and pattern learning *(coming soon)*
+- **[Memory System](features/memory-system.md)** - Entity-centric persistent memory with hybrid search and reconsolidation
 - **[MrCall Integration](features/mrcall-integration.md)** - Telephony and WhatsApp integration *(coming soon)*
 
 ### Future Development

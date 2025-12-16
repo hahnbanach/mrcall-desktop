@@ -1,0 +1,140 @@
+"""Hybrid search combining FTS and semantic search."""
+
+from dataclasses import dataclass
+from typing import List, Optional
+import numpy as np
+
+from .embeddings import EmbeddingEngine
+
+DEFAULT_FTS_WEIGHT = 0.5  # Configurable balance between FTS and semantic
+
+@dataclass
+class SearchResult:
+    blob_id: str
+    content: str
+    namespace: str
+    fts_score: float
+    semantic_score: float
+    hybrid_score: float
+    events: list
+    matching_sentences: List[str]
+
+class HybridSearchEngine:
+    """Hybrid search engine for entity blobs."""
+
+    RECONSOLIDATION_THRESHOLD = 0.65
+
+    def __init__(self, supabase_client, embedding_engine: EmbeddingEngine, default_alpha: float = 0.5):
+        self.supabase = supabase_client
+        self.embeddings = embedding_engine
+        self.default_alpha = default_alpha
+
+    def search(
+        self,
+        owner_id: str,
+        query: str,
+        namespace: Optional[str] = None,
+        limit: int = 10,
+        alpha: Optional[float] = None
+    ) -> List[SearchResult]:
+        """Execute hybrid search.
+
+        Args:
+            owner_id: Firebase UID
+            query: Search query
+            namespace: Optional namespace filter
+            limit: Max results
+            alpha: FTS weight (0-1). Default from config.
+
+        Returns:
+            List of SearchResult
+        """
+        fts_weight = alpha if alpha is not None else self.default_alpha
+
+        # Generate query embedding
+        query_embedding = self.embeddings.encode(query)
+
+        # Call Supabase hybrid search function
+        result = self.supabase.rpc(
+            "hybrid_search_blobs",
+            {
+                "p_owner_id": owner_id,
+                "p_query": query,
+                "p_query_embedding": query_embedding.tolist(),
+                "p_namespace": namespace,
+                "p_fts_weight": fts_weight,
+                "p_limit": limit
+            }
+        ).execute()
+
+        # Get matching sentences for each result
+        results = []
+        for row in result.data or []:
+            sentences = self._get_matching_sentences(
+                row["blob_id"],
+                owner_id,
+                query_embedding
+            )
+            results.append(SearchResult(
+                blob_id=row["blob_id"],
+                content=row["content"],
+                namespace=row["namespace"],
+                fts_score=row["fts_score"],
+                semantic_score=row["semantic_score"],
+                hybrid_score=row["hybrid_score"],
+                events=row["events"],
+                matching_sentences=sentences
+            ))
+
+        return results
+
+    def find_for_reconsolidation(
+        self,
+        owner_id: str,
+        content: str,
+        namespace: str
+    ) -> Optional[SearchResult]:
+        """Find existing blob for reconsolidation.
+
+        Returns blob if hybrid_score > RECONSOLIDATION_THRESHOLD.
+        """
+        results = self.search(
+            owner_id=owner_id,
+            query=content,
+            namespace=namespace,
+            limit=1,
+            alpha=0.5  # Balanced for reconsolidation
+        )
+
+        if results and results[0].hybrid_score >= self.RECONSOLIDATION_THRESHOLD:
+            return results[0]
+        return None
+
+    def _get_matching_sentences(
+        self,
+        blob_id: str,
+        owner_id: str,
+        query_embedding: np.ndarray,
+        top_k: int = 3
+    ) -> List[str]:
+        """Get top-k matching sentences from a blob."""
+        sentences = self.supabase.table("blob_sentences")\
+            .select("sentence_text, embedding")\
+            .eq("blob_id", blob_id)\
+            .eq("owner_id", owner_id)\
+            .execute()
+
+        if not sentences.data:
+            return []
+
+        # Compute similarities
+        scored = []
+        for s in sentences.data:
+            emb = np.array(s["embedding"])
+            sim = float(np.dot(query_embedding, emb) /
+                       (np.linalg.norm(query_embedding) * np.linalg.norm(emb)))
+            scored.append((sim, s["sentence_text"]))
+
+        # Return top-k
+        scored.sort(reverse=True)
+        return [text for _, text in scored[:top_k]]
