@@ -1920,32 +1920,6 @@ Run `/sync` first to fetch latest emails.''',
     },
 }
 
-# Export all handlers
-COMMAND_HANDLERS = {
-    '/help': handle_help,
-    '/sync': handle_sync,
-    '/clear': handle_clear,
-    '/briefing': handle_briefing,
-    '/archive': handle_archive,
-    '/model': handle_model,
-    '/memory': handle_memory,
-    '/email': handle_email,
-    '/trigger': handle_trigger,
-    '/assistant': handle_assistant,
-    '/mrcall': handle_mrcall,
-    '/connect': handle_connect,
-    '/share': handle_share,
-    '/revoke': handle_revoke,
-    '/sharing': handle_sharing,
-    '/tutorial': handle_tutorial,
-    # Phase 1: High-impact commands (replacing tools)
-    '/stats': handle_stats,
-    '/drafts': handle_drafts,
-    '/calendar': handle_calendar,
-    '/tasks': handle_tasks,
-    '/jobs': handle_jobs,
-}
-
 async def handle_stats(args: List[str], owner_id: str) -> str:
     """Handle /stats command - email statistics."""
     from zylch.storage.supabase_client import SupabaseStorage
@@ -2311,6 +2285,33 @@ Shows your scheduled reminders and jobs.
     except Exception as e:
         logger.error(f"Error in /jobs: {e}", exc_info=True)
         return f"❌ **Error:** {str(e)}"
+
+
+# Export all handlers
+COMMAND_HANDLERS = {
+    '/help': handle_help,
+    '/sync': handle_sync,
+    '/clear': handle_clear,
+    '/briefing': handle_briefing,
+    '/archive': handle_archive,
+    '/model': handle_model,
+    '/memory': handle_memory,
+    '/email': handle_email,
+    '/trigger': handle_trigger,
+    '/assistant': handle_assistant,
+    '/mrcall': handle_mrcall,
+    '/connect': handle_connect,
+    '/share': handle_share,
+    '/revoke': handle_revoke,
+    '/sharing': handle_sharing,
+    '/tutorial': handle_tutorial,
+    # Phase 1: High-impact commands (replacing tools)
+    '/stats': handle_stats,
+    '/drafts': handle_drafts,
+    '/calendar': handle_calendar,
+    '/tasks': handle_tasks,
+    '/jobs': handle_jobs,
+}
 
 
 # Natural language triggers for semantic command matching

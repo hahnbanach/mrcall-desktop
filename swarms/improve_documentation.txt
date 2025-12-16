@@ -1,0 +1,73 @@
+# ZYLCH DOCUMENTATION UPDATE SWARM
+
+  ## OBJECTIVE
+  Update and consolidate all project documentation by analyzing git history and codebase. Primary goal: reduce
+  .claude/ARCHITECTURE.md from 1798 lines to a concise, complete architectural reference.
+
+  ## PHASE 1: GIT HISTORY ANALYSIS
+  Analyze commits in this exact order:
+  1. `git log avatar --oneline --since="4 weeks ago"`
+  2. `git log neumann --oneline --since="4 weeks ago"`
+  3. `git log main --oneline --since="4 weeks ago"`
+
+  For each branch, examine:
+  - What features were added
+  - What services were created/modified
+  - What architectural decisions were made
+  - What was refactored or removed
+
+  Store findings in memory: `zylch-docs/git-analysis`
+
+  ## PHASE 2: CODE ANALYSIS
+  Analyze all code in `./zylch/*`:
+  - Directory structure and organization
+  - Services and their responsibilities
+  - API endpoints and contracts
+  - Data models and schemas
+  - Configuration patterns
+  - Integration points
+
+  Store findings in memory: `zylch-docs/code-analysis`
+
+  ## PHASE 3: DOCUMENTATION INVENTORY
+  Read and catalog current state of:
+  1. `.claude/ARCHITECTURE.md` (PRIMARY - 1798 lines, needs heavy reduction)
+  2. `.claude/DEVELOPMENT_PLAN.md`
+  3. All files in `docs/`
+  4. All other `.md` files EXCLUDING `ARCHIVE/` and `frontend/`
+
+  Identify: outdated content, duplications, missing features, gaps between code and docs.
+
+  Store findings in memory: `zylch-docs/doc-inventory`
+
+  ## PHASE 4: DOCUMENTATION UPDATES
+  Update all documentation files based on findings from phases 1-3.
+
+  ## PHASE 5: ARCHITECTURE.md CONSOLIDATION
+  Rewrite `.claude/ARCHITECTURE.md` following these rules:
+  - MUST document ALL features, services, architectural choices
+  - NO repetition
+  - NO outdated content
+  - SHORT and SWEET - aim for 300-500 lines maximum
+  - This file is a WORKING REFERENCE - if something is missing, developers won't understand the design; if too big, context
+  fills up before work starts
+
+  ## MEMORY KEYS
+  - `zylch-docs/git-analysis` - Git commit findings
+  - `zylch-docs/code-analysis` - Codebase structure findings
+  - `zylch-docs/doc-inventory` - Current documentation state
+  - `zylch-docs/updates-log` - Changes made to each file
+
+  ## AGENTS NEEDED
+  1. **Git Historian** - Phase 1: Analyze all commits across branches
+  2. **Code Analyst** - Phase 2: Deep dive into ./zylch/* codebase
+  3. **Doc Auditor** - Phase 3: Inventory existing documentation
+  4. **Doc Writer** - Phase 4: Update individual documentation files
+  5. **Architect** - Phase 5: Consolidate and rewrite ARCHITECTURE.md
+  6. **Coordinator** - Orchestrate workflow, ensure memory sync, verify completeness
+
+  ## CRITICAL REQUIREMENTS
+  - Every feature in code MUST appear in documentation
+  - Every service MUST be documented
+  - Every architectural decision MUST be captured
+  - Final ARCHITECTURE.md must be CONCISE but COMPLETE
