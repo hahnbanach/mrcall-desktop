@@ -495,21 +495,20 @@ class SyncService:
         # Memory Agent phase - Process unprocessed emails into structured memory
         try:
             from zylch.workers.memory_worker import MemoryWorker
-            from zylch.memory import ZylchMemory
 
             logger.info("[memory_agent] Starting email processing")
             start_time = datetime.now()
 
-            # Initialize memory system
-            memory = ZylchMemory()  # Uses default local config
-
-            # Get unprocessed emails from storage (not memory)
+            # Get unprocessed emails from storage
             unprocessed_emails = self.supabase.get_unprocessed_emails(self.owner_id, limit=100)
             email_count = len(unprocessed_emails)
 
             if email_count > 0:
-                # Process batch
-                worker = MemoryWorker(memory=memory)
+                # Process batch with reconsolidation-based memory worker
+                worker = MemoryWorker(
+                    storage=self.supabase,
+                    owner_id=self.owner_id
+                )
                 processed = await worker.process_batch(unprocessed_emails)
 
                 duration = (datetime.now() - start_time).total_seconds()
