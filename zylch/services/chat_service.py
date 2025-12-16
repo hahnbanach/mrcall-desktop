@@ -107,8 +107,22 @@ class ChatService:
         # Skip if already a slash command
         if user_message.strip().startswith('/'):
             return None
-        matcher = self._get_command_matcher()
-        return matcher.match(user_message)
+
+        try:
+            logger.debug(f"[SemanticMatch] Attempting to match: '{user_message}'")
+            matcher = self._get_command_matcher()
+            if matcher is None:
+                logger.warning("[SemanticMatch] Matcher is None")
+                return None
+            result = matcher.match(user_message)
+            if result:
+                logger.info(f"[SemanticMatch] Matched: '{user_message}' → '{result}'")
+            else:
+                logger.debug(f"[SemanticMatch] No match for: '{user_message}'")
+            return result
+        except Exception as e:
+            logger.error(f"[SemanticMatch] Error matching command: {e}", exc_info=True)
+            return None
 
     async def process_message(
         self,
@@ -205,14 +219,14 @@ class ChatService:
                     elif cmd == '/briefing':
                         # /briefing only needs args and owner_id (fast avatar query)
                         response_text = await handler(args, owner_id)
-                    elif cmd in ['/archive', '/memory']:
-                        # /archive and /memory need config and owner_id
+                    elif cmd in ['/archive', '/memory', '/email']:
+                        # /archive, /memory and /email need config and owner_id
                         config = ToolConfig.from_settings()
                         response_text = await handler(args, config, owner_id)
                     elif cmd in ['/trigger', '/mrcall', '/share', '/revoke', '/sharing', '/connect']:
                         # These need args, owner_id, and optionally email
                         response_text = await handler(args, owner_id, user_email)
-                    elif cmd in ['/cache', '/model', '/tutorial', '/help', '/clear']:
+                    elif cmd in ['/model', '/tutorial', '/help', '/clear']:
                         # These only need args (or nothing)
                         response_text = await handler(args) if args else await handler()
                     else:
