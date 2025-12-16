@@ -535,7 +535,10 @@ When storing, similar memories are automatically merged (reconsolidation)."""
 
         namespace = f"user:{owner_id}"
 
-        if args[0] == 'search':
+        # Normalize args - accept both 'search' and '--search'
+        cmd = args[0].lstrip('-') if args else ''
+
+        if cmd == 'search':
             # Search memories
             if len(args) < 2:
                 return "❌ Missing query\n\nUsage: `/memory search <query>`"
@@ -560,7 +563,7 @@ When storing, similar memories are automatically merged (reconsolidation)."""
 
             return output
 
-        elif args[0] == 'store':
+        elif cmd == 'store':
             # Store new memory (with auto-reconsolidation)
             if len(args) < 2:
                 return "❌ Missing content\n\nUsage: `/memory store <content>`"
@@ -603,7 +606,7 @@ New content added to existing entity blob."""
 
 Memory will be searchable via hybrid search."""
 
-        elif args[0] == 'stats':
+        elif cmd == 'stats':
             # Memory statistics
             stats = blob_storage.get_stats(owner_id)
 
@@ -620,7 +623,7 @@ Memory will be searchable via hybrid search."""
 
             return output
 
-        elif args[0] == 'list':
+        elif cmd == 'list':
             # List recent memories
             limit = 10
             if len(args) > 1:
@@ -650,7 +653,7 @@ Memory will be searchable via hybrid search."""
 
             return output
 
-        elif args[0] == '--reset':
+        elif cmd == 'reset':
             # Delete ALL user memories
             # First delete sentences (they reference blobs)
             supabase.table("blob_sentences")\
@@ -1402,6 +1405,347 @@ This integration requires manual configuration.
         return f"❌ **Error:** {str(e)}"
 
 
+async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> str:
+    """Handle /email command - email drafts and search.
+
+    Drafts are stored in Supabase (Superhuman-style).
+    Sending routes through Gmail or Outlook API based on user's provider.
+
+    Usage:
+        /email --list --draft [--limit N]     - List drafts
+        /email --create [--to X] [--subject Y] - Create draft
+        /email --send <draft_id>               - Send draft
+        /email --delete <draft_id>             - Delete draft
+        /email --search <query> [--from X] [--days N] [--limit N]  - Search emails
+    """
+    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.api.token_storage import get_provider, get_email
+    from datetime import datetime, timezone
+    import uuid
+    import shlex
+
+    if '--help' in args or not args:
+        return """**📧 Email Command**
+
+**Drafts:**
+• `/email --list --draft [--limit N]` - List drafts
+• `/email --create --to <email> --subject <text>` - Create draft
+• `/email --send <draft_id>` - Send draft via Gmail/Outlook
+• `/email --delete <draft_id>` - Delete draft
+
+**Search:**
+• `/email --search <query>` - Search emails
+• `/email --search <query> --from <sender>` - Search from specific sender
+• `/email --search <query> --days N` - Search last N days
+• `/email --search <query> --limit N` - Limit results
+
+**Examples:**
+• `/email --list --draft`
+• `/email --create --to mario@example.com --subject "Meeting tomorrow"`
+• `/email --search "contract" --days 30 --limit 10`
+• `/email --send abc123`
+
+**Note:** Drafts are stored locally in Zylch. When you send, it routes through your connected Gmail or Outlook."""
+
+    try:
+        supabase = SupabaseStorage.get_instance().client
+
+        # Parse arguments
+        def parse_flag(flag: str, default=None):
+            """Extract value after a flag like --to or --subject."""
+            for i, arg in enumerate(args):
+                if arg == flag and i + 1 < len(args):
+                    return args[i + 1]
+            return default
+
+        def has_flag(flag: str) -> bool:
+            """Check if a flag is present."""
+            return flag in args
+
+        # --- LIST DRAFTS ---
+        if has_flag('--list') and has_flag('--draft'):
+            limit = int(parse_flag('--limit', '20'))
+            limit = min(limit, 50)
+
+            result = supabase.table('drafts')\
+                .select('*')\
+                .eq('owner_id', owner_id)\
+                .eq('status', 'draft')\
+                .order('updated_at', desc=True)\
+                .limit(limit)\
+                .execute()
+
+            if not result.data:
+                return "**📭 No drafts**\n\nCreate one with `/email --create --to <email> --subject <text>`"
+
+            output = f"**📝 Drafts** ({len(result.data)} found)\n\n"
+            for i, draft in enumerate(result.data, 1):
+                to_str = ', '.join(draft.get('to_addresses', [])[:2])
+                if len(draft.get('to_addresses', [])) > 2:
+                    to_str += f" (+{len(draft['to_addresses']) - 2})"
+                subject = draft.get('subject', '(no subject)')[:50]
+                draft_id = draft['id'][:8]
+                updated = draft['updated_at'][:10] if draft.get('updated_at') else ''
+
+                output += f"**{i}. {subject}**\n"
+                output += f"   To: {to_str}\n"
+                output += f"   ID: `{draft_id}` | {updated}\n\n"
+
+            output += "_Use `/email --send <id>` to send a draft._"
+            return output
+
+        # --- CREATE DRAFT ---
+        if has_flag('--create'):
+            to_addr = parse_flag('--to', '')
+            subject = parse_flag('--subject', '')
+
+            # Parse body from remaining args (everything after known flags)
+            body = ''
+            skip_next = False
+            for i, arg in enumerate(args):
+                if skip_next:
+                    skip_next = False
+                    continue
+                if arg in ('--create', '--to', '--subject', '--list', '--draft'):
+                    if arg in ('--to', '--subject'):
+                        skip_next = True
+                    continue
+                body += arg + ' '
+            body = body.strip()
+
+            if not to_addr:
+                return "❌ Missing recipient\n\nUsage: `/email --create --to <email> [--subject <text>]`"
+
+            # Parse multiple recipients
+            to_addresses = [addr.strip() for addr in to_addr.split(',')]
+
+            # Insert into Supabase
+            draft_data = {
+                'owner_id': owner_id,
+                'to_addresses': to_addresses,
+                'subject': subject or None,
+                'body': body or None,
+                'status': 'draft',
+            }
+
+            result = supabase.table('drafts').insert(draft_data).execute()
+
+            if not result.data:
+                return "❌ Failed to create draft"
+
+            draft = result.data[0]
+            return f"""✅ **Draft created** (ID: `{draft['id'][:8]}`)
+
+**To:** {', '.join(to_addresses)}
+**Subject:** {subject or '(none)'}
+
+Use `/email --send {draft['id'][:8]}` to send it.
+Or `/email --list --draft` to see all drafts."""
+
+        # --- SEND DRAFT ---
+        if has_flag('--send'):
+            draft_id = parse_flag('--send', '')
+            if not draft_id:
+                # Check if there's a positional arg after --send
+                for i, arg in enumerate(args):
+                    if arg == '--send' and i + 1 < len(args) and not args[i + 1].startswith('--'):
+                        draft_id = args[i + 1]
+                        break
+
+            if not draft_id:
+                return "❌ Missing draft ID\n\nUsage: `/email --send <draft_id>`"
+
+            # Find the draft (support partial ID)
+            result = supabase.table('drafts')\
+                .select('*')\
+                .eq('owner_id', owner_id)\
+                .eq('status', 'draft')\
+                .like('id', f'{draft_id}%')\
+                .execute()
+
+            if not result.data:
+                return f"❌ Draft not found: `{draft_id}`\n\nUse `/email --list --draft` to see your drafts."
+
+            draft = result.data[0]
+
+            # Get user's email provider
+            provider = get_provider(owner_id)
+            user_email = get_email(owner_id)
+
+            if not provider:
+                return "❌ No email provider connected\n\nUse `/connect google` or `/connect microsoft` first."
+
+            # Mark as sending
+            supabase.table('drafts').update({
+                'status': 'sending',
+                'provider': provider
+            }).eq('id', draft['id']).execute()
+
+            try:
+                if provider == 'google':
+                    from zylch.tools.gmail import GmailClient
+
+                    gmail = GmailClient(
+                        credentials_path="credentials/gmail_oauth.json",
+                        account=user_email,
+                        owner_id=owner_id
+                    )
+
+                    # Build and send message
+                    sent_message = gmail.send_message(
+                        to=draft['to_addresses'],
+                        subject=draft.get('subject', ''),
+                        body=draft.get('body', ''),
+                        cc=draft.get('cc_addresses'),
+                        bcc=draft.get('bcc_addresses'),
+                        in_reply_to=draft.get('in_reply_to'),
+                        references=draft.get('references'),
+                        thread_id=draft.get('thread_id'),
+                    )
+
+                    sent_id = sent_message.get('id', '')
+
+                elif provider == 'microsoft':
+                    from zylch.tools.outlook import OutlookClient
+                    from zylch.api.token_storage import get_graph_token
+
+                    graph_token = get_graph_token(owner_id)
+                    if not graph_token:
+                        raise Exception("Microsoft token expired. Please reconnect.")
+
+                    outlook = OutlookClient(
+                        graph_token=graph_token['access_token'],
+                        account=user_email
+                    )
+
+                    sent_message = outlook.send_message(
+                        to=draft['to_addresses'],
+                        subject=draft.get('subject', ''),
+                        body=draft.get('body', ''),
+                        cc=draft.get('cc_addresses'),
+                        bcc=draft.get('bcc_addresses'),
+                    )
+
+                    sent_id = sent_message.get('id', '')
+
+                else:
+                    raise Exception(f"Unknown provider: {provider}")
+
+                # Mark as sent
+                supabase.table('drafts').update({
+                    'status': 'sent',
+                    'sent_at': datetime.now(timezone.utc).isoformat(),
+                    'sent_message_id': sent_id,
+                }).eq('id', draft['id']).execute()
+
+                to_str = ', '.join(draft['to_addresses'][:2])
+                return f"""✅ **Email sent!**
+
+**To:** {to_str}
+**Subject:** {draft.get('subject', '(no subject)')}
+**Via:** {provider.title()}
+
+Message ID: `{sent_id[:12] if sent_id else 'N/A'}`"""
+
+            except Exception as e:
+                # Mark as failed
+                supabase.table('drafts').update({
+                    'status': 'failed',
+                    'error_message': str(e),
+                }).eq('id', draft['id']).execute()
+
+                logger.error(f"Failed to send email: {e}", exc_info=True)
+                return f"❌ **Failed to send:** {str(e)}\n\nDraft saved. Fix the issue and try again with `/email --send {draft_id}`"
+
+        # --- DELETE DRAFT ---
+        if has_flag('--delete'):
+            draft_id = parse_flag('--delete', '')
+            if not draft_id:
+                for i, arg in enumerate(args):
+                    if arg == '--delete' and i + 1 < len(args) and not args[i + 1].startswith('--'):
+                        draft_id = args[i + 1]
+                        break
+
+            if not draft_id:
+                return "❌ Missing draft ID\n\nUsage: `/email --delete <draft_id>`"
+
+            result = supabase.table('drafts')\
+                .delete()\
+                .eq('owner_id', owner_id)\
+                .like('id', f'{draft_id}%')\
+                .execute()
+
+            if result.data:
+                return f"✅ Draft `{draft_id}` deleted"
+            else:
+                return f"❌ Draft not found: `{draft_id}`"
+
+        # --- SEARCH EMAILS ---
+        if has_flag('--search'):
+            query = parse_flag('--search', '')
+            if not query:
+                # Get query from positional args after --search
+                for i, arg in enumerate(args):
+                    if arg == '--search' and i + 1 < len(args) and not args[i + 1].startswith('--'):
+                        query = args[i + 1]
+                        break
+
+            if not query:
+                return "❌ Missing search query\n\nUsage: `/email --search <query>`"
+
+            sender = parse_flag('--from', '')
+            days = int(parse_flag('--days', '30'))
+            limit = int(parse_flag('--limit', '10'))
+            limit = min(limit, 50)
+
+            # Search in emails table (synced via /sync)
+            from datetime import timedelta
+
+            since_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+            # Build query
+            q = supabase.table('emails')\
+                .select('id, thread_id, subject, from_email, from_name, snippet, date, is_read')\
+                .eq('owner_id', owner_id)\
+                .gte('date', since_date)\
+                .order('date', desc=True)\
+                .limit(limit)
+
+            # Text search in subject/snippet
+            q = q.or_(f'subject.ilike.%{query}%,snippet.ilike.%{query}%')
+
+            if sender:
+                q = q.ilike('from_email', f'%{sender}%')
+
+            result = q.execute()
+
+            if not result.data:
+                return f"**📭 No emails found** matching `{query}`\n\nTry `/sync` first to fetch recent emails."
+
+            output = f"**🔍 Search Results** ({len(result.data)} found)\n\n"
+            for email in result.data:
+                read_mark = '' if email.get('is_read') else '🔵 '
+                subject = email.get('subject', '(no subject)')[:40]
+                from_name = email.get('from_name') or email.get('from_email', '?')
+                date = email.get('date', '')[:10]
+                snippet = (email.get('snippet', '')[:60] + '...') if email.get('snippet') else ''
+
+                output += f"{read_mark}**{subject}**\n"
+                output += f"   From: {from_name} | {date}\n"
+                if snippet:
+                    output += f"   _{snippet}_\n"
+                output += "\n"
+
+            return output
+
+        # Unknown command
+        return "❌ Unknown /email command\n\nUse `/email --help` to see available options."
+
+    except Exception as e:
+        logger.error(f"Error in /email command: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}"
+
+
 # Command help texts - source of truth for all clients (CLI, web, mobile)
 COMMAND_HELP = {
     '/help': {
@@ -1470,6 +1814,21 @@ Run `/sync` first to fetch latest emails.''',
         'usage': '/memory [search|store|stats|list] <args>',
         'description': 'Search, store, and manage entity memories with hybrid FTS + semantic search.',
     },
+    '/email': {
+        'summary': 'Email drafts and search',
+        'usage': '/email [--list --draft|--create|--send|--search] <args>',
+        'description': '''Manage email drafts (stored in Zylch) and search emails.
+
+**Drafts:**
+- `/email --list --draft` - List drafts
+- `/email --create --to <email> --subject <text>` - Create draft
+- `/email --send <draft_id>` - Send via Gmail/Outlook
+- `/email --delete <draft_id>` - Delete draft
+
+**Search:**
+- `/email --search <query>` - Search emails
+- `/email --search <query> --from <sender> --days N`''',
+    },
     '/trigger': {
         'summary': 'Manage event triggers',
         'usage': '/trigger [--list|--add|--remove]',
@@ -1536,6 +1895,7 @@ COMMAND_HANDLERS = {
     '/archive': handle_archive,
     '/model': handle_model,
     '/memory': handle_memory,
+    '/email': handle_email,
     '/trigger': handle_trigger,
     '/assistant': handle_assistant,
     '/mrcall': handle_mrcall,
