@@ -29,7 +29,7 @@ async def handle_help() -> str:
 • `/cache` - Cache management
 
 **🧠 Memory & Automation:**
-• `/memory` - Behavioral memory management
+• `/memory [search|store|stats|list]` - Entity memory with hybrid search
 • `/trigger` - Event-driven automation
 
 **📡 Integrations:**
@@ -698,158 +698,160 @@ API clients should include in context for future requests:
 
 
 async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> str:
-    """Handle /memory command - behavioral memory management."""
+    """Handle /memory command - entity-centric memory management."""
     if '--help' in args or not args:
-        return """**🧠 Behavioral Memory Management**
+        return """**🧠 Entity Memory System**
 
 **Usage:**
-• `/memory --add <issue> <correct> <channel>` - Add memory
-• `/memory --list [scope]` - List memories (personal/global/all)
-• `/memory --stats [scope]` - Memory statistics
+• `/memory search <query>` - Search memories (hybrid FTS + semantic)
+• `/memory store <content>` - Store new memory (with auto-reconsolidation)
+• `/memory stats` - Show memory statistics
+• `/memory list [limit]` - List recent memories
 
 **Examples:**
-• `/memory --add "Used tu" "Use lei" email`
-• `/memory --list personal`
-• `/memory --stats global`
+• `/memory search John Smith`
+• `/memory store "Mario prefers formal Italian in emails"`
+• `/memory stats`
+• `/memory list 10`
 
-**Scope:**
-• `personal` - Your personal memories
-• `global` - Global system memories
-• `all` - Both personal and global"""
+**How it works:**
+Memories are stored as entity blobs with sentence-level embeddings.
+When storing, similar memories are automatically merged (reconsolidation)."""
 
-    from zylch.tools.factory import ToolFactory
+    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch_memory import BlobStorage, HybridSearchEngine, EmbeddingEngine
+    from zylch_memory.config import ZylchMemoryConfig
 
     try:
-        # Initialize memory system
-        memory = await ToolFactory.create_memory_system(config)
+        # Initialize services
+        supabase = SupabaseStorage.get_instance().client
+        mem_config = ZylchMemoryConfig()
+        embedding_engine = EmbeddingEngine(mem_config)
+        blob_storage = BlobStorage(supabase, embedding_engine)
+        search_engine = HybridSearchEngine(supabase, embedding_engine)
 
-        if '--list' in args:
-            # List memories
-            scope_idx = args.index('--list') + 1
-            scope = args[scope_idx] if len(args) > scope_idx else 'all'
+        namespace = f"user:{owner_id}"
 
-            if scope not in ['personal', 'global', 'all']:
-                return f"❌ Invalid scope: `{scope}`\n\nUse: personal, global, all"
+        if args[0] == 'search':
+            # Search memories
+            if len(args) < 2:
+                return "❌ Missing query\n\nUsage: `/memory search <query>`"
 
-            # Determine namespaces to query
-            namespaces = []
-            if scope in ['personal', 'all']:
-                namespaces.append(f"user:{owner_id}")
-            if scope in ['global', 'all']:
-                namespaces.append("global")
-
-            # Collect memories from all namespaces
-            all_memories = []
-            for namespace in namespaces:
-                memories = memory.storage.get_memories_by_namespace(namespace, limit=50)
-                for mem in memories:
-                    mem['_namespace'] = namespace  # Tag with namespace
-                    all_memories.append(mem)
-
-            if not all_memories:
-                return f"**📭 No memories found** (scope: {scope})\n\nMemories are automatically created when Zylch learns from corrections."
-
-            # Format output
-            output = f"**🧠 Behavioral Memories** ({len(all_memories)} total, scope: {scope})\n\n"
-
-            for mem in all_memories[:20]:  # Show max 20
-                issue = mem.get('issue', 'N/A')
-                correct = mem.get('correct', 'N/A')
-                category = mem.get('category', 'N/A')
-                confidence = mem.get('confidence', 0.0)
-                scope_label = '🌍' if mem['_namespace'] == 'global' else '👤'
-
-                output += f"{scope_label} **{issue}** → **{correct}**\n"
-                output += f"   Category: {category} | Confidence: {confidence:.2f}\n\n"
-
-            if len(all_memories) > 20:
-                output += f"_... and {len(all_memories) - 20} more memories_"
-
-            return output
-
-        elif '--stats' in args:
-            # Memory statistics
-            scope_idx = args.index('--stats') + 1
-            scope = args[scope_idx] if len(args) > scope_idx else 'all'
-
-            if scope not in ['personal', 'global', 'all']:
-                return f"❌ Invalid scope: `{scope}`\n\nUse: personal, global, all"
-
-            # Determine namespaces to query
-            namespaces = []
-            if scope in ['personal', 'all']:
-                namespaces.append(f"user:{owner_id}")
-            if scope in ['global', 'all']:
-                namespaces.append("global")
-
-            # Collect stats
-            total_memories = 0
-            total_patterns = 0
-            by_category = {}
-
-            for namespace in namespaces:
-                memories = memory.storage.get_memories_by_namespace(namespace, limit=1000)
-                patterns = memory.storage.get_patterns_by_namespace(namespace, limit=1000)
-
-                total_memories += len(memories)
-                total_patterns += len(patterns)
-
-                # Count by category
-                for mem in memories:
-                    cat = mem.get('category', 'unknown')
-                    by_category[cat] = by_category.get(cat, 0) + 1
-
-            output = f"**🧠 Memory Statistics** (scope: {scope})\n\n"
-            output += f"**Total Memories:** {total_memories}\n"
-            output += f"**Total Patterns:** {total_patterns}\n\n"
-
-            if by_category:
-                output += "**By Category:**\n"
-                for cat, count in sorted(by_category.items(), key=lambda x: x[1], reverse=True):
-                    output += f"• {cat}: {count}\n"
-
-            output += f"\n**Storage:** {config.memory_db_path}"
-
-            return output
-
-        elif '--add' in args:
-            # Add memory (manual)
-            add_idx = args.index('--add') + 1
-
-            if len(args) < add_idx + 3:
-                return "❌ Missing arguments\n\nUsage: `/memory --add <issue> <correct> <channel>`"
-
-            issue = args[add_idx]
-            correct = args[add_idx + 1]
-            channel = args[add_idx + 2]
-
-            # Store memory in personal namespace
-            memory_id = memory.store_behavioral_memory(
-                namespace=f"user:{owner_id}",
-                issue=issue,
-                correct=correct,
-                category=channel,
-                confidence=1.0,  # Manual additions get high confidence
-                user_id=owner_id
+            query = ' '.join(args[1:])
+            results = search_engine.search(
+                owner_id=owner_id,
+                query=query,
+                namespace=namespace,
+                limit=5
             )
 
-            return f"""✅ **Memory added** (ID: {memory_id})
+            if not results:
+                return f"**📭 No memories found** for: `{query}`"
 
-**Issue:** {issue}
-**Correct:** {correct}
-**Category:** {channel}
+            output = f"**🔍 Search Results** ({len(results)} found)\n\n"
+            for i, r in enumerate(results, 1):
+                score_info = f"hybrid: {r.hybrid_score:.2f} (FTS: {r.fts_score:.2f}, semantic: {r.semantic_score:.2f})"
+                content_preview = r.content[:200] + "..." if len(r.content) > 200 else r.content
+                output += f"**{i}.** {content_preview}\n"
+                output += f"   _Score: {score_info}_\n\n"
 
-Zylch will now remember this correction."""
+            return output
+
+        elif args[0] == 'store':
+            # Store new memory (with auto-reconsolidation)
+            if len(args) < 2:
+                return "❌ Missing content\n\nUsage: `/memory store <content>`"
+
+            content = ' '.join(args[1:])
+
+            # Check for reconsolidation candidate
+            existing = search_engine.find_for_reconsolidation(
+                owner_id=owner_id,
+                content=content,
+                namespace=namespace
+            )
+
+            if existing:
+                # Reconsolidate: append to existing
+                merged_content = f"{existing.content}\n\n{content}"
+                result = blob_storage.update_blob(
+                    blob_id=existing.blob_id,
+                    owner_id=owner_id,
+                    content=merged_content,
+                    event_description="Reconsolidated via /memory store"
+                )
+                return f"""✅ **Memory reconsolidated** (ID: {result['id'][:8]}...)
+
+**Merged with existing memory** (score: {existing.hybrid_score:.2f})
+
+New content added to existing entity blob."""
+
+            else:
+                # Create new blob
+                result = blob_storage.store_blob(
+                    owner_id=owner_id,
+                    namespace=namespace,
+                    content=content,
+                    event_description="Created via /memory store"
+                )
+                return f"""✅ **Memory stored** (ID: {result['id'][:8]}...)
+
+**Content:** {content[:100]}{'...' if len(content) > 100 else ''}
+
+Memory will be searchable via hybrid search."""
+
+        elif args[0] == 'stats':
+            # Memory statistics
+            stats = blob_storage.get_stats(owner_id)
+
+            output = f"**🧠 Memory Statistics**\n\n"
+            output += f"**Total Blobs:** {stats['total_blobs']}\n"
+            output += f"**Total Sentences:** {stats['total_sentences']}\n"
+            output += f"**Avg Sentences/Blob:** {stats['avg_blob_size']}\n"
+            output += f"**Namespaces:** {len(stats['namespaces'])}\n"
+
+            if stats['namespaces']:
+                output += "\n**Namespaces:**\n"
+                for ns in stats['namespaces'][:10]:
+                    output += f"• `{ns}`\n"
+
+            return output
+
+        elif args[0] == 'list':
+            # List recent memories
+            limit = 10
+            if len(args) > 1:
+                try:
+                    limit = int(args[1])
+                    limit = min(limit, 50)  # Cap at 50
+                except ValueError:
+                    pass
+
+            # Get recent blobs
+            result = supabase.table("blobs")\
+                .select("id, namespace, content, created_at, updated_at")\
+                .eq("owner_id", owner_id)\
+                .order("updated_at", desc=True)\
+                .limit(limit)\
+                .execute()
+
+            if not result.data:
+                return "**📭 No memories found**\n\nUse `/memory store <content>` to add memories."
+
+            output = f"**🧠 Recent Memories** ({len(result.data)} shown)\n\n"
+            for blob in result.data:
+                content_preview = blob['content'][:100] + "..." if len(blob['content']) > 100 else blob['content']
+                blob_id_short = blob['id'][:8]
+                output += f"**{blob_id_short}...** {content_preview}\n"
+                output += f"   _Updated: {blob['updated_at'][:10]}_\n\n"
+
+            return output
 
         else:
-            # Default: show help
-            return """**🧠 Behavioral Memory**
+            # Unknown subcommand
+            return f"""❌ Unknown subcommand: `{args[0]}`
 
-Use `/memory --help` to see available commands.
-
-**Quick start:**
-• `/memory --list` - View all memories
-• `/memory --stats` - View statistics"""
+Use `/memory --help` to see available commands."""
 
     except Exception as e:
         logger.error(f"Error in /memory command: {e}", exc_info=True)
@@ -1645,9 +1647,9 @@ Run `/sync` first to fetch latest emails.''',
         'description': 'Switch between Claude models for different speed/quality tradeoffs.',
     },
     '/memory': {
-        'summary': 'Manage conversation memory',
-        'usage': '/memory [--list|--clear|--export]',
-        'description': 'View, clear, or export conversation memory and preferences.',
+        'summary': 'Entity memory system',
+        'usage': '/memory [search|store|stats|list] <args>',
+        'description': 'Search, store, and manage entity memories with hybrid FTS + semantic search.',
     },
     '/trigger': {
         'summary': 'Manage event triggers',
@@ -1781,11 +1783,11 @@ COMMAND_TRIGGERS = {
         "change to sonnet",
     ],
     '/memory': [
-        "show my memories",
-        "what have you learned",
-        "behavioral memory",
-        "list preferences",
-        "what do you remember",
+        "search memory",
+        "who is john",
+        "store memory",
+        "memory stats",
+        "list memories",
     ],
     '/trigger': [
         "set up automation",
