@@ -628,40 +628,86 @@ Backend decodes automatically on startup (`zylch/api/firebase_auth.py`).
 
 ## Memory System
 
-### Core Principle: Person-Centric
+### Core Principle: Entity-Centric
 
-A person is NOT an email address. A person can have multiple emails, phones, and names. The memory system finds people by any identifier.
+The memory system stores knowledge as entity blobs with sentence-level embeddings. Entity identity lives IN the blob content (not in namespace structure), found via hybrid search.
+
+**Namespace = Ownership** (e.g., `user:{owner_id}`), not per-entity. This prevents fragmentation when the same entity appears in different contexts.
 
 ### Memory Reconsolidation
 
-**Problem solved**: `store_memory()` used to always INSERT, creating duplicate/conflicting memories.
+**How human memory works**: When you learn someone moved to a new city, you don't create a second "location" memory—you *update* the existing one.
 
-**Solution**: When storing, search for semantically similar memories (cosine > 0.85). If found, UPDATE instead of INSERT. This mirrors human memory reconsolidation.
+**How ZylchMemory works**:
+1. New information arrives (e.g., from email)
+2. Hybrid search (FTS + semantic) finds existing blobs about the same entity
+3. If found (score ≥ 0.65): LLM-merge new info with existing blob
+4. If not found: Create new blob
 
-### Two-Layer Architecture
+**Why this matters**:
+- No duplicate memories ("Mario lives in Rome" vs "Mario lives in Milan")
+- Coherent knowledge graph (one source of truth per entity)
+- Natural memory evolution (updates reflect reality changes)
 
-| Layer | Purpose | Technology |
-|-------|---------|------------|
-| Identifier Map | O(1) lookup: email/phone/name → memory_id | Supabase indexed |
-| Semantic Memory | Vector storage with reconsolidation | pg_vector + sentence-transformers |
+### Memory Agent (Email Processing)
 
-### Key Files
+During `/sync`, the Memory Agent processes unprocessed emails:
 
-- `zylch_memory/core.py` - `store_memory()` with `_find_similar_memories()`
-- `zylch_memory/config.py` - `similarity_threshold: 0.85`
-- `zylch/tools/factory.py` - `_SearchLocalMemoryTool`
-- `zylch/agent/prompts.py` - "LOCAL MEMORY FIRST" instructions
+1. **Extract facts** from each email using Haiku (cheap, fast)
+2. **Hybrid search** for existing blob about the entity (FTS + semantic)
+3. **Reconsolidate** if match found (LLM-merge), else create new blob
+4. **Mark email as processed** via `memory_processed_at` column
 
-### Usage
+**Key Files**:
+- `zylch/workers/memory_worker.py` - MemoryWorker class
+- `zylch_memory/blob_storage.py` - BlobStorage (store/update blobs)
+- `zylch_memory/hybrid_search.py` - HybridSearchEngine (FTS + semantic)
+- `zylch_memory/llm_merge.py` - LLMMergeService (reconsolidation)
 
-```python
-# Reconsolidation happens automatically
-mem.store_memory(namespace="contacts", category="person", context="Luigi", pattern="phone: 339...")
-# If similar memory exists (>0.85 similarity), it UPDATES instead of creating duplicate
+### Hybrid Search
 
-# Force new memory even if similar exists
-mem.store_memory(..., force_new=True)
+Combines PostgreSQL FTS (lexical) with pgvector (semantic) at sentence granularity:
+
 ```
+hybrid_score = alpha * FTS_score + (1-alpha) * semantic_score
+```
+
+- **Named entities** ("John Smith"): α = 0.7 (FTS-heavy)
+- **Conceptual queries** ("communication style"): α = 0.3 (semantic-heavy)
+- **Default**: α = 0.5 (balanced)
+
+### Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/memory search <query>` | Hybrid search (FTS + semantic) |
+| `/memory store <content>` | Store with auto-reconsolidation |
+| `/memory stats` | Show blob/sentence counts |
+| `/memory list [limit]` | List recent blobs |
+| `/memory --reset` | Delete ALL blobs (irreversible) |
+
+### Reprocessing Emails
+
+To reprocess all emails through the Memory Agent:
+
+```bash
+/memory --reset    # Delete all blobs first
+/sync --force      # Mark all emails for reprocessing
+/sync              # Process emails into fresh blobs
+```
+
+**`/sync --force`** clears `memory_processed_at` on all emails, marking them for reprocessing. It warns to run `/memory --reset` first to avoid duplicates.
+
+### Database Schema
+
+**Table: `blobs`**
+- `id`, `owner_id`, `namespace`, `content`, `embedding`, `events`, timestamps
+
+**Table: `blob_sentences`**
+- `id`, `blob_id`, `owner_id`, `sentence_text`, `embedding`
+
+**Column: `emails.memory_processed_at`**
+- NULL = not processed, timestamp = when processed
 
 ## Email Triage System (December 2025)
 
