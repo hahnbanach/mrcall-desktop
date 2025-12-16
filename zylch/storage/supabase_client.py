@@ -1878,22 +1878,59 @@ class SupabaseStorage:
     ) -> List[Dict[str, Any]]:
         """Get emails not yet processed by Memory Agent.
 
-        Uses LEFT JOIN to find emails not referenced in memory.examples[].
-
         Args:
             owner_id: Firebase UID
             limit: Maximum number of emails to return
 
         Returns:
-            List of email dicts with id, from_email, body_plain, snippet
+            List of email dicts with id, from_email, body_plain, snippet, subject, date
         """
-        # Use RPC function for complex LEFT JOIN query
-        result = self.client.rpc('get_unprocessed_emails', {
-            'p_owner_id': owner_id,
-            'p_limit': limit
-        }).execute()
+        result = self.client.table('emails')\
+            .select('id, from_email, body_plain, snippet, subject, date')\
+            .eq('owner_id', owner_id)\
+            .is_('memory_processed_at', 'null')\
+            .order('date', desc=True)\
+            .limit(limit)\
+            .execute()
 
         return result.data or []
+
+    def mark_email_processed(
+        self,
+        owner_id: str,
+        email_id: str
+    ) -> None:
+        """Mark an email as processed by Memory Agent.
+
+        Args:
+            owner_id: Firebase UID
+            email_id: Email ID to mark
+        """
+        self.client.table('emails')\
+            .update({'memory_processed_at': datetime.now(timezone.utc).isoformat()})\
+            .eq('owner_id', owner_id)\
+            .eq('id', email_id)\
+            .execute()
+
+    def mark_emails_processed(
+        self,
+        owner_id: str,
+        email_ids: List[str]
+    ) -> None:
+        """Mark multiple emails as processed by Memory Agent.
+
+        Args:
+            owner_id: Firebase UID
+            email_ids: List of email IDs to mark
+        """
+        if not email_ids:
+            return
+
+        self.client.table('emails')\
+            .update({'memory_processed_at': datetime.now(timezone.utc).isoformat()})\
+            .eq('owner_id', owner_id)\
+            .in_('id', email_ids)\
+            .execute()
 
     def upsert_identifier(
         self,
