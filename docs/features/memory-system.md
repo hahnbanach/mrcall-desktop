@@ -1,8 +1,10 @@
-# Memory System - Person-Centric Persistent Memory with Reconsolidation
+# Memory System - ENTITY-Centric Persistent Memory with Reconsolidation
 
 ## Overview
 
-The Memory System (ZylchMemory) provides persistent, person-centric memory for AI agents with semantic search and memory reconsolidation. Unlike traditional databases that create new entries for every piece of information, ZylchMemory mimics human memory by **updating existing memories** when new information arrives, preventing memory fragmentation and maintaining coherent knowledge.
+The Memory System (ZylchMemory) provides persistent, entity-centric memory for AI agents with semantic search and memory reconsolidation. Unlike traditional databases that create new entries for every piece of information, ZylchMemory mimics human memory by **updating existing memories** when new information arrives, preventing memory fragmentation and maintaining coherent knowledge.
+
+Like the human memory, Zylch remembers a "blob" about an "entity", where the entity is loosely defined as anything which can have properties and can be connected to other entities. But be aware: "properties" are **not cathegorized**, everything we know about an entity is in a single natural language field, a blob with all information.
 
 **The thesis**: Professional relationships exist entirely in language. LLMs don't need to learn physics to model relationships—they need to remember. ZylchMemory provides the persistent memory layer that transforms stateless LLMs into assistants that accumulate relational understanding over time.
 
@@ -14,7 +16,7 @@ The Memory System (ZylchMemory) provides persistent, person-centric memory for A
 
 **How ZylchMemory works**:
 1. New information arrives: "Mario moved to Milan"
-2. Search for similar existing memories using vector similarity (cosine > 0.85)
+2. Search for similar existing memories using hybrid search (lexical + semantic)
 3. If found: **UPDATE** the existing memory with new information
 4. If not found: **CREATE** a new memory
 
@@ -26,15 +28,19 @@ The Memory System (ZylchMemory) provides persistent, person-centric memory for A
 
 ### Namespace Architecture
 
-Memories are organized into namespaces for privacy and scoping:
-
-/*MARIO CHANGED */
+Namespaces define **ownership and access**, not content type. Entity identification happens through hybrid search, not namespace structure.
 
 | Namespace Pattern             | Purpose | Example |
 |-------------------------------|---------|---------|
-| `user:{user_id}`              | User-specific preferences | `user:mario_123` |
-| `contact:{contact_id}`        | Informations about a contact | `contact:john_456` |
-| `shared:{recipient}:{sender}` | Shared intelligence | `shared:luigi_456:mario_123` |
+| `user:{user_id}`              | All memories owned by a user | `user:mario_123` |
+| `org:{org_id}`                | Shared organizational knowledge | `org:acme_corp` |
+| `shared:{recipient}:{sender}` | Memories explicitly shared between users | `shared:luigi:mario` |
+
+**Why no entity sub-namespaces?**
+- Entity identity lives *in* the blob content, not the namespace
+- Hybrid search finds "John Doe" across all of Mario's memories
+- No need for entity resolution before storage
+- Prevents fragmentation when same entity appears in different contexts
 
 **Privacy guarantee**: Users can only access their own namespaces. Cross-user access requires explicit authorization (see [Sharing System](sharing-system.md)).
 
@@ -57,128 +63,331 @@ Memories are organized into namespaces for privacy and scoping:
 - Configurable accuracy/speed tradeoff
 - Memory-efficient graph structure
 
+---
+
 ## How It Works
 
-### 1. Storing Memory (with Reconsolidation)
+### 1. Hybrid Search: Combining Semantic and Lexical Retrieval
 
-**User input**: "Always use formal tone when emailing clients"
+Blobs contain free-form natural language, which creates a challenge: a query like "Who is John Smith?" has weak semantic similarity with a long blob that mentions John Smith only once among many other facts. Pure vector search dilutes the signal.
 
-**Agent calls**:
-/*MARIO: THIS HAS BEEN SIMPLIFIED*/
-```python
-memory_id = zylch_memory.store_memory(
-    namespace="user:mario_123",    
-    context="Email communication style",
-    pattern="Use formal tone when emailing clients",
-    event={"2025-12-11T22:05:43.234UTC": "The user said to me that we should use only 'Lei' when writing in Italian"} # /*MARIO this is new */
-)
+**Solution**: Hybrid search combining PostgreSQL full-text search (lexical) with pgvector (semantic), operating at sentence granularity.
+
+#### Database Schema
+
+**Table: `blobs`** (main memory storage)
+```sql
+CREATE TABLE blobs (
+    id UUID PRIMARY KEY,
+    namespace TEXT NOT NULL,
+    content TEXT NOT NULL,
+    embedding VECTOR(384),  -- blob-level embedding (optional, for fast pre-filter)
+    tsv TSVECTOR GENERATED ALWAYS AS (to_tsvector('italian', content)) STORED,
+    events JSONB,
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_blobs_tsv ON blobs USING GIN(tsv);
+CREATE INDEX idx_blobs_namespace ON blobs(namespace);
 ```
 
-**Processing flow**:
-1. **Generate embedding** from context and pattern separately /*MARIO: IT WAS context + pattern */
-    - context: "Email communication style" 
-    - pattern: "Use formal tone when emailing clients"
-    - Embedding model: `all-MiniLM-L6-v2` (384-dim vector)
-    - Cached to avoid recomputation
+**Table: `blob_sentences`** (sentence-level granularity for precise semantic search)
+```sql
+CREATE TABLE blob_sentences (
+    id UUID PRIMARY KEY,
+    blob_id UUID REFERENCES blobs(id) ON DELETE CASCADE,
+    sentence_text TEXT,
+    embedding VECTOR(384)
+);
 
-2. **Check for similar memories**
-    - Search namespace `user:mario_123`
-    - Find memories with cosine similarity > 0.85 (configurable) in context
-    - ==> Call Haiku to check if there is a pattern to be changed: for instance "Use friendly tone" that must become "Use formal tone" /*MARIO THIS IS NEW */
-    - If found: **RECONSOLIDATE** (update existing memory)
-    - If not found: **CREATE NEW** memory
+CREATE INDEX idx_sentences_embedding ON blob_sentences USING hnsw(embedding vector_cosine_ops);
+CREATE INDEX idx_sentences_blob_id ON blob_sentences(blob_id);
+```
 
-3. **Reconsolidation** (if similar memory exists):
-   ```python
-   # Found context "Email communication" (similarity 0.92)
-   # UPDATE instead of creating duplicate
-   # /*MARIO let's say that the old entry was: 
-   #  namespace="user:mario_123",    
-   #  context="communication style",
-   #  pattern="Use friendly tone",
-   # {"2025-02-21T12:25:11.234UTC": "The user told me to write to the contact anna@company.co, who is a customer, and to use friendly tone"} 
-   # this is an example of memory being updated with a different pattern: first Zylch had the impression it should have used 'tu', then it was clearly instructed to use 'Lei'. That's why, before 2025-12-11T22:05, the pattern was 'Use friendly tone'! */
-   
-   storage.update_memory(
-       memory_id=existing['id'],
-       pattern="Use formal tone when emailing clients",  # New pattern
-       context="Email communication style",  # New context
-       confidence_delta=0.1,  # Boost confidence (+0.1)
-       new_embedding_id=new_embedding_id,  # Update embedding
-       new_event={"2025-12-11T22:05:43.234UTC": "The user said to me that we should use only 'Lei' when writing in Italian"}
-   )
+#### Search Strategy
 
-   # Result: Memory updated, no duplicate created
-   # Confidence: 0.8 → 0.9
-   ```
+| Query Pattern | FTS Weight (α) | Rationale |
+|---------------|----------------|-----------|
+| Named entity ("John Smith", "Newco") | 0.7 | Exact match critical |
+| Conceptual ("communication style") | 0.3 | Meaning matters more |
+| Mixed ("John's email preferences") | 0.5 | Both signals useful |
+| Short query (1-2 words) | 0.6 | Likely a name or keyword |
 
-4. **New memory** (if no similar found):
-   ```python
-   memory_id = storage.store_memory(
-       namespace="user:mario_123",
-       context="Email communication style",
-       pattern="Use formal tone when emailing clients",
-       embedding_id=embedding_id,
-       confidence=0.8,
-       events=[{"2025-12-11T22:05:43.234UTC": "The user said to me that we should use only 'Lei' when writing in Italian"},{"datetime": "2025-02-21T12:25:11.234UTC", "event": "The user told me to write to the contact anna@company.co, who is a customer, and to use friendly tone"}]
-   )
+**Query type detection**: Boost FTS for capitalized words, proper nouns, short queries. Boost semantic for abstract nouns, questions, longer phrases.
 
-   # Add to HNSW index for fast retrieval
-   index.add(vector, memory_id)
-   ```
+#### Sentence-Level Similarity Aggregation
 
-### 2. Retrieving Memory
+When computing semantic similarity for a blob, we compare the query against each sentence and aggregate:
 
-**User query**: "How should I write to the CEO?"
+| Method | Formula | Use Case |
+|--------|---------|----------|
+| **Max pooling** | `max(sim_1, sim_2, ..., sim_n)` | Default. Simple, effective. |
+| **Top-k mean** | `mean(top_k(similarities))` | More robust, k=3 recommended |
+| **Probabilistic disjunction** | `1 - ∏(1 - sim_i)` | Optimistic. Normalize by sentence count to avoid length bias. |
+
+---
+
+### 2. Storing Memory (with Reconsolidation)
+
+#### Processing Flow
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│  INPUT                                                                     │
+│  ├─ namespace: "user:mario_123"                                            │
+│  ├─ new_blob: "John Doe has become a customer"                             │
+│  └─ event: {timestamp: "...", description: "User said..."}                 │
+└────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│  PHASE 1: EMBEDDING GENERATION                                             │
+│                                                                            │
+│  1. Generate query embedding from new_blob                                 │
+│     embedding = embed("John Doe has become a customer")  → Vector(384)     │
+│                                                                            │
+│  2. Extract searchable terms for FTS                                       │
+│     terms = ["John", "Doe", "customer"]                                    │
+└────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│  PHASE 2: HYBRID SEARCH FOR EXISTING MEMORIES                              │
+│                                                                            │
+│  Search within namespace (and optionally related namespaces)               │
+│                                                                            │
+│  Step A: Full-Text Search (PostgreSQL FTS)                                 │
+│  ┌────────────────────────────────────────────────────────────────────┐    │
+│  │ SELECT id, ts_rank(tsv, query) as fts_score                        │    │
+│  │ FROM blobs                                                         │    │
+│  │ WHERE namespace = 'user:mario_123'                                 │    │
+│  │   AND tsv @@ plainto_tsquery('italian', 'John Doe customer')       │    │
+│  └────────────────────────────────────────────────────────────────────┘    │
+│                                                                            │
+│  Step B: Sentence-Level Semantic Search                                    │
+│  ┌────────────────────────────────────────────────────────────────────┐    │
+│  │ For each candidate blob from Step A (or all blobs if FTS empty):   │    │
+│  │                                                                    │    │
+│  │   SELECT blob_id,                                                  │    │
+│  │          MAX(1 - (embedding <=> $query_embedding)) as max_sim      │    │
+│  │   FROM blob_sentences                                              │    │
+│  │   WHERE blob_id IN (candidate_ids)                                 │    │
+│  │   GROUP BY blob_id                                                 │    │
+│  └────────────────────────────────────────────────────────────────────┘    │
+│                                                                            │
+│  Step C: Score Combination                                                 │
+│  ┌────────────────────────────────────────────────────────────────────┐    │
+│  │ hybrid_score = α × norm(fts_score) + (1-α) × norm(semantic_score)  │    │
+│  │                                                                    │    │
+│  │ Where α is determined by query type:                               │    │
+│  │   - "John Doe" (proper noun) → α = 0.7                             │    │
+│  │   - "customer relationship" → α = 0.3                              │    │
+│  └────────────────────────────────────────────────────────────────────┘    │
+└────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  PHASE 3: DECISION - RECONSOLIDATE OR CREATE?                               │
+│                                                                             │
+│  Candidates = blobs with hybrid_score > RECONSOLIDATION_THRESHOLD (0.65)    │
+│                                                                             │
+│  ┌─────────────────────┐         ┌─────────────────────────────────────┐    │
+│  │ No candidates found │         │ One or more candidates found        │    │
+│  │                     │         │                                     │    │
+│  │         │           │         │         │                           │    │
+│  │         ▼           │         │         ▼                           │    │
+│  │   GO TO PHASE 4B    │         │   GO TO PHASE 4A                    │    │
+│  │   (Create New)      │         │   (Reconsolidate)                   │    │
+│  └─────────────────────┘         └─────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┴───────────────┐
+                    ▼                               ▼
+┌───────────────────────────────────┐ ┌───────────────────────────────────────┐
+│  PHASE 4A: RECONSOLIDATION        │ │  PHASE 4B: CREATE NEW MEMORY          │
+│                                   │ │                                       │
+│  1. Select best matching blob     │ │  1. Insert new blob                   │
+│     (highest hybrid_score)        │ │     ┌─────────────────────────────┐   │
+│                                   │ │     │ INSERT INTO blobs           │   │
+│  2. LLM-assisted merge            │ │     │ (namespace, content, events)│   │
+│     ┌───────────────────────┐     │ │     │ VALUES (...)                │   │
+│     │ Prompt to LLM:        │     │ │     └─────────────────────────────┘   │
+│     │                       │     │ │                                       │
+│     │ "Merge these memories │     │ │  2. Chunk into sentences              │
+│     │ into a single coherent│     │ │     sentences = split_sentences(blob) │
+│     │ blob:                 │     │ │                                       │
+│     │                       │     │ │  3. Generate embeddings               │
+│     │ EXISTING:             │     │ │     for each sentence:                │
+│     │ {old_blob}            │     │ │       embedding = embed(sentence)     │
+│     │                       │     │ │                                       │
+│     │ NEW INFO:             │     │ │  4. Insert sentences                  │
+│     │ {new_blob}            │     │ │     ┌─────────────────────────────┐   │
+│     │                       │     │ │     │ INSERT INTO blob_sentences  │   │
+│     │ Rules:                │     │ │     │ (blob_id,                   │   │
+│     │ - Preserve all facts  │     │ │     │  sentence_text, embedding)  │   │
+│     │ - Resolve conflicts   │     │ │     └─────────────────────────────┘   │
+│     │   (new info wins)     │     │ │                                       │
+│     │ - Keep it concise     │     │ │                                       │
+│     │ - Natural language    │     │ └───────────────────────────────────────┘
+│     └───────────────────────┘     │
+│                                   │
+│  3. Update blob                   │
+│     ┌───────────────────────┐     │
+│     │ UPDATE blobs SET      │     │
+│     │   content = merged,   │     │
+│     │   events = events ||  │     │
+│     │           new_event,  │     │
+│     │   updated_at = NOW()  │     │
+│     │ WHERE id = blob_id    │     │
+│     └───────────────────────┘     │
+│                                   │
+│  4. Cascade update sentences      │
+│     ┌───────────────────────┐     │
+│     │ DELETE FROM           │     │
+│     │   blob_sentences      │     │
+│     │ WHERE blob_id = ?     │     │
+│     │                       │     │
+│     │ Re-chunk and re-embed │     │
+│     │ (same as Phase 4B)    │     │
+│     └───────────────────────┘     │
+│                                   │
+└───────────────────────────────────┘
+```
+
+#### Configuration Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `RECONSOLIDATION_THRESHOLD` | 0.65 | Minimum hybrid score to trigger reconsolidation |
+| `FTS_WEIGHT_DEFAULT` | 0.5 | Default α for score combination |
+| `FTS_WEIGHT_NAMED_ENTITY` | 0.7 | α when query contains proper nouns |
+| `FTS_WEIGHT_CONCEPTUAL` | 0.3 | α for abstract/conceptual queries |
+| `SENTENCE_AGGREGATION` | "max" | How to aggregate sentence similarities |
+| `TOP_K` | 3 | k for top-k mean aggregation |
+| `EMBEDDING_MODEL` | "all-MiniLM-L6-v2" | Model for vector embeddings |
+
+#### Example: Reconsolidation in Action
+
+**Existing memory:**
+```json
+{
+  "id": "UUID888",
+  "namespace": "user:mario_123",
+  "content": "John Doe is our contact at Newco. He prefers email communication.",
+  "events": {"2025-02-21": "User mentioned John works at Newco"}
+}
+```
+
+**New information:** "John Doe has become a customer"
+
+**Hybrid search results:**
+- FTS score (normalized): 0.82 (matches "John Doe")
+- Semantic score (max sentence): 0.71
+- α = 0.7 (named entity detected)
+- **Hybrid score: 0.7 × 0.82 + 0.3 × 0.71 = 0.787** > 0.65 ✓
+
+**LLM merge prompt:**
+```
+Merge these memories into a single coherent blob:
+
+EXISTING: "John Doe is our contact at Newco. He prefers email communication."
+NEW INFO: "John Doe has become a customer"
+
+Rules: Preserve all facts, resolve conflicts (new wins), keep concise.
+```
+
+**Merged result:**
+```json
+{
+  "id": "UUID888",
+  "content": "John Doe is our contact at Newco and has become a customer. He prefers email communication.",
+  "events": {
+    "2025-02-21": "User mentioned John works at Newco",
+    "2025-12-11": "User said John Doe has become a customer"
+  }
+}
+```
+
+---
+
+### 3. Retrieving Memory
+
+**User query**: "Who is John Doe?"
 
 **Agent calls**:
 ```python
 memories = zylch_memory.retrieve_memories(
-    query="email communication style for John Smith, CEO",
+    query="John Doe",
     namespace="user:mario_123",
     limit=5
 )
 ```
 
 **Search flow**:
-1. **Generate query embedding**
-    - Text: "email communication style for CEO"
-    - Convert to 384-dim vector
+1. **Analyze query type**
+    - "John Doe" → proper noun detected → α = 0.7
 
-2. **HNSW vector search**
-    - Search in namespace `user:mario_123`
-    - Find k=10 nearest neighbors (2x limit for filtering)
-    - Returns: [(memory_id, distance), ...]
+2. **Hybrid search**
+    - FTS: `tsv @@ plainto_tsquery('italian', 'John Doe')`
+    - Semantic: sentence-level similarity with max aggregation
+    - Combine: `0.7 × fts + 0.3 × semantic`
 
 3. **Filter and rank**
-    - Filter by category (`email`)
-    - Filter by confidence (> 0.0, configurable)
-    - Calculate score: `similarity × confidence`
-    - Sort by score descending
+    - Filter by namespace
+    - Sort by hybrid_score descending
 
 4. **Return results**:
-   ```python
-   [
-       {
-           "id": "123",
-           "namespace": "user:mario_123",
-           "context": "Email communication style",
-           "pattern": "Use formal tone when emailing clients",
-           "confidence": 0.9,
-           "similarity": 0.95,
-           "score": 0.855  # 0.95 × 0.9
-       }
-   ]
-   ```
-
-**Agent uses memory**:
+```python
+[
+    {
+        "id": "UUID888",
+        "namespace": "user:mario_123",
+        "content": "John Doe is our contact at Newco and has become a customer. He prefers email communication.",
+        "hybrid_score": 0.92,
+        "matching_sentences": ["John Doe is our contact at Newco and has become a customer."]
+    }
+]
 ```
-Based on your preference for formal tone with clients, I'll draft a professional email:
 
-Dear CEO,
+---
 
-I hope this message finds you well...
-```
+## Implementation Guidelines for Claude Code
+
+### Required Components
+
+1. **Sentence Splitter**
+    - Handle abbreviations (Dr., Mr., Inc., etc.)
+    - Handle decimal numbers (3.14)
+    - Split on `.`, `!`, `?` only at sentence boundaries
+
+2. **Query Analyzer**
+    - Detect proper nouns (capitalization, NER optional)
+    - Classify query type: named_entity | conceptual | mixed
+    - Return appropriate α weight
+
+3. **Score Normalizer**
+    - Min-max normalization within result set
+    - Handle edge cases (single result, zero scores)
+
+4. **LLM Merge Service**
+    - Prompt template for memory reconsolidation
+    - Conflict resolution rules (newer wins)
+    - Length constraints (prevent blob explosion)
+
+5. **Embedding Service**
+    - Batch embedding for efficiency
+    - Caching for repeated queries
+    - Model: `all-MiniLM-L6-v2` (384 dimensions)
+
+### Performance Considerations
+
+- Index `blob_sentences.embedding` with HNSW for fast ANN search
+- Use GIN index on `blobs.tsv` for FTS
+- Consider materialized view for namespace prefixes if query patterns are predictable
+- Batch sentence insertions when creating/updating blobs
+
+---
 
 ## Implementation Details
 
