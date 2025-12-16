@@ -153,17 +153,26 @@ class TriggerParser:
         if not user_input:
             return None
 
+        logger.info(f"[TriggerParser] Matching input: '{user_input}'")
+
         # Compute embedding for user input
         input_embedding = self.embedding_engine.embed(user_input)
 
         best_match: Optional[MatchResult] = None
         best_score = 0.0
+        top_candidates = []  # Track top 3 for debugging
 
         # Search all commands
         for command, template_embeddings in self._template_embeddings.items():
             for template, template_embedding in template_embeddings:
                 # Compute cosine similarity
                 score = self._cosine_similarity(input_embedding, template_embedding)
+
+                # Track top candidates for debugging
+                if len(top_candidates) < 5 or score > top_candidates[-1][0]:
+                    top_candidates.append((score, command, template))
+                    top_candidates.sort(reverse=True, key=lambda x: x[0])
+                    top_candidates = top_candidates[:5]
 
                 if score > best_score and score >= self.MIN_CONFIDENCE:
                     best_score = score
@@ -184,12 +193,19 @@ class TriggerParser:
                         matched_template=template,
                     )
 
+        # Log top candidates for debugging - use INFO so it actually shows
+        logger.info(f"[TriggerParser] Top 5 candidates for '{user_input}':")
+        for score, cmd, tmpl in top_candidates:
+            logger.info(f"  {score:.3f} {cmd}: '{tmpl}'")
+
         if best_match:
-            logger.debug(
-                f"Matched '{user_input}' to '{best_match.matched_template}' "
+            logger.info(
+                f"[TriggerParser] MATCH: '{user_input}' → '{best_match.matched_template}' "
                 f"(command={best_match.command}, confidence={best_match.confidence:.2f}, "
                 f"params={best_match.params})"
             )
+        else:
+            logger.info(f"[TriggerParser] No match above threshold {self.MIN_CONFIDENCE} for '{user_input}'")
 
         return best_match
 
