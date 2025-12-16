@@ -503,8 +503,8 @@ class SyncService:
             # Initialize memory system
             memory = ZylchMemory()  # Uses default local config
 
-            # Get unprocessed emails
-            unprocessed_emails = memory.get_unprocessed_emails(limit=100)
+            # Get unprocessed emails from storage (not memory)
+            unprocessed_emails = self.supabase.get_unprocessed_emails(self.owner_id, limit=100)
             email_count = len(unprocessed_emails)
 
             if email_count > 0:
@@ -540,6 +540,7 @@ class SyncService:
         # CRM Agent phase - Compute avatars for affected contacts
         try:
             from zylch.workers.crm_worker import CRMWorker
+            from zylch.memory import ZylchMemory
 
             logger.info("[crm_agent] Starting avatar computation")
             start_time = datetime.now()
@@ -566,11 +567,14 @@ class SyncService:
             contact_count = len(affected_contacts)
             if contact_count > 0:
                 # Compute avatars
+                from anthropic import Anthropic
                 worker = CRMWorker(
-                    owner_id=self.owner_id,
-                    supabase_storage=self.supabase
+                    storage=self.supabase,
+                    memory=ZylchMemory(),
+                    anthropic=Anthropic()
                 )
-                computed = await worker.compute_batch(affected_contacts)
+                await worker.compute_batch(affected_contacts, self.owner_id)
+                computed = contact_count
 
                 duration = (datetime.now() - start_time).total_seconds()
                 logger.info(f"CRM Agent: Computed {computed} avatars in {duration:.1f}s")
