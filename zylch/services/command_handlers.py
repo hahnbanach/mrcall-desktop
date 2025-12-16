@@ -22,10 +22,18 @@ async def handle_help() -> str:
 
 💡 **Remember:** All commands accept `--help` for detailed usage
 
-**📧 Data Management:**
+**📧 Data & Email:**
 • `/sync [days]` - Sync email and calendar
-• `/briefing [days]` - Daily briefing of tasks and unanswered conversations
+• `/stats` - Email statistics (count, unread, threads)
+• `/drafts` - List email drafts
+• `/email` - Create, send, search emails
 • `/archive` - Email archive management
+
+**📅 Calendar & Tasks:**
+• `/calendar [days]` - Show upcoming events
+• `/tasks` - List open tasks (needs response)
+• `/briefing [days]` - Daily briefing with context
+• `/jobs` - Scheduled reminders and jobs
 
 **🧠 Memory & Automation:**
 • `/memory [search|store|stats|list]` - Entity memory with hybrid search
@@ -48,7 +56,7 @@ async def handle_help() -> str:
 • `/clear` - Clear conversation history
 • `/help` - Show this message
 
-**💡 Tip:** You can also chat naturally! Ask "who emailed me today?" or "help me with my emails"."""
+**💡 Tip:** Chat naturally! "show my tasks", "email stats", "what's on my calendar"."""
 
 
 async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
@@ -1884,6 +1892,32 @@ Run `/sync` first to fetch latest emails.''',
 - `/connect` - Show connection status
 - `/connect anthropic` - Add your Anthropic API key''',
     },
+    # Phase 1: High-impact commands (replacing tools)
+    '/stats': {
+        'summary': 'Email statistics',
+        'usage': '/stats',
+        'description': 'Shows statistics about synced emails: total count, unread, threads, date range, open conversations.',
+    },
+    '/drafts': {
+        'summary': 'List email drafts',
+        'usage': '/drafts [--limit N]',
+        'description': 'Lists saved email drafts. Use `/email --send <id>` to send a draft.',
+    },
+    '/calendar': {
+        'summary': 'Show calendar events',
+        'usage': '/calendar [days] [--limit N]',
+        'description': 'Shows upcoming calendar events. Default: next 7 days.',
+    },
+    '/tasks': {
+        'summary': 'List open tasks',
+        'usage': '/tasks [--limit N]',
+        'description': 'Lists open tasks (emails needing response). Shows priority and context.',
+    },
+    '/jobs': {
+        'summary': 'Scheduled jobs and reminders',
+        'usage': '/jobs [--cancel <id>]',
+        'description': 'Lists scheduled reminders and jobs. Use `--cancel <id>` to cancel a job.',
+    },
 }
 
 # Export all handlers
@@ -1904,7 +1938,380 @@ COMMAND_HANDLERS = {
     '/revoke': handle_revoke,
     '/sharing': handle_sharing,
     '/tutorial': handle_tutorial,
+    # Phase 1: High-impact commands (replacing tools)
+    '/stats': handle_stats,
+    '/drafts': handle_drafts,
+    '/calendar': handle_calendar,
+    '/tasks': handle_tasks,
+    '/jobs': handle_jobs,
 }
+
+async def handle_stats(args: List[str], owner_id: str) -> str:
+    """Handle /stats command - email statistics."""
+    from zylch.storage.supabase_client import SupabaseStorage
+    from datetime import datetime, timedelta, timezone
+
+    if '--help' in args:
+        return """**📊 Email Statistics**
+
+**Usage:** `/stats`
+
+Shows statistics about your synced emails:
+- Total emails and threads
+- Unread count
+- Date range
+- Open conversations needing response"""
+
+    try:
+        supabase = SupabaseStorage.get_instance().client
+
+        # Count total emails
+        email_result = supabase.table('emails')\
+            .select('id', count='exact')\
+            .eq('owner_id', owner_id)\
+            .execute()
+        total_emails = email_result.count if hasattr(email_result, 'count') else 0
+
+        # Count unread
+        unread_result = supabase.table('emails')\
+            .select('id', count='exact')\
+            .eq('owner_id', owner_id)\
+            .eq('is_read', False)\
+            .execute()
+        unread_count = unread_result.count if hasattr(unread_result, 'count') else 0
+
+        # Count threads
+        thread_result = supabase.table('emails')\
+            .select('thread_id')\
+            .eq('owner_id', owner_id)\
+            .execute()
+        unique_threads = len(set(e['thread_id'] for e in thread_result.data)) if thread_result.data else 0
+
+        # Get date range
+        oldest = supabase.table('emails')\
+            .select('date')\
+            .eq('owner_id', owner_id)\
+            .order('date', desc=False)\
+            .limit(1)\
+            .execute()
+        newest = supabase.table('emails')\
+            .select('date')\
+            .eq('owner_id', owner_id)\
+            .order('date', desc=True)\
+            .limit(1)\
+            .execute()
+
+        oldest_date = oldest.data[0]['date'][:10] if oldest.data else 'N/A'
+        newest_date = newest.data[0]['date'][:10] if newest.data else 'N/A'
+
+        # Count open avatars (need response)
+        avatar_result = supabase.table('avatars')\
+            .select('id', count='exact')\
+            .eq('owner_id', owner_id)\
+            .eq('relationship_status', 'open')\
+            .execute()
+        open_count = avatar_result.count if hasattr(avatar_result, 'count') else 0
+
+        return f"""**📊 Email Statistics**
+
+**Total Emails:** {total_emails:,}
+**Threads:** {unique_threads:,}
+**Unread:** {unread_count:,}
+**Date Range:** {oldest_date} → {newest_date}
+
+**Open Conversations:** {open_count} need response
+
+Run `/sync` to update or `/briefing` for task details."""
+
+    except Exception as e:
+        logger.error(f"Error in /stats: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}"
+
+
+async def handle_drafts(args: List[str], owner_id: str) -> str:
+    """Handle /drafts command - list email drafts."""
+    from zylch.storage.supabase_client import SupabaseStorage
+
+    if '--help' in args:
+        return """**📝 Email Drafts**
+
+**Usage:** `/drafts [--limit N]`
+
+Lists your saved email drafts.
+
+**Options:**
+- `--limit N` - Show N drafts (default: 20, max: 50)
+
+**Related:**
+- `/email --create --to <email>` - Create new draft
+- `/email --send <id>` - Send a draft
+- `/email --delete <id>` - Delete a draft"""
+
+    try:
+        supabase = SupabaseStorage.get_instance().client
+
+        # Parse limit
+        limit = 20
+        if '--limit' in args:
+            idx = args.index('--limit')
+            if idx + 1 < len(args):
+                try:
+                    limit = min(int(args[idx + 1]), 50)
+                except ValueError:
+                    pass
+
+        result = supabase.table('drafts')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('status', 'draft')\
+            .order('updated_at', desc=True)\
+            .limit(limit)\
+            .execute()
+
+        if not result.data:
+            return """**📭 No drafts**
+
+Create one with:
+`/email --create --to mario@example.com --subject "Hello"`"""
+
+        output = f"**📝 Drafts** ({len(result.data)} found)\n\n"
+        for i, draft in enumerate(result.data, 1):
+            to_str = ', '.join(draft.get('to_addresses', [])[:2])
+            if len(draft.get('to_addresses', [])) > 2:
+                to_str += f" (+{len(draft['to_addresses']) - 2})"
+            subject = draft.get('subject', '(no subject)')[:40]
+            draft_id = draft['id'][:8]
+            updated = draft['updated_at'][:10] if draft.get('updated_at') else ''
+
+            output += f"**{i}. {subject}**\n"
+            output += f"   To: {to_str}\n"
+            output += f"   ID: `{draft_id}` | {updated}\n\n"
+
+        output += "_Use `/email --send <id>` to send._"
+        return output
+
+    except Exception as e:
+        logger.error(f"Error in /drafts: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}"
+
+
+async def handle_calendar(args: List[str], config: ToolConfig, owner_id: str) -> str:
+    """Handle /calendar command - list calendar events."""
+    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.api.token_storage import get_provider, get_email
+    from datetime import datetime, timedelta, timezone
+
+    if '--help' in args:
+        return """**📅 Calendar**
+
+**Usage:** `/calendar [days] [--limit N]`
+
+Shows your upcoming calendar events.
+
+**Arguments:**
+- `days` - Days ahead to show (default: 7)
+- `--limit N` - Max events to show (default: 20)
+
+**Examples:**
+- `/calendar` - Events for next 7 days
+- `/calendar 1` - Today only
+- `/calendar 30 --limit 50` - Next month"""
+
+    try:
+        # Parse arguments
+        days_ahead = 7
+        limit = 20
+
+        for i, arg in enumerate(args):
+            if arg == '--limit' and i + 1 < len(args):
+                try:
+                    limit = min(int(args[i + 1]), 50)
+                except ValueError:
+                    pass
+            elif arg.isdigit():
+                days_ahead = int(arg)
+
+        # Get from Supabase (synced via /sync)
+        supabase = SupabaseStorage.get_instance().client
+
+        now = datetime.now(timezone.utc)
+        end_date = now + timedelta(days=days_ahead)
+
+        result = supabase.table('calendar_events')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .gte('start_time', now.isoformat())\
+            .lte('start_time', end_date.isoformat())\
+            .order('start_time', desc=False)\
+            .limit(limit)\
+            .execute()
+
+        if not result.data:
+            return f"""**📅 Calendar** (next {days_ahead} days)
+
+📭 No events found.
+
+Run `/sync` to fetch calendar events."""
+
+        output = f"**📅 Calendar** ({len(result.data)} events, next {days_ahead} days)\n\n"
+
+        current_date = None
+        for event in result.data:
+            # Parse start time
+            start_str = event.get('start_time', '')
+            try:
+                start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                event_date = start_dt.strftime('%A, %B %d')
+                event_time = start_dt.strftime('%H:%M')
+            except:
+                event_date = start_str[:10] if start_str else 'Unknown'
+                event_time = ''
+
+            # Group by date
+            if event_date != current_date:
+                current_date = event_date
+                output += f"\n**{event_date}**\n"
+
+            title = event.get('summary', '(no title)')[:50]
+            location = event.get('location', '')
+
+            output += f"• {event_time} - {title}"
+            if location:
+                output += f" 📍 {location[:30]}"
+            output += "\n"
+
+        return output
+
+    except Exception as e:
+        logger.error(f"Error in /calendar: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}"
+
+
+async def handle_tasks(args: List[str], owner_id: str) -> str:
+    """Handle /tasks command - list open tasks."""
+    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.services.task_formatter import filter_own_emails, format_task_list
+
+    if '--help' in args:
+        return """**✅ Tasks**
+
+**Usage:** `/tasks [--limit N]`
+
+Shows your open tasks (emails needing response).
+
+**Options:**
+- `--limit N` - Max tasks to show (default: all)
+
+**Related:**
+- `/briefing` - Full daily briefing with context
+- `/sync` - Sync emails to update tasks"""
+
+    try:
+        supabase = SupabaseStorage.get_instance().client
+
+        # Parse limit
+        limit = 50
+        if '--limit' in args:
+            idx = args.index('--limit')
+            if idx + 1 < len(args):
+                try:
+                    limit = min(int(args[idx + 1]), 100)
+                except ValueError:
+                    pass
+
+        result = supabase.table('avatars')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .or_('relationship_status.eq.open,relationship_status.eq.waiting')\
+            .gte('relationship_score', 3)\
+            .order('relationship_score', desc=True)\
+            .limit(limit)\
+            .execute()
+
+        avatars = result.data or []
+        avatars = filter_own_emails(avatars)
+
+        if not avatars:
+            return """**✅ Tasks**
+
+🎉 No open tasks! You're all caught up.
+
+Run `/sync` to check for new emails."""
+
+        return format_task_list(avatars, include_stale_warning=False)
+
+    except Exception as e:
+        logger.error(f"Error in /tasks: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}"
+
+
+async def handle_jobs(args: List[str], owner_id: str) -> str:
+    """Handle /jobs command - list scheduled jobs."""
+    from zylch.services.scheduler import ZylchScheduler
+
+    if '--help' in args:
+        return """**⏰ Scheduled Jobs**
+
+**Usage:** `/jobs [--cancel <id>]`
+
+Shows your scheduled reminders and jobs.
+
+**Options:**
+- `--cancel <id>` - Cancel a job by ID
+
+**Related:**
+- "remind me in 2 hours" - Schedule via Claude
+- `/trigger` - Event-driven automation"""
+
+    try:
+        scheduler = ZylchScheduler(owner_id=owner_id)
+
+        # Handle cancel
+        if '--cancel' in args:
+            idx = args.index('--cancel')
+            if idx + 1 < len(args):
+                job_id = args[idx + 1]
+                success = scheduler.cancel_job(job_id)
+                if success:
+                    return f"✅ **Job cancelled:** `{job_id[:8]}`"
+                else:
+                    return f"❌ **Job not found:** `{job_id[:8]}`"
+            else:
+                return "❌ Missing job ID. Usage: `/jobs --cancel <id>`"
+
+        # List jobs
+        jobs = scheduler.list_jobs()
+
+        if not jobs:
+            return """**⏰ Scheduled Jobs**
+
+📭 No scheduled jobs.
+
+**Create one:**
+- "remind me in 2 hours to call Mario"
+- `/trigger --add session_start "Check my emails"`"""
+
+        output = f"**⏰ Scheduled Jobs** ({len(jobs)} found)\n\n"
+
+        for job in jobs:
+            job_id = job.get('id', '')[:8]
+            job_type = job.get('type', 'reminder')
+            next_run = job.get('next_run', 'N/A')
+            description = job.get('description', '')[:50]
+
+            type_emoji = {'reminder': '🔔', 'conditional': '⚡'}.get(job_type, '📋')
+
+            output += f"{type_emoji} **{job_type}** (ID: `{job_id}`)\n"
+            output += f"   {description}\n"
+            output += f"   Next: {next_run}\n\n"
+
+        output += "_Use `/jobs --cancel <id>` to cancel._"
+        return output
+
+    except Exception as e:
+        logger.error(f"Error in /jobs: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}"
+
 
 # Natural language triggers for semantic command matching
 # Maps commands to phrases that should trigger them
@@ -2227,5 +2634,73 @@ COMMAND_TRIGGERS = {
         "show reminders",
         "cancel reminder",
         "cancel reminder {reminder_id:text}",
+    ],
+
+    # --- Stats (Phase 1 - replaces _EmailStatsTool) ---
+    '/stats': [
+        "stats",
+        "statistics",
+        "email stats",
+        "email statistics",
+        "inbox stats",
+        "inbox statistics",
+        "how many emails",
+        "how many unread",
+        "email count",
+        "show stats",
+        "show statistics",
+        "give me stats",
+        "email summary",
+        "inbox summary",
+    ],
+
+    # --- Drafts (Phase 1 - replaces _ListDraftsTool) ---
+    '/drafts': [
+        "drafts",
+        "show drafts",
+        "my drafts",
+        "list drafts",
+        "pending drafts",
+        "show my drafts",
+        "email drafts",
+        "unsent emails",
+        "show the last {limit:int} drafts",
+        "list {limit:int} drafts",
+    ],
+
+    # --- Tasks (Phase 1 - replaces _GetTasksTool) ---
+    '/tasks': [
+        "tasks",
+        "my tasks",
+        "show tasks",
+        "list tasks",
+        "open tasks",
+        "pending tasks",
+        "what do I need to do",
+        "what needs doing",
+        "action items",
+        "to do list",
+        "todo list",
+        "to-do list",
+        "things to do",
+        "show {limit:int} tasks",
+        "top {limit:int} tasks",
+    ],
+
+    # --- Jobs (Phase 1 - replaces ListScheduledJobsTool) ---
+    '/jobs': [
+        "jobs",
+        "scheduled jobs",
+        "my jobs",
+        "list jobs",
+        "show jobs",
+        "pending jobs",
+        "scheduled reminders",
+        "my reminders",
+        "upcoming reminders",
+        "what's scheduled",
+        "scheduled tasks",
+        "cancel job {job_id:text}",
+        "cancel {job_id:text}",
     ],
 }
