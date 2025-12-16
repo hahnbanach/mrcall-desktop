@@ -117,35 +117,6 @@ Run `/sync [days]` to sync more data."""
             logger.error(f"[/sync] Failed to get sync status: {e}")
             return f"❌ **Error getting sync status:** {str(e)}"
 
-    # Check for --force flag (reprocess all emails through memory agent)
-    force_reprocess = '--force' in args
-    if force_reprocess:
-        logger.info(f"[/sync] Force flag detected, clearing memory_processed_at for owner_id={owner_id}")
-        try:
-            supabase = SupabaseStorage()
-
-            # Clear memory_processed_at on all emails to mark them for reprocessing
-            supabase.client.table('emails')\
-                .update({'memory_processed_at': None})\
-                .eq('owner_id', owner_id)\
-                .execute()
-
-            logger.info(f"[/sync] Cleared memory_processed_at - all emails will be reprocessed")
-
-            return """⚠️ **Force reprocess enabled**
-
-All emails marked for memory reprocessing.
-
-**Important:** This will create duplicate memory entries unless you reset memory first:
-```
-/memory --reset
-```
-
-Then run `/sync` to reprocess all emails with fresh memory."""
-        except Exception as e:
-            logger.error(f"[/sync] Failed to clear memory_processed_at: {e}")
-            return f"❌ **Error:** {str(e)}"
-
     # Check for --reset flag
     reset_sync = '--reset' in args
     if reset_sync:
@@ -165,7 +136,16 @@ Then run `/sync` to reprocess all emails with fresh memory."""
             cal_result = supabase.client.table('calendar_events').delete().eq('owner_id', owner_id).execute()
             logger.info(f"[/sync] Cleared calendar_events")
 
-            return "✅ **Sync state reset!**\n\nAll emails and calendar events cleared.\nNext `/sync [days]` will perform a full re-sync from scratch."
+            return """✅ **Sync state reset!**
+
+All emails and calendar events cleared.
+Next `/sync [days]` will perform a full re-sync from scratch.
+
+⚠️ **Memory note:** Your memory blobs still exist. If you want fresh memory:
+```
+/memory --reset
+```
+Then run `/sync [days]` to rebuild memory from re-synced emails."""
         except Exception as e:
             logger.error(f"[/sync] Failed to reset sync state: {e}")
             return f"❌ **Error resetting sync state:** {str(e)}"
@@ -1792,14 +1772,14 @@ COMMAND_HELP = {
     },
     '/sync': {
         'summary': 'Sync emails and calendar',
-        'usage': '/sync [days] [--status] [--reset] [--force]',
+        'usage': '/sync [days] [--status] [--reset]',
         'description': '''Fetches new emails from Gmail and calendar events from Google Calendar.
+Also runs Memory Agent to extract facts from emails into entity blobs.
 
 **Arguments:**
 - `days` - Number of days to sync (default: 30 for first sync, incremental after)
 - `--status` - Show sync status (last sync time, email count, event count)
-- `--reset` - Clear sync state and force full re-sync from scratch
-- `--force` - Mark all emails for memory reprocessing (run `/memory --reset` first!)
+- `--reset` - Clear sync state and force full re-sync (warns about memory)
 
 **Examples:**
 - `/sync` - Sync with defaults (incremental after first sync)
@@ -1807,9 +1787,11 @@ COMMAND_HELP = {
 - `/sync 300` - Sync last 300 days
 - `/sync --status` - Check sync status without syncing
 - `/sync --reset` - Reset sync state, then run `/sync [days]` to re-sync
-- `/sync --force` - Reprocess all emails through memory agent
 
-This only syncs data - no AI analysis. Run `/briefing` after to analyze tasks.''',
+**Fresh start:** To rebuild everything from scratch:
+1. `/memory --reset` - Clear memory blobs
+2. `/sync --reset` - Clear emails/calendar
+3. `/sync [days]` - Re-sync and rebuild memory''',
     },
     '/briefing': {
         'summary': 'Daily briefing of tasks and unanswered conversations',
@@ -2394,18 +2376,6 @@ COMMAND_TRIGGERS = {
         "sync with the last {days:int} days",
         "get emails from the last {days:int} days",
         "fetch emails from the past {days:int} days",
-    ],
-    '/sync --force': [
-        "sync force",
-        "force sync",
-        "reprocess emails",
-        "reprocess all emails",
-        "reprocess memory",
-        "rebuild memory",
-        "rebuild memory from emails",
-        "force reprocess",
-        "reanalyze emails",
-        "reanalyze all emails",
     ],
     '/memory --reset': [
         "reset memory",

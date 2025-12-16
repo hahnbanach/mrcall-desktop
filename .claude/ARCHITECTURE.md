@@ -686,17 +686,17 @@ hybrid_score = alpha * FTS_score + (1-alpha) * semantic_score
 | `/memory list [limit]` | List recent blobs |
 | `/memory --reset` | Delete ALL blobs (irreversible) |
 
-### Reprocessing Emails
+### Fresh Start (Rebuild Everything)
 
-To reprocess all emails through the Memory Agent:
+To rebuild memory from scratch:
 
 ```bash
 /memory --reset    # Delete all blobs first
-/sync --force      # Mark all emails for reprocessing
-/sync              # Process emails into fresh blobs
+/sync --reset      # Clear emails/calendar (warns about memory)
+/sync [days]       # Re-sync and process into fresh blobs
 ```
 
-**`/sync --force`** clears `memory_processed_at` on all emails, marking them for reprocessing. It warns to run `/memory --reset` first to avoid duplicates.
+**`/sync --reset`** clears emails and calendar, then warns to run `/memory --reset` if you want fresh memory too.
 
 ### Database Schema
 
