@@ -144,7 +144,7 @@ Triggers support typed parameters using `{param:type}` syntax:
 
 ## 📧 Data Management Commands
 
-### `/sync [days] [--status] [--reset] [--force]`
+### `/sync [days] [--status] [--reset]`
 
 **Summary**: Sync emails and calendar from Google/Microsoft
 
@@ -153,8 +153,7 @@ Triggers support typed parameters using `{param:type}` syntax:
 **Arguments**:
 - `days` - Number of days to sync (default: 30 for first sync, incremental after)
 - `--status` - Show sync status without syncing
-- `--reset` - Clear sync state and force full re-sync
-- `--force` - Mark all emails for memory reprocessing (run `/memory --reset` first!)
+- `--reset` - Clear sync state and force full re-sync (warns about memory)
 
 **Examples**:
 ```bash
@@ -173,10 +172,10 @@ Triggers support typed parameters using `{param:type}` syntax:
 # Reset sync state (then run /sync [days])
 /sync --reset
 
-# Reprocess all emails through Memory Agent
-/memory --reset   # Clear existing blobs first
-/sync --force     # Mark all emails for reprocessing
-/sync             # Process into fresh blobs
+# Fresh start - rebuild everything from scratch
+/memory --reset   # Clear memory blobs first
+/sync --reset     # Clear emails/calendar
+/sync 30          # Re-sync and rebuild memory
 ```
 
 **Output**:
@@ -715,11 +714,11 @@ Deleted 156 memory blobs and all associated sentences.
 Your memory is now empty. Use /memory store <content> to add new memories.
 ```
 
-**Reprocessing All Emails**: To rebuild memory from scratch:
+**Fresh Start**: To rebuild memory from scratch:
 ```bash
 /memory --reset   # Delete all blobs
-/sync --force     # Mark all emails for reprocessing
-/sync             # Run Memory Agent on all emails
+/sync --reset     # Clear emails/calendar
+/sync 30          # Re-sync and rebuild memory
 ```
 
 **Hybrid Search**: Combines PostgreSQL full-text search (FTS) with pgvector semantic search. Named entities (like "Mario Rossi") weight FTS higher (α=0.7), conceptual queries weight semantic higher (α=0.3).
