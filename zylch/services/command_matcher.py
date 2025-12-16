@@ -1,132 +1,380 @@
-"""Semantic command matching using sentence embeddings.
+"""
+Semantic Command Matcher
 
-Matches natural language user messages to slash commands by comparing
-embeddings. Enables users to say "sync my emails" instead of "/sync".
+Matches natural language to slash commands with parameter extraction.
+Uses the TriggerParser for semantic matching and typed parameter extraction.
+
+Example:
+    "sync the last 12 days" → "/sync 12"
+    "who is Mario Rossi" → "/memory --search Mario Rossi"
+    "show me 5 drafts" → "/email --list --draft --limit 5"
 """
 
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any
 
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
+from zylch.services.trigger_parser import TriggerParser, MatchResult
+from zylch.services.command_handlers import COMMAND_TRIGGERS
 
 logger = logging.getLogger(__name__)
 
 
 class SemanticCommandMatcher:
-    """Matches natural language to slash commands using embeddings.
+    """
+    Matches natural language input to slash commands.
 
-    Uses a singleton pattern to ensure embeddings are computed only once.
-    The model and embeddings are loaded lazily on first use.
+    Uses semantic embeddings to find the best matching command trigger,
+    then extracts typed parameters and formats the final command string.
     """
 
-    _instance = None
-    _initialized = False
+    # Minimum confidence for a match
+    MIN_CONFIDENCE = 0.70
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+    def __init__(self):
+        """Initialize the matcher with lazy-loaded embedding engine."""
+        self._parser: Optional[TriggerParser] = None
+        self._initialized = False
 
-    def __init__(self, threshold: float = 0.75):
-        """Initialize the matcher.
+    def _ensure_initialized(self):
+        """Lazy initialization of the trigger parser."""
+        if self._initialized:
+            return
 
-        Args:
-            threshold: Minimum similarity score to consider a match (0-1).
-                      Higher values = fewer false positives but may miss valid matches.
-        """
-        if not SemanticCommandMatcher._initialized:
-            self.threshold = threshold
-            self.model = None
-            self.all_triggers = []
-            self._trigger_embeddings = None
-            self._initialize_embeddings()
-            SemanticCommandMatcher._initialized = True
-
-    def _initialize_embeddings(self):
-        """Pre-compute all trigger embeddings at startup."""
-        from sentence_transformers import SentenceTransformer
-
-        from zylch.services.command_handlers import COMMAND_TRIGGERS
-
-        logger.info("Initializing semantic command matcher...")
-
-        # Load the same model used by zylch_memory
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
-
-        self.all_triggers = []  # [(command, trigger_text, embedding), ...]
-
-        for command, triggers in COMMAND_TRIGGERS.items():
-            embeddings = self.model.encode(triggers, convert_to_numpy=True)
-            for trigger, embedding in zip(triggers, embeddings):
-                self.all_triggers.append((command, trigger, embedding))
-
-        # Stack all embeddings for vectorized comparison
-        self._trigger_embeddings = np.vstack([t[2] for t in self.all_triggers])
-
-        logger.info(f"Loaded {len(self.all_triggers)} command triggers")
+        try:
+            logger.info("[CommandMatcher] Initializing SemanticCommandMatcher...")
+            from zylch_memory import EmbeddingEngine
+            embedding_engine = EmbeddingEngine()
+            logger.info("[CommandMatcher] EmbeddingEngine created")
+            self._parser = TriggerParser(embedding_engine, COMMAND_TRIGGERS)
+            self._parser.MIN_CONFIDENCE = self.MIN_CONFIDENCE
+            logger.info(f"[CommandMatcher] MIN_CONFIDENCE={self.MIN_CONFIDENCE}")
+            self._parser.initialize()
+            self._initialized = True
+            logger.info(f"[CommandMatcher] SemanticCommandMatcher initialized with {len(COMMAND_TRIGGERS)} commands")
+        except Exception as e:
+            logger.error(f"[CommandMatcher] Failed to initialize: {e}", exc_info=True)
+            self._initialized = False
 
     def match(self, user_message: str) -> Optional[str]:
-        """Match user message to a command semantically.
+        """
+        Match user message to a slash command.
 
         Args:
-            user_message: The user's natural language message
+            user_message: Natural language input from user
 
         Returns:
-            The matched command (e.g., "/sync") or None if no match
+            Formatted command string (e.g., "/sync 12") or None if no match
         """
-        # Skip very short messages - likely not command intent
-        # Lowered to 3 to allow "help", "sync", etc.
-        if len(user_message.strip()) < 3:
+        self._ensure_initialized()
+
+        if not self._parser:
+            logger.warning("[CommandMatcher] Parser not initialized, returning None")
             return None
 
-        # Skip if already a slash command
-        if user_message.strip().startswith('/'):
+        # Get match result with parameters
+        logger.info(f"[CommandMatcher] Matching: '{user_message}'")
+        result = self._parser.match(user_message)
+
+        if not result:
+            logger.info(f"[CommandMatcher] No match found for: '{user_message}'")
             return None
 
-        # Embed user message
-        user_embedding = self.model.encode(user_message, convert_to_numpy=True)
+        logger.info(f"[CommandMatcher] Raw match: command={result.command}, confidence={result.confidence:.2f}, template='{result.matched_template}'")
 
-        # Compute cosine similarities against all triggers
-        similarities = cosine_similarity([user_embedding], self._trigger_embeddings)[0]
+        if result.confidence < self.MIN_CONFIDENCE:
+            logger.info(f"[CommandMatcher] Confidence too low: {result.confidence:.2f} < {self.MIN_CONFIDENCE} for '{user_message}'")
+            return None
 
-        # Find best match
-        best_idx = np.argmax(similarities)
-        best_similarity = similarities[best_idx]
+        # Format the command with extracted parameters
+        command = self._format_command(result, user_message)
 
-        if best_similarity >= self.threshold:
-            command, trigger_text, _ = self.all_triggers[best_idx]
-            logger.info(
-                f"Semantic match: '{user_message}' -> {command} "
-                f"via '{trigger_text}' (sim={best_similarity:.3f})"
-            )
+        logger.info(
+            f"Semantic match: '{user_message}' → '{command}' "
+            f"(confidence={result.confidence:.2f}, template='{result.matched_template}')"
+        )
+
+        return command
+
+    def _format_command(self, result: MatchResult, original_input: str) -> str:
+        """
+        Format a MatchResult into a command string.
+
+        Handles different command patterns:
+        - /sync {days} → "/sync 12"
+        - /memory --search {query} → "/memory --search Mario Rossi"
+        - /email --list --draft --limit {limit} → "/email --list --draft --limit 5"
+
+        Args:
+            result: The match result with command and params
+            original_input: The original user input (for --search full message)
+
+        Returns:
+            Formatted command string
+        """
+        command = result.command
+        params = result.params
+        template = result.matched_template
+
+        # Special handling based on command type
+        if command == '/sync':
+            return self._format_sync(params)
+        elif command == '/memory':
+            return self._format_memory(params, template, original_input)
+        elif command == '/email':
+            return self._format_email(params, template)
+        elif command == '/calendar':
+            return self._format_calendar(params, template)
+        elif command == '/reminder':
+            return self._format_reminder(params, template)
+        elif command == '/briefing':
+            return self._format_briefing(params)
+        elif command == '/model':
+            return self._format_model(params)
+        elif command == '/archive':
+            return self._format_archive(params, template)
+        elif command == '/trigger':
+            return self._format_trigger(params, template)
+        elif command == '/share':
+            return self._format_share(params)
+        elif command == '/revoke':
+            return self._format_revoke(params)
+        elif command == '/tutorial':
+            return self._format_tutorial(params)
+        elif command == '/connect':
+            return self._format_connect(params)
+        else:
+            # Default: just return the command
             return command
 
-        return None
+    def _format_sync(self, params: Dict[str, Any]) -> str:
+        """/sync [days]"""
+        if 'days' in params:
+            return f"/sync {params['days']}"
+        return "/sync"
 
-    def get_best_match_info(self, user_message: str) -> dict:
-        """Get detailed info about the best match (for debugging/testing).
+    def _format_memory(self, params: Dict[str, Any], template: str, original_input: str) -> str:
+        """/memory [--search query | --store content | --stats | --list | --reset]"""
+        # Determine subcommand from template
+        if 'search' in template or 'who is' in template or 'what do you know' in template or 'find in memory' in template:
+            # Pass the FULL original message as the search query
+            # This way "who is Mario Rossi" becomes "--search who is Mario Rossi"
+            return f"/memory --search {original_input}"
+        elif 'store' in template or 'remember' in template or 'save to memory' in template:
+            content = params.get('content', '')
+            return f"/memory --store {content}"
+        elif 'stats' in template or 'statistics' in template:
+            return "/memory --stats"
+        elif 'list' in template or 'show memories' in template:
+            limit = params.get('limit', '')
+            if limit:
+                return f"/memory --list {limit}"
+            return "/memory --list"
+        elif 'reset' in template or 'clear memory' in template or 'delete all' in template:
+            return "/memory --reset"
 
-        Args:
-            user_message: The user's natural language message
+        # Default to search with original input
+        return f"/memory --search {original_input}"
 
-        Returns:
-            Dict with command, trigger, similarity, and threshold
-        """
-        if len(user_message.strip()) < 5:
-            return {"matched": False, "reason": "message_too_short"}
+    def _format_email(self, params: Dict[str, Any], template: str) -> str:
+        """/email [--list --draft | --create | --send | --delete | --search]"""
+        # Drafts - List
+        if 'list draft' in template or 'show draft' in template or 'my draft' in template:
+            limit = params.get('limit', '')
+            if limit:
+                return f"/email --list --draft --limit {limit}"
+            return "/email --list --draft"
 
-        user_embedding = self.model.encode(user_message, convert_to_numpy=True)
-        similarities = cosine_similarity([user_embedding], self._trigger_embeddings)[0]
+        # Drafts - Create
+        if 'create draft' in template or 'draft email' in template or 'compose' in template or 'write email' in template:
+            to = params.get('to', '')
+            subject = params.get('subject', '')
+            parts = ["/email --create"]
+            if to:
+                parts.append(f"--to {to}")
+            if subject:
+                parts.append(f"--subject \"{subject}\"")
+            return " ".join(parts)
 
-        best_idx = np.argmax(similarities)
-        best_similarity = similarities[best_idx]
-        command, trigger_text, _ = self.all_triggers[best_idx]
+        # Drafts - Send
+        if 'send draft' in template or 'send the email' in template or 'send it' in template:
+            draft_id = params.get('draft_id', '')
+            if draft_id:
+                return f"/email --send {draft_id}"
+            return "/email --send"
 
-        return {
-            "matched": best_similarity >= self.threshold,
-            "command": command,
-            "trigger": trigger_text,
-            "similarity": float(best_similarity),
-            "threshold": self.threshold,
-        }
+        # Drafts - Delete
+        if 'delete draft' in template or 'discard draft' in template:
+            draft_id = params.get('draft_id', '')
+            if draft_id:
+                return f"/email --delete {draft_id}"
+            return "/email --delete"
+
+        # Search
+        if 'search' in template or 'find email' in template or 'emails from' in template or 'emails about' in template:
+            query = params.get('query', '')
+            sender = params.get('sender', '')
+            days = params.get('days', '')
+            limit = params.get('limit', '')
+
+            parts = ["/email --search"]
+            if query:
+                parts.append(f"\"{query}\"")
+            if sender:
+                parts.append(f"--from {sender}")
+            if days:
+                parts.append(f"--days {days}")
+            if limit:
+                parts.append(f"--limit {limit}")
+            return " ".join(parts)
+
+        # Default to list drafts
+        return "/email --list --draft"
+
+    def _format_calendar(self, params: Dict[str, Any], template: str) -> str:
+        """/calendar [--list | --create | --search]"""
+        # List
+        if 'show calendar' in template or 'my calendar' in template or 'calendar for' in template or 'meetings' in template or 'events' in template or 'what\'s on' in template:
+            date = params.get('date', '')
+            limit = params.get('limit', '')
+            parts = ["/calendar --list"]
+            if date:
+                parts.append(f"--date {date}")
+            if limit:
+                parts.append(f"--limit {limit}")
+            return " ".join(parts)
+
+        # Create
+        if 'create event' in template or 'schedule meeting' in template or 'add event' in template:
+            attendee = params.get('attendee', '')
+            date = params.get('date', '')
+            time = params.get('time', '')
+            title = params.get('title', '')
+            parts = ["/calendar --create"]
+            if title:
+                parts.append(f"--title \"{title}\"")
+            if attendee:
+                parts.append(f"--attendee {attendee}")
+            if date:
+                parts.append(f"--date {date}")
+            if time:
+                parts.append(f"--time {time}")
+            return " ".join(parts)
+
+        # Search
+        if 'search calendar' in template or 'find meeting' in template or 'when is' in template:
+            query = params.get('query', '')
+            attendee = params.get('attendee', '')
+            if query:
+                return f"/calendar --search \"{query}\""
+            if attendee:
+                return f"/calendar --search {attendee}"
+            return "/calendar --search"
+
+        return "/calendar --list"
+
+    def _format_reminder(self, params: Dict[str, Any], template: str) -> str:
+        """/reminder [--set | --list | --cancel]"""
+        # List
+        if 'list reminder' in template or 'show reminder' in template:
+            return "/reminder --list"
+
+        # Cancel
+        if 'cancel reminder' in template:
+            reminder_id = params.get('reminder_id', '')
+            if reminder_id:
+                return f"/reminder --cancel {reminder_id}"
+            return "/reminder --cancel"
+
+        # Set (default)
+        duration = params.get('duration', '')
+        time = params.get('time', '')
+        date = params.get('date', '')
+        task = params.get('task', '')
+
+        parts = ["/reminder --set"]
+        if duration:
+            parts.append(f"--in \"{duration}\"")
+        if time:
+            parts.append(f"--at {time}")
+        if date:
+            parts.append(f"--on {date}")
+        if task:
+            parts.append(f"--task \"{task}\"")
+        return " ".join(parts)
+
+    def _format_briefing(self, params: Dict[str, Any]) -> str:
+        """/briefing [limit]"""
+        limit = params.get('limit', '')
+        if limit:
+            return f"/briefing {limit}"
+        return "/briefing"
+
+    def _format_model(self, params: Dict[str, Any]) -> str:
+        """/model [haiku|sonnet|opus]"""
+        model = params.get('model', '')
+        if model:
+            return f"/model {model}"
+        return "/model"
+
+    def _format_archive(self, params: Dict[str, Any], template: str) -> str:
+        """/archive [--stats | --search query]"""
+        if 'search' in template or 'find' in template:
+            query = params.get('query', '')
+            limit = params.get('limit', '')
+            parts = ["/archive --search"]
+            if query:
+                parts.append(f"\"{query}\"")
+            if limit:
+                parts.append(f"--limit {limit}")
+            return " ".join(parts)
+
+        if 'stats' in template or 'statistics' in template:
+            return "/archive --stats"
+
+        limit = params.get('limit', '')
+        if limit:
+            return f"/archive --list --limit {limit}"
+
+        return "/archive --stats"
+
+    def _format_trigger(self, params: Dict[str, Any], template: str) -> str:
+        """/trigger [--list | --add | --remove id]"""
+        if 'list' in template or 'show' in template:
+            return "/trigger --list"
+        if 'remove' in template or 'delete' in template:
+            trigger_id = params.get('trigger_id', '')
+            if trigger_id:
+                return f"/trigger --remove {trigger_id}"
+            return "/trigger --remove"
+        return "/trigger --list"
+
+    def _format_share(self, params: Dict[str, Any]) -> str:
+        """/share [email]"""
+        email = params.get('email', '')
+        name = params.get('name', '')
+        if email:
+            return f"/share {email}"
+        if name:
+            return f"/share {name}"
+        return "/share"
+
+    def _format_revoke(self, params: Dict[str, Any]) -> str:
+        """/revoke [email]"""
+        email = params.get('email', '')
+        if email:
+            return f"/revoke {email}"
+        return "/revoke"
+
+    def _format_tutorial(self, params: Dict[str, Any]) -> str:
+        """/tutorial [topic]"""
+        topic = params.get('topic', '')
+        if topic:
+            return f"/tutorial {topic}"
+        return "/tutorial"
+
+    def _format_connect(self, params: Dict[str, Any]) -> str:
+        """/connect [provider]"""
+        provider = params.get('provider', '')
+        if provider:
+            return f"/connect {provider}"
+        return "/connect"
