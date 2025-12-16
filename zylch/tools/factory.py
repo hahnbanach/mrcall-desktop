@@ -269,11 +269,12 @@ class ToolFactory:
             # Initialize hybrid search engine for better memory search
             search_engine = None
             if zylch_memory:
+                from zylch.storage.supabase_client import SupabaseStorage
+                supabase_storage = SupabaseStorage.get_instance()
                 search_engine = HybridSearchEngine(
-                    supabase_client=zylch_memory.supabase,
-                    embedding_model=zylch_memory.embedding_model,
-                    fts_weight=0.3,
-                    semantic_weight=0.7
+                    supabase_client=supabase_storage.client,
+                    embedding_engine=zylch_memory.embedding_engine,
+                    default_alpha=0.3  # FTS weight (0.3 = 70% semantic, 30% FTS)
                 )
                 logger.info("Hybrid search engine initialized")
 

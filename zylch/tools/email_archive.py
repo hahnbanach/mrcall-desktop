@@ -469,6 +469,33 @@ class EmailArchiveManager:
 
         raise ValueError("Cannot perform fallback sync: no last_sync timestamp")
 
+    def _extract_emails_from_header(self, header: str) -> str:
+        """Extract email addresses from RFC 5322 format.
+
+        Parses headers like 'Name <email>, Name2 <email2>' and returns
+        just the email addresses as comma-separated string.
+
+        Args:
+            header: Raw email header value
+
+        Returns:
+            Comma-separated email addresses
+        """
+        if not header:
+            return ''
+
+        emails = []
+        for part in header.split(','):
+            part = part.strip()
+            if '<' in part and '>' in part:
+                email = part.split('<')[1].split('>')[0].strip()
+            else:
+                email = part.strip()
+            if email:
+                emails.append(email)
+
+        return ', '.join(emails)
+
     def _convert_message(self, gmail_msg: Dict[str, Any]) -> Dict[str, Any]:
         """Convert Gmail message format to archive format.
 
@@ -521,8 +548,8 @@ class EmailArchiveManager:
             'thread_id': gmail_msg['thread_id'],
             'from_email': from_email,
             'from_name': from_name,
-            'to_emails': gmail_msg.get('to', ''),
-            'cc_emails': gmail_msg.get('cc', ''),
+            'to_emails': self._extract_emails_from_header(gmail_msg.get('to', '')),
+            'cc_emails': self._extract_emails_from_header(gmail_msg.get('cc', '')),
             'subject': gmail_msg.get('subject', ''),
             'date': date_iso,
             'date_timestamp': date_timestamp,
