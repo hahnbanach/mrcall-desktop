@@ -707,12 +707,14 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 • `/memory store <content>` - Store new memory (with auto-reconsolidation)
 • `/memory stats` - Show memory statistics
 • `/memory list [limit]` - List recent memories
+• `/memory --reset` - Delete ALL your memories (irreversible!)
 
 **Examples:**
 • `/memory search John Smith`
 • `/memory store "Mario prefers formal Italian in emails"`
 • `/memory stats`
 • `/memory list 10`
+• `/memory --reset` - Wipe all memories
 
 **How it works:**
 Memories are stored as entity blobs with sentence-level embeddings.
@@ -846,6 +848,27 @@ Memory will be searchable via hybrid search."""
                 output += f"   _Updated: {blob['updated_at'][:10]}_\n\n"
 
             return output
+
+        elif args[0] == '--reset':
+            # Delete ALL user memories
+            # First delete sentences (they reference blobs)
+            supabase.table("blob_sentences")\
+                .delete()\
+                .eq("owner_id", owner_id)\
+                .execute()
+
+            # Then delete blobs
+            result = supabase.table("blobs")\
+                .delete()\
+                .eq("owner_id", owner_id)\
+                .execute()
+
+            deleted_count = len(result.data) if result.data else 0
+            return f"""🗑️ **Memory reset complete**
+
+Deleted **{deleted_count}** memory blobs and all associated sentences.
+
+Your memory is now empty. Use `/memory store <content>` to add new memories."""
 
         else:
             # Unknown subcommand
