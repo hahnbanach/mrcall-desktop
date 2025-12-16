@@ -1,10 +1,13 @@
 """
 Trigger Parser for Typed Parameter Extraction
 
-This module provides semantic matching of natural language to command triggers,
-with typed parameter extraction using the {param:type} DSL.
+This module provides HYBRID matching of natural language to command triggers,
+combining keyword overlap (FTS-style) with semantic similarity - the same
+pattern used for memory blob search.
 
-Supported types:
+Hybrid score = alpha * keyword_overlap + (1-alpha) * semantic_similarity
+
+Supported parameter types:
     int      - integers (e.g., "12", "5", "100")
     email    - email addresses (e.g., "mario@example.com")
     text     - free text, greedy (e.g., "the project update")
@@ -70,31 +73,39 @@ class TriggerParser:
     # Minimum confidence threshold for a match
     MIN_CONFIDENCE = 0.65
 
-    def __init__(self, embedding_engine, triggers: Dict[str, List[str]]):
+    # Default alpha for hybrid scoring (same as memory search)
+    # alpha=0.5 means equal weight to keywords and semantics
+    DEFAULT_ALPHA = 0.5
+
+    def __init__(self, embedding_engine, triggers: Dict[str, List[str]], alpha: float = None):
         """
         Initialize the trigger parser.
 
         Args:
-            embedding_engine: Engine with embed() method for semantic matching
+            embedding_engine: Engine with encode() method for semantic matching
             triggers: Dict mapping commands to list of trigger templates
+            alpha: FTS/keyword weight (0-1). Default 0.5 for balanced hybrid.
         """
         self.embedding_engine = embedding_engine
         self.triggers = triggers
+        self.alpha = alpha if alpha is not None else self.DEFAULT_ALPHA
         self._parsed_templates: Dict[str, List[ParsedTemplate]] = {}
         self._template_embeddings: Dict[str, List[Tuple[str, Any]]] = {}
+        self._template_keywords: Dict[str, List[Tuple[str, set]]] = {}  # For keyword matching
         self._initialized = False
 
     def initialize(self):
-        """Parse templates and compute embeddings. Call once before matching."""
+        """Parse templates, compute embeddings, and extract keywords. Call once before matching."""
         if self._initialized:
             return
 
-        logger.info("Initializing trigger parser...")
+        logger.info(f"Initializing trigger parser (alpha={self.alpha})...")
 
         # Parse all templates
         for command, templates in self.triggers.items():
             self._parsed_templates[command] = []
             self._template_embeddings[command] = []
+            self._template_keywords[command] = []
 
             for template in templates:
                 parsed = self._parse_template(template)
@@ -104,9 +115,33 @@ class TriggerParser:
                 embedding = self.embedding_engine.encode(parsed.stripped)
                 self._template_embeddings[command].append((template, embedding))
 
+                # Extract keywords for FTS-style matching
+                keywords = self._extract_keywords(parsed.stripped)
+                self._template_keywords[command].append((template, keywords))
+
         self._initialized = True
         total = sum(len(t) for t in self._parsed_templates.values())
-        logger.info(f"Trigger parser initialized with {total} templates")
+        logger.info(f"Trigger parser initialized with {total} templates (hybrid mode)")
+
+    def _extract_keywords(self, text: str) -> set:
+        """Extract keywords from text for FTS-style matching.
+
+        Removes common stop words and normalizes to lowercase.
+        """
+        # Common stop words to ignore
+        stop_words = {
+            'a', 'an', 'the', 'to', 'for', 'of', 'in', 'on', 'at', 'by',
+            'and', 'or', 'is', 'are', 'was', 'were', 'be', 'been',
+            'my', 'me', 'i', 'you', 'your', 'it', 'this', 'that',
+            'with', 'from', 'as', 'what', 'how', 'when', 'where',
+            'show', 'get', 'list', 'give', 'tell', 'find',  # Common command verbs
+        }
+
+        # Tokenize and filter
+        words = re.findall(r'\b[a-z]+\b', text.lower())
+        keywords = {w for w in words if w not in stop_words and len(w) > 1}
+
+        return keywords
 
     def _parse_template(self, template: str) -> ParsedTemplate:
         """Parse a template string to extract slot information."""
@@ -138,7 +173,9 @@ class TriggerParser:
 
     def match(self, user_input: str) -> Optional[MatchResult]:
         """
-        Match user input against all triggers and extract parameters.
+        Match user input against all triggers using HYBRID scoring.
+
+        Hybrid score = alpha * keyword_overlap + (1-alpha) * semantic_similarity
 
         Args:
             user_input: The natural language input from user
@@ -153,29 +190,43 @@ class TriggerParser:
         if not user_input:
             return None
 
-        logger.info(f"[TriggerParser] Matching input: '{user_input}'")
+        logger.info(f"[TriggerParser] Matching input: '{user_input}' (alpha={self.alpha})")
 
         # Compute embedding for user input
         input_embedding = self.embedding_engine.encode(user_input)
 
+        # Extract keywords from user input
+        input_keywords = self._extract_keywords(user_input)
+
         best_match: Optional[MatchResult] = None
         best_score = 0.0
-        top_candidates = []  # Track top 3 for debugging
+        top_candidates = []  # Track top 5 for debugging
 
         # Search all commands
         for command, template_embeddings in self._template_embeddings.items():
-            for template, template_embedding in template_embeddings:
-                # Compute cosine similarity
-                score = self._cosine_similarity(input_embedding, template_embedding)
+            template_keywords_list = self._template_keywords[command]
+
+            for i, (template, template_embedding) in enumerate(template_embeddings):
+                # Get template keywords
+                _, template_keywords = template_keywords_list[i]
+
+                # Compute keyword overlap (FTS-style)
+                keyword_score = self._keyword_overlap(input_keywords, template_keywords)
+
+                # Compute semantic similarity
+                semantic_score = self._cosine_similarity(input_embedding, template_embedding)
+
+                # Hybrid score
+                hybrid_score = self.alpha * keyword_score + (1 - self.alpha) * semantic_score
 
                 # Track top candidates for debugging
-                if len(top_candidates) < 5 or score > top_candidates[-1][0]:
-                    top_candidates.append((score, command, template))
+                if len(top_candidates) < 5 or hybrid_score > top_candidates[-1][0]:
+                    top_candidates.append((hybrid_score, keyword_score, semantic_score, command, template))
                     top_candidates.sort(reverse=True, key=lambda x: x[0])
                     top_candidates = top_candidates[:5]
 
-                if score > best_score and score >= self.MIN_CONFIDENCE:
-                    best_score = score
+                if hybrid_score > best_score and hybrid_score >= self.MIN_CONFIDENCE:
+                    best_score = hybrid_score
 
                     # Find the parsed template
                     parsed = next(
@@ -189,14 +240,14 @@ class TriggerParser:
                     best_match = MatchResult(
                         command=command,
                         params=params,
-                        confidence=score,
+                        confidence=hybrid_score,
                         matched_template=template,
                     )
 
         # Log top candidates for debugging - use INFO so it actually shows
         logger.info(f"[TriggerParser] Top 5 candidates for '{user_input}':")
-        for score, cmd, tmpl in top_candidates:
-            logger.info(f"  {score:.3f} {cmd}: '{tmpl}'")
+        for hybrid, kw, sem, cmd, tmpl in top_candidates:
+            logger.info(f"  {hybrid:.3f} (kw={kw:.2f}, sem={sem:.2f}) {cmd}: '{tmpl}'")
 
         if best_match:
             logger.info(
@@ -221,6 +272,40 @@ class TriggerParser:
             return 0.0
 
         return dot_product / (norm_a * norm_b)
+
+    def _keyword_overlap(self, input_keywords: set, template_keywords: set) -> float:
+        """Compute keyword overlap score (FTS-style matching).
+
+        Uses Jaccard-like similarity but weighted towards template coverage:
+        - If user says "sync", and template is "sync", score = 1.0
+        - If user says "sync my emails", and template is "sync", score still high
+        - If user says "calendar", and template is "sync", score = 0.0
+
+        Formula: intersection / template_keywords (how much of template is covered)
+        With bonus for exact match.
+        """
+        if not template_keywords:
+            return 0.0
+
+        intersection = input_keywords & template_keywords
+
+        if not intersection:
+            return 0.0
+
+        # Base score: what fraction of template keywords are in input
+        coverage = len(intersection) / len(template_keywords)
+
+        # Bonus for exact/near-exact match (input ≈ template)
+        if input_keywords == template_keywords:
+            return 1.0
+
+        # Slight penalty if input has many extra keywords (less focused)
+        extra_keywords = len(input_keywords - template_keywords)
+        if extra_keywords > 0:
+            penalty = min(0.1, extra_keywords * 0.02)  # Max 10% penalty
+            coverage = max(0, coverage - penalty)
+
+        return coverage
 
     def _extract_params(self, user_input: str, parsed: ParsedTemplate) -> Dict[str, Any]:
         """
