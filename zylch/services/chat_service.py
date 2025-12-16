@@ -107,8 +107,22 @@ class ChatService:
         # Skip if already a slash command
         if user_message.strip().startswith('/'):
             return None
-        matcher = self._get_command_matcher()
-        return matcher.match(user_message)
+
+        try:
+            logger.debug(f"[SemanticMatch] Attempting to match: '{user_message}'")
+            matcher = self._get_command_matcher()
+            if matcher is None:
+                logger.warning("[SemanticMatch] Matcher is None")
+                return None
+            result = matcher.match(user_message)
+            if result:
+                logger.info(f"[SemanticMatch] Matched: '{user_message}' → '{result}'")
+            else:
+                logger.debug(f"[SemanticMatch] No match for: '{user_message}'")
+            return result
+        except Exception as e:
+            logger.error(f"[SemanticMatch] Error matching command: {e}", exc_info=True)
+            return None
 
     async def process_message(
         self,

@@ -1944,8 +1944,17 @@ COMMAND_TRIGGERS = {
         "check for new emails",
         "refresh",
         "update",
+        # With {days:int} parameter
         "sync the last {days:int} days",
         "sync emails from the last {days:int} days",
+        "synchronize the last {days:int} days",
+        "synchronize the past {days:int} days",
+        "sync the past {days:int} days",
+        "sync past {days:int} days",
+        "synchronize with the past {days:int} days",
+        "sync with the last {days:int} days",
+        "get emails from the last {days:int} days",
+        "fetch emails from the past {days:int} days",
     ],
 
     # --- Help ---

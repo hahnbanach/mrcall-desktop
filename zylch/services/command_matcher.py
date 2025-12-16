@@ -41,15 +41,18 @@ class SemanticCommandMatcher:
             return
 
         try:
+            logger.info("[CommandMatcher] Initializing SemanticCommandMatcher...")
             from zylch_memory import EmbeddingEngine
             embedding_engine = EmbeddingEngine()
+            logger.info("[CommandMatcher] EmbeddingEngine created")
             self._parser = TriggerParser(embedding_engine, COMMAND_TRIGGERS)
             self._parser.MIN_CONFIDENCE = self.MIN_CONFIDENCE
+            logger.info(f"[CommandMatcher] MIN_CONFIDENCE={self.MIN_CONFIDENCE}")
             self._parser.initialize()
             self._initialized = True
-            logger.info("SemanticCommandMatcher initialized")
+            logger.info(f"[CommandMatcher] SemanticCommandMatcher initialized with {len(COMMAND_TRIGGERS)} commands")
         except Exception as e:
-            logger.error(f"Failed to initialize SemanticCommandMatcher: {e}")
+            logger.error(f"[CommandMatcher] Failed to initialize: {e}", exc_info=True)
             self._initialized = False
 
     def match(self, user_message: str) -> Optional[str]:
@@ -65,16 +68,21 @@ class SemanticCommandMatcher:
         self._ensure_initialized()
 
         if not self._parser:
+            logger.warning("[CommandMatcher] Parser not initialized, returning None")
             return None
 
         # Get match result with parameters
+        logger.info(f"[CommandMatcher] Matching: '{user_message}'")
         result = self._parser.match(user_message)
 
         if not result:
+            logger.info(f"[CommandMatcher] No match found for: '{user_message}'")
             return None
 
+        logger.info(f"[CommandMatcher] Raw match: command={result.command}, confidence={result.confidence:.2f}, template='{result.matched_template}'")
+
         if result.confidence < self.MIN_CONFIDENCE:
-            logger.debug(f"Match confidence too low: {result.confidence:.2f} < {self.MIN_CONFIDENCE}")
+            logger.info(f"[CommandMatcher] Confidence too low: {result.confidence:.2f} < {self.MIN_CONFIDENCE} for '{user_message}'")
             return None
 
         # Format the command with extracted parameters
