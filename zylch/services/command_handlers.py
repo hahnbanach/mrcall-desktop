@@ -1548,7 +1548,26 @@ COMMAND_HANDLERS = {
 
 # Natural language triggers for semantic command matching
 # Maps commands to phrases that should trigger them
+#
+# TYPED PARAMETER DSL:
+# Use {param_name:type} syntax to extract parameters from natural language
+#
+# Supported types:
+#   int      - integers (e.g., "12", "5", "100")
+#   email    - email addresses (e.g., "mario@example.com")
+#   text     - free text, greedy (e.g., "the project update")
+#   date     - date expressions (e.g., "tomorrow", "next monday", "March 5")
+#   time     - time expressions (e.g., "3pm", "15:30", "noon")
+#   duration - duration expressions (e.g., "30 minutes", "2 hours")
+#   model    - AI model names (e.g., "haiku", "sonnet", "opus")
+#
+# The semantic matcher:
+# 1. Strips placeholders from templates for embedding comparison
+# 2. Finds best semantic match using embeddings
+# 3. Extracts typed values from the original user input
+#
 COMMAND_TRIGGERS = {
+    # --- Sync & Data ---
     '/sync': [
         "sync",
         "synchronize",
@@ -1565,7 +1584,11 @@ COMMAND_TRIGGERS = {
         "check for new emails",
         "refresh",
         "update",
+        "sync the last {days:int} days",
+        "sync emails from the last {days:int} days",
     ],
+
+    # --- Help ---
     '/help': [
         "help",
         "commands",
@@ -1577,10 +1600,12 @@ COMMAND_TRIGGERS = {
         "list available features",
         "?",
         "how to use",
-        "aiuto",  # Italian for "help"
-        "ayuda",  # Spanish for "help"
-        "aide",   # French for "help"
+        "aiuto",
+        "ayuda",
+        "aide",
     ],
+
+    # --- Clear ---
     '/clear': [
         "clear",
         "reset",
@@ -1592,28 +1617,58 @@ COMMAND_TRIGGERS = {
         "erase",
         "start over",
     ],
+
+    # --- Model Selection ---
     '/model': [
         "change AI model",
         "switch model",
         "use faster model",
         "use smarter model",
-        "change to haiku",
-        "change to sonnet",
+        "change to {model:model}",
+        "switch to {model:model}",
+        "use {model:model}",
+        "use {model:model} model",
     ],
+
+    # --- Memory System ---
     '/memory': [
+        # Search
         "search memory",
-        "who is john",
+        "search memory for {query:text}",
+        "who is {query:text}",
+        "what do you know about {query:text}",
+        "find in memory {query:text}",
+        # Store
         "store memory",
+        "remember that {content:text}",
+        "save to memory {content:text}",
+        # Stats & List
         "memory stats",
+        "memory statistics",
         "list memories",
+        "show memories",
+        "show the last {limit:int} memories",
+        "list {limit:int} memories",
+        # Reset
+        "reset memory",
+        "clear memory",
+        "delete all memories",
     ],
+
+    # --- Triggers/Automation ---
     '/trigger': [
         "set up automation",
         "create trigger",
         "automate",
         "when email arrives",
         "create rule",
+        "list triggers",
+        "show triggers",
+        "remove trigger {trigger_id:text}",
+        "delete trigger {trigger_id:text}",
     ],
+
+    # --- Connections ---
     '/connect': [
         "connect",
         "connections",
@@ -1626,24 +1681,56 @@ COMMAND_TRIGGERS = {
         "add calendar",
         "link",
         "setup",
+        "connect {provider:text}",
     ],
+
+    # --- Sharing ---
     '/sharing': [
         "who can see my data",
         "sharing status",
         "who am I sharing with",
+        "list shared access",
     ],
+    '/share': [
+        "share my data",
+        "give someone access",
+        "share with {email:email}",
+        "grant access to {email:email}",
+        "share with {name:text}",
+    ],
+    '/revoke': [
+        "revoke access",
+        "remove access",
+        "stop sharing",
+        "revoke sharing",
+        "revoke access from {email:email}",
+        "stop sharing with {email:email}",
+    ],
+
+    # --- Archive ---
     '/archive': [
         "email archive",
-        "search old emails",
         "archive statistics",
+        "archive stats",
+        "search old emails",
+        "search archive for {query:text}",
+        "find in archive {query:text}",
+        "search archive {query:text}",
+        "show {limit:int} archived emails",
     ],
+
+    # --- Tutorial ---
     '/tutorial': [
         "show me how",
         "tutorial",
         "learn how to",
         "guide me",
         "getting started",
+        "tutorial on {topic:text}",
+        "how do I {topic:text}",
     ],
+
+    # --- Briefing/Tasks ---
     '/briefing': [
         "briefing",
         "daily briefing",
@@ -1669,29 +1756,107 @@ COMMAND_TRIGGERS = {
         "todos",
         "to-dos",
         "action items",
+        "show {limit:int} tasks",
+        "top {limit:int} priorities",
     ],
+
+    # --- Assistant Config ---
     '/assistant': [
         "configure assistant",
         "assistant settings",
         "change assistant behavior",
         "ai configuration",
     ],
+
+    # --- MrCall/Phone ---
     '/mrcall': [
         "phone integration",
         "mrcall status",
         "telephone integration",
         "starchat integration",
     ],
-    '/share': [
-        "share my data",
-        "give someone access",
-        "share with",
-        "grant access",
+
+    # --- Email (NEW - replaces Gmail tools) ---
+    '/email': [
+        # Drafts - List
+        "list drafts",
+        "show drafts",
+        "my drafts",
+        "show my drafts",
+        "list my drafts",
+        "show the last {limit:int} drafts",
+        "list {limit:int} drafts",
+        # Drafts - Create
+        "create draft",
+        "draft email",
+        "draft email to {to:email}",
+        "draft email to {to:text}",
+        "compose email",
+        "compose email to {to:email}",
+        "write email to {to:email} about {subject:text}",
+        # Drafts - Send
+        "send draft",
+        "send draft {draft_id:text}",
+        "send the email",
+        "send it",
+        # Drafts - Delete
+        "delete draft",
+        "delete draft {draft_id:text}",
+        "discard draft",
+        # Search
+        "search emails",
+        "search emails for {query:text}",
+        "search emails from {sender:text}",
+        "find emails about {query:text}",
+        "find emails from {sender:email}",
+        "emails from {sender:text}",
+        "emails about {query:text}",
+        "show emails from the last {days:int} days",
+        "search {limit:int} emails for {query:text}",
     ],
-    '/revoke': [
-        "revoke access",
-        "remove access",
-        "stop sharing",
-        "revoke sharing",
+
+    # --- Calendar (NEW) ---
+    '/calendar': [
+        # List
+        "show calendar",
+        "my calendar",
+        "calendar for today",
+        "calendar for {date:date}",
+        "show calendar for {date:date}",
+        "what's on my calendar",
+        "meetings today",
+        "meetings {date:date}",
+        "events this week",
+        "show the next {limit:int} events",
+        # Create
+        "create event",
+        "schedule meeting",
+        "schedule meeting with {attendee:text}",
+        "schedule meeting with {attendee:text} on {date:date}",
+        "schedule meeting with {attendee:text} at {time:time}",
+        "create event on {date:date}",
+        "add event {title:text}",
+        # Search
+        "search calendar",
+        "search calendar for {query:text}",
+        "find meetings about {query:text}",
+        "when is my meeting with {attendee:text}",
+    ],
+
+    # --- Reminders (NEW) ---
+    '/reminder': [
+        "remind me",
+        "set reminder",
+        "remind me in {duration:duration}",
+        "remind me in {duration:duration} to {task:text}",
+        "remind me at {time:time}",
+        "remind me at {time:time} to {task:text}",
+        "remind me on {date:date}",
+        "remind me on {date:date} to {task:text}",
+        "remind me to {task:text}",
+        "list reminders",
+        "show reminders",
+        "cancel reminder",
+        "cancel reminder {reminder_id:text}",
     ],
 }
