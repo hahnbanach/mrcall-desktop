@@ -168,18 +168,28 @@ services/      # Business logic layer (shared with CLI)
 
 ### 6. Semantic Command Matching (`zylch/services/`)
 
-Natural language triggers that route to slash commands without using Claude API.
+Natural language triggers that route to slash commands without using Claude API. Uses **hybrid scoring** (same pattern as memory blob search).
 
 **Key Files**:
-- `trigger_parser.py`: Typed parameter DSL parsing and semantic matching
+- `trigger_parser.py`: Hybrid matching (keyword + semantic) with typed parameter DSL
 - `command_matcher.py`: Routes natural language to commands
 - `command_handlers.py`: `COMMAND_TRIGGERS` dict with trigger templates
 
+**Hybrid Scoring** (same as HybridSearchEngine):
+```
+hybrid_score = alpha * keyword_overlap + (1-alpha) * semantic_similarity
+```
+- Default `alpha=0.5` (balanced keyword + semantic)
+- Keyword matching: FTS-style coverage scoring with stop word removal
+- Semantic matching: Cosine similarity with `all-MiniLM-L6-v2` embeddings
+- Threshold: 0.65 minimum confidence for match
+
 **How It Works**:
 1. User input embedded with `all-MiniLM-L6-v2` (same model as memory)
-2. Compared against pre-computed trigger embeddings using cosine similarity
-3. If match > 0.70 confidence, extract typed parameters and route to command
-4. Parameters extracted using `{param:type}` DSL syntax
+2. Keywords extracted (stop words removed)
+3. Hybrid score computed against pre-computed trigger embeddings
+4. If match > 0.65 confidence, extract typed parameters and route to command
+5. Parameters extracted using `{param:type}` DSL syntax
 
 **Typed Parameter DSL**:
 ```python
@@ -187,15 +197,12 @@ COMMAND_TRIGGERS = {
     '/sync': [
         "sync",
         "synchronize the past {days:int} days",
-        "fetch emails from the last {days:int} days",
     ],
-    '/memory': [
-        "who is {query:text}",
-        "what do you know about {query:text}",
+    '/stats': [
+        "stats", "email stats", "inbox statistics",
     ],
-    '/email': [
-        "show me the last {limit:int} drafts",
-        "draft email to {to:email}",
+    '/tasks': [
+        "tasks", "my tasks", "what do I need to do",
     ],
 }
 ```
@@ -204,10 +211,25 @@ COMMAND_TRIGGERS = {
 
 **Example**:
 ```
+Input: "sync"
+Keyword score: 1.0 (exact match)
+Semantic score: 0.85
+Hybrid (alpha=0.5): 0.925 → "/sync"
+
 Input: "synchronize with the past 2 days"
-Match: 0.899 confidence → "synchronize with the past {days:int} days"
-Output: "/sync 2"
+Keyword score: 0.8
+Semantic score: 0.90
+Hybrid: 0.85 → "/sync 2"
 ```
+
+**Phase 1 Commands** (replacing high-frequency tools):
+| Command | Replaces Tool | Semantic Triggers |
+|---------|---------------|-------------------|
+| `/stats` | `_EmailStatsTool` | "email stats", "how many emails" |
+| `/drafts` | `_ListDraftsTool` | "my drafts", "show drafts" |
+| `/calendar` | `ListCalendarEventsTool` | "my calendar", "meetings today" |
+| `/tasks` | `_GetTasksTool` | "my tasks", "todo list" |
+| `/jobs` | `ListScheduledJobsTool` | "scheduled jobs", "my reminders" |
 
 **Performance**: <100ms matching (embeddings cached after first load)
 

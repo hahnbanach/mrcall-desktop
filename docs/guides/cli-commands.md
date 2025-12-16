@@ -37,23 +37,36 @@ Help, tutorials, and system management.
 
 ## Semantic Command Matching
 
-Zylch uses **semantic embeddings** to understand natural language and route to commands without using the Claude API.
+Zylch uses **hybrid scoring** (keyword + semantic) to understand natural language and route to commands without using the Claude API. This is the same pattern used for memory blob search.
+
+### Hybrid Scoring
+
+```
+hybrid_score = alpha * keyword_overlap + (1-alpha) * semantic_similarity
+```
+
+- **alpha=0.5** (default): Equal weight to keywords and semantics
+- **Keyword matching**: FTS-style coverage scoring with stop word removal
+- **Semantic matching**: Cosine similarity with `all-MiniLM-L6-v2` embeddings
+- **Threshold**: 0.65 minimum confidence for match
 
 ### How It Works
 
 1. Your message is embedded using `all-MiniLM-L6-v2` (384 dimensions)
-2. Compared against pre-computed trigger templates using cosine similarity
-3. If confidence > 0.70, parameters are extracted and command is executed
-4. Falls back to Claude for complex queries
+2. Keywords extracted (stop words removed)
+3. Hybrid score computed: keyword overlap + semantic similarity
+4. If confidence > 0.65, parameters are extracted and command is executed
+5. Falls back to Claude for complex queries
 
 ### Example Matches
 
-| Natural Language | Command | Confidence |
-|-----------------|---------|------------|
-| "synchronize with the past 2 days" | `/sync 2` | 0.90 |
-| "who is Mario Rossi" | `/memory --search Mario Rossi` | 0.85 |
-| "show me the last 5 drafts" | `/email --list --draft --limit 5` | 0.88 |
-| "what's on my calendar tomorrow" | `/calendar --list --date tomorrow` | 0.82 |
+| Natural Language | Command | Hybrid Score | Keyword | Semantic |
+|-----------------|---------|--------------|---------|----------|
+| "sync" | `/sync` | 0.93 | 1.00 | 0.85 |
+| "synchronize with the past 2 days" | `/sync 2` | 0.85 | 0.80 | 0.90 |
+| "my tasks" | `/tasks` | 0.92 | 1.00 | 0.84 |
+| "email stats" | `/stats` | 0.95 | 1.00 | 0.90 |
+| "what's on my calendar" | `/calendar` | 0.88 | 0.75 | 0.92 |
 
 ### Typed Parameter DSL
 
@@ -90,19 +103,25 @@ Triggers support typed parameters using `{param:type}` syntax:
 
 💡 Remember: All commands accept --help for detailed usage
 
-📧 Data Management:
+📧 Data & Email:
 • /sync [days] - Sync email and calendar
-• /briefing [days] - Daily briefing of tasks and conversations
+• /stats - Email statistics (count, unread, threads)
+• /drafts - List email drafts
+• /email - Create, send, search emails
 • /archive - Email archive management
 
-✉️ Email:
-• /email - Draft management (list, create, send, delete)
+📅 Calendar & Tasks:
+• /calendar [days] - Show upcoming events
+• /tasks - List open tasks (needs response)
+• /briefing [days] - Daily briefing with context
+• /jobs - Scheduled reminders and jobs
 
 🧠 Memory & Automation:
 • /memory [search|store|stats|list|reset] - Entity memory with hybrid search
 • /trigger - Event-driven automation
 
 📞 Integrations:
+• /connect - View and manage external connections
 • /mrcall - MrCall/StarChat phone integration
 
 🔗 Sharing:
@@ -118,7 +137,7 @@ Triggers support typed parameters using `{param:type}` syntax:
 • /clear - Clear conversation history
 • /help - Show this message
 
-💡 Tip: You can also chat naturally! Ask "who emailed me today?"
+💡 Tip: Chat naturally! "show my tasks", "email stats", "what's on my calendar"
 ```
 
 ---
@@ -183,6 +202,195 @@ Run /sync [days] to sync more data.
 - Email sync: ~100 messages/second
 - Calendar sync: ~50 events/second
 - Incremental sync after first run (only fetches changes)
+
+---
+
+### `/stats`
+
+**Summary**: Show email statistics
+
+**Description**: Displays statistics about your synced emails - total count, unread, threads, date range, and open conversations needing response. No Claude API call required.
+
+**Usage**:
+```bash
+/stats
+```
+
+**Output**:
+```
+📊 Email Statistics
+
+Total Emails: 1,234
+Threads: 456
+Unread: 23
+Date Range: 2024-06-15 → 2025-12-16
+
+Open Conversations: 12 need response
+
+Run /sync to update or /briefing for task details.
+```
+
+**Semantic Triggers**: "stats", "email stats", "inbox statistics", "how many emails", "unread count"
+
+---
+
+### `/drafts [--limit N]`
+
+**Summary**: List email drafts
+
+**Description**: Lists your saved email drafts stored in Supabase. Use `/email --send <id>` to send a draft.
+
+**Arguments**:
+- `--limit N` - Max drafts to show (default: 20, max: 50)
+
+**Usage**:
+```bash
+# List recent drafts
+/drafts
+
+# List last 5 drafts
+/drafts --limit 5
+```
+
+**Output**:
+```
+📝 Drafts (3 found)
+
+1. Meeting follow-up
+   To: mario@example.com
+   ID: abc12345 | 2025-12-15
+
+2. Q4 Budget Proposal
+   To: sarah@client.com, john@client.com (+1)
+   ID: def67890 | 2025-12-14
+
+3. (no subject)
+   To: team@company.com
+   ID: ghi11111 | 2025-12-13
+
+Use /email --send <id> to send.
+```
+
+**Semantic Triggers**: "drafts", "show drafts", "my drafts", "pending drafts", "unsent emails"
+
+---
+
+### `/calendar [days] [--limit N]`
+
+**Summary**: Show upcoming calendar events
+
+**Description**: Displays your upcoming calendar events from synced Google/Outlook calendar. Events are grouped by date.
+
+**Arguments**:
+- `days` - Days ahead to show (default: 7)
+- `--limit N` - Max events to show (default: 20)
+
+**Usage**:
+```bash
+# Events for next 7 days (default)
+/calendar
+
+# Today only
+/calendar 1
+
+# Next 30 days, up to 50 events
+/calendar 30 --limit 50
+```
+
+**Output**:
+```
+📅 Calendar (8 events, next 7 days)
+
+Monday, December 16
+• 09:00 - Team Standup
+• 14:00 - Client Call - Acme Corp 📍 Zoom
+
+Tuesday, December 17
+• 10:30 - 1:1 with Mario
+• 15:00 - Product Review 📍 Conference Room A
+
+Wednesday, December 18
+• 11:00 - Demo Presentation 📍 Google Meet
+```
+
+**Semantic Triggers**: "calendar", "my calendar", "schedule today", "meetings this week", "what's on my calendar"
+
+---
+
+### `/tasks [--limit N]`
+
+**Summary**: List open tasks (emails needing response)
+
+**Description**: Shows your open tasks - emails that need response, based on pre-computed avatar analysis. Tasks are sorted by relationship score (priority).
+
+**Arguments**:
+- `--limit N` - Max tasks to show (default: 50)
+
+**Usage**:
+```bash
+# List all open tasks
+/tasks
+
+# List top 10 tasks
+/tasks --limit 10
+```
+
+**Output**:
+```
+✅ Open Tasks (5 found)
+
+🔴 High Priority:
+• John Smith - Re: Budget Approval
+  Waiting 3 days | Score: 9
+
+• Sarah Chen - Partnership Proposal
+  Waiting 5 days | Score: 8
+
+🟡 Medium Priority:
+• Mike Johnson - Meeting Follow-up
+  Waiting 1 week | Score: 6
+
+Run /sync to check for new emails.
+```
+
+**Semantic Triggers**: "tasks", "my tasks", "todo list", "what do I need to do", "action items", "things to do"
+
+---
+
+### `/jobs [--cancel <id>]`
+
+**Summary**: List scheduled jobs and reminders
+
+**Description**: Shows your scheduled reminders and automation jobs. Use `--cancel <id>` to cancel a job.
+
+**Arguments**:
+- `--cancel <id>` - Cancel a job by ID
+
+**Usage**:
+```bash
+# List all scheduled jobs
+/jobs
+
+# Cancel a job
+/jobs --cancel abc12345
+```
+
+**Output**:
+```
+⏰ Scheduled Jobs (2 found)
+
+🔔 reminder (ID: abc12345)
+   Call Mario about the proposal
+   Next: 2025-12-16 14:00
+
+⚡ conditional (ID: def67890)
+   Send follow-up if no reply in 3 days
+   Next: 2025-12-19 09:00
+
+Use /jobs --cancel <id> to cancel.
+```
+
+**Semantic Triggers**: "jobs", "scheduled jobs", "my reminders", "upcoming reminders", "what's scheduled"
 
 ---
 
