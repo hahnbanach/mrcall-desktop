@@ -5,17 +5,21 @@
 Zylch provides a comprehensive set of slash commands for managing your emails, calendar, contacts, and automation. All commands are accessible via the CLI, web interface, and mobile app.
 
 **Key Features**:
-- Natural language interface (you can also just ask "who emailed me today?")
+- **Semantic command matching**: Natural language like "synchronize with the past 2 days" automatically routes to `/sync 2`
 - Slash commands for specific operations (`/sync`, `/gaps`, `/memory`)
 - All commands support `--help` flag for detailed usage
+- No Claude API calls for command routing (uses local embeddings)
 
 ## Command Categories
 
 ### 📧 Data Management
 Sync and manage your email and calendar data.
 
+### ✉️ Email (Drafts)
+Create, list, send, and manage email drafts stored in Supabase.
+
 ### 🧠 Memory & Automation
-Configure behavioral memory and event-driven automation.
+Configure entity memory and event-driven automation.
 
 ### 📞 Integrations
 Connect with external services (MrCall, WhatsApp).
@@ -28,6 +32,44 @@ Customize AI behavior and system settings.
 
 ### 📚 Utility
 Help, tutorials, and system management.
+
+---
+
+## Semantic Command Matching
+
+Zylch uses **semantic embeddings** to understand natural language and route to commands without using the Claude API.
+
+### How It Works
+
+1. Your message is embedded using `all-MiniLM-L6-v2` (384 dimensions)
+2. Compared against pre-computed trigger templates using cosine similarity
+3. If confidence > 0.70, parameters are extracted and command is executed
+4. Falls back to Claude for complex queries
+
+### Example Matches
+
+| Natural Language | Command | Confidence |
+|-----------------|---------|------------|
+| "synchronize with the past 2 days" | `/sync 2` | 0.90 |
+| "who is Mario Rossi" | `/memory --search Mario Rossi` | 0.85 |
+| "show me the last 5 drafts" | `/email --list --draft --limit 5` | 0.88 |
+| "what's on my calendar tomorrow" | `/calendar --list --date tomorrow` | 0.82 |
+
+### Typed Parameter DSL
+
+Triggers support typed parameters using `{param:type}` syntax:
+
+| Type | Example | Extracts |
+|------|---------|----------|
+| `int` | "last {days:int} days" | `12` from "last 12 days" |
+| `email` | "email to {to:email}" | `mario@example.com` |
+| `text` | "who is {query:text}" | `Mario Rossi` |
+| `date` | "on {date:date}" | `tomorrow`, `next monday` |
+| `time` | "at {time:time}" | `3pm`, `15:30` |
+| `duration` | "in {duration:duration}" | `30 minutes`, `2 hours` |
+| `model` | "use {model:model}" | `haiku`, `sonnet`, `opus` |
+
+**Performance**: <100ms matching (embeddings cached after first request)
 
 ---
 
@@ -50,12 +92,14 @@ Help, tutorials, and system management.
 
 📧 Data Management:
 • /sync [days] - Sync email and calendar
-• /gaps - Analyze unanswered conversations
+• /briefing [days] - Daily briefing of tasks and conversations
 • /archive - Email archive management
-• /cache - Cache management
+
+✉️ Email:
+• /email - Draft management (list, create, send, delete)
 
 🧠 Memory & Automation:
-• /memory - Behavioral memory management
+• /memory [search|store|stats|list|reset] - Entity memory with hybrid search
 • /trigger - Event-driven automation
 
 📞 Integrations:
@@ -304,187 +348,155 @@ Output:
 
 ---
 
-### `/cache [emails|calendar|gaps] [--clear]`
+## ✉️ Email Commands
 
-**Summary**: View and manage cached data
+### `/email [--list|--create|--send|--delete|--search]`
 
-**Description**: Shows statistics about cached emails, calendar events, or gap analysis. Useful for debugging or clearing stale data.
+**Summary**: Manage email drafts stored in Supabase
+
+**Description**: Drafts are stored in Supabase (not Gmail/Outlook drafts). When sent, they go through Gmail or Outlook API based on user's connected provider. This is a Superhuman-style approach where drafts live in Zylch.
 
 **Options**:
 
-**Overview** (`/cache`):
+**List drafts** (`/email --list --draft`):
 ```bash
-/cache
+# List recent drafts
+/email --list --draft
+
+# List last 5 drafts
+/email --list --draft --limit 5
 ```
 
-Output:
-```
-💾 Cache Overview
-
-📧 Email threads: 156
-📅 Calendar events: 42
-⚠️ Relationship gaps: 23
-
-Commands:
-• /cache emails - View email cache
-• /cache calendar - View calendar cache
-• /cache gaps - View gaps cache
-• /cache --clear all - Clear all caches
-```
-
-**Email cache** (`/cache emails`):
+**Create draft** (`/email --create`):
 ```bash
-/cache emails
+# Create draft to specific recipient
+/email --create --to mario@example.com --subject "Meeting follow-up"
+
+# Create draft (opens editor)
+/email --create
 ```
 
-Output:
-```
-📧 Email Cache (156 threads)
-
-**Re: Q4 Budget Review**
-From: john@example.com | 2025-12-05
-
-**Partnership Discussion**
-From: sarah@acmecorp.com | 2025-12-04
-
-... and 154 more threads
-```
-
-**Calendar cache** (`/cache calendar`):
+**Send draft** (`/email --send <draft_id>`):
 ```bash
-/cache calendar
+/email --send abc123
 ```
 
-Output:
-```
-📅 Calendar Cache (42 events)
-
-**Weekly Sync with Team**
-When: 2025-12-09 10:00
-
-**Client Demo**
-When: 2025-12-10 14:00
-
-... and 40 more upcoming events
-```
-
-**Gaps cache** (`/cache gaps`):
+**Delete draft** (`/email --delete <draft_id>`):
 ```bash
-/cache gaps
+/email --delete abc123
 ```
 
-**Clear caches**:
+**Search emails** (`/email --search`):
 ```bash
-# Clear all caches
-/cache --clear all
+# Search by keyword
+/email --search "budget proposal"
 
-# Clear email cache only
-/cache --clear emails
+# Search by sender
+/email --search --from john@example.com
 
-# Clear calendar cache only
-/cache --clear calendar
-
-# Clear gaps cache only
-/cache --clear gaps
+# Search with date range
+/email --search "contract" --days 30
 ```
 
-**Cache Location**: `.swarm/cache/`
+**Provider Routing**: Emails are sent via Gmail API (if Google connected) or Outlook API (if Microsoft connected).
 
 ---
 
 ## 🧠 Memory & Automation Commands
 
-### `/memory [--add|--list|--stats]`
+### `/memory [search|store|stats|list|reset]`
 
-**Summary**: Manage behavioral memory
+**Summary**: Entity-centric memory with hybrid search
 
-**Description**: Behavioral memory stores patterns Zylch learns from your corrections and preferences. Unlike triggered instructions (which are event-driven), behavioral memory is always-on and injected into every AI prompt.
+**Description**: The memory system stores "blobs" of natural language information about entities (people, companies, topics). Unlike traditional databases, all facts about an entity live in a single blob that gets reconsolidated when new information arrives.
 
 **Options**:
 
-**Add memory** (`/memory --add <issue> <correct> <channel>`):
+**Search memory** (`/memory search <query>` or `/memory --search <query>`):
 ```bash
-# Add language preference
-/memory --add "Used tu" "Use lei" email
+# Search for a person
+/memory search Mario Rossi
 
-# Add CC preference
-/memory --add "Forgot CC" "Always CC marco@example.com on contracts" email
+# Natural language query
+/memory search "who is the CTO of Acme Corp"
 
-# Add tone preference
-/memory --add "Too casual" "Use formal tone with clients" email
+# Semantic triggers also work:
+"who is Mario Rossi"  →  /memory --search who is Mario Rossi
 ```
 
 Output:
 ```
-✅ Memory added (ID: mem_abc12345)
+🧠 Memory Search: "Mario Rossi"
 
-Issue: Used tu
-Correct: Use lei
-Category: email
+📄 **Mario Rossi**
+   Mario Rossi is the CTO of Acme Corp. He prefers formal communication
+   and responds well to data-driven proposals. Met him at the Milan
+   conference in October 2025.
 
-Zylch will now remember this correction.
+   Last updated: 2025-12-15
+   Similarity: 0.92
 ```
 
-**List memories** (`/memory --list [scope]`):
+**Store memory** (`/memory store <content>`):
 ```bash
-# List all memories (personal + global)
-/memory --list
+# Store a fact
+/memory store "Mario Rossi moved to the Rome office"
 
-# List personal memories only
-/memory --list personal
-
-# List global memories only
-/memory --list global
+# Store relationship info
+/memory store "John Smith is very responsive, usually replies within 2 hours"
 ```
 
 Output:
 ```
-🧠 Behavioral Memories (12 total, scope: all)
+✅ Memory stored
 
-👤 **Used tu** → **Use lei**
-   Category: email | Confidence: 0.95
+Content: Mario Rossi moved to the Rome office
+Action: Reconsolidated with existing memory (similarity: 0.87)
 
-👤 **Forgot CC** → **Always CC marco@example.com on contracts**
-   Category: email | Confidence: 0.88
-
-🌍 **Too informal** → **Use professional tone in business emails**
-   Category: email | Confidence: 0.92
-
-... and 9 more memories
+The existing blob about Mario Rossi has been updated with this new information.
 ```
 
-**Icons**:
-- 👤 Personal memory (your namespace: `user:{owner_id}`)
-- 🌍 Global memory (system-wide: `global:skills`)
-
-**Memory statistics** (`/memory --stats [scope]`):
+**Memory statistics** (`/memory stats`):
 ```bash
-# Overall statistics
-/memory --stats
-
-# Personal statistics only
-/memory --stats personal
+/memory stats
 ```
 
 Output:
 ```
-🧠 Memory Statistics (scope: all)
+🧠 Memory Statistics
 
-Total Memories: 42
-Total Patterns: 18
+Total Blobs: 156
+Total Sentences: 892
+Index Size: 2.3 MB
 
-By Category:
-• email: 28
-• contacts: 8
-• calendar: 4
-• task: 2
+By Entity Type (estimated):
+• People: 89
+• Companies: 42
+• Topics: 25
 
-Storage: /Users/mal/.zylch/zylch_memory.db
+Storage: Supabase (blobs + blob_sentences tables)
 ```
 
-**Memory Reconsolidation**: Zylch automatically merges similar memories (similarity threshold: 0.85) to prevent duplicates. See [Memory System](../features/memory-system.md) for details.
+**List memories** (`/memory list [limit]`):
+```bash
+# List recent memories
+/memory list
 
-**Performance**: Memory retrieval is O(log n) with HNSW indexing (150x faster than brute-force).
+# List last 20 memories
+/memory list 20
+```
+
+**Reset memory** (`/memory reset`):
+```bash
+# Clear all memories (requires confirmation)
+/memory reset
+```
+
+**Hybrid Search**: Combines PostgreSQL full-text search (FTS) with pgvector semantic search. Named entities (like "Mario Rossi") weight FTS higher (α=0.7), conceptual queries weight semantic higher (α=0.3).
+
+**Reconsolidation**: When storing new info, Zylch searches for similar existing memories. If found (similarity > 0.65), the LLM merges the old and new info instead of creating duplicates.
+
+**Performance**: <50ms for search (HNSW index), <200ms for store (includes reconsolidation check).
 
 ---
 

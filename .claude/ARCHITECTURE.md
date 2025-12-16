@@ -166,7 +166,52 @@ services/      # Business logic layer (shared with CLI)
 
 **Help via Chat**: Sending `/gaps --help` (or any command with `--help`) returns help text without executing the command. This is handled by the dispatcher in `chat_service.py` before routing to handlers.
 
-### 6. CLI (`zylch/cli/main.py`)
+### 6. Semantic Command Matching (`zylch/services/`)
+
+Natural language triggers that route to slash commands without using Claude API.
+
+**Key Files**:
+- `trigger_parser.py`: Typed parameter DSL parsing and semantic matching
+- `command_matcher.py`: Routes natural language to commands
+- `command_handlers.py`: `COMMAND_TRIGGERS` dict with trigger templates
+
+**How It Works**:
+1. User input embedded with `all-MiniLM-L6-v2` (same model as memory)
+2. Compared against pre-computed trigger embeddings using cosine similarity
+3. If match > 0.70 confidence, extract typed parameters and route to command
+4. Parameters extracted using `{param:type}` DSL syntax
+
+**Typed Parameter DSL**:
+```python
+COMMAND_TRIGGERS = {
+    '/sync': [
+        "sync",
+        "synchronize the past {days:int} days",
+        "fetch emails from the last {days:int} days",
+    ],
+    '/memory': [
+        "who is {query:text}",
+        "what do you know about {query:text}",
+    ],
+    '/email': [
+        "show me the last {limit:int} drafts",
+        "draft email to {to:email}",
+    ],
+}
+```
+
+**Supported Types**: `int`, `email`, `text`, `date`, `time`, `duration`, `model`
+
+**Example**:
+```
+Input: "synchronize with the past 2 days"
+Match: 0.899 confidence → "synchronize with the past {days:int} days"
+Output: "/sync 2"
+```
+
+**Performance**: <100ms matching (embeddings cached after first load)
+
+### 7. CLI (`zylch/cli/main.py`)
 Interactive command-line interface:
 - `/sync` - Morning workflow (archive + intelligence + calendar + gaps)
 - `/gaps` - Show relationship gaps
