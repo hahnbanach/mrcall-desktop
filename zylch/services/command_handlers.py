@@ -23,7 +23,7 @@ async def handle_help() -> str:
 💡 **Remember:** All commands accept `--help` for detailed usage
 
 **📧 Data & Email:**
-• `/sync [days]` - Sync email and calendar
+• `/sync --days <n>` - Sync email and calendar
 • `/stats` - Email statistics (count, unread, threads)
 • `/drafts` - List email drafts
 • `/email` - Create, send, search emails
@@ -78,7 +78,7 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
             result = supabase.client.table('sync_state').select('*').eq('owner_id', owner_id).execute()
 
             if not result.data:
-                return "📊 **Sync Status**\n\n❌ No sync state found - never synced.\n\nRun `/sync [days]` to start."
+                return "📊 **Sync Status**\n\n❌ No sync state found - never synced.\n\nRun `/sync` or `/sync --days <n>` to start."
 
             sync_state = result.data[0]
             last_sync = sync_state.get('last_sync')
@@ -112,7 +112,7 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
 📧 **Emails archived:** {email_count:,}
 📅 **Calendar events:** {event_count:,}
 
-Run `/sync [days]` to sync more data."""
+Run `/sync` or `/sync --days <n>` to sync more data."""
         except Exception as e:
             logger.error(f"[/sync] Failed to get sync status: {e}")
             return f"❌ **Error getting sync status:** {str(e)}"
@@ -139,13 +139,13 @@ Run `/sync [days]` to sync more data."""
             return """✅ **Sync state reset!**
 
 All emails and calendar events cleared.
-Next `/sync [days]` will perform a full re-sync from scratch.
+Next `/sync` will perform a full re-sync from scratch.
 
 ⚠️ **Memory note:** Your memory blobs still exist. If you want fresh memory:
 ```
 /memory --reset
 ```
-Then run `/sync [days]` to rebuild memory from re-synced emails."""
+Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
         except Exception as e:
             logger.error(f"[/sync] Failed to reset sync state: {e}")
             return f"❌ **Error resetting sync state:** {str(e)}"
@@ -238,7 +238,7 @@ Then run `/sync [days]` to rebuild memory from re-synced emails."""
             if email_data.get('incremental'):
                 first_sync = email_data.get('first_sync_date', 'previous sync')
                 lines.append(f"ℹ️  **Incremental sync** - fetching changes since {first_sync}")
-                lines.append(f"   If you want to go further in the past, run `/sync --reset` first, then `/sync [days]`")
+                lines.append(f"   If you want to go further in the past, run `/sync --reset` first, then `/sync --days <n>`")
         else:
             has_failures = True
             lines.append(f"❌ **Email:** {results['email_sync'].get('error')}")
