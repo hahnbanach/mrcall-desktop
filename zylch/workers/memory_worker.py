@@ -224,3 +224,121 @@ class MemoryWorker:
         except Exception as e:
             logger.error(f"Failed to extract facts: {e}")
             return ""
+
+    async def process_calendar_event(self, event: Dict) -> bool:
+        """Process single calendar event to extract and store facts.
+
+        Args:
+            event: Event dict with id, summary, description, location, start_time, end_time, attendees
+
+        Returns:
+            True if processed successfully, False otherwise
+        """
+        event_id = event.get("id", "unknown")
+        try:
+            logger.debug(f"Processing calendar event {event_id}")
+
+            # Extract facts from event
+            facts = self._extract_calendar_facts(event)
+            if not facts or facts == "No significant facts.":
+                logger.debug(f"No facts extracted from event {event_id}")
+                self.storage.mark_calendar_event_processed(self.owner_id, event_id)
+                return True
+
+            # Search for existing blob about this meeting/attendees
+            existing = self.hybrid_search.find_for_reconsolidation(
+                owner_id=self.owner_id,
+                content=facts,
+                namespace=self.namespace
+            )
+
+            event_desc = f"Extracted from calendar event '{event.get('summary', '')}' ({event.get('start_time', '')})"
+
+            if existing:
+                merged_content = self.llm_merge.merge(existing.content, facts)
+                self.blob_storage.update_blob(
+                    blob_id=existing.blob_id,
+                    owner_id=self.owner_id,
+                    content=merged_content,
+                    event_description=event_desc
+                )
+                logger.info(f"Reconsolidated blob {existing.blob_id} with event {event_id}")
+            else:
+                blob = self.blob_storage.store_blob(
+                    owner_id=self.owner_id,
+                    namespace=self.namespace,
+                    content=facts,
+                    event_description=event_desc
+                )
+                logger.info(f"Created new blob {blob['id']} from event {event_id}")
+
+            self.storage.mark_calendar_event_processed(self.owner_id, event_id)
+            return True
+
+        except Exception as e:
+            logger.error(f"Error processing event {event_id}: {e}", exc_info=True)
+            return False
+
+    async def process_calendar_batch(self, events: List[Dict]) -> int:
+        """Process batch of calendar events.
+
+        Args:
+            events: List of event dicts (from get_unprocessed_calendar_events)
+
+        Returns:
+            Number of successfully processed events
+        """
+        logger.info(f"Processing batch of {len(events)} calendar events")
+        processed = 0
+
+        for event in events:
+            success = await self.process_calendar_event(event)
+            if success:
+                processed += 1
+
+        logger.info(f"Calendar batch complete: {processed}/{len(events)} processed")
+        return processed
+
+    def _extract_calendar_facts(self, event: Dict) -> str:
+        """Extract facts from calendar event using LLM.
+
+        Args:
+            event: Calendar event dict
+
+        Returns:
+            Extracted facts as natural language string
+        """
+        try:
+            attendees = event.get("attendees", [])
+            attendees_str = ", ".join(attendees) if isinstance(attendees, list) else str(attendees)
+
+            prompt = f"""Extract key facts about attendees from this calendar event.
+
+TITLE: {event.get('summary', '(no title)')}
+DATE/TIME: {event.get('start_time', '')} - {event.get('end_time', '')}
+LOCATION: {event.get('location', '(no location)')}
+ATTENDEES: {attendees_str}
+DESCRIPTION: {event.get('description', '(no description)')[:2000]}
+
+---
+
+Write a concise summary of what we learned from this meeting.
+Include:
+- Who attended and their relationship to the meeting
+- Meeting purpose and topics discussed
+- Any action items or follow-ups implied
+- Context about the attendees (companies, roles if mentioned)
+
+Output ONLY the facts as natural language prose (2-5 sentences). If no meaningful facts, output "No significant facts."
+"""
+
+            response = self.anthropic.messages.create(
+                model="claude-3-5-haiku-20241022",
+                max_tokens=512,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.content[0].text.strip()
+
+        except Exception as e:
+            logger.error(f"Failed to extract calendar facts: {e}")
+            return ""

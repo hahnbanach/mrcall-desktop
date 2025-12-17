@@ -1932,6 +1932,96 @@ class SupabaseStorage:
             .in_('id', email_ids)\
             .execute()
 
+    def get_unprocessed_calendar_events(
+        self,
+        owner_id: str,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Get calendar events not yet processed by Memory Agent.
+
+        Args:
+            owner_id: Firebase UID
+            limit: Maximum number of events to return
+
+        Returns:
+            List of event dicts
+        """
+        result = self.client.table('calendar_events')\
+            .select('id, summary, description, location, start_time, end_time, attendees')\
+            .eq('owner_id', owner_id)\
+            .is_('memory_processed_at', 'null')\
+            .order('start_time', desc=True)\
+            .limit(limit)\
+            .execute()
+
+        return result.data or []
+
+    def mark_calendar_event_processed(
+        self,
+        owner_id: str,
+        event_id: str
+    ) -> None:
+        """Mark a calendar event as processed by Memory Agent.
+
+        Args:
+            owner_id: Firebase UID
+            event_id: Event ID to mark
+        """
+        self.client.table('calendar_events')\
+            .update({'memory_processed_at': datetime.now(timezone.utc).isoformat()})\
+            .eq('owner_id', owner_id)\
+            .eq('id', event_id)\
+            .execute()
+
+    def mark_calendar_events_processed(
+        self,
+        owner_id: str,
+        event_ids: List[str]
+    ) -> None:
+        """Mark multiple calendar events as processed by Memory Agent.
+
+        Args:
+            owner_id: Firebase UID
+            event_ids: List of event IDs to mark
+        """
+        if not event_ids:
+            return
+
+        self.client.table('calendar_events')\
+            .update({'memory_processed_at': datetime.now(timezone.utc).isoformat()})\
+            .eq('owner_id', owner_id)\
+            .in_('id', event_ids)\
+            .execute()
+
+    def reset_memory_processing_timestamps(self, owner_id: str) -> Dict[str, int]:
+        """Reset memory_processed_at timestamps for all services.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            Dict with counts of reset items per service
+        """
+        counts = {}
+
+        # Reset emails
+        result = self.client.table('emails')\
+            .update({'memory_processed_at': None})\
+            .eq('owner_id', owner_id)\
+            .not_.is_('memory_processed_at', 'null')\
+            .execute()
+        counts['emails'] = len(result.data) if result.data else 0
+
+        # Reset calendar events
+        result = self.client.table('calendar_events')\
+            .update({'memory_processed_at': None})\
+            .eq('owner_id', owner_id)\
+            .not_.is_('memory_processed_at', 'null')\
+            .execute()
+        counts['calendar_events'] = len(result.data) if result.data else 0
+
+        return counts
+
     def upsert_identifier(
         self,
         owner_id: str,
