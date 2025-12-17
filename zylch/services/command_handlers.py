@@ -16,7 +16,7 @@ from zylch.config import settings
 logger = logging.getLogger(__name__)
 
 
-async def handle_echo(args: List[str]) -> str:
+async def handle_echo(args: List[str] = None) -> str:
     """Echo back the provided text."""
     if not args:
         return ""
