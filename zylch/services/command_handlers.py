@@ -2516,7 +2516,10 @@ COMMAND_TRIGGERS = {
         "process memory",
         "process emails into memory",
         "process calendar into memory",
+        "process pipedrive into memory",
+        "process deals into memory",
         "extract facts from emails",
+        "extract facts from pipedrive",
         "build memory from synced data",
         "run memory agent",
         # Search
