@@ -1878,8 +1878,27 @@ Run `/sync` first to fetch latest emails.''',
     },
     '/memory': {
         'summary': 'Entity memory system',
-        'usage': '/memory [search|store|stats|list] <args>',
-        'description': 'Search, store, and manage entity memories with hybrid FTS + semantic search.',
+        'usage': '/memory [process|search|store|stats|list|--reset] <args>',
+        'description': '''Process synced data into memory blobs, search, and manage entity memories.
+
+**Processing:**
+- `/memory process` - Process all unprocessed emails + calendar into blobs
+- `/memory process email` - Process only unprocessed emails
+- `/memory process calendar` - Process only unprocessed calendar events
+
+**Searching:**
+- `/memory search <query>` - Search memories (hybrid FTS + semantic)
+- `/memory store <content>` - Store new memory (with auto-reconsolidation)
+
+**Management:**
+- `/memory stats` - Show memory statistics
+- `/memory list [limit]` - List recent memories
+- `/memory --reset` - Delete ALL memories AND reset processing timestamps
+
+**Workflow:**
+1. `/sync` - Fetches emails/calendar to local DB
+2. `/memory process` - Extracts facts into blobs
+3. `/memory search <query>` - Finds stored information''',
     },
     '/email': {
         'summary': 'Email drafts and search',
@@ -2480,6 +2499,13 @@ COMMAND_TRIGGERS = {
 
     # --- Memory System ---
     '/memory': [
+        # Process (extract facts from synced data)
+        "process memory",
+        "process emails into memory",
+        "process calendar into memory",
+        "extract facts from emails",
+        "build memory from synced data",
+        "run memory agent",
         # Search
         "search memory",
         "search memory for {query:text}",
@@ -2501,6 +2527,7 @@ COMMAND_TRIGGERS = {
         "reset memory",
         "clear memory",
         "delete all memories",
+        "wipe memory and reprocess",
     ],
 
     # --- Triggers/Automation ---
