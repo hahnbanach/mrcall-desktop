@@ -2020,7 +2020,79 @@ class SupabaseStorage:
             .execute()
         counts['calendar_events'] = len(result.data) if result.data else 0
 
+        # Reset pipedrive deals
+        try:
+            result = self.client.table('pipedrive_deals')\
+                .update({'memory_processed_at': None})\
+                .eq('owner_id', owner_id)\
+                .not_.is_('memory_processed_at', 'null')\
+                .execute()
+            counts['pipedrive_deals'] = len(result.data) if result.data else 0
+        except Exception:
+            counts['pipedrive_deals'] = 0  # Table may not exist yet
+
         return counts
+
+    def get_unprocessed_pipedrive_deals(
+        self,
+        owner_id: str,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Get pipedrive deals not yet processed by Memory Agent.
+
+        Args:
+            owner_id: Firebase UID
+            limit: Maximum number of deals to return
+
+        Returns:
+            List of deal dicts
+        """
+        result = self.client.table('pipedrive_deals')\
+            .select('id, deal_id, title, person_name, org_name, value, currency, status, stage_name, deal_data')\
+            .eq('owner_id', owner_id)\
+            .is_('memory_processed_at', 'null')\
+            .order('updated_at', desc=True)\
+            .limit(limit)\
+            .execute()
+
+        return result.data or []
+
+    def mark_pipedrive_deal_processed(
+        self,
+        owner_id: str,
+        deal_id: str
+    ) -> None:
+        """Mark a pipedrive deal as processed by Memory Agent.
+
+        Args:
+            owner_id: Firebase UID
+            deal_id: Deal ID (from pipedrive_deals.id, not deal_id column)
+        """
+        self.client.table('pipedrive_deals')\
+            .update({'memory_processed_at': datetime.now(timezone.utc).isoformat()})\
+            .eq('owner_id', owner_id)\
+            .eq('id', deal_id)\
+            .execute()
+
+    def mark_pipedrive_deals_processed(
+        self,
+        owner_id: str,
+        deal_ids: List[str]
+    ) -> None:
+        """Mark multiple pipedrive deals as processed by Memory Agent.
+
+        Args:
+            owner_id: Firebase UID
+            deal_ids: List of deal IDs to mark
+        """
+        if not deal_ids:
+            return
+
+        self.client.table('pipedrive_deals')\
+            .update({'memory_processed_at': datetime.now(timezone.utc).isoformat()})\
+            .eq('owner_id', owner_id)\
+            .in_('id', deal_ids)\
+            .execute()
 
     def upsert_identifier(
         self,

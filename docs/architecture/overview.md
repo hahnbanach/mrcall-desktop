@@ -382,9 +382,34 @@ CREATE TABLE calendar_events (
   end_time TIMESTAMPTZ,
   attendees JSONB,
   meeting_link TEXT,
+  memory_processed_at TIMESTAMPTZ DEFAULT NULL,  -- NULL = unprocessed
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX idx_calendar_owner ON calendar_events(owner_id, start_time);
+CREATE INDEX idx_calendar_memory_unprocessed ON calendar_events(owner_id, start_time DESC) WHERE memory_processed_at IS NULL;
+
+-- Pipedrive deals
+CREATE TABLE pipedrive_deals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id TEXT NOT NULL,
+  deal_id TEXT NOT NULL,  -- Pipedrive deal ID
+  title TEXT,
+  person_name TEXT,
+  org_name TEXT,
+  value NUMERIC,
+  currency TEXT DEFAULT 'USD',
+  status TEXT,  -- 'open', 'won', 'lost'
+  stage_name TEXT,
+  pipeline_name TEXT,
+  expected_close_date DATE,
+  deal_data JSONB,  -- Full deal object from Pipedrive
+  memory_processed_at TIMESTAMPTZ DEFAULT NULL,  -- NULL = unprocessed
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(owner_id, deal_id)
+);
+CREATE INDEX idx_pipedrive_deals_owner ON pipedrive_deals(owner_id, updated_at DESC);
+CREATE INDEX idx_pipedrive_deals_memory_unprocessed ON pipedrive_deals(owner_id, updated_at DESC) WHERE memory_processed_at IS NULL;
 
 -- Triggers (event-driven automation)
 CREATE TABLE triggers (

@@ -185,10 +185,10 @@ class SyncService:
         return results
 
     async def sync_pipedrive(self) -> Dict[str, Any]:
-        """Sync deals from Pipedrive to memory.
+        """Sync deals from Pipedrive to local table.
 
-        Fetches all deals from Pipedrive and stores them in the
-        unstructured memory system for AI context.
+        Fetches all deals from Pipedrive and stores them in pipedrive_deals table.
+        Use /memory process pipedrive to extract facts into blobs.
 
         Returns:
             Sync results with deal count
@@ -218,49 +218,45 @@ class SyncService:
 
         try:
             from zylch.tools.pipedrive import PipedriveClient
-            from zylch.memory import ZylchMemory
 
-            # Initialize clients
+            # Initialize client
             pipedrive = PipedriveClient(api_token=pipedrive_creds['api_token'])
-            memory = ZylchMemory()  # Uses default local config
 
             # Fetch all deals
             deals = pipedrive.list_deals(status="all_not_deleted", limit=500)
             logger.info(f"[pipedrive_sync] Fetched {len(deals)} deals")
 
-            # Store each deal in memory
+            # Store each deal in pipedrive_deals table
             deals_synced = 0
             for deal in deals:
                 try:
-                    # Build a human-readable summary
-                    person_name = deal.get('person_name') or deal.get('person_id', {}).get('name', 'Unknown')
-                    org_name = deal.get('org_name') or deal.get('org_id', {}).get('name', '')
-                    stage_name = deal.get('stage_id', 'Unknown stage')
-                    value = deal.get('value', 0)
-                    currency = deal.get('currency', 'USD')
-                    status = deal.get('status', 'open')
+                    deal_id = str(deal.get('id'))
+                    person_name = deal.get('person_name') or (deal.get('person_id') or {}).get('name', '')
+                    org_name = deal.get('org_name') or (deal.get('org_id') or {}).get('name', '')
 
-                    # Create pattern (human-readable summary)
-                    pattern = f"Deal: {deal.get('title', 'Untitled')} | {person_name}"
-                    if org_name:
-                        pattern += f" ({org_name})"
-                    pattern += f" | Value: {value} {currency} | Status: {status}"
+                    # Upsert deal into table
+                    self.supabase.client.table('pipedrive_deals').upsert({
+                        'owner_id': self.owner_id,
+                        'deal_id': deal_id,
+                        'title': deal.get('title', ''),
+                        'person_name': person_name,
+                        'org_name': org_name,
+                        'value': deal.get('value', 0),
+                        'currency': deal.get('currency', 'USD'),
+                        'status': deal.get('status', 'open'),
+                        'stage_name': str(deal.get('stage_id', '')),
+                        'pipeline_name': str(deal.get('pipeline_id', '')),
+                        'expected_close_date': deal.get('expected_close_date'),
+                        'deal_data': deal,
+                        'updated_at': datetime.now(timezone.utc).isoformat()
+                    }, on_conflict='owner_id,deal_id').execute()
 
-                    # Store in memory
-                    memory.store_memory(
-                        namespace="pipedrive:deals",
-                        category="crm",
-                        context=f"Pipedrive deal ID {deal.get('id')}: {deal.get('title', 'Untitled')}",
-                        pattern=pattern,
-                        examples=[f"pipedrive_deal_{deal.get('id')}"],
-                        confidence=1.0
-                    )
                     deals_synced += 1
 
                 except Exception as e:
                     logger.warning(f"[pipedrive_sync] Failed to store deal {deal.get('id')}: {e}")
 
-            logger.info(f"[pipedrive_sync] Complete: {deals_synced} deals synced to memory")
+            logger.info(f"[pipedrive_sync] Complete: {deals_synced} deals synced to table")
             return {
                 "success": True,
                 "deals_synced": deals_synced,
