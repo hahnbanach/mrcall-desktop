@@ -148,9 +148,9 @@ class SemanticCommandMatcher:
             return command
 
     def _format_sync(self, params: Dict[str, Any]) -> str:
-        """/sync [days]"""
+        """/sync [--days <n>]"""
         if 'days' in params:
-            return f"/sync {params['days']}"
+            return f"/sync --days {params['days']}"
         return "/sync"
 
     def _format_memory(self, params: Dict[str, Any], template: str, original_input: str) -> str:

@@ -144,14 +144,14 @@ Triggers support typed parameters using `{param:type}` syntax:
 
 ## 📧 Data Management Commands
 
-### `/sync [days] [--status] [--reset]`
+### `/sync [--days <n>] [--status] [--reset]`
 
 **Summary**: Sync emails and calendar from Google/Microsoft
 
 **Description**: Fetches new emails from Gmail/Outlook and calendar events from Google Calendar. Performs incremental sync after first run. Also runs Memory Agent to extract facts from emails into entity blobs.
 
 **Arguments**:
-- `days` - Number of days to sync (default: 30 for first sync, incremental after)
+- `--days <n>` - Number of days to sync (default: 30 for first sync, incremental after)
 - `--status` - Show sync status without syncing
 - `--reset` - Clear sync state and force full re-sync (warns about memory)
 
@@ -161,21 +161,21 @@ Triggers support typed parameters using `{param:type}` syntax:
 /sync
 
 # Sync last 7 days
-/sync 7
+/sync --days 7
 
 # Sync last 300 days (extensive history)
-/sync 300
+/sync --days 300
 
 # Check sync status
 /sync --status
 
-# Reset sync state (then run /sync [days])
+# Reset sync state (then run /sync)
 /sync --reset
 
 # Fresh start - rebuild everything from scratch
-/memory --reset   # Clear memory blobs first
-/sync --reset     # Clear emails/calendar
-/sync 30          # Re-sync and rebuild memory
+/memory --reset      # Clear memory blobs first
+/sync --reset        # Clear emails/calendar
+/sync --days 30      # Re-sync and rebuild memory
 ```
 
 **Output**:
@@ -716,9 +716,9 @@ Your memory is now empty. Use /memory store <content> to add new memories.
 
 **Fresh Start**: To rebuild memory from scratch:
 ```bash
-/memory --reset   # Delete all blobs
-/sync --reset     # Clear emails/calendar
-/sync 30          # Re-sync and rebuild memory
+/memory --reset      # Delete all blobs
+/sync --reset        # Clear emails/calendar
+/sync --days 30      # Re-sync and rebuild memory
 ```
 
 **Hybrid Search**: Combines PostgreSQL full-text search (FTS) with pgvector semantic search. Named entities (like "Mario Rossi") weight FTS higher (α=0.7), conceptual queries weight semantic higher (α=0.3).

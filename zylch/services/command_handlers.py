@@ -150,14 +150,15 @@ Then run `/sync [days]` to rebuild memory from re-synced emails."""
             logger.error(f"[/sync] Failed to reset sync state: {e}")
             return f"❌ **Error resetting sync state:** {str(e)}"
 
-    # Parse days parameter (filter out flags)
+    # Parse --days parameter
     days_back = 30
-    numeric_args = [arg for arg in args if not arg.startswith('--')]
-    if numeric_args:
-        try:
-            days_back = int(numeric_args[0])
-        except ValueError:
-            return f"❌ **Error:** `{numeric_args[0]}` is not a valid number\n\n**Usage:** `/sync [days] [--reset]`"
+    for i, arg in enumerate(args):
+        if arg == '--days' and i + 1 < len(args):
+            try:
+                days_back = int(args[i + 1])
+            except ValueError:
+                return f"❌ **Error:** `{args[i + 1]}` is not a valid number\n\n**Usage:** `/sync --days <number> [--reset]`"
+            break
 
     try:
         # Get user's auth provider
@@ -1772,26 +1773,26 @@ COMMAND_HELP = {
     },
     '/sync': {
         'summary': 'Sync emails and calendar',
-        'usage': '/sync [days] [--status] [--reset]',
+        'usage': '/sync [--days <n>] [--status] [--reset]',
         'description': '''Fetches new emails from Gmail and calendar events from Google Calendar.
 Also runs Memory Agent to extract facts from emails into entity blobs.
 
 **Arguments:**
-- `days` - Number of days to sync (default: 30 for first sync, incremental after)
+- `--days <n>` - Number of days to sync (default: 30 for first sync, incremental after)
 - `--status` - Show sync status (last sync time, email count, event count)
 - `--reset` - Clear sync state and force full re-sync (warns about memory)
 
 **Examples:**
 - `/sync` - Sync with defaults (incremental after first sync)
-- `/sync 1` - Sync only last 1 day (useful for testing)
-- `/sync 300` - Sync last 300 days
+- `/sync --days 1` - Sync only last 1 day (useful for testing)
+- `/sync --days 300` - Sync last 300 days
 - `/sync --status` - Check sync status without syncing
-- `/sync --reset` - Reset sync state, then run `/sync [days]` to re-sync
+- `/sync --reset` - Reset sync state, then run `/sync` to re-sync
 
 **Fresh start:** To rebuild everything from scratch:
 1. `/memory --reset` - Clear memory blobs
 2. `/sync --reset` - Clear emails/calendar
-3. `/sync [days]` - Re-sync and rebuild memory''',
+3. `/sync --days 30` - Re-sync and rebuild memory''',
     },
     '/briefing': {
         'summary': 'Daily briefing of tasks and unanswered conversations',
