@@ -517,22 +517,26 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
         return """**🧠 Entity Memory System**
 
 **Usage:**
+• `/memory process` - Process all unprocessed data into memory blobs
+• `/memory process email` - Process only emails
+• `/memory process calendar` - Process only calendar events
 • `/memory search <query>` - Search memories (hybrid FTS + semantic)
 • `/memory store <content>` - Store new memory (with auto-reconsolidation)
 • `/memory stats` - Show memory statistics
 • `/memory list [limit]` - List recent memories
-• `/memory --reset` - Delete ALL your memories (irreversible!)
+• `/memory --reset` - Delete ALL memories AND reset processing timestamps
 
 **Examples:**
+• `/memory process` - Process all synced data into blobs
+• `/memory process email` - Process only unprocessed emails
 • `/memory search John Smith`
 • `/memory store "Mario prefers formal Italian in emails"`
-• `/memory stats`
-• `/memory list 10`
-• `/memory --reset` - Wipe all memories
+• `/memory --reset` - Wipe all memories + mark data as unprocessed
 
 **How it works:**
-Memories are stored as entity blobs with sentence-level embeddings.
-When storing, similar memories are automatically merged (reconsolidation)."""
+1. `/sync` fetches emails and calendar to local database
+2. `/memory process` extracts facts and stores them in blobs
+3. `/memory search` finds information using hybrid FTS + semantic search"""
 
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch_memory import BlobStorage, HybridSearchEngine, EmbeddingEngine
@@ -540,7 +544,8 @@ When storing, similar memories are automatically merged (reconsolidation)."""
 
     try:
         # Initialize services
-        supabase = SupabaseStorage.get_instance().client
+        storage = SupabaseStorage.get_instance()
+        supabase = storage.client
         mem_config = ZylchMemoryConfig()
         embedding_engine = EmbeddingEngine(mem_config)
         blob_storage = BlobStorage(supabase, embedding_engine)
@@ -551,7 +556,43 @@ When storing, similar memories are automatically merged (reconsolidation)."""
         # Normalize args - accept both 'search' and '--search'
         cmd = args[0].lstrip('-') if args else ''
 
-        if cmd == 'search':
+        if cmd == 'process':
+            # Process synced data into memory blobs
+            from zylch.workers.memory_worker import MemoryWorker
+
+            service = args[1].lower() if len(args) > 1 else 'all'
+            valid_services = ['all', 'email', 'calendar']
+
+            if service not in valid_services:
+                return f"❌ Unknown service: `{service}`\n\nValid options: `email`, `calendar`, or omit for all."
+
+            worker = MemoryWorker(storage=storage, owner_id=owner_id)
+            results = []
+
+            # Process emails
+            if service in ['all', 'email']:
+                unprocessed_emails = storage.get_unprocessed_emails(owner_id, limit=100)
+                if unprocessed_emails:
+                    processed = await worker.process_batch(unprocessed_emails)
+                    results.append(f"📧 **Emails:** {processed}/{len(unprocessed_emails)} processed")
+                else:
+                    results.append("📧 **Emails:** No unprocessed emails")
+
+            # Process calendar events
+            if service in ['all', 'calendar']:
+                unprocessed_events = storage.get_unprocessed_calendar_events(owner_id, limit=100)
+                if unprocessed_events:
+                    processed = await worker.process_calendar_batch(unprocessed_events)
+                    results.append(f"📅 **Calendar:** {processed}/{len(unprocessed_events)} processed")
+                else:
+                    results.append("📅 **Calendar:** No unprocessed events")
+
+            output = "**🧠 Memory Processing Complete**\n\n"
+            output += "\n".join(results)
+            output += "\n\nUse `/memory search <query>` to find stored information."
+            return output
+
+        elif cmd == 'search':
             # Search memories
             if len(args) < 2:
                 return "❌ Missing query\n\nUsage: `/memory search <query>`"
@@ -667,7 +708,7 @@ Memory will be searchable via hybrid search."""
             return output
 
         elif cmd == 'reset':
-            # Delete ALL user memories
+            # Delete ALL user memories AND reset processing timestamps
             # First delete sentences (they reference blobs)
             supabase.table("blob_sentences")\
                 .delete()\
@@ -681,11 +722,20 @@ Memory will be searchable via hybrid search."""
                 .execute()
 
             deleted_count = len(result.data) if result.data else 0
+
+            # Reset processing timestamps so data can be reprocessed
+            reset_counts = storage.reset_memory_processing_timestamps(owner_id)
+
             return f"""🗑️ **Memory reset complete**
 
-Deleted **{deleted_count}** memory blobs and all associated sentences.
+**Deleted:**
+• {deleted_count} memory blobs and all associated sentences
 
-Your memory is now empty. Use `/memory store <content>` to add new memories."""
+**Reset timestamps:**
+• {reset_counts.get('emails', 0)} emails marked as unprocessed
+• {reset_counts.get('calendar_events', 0)} calendar events marked as unprocessed
+
+Run `/memory process` to rebuild memory from your synced data."""
 
         else:
             # Unknown subcommand
