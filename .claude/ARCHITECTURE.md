@@ -691,9 +691,9 @@ hybrid_score = alpha * FTS_score + (1-alpha) * semantic_score
 To rebuild memory from scratch:
 
 ```bash
-/memory --reset    # Delete all blobs first
-/sync --reset      # Clear emails/calendar (warns about memory)
-/sync [days]       # Re-sync and process into fresh blobs
+/memory --reset       # Delete all blobs first
+/sync --reset         # Clear emails/calendar (warns about memory)
+/sync --days 30       # Re-sync and process into fresh blobs
 ```
 
 **`/sync --reset`** clears emails and calendar, then warns to run `/memory --reset` if you want fresh memory too.
