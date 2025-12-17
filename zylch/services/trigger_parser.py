@@ -73,9 +73,10 @@ class TriggerParser:
     # Minimum confidence threshold for a match
     MIN_CONFIDENCE = 0.65
 
-    # Default alpha for hybrid scoring (same as memory search)
-    # alpha=0.5 means equal weight to keywords and semantics
-    DEFAULT_ALPHA = 0.5
+    # Default alpha for hybrid scoring
+    # alpha=0.3 means 70% keyword weight, 30% semantic weight
+    # Higher keyword weight helps when user input closely matches trigger patterns
+    DEFAULT_ALPHA = 0.3
 
     def __init__(self, embedding_engine, triggers: Dict[str, List[str]], alpha: float = None):
         """
