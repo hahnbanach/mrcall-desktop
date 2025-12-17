@@ -226,7 +226,7 @@ class ChatService:
                     elif cmd in ['/trigger', '/mrcall', '/share', '/revoke', '/sharing', '/connect']:
                         # These need args, owner_id, and optionally email
                         response_text = await handler(args, owner_id, user_email)
-                    elif cmd in ['/model', '/tutorial', '/help', '/clear']:
+                    elif cmd in ['/model', '/tutorial', '/help', '/clear', '/echo']:
                         # These only need args (or nothing)
                         response_text = await handler(args) if args else await handler()
                     else:
