@@ -520,6 +520,7 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 • `/memory process` - Process all unprocessed data into memory blobs
 • `/memory process email` - Process only emails
 • `/memory process calendar` - Process only calendar events
+• `/memory process pipedrive` - Process only Pipedrive deals
 • `/memory search <query>` - Search memories (hybrid FTS + semantic)
 • `/memory store <content>` - Store new memory (with auto-reconsolidation)
 • `/memory stats` - Show memory statistics
@@ -529,12 +530,13 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 **Examples:**
 • `/memory process` - Process all synced data into blobs
 • `/memory process email` - Process only unprocessed emails
+• `/memory process pipedrive` - Process only unprocessed deals
 • `/memory search John Smith`
 • `/memory store "Mario prefers formal Italian in emails"`
 • `/memory --reset` - Wipe all memories + mark data as unprocessed
 
 **How it works:**
-1. `/sync` fetches emails and calendar to local database
+1. `/sync` fetches emails, calendar, and Pipedrive to local database
 2. `/memory process` extracts facts and stores them in blobs
 3. `/memory search` finds information using hybrid FTS + semantic search"""
 
@@ -561,10 +563,10 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
             from zylch.workers.memory_worker import MemoryWorker
 
             service = args[1].lower() if len(args) > 1 else 'all'
-            valid_services = ['all', 'email', 'calendar']
+            valid_services = ['all', 'email', 'calendar', 'pipedrive']
 
             if service not in valid_services:
-                return f"❌ Unknown service: `{service}`\n\nValid options: `email`, `calendar`, or omit for all."
+                return f"❌ Unknown service: `{service}`\n\nValid options: `email`, `calendar`, `pipedrive`, or omit for all."
 
             worker = MemoryWorker(storage=storage, owner_id=owner_id)
             results = []
@@ -586,6 +588,15 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
                     results.append(f"📅 **Calendar:** {processed}/{len(unprocessed_events)} processed")
                 else:
                     results.append("📅 **Calendar:** No unprocessed events")
+
+            # Process pipedrive deals
+            if service in ['all', 'pipedrive']:
+                unprocessed_deals = storage.get_unprocessed_pipedrive_deals(owner_id, limit=100)
+                if unprocessed_deals:
+                    processed = await worker.process_pipedrive_batch(unprocessed_deals)
+                    results.append(f"💼 **Pipedrive:** {processed}/{len(unprocessed_deals)} processed")
+                else:
+                    results.append("💼 **Pipedrive:** No unprocessed deals")
 
             output = "**🧠 Memory Processing Complete**\n\n"
             output += "\n".join(results)
@@ -734,6 +745,7 @@ Memory will be searchable via hybrid search."""
 **Reset timestamps:**
 • {reset_counts.get('emails', 0)} emails marked as unprocessed
 • {reset_counts.get('calendar_events', 0)} calendar events marked as unprocessed
+• {reset_counts.get('pipedrive_deals', 0)} Pipedrive deals marked as unprocessed
 
 Run `/memory process` to rebuild memory from your synced data."""
 
@@ -1882,9 +1894,10 @@ Run `/sync` first to fetch latest emails.''',
         'description': '''Process synced data into memory blobs, search, and manage entity memories.
 
 **Processing:**
-- `/memory process` - Process all unprocessed emails + calendar into blobs
+- `/memory process` - Process all unprocessed data into blobs
 - `/memory process email` - Process only unprocessed emails
 - `/memory process calendar` - Process only unprocessed calendar events
+- `/memory process pipedrive` - Process only unprocessed Pipedrive deals
 
 **Searching:**
 - `/memory search <query>` - Search memories (hybrid FTS + semantic)
@@ -1896,7 +1909,7 @@ Run `/sync` first to fetch latest emails.''',
 - `/memory --reset` - Delete ALL memories AND reset processing timestamps
 
 **Workflow:**
-1. `/sync` - Fetches emails/calendar to local DB
+1. `/sync` - Fetches emails/calendar/pipedrive to local DB
 2. `/memory process` - Extracts facts into blobs
 3. `/memory search <query>` - Finds stored information''',
     },

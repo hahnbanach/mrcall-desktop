@@ -342,3 +342,123 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
         except Exception as e:
             logger.error(f"Failed to extract calendar facts: {e}")
             return ""
+
+    async def process_pipedrive_deal(self, deal: Dict) -> bool:
+        """Process single Pipedrive deal to extract and store facts.
+
+        Args:
+            deal: Deal dict with id, deal_id, title, person_name, org_name, value, status, deal_data
+
+        Returns:
+            True if processed successfully, False otherwise
+        """
+        deal_id = deal.get("id", "unknown")
+        try:
+            logger.debug(f"Processing pipedrive deal {deal_id}")
+
+            # Extract facts from deal
+            facts = self._extract_pipedrive_facts(deal)
+            if not facts or facts == "No significant facts.":
+                logger.debug(f"No facts extracted from deal {deal_id}")
+                self.storage.mark_pipedrive_deal_processed(self.owner_id, deal_id)
+                return True
+
+            # Search for existing blob about this deal/contact
+            existing = self.hybrid_search.find_for_reconsolidation(
+                owner_id=self.owner_id,
+                content=facts,
+                namespace=self.namespace
+            )
+
+            event_desc = f"Extracted from Pipedrive deal '{deal.get('title', '')}' (ID: {deal.get('deal_id', '')})"
+
+            if existing:
+                merged_content = self.llm_merge.merge(existing.content, facts)
+                self.blob_storage.update_blob(
+                    blob_id=existing.blob_id,
+                    owner_id=self.owner_id,
+                    content=merged_content,
+                    event_description=event_desc
+                )
+                logger.info(f"Reconsolidated blob {existing.blob_id} with deal {deal_id}")
+            else:
+                blob = self.blob_storage.store_blob(
+                    owner_id=self.owner_id,
+                    namespace=self.namespace,
+                    content=facts,
+                    event_description=event_desc
+                )
+                logger.info(f"Created new blob {blob['id']} from deal {deal_id}")
+
+            self.storage.mark_pipedrive_deal_processed(self.owner_id, deal_id)
+            return True
+
+        except Exception as e:
+            logger.error(f"Error processing deal {deal_id}: {e}", exc_info=True)
+            return False
+
+    async def process_pipedrive_batch(self, deals: List[Dict]) -> int:
+        """Process batch of Pipedrive deals.
+
+        Args:
+            deals: List of deal dicts (from get_unprocessed_pipedrive_deals)
+
+        Returns:
+            Number of successfully processed deals
+        """
+        logger.info(f"Processing batch of {len(deals)} pipedrive deals")
+        processed = 0
+
+        for deal in deals:
+            success = await self.process_pipedrive_deal(deal)
+            if success:
+                processed += 1
+
+        logger.info(f"Pipedrive batch complete: {processed}/{len(deals)} processed")
+        return processed
+
+    def _extract_pipedrive_facts(self, deal: Dict) -> str:
+        """Extract facts from Pipedrive deal using LLM.
+
+        Args:
+            deal: Pipedrive deal dict
+
+        Returns:
+            Extracted facts as natural language string
+        """
+        try:
+            deal_data = deal.get("deal_data", {}) or {}
+
+            prompt = f"""Extract key facts about the contact/company from this CRM deal.
+
+DEAL TITLE: {deal.get('title', '(no title)')}
+CONTACT: {deal.get('person_name', '(unknown)')}
+COMPANY: {deal.get('org_name', '(unknown)')}
+VALUE: {deal.get('value', 0)} {deal.get('currency', 'USD')}
+STATUS: {deal.get('status', 'unknown')}
+STAGE: {deal.get('stage_name', '(unknown)')}
+EXPECTED CLOSE: {deal_data.get('expected_close_date', '(not set)')}
+NOTES: {str(deal_data.get('notes', ''))[:1000]}
+
+---
+
+Write a concise summary of what we know about this deal and the contact.
+Include:
+- Contact/company information
+- Deal context (what they're interested in, value, stage)
+- Any notes or context about the relationship
+- Deal status and timeline if available
+
+Output ONLY the facts as natural language prose (2-5 sentences). If no meaningful facts, output "No significant facts."
+"""
+
+            response = self.anthropic.messages.create(
+                model="claude-3-5-haiku-20241022",
+                max_tokens=512,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.content[0].text.strip()
+
+        except Exception as e:
+            logger.error(f"Failed to extract pipedrive facts: {e}")
+            return ""
