@@ -235,11 +235,46 @@ Hybrid: 0.85 → "/sync 2"
 
 ### 7. CLI (`zylch/cli/main.py`)
 Interactive command-line interface:
-- `/sync` - Morning workflow (archive + intelligence + calendar + gaps)
+- `/sync` - Sync emails, calendar, pipedrive (data only, no processing)
+- `/memory process` - Extract facts from synced data into blobs
+- `/memory search` - Search entity memories
 - `/gaps` - Show relationship gaps
 - `/archive` - Archive management
-- `/memory` - Memory system
 - Natural conversation with agent
+
+### 8. Memory System (Entity-Centric Blobs)
+
+**Data Flow**:
+```
+Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
+                                          ↓
+                              /memory process (MemoryWorker)
+                                          ↓
+                           Extract facts via Haiku LLM
+                                          ↓
+                          Hybrid search for existing blob
+                                          ↓
+                    [Found] LLM-merge → Update blob
+                    [Not found] → Create new blob
+                                          ↓
+                              Mark source as processed
+```
+
+**Key Tables**:
+- `emails.memory_processed_at` - NULL = unprocessed, timestamp = when processed
+- `calendar_events.memory_processed_at` - Same pattern
+- `blobs` - Entity-centric memory storage
+- `blob_sentences` - Sentence-level embeddings for search
+
+**Commands**:
+- `/sync` - Fetches data to local DB (no processing)
+- `/memory process` - Process all unprocessed data into blobs
+- `/memory process email` - Process only emails
+- `/memory process calendar` - Process only calendar events
+- `/memory search <query>` - Hybrid FTS + semantic search
+- `/memory --reset` - Delete blobs AND reset processing timestamps
+
+**Reconsolidation**: When storing new facts, system searches for existing blob about same entity (hybrid score ≥ 0.65). If found, LLM merges old + new content. This prevents duplicate blobs about same person/topic.
 
 ### Task Display: `get_tasks` Tool
 

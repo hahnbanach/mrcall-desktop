@@ -146,9 +146,9 @@ Triggers support typed parameters using `{param:type}` syntax:
 
 ### `/sync [--days <n>] [--status] [--reset]`
 
-**Summary**: Sync emails and calendar from Google/Microsoft
+**Summary**: Sync emails, calendar, and Pipedrive from connected services
 
-**Description**: Fetches new emails from Gmail/Outlook and calendar events from Google Calendar. Performs incremental sync after first run. Also runs Memory Agent to extract facts from emails into entity blobs.
+**Description**: Fetches new emails from Gmail/Outlook, calendar events from Google Calendar, and deals from Pipedrive (if connected). This is a **data sync only** - it does NOT process data into memory blobs. Use `/memory process` after syncing to extract facts.
 
 **Arguments**:
 - `--days <n>` - Number of days to sync (default: 30 for first sync, incremental after)
@@ -172,10 +172,9 @@ Triggers support typed parameters using `{param:type}` syntax:
 # Reset sync state (then run /sync)
 /sync --reset
 
-# Fresh start - rebuild everything from scratch
-/memory --reset      # Clear memory blobs first
-/sync --reset        # Clear emails/calendar
-/sync --days 30      # Re-sync and rebuild memory
+# Full workflow - sync then process into memory
+/sync --days 30
+/memory process
 ```
 
 **Output**:
@@ -183,13 +182,13 @@ Triggers support typed parameters using `{param:type}` syntax:
 🔄 Sync Complete
 
 ✅ Email: +42 new, -3 deleted
-🔄 Avatars: 15 contacts queued for analysis (~5 min)
 ℹ️  Incremental sync - fetching changes since 2025-12-01
-   If you want to go further back, run /sync --reset first
+   If you want to go further back, run /sync --reset first, then /sync --days <n>
 
 ✅ Calendar: 5 new, 2 updated
+✅ Pipedrive: 12 deals synced
 
-✅ Done! Run /gaps [days] to analyze tasks.
+✅ Done! Run /memory process to extract facts into memory.
 ```
 
 **Status Output** (`/sync --status`):
@@ -200,13 +199,15 @@ Triggers support typed parameters using `{param:type}` syntax:
 📧 Emails archived: 1,234
 📅 Calendar events: 89
 
-Run /sync [days] to sync more data.
+Run /sync or /sync --days <n> to sync more data.
 ```
 
 **Performance**:
 - Email sync: ~100 messages/second
 - Calendar sync: ~50 events/second
 - Incremental sync after first run (only fetches changes)
+
+**Note**: `/sync` only fetches data. To extract facts into searchable memory, run `/memory process` after syncing.
 
 ---
 
@@ -617,15 +618,52 @@ Output:
 
 ## 🧠 Memory & Automation Commands
 
-### `/memory [search|store|stats|list|reset]`
+### `/memory [process|search|store|stats|list|--reset]`
 
-**Summary**: Entity-centric memory with hybrid search
+**Summary**: Entity-centric memory with hybrid search and automatic fact extraction
 
-**Description**: The memory system stores "blobs" of natural language information about entities (people, companies, topics). Unlike traditional databases, all facts about an entity live in a single blob that gets reconsolidated when new information arrives.
+**Description**: The memory system stores "blobs" of natural language information about entities (people, companies, topics). Facts are extracted from synced emails and calendar events via `/memory process`, then stored with automatic reconsolidation.
 
-**Options**:
+**Workflow**:
+1. `/sync` - Fetch emails/calendar to local database
+2. `/memory process` - Extract facts into searchable blobs
+3. `/memory search <query>` - Find stored information
 
-**Search memory** (`/memory search <query>` or `/memory --search <query>`):
+---
+
+**Process synced data** (`/memory process [service]`):
+```bash
+# Process ALL unprocessed data (emails + calendar)
+/memory process
+
+# Process only unprocessed emails
+/memory process email
+
+# Process only unprocessed calendar events
+/memory process calendar
+```
+
+Output:
+```
+🧠 Memory Processing Complete
+
+📧 Emails: 42/42 processed
+📅 Calendar: 15/15 processed
+
+Use /memory search <query> to find stored information.
+```
+
+**How Processing Works**:
+1. Fetches unprocessed items (where `memory_processed_at IS NULL`)
+2. Extracts facts using Claude Haiku LLM
+3. Searches for existing blob about same entity (hybrid search)
+4. If found (score ≥ 0.65): LLM-merges new facts with existing
+5. If not found: Creates new blob
+6. Marks source item as processed (sets `memory_processed_at`)
+
+---
+
+**Search memory** (`/memory search <query>`):
 ```bash
 # Search for a person
 /memory search Mario Rossi
@@ -634,23 +672,24 @@ Output:
 /memory search "who is the CTO of Acme Corp"
 
 # Semantic triggers also work:
-"who is Mario Rossi"  →  /memory --search who is Mario Rossi
+"who is Mario Rossi"  →  /memory search Mario Rossi
 ```
 
 Output:
 ```
-🧠 Memory Search: "Mario Rossi"
+🔍 Search Results (3 found)
 
-📄 **Mario Rossi**
-   Mario Rossi is the CTO of Acme Corp. He prefers formal communication
+1. Mario Rossi is the CTO of Acme Corp. He prefers formal communication
    and responds well to data-driven proposals. Met him at the Milan
    conference in October 2025.
+   Score: hybrid: 0.92 (FTS: 0.95, semantic: 0.89)
 
-   Last updated: 2025-12-15
-   Similarity: 0.92
+2. ...
 ```
 
-**Store memory** (`/memory store <content>`):
+---
+
+**Store memory manually** (`/memory store <content>`):
 ```bash
 # Store a fact
 /memory store "Mario Rossi moved to the Rome office"
@@ -661,13 +700,14 @@ Output:
 
 Output:
 ```
-✅ Memory stored
+✅ Memory reconsolidated (ID: abc12345...)
 
-Content: Mario Rossi moved to the Rome office
-Action: Reconsolidated with existing memory (similarity: 0.87)
+Merged with existing memory (score: 0.87)
 
-The existing blob about Mario Rossi has been updated with this new information.
+New content added to existing entity blob.
 ```
+
+---
 
 **Memory statistics** (`/memory stats`):
 ```bash
@@ -680,28 +720,29 @@ Output:
 
 Total Blobs: 156
 Total Sentences: 892
-Index Size: 2.3 MB
+Avg Sentences/Blob: 5.7
+Namespaces: 1
 
-By Entity Type (estimated):
-• People: 89
-• Companies: 42
-• Topics: 25
-
-Storage: Supabase (blobs + blob_sentences tables)
+Namespaces:
+• user:abc123
 ```
+
+---
 
 **List memories** (`/memory list [limit]`):
 ```bash
-# List recent memories
+# List recent memories (default: 10)
 /memory list
 
 # List last 20 memories
 /memory list 20
 ```
 
-**Reset memory** (`/memory --reset` or `/memory reset`):
+---
+
+**Reset memory** (`/memory --reset`):
 ```bash
-# Delete ALL blobs and sentences (irreversible!)
+# Delete ALL blobs AND reset processing timestamps (irreversible!)
 /memory --reset
 ```
 
@@ -709,23 +750,44 @@ Output:
 ```
 🗑️ Memory reset complete
 
-Deleted 156 memory blobs and all associated sentences.
+Deleted:
+• 156 memory blobs and all associated sentences
 
-Your memory is now empty. Use /memory store <content> to add new memories.
+Reset timestamps:
+• 1,234 emails marked as unprocessed
+• 89 calendar events marked as unprocessed
+
+Run /memory process to rebuild memory from your synced data.
 ```
 
 **Fresh Start**: To rebuild memory from scratch:
 ```bash
-/memory --reset      # Delete all blobs
-/sync --reset        # Clear emails/calendar
-/sync --days 30      # Re-sync and rebuild memory
+/memory --reset      # Delete blobs + reset timestamps
+/memory process      # Re-extract facts from existing synced data
 ```
 
-**Hybrid Search**: Combines PostgreSQL full-text search (FTS) with pgvector semantic search. Named entities (like "Mario Rossi") weight FTS higher (α=0.7), conceptual queries weight semantic higher (α=0.3).
+Or for a complete reset (including re-syncing data):
+```bash
+/memory --reset      # Delete blobs + reset timestamps
+/sync --reset        # Clear synced emails/calendar
+/sync --days 30      # Re-sync from services
+/memory process      # Extract facts into blobs
+```
 
-**Reconsolidation**: When storing new info, Zylch searches for similar existing memories. If found (similarity > 0.65), the LLM merges the old and new info instead of creating duplicates.
+---
 
-**Performance**: <50ms for search (HNSW index), <200ms for store (includes reconsolidation check).
+**Hybrid Search**: Combines PostgreSQL full-text search (FTS) with pgvector semantic search using formula:
+```
+hybrid_score = α × FTS_score + (1-α) × semantic_score
+```
+Default α=0.5 (balanced). Named entities weight FTS higher.
+
+**Reconsolidation**: When storing new info, Zylch searches for similar existing memories. If found (score ≥ 0.65), the LLM merges old + new info instead of creating duplicates.
+
+**Performance**:
+- Search: <50ms (HNSW index)
+- Store: <200ms (includes reconsolidation check)
+- Process: ~1-2s per item (includes LLM extraction)
 
 ---
 
