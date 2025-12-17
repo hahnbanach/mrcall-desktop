@@ -16,6 +16,13 @@ from zylch.config import settings
 logger = logging.getLogger(__name__)
 
 
+async def handle_echo(args: List[str]) -> str:
+    """Echo back the provided text."""
+    if not args:
+        return ""
+    return " ".join(args)
+
+
 async def handle_help() -> str:
     """Return help message."""
     return """**📋 Zylch AI Commands**
@@ -2380,6 +2387,7 @@ Shows your scheduled reminders and jobs.
 
 # Export all handlers
 COMMAND_HANDLERS = {
+    '/echo': handle_echo,
     '/help': handle_help,
     '/sync': handle_sync,
     '/clear': handle_clear,
