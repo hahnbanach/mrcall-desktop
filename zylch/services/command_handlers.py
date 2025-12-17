@@ -215,7 +215,7 @@ Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
 
         # Run sync (archive only, no AI analysis)
         logger.info(f"[/sync] Running archive sync...")
-        results = await sync_service.run_full_sync(days_back=days_back, skip_gap_analysis=True)
+        results = await sync_service.run_full_sync(days_back=days_back)
         logger.info(f"[/sync] Sync complete: email={results['email_sync']['success']}, calendar={results['calendar_sync']['success']}, pipedrive={results.get('pipedrive_sync', {}).get('success', 'N/A')}")
 
         lines = ["**🔄 Sync Complete**\n"]
@@ -226,13 +226,8 @@ Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
             email_data = results['email_sync']
             new_msgs = email_data.get('new_messages', 0)
             del_msgs = email_data.get('deleted_messages', 0)
-            avatars_queued = email_data.get('avatars_queued', 0)
 
             lines.append(f"✅ **Email:** +{new_msgs} new, -{del_msgs} deleted")
-
-            # Show avatar queue status
-            if avatars_queued > 0:
-                lines.append(f"🔄 **Avatars:** {avatars_queued} contacts queued for analysis (~5 min)")
 
             # Show warning if incremental sync
             if email_data.get('incremental'):
@@ -255,7 +250,7 @@ Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
         if pipedrive_data.get('success'):
             if not pipedrive_data.get('skipped'):
                 deals_synced = pipedrive_data.get('deals_synced', 0)
-                lines.append(f"✅ **Pipedrive:** {deals_synced} deals synced to memory")
+                lines.append(f"✅ **Pipedrive:** {deals_synced} deals synced")
         elif pipedrive_data.get('error'):
             has_failures = True
             lines.append(f"❌ **Pipedrive:** {pipedrive_data.get('error')}")
@@ -263,7 +258,7 @@ Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
         if has_failures:
             lines.append("\n⚠️ **Sync completed with errors.** Check the issues above.")
         else:
-            lines.append("\n✅ **Done!** Run `/gaps [days]` to analyze tasks.")
+            lines.append("\n✅ **Done!** Run `/memory` to process emails into memory.")
         return "\n".join(lines)
 
     except Exception as e:
