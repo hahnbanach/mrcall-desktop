@@ -135,36 +135,25 @@ Run `/sync` or `/sync --days <n>` to sync more data."""
             # Clear sync state
             supabase.client.table('sync_state').delete().eq('owner_id', owner_id).execute()
             logger.info(f"[/sync] Cleared sync_state")
-            cleared_tables.append("sync_state")
 
             # Clear emails
-            supabase.client.table('emails').delete().eq('owner_id', owner_id).execute()
+            email_result = supabase.client.table('emails').delete().eq('owner_id', owner_id).execute()
             logger.info(f"[/sync] Cleared emails")
-            cleared_tables.append("emails")
 
             # Clear calendar events
-            supabase.client.table('calendar_events').delete().eq('owner_id', owner_id).execute()
+            cal_result = supabase.client.table('calendar_events').delete().eq('owner_id', owner_id).execute()
             logger.info(f"[/sync] Cleared calendar_events")
-            cleared_tables.append("calendar_events")
 
-            # Clear pipedrive deals (if table exists)
-            try:
-                supabase.client.table('pipedrive_deals').delete().eq('owner_id', owner_id).execute()
-                logger.info(f"[/sync] Cleared pipedrive_deals")
-                cleared_tables.append("pipedrive_deals")
-            except Exception:
-                pass  # Table may not exist
+            return """✅ **Sync state reset!**
 
-            return f"""✅ **Sync state reset!**
-
-Cleared: {', '.join(cleared_tables)}
+All emails and calendar events cleared.
 Next `/sync` will perform a full re-sync from scratch.
 
 ⚠️ **Memory note:** Your memory blobs still exist. If you want fresh memory:
 ```
 /memory --reset
 ```
-Then run `/sync --days <n>` to rebuild memory from re-synced data."""
+Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
         except Exception as e:
             logger.error(f"[/sync] Failed to reset sync state: {e}")
             return f"❌ **Error resetting sync state:** {str(e)}"
@@ -566,8 +555,7 @@ This learns YOUR patterns for better cold outreach detection and VIP prioritizat
 4. `/memory search` finds information using hybrid FTS + semantic search"""
 
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch_memory import BlobStorage, HybridSearchEngine, EmbeddingEngine
-    from zylch_memory.config import ZylchMemoryConfig
+    from zylch_memory import BlobStorage, HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig
 
     try:
         # Initialize services
@@ -586,6 +574,7 @@ This learns YOUR patterns for better cold outreach detection and VIP prioritizat
         if cmd == 'process':
             # Process synced data into memory blobs
             from zylch.workers.memory_worker import MemoryWorker
+            from zylch.config import settings
 
             service = args[1].lower() if len(args) > 1 else 'all'
             valid_services = ['all', 'email', 'calendar', 'pipedrive']
@@ -593,12 +582,40 @@ This learns YOUR patterns for better cold outreach detection and VIP prioritizat
             if service not in valid_services:
                 return f"❌ Unknown service: `{service}`\n\nValid options: `email`, `calendar`, `pipedrive`, or omit for all."
 
-            # Get BYOK Anthropic API key from Supabase
-            anthropic_api_key = storage.get_anthropic_key(owner_id)
-            if not anthropic_api_key:
-                return "❌ Anthropic API key not configured.\n\nPlease run `/connect anthropic` to set up your API key."
+            # Get Anthropic API key from user's stored key or system settings
+            anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
 
-            worker = MemoryWorker(storage=storage, owner_id=owner_id, anthropic_api_key=anthropic_api_key)
+            if not anthropic_key:
+                return """❌ **Anthropic API key required**
+
+Connect your Anthropic account:
+`/connect anthropic`"""
+
+            worker = MemoryWorker(storage=storage, owner_id=owner_id, anthropic_api_key=anthropic_key)
+
+            # Gate: Check if processing emails without a custom prompt
+            if service in ['all', 'email'] and not worker.has_custom_prompt():
+                # Show recommendation to build custom prompt first
+                unprocessed_count = len(storage.get_unprocessed_emails(owner_id, limit=1))
+                if unprocessed_count > 0:
+                    return """⚠️ **No personalized extraction prompt found**
+
+For better memory extraction, create a personalized prompt first:
+
+```
+/train build memory-email
+```
+
+This analyzes your email patterns to understand:
+- **Who matters to you** (VIP contacts get detailed extraction)
+- **What to ignore** (cold outreach specific to you)
+- **Your role/context** (founder vs investor vs engineer)
+
+The personalized prompt significantly improves:
+- Cold outreach detection
+- Relevant fact extraction
+- VIP contact prioritization"""
+
             results = []
 
             # Process emails
@@ -2496,17 +2513,8 @@ Then run `/train build memory-email` again."""
 Run `/sync --days 90` to sync more email history.
 Need at least some emails to analyze patterns."""
 
-                # Get Anthropic API key from user's credentials or system settings
-                anthropic_key = None
-                try:
-                    credentials = storage.get_oauth_credentials(owner_id, "anthropic")
-                    if credentials and credentials.get("api_key"):
-                        anthropic_key = credentials["api_key"]
-                except Exception:
-                    pass
-
-                if not anthropic_key:
-                    anthropic_key = settings.anthropic_api_key
+                # Get Anthropic API key from user's stored key or system settings
+                anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
 
                 if not anthropic_key:
                     return """❌ **Anthropic API key required**

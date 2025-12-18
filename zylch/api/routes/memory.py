@@ -52,9 +52,9 @@ def get_llm_merge(user_id: str) -> Optional[LLMMergeService]:
     global _llm_merge
     try:
         storage = SupabaseStorage.get_instance()
-        credentials = storage.get_oauth_credentials(user_id, "anthropic")
-        if credentials and credentials.get("api_key"):
-            return LLMMergeService(api_key=credentials["api_key"])
+        api_key = storage.get_anthropic_key(user_id)
+        if api_key:
+            return LLMMergeService(api_key=api_key)
     except Exception as e:
         logger.warning(f"Could not initialize LLM merge service: {e}")
     return None
