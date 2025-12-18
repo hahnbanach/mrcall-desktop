@@ -1251,13 +1251,14 @@ This integration requires manual configuration.
 
 
 async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> str:
-    """Handle /email command - email drafts and search.
+    """Handle /email command - email listing, drafts, and search.
 
     Drafts are stored in Supabase (Superhuman-style).
     Sending routes through Gmail or Outlook API based on user's provider.
 
     Usage:
-        /email list [--draft] [--limit N]        - List drafts
+        /email list [--limit N]                  - List recent emails
+        /email list --draft [--limit N]          - List drafts
         /email create [--to X] [--subject Y]     - Create draft
         /email send <draft_id>                   - Send draft
         /email delete <draft_id>                 - Delete draft
@@ -1265,15 +1266,18 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
     """
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch.api.token_storage import get_provider, get_email
-    from datetime import datetime, timezone
+    from datetime import datetime, timezone, timedelta
     import uuid
     import shlex
 
     if '--help' in args or not args:
         return """**📧 Email Command**
 
+**List:**
+• `/email list [--limit N]` - List recent emails
+• `/email list --draft [--limit N]` - List drafts
+
 **Drafts:**
-• `/email list [--draft] [--limit N]` - List drafts
 • `/email create --to <email> --subject <text>` - Create draft
 • `/email send <draft_id>` - Send draft via Gmail/Outlook
 • `/email delete <draft_id>` - Delete draft
@@ -1286,6 +1290,7 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
 
 **Examples:**
 • `/email list`
+• `/email list --draft`
 • `/email create --to mario@example.com --subject "Meeting tomorrow"`
 • `/email search "contract" --days 30 --limit 10`
 • `/email send abc123`
@@ -1311,36 +1316,66 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
             """Check if a flag is present."""
             return flag in sub_args
 
-        # --- LIST DRAFTS ---
+        # --- LIST EMAILS or DRAFTS ---
         if subcommand == 'list':
             limit = int(parse_flag('--limit', '20'))
             limit = min(limit, 50)
 
-            result = supabase.table('drafts')\
-                .select('*')\
+            # If --draft flag, list drafts
+            if has_flag('--draft'):
+                result = supabase.table('drafts')\
+                    .select('*')\
+                    .eq('owner_id', owner_id)\
+                    .eq('status', 'draft')\
+                    .order('updated_at', desc=True)\
+                    .limit(limit)\
+                    .execute()
+
+                if not result.data:
+                    return "**📭 No drafts**\n\nCreate one with `/email create --to <email> --subject <text>`"
+
+                output = f"**📝 Drafts** ({len(result.data)} found)\n\n"
+                for i, draft in enumerate(result.data, 1):
+                    to_str = ', '.join(draft.get('to_addresses', [])[:2])
+                    if len(draft.get('to_addresses', [])) > 2:
+                        to_str += f" (+{len(draft['to_addresses']) - 2})"
+                    subject = draft.get('subject', '(no subject)')[:50]
+                    draft_id = draft['id'][:8]
+                    updated = draft['updated_at'][:10] if draft.get('updated_at') else ''
+
+                    output += f"**{i}. {subject}**\n"
+                    output += f"   To: {to_str}\n"
+                    output += f"   ID: `{draft_id}` | {updated}\n\n"
+
+                output += "_Use `/email send <id>` to send a draft._"
+                return output
+
+            # Default: list recent emails
+            days = int(parse_flag('--days', '7'))
+            since_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+            result = supabase.table('emails')\
+                .select('id, thread_id, subject, from_email, from_name, snippet, date, is_read')\
                 .eq('owner_id', owner_id)\
-                .eq('status', 'draft')\
-                .order('updated_at', desc=True)\
+                .gte('date', since_date)\
+                .order('date', desc=True)\
                 .limit(limit)\
                 .execute()
 
             if not result.data:
-                return "**📭 No drafts**\n\nCreate one with `/email create --to <email> --subject <text>`"
+                return f"**📭 No emails** in the last {days} days\n\nTry `/sync` to fetch recent emails."
 
-            output = f"**📝 Drafts** ({len(result.data)} found)\n\n"
-            for i, draft in enumerate(result.data, 1):
-                to_str = ', '.join(draft.get('to_addresses', [])[:2])
-                if len(draft.get('to_addresses', [])) > 2:
-                    to_str += f" (+{len(draft['to_addresses']) - 2})"
-                subject = draft.get('subject', '(no subject)')[:50]
-                draft_id = draft['id'][:8]
-                updated = draft['updated_at'][:10] if draft.get('updated_at') else ''
+            output = f"**📧 Recent Emails** ({len(result.data)} found)\n\n"
+            for email in result.data:
+                read_mark = '' if email.get('is_read') else '🔵 '
+                subject = email.get('subject', '(no subject)')[:45]
+                from_name = email.get('from_name') or email.get('from_email', '?')
+                date = email.get('date', '')[:10]
 
-                output += f"**{i}. {subject}**\n"
-                output += f"   To: {to_str}\n"
-                output += f"   ID: `{draft_id}` | {updated}\n\n"
+                output += f"{read_mark}**{subject}**\n"
+                output += f"   From: {from_name} | {date}\n\n"
 
-            output += "_Use `/email send <id>` to send a draft._"
+            output += f"_Showing last {days} days. Use `--days N` or `--limit N` to adjust._"
             return output
 
         # --- CREATE DRAFT ---
@@ -1662,12 +1697,15 @@ Run `/sync` first to fetch latest emails.''',
 3. `/memory search <query>` - Finds stored information''',
     },
     '/email': {
-        'summary': 'Email drafts and search',
+        'summary': 'List emails, manage drafts, search',
         'usage': '/email <list|create|send|delete|search> [args]',
-        'description': '''Manage email drafts (stored in Zylch) and search emails.
+        'description': '''List emails, manage drafts, and search.
+
+**List:**
+- `/email list [--limit N]` - List recent emails
+- `/email list --draft [--limit N]` - List drafts
 
 **Drafts:**
-- `/email list [--limit N]` - List drafts
 - `/email create --to <email> --subject <text>` - Create draft
 - `/email send <draft_id>` - Send via Gmail/Outlook
 - `/email delete <draft_id>` - Delete draft
