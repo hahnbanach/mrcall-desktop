@@ -526,7 +526,6 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 **Usage:**
 • `/memory process` - Process all unprocessed data into memory blobs
 • `/memory process email` - Process only emails
-• `/memory process email --force` - Process emails with default prompt
 • `/memory process calendar` - Process only calendar events
 • `/memory process pipedrive` - Process only Pipedrive deals
 • `/memory search <query>` - Search memories (hybrid FTS + semantic)
@@ -555,8 +554,7 @@ This learns YOUR patterns for better cold outreach detection and VIP prioritizat
 4. `/memory search` finds information using hybrid FTS + semantic search"""
 
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch_memory import BlobStorage, HybridSearchEngine, EmbeddingEngine
-    from zylch_memory.config import ZylchMemoryConfig
+    from zylch_memory import BlobStorage, HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig
 
     try:
         # Initialize services
@@ -584,11 +582,8 @@ This learns YOUR patterns for better cold outreach detection and VIP prioritizat
 
             worker = MemoryWorker(storage=storage, owner_id=owner_id)
 
-            # Check for --force flag
-            force_flag = '--force' in args
-
-            # Gate: Check if processing emails without a custom prompt (unless --force)
-            if service in ['all', 'email'] and not worker.has_custom_prompt() and not force_flag:
+            # Gate: Check if processing emails without a custom prompt
+            if service in ['all', 'email'] and not worker.has_custom_prompt():
                 # Show recommendation to build custom prompt first
                 unprocessed_count = len(storage.get_unprocessed_emails(owner_id, limit=1))
                 if unprocessed_count > 0:
@@ -608,15 +603,7 @@ This analyzes your email patterns to understand:
 The personalized prompt significantly improves:
 - Cold outreach detection
 - Relevant fact extraction
-- VIP contact prioritization
-
-**To proceed anyway with the default prompt**, run:
-`/memory process email --force`
-
-**Recommended:** Run `/train build memory-email` first."""
-
-            if force_flag and not worker.has_custom_prompt():
-                logger.info("Processing with default prompt (--force flag used)")
+- VIP contact prioritization"""
 
             results = []
 
