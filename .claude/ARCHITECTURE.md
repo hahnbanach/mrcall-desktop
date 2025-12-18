@@ -810,9 +810,6 @@ When user runs `/memory process email` without a custom prompt, they see a recom
 
 For better memory extraction, create a personalized prompt first:
 /train build memory-email
-
-To proceed anyway with the default prompt:
-/memory process email --force
 ```
 
 ### Database
