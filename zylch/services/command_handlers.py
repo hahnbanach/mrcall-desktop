@@ -573,6 +573,7 @@ This learns YOUR patterns for better cold outreach detection and VIP prioritizat
         if cmd == 'process':
             # Process synced data into memory blobs
             from zylch.workers.memory_worker import MemoryWorker
+            from zylch.config import settings
 
             service = args[1].lower() if len(args) > 1 else 'all'
             valid_services = ['all', 'email', 'calendar', 'pipedrive']
@@ -580,7 +581,16 @@ This learns YOUR patterns for better cold outreach detection and VIP prioritizat
             if service not in valid_services:
                 return f"❌ Unknown service: `{service}`\n\nValid options: `email`, `calendar`, `pipedrive`, or omit for all."
 
-            worker = MemoryWorker(storage=storage, owner_id=owner_id)
+            # Get Anthropic API key from user's stored key or system settings
+            anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
+
+            if not anthropic_key:
+                return """❌ **Anthropic API key required**
+
+Connect your Anthropic account:
+`/connect anthropic`"""
+
+            worker = MemoryWorker(storage=storage, owner_id=owner_id, anthropic_api_key=anthropic_key)
 
             # Gate: Check if processing emails without a custom prompt
             if service in ['all', 'email'] and not worker.has_custom_prompt():
@@ -2502,17 +2512,8 @@ Then run `/train build memory-email` again."""
 Run `/sync --days 90` to sync more email history.
 Need at least some emails to analyze patterns."""
 
-                # Get Anthropic API key from user's credentials or system settings
-                anthropic_key = None
-                try:
-                    credentials = storage.get_oauth_credentials(owner_id, "anthropic")
-                    if credentials and credentials.get("api_key"):
-                        anthropic_key = credentials["api_key"]
-                except Exception:
-                    pass
-
-                if not anthropic_key:
-                    anthropic_key = settings.anthropic_api_key
+                # Get Anthropic API key from user's stored key or system settings
+                anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
 
                 if not anthropic_key:
                     return """❌ **Anthropic API key required**
