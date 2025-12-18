@@ -219,8 +219,8 @@ class ChatService:
                     elif cmd == '/briefing':
                         # /briefing only needs args and owner_id (fast avatar query)
                         response_text = await handler(args, owner_id)
-                    elif cmd in ['/archive', '/memory', '/email']:
-                        # /archive, /memory and /email need config and owner_id
+                    elif cmd in ['/archive', '/memory', '/email', '/train']:
+                        # /archive, /memory, /email and /train need config and owner_id
                         config = ToolConfig.from_settings()
                         response_text = await handler(args, config, owner_id)
                     elif cmd in ['/trigger', '/mrcall', '/share', '/revoke', '/sharing', '/connect']:
