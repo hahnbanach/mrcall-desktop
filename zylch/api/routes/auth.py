@@ -51,11 +51,21 @@ class LoginResponse(BaseModel):
     expires_at: str = Field(description="ISO 8601 timestamp when token expires")
 
 
+class RefreshRequest(BaseModel):
+    """Request to refresh token using refresh_token."""
+
+    refresh_token: str = Field(
+        ...,
+        description="Firebase refresh token"
+    )
+
+
 class RefreshResponse(BaseModel):
     """Response with refreshed session information."""
 
     success: bool = Field(description="Whether refresh succeeded")
     token: str = Field(description="Refreshed session token")
+    refresh_token: str = Field(description="New refresh token (may rotate)")
     expires_at: str = Field(description="ISO 8601 timestamp when token expires")
 
 
@@ -249,39 +259,73 @@ async def microsoft_login(request: MicrosoftLoginRequest):
 
 
 @router.post("/refresh", response_model=RefreshResponse)
-async def refresh_token(user: dict = Depends(get_current_user)):
-    """Refresh session token.
+async def refresh_token(request: RefreshRequest):
+    """Refresh session token using Firebase refresh token.
 
-    This endpoint validates the current session and returns refreshed token info.
-    For Phase 1, this validates the Firebase token and returns expiration info.
+    This endpoint exchanges a Firebase refresh token for a new ID token.
+    No authentication required - the refresh_token itself is the credential.
 
-    In future phases (thin client), this will:
-    - Validate current session token
-    - Issue new short-lived session token
-    - Enable seamless token rotation
-
-    **Authentication:**
-    - Requires Firebase ID token in 'auth' header
+    **Request Body:**
+    - refresh_token: Firebase refresh token from login
 
     **Response:**
-    - token: Refreshed session token
+    - token: New Firebase ID token
+    - refresh_token: New refresh token (may rotate)
     - expires_at: Token expiration timestamp
     """
+    import httpx
+
     try:
-        # Extract owner_id (this validates the token)
-        owner_id = get_user_id_from_token(user)
+        # Call Firebase token refresh API
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"https://securetoken.googleapis.com/v1/token?key={settings.firebase_api_key}",
+                json={
+                    "grant_type": "refresh_token",
+                    "refresh_token": request.refresh_token
+                },
+                timeout=30
+            )
 
-        # Calculate new expiration
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        if response.status_code != 200:
+            error_data = response.json()
+            error_msg = error_data.get("error", {}).get("message", "Token refresh failed")
+            logger.warning(f"Firebase token refresh failed: {error_msg}")
+            raise HTTPException(
+                status_code=401,
+                detail=f"Token refresh failed: {error_msg}"
+            )
 
-        logger.info(f"Token refreshed for user {owner_id}")
+        data = response.json()
+        new_id_token = data.get("id_token")
+        new_refresh_token = data.get("refresh_token", request.refresh_token)
+        expires_in = int(data.get("expires_in", 3600))
+
+        if not new_id_token:
+            raise HTTPException(
+                status_code=401,
+                detail="No id_token in refresh response"
+            )
+
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+
+        logger.info("Token refreshed successfully")
 
         return RefreshResponse(
             success=True,
-            token=user.get('token', ''),  # Return same token for Phase 1
+            token=new_id_token,
+            refresh_token=new_refresh_token,
             expires_at=expires_at.isoformat()
         )
 
+    except httpx.RequestError as e:
+        logger.error(f"Firebase API request failed: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Could not reach authentication service"
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error refreshing token: {e}", exc_info=True)
         raise HTTPException(
