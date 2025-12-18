@@ -2059,6 +2059,31 @@ Run `/sync` first to fetch latest emails.''',
         'usage': '/jobs [--cancel <id>]',
         'description': 'Lists scheduled reminders and jobs. Use `--cancel <id>` to cancel a job.',
     },
+    '/prompt': {
+        'summary': 'Manage personalized prompts',
+        'usage': '/prompt [build|show|reset] <type>',
+        'description': '''Build and manage personalized prompts that learn from your email patterns.
+
+**Usage:**
+- `/prompt build memory-email` - Analyze your emails to create personalized extraction prompt
+- `/prompt show memory-email` - Display your current prompt
+- `/prompt reset memory-email` - Delete custom prompt, return to default
+
+**How it works:**
+1. Run `/sync` to sync your email history
+2. `/prompt build memory-email` analyzes patterns:
+   - Who you reply to (VIP contacts)
+   - What you ignore (cold outreach)
+   - Your role and business context
+3. Creates a personalized prompt stored in your account
+4. `/memory process email` uses this prompt for smarter extraction
+
+**Why personalize?**
+- Better cold outreach detection specific to YOU
+- VIP contacts get detailed fact extraction
+- Your role/context understood (founder vs investor vs engineer)
+- Significantly improved memory quality''',
+    },
 }
 
 async def handle_stats(args: List[str], owner_id: str) -> str:
@@ -3034,5 +3059,33 @@ COMMAND_TRIGGERS = {
         "scheduled tasks",
         "cancel job {job_id:text}",
         "cancel {job_id:text}",
+    ],
+
+    # --- Prompt Management (Personalized extraction prompts) ---
+    '/prompt': [
+        # Build
+        "build prompt",
+        "create prompt",
+        "build memory prompt",
+        "create memory prompt",
+        "build email prompt",
+        "personalize memory",
+        "personalize extraction",
+        "learn my patterns",
+        "analyze my email patterns",
+        "customize memory extraction",
+        "train on my emails",
+        # Show
+        "show prompt",
+        "show my prompt",
+        "view prompt",
+        "display prompt",
+        "what's my prompt",
+        # Reset
+        "reset prompt",
+        "delete prompt",
+        "clear prompt",
+        "remove prompt",
+        "reset memory prompt",
     ],
 }
