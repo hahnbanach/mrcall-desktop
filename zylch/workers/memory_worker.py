@@ -19,8 +19,8 @@ from zylch_memory import BlobStorage, HybridSearchEngine, LLMMergeService, Embed
 logger = logging.getLogger(__name__)
 
 
-# Prompt to extract facts from email
-EXTRACT_FACTS_PROMPT = """Extract key facts about the contact from this email.
+# Default prompt to extract facts from email (used when no custom prompt exists)
+DEFAULT_EXTRACT_FACTS_PROMPT = """Extract key facts about the contact from this email.
 
 FROM: {from_email}
 TO: {to_email}
@@ -96,7 +96,40 @@ class MemoryWorker:
         # Also use Anthropic for fact extraction
         self.anthropic = anthropic.Anthropic(api_key=api_key)
 
+        # Cache for user's custom prompt (lazy loaded)
+        self._custom_prompt: Optional[str] = None
+        self._custom_prompt_loaded: bool = False
+
         logger.info(f"MemoryWorker initialized for namespace={self.namespace}")
+
+    def _get_extraction_prompt(self) -> str:
+        """Get extraction prompt - user-specific or default.
+
+        Loads user's custom prompt from DB on first call, caches for subsequent calls.
+
+        Returns:
+            The extraction prompt to use
+        """
+        if not self._custom_prompt_loaded:
+            self._custom_prompt = self.storage.get_user_prompt(self.owner_id, 'memory_email')
+            self._custom_prompt_loaded = True
+
+            if self._custom_prompt:
+                logger.info("Using user's custom memory_email prompt")
+            else:
+                logger.debug("No custom prompt found, using default")
+
+        return self._custom_prompt if self._custom_prompt else DEFAULT_EXTRACT_FACTS_PROMPT
+
+    def has_custom_prompt(self) -> bool:
+        """Check if user has a custom extraction prompt.
+
+        Returns:
+            True if user has configured a custom prompt
+        """
+        if not self._custom_prompt_loaded:
+            self._get_extraction_prompt()  # Trigger load
+        return self._custom_prompt is not None
 
     async def process_email(self, email: Dict) -> bool:
         """Process single email to extract and store facts.
@@ -197,6 +230,8 @@ class MemoryWorker:
     def _extract_facts(self, email: Dict, contact_email: str) -> str:
         """Extract facts from email using LLM.
 
+        Uses user's custom prompt if available, otherwise falls back to default.
+
         Args:
             email: Email dict
             contact_email: Email address of the contact
@@ -208,7 +243,10 @@ class MemoryWorker:
             # Get email body, prefer body_plain, fall back to snippet
             body = email.get("body_plain", "") or email.get("snippet", "")
 
-            prompt = EXTRACT_FACTS_PROMPT.format(
+            # Get the extraction prompt (user's custom or default)
+            prompt_template = self._get_extraction_prompt()
+
+            prompt = prompt_template.format(
                 from_email=email.get("from_email", "unknown"),
                 to_email=", ".join(email.get("to_email", [])) if isinstance(email.get("to_email"), list) else email.get("to_email", "unknown"),
                 subject=email.get("subject", "(no subject)"),

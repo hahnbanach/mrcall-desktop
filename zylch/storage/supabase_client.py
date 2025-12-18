@@ -2798,6 +2798,126 @@ class SupabaseStorage:
         except Exception as e:
             logger.error(f"Failed to update message read_events: {e}")
 
+    # ==========================================
+    # USER PROMPTS
+    # ==========================================
+
+    def get_user_prompt(self, owner_id: str, prompt_type: str) -> Optional[str]:
+        """Get user's custom prompt by type.
+
+        Args:
+            owner_id: Firebase UID
+            prompt_type: Type of prompt (e.g., 'memory_email')
+
+        Returns:
+            Prompt content if exists, None otherwise
+        """
+        try:
+            result = self.client.table('user_prompts')\
+                .select('prompt_content')\
+                .eq('owner_id', owner_id)\
+                .eq('prompt_type', prompt_type)\
+                .limit(1)\
+                .execute()
+
+            if result.data:
+                return result.data[0].get('prompt_content')
+            return None
+
+        except Exception as e:
+            logger.warning(f"Failed to get user prompt: {e}")
+            return None
+
+    def store_user_prompt(
+        self,
+        owner_id: str,
+        prompt_type: str,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Store or update a user's custom prompt.
+
+        Args:
+            owner_id: Firebase UID
+            prompt_type: Type of prompt (e.g., 'memory_email')
+            content: The prompt content
+            metadata: Optional metadata (generation stats, etc.)
+
+        Returns:
+            The stored prompt record
+        """
+        data = {
+            'owner_id': owner_id,
+            'prompt_type': prompt_type,
+            'prompt_content': content,
+            'metadata': metadata or {},
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        result = self.client.table('user_prompts').upsert(
+            data,
+            on_conflict='owner_id,prompt_type'
+        ).execute()
+
+        logger.info(f"Stored user prompt: {owner_id}/{prompt_type}")
+        return result.data[0] if result.data else {}
+
+    def delete_user_prompt(self, owner_id: str, prompt_type: str) -> bool:
+        """Delete a user's custom prompt.
+
+        Args:
+            owner_id: Firebase UID
+            prompt_type: Type of prompt to delete
+
+        Returns:
+            True if deleted, False otherwise
+        """
+        try:
+            result = self.client.table('user_prompts')\
+                .delete()\
+                .eq('owner_id', owner_id)\
+                .eq('prompt_type', prompt_type)\
+                .execute()
+
+            deleted = len(result.data) > 0 if result.data else False
+            if deleted:
+                logger.info(f"Deleted user prompt: {owner_id}/{prompt_type}")
+            return deleted
+
+        except Exception as e:
+            logger.error(f"Failed to delete user prompt: {e}")
+            return False
+
+    def get_user_prompt_metadata(self, owner_id: str, prompt_type: str) -> Optional[Dict[str, Any]]:
+        """Get metadata for a user's prompt.
+
+        Args:
+            owner_id: Firebase UID
+            prompt_type: Type of prompt
+
+        Returns:
+            Metadata dict if exists, None otherwise
+        """
+        try:
+            result = self.client.table('user_prompts')\
+                .select('metadata, created_at, updated_at')\
+                .eq('owner_id', owner_id)\
+                .eq('prompt_type', prompt_type)\
+                .limit(1)\
+                .execute()
+
+            if result.data:
+                return {
+                    'metadata': result.data[0].get('metadata', {}),
+                    'created_at': result.data[0].get('created_at'),
+                    'updated_at': result.data[0].get('updated_at')
+                }
+            return None
+
+        except Exception as e:
+            logger.warning(f"Failed to get user prompt metadata: {e}")
+            return None
+
 
 # Create search_emails function in Supabase (run once via SQL Editor):
 """

@@ -707,111 +707,66 @@ should generally have tasks created even for borderline cases.
 
 """
 
-        # Build relationship signals section
-        signals_text = f"""{importance_text}=== RELATIONSHIP SIGNALS (FACTS - pre-computed) ===
+        # Build context section
+        prior_contact_text = "YES - Mario has previously emailed this person" if signals['has_prior_contact'] else "NO - Mario has NEVER emailed or replied to this person"
 
-1. **Has Mario ever contacted this person?** {'YES' if signals['has_prior_contact'] else 'NO — This is someone who contacted Mario first, Mario has NEVER replied or initiated contact'}
-2. **Does this look like a sales/marketing message?** {'YES — Contains sales language (case studies, ROI, schedule a call, etc.)' if signals['looks_like_sales'] else 'NO'}
-3. **Does this look AI-generated?** {'YES — Writing style suggests AI/template generation' if signals['looks_ai_generated'] else 'NO'}
-4. **Has unsubscribe/opt-out language?** {'YES — Contains "unsubscribe", "reply no if not interested", etc.' if signals['has_unsubscribe_language'] else 'NO'}
+        prompt = f"""You are helping Mario decide if he needs to follow up with someone.
 
-⚠️ CRITICAL: If #1 is NO (Mario never contacted them) AND (#2 OR #3 is YES), this is COLD OUTREACH and should almost certainly be has_task=false.
-"""
+=== ABOUT MARIO ===
+- Mario is a startup founder running Mrcall (AI phone assistant)
+- Mario is NOT an investor and does NOT fund companies
+- Mario values his time and only responds to genuine, relevant communications
 
-        prompt = f"""You are an assistant helping Mario manage customer relationships.
+=== CONTACT ===
+Name: {contact_name}
+Email: {contact_email}
+Has Mario ever contacted them? {prior_contact_text}
 
-CONTACT: {contact_name} <{contact_email}>
-
-Mario has had {len(threads)} email conversations with this person in recent days.
-You must analyze ALL communications and understand the evolution of the relationship.
-
-{signals_text}
-
-CONVERSATIONS (in chronological order):
+{importance_text}
+=== THEIR MESSAGES ===
 {threads_text}
 
-=== ADDITIONAL CONTEXT: AI-GENERATED EMAIL PATTERNS ===
+=== YOUR TASK ===
 
-Beyond the pre-computed signals above, also look for these patterns:
+Analyze the messages and determine: Does Mario need to take action?
 
-SIGNALS OF AI-GENERATED COLD OUTREACH:
-1. **Marketing buzzwords**: "unit economics", "pipeline", "LTV:CAC", "inputs and outputs", "hundreds of thousands"
-2. **Name-dropping for social proof**: Lists client names without context
-3. **Classic sales structure**: Problem → Solution → Social Proof → Call-to-Action
-4. **Mail-merge personalization**: Only mentions company name once (from {{ company_name }} template variable)
-5. **Offering "free tool/calculator"**: Classic lead magnet tactic
-6. **Generic sender**: "The GTM Company", "Founder" titles without details
-7. **Template errors**: Duplicate names, repeated phrases (AI generation artifacts)
-8. **No prior relationship**: First-time contact offering unsolicited help
+CLASSIFICATION CRITERIA:
 
-⚠️ CRITICAL: Just mentioning the company name (Mrcall, Mario, etc.) is NOT genuine personalization!
-That's mail-merge automation. TRUE personalization requires:
-- Reference to specific conversations or context
-- Knowledge of Mario's actual problems or situation
-- Authentic connection, not templated opener
+**COLD OUTREACH (no task needed):**
+Cold outreach is when someone contacts Mario without a prior relationship, introduction, or genuine connection. Signs include:
 
-CRITICAL RULE:
-- Cold outreach offering "tools" or "calculators" = LEAD MAGNET = Sales pitch
-- "Founder, [Generic Company]" + buzzwords = AI-GENERATED SPAM
-- Name-dropping clients without context = Social proof template
-- ANY cold email from unknown sender offering free resources = qualified spam
+- First contact with no introduction from a mutual connection
+- Asking for something (money, time, meeting) without providing value first
+- Fundraising pitches (Mario is NOT an investor - these are always irrelevant)
+- Sales pitches for services/products
+- "Partnership" or "collaboration" proposals from strangers
+- Follow-up emails to previous cold outreach ("you may have missed my last email")
+- No attached documentation when asking for significant commitment (e.g., asking for investment without a pitch deck)
+- Generic personalization (just using Mario's name or company name from a template)
 
-If the email matches 3+ signals above:
-→ has_task = false, is_ai_generated = true (reason: "AI-generated cold outreach with mail-merge personalization")
+Even well-written, polite cold outreach is still cold outreach. The quality of writing doesn't make unsolicited asks relevant.
 
-=== THE TWO FUNDAMENTAL QUESTIONS ===
+**GENUINE COMMUNICATION (may need task):**
+- Existing customers with questions or issues
+- People Mario has previously corresponded with
+- Referrals with explicit introduction from someone Mario knows
+- Responses to something Mario initiated
+- Business partners with active projects
 
-If the email is NOT AI-generated spam, answer:
+**DECISION:**
+- If this is cold outreach → has_task: false
+- If Mario previously engaged and there's a pending matter → has_task: true
+- If it's from a customer/partner with an unresolved issue → has_task: true
+- If the thread is already resolved → has_task: false
 
-a) Does this person expect something from Mario NOW?
-b) Does Mario expect something from this person?
-
-IMPORTANT:
-- Study the ENTIRE history, not just the last message
-- Try to understand if problems have been RESOLVED or are still OPEN
-- If the last exchange indicates "everything is fine", probably NO TASK needed
-- If there are unmet promises, unresolved issues, or pending requests → TASK
-
-=== EXAMPLES ===
-
-Example 1 - NO TASK (problem resolved):
-Luisa Boni had problems with WhatsApp and assistant, but in the last exchange
-says everything works now. → NO TASK
-
-Example 2 - NO TASK (AI-generated email):
-Irene Lorenzo from Sesamers sends perfectly formatted email with bullet points,
-marketing buzzwords, offering "opportunities" at "Startup Village" (= selling booth).
-→ NO TASK (100% AI-generated email from business developer)
-
-Example 3 - TASK (personal request):
-Giuseppe personally asks for product information with natural language
-and specific references to previous conversation.
-→ TASK (authentic request)
-
-Respond ONLY with valid JSON in this format:
+Respond with JSON only:
 
 {{
-  "has_task": true,
-  "task_description": "Brief description of what Mario needs to do",
-  "reason": "Explanation of why this task is needed",
-  "is_ai_generated": false
-}}
-
-or:
-
-{{
-  "has_task": false,
-  "reason": "Explanation of why NO task is needed",
-  "is_ai_generated": true
-}}
-
-CRITICAL INSTRUCTIONS:
-- YOUR RESPONSE MUST BE VALID JSON ONLY
-- DO NOT USE MARKDOWN CODE BLOCKS
-- THE RESPONSE MUST START WITH {{ AND END WITH }}
-- NO TEXT BEFORE OR AFTER THE JSON
-
-RETURN ONLY THE JSON, NOTHING ELSE."""
+  "has_task": true/false,
+  "task_description": "What Mario should do (if has_task is true)",
+  "reason": "Brief explanation",
+  "classification": "cold_outreach" | "existing_relationship" | "customer_support" | "resolved"
+}}"""
 
         # Call Sonnet
         if not self.anthropic_client:
@@ -1358,165 +1313,16 @@ REMEMBER: RETURN ONLY THE JSON OBJECT, NOTHING ELSE. NO MARKDOWN, NO EXPLANATION
             logger.warning(f"Failed to check prior contact for {contact_email}: {e}")
             return True  # Assume yes on error (conservative)
 
-    def _detect_sales_signals(self, email_body: str) -> bool:
-        """Detect if email looks like a sales/marketing message.
-
-        Args:
-            email_body: Email body text
-
-        Returns:
-            True if email appears to be sales/marketing
-        """
-        if not email_body:
-            return False
-
-        body_lower = email_body.lower()
-
-        # Sales phrases
-        sales_phrases = [
-            'schedule a call',
-            'schedule a demo',
-            'book a meeting',
-            'book a call',
-            'would you be open to',
-            'would that be worth',
-            'brief discussion',
-            'quick chat',
-            'happy to discuss',
-            'let me know if you\'d like',
-            'interested in learning',
-            'help you grow',
-            'help you scale',
-            'increase your',
-            'boost your',
-            'roi',
-            'pipeline',
-            'revenue',
-            'case study',
-            'client success',
-            'we helped',
-            'we\'ve helped',
-            'raised $',
-            'raised funding',
-            'arr',
-            'mrr',
-        ]
-
-        matches = sum(1 for phrase in sales_phrases if phrase in body_lower)
-        return matches >= 2  # Need at least 2 sales signals
-
-    def _detect_unsubscribe_signals(self, email_body: str) -> bool:
-        """Detect if email has unsubscribe or opt-out language.
-
-        Args:
-            email_body: Email body text
-
-        Returns:
-            True if email has unsubscribe/opt-out signals
-        """
-        if not email_body:
-            return False
-
-        body_lower = email_body.lower()
-
-        unsubscribe_phrases = [
-            'unsubscribe',
-            'opt out',
-            'opt-out',
-            'remove me',
-            'stop receiving',
-            'not interested',
-            'reply stop',
-            'reply no',
-            'just reply no',
-            'say no',
-            'let me know if not',
-            'no worries if not',
-            'feel free to ignore',
-            'manage preferences',
-            'email preferences',
-            'subscription',
-        ]
-
-        return any(phrase in body_lower for phrase in unsubscribe_phrases)
-
-    def _detect_ai_generated_signals(self, email_body: str) -> bool:
-        """Detect if email appears to be AI-generated.
-
-        Args:
-            email_body: Email body text
-
-        Returns:
-            True if email appears AI-generated
-        """
-        if not email_body:
-            return False
-
-        body_lower = email_body.lower()
-
-        # AI writing patterns
-        ai_signals = [
-            'i hope this email finds you',
-            'i wanted to reach out',
-            'i came across',
-            'i noticed that',
-            'i\'d love to connect',
-            'i\'d love to learn more',
-            'leverage',
-            'synergy',
-            'cutting-edge',
-            'game-changing',
-            'revolutionary',
-            'transform your',
-            'unlock',
-            'empower',
-            'streamline',
-            'optimize',
-            'innovative solution',
-            'best regards',
-            'warm regards',
-            'kind regards',
-        ]
-
-        # Count matches
-        matches = sum(1 for signal in ai_signals if signal in body_lower)
-
-        # Also check for perfect structure (greeting + pitch + CTA + signature)
-        has_greeting = any(g in body_lower[:100] for g in ['hi ', 'hello ', 'dear ', 'hey '])
-        has_cta = any(cta in body_lower for cta in ['let me know', 'would you be', 'interested?', 'thoughts?'])
-
-        return matches >= 3 or (matches >= 2 and has_greeting and has_cta)
-
-    def _compute_relationship_signals(self, contact_email: str, threads: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Compute all relationship signals for a contact.
+    def _compute_relationship_signals(self, contact_email: str, threads: List[Dict[str, Any]]) -> Dict[str, bool]:
+        """Check if user has prior relationship with this contact.
 
         Args:
             contact_email: Contact's email address
-            threads: List of threads with this contact
+            threads: List of threads with this contact (unused, kept for API compat)
 
         Returns:
-            Dict with signal flags and metadata
+            Dict with has_prior_contact flag
         """
-        # Get all email bodies from threads
-        all_bodies = []
-        for thread in threads:
-            body = thread.get('last_email', {}).get('body', '')
-            if body:
-                all_bodies.append(body)
-
-        combined_body = '\n'.join(all_bodies)
-
-        # Compute signals
-        has_prior_contact = self._has_prior_contact(contact_email)
-        looks_like_sales = self._detect_sales_signals(combined_body)
-        has_unsubscribe = self._detect_unsubscribe_signals(combined_body)
-        looks_ai_generated = self._detect_ai_generated_signals(combined_body)
-
         return {
-            'has_prior_contact': has_prior_contact,
-            'looks_like_sales': looks_like_sales,
-            'has_unsubscribe_language': has_unsubscribe,
-            'looks_ai_generated': looks_ai_generated,
-            # Summary for prompt
-            'is_cold_outreach': not has_prior_contact and (looks_like_sales or looks_ai_generated),
+            'has_prior_contact': self._has_prior_contact(contact_email),
         }
