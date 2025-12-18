@@ -130,29 +130,41 @@ Run `/sync` or `/sync --days <n>` to sync more data."""
         logger.info(f"[/sync] Reset flag detected, clearing all sync data for owner_id={owner_id}")
         try:
             supabase = SupabaseStorage()
+            cleared_tables = []
 
             # Clear sync state
             supabase.client.table('sync_state').delete().eq('owner_id', owner_id).execute()
             logger.info(f"[/sync] Cleared sync_state")
+            cleared_tables.append("sync_state")
 
             # Clear emails
-            email_result = supabase.client.table('emails').delete().eq('owner_id', owner_id).execute()
+            supabase.client.table('emails').delete().eq('owner_id', owner_id).execute()
             logger.info(f"[/sync] Cleared emails")
+            cleared_tables.append("emails")
 
             # Clear calendar events
-            cal_result = supabase.client.table('calendar_events').delete().eq('owner_id', owner_id).execute()
+            supabase.client.table('calendar_events').delete().eq('owner_id', owner_id).execute()
             logger.info(f"[/sync] Cleared calendar_events")
+            cleared_tables.append("calendar_events")
 
-            return """✅ **Sync state reset!**
+            # Clear pipedrive deals (if table exists)
+            try:
+                supabase.client.table('pipedrive_deals').delete().eq('owner_id', owner_id).execute()
+                logger.info(f"[/sync] Cleared pipedrive_deals")
+                cleared_tables.append("pipedrive_deals")
+            except Exception:
+                pass  # Table may not exist
 
-All emails and calendar events cleared.
+            return f"""✅ **Sync state reset!**
+
+Cleared: {', '.join(cleared_tables)}
 Next `/sync` will perform a full re-sync from scratch.
 
 ⚠️ **Memory note:** Your memory blobs still exist. If you want fresh memory:
 ```
 /memory --reset
 ```
-Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
+Then run `/sync --days <n>` to rebuild memory from re-synced data."""
         except Exception as e:
             logger.error(f"[/sync] Failed to reset sync state: {e}")
             return f"❌ **Error resetting sync state:** {str(e)}"
@@ -575,7 +587,12 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
             if service not in valid_services:
                 return f"❌ Unknown service: `{service}`\n\nValid options: `email`, `calendar`, `pipedrive`, or omit for all."
 
-            worker = MemoryWorker(storage=storage, owner_id=owner_id)
+            # Get BYOK Anthropic API key from Supabase
+            anthropic_api_key = storage.get_anthropic_key(owner_id)
+            if not anthropic_api_key:
+                return "❌ Anthropic API key not configured.\n\nPlease run `/connect anthropic` to set up your API key."
+
+            worker = MemoryWorker(storage=storage, owner_id=owner_id, anthropic_api_key=anthropic_api_key)
             results = []
 
             # Process emails

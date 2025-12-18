@@ -13,9 +13,8 @@ from typing import Dict, List, Optional
 
 import anthropic
 
-from zylch.config import settings
 from zylch.storage.supabase_client import SupabaseStorage
-from zylch_memory import BlobStorage, HybridSearchEngine, LLMMergeService, EmbeddingEngine
+from zylch_memory import BlobStorage, HybridSearchEngine, LLMMergeService, EmbeddingEngine, ZylchMemoryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -73,13 +72,17 @@ class MemoryWorker:
         self.owner_id = owner_id
         self.namespace = f"user:{owner_id}"
 
-        # Use provided key or fall back to settings
-        api_key = anthropic_api_key or settings.anthropic_api_key
-        if not api_key:
-            raise ValueError("Anthropic API key required for memory extraction")
+        # BYOK - API key must be provided, no env var fallback
+        if not anthropic_api_key:
+            raise ValueError(
+                "Anthropic API key required for memory extraction. "
+                "Please run `/connect anthropic` to configure your API key."
+            )
+        api_key = anthropic_api_key
 
         # Initialize components
-        self.embedding_engine = EmbeddingEngine()
+        config = ZylchMemoryConfig()
+        self.embedding_engine = EmbeddingEngine(config)
         self.blob_storage = BlobStorage(
             storage.client,
             self.embedding_engine
