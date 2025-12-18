@@ -265,7 +265,13 @@ Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
         if has_failures:
             lines.append("\n⚠️ **Sync completed with errors.** Check the issues above.")
         else:
-            lines.append("\n✅ **Done!** Run `/memory` to process emails into memory.")
+            # Check if user has trained a custom prompt
+            storage = SupabaseStorage.get_instance()
+            has_custom_prompt = storage.get_user_prompt(owner_id, 'memory_email') is not None
+            if has_custom_prompt:
+                lines.append("\n✅ **Done!** Run `/memory process` to extract memories.")
+            else:
+                lines.append("\n✅ **Done!** Run `/train build memory-email` then `/memory process`.")
         return "\n".join(lines)
 
     except Exception as e:
