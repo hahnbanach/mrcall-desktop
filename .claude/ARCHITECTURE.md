@@ -236,7 +236,7 @@ Hybrid: 0.85 → "/sync 2"
 ### 7. CLI (`zylch/cli/main.py`)
 Interactive command-line interface:
 - `/sync` - Sync emails, calendar, pipedrive (data only, no processing)
-- `/prompt build memory-email` - Generate personalized extraction prompt from email patterns
+- `/train build memory-email` - Generate personalized extraction prompt from email patterns
 - `/memory process` - Extract facts from synced data into blobs (uses personalized prompt)
 - `/memory search` - Search entity memories
 - `/gaps` - Show relationship gaps
@@ -757,7 +757,7 @@ The default memory extraction prompt uses generic rules for classifying emails (
 
 ### Solution: Learn from User's Email Patterns
 
-The `/prompt build memory-email` command analyzes the user's actual email behavior:
+The `/train build memory-email` command analyzes the user's actual email behavior:
 
 1. **Emails user replied to** = Important contacts (VIPs)
 2. **Emails user ignored** = Noise patterns (cold outreach, newsletters)
@@ -780,7 +780,7 @@ This generates a personalized extraction prompt that understands:
 ```
 /sync → emails stored in DB
     ↓
-/prompt build memory-email
+/train build memory-email
     ↓
 PromptBuilder analyzes:
   - Replied threads (VIP contacts)
@@ -798,9 +798,9 @@ Stored in user_prompts table
 
 | Command | Purpose |
 |---------|---------|
-| `/prompt build memory-email` | Analyze email patterns and generate personalized prompt |
-| `/prompt show memory-email` | Display current personalized prompt |
-| `/prompt reset memory-email` | Delete custom prompt, revert to default |
+| `/train build memory-email` | Analyze email patterns and generate personalized prompt |
+| `/train show memory-email` | Display current personalized prompt |
+| `/train reset memory-email` | Delete custom prompt, revert to default |
 
 ### Gate on Memory Processing
 
@@ -809,7 +809,7 @@ When user runs `/memory process email` without a custom prompt, they see a recom
 ⚠️ No personalized extraction prompt found
 
 For better memory extraction, create a personalized prompt first:
-/prompt build memory-email
+/train build memory-email
 
 To proceed anyway with the default prompt:
 /memory process email --force
