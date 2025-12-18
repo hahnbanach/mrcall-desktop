@@ -1355,7 +1355,7 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
             since_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
             result = supabase.table('emails')\
-                .select('id, thread_id, subject, from_email, from_name, snippet, date, is_read')\
+                .select('gmail_id, thread_id, subject, from_email, from_name, snippet, date')\
                 .eq('owner_id', owner_id)\
                 .gte('date', since_date)\
                 .order('date', desc=True)\
@@ -1367,12 +1367,11 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
 
             output = f"**📧 Recent Emails** ({len(result.data)} found)\n\n"
             for email in result.data:
-                read_mark = '' if email.get('is_read') else '🔵 '
                 subject = email.get('subject', '(no subject)')[:45]
                 from_name = email.get('from_name') or email.get('from_email', '?')
                 date = email.get('date', '')[:10]
 
-                output += f"{read_mark}**{subject}**\n"
+                output += f"**{subject}**\n"
                 output += f"   From: {from_name} | {date}\n\n"
 
             output += f"_Showing last {days} days. Use `--days N` or `--limit N` to adjust._"
@@ -1574,7 +1573,7 @@ Message ID: `{sent_id[:12] if sent_id else 'N/A'}`"""
 
             # Build query
             q = supabase.table('emails')\
-                .select('id, thread_id, subject, from_email, from_name, snippet, date, is_read')\
+                .select('gmail_id, thread_id, subject, from_email, from_name, snippet, date')\
                 .eq('owner_id', owner_id)\
                 .gte('date', since_date)\
                 .order('date', desc=True)\
@@ -1593,13 +1592,12 @@ Message ID: `{sent_id[:12] if sent_id else 'N/A'}`"""
 
             output = f"**🔍 Search Results** ({len(result.data)} found)\n\n"
             for email in result.data:
-                read_mark = '' if email.get('is_read') else '🔵 '
                 subject = email.get('subject', '(no subject)')[:40]
                 from_name = email.get('from_name') or email.get('from_email', '?')
                 date = email.get('date', '')[:10]
                 snippet = (email.get('snippet', '')[:60] + '...') if email.get('snippet') else ''
 
-                output += f"{read_mark}**{subject}**\n"
+                output += f"**{subject}**\n"
                 output += f"   From: {from_name} | {date}\n"
                 if snippet:
                     output += f"   _{snippet}_\n"
@@ -1833,14 +1831,6 @@ Shows statistics about your synced emails:
             .execute()
         total_emails = email_result.count if hasattr(email_result, 'count') else 0
 
-        # Count unread
-        unread_result = supabase.table('emails')\
-            .select('id', count='exact')\
-            .eq('owner_id', owner_id)\
-            .eq('is_read', False)\
-            .execute()
-        unread_count = unread_result.count if hasattr(unread_result, 'count') else 0
-
         # Count threads
         thread_result = supabase.table('emails')\
             .select('thread_id')\
@@ -1877,7 +1867,6 @@ Shows statistics about your synced emails:
 
 **Total Emails:** {total_emails:,}
 **Threads:** {unique_threads:,}
-**Unread:** {unread_count:,}
 **Date Range:** {oldest_date} → {newest_date}
 
 **Open Conversations:** {open_count} need response
