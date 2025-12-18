@@ -3064,33 +3064,10 @@ COMMAND_TRIGGERS = {
     # --- Training (Personalized extraction prompts) ---
     '/train': [
         # Build
-        "train",
-        "train memory",
-        "train on my emails",
-        "train on emails",
-        "build prompt",
-        "create prompt",
-        "build memory prompt",
-        "create memory prompt",
-        "build email prompt",
-        "personalize memory",
-        "personalize extraction",
-        "learn my patterns",
-        "analyze my email patterns",
-        "customize memory extraction",
+        "train zylch from email",
         # Show
-        "show training",
-        "show my prompt",
-        "view prompt",
-        "display prompt",
-        "what's my prompt",
+        "let me see your training prompts",
         # Reset
         "reset training",
-        "delete training",
-        "reset prompt",
-        "delete prompt",
-        "clear prompt",
-        "remove prompt",
-        "reset memory prompt",
     ],
 }
