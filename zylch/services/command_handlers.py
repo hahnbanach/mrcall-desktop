@@ -538,19 +538,19 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 **Before processing emails:**
 First, create a personalized extraction prompt:
 ```
-/prompt build memory-email
+/train build memory-email
 ```
 This learns YOUR patterns for better cold outreach detection and VIP prioritization.
 
 **Examples:**
-• `/prompt build memory-email` - Create personalized prompt first
+• `/train build memory-email` - Create personalized prompt first
 • `/memory process email` - Process emails with your custom prompt
 • `/memory search John Smith`
 • `/memory store "Mario prefers formal Italian in emails"`
 
 **How it works:**
 1. `/sync` fetches emails, calendar, and Pipedrive
-2. `/prompt build memory-email` learns your patterns (recommended)
+2. `/train build memory-email` learns your patterns (recommended)
 3. `/memory process` extracts facts using personalized prompt
 4. `/memory search` finds information using hybrid FTS + semantic search"""
 
@@ -597,7 +597,7 @@ This learns YOUR patterns for better cold outreach detection and VIP prioritizat
 For better memory extraction, create a personalized prompt first:
 
 ```
-/prompt build memory-email
+/train build memory-email
 ```
 
 This analyzes your email patterns to understand:
@@ -613,7 +613,7 @@ The personalized prompt significantly improves:
 **To proceed anyway with the default prompt**, run:
 `/memory process email --force`
 
-**Recommended:** Run `/prompt build memory-email` first."""
+**Recommended:** Run `/train build memory-email` first."""
 
             if force_flag and not worker.has_custom_prompt():
                 logger.info("Processing with default prompt (--force flag used)")
@@ -2059,19 +2059,19 @@ Run `/sync` first to fetch latest emails.''',
         'usage': '/jobs [--cancel <id>]',
         'description': 'Lists scheduled reminders and jobs. Use `--cancel <id>` to cancel a job.',
     },
-    '/prompt': {
-        'summary': 'Manage personalized prompts',
-        'usage': '/prompt [build|show|reset] <type>',
+    '/train': {
+        'summary': 'Train personalized prompts from your data',
+        'usage': '/train [build|show|reset] <type>',
         'description': '''Build and manage personalized prompts that learn from your email patterns.
 
 **Usage:**
-- `/prompt build memory-email` - Analyze your emails to create personalized extraction prompt
-- `/prompt show memory-email` - Display your current prompt
-- `/prompt reset memory-email` - Delete custom prompt, return to default
+- `/train build memory-email` - Analyze your emails to create personalized extraction prompt
+- `/train show memory-email` - Display your current prompt
+- `/train reset memory-email` - Delete custom prompt, return to default
 
 **How it works:**
 1. Run `/sync` to sync your email history
-2. `/prompt build memory-email` analyzes patterns:
+2. `/train build memory-email` analyzes patterns:
    - Who you reply to (VIP contacts)
    - What you ignore (cold outreach)
    - Your role and business context
@@ -2453,23 +2453,23 @@ Shows your scheduled reminders and jobs.
         return f"❌ **Error:** {str(e)}"
 
 
-async def handle_prompt(args: List[str], config: ToolConfig, owner_id: str) -> str:
-    """Handle /prompt command - manage user-specific prompts."""
+async def handle_train(args: List[str], config: ToolConfig, owner_id: str) -> str:
+    """Handle /train command - train personalized prompts from user data."""
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch.services.prompt_builder import PromptBuilder
     from zylch.config import settings
 
     if '--help' in args or not args:
-        return """**📝 Prompt Management**
+        return """**🎓 Train Personalized Prompts**
 
 **Usage:**
-• `/prompt build memory-email` - Analyze your emails and create personalized extraction prompt
-• `/prompt show memory-email` - Show your current email memory prompt
-• `/prompt reset memory-email` - Reset to default prompt
+• `/train build memory-email` - Analyze your emails and create personalized extraction prompt
+• `/train show memory-email` - Show your current email memory prompt
+• `/train reset memory-email` - Reset to default prompt
 
 **How it works:**
 1. Run `/sync` first to ensure emails are available
-2. `/prompt build memory-email` analyzes your sent/received patterns
+2. `/train build memory-email` analyzes your sent/received patterns
 3. Creates a personalized prompt that understands:
    - Who matters to you (VIP contacts)
    - What to extract from their emails
@@ -2496,7 +2496,7 @@ async def handle_prompt(args: List[str], config: ToolConfig, owner_id: str) -> s
 
         if cmd == 'build':
             if not prompt_type_normalized:
-                return "❌ Missing prompt type.\n\nUsage: `/prompt build memory-email`"
+                return "❌ Missing prompt type.\n\nUsage: `/train build memory-email`"
 
             if prompt_type_normalized == 'memory_email':
                 # Check sync status first
@@ -2505,7 +2505,7 @@ async def handle_prompt(args: List[str], config: ToolConfig, owner_id: str) -> s
                     return """❌ **Please sync your emails first**
 
 Run `/sync` to synchronize your email history.
-Then run `/prompt build memory-email` again."""
+Then run `/train build memory-email` again."""
 
                 # Check email count
                 emails = storage.get_emails(owner_id, limit=1)
@@ -2555,19 +2555,19 @@ Connect your Anthropic account:
 - Topics you engage with vs ignore
 
 **Next steps:**
-- `/prompt show memory-email` to review the prompt
+- `/train show memory-email` to review the prompt
 - `/memory process email` to extract memories using this prompt"""
 
         elif cmd == 'show':
             if not prompt_type_normalized:
-                return "❌ Missing prompt type.\n\nUsage: `/prompt show memory-email`"
+                return "❌ Missing prompt type.\n\nUsage: `/train show memory-email`"
 
             prompt_content = storage.get_user_prompt(owner_id, prompt_type_normalized)
             if not prompt_content:
                 return f"""❌ **No custom prompt found for `{prompt_type}`**
 
 Create one with:
-`/prompt build {prompt_type}`"""
+`/train build {prompt_type}`"""
 
             # Get metadata too
             meta = storage.get_user_prompt_metadata(owner_id, prompt_type_normalized)
@@ -2588,11 +2588,11 @@ Create one with:
 {display_content}
 ---
 
-_Use `/prompt reset memory-email` to delete and return to default._"""
+_Use `/train reset memory-email` to delete and return to default._"""
 
         elif cmd == 'reset':
             if not prompt_type_normalized:
-                return "❌ Missing prompt type.\n\nUsage: `/prompt reset memory-email`"
+                return "❌ Missing prompt type.\n\nUsage: `/train reset memory-email`"
 
             deleted = storage.delete_user_prompt(owner_id, prompt_type_normalized)
             if deleted:
@@ -2601,7 +2601,7 @@ _Use `/prompt reset memory-email` to delete and return to default._"""
 Your custom `{prompt_type}` prompt has been deleted.
 Memory extraction will use the default prompt.
 
-Recreate with: `/prompt build {prompt_type}`"""
+Recreate with: `/train build {prompt_type}`"""
             else:
                 return f"❌ No custom prompt found for `{prompt_type}`"
 
@@ -2609,12 +2609,12 @@ Recreate with: `/prompt build {prompt_type}`"""
             return f"""❌ Unknown subcommand: `{cmd}`
 
 **Available commands:**
-- `/prompt build memory-email`
-- `/prompt show memory-email`
-- `/prompt reset memory-email`"""
+- `/train build memory-email`
+- `/train show memory-email`
+- `/train reset memory-email`"""
 
     except Exception as e:
-        logger.error(f"Error in /prompt: {e}", exc_info=True)
+        logger.error(f"Error in /train: {e}", exc_info=True)
         return f"❌ **Error:** {str(e)}"
 
 
@@ -2643,7 +2643,7 @@ COMMAND_HANDLERS = {
     '/calendar': handle_calendar,
     '/tasks': handle_tasks,
     '/jobs': handle_jobs,
-    '/prompt': handle_prompt,
+    '/train': handle_train,
 }
 
 
@@ -3061,9 +3061,13 @@ COMMAND_TRIGGERS = {
         "cancel {job_id:text}",
     ],
 
-    # --- Prompt Management (Personalized extraction prompts) ---
-    '/prompt': [
+    # --- Training (Personalized extraction prompts) ---
+    '/train': [
         # Build
+        "train",
+        "train memory",
+        "train on my emails",
+        "train on emails",
         "build prompt",
         "create prompt",
         "build memory prompt",
@@ -3074,14 +3078,15 @@ COMMAND_TRIGGERS = {
         "learn my patterns",
         "analyze my email patterns",
         "customize memory extraction",
-        "train on my emails",
         # Show
-        "show prompt",
+        "show training",
         "show my prompt",
         "view prompt",
         "display prompt",
         "what's my prompt",
         # Reset
+        "reset training",
+        "delete training",
         "reset prompt",
         "delete prompt",
         "clear prompt",
