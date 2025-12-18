@@ -574,7 +574,6 @@ This learns YOUR patterns for better cold outreach detection and VIP prioritizat
         if cmd == 'process':
             # Process synced data into memory blobs
             from zylch.workers.memory_worker import MemoryWorker
-            from zylch.config import settings
 
             service = args[1].lower() if len(args) > 1 else 'all'
             valid_services = ['all', 'email', 'calendar', 'pipedrive']
@@ -2455,7 +2454,6 @@ async def handle_train(args: List[str], config: ToolConfig, owner_id: str) -> st
     """Handle /train command - train personalized prompts from user data."""
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch.services.prompt_builder import PromptBuilder
-    from zylch.config import settings
 
     if '--help' in args or not args:
         return """**🎓 Train Personalized Prompts**
