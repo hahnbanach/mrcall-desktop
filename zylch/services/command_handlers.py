@@ -526,6 +526,7 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 **Usage:**
 • `/memory process` - Process all unprocessed data into memory blobs
 • `/memory process email` - Process only emails
+• `/memory process email --force` - Process emails with default prompt
 • `/memory process calendar` - Process only calendar events
 • `/memory process pipedrive` - Process only Pipedrive deals
 • `/memory search <query>` - Search memories (hybrid FTS + semantic)
@@ -534,18 +535,24 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 • `/memory list [limit]` - List recent memories
 • `/memory --reset` - Delete ALL memories AND reset processing timestamps
 
+**Before processing emails:**
+First, create a personalized extraction prompt:
+```
+/prompt build memory-email
+```
+This learns YOUR patterns for better cold outreach detection and VIP prioritization.
+
 **Examples:**
-• `/memory process` - Process all synced data into blobs
-• `/memory process email` - Process only unprocessed emails
-• `/memory process pipedrive` - Process only unprocessed deals
+• `/prompt build memory-email` - Create personalized prompt first
+• `/memory process email` - Process emails with your custom prompt
 • `/memory search John Smith`
 • `/memory store "Mario prefers formal Italian in emails"`
-• `/memory --reset` - Wipe all memories + mark data as unprocessed
 
 **How it works:**
-1. `/sync` fetches emails, calendar, and Pipedrive to local database
-2. `/memory process` extracts facts and stores them in blobs
-3. `/memory search` finds information using hybrid FTS + semantic search"""
+1. `/sync` fetches emails, calendar, and Pipedrive
+2. `/prompt build memory-email` learns your patterns (recommended)
+3. `/memory process` extracts facts using personalized prompt
+4. `/memory search` finds information using hybrid FTS + semantic search"""
 
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch_memory import BlobStorage, HybridSearchEngine, EmbeddingEngine
@@ -576,6 +583,41 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
                 return f"❌ Unknown service: `{service}`\n\nValid options: `email`, `calendar`, `pipedrive`, or omit for all."
 
             worker = MemoryWorker(storage=storage, owner_id=owner_id)
+
+            # Check for --force flag
+            force_flag = '--force' in args
+
+            # Gate: Check if processing emails without a custom prompt (unless --force)
+            if service in ['all', 'email'] and not worker.has_custom_prompt() and not force_flag:
+                # Show recommendation to build custom prompt first
+                unprocessed_count = len(storage.get_unprocessed_emails(owner_id, limit=1))
+                if unprocessed_count > 0:
+                    return """⚠️ **No personalized extraction prompt found**
+
+For better memory extraction, create a personalized prompt first:
+
+```
+/prompt build memory-email
+```
+
+This analyzes your email patterns to understand:
+- **Who matters to you** (VIP contacts get detailed extraction)
+- **What to ignore** (cold outreach specific to you)
+- **Your role/context** (founder vs investor vs engineer)
+
+The personalized prompt significantly improves:
+- Cold outreach detection
+- Relevant fact extraction
+- VIP contact prioritization
+
+**To proceed anyway with the default prompt**, run:
+`/memory process email --force`
+
+**Recommended:** Run `/prompt build memory-email` first."""
+
+            if force_flag and not worker.has_custom_prompt():
+                logger.info("Processing with default prompt (--force flag used)")
+
             results = []
 
             # Process emails
@@ -583,7 +625,8 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
                 unprocessed_emails = storage.get_unprocessed_emails(owner_id, limit=100)
                 if unprocessed_emails:
                     processed = await worker.process_batch(unprocessed_emails)
-                    results.append(f"📧 **Emails:** {processed}/{len(unprocessed_emails)} processed")
+                    prompt_note = " (using custom prompt)" if worker.has_custom_prompt() else " (using default prompt)"
+                    results.append(f"📧 **Emails:** {processed}/{len(unprocessed_emails)} processed{prompt_note}")
                 else:
                     results.append("📧 **Emails:** No unprocessed emails")
 
@@ -2385,6 +2428,171 @@ Shows your scheduled reminders and jobs.
         return f"❌ **Error:** {str(e)}"
 
 
+async def handle_prompt(args: List[str], config: ToolConfig, owner_id: str) -> str:
+    """Handle /prompt command - manage user-specific prompts."""
+    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.services.prompt_builder import PromptBuilder
+    from zylch.config import settings
+
+    if '--help' in args or not args:
+        return """**📝 Prompt Management**
+
+**Usage:**
+• `/prompt build memory-email` - Analyze your emails and create personalized extraction prompt
+• `/prompt show memory-email` - Show your current email memory prompt
+• `/prompt reset memory-email` - Reset to default prompt
+
+**How it works:**
+1. Run `/sync` first to ensure emails are available
+2. `/prompt build memory-email` analyzes your sent/received patterns
+3. Creates a personalized prompt that understands:
+   - Who matters to you (VIP contacts)
+   - What to extract from their emails
+   - What to ignore (cold outreach, etc.)
+4. `/memory process email` uses this prompt for extraction
+
+**Why personalize?**
+- The system learns YOUR patterns, not generic rules
+- VIP contacts get detailed extraction
+- Cold outreach patterns specific to YOU are filtered
+- Your role/context is understood (founder vs investor vs engineer)"""
+
+    try:
+        storage = SupabaseStorage.get_instance()
+        cmd = args[0].lower()
+        prompt_type = args[1].lower() if len(args) > 1 else None
+
+        # Normalize prompt type
+        prompt_type_normalized = None
+        if prompt_type == 'memory-email':
+            prompt_type_normalized = 'memory_email'
+        elif prompt_type:
+            return f"❌ Unknown prompt type: `{prompt_type}`\n\nAvailable types: `memory-email`"
+
+        if cmd == 'build':
+            if not prompt_type_normalized:
+                return "❌ Missing prompt type.\n\nUsage: `/prompt build memory-email`"
+
+            if prompt_type_normalized == 'memory_email':
+                # Check sync status first
+                sync_state = storage.get_sync_state(owner_id)
+                if not sync_state or not sync_state.get('full_sync_completed'):
+                    return """❌ **Please sync your emails first**
+
+Run `/sync` to synchronize your email history.
+Then run `/prompt build memory-email` again."""
+
+                # Check email count
+                emails = storage.get_emails(owner_id, limit=1)
+                if not emails:
+                    return """❌ **No emails found**
+
+Run `/sync --days 90` to sync more email history.
+Need at least some emails to analyze patterns."""
+
+                # Get Anthropic API key from user's credentials or system settings
+                anthropic_key = None
+                try:
+                    credentials = storage.get_oauth_credentials(owner_id, "anthropic")
+                    if credentials and credentials.get("api_key"):
+                        anthropic_key = credentials["api_key"]
+                except Exception:
+                    pass
+
+                if not anthropic_key:
+                    anthropic_key = settings.anthropic_api_key
+
+                if not anthropic_key:
+                    return """❌ **Anthropic API key required**
+
+Connect your Anthropic account:
+`/connect anthropic`"""
+
+                # Build the prompt
+                builder = PromptBuilder(storage, owner_id, anthropic_key)
+                prompt_content, metadata = await builder.build_memory_email_prompt()
+
+                # Store in DB
+                storage.store_user_prompt(owner_id, 'memory_email', prompt_content, metadata)
+
+                return f"""✅ **Email memory prompt created**
+
+**Analyzed:**
+- {metadata.get('replied_threads_analyzed', 0)} threads you replied to
+- {metadata.get('ignored_emails_analyzed', 0)} emails you ignored
+- {metadata.get('vip_contacts_count', 0)} VIP contacts identified
+- {metadata.get('noise_patterns_count', 0)} noise patterns detected
+
+**What was learned:**
+- Your role and business context
+- VIP contacts who deserve detailed extraction
+- Cold outreach patterns specific to you
+- Topics you engage with vs ignore
+
+**Next steps:**
+- `/prompt show memory-email` to review the prompt
+- `/memory process email` to extract memories using this prompt"""
+
+        elif cmd == 'show':
+            if not prompt_type_normalized:
+                return "❌ Missing prompt type.\n\nUsage: `/prompt show memory-email`"
+
+            prompt_content = storage.get_user_prompt(owner_id, prompt_type_normalized)
+            if not prompt_content:
+                return f"""❌ **No custom prompt found for `{prompt_type}`**
+
+Create one with:
+`/prompt build {prompt_type}`"""
+
+            # Get metadata too
+            meta = storage.get_user_prompt_metadata(owner_id, prompt_type_normalized)
+            meta_info = ""
+            if meta:
+                metadata = meta.get('metadata', {})
+                created = meta.get('created_at', '')[:10] if meta.get('created_at') else 'unknown'
+                meta_info = f"\n_Created: {created} | VIPs: {metadata.get('vip_contacts_count', 'N/A')} | Noise patterns: {metadata.get('noise_patterns_count', 'N/A')}_\n"
+
+            # Truncate if too long for display
+            display_content = prompt_content
+            if len(prompt_content) > 2000:
+                display_content = prompt_content[:2000] + f"\n\n_... ({len(prompt_content) - 2000} more characters)_"
+
+            return f"""**📝 Your Email Memory Prompt**
+{meta_info}
+---
+{display_content}
+---
+
+_Use `/prompt reset memory-email` to delete and return to default._"""
+
+        elif cmd == 'reset':
+            if not prompt_type_normalized:
+                return "❌ Missing prompt type.\n\nUsage: `/prompt reset memory-email`"
+
+            deleted = storage.delete_user_prompt(owner_id, prompt_type_normalized)
+            if deleted:
+                return f"""✅ **Prompt reset**
+
+Your custom `{prompt_type}` prompt has been deleted.
+Memory extraction will use the default prompt.
+
+Recreate with: `/prompt build {prompt_type}`"""
+            else:
+                return f"❌ No custom prompt found for `{prompt_type}`"
+
+        else:
+            return f"""❌ Unknown subcommand: `{cmd}`
+
+**Available commands:**
+- `/prompt build memory-email`
+- `/prompt show memory-email`
+- `/prompt reset memory-email`"""
+
+    except Exception as e:
+        logger.error(f"Error in /prompt: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}"
+
+
 # Export all handlers
 COMMAND_HANDLERS = {
     '/echo': handle_echo,
@@ -2410,6 +2618,7 @@ COMMAND_HANDLERS = {
     '/calendar': handle_calendar,
     '/tasks': handle_tasks,
     '/jobs': handle_jobs,
+    '/prompt': handle_prompt,
 }
 
 
