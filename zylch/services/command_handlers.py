@@ -32,9 +32,7 @@ async def handle_help() -> str:
 **📧 Data & Email:**
 • `/sync --days <n>` - Sync email and calendar
 • `/stats` - Email statistics (count, unread, threads)
-• `/drafts` - List email drafts
-• `/email` - Create, send, search emails
-• `/archive` - Email archive management
+• `/email list|create|send|delete|search` - Manage drafts and search
 
 **📅 Calendar & Tasks:**
 • `/calendar [days]` - Show upcoming events
@@ -53,7 +51,6 @@ async def handle_help() -> str:
 **🔗 Sharing:**
 • `/share <email>` - Share data with someone
 • `/revoke <email>` - Revoke sharing access
-• `/sharing` - Show sharing status
 
 **🔧 Configuration:**
 • `/model [haiku|sonnet|opus|auto]` - Change AI model
@@ -332,143 +329,6 @@ async def handle_briefing(args: List[str], owner_id: str) -> str:
     except Exception as e:
         logger.error(f"Briefing failed: {e}", exc_info=True)
         return f"❌ **Briefing failed:** {str(e)}"
-
-
-async def handle_archive(args: List[str], config: ToolConfig, owner_id: str) -> str:
-    """Handle /archive command - email archive management."""
-    if '--help' in args:
-        return """**📦 Email Archive Management**
-
-**Usage:**
-• `/archive` or `/archive --stats` - Show archive statistics
-• `/archive --sync` - Run incremental sync
-• `/archive --init [months]` - Initialize archive (download history)
-• `/archive --search <query> --limit N` - Search emails
-
-**Examples:**
-• `/archive --stats`
-• `/archive --search "contract" --limit 10`
-• `/archive --init 3`
-
-**Note:** Only Gmail is currently supported for email archiving.
-Outlook archiving will be added in a future update."""
-
-    from zylch.tools.email_archive import EmailArchiveManager
-    from zylch.api.token_storage import get_provider, get_email
-    from zylch.tools.gmail import GmailClient
-
-    try:
-        # Check provider - only Gmail is supported for archiving
-        provider = get_provider(owner_id)
-        if provider == 'microsoft':
-            return """**⏭️ Email Archive**
-
-Email archiving is currently only supported for Gmail accounts.
-Outlook/Microsoft archiving will be added in a future update.
-
-For now, Microsoft users can use natural language to search emails:
-"Show emails from last week about contracts" """
-
-        # Create Gmail client for archive (tokens stored in Supabase)
-        email = get_email(owner_id)
-        # Note: credentials_path is not used when owner_id is provided (uses Supabase)
-        email_client = GmailClient(
-            credentials_path="credentials/gmail_oauth.json",  # Not used with owner_id
-            account=email,
-            owner_id=owner_id
-        )
-
-        # Authenticate
-        try:
-            email_client.authenticate()
-        except Exception as auth_error:
-            return f"**❌ Error:** Could not authenticate with Gmail. Please reconnect Google via `/connect google`.\n\nDetails: {auth_error}"
-
-        # Create archive manager
-        archive = EmailArchiveManager(gmail_client=email_client)
-
-        # Parse command
-        if '--init' in args:
-            # Initialize archive with history
-            months_idx = args.index('--init') + 1
-            months = 6  # default
-            if months_idx < len(args) and args[months_idx].isdigit():
-                months = int(args[months_idx])
-
-            result = archive.initial_full_sync(months_back=months)
-
-            if not result['success']:
-                return f"**❌ Error:** {result.get('error', 'Unknown error')}"
-
-            return f"""**✅ Archive Initialized**
-
-**Downloaded:** {result['total_fetched']} emails ({months} months)
-**Stored:** {result['total_stored']} messages
-**Time:** {result.get('duration_seconds', 0):.1f}s
-
-Run `/archive --stats` to see archive details."""
-
-        elif '--sync' in args:
-            # Incremental sync
-            result = archive.incremental_sync()
-
-            if not result['success']:
-                return f"**❌ Error:** {result.get('error', 'Unknown error')}"
-
-            return f"""**✅ Archive Sync Complete**
-
-**Added:** {result['messages_added']} new messages
-**Deleted:** {result['messages_deleted']} messages
-**Duration:** {result.get('duration_seconds', 0):.1f}s"""
-
-        elif '--search' in args:
-            # Search emails
-            search_idx = args.index('--search') + 1
-            if search_idx >= len(args):
-                return "**❌ Error:** Missing search query. Usage: `/archive --search <query>`"
-
-            query = args[search_idx]
-            limit = 10  # default
-
-            if '--limit' in args:
-                limit_idx = args.index('--limit') + 1
-                if limit_idx < len(args) and args[limit_idx].isdigit():
-                    limit = int(args[limit_idx])
-
-            messages = archive.search_messages(query=query, limit=limit)
-
-            if not messages:
-                return f"**📭 No results found for:** `{query}`"
-
-            # Format results
-            results_text = f"**📬 Found {len(messages)} emails matching:** `{query}`\n\n"
-            for msg in messages[:limit]:
-                from_addr = msg.get('from_email', 'Unknown')
-                subject = msg.get('subject', '(no subject)')
-                date = msg.get('date', '')
-                results_text += f"• **{subject}**\n  From: {from_addr} | {date}\n\n"
-
-            return results_text
-
-        else:
-            # Default: show stats
-            stats = archive.get_stats()
-
-            return f"""**📦 Email Archive Statistics**
-
-**Total Messages:** {stats.get('total_messages', 0):,}
-**Total Threads:** {stats.get('total_threads', 0):,}
-**Date Range:** {stats.get('oldest_date', 'N/A')} to {stats.get('newest_date', 'N/A')}
-**Full Sync:** {'✅ Completed' if stats.get('full_sync_completed') else '❌ Not completed'}
-**Last Sync:** {stats.get('last_sync', 'Never')}
-
-**Storage:** {stats.get('database_path', 'N/A')}
-
-Use `/archive --help` for more commands."""
-
-    except Exception as e:
-        logger.error(f"Error in /archive command: {e}", exc_info=True)
-        return f"**❌ Error:** {str(e)}\n\nUse `/archive --help` for usage information."
 
 
 async def handle_model(args: List[str]) -> str:
@@ -960,39 +820,6 @@ This trigger will fire automatically when the event occurs."""
         return f"❌ **Error:** {str(e)}\n\nUse `/trigger --help` for usage information."
 
 
-async def handle_assistant(args: List[str]) -> str:
-    """Handle /assistant command - assistant management."""
-    if '--help' in args or not args:
-        return """**🎯 Assistant Management**
-
-**Usage:**
-• `/assistant` - Show current assistant
-• `/assistant --list` - List all assistants
-• `/assistant --create <name>` - Create new assistant
-• `/assistant --id <id>` - Switch to assistant
-
-**Examples:**
-• `/assistant --list`
-• `/assistant --create "Work Assistant"`
-• `/assistant --id asst_abc123`
-
-**Note:** Assistants maintain separate memory contexts."""
-
-    # Placeholder
-    return """**🎯 Assistants**
-
-**Status:** Multi-assistant system coming soon.
-
-**Current:** Single assistant per user.
-Your current assistant maintains all memories and context.
-
-**Future features:**
-• Multiple assistants per user
-• Separate contexts (work/personal)
-• Assistant switching
-• Shared memories"""
-
-
 async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) -> str:
     """Handle /mrcall command - MrCall integration."""
     from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
@@ -1224,116 +1051,6 @@ Use `/sharing` to see your current sharing connections."""
         return f"❌ **Error:** {str(e)}\n\nUse `/revoke --help` for usage information."
 
 
-async def handle_sharing(args: List[str], owner_id: str, user_email: str = None) -> str:
-    """Handle /sharing command - show sharing status."""
-    from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
-
-    if '--help' in args:
-        return """**📊 Sharing Status**
-
-**Usage:** `/sharing`
-
-Shows your current sharing connections:
-• **Pending requests** - Awaiting authorization
-• **Authorized recipients** - Who receives your data
-• **Incoming shares** - Whose data you receive
-
-**Related commands:**
-• `/share <email>` - Share with someone
-• `/revoke <email>` - Stop sharing
-• `/sharing --authorize <email>` - Accept incoming share"""
-
-    try:
-        client = SupabaseClient()
-
-        # Handle authorize action
-        if '--authorize' in args:
-            auth_idx = args.index('--authorize') + 1
-            if len(args) <= auth_idx:
-                return "❌ **Error:** Missing email\n\n**Usage:** `/sharing --authorize <sender_email>`"
-
-            sender_email = args[auth_idx].lower()
-
-            if not user_email:
-                return "❌ **Error:** Your email is not available. Please re-authenticate."
-
-            success = client.authorize_sender(user_email, sender_email)
-
-            if success:
-                return f"""✅ **Sharing Authorized**
-
-**From:** {sender_email}
-
-You will now receive their shared data:
-• Contact intelligence
-• Relationship context
-• Avatar data"""
-            else:
-                return f"""❌ **Error:** Could not authorize
-
-No pending share request found from `{sender_email}`.
-
-Use `/sharing` to see pending requests."""
-
-        # Get sharing status
-        status = client.get_sharing_status(owner_id, user_email)
-
-        if not status:
-            return """**📊 Sharing Status**
-
-**No sharing connections**
-
-Share your relational intelligence with colleagues:
-`/share colleague@example.com`
-
-**Benefits of sharing:**
-• Contacts know about relationships across your team
-• Better meeting prep with shared context
-• Seamless handoffs when colleagues leave"""
-
-        outgoing = status.get('outgoing', [])
-        incoming = status.get('incoming', [])
-
-        output = "**📊 Sharing Status**\n\n"
-
-        # Outgoing shares (you → others)
-        if outgoing:
-            output += "**📤 Your Recipients** (you share with them)\n"
-            for share in outgoing:
-                recipient = share.get('recipient_email', 'Unknown')
-                status_text = share.get('status', 'unknown')
-                status_icon = {'pending': '⏳', 'authorized': '✅', 'revoked': '❌'}.get(status_text, '❓')
-                output += f"{status_icon} {recipient} ({status_text})\n"
-            output += "\n"
-        else:
-            output += "**📤 Your Recipients:** None\n\n"
-
-        # Incoming shares (others → you)
-        if incoming:
-            output += "**📥 Sharing With You** (you receive their data)\n"
-            for share in incoming:
-                sender = share.get('sender_email', 'Unknown')
-                status_text = share.get('status', 'unknown')
-                status_icon = {'pending': '⏳', 'authorized': '✅', 'revoked': '❌'}.get(status_text, '❓')
-
-                if status_text == 'pending':
-                    output += f"{status_icon} {sender} - **Pending your authorization**\n"
-                    output += f"   → `/sharing --authorize {sender}`\n"
-                else:
-                    output += f"{status_icon} {sender} ({status_text})\n"
-            output += "\n"
-        else:
-            output += "**📥 Sharing With You:** None\n\n"
-
-        output += "**Commands:** `/share <email>` | `/revoke <email>`"
-
-        return output
-
-    except Exception as e:
-        logger.error(f"Error in /sharing command: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}\n\nUse `/sharing --help` for usage information."
-
-
 async def handle_tutorial(args: List[str]) -> str:
     """Handle /tutorial command - quick guides."""
     if '--help' in args or not args:
@@ -1540,11 +1257,11 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
     Sending routes through Gmail or Outlook API based on user's provider.
 
     Usage:
-        /email --list --draft [--limit N]     - List drafts
-        /email --create [--to X] [--subject Y] - Create draft
-        /email --send <draft_id>               - Send draft
-        /email --delete <draft_id>             - Delete draft
-        /email --search <query> [--from X] [--days N] [--limit N]  - Search emails
+        /email list [--draft] [--limit N]        - List drafts
+        /email create [--to X] [--subject Y]     - Create draft
+        /email send <draft_id>                   - Send draft
+        /email delete <draft_id>                 - Delete draft
+        /email search <query> [--from X] [--days N] [--limit N]  - Search emails
     """
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch.api.token_storage import get_provider, get_email
@@ -1556,42 +1273,46 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
         return """**📧 Email Command**
 
 **Drafts:**
-• `/email --list --draft [--limit N]` - List drafts
-• `/email --create --to <email> --subject <text>` - Create draft
-• `/email --send <draft_id>` - Send draft via Gmail/Outlook
-• `/email --delete <draft_id>` - Delete draft
+• `/email list [--draft] [--limit N]` - List drafts
+• `/email create --to <email> --subject <text>` - Create draft
+• `/email send <draft_id>` - Send draft via Gmail/Outlook
+• `/email delete <draft_id>` - Delete draft
 
 **Search:**
-• `/email --search <query>` - Search emails
-• `/email --search <query> --from <sender>` - Search from specific sender
-• `/email --search <query> --days N` - Search last N days
-• `/email --search <query> --limit N` - Limit results
+• `/email search <query>` - Search emails
+• `/email search <query> --from <sender>` - Filter by sender
+• `/email search <query> --days N` - Search last N days
+• `/email search <query> --limit N` - Limit results
 
 **Examples:**
-• `/email --list --draft`
-• `/email --create --to mario@example.com --subject "Meeting tomorrow"`
-• `/email --search "contract" --days 30 --limit 10`
-• `/email --send abc123`
+• `/email list`
+• `/email create --to mario@example.com --subject "Meeting tomorrow"`
+• `/email search "contract" --days 30 --limit 10`
+• `/email send abc123`
 
-**Note:** Drafts are stored locally in Zylch. When you send, it routes through your connected Gmail or Outlook."""
+**Note:** Drafts are stored in Zylch. When you send, it routes through your connected Gmail or Outlook."""
 
     try:
         supabase = SupabaseStorage.get_instance().client
 
+        # Get the subcommand (first positional arg)
+        subcommand = args[0].lower() if args else ''
+        sub_args = args[1:] if len(args) > 1 else []
+
         # Parse arguments
         def parse_flag(flag: str, default=None):
             """Extract value after a flag like --to or --subject."""
-            for i, arg in enumerate(args):
-                if arg == flag and i + 1 < len(args):
-                    return args[i + 1]
+            for i, arg in enumerate(sub_args):
+                if arg == flag and i + 1 < len(sub_args):
+                    return sub_args[i + 1]
             return default
 
         def has_flag(flag: str) -> bool:
             """Check if a flag is present."""
-            return flag in args
+            return flag in sub_args
 
         # --- LIST DRAFTS ---
-        if has_flag('--list') and has_flag('--draft'):
+        if subcommand == 'list':
             limit = int(parse_flag('--limit', '20'))
             limit = min(limit, 50)
 
@@ -1604,7 +1325,7 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
                 .execute()
 
             if not result.data:
-                return "**📭 No drafts**\n\nCreate one with `/email --create --to <email> --subject <text>`"
+                return "**📭 No drafts**\n\nCreate one with `/email create --to <email> --subject <text>`"
 
             output = f"**📝 Drafts** ({len(result.data)} found)\n\n"
             for i, draft in enumerate(result.data, 1):
@@ -1619,30 +1340,29 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
                 output += f"   To: {to_str}\n"
                 output += f"   ID: `{draft_id}` | {updated}\n\n"
 
-            output += "_Use `/email --send <id>` to send a draft._"
+            output += "_Use `/email send <id>` to send a draft._"
             return output
 
         # --- CREATE DRAFT ---
-        if has_flag('--create'):
+        if subcommand == 'create':
             to_addr = parse_flag('--to', '')
             subject = parse_flag('--subject', '')
 
             # Parse body from remaining args (everything after known flags)
             body = ''
             skip_next = False
-            for i, arg in enumerate(args):
+            for i, arg in enumerate(sub_args):
                 if skip_next:
                     skip_next = False
                     continue
-                if arg in ('--create', '--to', '--subject', '--list', '--draft'):
-                    if arg in ('--to', '--subject'):
-                        skip_next = True
+                if arg in ('--to', '--subject'):
+                    skip_next = True
                     continue
                 body += arg + ' '
             body = body.strip()
 
             if not to_addr:
-                return "❌ Missing recipient\n\nUsage: `/email --create --to <email> [--subject <text>]`"
+                return "❌ Missing recipient\n\nUsage: `/email create --to <email> [--subject <text>]`"
 
             # Parse multiple recipients
             to_addresses = [addr.strip() for addr in to_addr.split(',')]
@@ -1667,21 +1387,16 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
 **To:** {', '.join(to_addresses)}
 **Subject:** {subject or '(none)'}
 
-Use `/email --send {draft['id'][:8]}` to send it.
-Or `/email --list --draft` to see all drafts."""
+Use `/email send {draft['id'][:8]}` to send it.
+Or `/email list` to see all drafts."""
 
         # --- SEND DRAFT ---
-        if has_flag('--send'):
-            draft_id = parse_flag('--send', '')
-            if not draft_id:
-                # Check if there's a positional arg after --send
-                for i, arg in enumerate(args):
-                    if arg == '--send' and i + 1 < len(args) and not args[i + 1].startswith('--'):
-                        draft_id = args[i + 1]
-                        break
+        if subcommand == 'send':
+            # Get draft_id from first positional arg after 'send'
+            draft_id = sub_args[0] if sub_args and not sub_args[0].startswith('--') else None
 
             if not draft_id:
-                return "❌ Missing draft ID\n\nUsage: `/email --send <draft_id>`"
+                return "❌ Missing draft ID\n\nUsage: `/email send <draft_id>`"
 
             # Find the draft (support partial ID)
             result = supabase.table('drafts')\
@@ -1692,7 +1407,7 @@ Or `/email --list --draft` to see all drafts."""
                 .execute()
 
             if not result.data:
-                return f"❌ Draft not found: `{draft_id}`\n\nUse `/email --list --draft` to see your drafts."
+                return f"❌ Draft not found: `{draft_id}`\n\nUse `/email list` to see your drafts."
 
             draft = result.data[0]
 
@@ -1783,19 +1498,15 @@ Message ID: `{sent_id[:12] if sent_id else 'N/A'}`"""
                 }).eq('id', draft['id']).execute()
 
                 logger.error(f"Failed to send email: {e}", exc_info=True)
-                return f"❌ **Failed to send:** {str(e)}\n\nDraft saved. Fix the issue and try again with `/email --send {draft_id}`"
+                return f"❌ **Failed to send:** {str(e)}\n\nDraft saved. Fix the issue and try again with `/email send {draft_id}`"
 
         # --- DELETE DRAFT ---
-        if has_flag('--delete'):
-            draft_id = parse_flag('--delete', '')
-            if not draft_id:
-                for i, arg in enumerate(args):
-                    if arg == '--delete' and i + 1 < len(args) and not args[i + 1].startswith('--'):
-                        draft_id = args[i + 1]
-                        break
+        if subcommand == 'delete':
+            # Get draft_id from first positional arg after 'delete'
+            draft_id = sub_args[0] if sub_args and not sub_args[0].startswith('--') else None
 
             if not draft_id:
-                return "❌ Missing draft ID\n\nUsage: `/email --delete <draft_id>`"
+                return "❌ Missing draft ID\n\nUsage: `/email delete <draft_id>`"
 
             result = supabase.table('drafts')\
                 .delete()\
@@ -1809,17 +1520,12 @@ Message ID: `{sent_id[:12] if sent_id else 'N/A'}`"""
                 return f"❌ Draft not found: `{draft_id}`"
 
         # --- SEARCH EMAILS ---
-        if has_flag('--search'):
-            query = parse_flag('--search', '')
-            if not query:
-                # Get query from positional args after --search
-                for i, arg in enumerate(args):
-                    if arg == '--search' and i + 1 < len(args) and not args[i + 1].startswith('--'):
-                        query = args[i + 1]
-                        break
+        if subcommand == 'search':
+            # Get query from first positional arg after 'search'
+            query = sub_args[0] if sub_args and not sub_args[0].startswith('--') else None
 
             if not query:
-                return "❌ Missing search query\n\nUsage: `/email --search <query>`"
+                return "❌ Missing search query\n\nUsage: `/email search <query>`"
 
             sender = parse_flag('--from', '')
             days = int(parse_flag('--days', '30'))
@@ -1866,8 +1572,8 @@ Message ID: `{sent_id[:12] if sent_id else 'N/A'}`"""
 
             return output
 
-        # Unknown command
-        return "❌ Unknown /email command\n\nUse `/email --help` to see available options."
+        # Unknown subcommand
+        return f"❌ Unknown subcommand: `{subcommand}`\n\nUse `/email --help` to see available options."
 
     except Exception as e:
         logger.error(f"Error in /email command: {e}", exc_info=True)
@@ -1925,17 +1631,6 @@ Analyzes email threads to detect tasks you need to act on.
 
 Run `/sync` first to fetch latest emails.''',
     },
-    '/archive': {
-        'summary': 'Email archive management',
-        'usage': '/archive [--stats|--sync|--init|--search]',
-        'description': '''Manage the local email archive.
-
-**Options:**
-- `/archive` or `/archive --stats` - Show archive statistics
-- `/archive --sync` - Run incremental sync
-- `/archive --init [months]` - Initialize archive (download history)
-- `/archive --search <query> --limit N` - Search emails''',
-    },
     '/model': {
         'summary': 'Switch AI model',
         'usage': '/model [haiku|sonnet|opus]',
@@ -1968,28 +1663,23 @@ Run `/sync` first to fetch latest emails.''',
     },
     '/email': {
         'summary': 'Email drafts and search',
-        'usage': '/email [--list --draft|--create|--send|--search] <args>',
+        'usage': '/email <list|create|send|delete|search> [args]',
         'description': '''Manage email drafts (stored in Zylch) and search emails.
 
 **Drafts:**
-- `/email --list --draft` - List drafts
-- `/email --create --to <email> --subject <text>` - Create draft
-- `/email --send <draft_id>` - Send via Gmail/Outlook
-- `/email --delete <draft_id>` - Delete draft
+- `/email list [--limit N]` - List drafts
+- `/email create --to <email> --subject <text>` - Create draft
+- `/email send <draft_id>` - Send via Gmail/Outlook
+- `/email delete <draft_id>` - Delete draft
 
 **Search:**
-- `/email --search <query>` - Search emails
-- `/email --search <query> --from <sender> --days N`''',
+- `/email search <query>` - Search emails
+- `/email search <query> --from <sender> --days N --limit N`''',
     },
     '/trigger': {
         'summary': 'Manage event triggers',
         'usage': '/trigger [--list|--add|--remove]',
         'description': 'Configure automated triggers for events like new emails.',
-    },
-    '/assistant': {
-        'summary': 'Configure AI assistant behavior',
-        'usage': '/assistant [--config]',
-        'description': 'Configure how the AI assistant responds and behaves.',
     },
     '/mrcall': {
         'summary': 'MrCall integration',
@@ -2005,11 +1695,6 @@ Run `/sync` first to fetch latest emails.''',
         'summary': 'Revoke shared access',
         'usage': '/revoke <email>',
         'description': 'Remove shared access from a user.',
-    },
-    '/sharing': {
-        'summary': 'View sharing settings',
-        'usage': '/sharing',
-        'description': 'List all users with shared access to your data.',
     },
     '/clear': {
         'summary': 'Clear conversation history',
@@ -2041,11 +1726,6 @@ Run `/sync` first to fetch latest emails.''',
         'summary': 'Email statistics',
         'usage': '/stats',
         'description': 'Shows statistics about synced emails: total count, unread, threads, date range, open conversations.',
-    },
-    '/drafts': {
-        'summary': 'List email drafts',
-        'usage': '/drafts [--limit N]',
-        'description': 'Lists saved email drafts. Use `/email --send <id>` to send a draft.',
     },
     '/calendar': {
         'summary': 'Show calendar events',
@@ -2168,73 +1848,6 @@ Run `/sync` to update or `/briefing` for task details."""
 
     except Exception as e:
         logger.error(f"Error in /stats: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}"
-
-
-async def handle_drafts(args: List[str], owner_id: str) -> str:
-    """Handle /drafts command - list email drafts."""
-    from zylch.storage.supabase_client import SupabaseStorage
-
-    if '--help' in args:
-        return """**📝 Email Drafts**
-
-**Usage:** `/drafts [--limit N]`
-
-Lists your saved email drafts.
-
-**Options:**
-- `--limit N` - Show N drafts (default: 20, max: 50)
-
-**Related:**
-- `/email --create --to <email>` - Create new draft
-- `/email --send <id>` - Send a draft
-- `/email --delete <id>` - Delete a draft"""
-
-    try:
-        supabase = SupabaseStorage.get_instance().client
-
-        # Parse limit
-        limit = 20
-        if '--limit' in args:
-            idx = args.index('--limit')
-            if idx + 1 < len(args):
-                try:
-                    limit = min(int(args[idx + 1]), 50)
-                except ValueError:
-                    pass
-
-        result = supabase.table('drafts')\
-            .select('*')\
-            .eq('owner_id', owner_id)\
-            .eq('status', 'draft')\
-            .order('updated_at', desc=True)\
-            .limit(limit)\
-            .execute()
-
-        if not result.data:
-            return """**📭 No drafts**
-
-Create one with:
-`/email --create --to mario@example.com --subject "Hello"`"""
-
-        output = f"**📝 Drafts** ({len(result.data)} found)\n\n"
-        for i, draft in enumerate(result.data, 1):
-            to_str = ', '.join(draft.get('to_addresses', [])[:2])
-            if len(draft.get('to_addresses', [])) > 2:
-                to_str += f" (+{len(draft['to_addresses']) - 2})"
-            subject = draft.get('subject', '(no subject)')[:40]
-            draft_id = draft['id'][:8]
-            updated = draft['updated_at'][:10] if draft.get('updated_at') else ''
-
-            output += f"**{i}. {subject}**\n"
-            output += f"   To: {to_str}\n"
-            output += f"   ID: `{draft_id}` | {updated}\n\n"
-
-        output += "_Use `/email --send <id>` to send._"
-        return output
-
-    except Exception as e:
-        logger.error(f"Error in /drafts: {e}", exc_info=True)
         return f"❌ **Error:** {str(e)}"
 
 
@@ -2618,21 +2231,17 @@ COMMAND_HANDLERS = {
     '/sync': handle_sync,
     '/clear': handle_clear,
     '/briefing': handle_briefing,
-    '/archive': handle_archive,
     '/model': handle_model,
     '/memory': handle_memory,
     '/email': handle_email,
     '/trigger': handle_trigger,
-    '/assistant': handle_assistant,
     '/mrcall': handle_mrcall,
     '/connect': handle_connect,
     '/share': handle_share,
     '/revoke': handle_revoke,
-    '/sharing': handle_sharing,
     '/tutorial': handle_tutorial,
     # Phase 1: High-impact commands (replacing tools)
     '/stats': handle_stats,
-    '/drafts': handle_drafts,
     '/calendar': handle_calendar,
     '/tasks': handle_tasks,
     '/jobs': handle_jobs,
@@ -2811,12 +2420,6 @@ COMMAND_TRIGGERS = {
     ],
 
     # --- Sharing ---
-    '/sharing': [
-        "who can see my data",
-        "sharing status",
-        "who am I sharing with",
-        "list shared access",
-    ],
     '/share': [
         "share my data",
         "give someone access",
@@ -2831,18 +2434,6 @@ COMMAND_TRIGGERS = {
         "revoke sharing",
         "revoke access from {email:email}",
         "stop sharing with {email:email}",
-    ],
-
-    # --- Archive ---
-    '/archive': [
-        "email archive",
-        "archive statistics",
-        "archive stats",
-        "search old emails",
-        "search archive for {query:text}",
-        "find in archive {query:text}",
-        "search archive {query:text}",
-        "show {limit:int} archived emails",
     ],
 
     # --- Tutorial ---
@@ -2884,14 +2475,6 @@ COMMAND_TRIGGERS = {
         "action items",
         "show {limit:int} tasks",
         "top {limit:int} priorities",
-    ],
-
-    # --- Assistant Config ---
-    '/assistant': [
-        "configure assistant",
-        "assistant settings",
-        "change assistant behavior",
-        "ai configuration",
     ],
 
     # --- MrCall/Phone ---
@@ -3002,20 +2585,6 @@ COMMAND_TRIGGERS = {
         "give me stats",
         "email summary",
         "inbox summary",
-    ],
-
-    # --- Drafts (Phase 1 - replaces _ListDraftsTool) ---
-    '/drafts': [
-        "drafts",
-        "show drafts",
-        "my drafts",
-        "list drafts",
-        "pending drafts",
-        "show my drafts",
-        "email drafts",
-        "unsent emails",
-        "show the last {limit:int} drafts",
-        "list {limit:int} drafts",
     ],
 
     # --- Tasks (Phase 1 - replaces _GetTasksTool) ---
