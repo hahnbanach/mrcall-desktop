@@ -236,7 +236,8 @@ Hybrid: 0.85 → "/sync 2"
 ### 7. CLI (`zylch/cli/main.py`)
 Interactive command-line interface:
 - `/sync` - Sync emails, calendar, pipedrive (data only, no processing)
-- `/memory process` - Extract facts from synced data into blobs
+- `/prompt build memory-email` - Generate personalized extraction prompt from email patterns
+- `/memory process` - Extract facts from synced data into blobs (uses personalized prompt)
 - `/memory search` - Search entity memories
 - `/gaps` - Show relationship gaps
 - `/archive` - Archive management
@@ -368,6 +369,7 @@ for contact_email, threads in person_threads.items():
 | `triage_training_samples` | Anonymized training data + user corrections |
 | `email_read_events` | Email read tracking events (SendGrid + custom pixel) |
 | `sendgrid_message_mapping` | SendGrid message ID to Zylch message ID mapping |
+| `user_prompts` | Personalized prompts generated from user email patterns |
 
 **Email Triage Tables** (December 2025):
 
@@ -743,6 +745,89 @@ To rebuild memory from scratch:
 
 **Column: `emails.memory_processed_at`**
 - NULL = not processed, timestamp = when processed
+
+## Personalized Prompts System (December 2025)
+
+### Problem Solved
+
+The default memory extraction prompt uses generic rules for classifying emails (cold outreach, important contacts, etc.). This fails because:
+- Generic regex patterns miss nuanced cold outreach (e.g., fundraising asks to non-investors)
+- No understanding of user's role, business context, or priorities
+- VIP contacts aren't prioritized over random senders
+
+### Solution: Learn from User's Email Patterns
+
+The `/prompt build memory-email` command analyzes the user's actual email behavior:
+
+1. **Emails user replied to** = Important contacts (VIPs)
+2. **Emails user ignored** = Noise patterns (cold outreach, newsletters)
+3. **User's sent emails** = Role, business context, signature patterns
+
+This generates a personalized extraction prompt that understands:
+- Who matters to this specific user
+- What types of outreach they ignore
+- Their role (founder vs investor vs engineer)
+- VIP contacts who deserve detailed extraction
+
+### Architecture
+
+**Key Files**:
+- `zylch/services/prompt_builder.py` - PromptBuilder class that analyzes patterns
+- `zylch/workers/memory_worker.py` - Uses personalized prompt for extraction
+- `zylch/storage/migrations/006_user_prompts.sql` - Database table
+
+**Data Flow**:
+```
+/sync → emails stored in DB
+    ↓
+/prompt build memory-email
+    ↓
+PromptBuilder analyzes:
+  - Replied threads (VIP contacts)
+  - Ignored emails (noise patterns)
+  - Sent emails (user profile)
+    ↓
+Claude Sonnet generates personalized prompt
+    ↓
+Stored in user_prompts table
+    ↓
+/memory process email uses personalized prompt
+```
+
+### Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/prompt build memory-email` | Analyze email patterns and generate personalized prompt |
+| `/prompt show memory-email` | Display current personalized prompt |
+| `/prompt reset memory-email` | Delete custom prompt, revert to default |
+
+### Gate on Memory Processing
+
+When user runs `/memory process email` without a custom prompt, they see a recommendation:
+```
+⚠️ No personalized extraction prompt found
+
+For better memory extraction, create a personalized prompt first:
+/prompt build memory-email
+
+To proceed anyway with the default prompt:
+/memory process email --force
+```
+
+### Database
+
+**Table: `user_prompts`**
+- `id`, `owner_id`, `prompt_type`, `prompt_content`, `metadata`, timestamps
+- Unique constraint on `(owner_id, prompt_type)`
+- Metadata includes: generation stats, VIP count, noise patterns count
+
+### Benefits
+
+1. **Cold outreach detection** - Learns YOUR patterns, not generic rules
+2. **VIP prioritization** - Contacts you engage with get detailed extraction
+3. **Role awareness** - System knows if you're a founder (not investor) and filters accordingly
+4. **Zero maintenance** - Run once, prompt stored and used automatically
 
 ## Email Triage System (December 2025)
 
