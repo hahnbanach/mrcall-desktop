@@ -6,7 +6,7 @@
 -- Drafts table: store email drafts locally, send via Gmail/Outlook API
 CREATE TABLE IF NOT EXISTS drafts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    owner_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    owner_id TEXT NOT NULL,  -- Firebase UID (not Supabase auth.users)
 
     -- Email fields
     to_addresses TEXT[] NOT NULL DEFAULT '{}',
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS drafts (
 
     -- Threading (for replies)
     in_reply_to TEXT,                    -- Message-ID of email being replied to
-    references TEXT[],                   -- Thread message IDs for proper threading
+    "references" TEXT[],                 -- Thread message IDs for proper threading (quoted: reserved word)
     thread_id TEXT,                      -- Gmail/Outlook thread ID
     original_message_id TEXT,            -- ID of message being replied to (for context)
 
@@ -44,10 +44,11 @@ CREATE INDEX IF NOT EXISTS idx_drafts_created ON drafts(owner_id, created_at DES
 ALTER TABLE drafts ENABLE ROW LEVEL SECURITY;
 
 -- RLS policy: users can only access their own drafts
+-- Note: We use service role key and filter by owner_id manually (Firebase Auth, not Supabase Auth)
 CREATE POLICY "Users can manage own drafts"
 ON drafts FOR ALL
-USING (owner_id = auth.uid())
-WITH CHECK (owner_id = auth.uid());
+USING (true)
+WITH CHECK (true);
 
 -- Auto-update updated_at trigger
 CREATE OR REPLACE FUNCTION update_drafts_updated_at()
