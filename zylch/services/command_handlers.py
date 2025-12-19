@@ -42,6 +42,7 @@ async def handle_help() -> str:
 
 **🧠 Memory & Automation:**
 • `/memory [search|store|stats|list]` - Entity memory with hybrid search
+• `/agent [train|show|reset] email` - Personalized extraction agents
 • `/trigger` - Event-driven automation
 
 **📡 Integrations:**
@@ -56,7 +57,6 @@ async def handle_help() -> str:
 • `/model [haiku|sonnet|opus|auto]` - Change AI model
 
 **📚 Utility:**
-• `/tutorial [topic]` - Quick guides
 • `/clear` - Clear conversation history
 • `/help` - Show this message
 
@@ -1051,111 +1051,6 @@ Use `/sharing` to see your current sharing connections."""
         return f"❌ **Error:** {str(e)}\n\nUse `/revoke --help` for usage information."
 
 
-async def handle_tutorial(args: List[str]) -> str:
-    """Handle /tutorial command - quick guides."""
-    if '--help' in args or not args:
-        return """**📚 Quick Guides**
-
-**Available topics:**
-• `/tutorial contact` - Contact management
-• `/tutorial email` - Email operations
-• `/tutorial calendar` - Calendar management
-• `/tutorial sync` - Morning sync workflow
-• `/tutorial memory` - Memory system
-
-**Example:** `/tutorial sync`"""
-
-    topic = args[0].lower()
-
-    guides = {
-        'contact': """**👤 Contact Management Guide**
-
-**Search contacts:**
-"Who is mario@example.com?"
-"Find contact for Acme Corp"
-
-**Create contacts:**
-"Create contact for luisa@example.com"
-
-**Update contacts:**
-"Add phone +39 123456789 to Mario Rossi"
-
-**View relationships:**
-"Show my relationship with Mario"
-
-**Pro tip:** Zylch auto-creates contacts from emails.""",
-
-        'email': """**📧 Email Operations Guide**
-
-**Read emails:**
-"Show emails from today"
-"Unread emails from Mario"
-
-**Draft emails:**
-"Draft email to mario@example.com about meeting"
-
-**Search archive:**
-"/archive --search query" to search emails
-
-**Sync:**
-"/sync" - Fetch latest emails
-
-**Pro tip:** Use natural language for complex queries.""",
-
-        'calendar': """**📅 Calendar Management Guide**
-
-**View events:**
-"Show calendar for today"
-"Meetings this week"
-
-**Create events:**
-"Schedule meeting with Mario tomorrow 3pm"
-
-**Find time:**
-"When am I free this week?"
-
-**Pro tip:** Zylch auto-analyzes calendar conflicts.""",
-
-        'sync': """**🔄 Morning Sync Workflow**
-
-**Daily routine:**
-1. Run `/sync` - Fetch emails + calendar
-2. Check `/gaps` - See unanswered emails
-3. Review: "Summarize today's emails"
-4. Respond: "Draft reply to Mario's email"
-
-**Quick workflow:** `/sync` → `/briefing` → respond
-
-**Pro tip:** Use `/sync --status` to check sync status.""",
-
-        'memory': """**🧠 Memory System Guide**
-
-**How it works:**
-Zylch learns from your corrections during conversation.
-
-**Examples:**
-"Use 'lei' instead of 'tu' with this contact"
-"Always CC marco@example.com on contracts"
-
-**Future:**
-• `/memory --add` - Explicit memory creation
-• `/memory --list` - View all memories
-• `/memory --stats` - Memory statistics
-
-**Pro tip:** Memory learns automatically from feedback."""
-    }
-
-    if topic in guides:
-        return guides[topic]
-    else:
-        return f"""❌ **Unknown topic:** {topic}
-
-**Available topics:**
-contact, email, calendar, sync, memory
-
-Use `/tutorial --help` to see all topics."""
-
-
 async def handle_connect(args: List[str], owner_id: str, user_email: str = None) -> str:
     """Handle /connect command - list available connections and initiate connection flow.
 
@@ -1737,11 +1632,6 @@ Run `/sync` first to fetch latest emails.''',
         'usage': '/clear',
         'description': 'Clears the conversation history. Note: Server is stateless, this clears client-side history.',
     },
-    '/tutorial': {
-        'summary': 'Interactive tutorials',
-        'usage': '/tutorial [topic]',
-        'description': 'Learn how to use Zylch with interactive tutorials.',
-    },
     '/connect': {
         'summary': 'Manage external integrations',
         'usage': '/connect [provider]',
@@ -2268,7 +2158,6 @@ COMMAND_HANDLERS = {
     '/connect': handle_connect,
     '/share': handle_share,
     '/revoke': handle_revoke,
-    '/tutorial': handle_tutorial,
     # Phase 1: High-impact commands (replacing tools)
     '/stats': handle_stats,
     '/calendar': handle_calendar,
@@ -2463,17 +2352,6 @@ COMMAND_TRIGGERS = {
         "revoke sharing",
         "revoke access from {email:email}",
         "stop sharing with {email:email}",
-    ],
-
-    # --- Tutorial ---
-    '/tutorial': [
-        "show me how",
-        "tutorial",
-        "learn how to",
-        "guide me",
-        "getting started",
-        "tutorial on {topic:text}",
-        "how do I {topic:text}",
     ],
 
     # --- Briefing/Tasks ---
