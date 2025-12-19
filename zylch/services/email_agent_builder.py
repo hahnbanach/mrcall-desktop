@@ -20,17 +20,41 @@ from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)
 
+# Fixed suffix appended to all generated prompts to ensure entity delimiter is used
+ENTITY_FORMAT_SUFFIX = """
+
+---
+
+CRITICAL OUTPUT FORMAT:
+- If multiple entities are found, separate each with ---ENTITY--- on its own line
+- Output ONE blob per entity, never combine multiple entities into one blob
+- Example with 2 entities:
+#Identifiers
+Entity type: person
+Name: John Doe
+Email: john@example.com
+#About
+John is a customer...
+---ENTITY---
+#Identifiers
+Entity type: company
+Name: Acme Corp
+Website: acme.com
+#About
+Acme Corp is...
+"""
 
 # Meta-prompt used to generate the email agent
 EMAIL_AGENT_META_PROMPT = """You are analyzing a user's email history to create a personalized prompt for their AI assistant.
 
 Your goal: Generate a prompt that will be used to EXTRACT ENTITIES from emails and store them in memory.
 
-CRITICAL CONCEPT - ENTITY EXTRACTION:
+CRITICAL CONCEPT - ONE BLOB PER ENTITY:
 The memory system stores ONE BLOB PER ENTITY (person, company, project, etc.). Each blob has:
 - **#Identifiers section**: Unique identifiers that allow reconsolidation (merging) when the same entity appears again
 - **#About section**: Natural language description of what we know about this entity
 
+IMPORTANT: An email may mention MULTIPLE entities. Each entity MUST be output as a SEPARATE blob.
 When the same entity appears in multiple emails, the system uses identifiers to MERGE information into ONE blob, not create duplicates.
 
 === USER'S PROFILE ===
@@ -57,7 +81,7 @@ The prompt must include:
 2. **ENTITY EXTRACTION** (the core task)
    An entity is anything which can have properties and can be connected to other entities (person, company, contract, project, document, agreement, deal, event, etc.).
 
-   The prompt must instruct to extract entities in this format:
+   The prompt must instruct to extract EACH entity in this format, with entities separated by the delimiter `---ENTITY---`:
 
    ```
    #Identifiers
@@ -69,9 +93,19 @@ The prompt must include:
    #About
 
    [2-5 sentences describing what we know about this entity: role, company, relationship to user, topics discussed, preferences, action items, etc.]
+   ---ENTITY---
+   #Identifiers
+
+   Entity type: [next entity type].
+   Name: [next entity name].
+   ...
    ```
 
-   IDENTIFIERS ARE CRITICAL: They enable the memory system to recognize "this is the same entity" and merge information. Without identifiers, we get duplicate blobs.
+   CRITICAL RULES:
+   - Output ONE BLOB PER ENTITY - never combine multiple entities into one blob
+   - Separate each entity with `---ENTITY---` on its own line
+   - IDENTIFIERS ARE CRITICAL: They enable the memory system to recognize "this is the same entity" and merge information. Without identifiers, we get duplicate blobs.
+   - Focus on PEOPLE and COMPANIES as primary entities. Only extract other entity types (projects, contracts, etc.) if they have clear identifiers.
 
 3. **IMPORTANCE ASSESSMENT**
    - Specific cold outreach patterns this user ignores
@@ -83,7 +117,7 @@ The prompt must include:
 
 4. **OUTPUT FORMAT**
    The prompt should instruct the LLM to output:
-   - The entity in the #Identifiers / #About format above
+   - ONE blob per entity, separated by `---ENTITY---`
    - Include ALL available identifiers (email, phone, LinkedIn, etc.)
    - If the email is automated/marketing/noise or contains no extractable entity, output only: SKIP
 
@@ -446,6 +480,9 @@ Body preview: {body}
         )
 
         prompt_content = response.content[0].text.strip()
+
+        # Append fixed suffix to ensure entity delimiter is always present
+        prompt_content += ENTITY_FORMAT_SUFFIX
 
         logger.info(f"Generated prompt ({len(prompt_content)} chars)")
         return prompt_content
