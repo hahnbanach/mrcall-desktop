@@ -18,30 +18,6 @@ from zylch_memory import BlobStorage, HybridSearchEngine, LLMMergeService, Embed
 
 logger = logging.getLogger(__name__)
 
-# Fixed suffix appended to all extraction prompts to ensure entity delimiter is used
-ENTITY_FORMAT_SUFFIX = """
-
-CRITICAL OUTPUT FORMAT:
-- If multiple entities are found, separate each with ---ENTITY--- on its own line
-- Output ONE blob per entity, never combine multiple entities into one blob
-- Example with 2 entities:
-#Identifiers
-Entity type: person
-Name: John Doe
-Email: john@example.com
-#About
-John is a customer...
----ENTITY---
-#Identifiers
-Entity type: company
-Name: Acme Corp
-Website: acme.com
-#About
-Acme Corp is...
-"""
-
-
-
 
 class MemoryWorker:
     """Worker for extracting facts from emails and storing in entity-centric blobs.
@@ -290,10 +266,10 @@ class MemoryWorker:
                 date=email.get("date", "unknown"),
                 body=body[:4000],  # Limit body size
                 contact_email=contact_email
-            ) + ENTITY_FORMAT_SUFFIX
+            )
 
             response = self.anthropic.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model="claude-sonnet-4-20250514",
                 max_tokens=1024,  # Increased for multiple entities
                 messages=[{"role": "user", "content": prompt}]
             )
