@@ -30,7 +30,7 @@ async def handle_help() -> str:
 💡 **Remember:** All commands accept `--help` for detailed usage
 
 **📧 Data & Email:**
-• `/sync --days <n>` - Sync email and calendar
+• `/sync [days <n>|status|reset]` - Sync email and calendar
 • `/stats` - Email statistics (count, unread, threads)
 • `/email list|create|send|delete|search` - Manage drafts and search
 
@@ -73,8 +73,8 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
     from zylch.tools.gcalendar import GoogleCalendarClient
     from zylch.storage.supabase_client import SupabaseStorage
 
-    # Check for --status flag
-    status_check = '--status' in args
+    # Check for status subcommand (accept both 'status' and '--status')
+    status_check = 'status' in args or '--status' in args
     if status_check:
         logger.info(f"[/sync] Status check for owner_id={owner_id}")
         try:
@@ -82,7 +82,7 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
             result = supabase.client.table('sync_state').select('*').eq('owner_id', owner_id).execute()
 
             if not result.data:
-                return "📊 **Sync Status**\n\n❌ No sync state found - never synced.\n\nRun `/sync` or `/sync --days <n>` to start."
+                return "📊 **Sync Status**\n\n❌ No sync state found - never synced.\n\nRun `/sync` or `/sync days <n>` to start."
 
             sync_state = result.data[0]
             last_sync = sync_state.get('last_sync')
@@ -116,13 +116,13 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
 📧 **Emails archived:** {email_count:,}
 📅 **Calendar events:** {event_count:,}
 
-Run `/sync` or `/sync --days <n>` to sync more data."""
+Run `/sync` or `/sync days <n>` to sync more data."""
         except Exception as e:
             logger.error(f"[/sync] Failed to get sync status: {e}")
             return f"❌ **Error getting sync status:** {str(e)}"
 
-    # Check for --reset flag
-    reset_sync = '--reset' in args
+    # Check for reset subcommand (accept both 'reset' and '--reset')
+    reset_sync = 'reset' in args or '--reset' in args
     if reset_sync:
         logger.info(f"[/sync] Reset flag detected, clearing all sync data for owner_id={owner_id}")
         try:
@@ -150,19 +150,19 @@ Next `/sync` will perform a full re-sync from scratch.
 ```
 /memory reset
 ```
-Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
+Then run `/sync days <n>` to rebuild memory from re-synced emails."""
         except Exception as e:
             logger.error(f"[/sync] Failed to reset sync state: {e}")
             return f"❌ **Error resetting sync state:** {str(e)}"
 
-    # Parse --days parameter
+    # Parse days parameter (accept both 'days' and '--days')
     days_back = 30
     for i, arg in enumerate(args):
-        if arg == '--days' and i + 1 < len(args):
+        if arg in ['days', '--days'] and i + 1 < len(args):
             try:
                 days_back = int(args[i + 1])
             except ValueError:
-                return f"❌ **Error:** `{args[i + 1]}` is not a valid number\n\n**Usage:** `/sync --days <number> [--reset]`"
+                return f"❌ **Error:** `{args[i + 1]}` is not a valid number\n\n**Usage:** `/sync days <number>`"
             break
 
     try:
@@ -238,7 +238,7 @@ Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
             if email_data.get('incremental'):
                 first_sync = email_data.get('first_sync_date', 'previous sync')
                 lines.append(f"ℹ️  **Incremental sync** - fetching changes since {first_sync}")
-                lines.append(f"   If you want to go further in the past, run `/sync --reset` first, then `/sync --days <n>`")
+                lines.append(f"   If you want to go further in the past, run `/sync reset` first, then `/sync days <n>`")
         else:
             has_failures = True
             lines.append(f"❌ **Email:** {results['email_sync'].get('error')}")
@@ -1424,26 +1424,25 @@ COMMAND_HELP = {
     },
     '/sync': {
         'summary': 'Sync emails and calendar',
-        'usage': '/sync [--days <n>] [--status] [--reset]',
+        'usage': '/sync [days <n>] [status] [reset]',
         'description': '''Fetches new emails from Gmail and calendar events from Google Calendar.
-Also runs Memory Agent to extract facts from emails into entity blobs.
 
-**Arguments:**
-- `--days <n>` - Number of days to sync (default: 30 for first sync, incremental after)
-- `--status` - Show sync status (last sync time, email count, event count)
-- `--reset` - Clear sync state and force full re-sync (warns about memory)
+**Subcommands:**
+- `days <n>` - Number of days to sync (default: 30 for first sync, incremental after)
+- `status` - Show sync status (last sync time, email count, event count)
+- `reset` - Clear sync state and force full re-sync (warns about memory)
 
 **Examples:**
 - `/sync` - Sync with defaults (incremental after first sync)
-- `/sync --days 1` - Sync only last 1 day (useful for testing)
-- `/sync --days 300` - Sync last 300 days
-- `/sync --status` - Check sync status without syncing
-- `/sync --reset` - Reset sync state, then run `/sync` to re-sync
+- `/sync days 1` - Sync only last 1 day (useful for testing)
+- `/sync days 300` - Sync last 300 days
+- `/sync status` - Check sync status without syncing
+- `/sync reset` - Reset sync state, then run `/sync` to re-sync
 
 **Fresh start:** To rebuild everything from scratch:
 1. `/memory reset` - Clear memory blobs
-2. `/sync --reset` - Clear emails/calendar
-3. `/sync --days 30` - Re-sync and rebuild memory''',
+2. `/sync reset` - Clear emails/calendar
+3. `/sync days 30` - Re-sync and rebuild memory''',
     },
     '/briefing': {
         'summary': 'Daily briefing of tasks and unanswered conversations',
@@ -2019,7 +2018,7 @@ Then run `/agent train email` again."""
                 if not emails:
                     return """❌ **No emails found**
 
-Run `/sync --days 90` to sync more email history.
+Run `/sync days 90` to sync more email history.
 Need at least some emails to analyze patterns."""
 
                 # Get Anthropic API key from user's stored key or system settings
