@@ -2476,6 +2476,172 @@ class SupabaseStorage:
             logger.warning(f"Failed to get agent prompt metadata: {e}")
             return None
 
+    # ==================== Task Items ====================
+
+    def store_task_item(self, owner_id: str, item: Dict[str, Any]) -> bool:
+        """Store a single task item.
+
+        Args:
+            owner_id: Firebase UID
+            item: Task item dict with event_type, event_id, action_required, etc.
+
+        Returns:
+            True if stored successfully
+        """
+        try:
+            data = {
+                'owner_id': owner_id,
+                'event_type': item.get('event_type'),
+                'event_id': item.get('event_id'),
+                'contact_email': item.get('contact_email'),
+                'contact_name': item.get('contact_name'),
+                'action_required': item.get('action_required', False),
+                'urgency': item.get('urgency'),
+                'reason': item.get('reason'),
+                'suggested_action': item.get('suggested_action'),
+                'analyzed_at': item.get('analyzed_at')
+            }
+
+            self.client.table('task_items')\
+                .upsert(data, on_conflict='owner_id,event_type,event_id')\
+                .execute()
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to store task item: {e}")
+            return False
+
+    def store_task_items_batch(self, owner_id: str, items: List[Dict[str, Any]]) -> int:
+        """Store multiple task items.
+
+        Args:
+            owner_id: Firebase UID
+            items: List of task item dicts
+
+        Returns:
+            Number of items stored successfully
+        """
+        stored = 0
+        for item in items:
+            if self.store_task_item(owner_id, item):
+                stored += 1
+        return stored
+
+    def get_task_items(
+        self,
+        owner_id: str,
+        action_required: Optional[bool] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Get task items for a user.
+
+        Args:
+            owner_id: Firebase UID
+            action_required: If True, only return items needing action.
+                           If False, only return items not needing action.
+                           If None, return all.
+            limit: Max items to return
+
+        Returns:
+            List of task item dicts
+        """
+        try:
+            query = self.client.table('task_items')\
+                .select('*')\
+                .eq('owner_id', owner_id)\
+                .is_('completed_at', 'null')
+
+            if action_required is not None:
+                query = query.eq('action_required', action_required)
+
+            # Order by urgency (high first) then by analyzed_at
+            result = query\
+                .order('urgency', desc=False)\
+                .order('analyzed_at', desc=True)\
+                .limit(limit)\
+                .execute()
+
+            return result.data or []
+
+        except Exception as e:
+            logger.error(f"Failed to get task items: {e}")
+            return []
+
+    def task_item_exists(self, owner_id: str, event_type: str, event_id: str) -> bool:
+        """Check if a task item already exists.
+
+        Args:
+            owner_id: Firebase UID
+            event_type: Type of event (email, calendar, mrcall)
+            event_id: ID of the source event
+
+        Returns:
+            True if exists
+        """
+        try:
+            result = self.client.table('task_items')\
+                .select('id')\
+                .eq('owner_id', owner_id)\
+                .eq('event_type', event_type)\
+                .eq('event_id', event_id)\
+                .limit(1)\
+                .execute()
+
+            return bool(result.data)
+
+        except Exception as e:
+            logger.warning(f"Failed to check task item existence: {e}")
+            return False
+
+    def mark_task_complete(self, owner_id: str, task_id: str) -> bool:
+        """Mark a task as complete.
+
+        Args:
+            owner_id: Firebase UID
+            task_id: Task item ID
+
+        Returns:
+            True if marked successfully
+        """
+        try:
+            from datetime import datetime, timezone
+
+            self.client.table('task_items')\
+                .update({'completed_at': datetime.now(timezone.utc).isoformat()})\
+                .eq('owner_id', owner_id)\
+                .eq('id', task_id)\
+                .execute()
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to mark task complete: {e}")
+            return False
+
+    def clear_task_items(self, owner_id: str) -> int:
+        """Clear all task items for a user (for refresh).
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            Number of items deleted
+        """
+        try:
+            result = self.client.table('task_items')\
+                .delete()\
+                .eq('owner_id', owner_id)\
+                .execute()
+
+            count = len(result.data) if result.data else 0
+            logger.info(f"Cleared {count} task items for {owner_id}")
+            return count
+
+        except Exception as e:
+            logger.error(f"Failed to clear task items: {e}")
+            return 0
+
 
 # Create search_emails function in Supabase (run once via SQL Editor):
 """

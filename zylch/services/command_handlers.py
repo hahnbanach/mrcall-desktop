@@ -1773,60 +1773,94 @@ Run `/sync` to fetch calendar events."""
 
 
 async def handle_tasks(args: List[str], owner_id: str) -> str:
-    """Handle /tasks command - list open tasks."""
+    """Handle /tasks command - list items needing action using LLM analysis."""
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch.services.task_formatter import filter_own_emails, format_task_list
+    from zylch.services.task_formatter import format_task_items
+    from zylch.workers.task_worker import TaskWorker
+    from zylch.api.token_storage import get_email
 
     help_text = """**✅ Tasks**
 
-**Usage:** `/tasks [--limit N]`
+**Usage:** `/tasks [refresh]`
 
-Shows your open tasks (emails needing response).
+Shows items needing your action, analyzed by AI.
 
 **Options:**
-- `--limit N` - Max tasks to show (default: all)
+- `refresh` - Re-analyze events with fresh LLM call
+
+**Setup:**
+1. `/sync` - Fetch emails and calendar
+2. `/agent train tasks` - Train task detection agent
+3. `/tasks` - View actionable items
 
 **Related:**
-- `/briefing` - Full daily briefing with context
-- `/sync` - Sync emails to update tasks"""
+- `/agent train tasks` - Train/retrain task detection
+- `/agent show tasks` - View trained agent"""
 
     if 'help' in args or '--help' in args:
         return help_text
 
     try:
-        supabase = SupabaseStorage.get_instance().client
+        storage = SupabaseStorage.get_instance()
 
-        # Parse limit
-        limit = 50
-        if '--limit' in args:
-            idx = args.index('--limit')
-            if idx + 1 < len(args):
-                try:
-                    limit = min(int(args[idx + 1]), 100)
-                except ValueError:
-                    pass
+        # Check if task agent is trained
+        task_prompt = storage.get_agent_prompt(owner_id, 'tasks')
+        if not task_prompt:
+            return """⚠️ **Task agent not trained yet**
 
-        result = supabase.table('avatars')\
-            .select('*')\
-            .eq('owner_id', owner_id)\
-            .or_('relationship_status.eq.open,relationship_status.eq.waiting')\
-            .gte('relationship_score', 3)\
-            .order('relationship_score', desc=True)\
-            .limit(limit)\
-            .execute()
+Train your personalized task detection agent first:
 
-        avatars = result.data or []
-        avatars = filter_own_emails(avatars)
+```
+/agent train tasks
+```
 
-        if not avatars:
-            return """**✅ Tasks**
+This analyzes your email patterns to understand:
+- How quickly you respond to different contacts
+- What types of emails you ignore
+- VIP contacts who need quick responses
 
-🎉 No open tasks! You're all caught up.
+Then run `/tasks` again."""
 
-Run `/sync` to check for new emails."""
+        # Get Anthropic API key
+        anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
+        if not anthropic_key:
+            return """❌ **Anthropic API key required**
 
-        return format_task_list(avatars, include_stale_warning=False)
+Connect your Anthropic account:
+`/connect anthropic`"""
 
+        # Get user email
+        user_email = get_email(owner_id) or ''
+
+        # Check for refresh flag
+        refresh = 'refresh' in args
+
+        # Create worker and get tasks
+        worker = TaskWorker(storage, owner_id, anthropic_key, user_email)
+        tasks = await worker.get_tasks(refresh=refresh)
+
+        if not tasks:
+            if refresh:
+                return """**✅ Tasks**
+
+🎉 No action needed! You're all caught up.
+
+Analyzed recent emails and calendar - nothing requires your attention."""
+            else:
+                return """**✅ Tasks**
+
+🎉 No action needed! You're all caught up.
+
+Run `/tasks refresh` to re-analyze with fresh AI check."""
+
+        result = format_task_items(tasks)
+        if refresh:
+            result += "\n\n_Freshly analyzed with AI_"
+        return result
+
+    except ValueError as e:
+        # Task prompt not found
+        return f"⚠️ {str(e)}"
     except Exception as e:
         logger.error(f"Error in /tasks: {e}", exc_info=True)
         return f"❌ **Error:** {str(e)}\n\n{help_text}"
@@ -2018,8 +2052,9 @@ The personalized agent significantly improves:
         agent_type = args[1].lower() if len(args) > 1 else None
 
         # Validate agent type for train/show/reset commands
-        if cmd in ['train', 'show', 'reset'] and agent_type and agent_type != 'email':
-            return f"❌ Unknown agent type: `{agent_type}`\n\nAvailable types: `email`"
+        valid_agent_types = ['email', 'tasks']
+        if cmd in ['train', 'show', 'reset'] and agent_type and agent_type not in valid_agent_types:
+            return f"❌ Unknown agent type: `{agent_type}`\n\nAvailable types: `email`, `tasks`"
 
         if cmd == 'train':
             if not agent_type:
@@ -2080,6 +2115,67 @@ Please ensure your account is properly connected via `/connect`."""
 **Next steps:**
 - `/agent show email` to review the agent
 - `/agent process email` to extract entities using this agent"""
+
+            elif agent_type == 'tasks':
+                # Check sync status first
+                sync_state = storage.get_sync_state(owner_id)
+                if not sync_state or not sync_state.get('full_sync_completed'):
+                    return """❌ **Please sync your emails first**
+
+Run `/sync` to synchronize your email history.
+Then run `/agent train tasks` again."""
+
+                # Check email count
+                emails = storage.get_emails(owner_id, limit=1)
+                if not emails:
+                    return """❌ **No emails found**
+
+Run `/sync days 90` to sync more email history.
+Need at least some emails to analyze patterns."""
+
+                # Get Anthropic API key
+                anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
+
+                if not anthropic_key:
+                    return """❌ **Anthropic API key required**
+
+Connect your Anthropic account:
+`/connect anthropic`"""
+
+                # Get user's email address
+                user_email = get_email(owner_id)
+                if not user_email:
+                    return """❌ **User email not found**
+
+Your email address is required to identify sent vs received emails.
+Please ensure your account is properly connected via `/connect`."""
+
+                # Build the task agent
+                from zylch.services.task_agent_builder import TaskAgentBuilder
+
+                builder = TaskAgentBuilder(storage, owner_id, anthropic_key, user_email)
+                agent_prompt, metadata = await builder.build_task_prompt()
+
+                # Store in DB
+                storage.store_agent_prompt(owner_id, 'tasks', agent_prompt, metadata)
+
+                return f"""✅ **Task detection agent created**
+
+**Analyzed:**
+- {metadata.get('threads_analyzed', 0)} email threads
+- {metadata.get('contacts_found', 0)} contacts identified
+- {metadata.get('blobs_found', 0)} memory blobs for context
+
+**What was learned:**
+- Your typical response patterns
+- VIP contacts who get quick responses
+- Types of emails you ignore
+- Commitment phrases you use
+
+**Next steps:**
+- `/agent show tasks` to review the agent
+- `/tasks` to see items needing action
+- `/tasks refresh` to re-analyze with fresh LLM call"""
 
         elif cmd == 'show':
             if not agent_type:
