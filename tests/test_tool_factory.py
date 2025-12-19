@@ -126,7 +126,7 @@ async def test_create_all_tools_success(
          patch('zylch.tools.factory.JSONCache'):
 
         result = await ToolFactory.create_all_tools(mock_config, current_business_id="test_business_123")
-        tools, session_state, persona_analyzer = result
+        tools, session_state = result
 
         # Verify we got tools (number may vary based on available services)
         assert len(tools) > 0, "Should create some tools"
@@ -135,9 +135,8 @@ async def test_create_all_tools_success(
         for tool in tools:
             assert isinstance(tool, Tool)
 
-        # Verify session_state and persona_analyzer are returned
+        # Verify session_state is returned
         assert session_state is not None
-        assert persona_analyzer is not None
 
 
 @pytest.mark.asyncio
@@ -167,14 +166,13 @@ async def test_create_all_tools_with_pipedrive(
          patch('zylch.tools.factory.JSONCache'):
 
         result = await ToolFactory.create_all_tools(mock_config, current_business_id="test_business_123")
-        tools, session_state, persona_analyzer = result
+        tools, session_state = result
 
         # Verify we got tools (with Pipedrive enabled, should have more tools)
         assert len(tools) > 0, "Should create some tools"
 
-        # Verify session_state and persona_analyzer are returned
+        # Verify session_state is returned
         assert session_state is not None
-        assert persona_analyzer is not None
 
 
 @pytest.mark.asyncio
@@ -196,12 +194,11 @@ async def test_create_all_tools_without_business_id(
          patch('zylch.tools.factory.JSONCache'):
 
         result = await ToolFactory.create_all_tools(mock_config, current_business_id=None)
-        tools, session_state, persona_analyzer = result
+        tools, session_state = result
 
         # Should still create tools successfully
         assert len(tools) > 0, "Should create some tools"
         assert session_state is not None
-        assert persona_analyzer is not None
 
 
 @pytest.mark.asyncio
@@ -260,7 +257,7 @@ async def test_tool_categories(
          patch('zylch.tools.factory.JSONCache'):
 
         result = await ToolFactory.create_all_tools(mock_config)
-        tools, session_state, persona_analyzer = result
+        tools, session_state = result
 
         tool_names = [tool.name for tool in tools]
 
