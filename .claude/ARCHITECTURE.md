@@ -226,7 +226,7 @@ Hybrid: 0.85 → "/sync 2"
 | Command | Replaces Tool | Semantic Triggers |
 |---------|---------------|-------------------|
 | `/stats` | `_EmailStatsTool` | "email stats", "how many emails" |
-| `/drafts` | `_ListDraftsTool` | "my drafts", "show drafts" |
+| `/email list --draft` | `_ListDraftsTool` | "my drafts", "show drafts" |
 | `/calendar` | `ListCalendarEventsTool` | "my calendar", "meetings today" |
 | `/tasks` | `_GetTasksTool` | "my tasks", "todo list" |
 | `/jobs` | `ListScheduledJobsTool` | "scheduled jobs", "my reminders" |
@@ -236,11 +236,11 @@ Hybrid: 0.85 → "/sync 2"
 ### 7. CLI (`zylch/cli/main.py`)
 Interactive command-line interface:
 - `/sync` - Sync emails, calendar, pipedrive (data only, no processing)
+- `/email list|create|send|delete|search` - Email and draft management
 - `/train build memory-email` - Generate personalized extraction prompt from email patterns
 - `/memory process` - Extract facts from synced data into blobs (uses personalized prompt)
 - `/memory search` - Search entity memories
 - `/gaps` - Show relationship gaps
-- `/archive` - Archive management
 - Natural conversation with agent
 
 ### 8. Memory System (Entity-Centric Blobs)
@@ -757,23 +757,22 @@ The default memory extraction prompt uses generic rules for classifying emails (
 
 ### Solution: Learn from User's Email Patterns
 
-The `/train build memory-email` command analyzes the user's actual email behavior:
+The `/train build memory-email` command analyzes the user's recent emails (up to 100) to understand their communication context:
 
-1. **Emails user replied to** = Important contacts (VIPs)
-2. **Emails user ignored** = Noise patterns (cold outreach, newsletters)
-3. **User's sent emails** = Role, business context, signature patterns
+1. **Recent emails** = Sample of communication patterns, contacts, topics
+2. **User's sent emails** = Role, business context, signature patterns
+3. **Frequent contacts** = People who appear multiple times
 
-This generates a personalized extraction prompt that understands:
-- Who matters to this specific user
-- What types of outreach they ignore
-- Their role (founder vs investor vs engineer)
-- VIP contacts who deserve detailed extraction
+The LLM judges email importance based on **tone and content** (not reply history), generating a personalized extraction prompt that understands:
+- The user's role (founder vs investor vs engineer)
+- Types of emails they receive
+- How to assess importance from email content itself
 
 ### Architecture
 
 **Key Files**:
 - `zylch/services/prompt_builder.py` - PromptBuilder class that analyzes patterns
-- `zylch/workers/memory_worker.py` - Uses personalized prompt for extraction
+- `zylch/workers/memory_worker.py` - Uses personalized prompt for extraction (includes CC field)
 - `zylch/storage/migrations/006_user_prompts.sql` - Database table
 
 **Data Flow**:
@@ -783,9 +782,9 @@ This generates a personalized extraction prompt that understands:
 /train build memory-email
     ↓
 PromptBuilder analyzes:
-  - Replied threads (VIP contacts)
-  - Ignored emails (noise patterns)
+  - 100 recent emails (sample)
   - Sent emails (user profile)
+  - Frequent contacts
     ↓
 Claude Sonnet generates personalized prompt
     ↓
@@ -817,14 +816,13 @@ For better memory extraction, create a personalized prompt first:
 **Table: `user_prompts`**
 - `id`, `owner_id`, `prompt_type`, `prompt_content`, `metadata`, timestamps
 - Unique constraint on `(owner_id, prompt_type)`
-- Metadata includes: generation stats, VIP count, noise patterns count
+- Metadata includes: emails_analyzed count, frequent_contacts_count
 
 ### Benefits
 
-1. **Cold outreach detection** - Learns YOUR patterns, not generic rules
-2. **VIP prioritization** - Contacts you engage with get detailed extraction
-3. **Role awareness** - System knows if you're a founder (not investor) and filters accordingly
-4. **Zero maintenance** - Run once, prompt stored and used automatically
+1. **Content-based importance** - Judges emails by tone/content, not reply history
+2. **Role awareness** - System knows if you're a founder (not investor) and filters accordingly
+3. **Zero maintenance** - Run once, prompt stored and used automatically
 
 ## Email Triage System (December 2025)
 
