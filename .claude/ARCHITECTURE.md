@@ -729,11 +729,11 @@ To rebuild memory from scratch:
 
 ```bash
 /memory reset         # Delete all blobs first
-/sync --reset         # Clear emails/calendar (warns about memory)
-/sync --days 30       # Re-sync and process into fresh blobs
+/sync reset           # Clear emails/calendar (warns about memory)
+/sync days 30         # Re-sync and process into fresh blobs
 ```
 
-**`/sync --reset`** clears emails and calendar, then warns to run `/memory reset` if you want fresh memory too.
+**`/sync reset`** clears emails and calendar, then warns to run `/memory reset` if you want fresh memory too.
 
 ### Database Schema
 
