@@ -1,4 +1,9 @@
-"""Shared task formatting utilities for /gaps and get_tasks tool."""
+"""Shared task formatting utilities for /tasks command.
+
+Provides formatting for both:
+- Legacy avatar-based tasks (format_task_list)
+- New LLM-analyzed tasks (format_task_items)
+"""
 
 from typing import List, Dict, Any, Set
 from ..config import settings
@@ -167,6 +172,77 @@ def format_task_list(avatars: List[Dict[str, Any]], include_stale_warning: bool 
     if stale_avatars > 0:
         lines.append(f"\n⚠️ {stale_avatars} avatars are >7 days old. Run `/sync` to refresh.")
 
+    lines.append("\n💡 Say \"more on #3\" or \"draft reply for #5\" to act on a task")
+
+    return "\n".join(lines)
+
+
+def format_task_items(tasks: List[Dict[str, Any]]) -> str:
+    """Format LLM-analyzed task items as numbered list.
+
+    Args:
+        tasks: List of task item dicts from task_items table
+
+    Returns:
+        Formatted markdown string
+    """
+    if not tasks:
+        return "✨ **No action needed!** All caught up."
+
+    # Group by urgency
+    high = [t for t in tasks if t.get('urgency') == 'high']
+    medium = [t for t in tasks if t.get('urgency') == 'medium']
+    low = [t for t in tasks if t.get('urgency') == 'low']
+
+    # Icon mapping for event types
+    icon_map = {
+        'email': '📧',
+        'calendar': '📅',
+        'mrcall': '📞'
+    }
+
+    lines = ["## 📋 Action Required\n"]
+    task_num = 1
+
+    if high:
+        lines.append("### 🔥 Urgent")
+        for t in high:
+            icon = icon_map.get(t.get('event_type'), '📌')
+            name = t.get('contact_name') or t.get('contact_email', 'Unknown')
+            action = t.get('suggested_action', 'Review')
+            reason = t.get('reason', '')
+
+            line = f"{task_num}. {icon} **{name}**: {action}"
+            if reason:
+                line += f"\n   _({reason})_"
+            lines.append(line)
+            task_num += 1
+        lines.append("")
+
+    if medium:
+        lines.append("### 📌 Should Do")
+        for t in medium:
+            icon = icon_map.get(t.get('event_type'), '📌')
+            name = t.get('contact_name') or t.get('contact_email', 'Unknown')
+            action = t.get('suggested_action', 'Review')
+
+            lines.append(f"{task_num}. {icon} **{name}**: {action}")
+            task_num += 1
+        lines.append("")
+
+    if low:
+        lines.append("### 📝 Nice To Do")
+        for t in low[:10]:  # Limit to 10
+            icon = icon_map.get(t.get('event_type'), '📌')
+            name = t.get('contact_name') or t.get('contact_email', 'Unknown')
+            action = t.get('suggested_action', 'Review')
+
+            lines.append(f"{task_num}. {icon} {name}: {action}")
+            task_num += 1
+        if len(low) > 10:
+            lines.append(f"   ... and {len(low) - 10} more")
+
+    lines.append(f"\n**Total: {len(tasks)} items need attention**")
     lines.append("\n💡 Say \"more on #3\" or \"draft reply for #5\" to act on a task")
 
     return "\n".join(lines)
