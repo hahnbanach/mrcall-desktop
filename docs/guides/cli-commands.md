@@ -25,7 +25,7 @@ Configure entity memory and event-driven automation.
 Connect with external services (MrCall, WhatsApp).
 
 ### 🔗 Sharing
-Share intelligence with colleagues and team members.
+Share intelligence with colleagues (via `/share` and `/revoke`).
 
 ### 🔧 Configuration
 Customize AI behavior and system settings.
@@ -105,10 +105,8 @@ Triggers support typed parameters using `{param:type}` syntax:
 
 📧 Data & Email:
 • /sync [days] - Sync email and calendar
-• /stats - Email statistics (count, unread, threads)
-• /drafts - List email drafts
-• /email - Create, send, search emails
-• /archive - Email archive management
+• /stats - Email statistics (count, threads)
+• /email list|create|send|delete|search - Manage drafts and search
 
 📅 Calendar & Tasks:
 • /calendar [days] - Show upcoming events
@@ -127,7 +125,6 @@ Triggers support typed parameters using `{param:type}` syntax:
 🔗 Sharing:
 • /share <email> - Share data with someone
 • /revoke <email> - Revoke sharing access
-• /sharing - Show sharing status
 
 🔧 Configuration:
 • /model [haiku|sonnet|opus|auto] - Change AI model
@@ -237,47 +234,6 @@ Run /sync to update or /briefing for task details.
 ```
 
 **Semantic Triggers**: "stats", "email stats", "inbox statistics", "how many emails", "unread count"
-
----
-
-### `/drafts [--limit N]`
-
-**Summary**: List email drafts
-
-**Description**: Lists your saved email drafts stored in Supabase. Use `/email --send <id>` to send a draft.
-
-**Arguments**:
-- `--limit N` - Max drafts to show (default: 20, max: 50)
-
-**Usage**:
-```bash
-# List recent drafts
-/drafts
-
-# List last 5 drafts
-/drafts --limit 5
-```
-
-**Output**:
-```
-📝 Drafts (3 found)
-
-1. Meeting follow-up
-   To: mario@example.com
-   ID: abc12345 | 2025-12-15
-
-2. Q4 Budget Proposal
-   To: sarah@client.com, john@client.com (+1)
-   ID: def67890 | 2025-12-14
-
-3. (no subject)
-   To: team@company.com
-   ID: ghi11111 | 2025-12-13
-
-Use /email --send <id> to send.
-```
-
-**Semantic Triggers**: "drafts", "show drafts", "my drafts", "pending drafts", "unsent emails"
 
 ---
 
@@ -465,151 +421,51 @@ Use /jobs --cancel <id> to cancel.
 
 ---
 
-### `/archive [--stats|--sync|--init|--search]`
-
-**Summary**: Email archive management (Gmail only)
-
-**Description**: Manage the local email archive for fast searching and offline access.
-
-**Options**:
-
-**Show statistics** (`/archive` or `/archive --stats`):
-```bash
-/archive
-```
-
-Output:
-```
-📦 Email Archive Statistics
-
-Total Messages: 12,456
-Total Threads: 3,421
-Date Range: 2023-01-15 to 2025-12-08
-Full Sync: ✅ Completed
-Last Sync: 2025-12-08 09:30:00
-
-Storage: /Users/mal/.zylch/archive/email_archive.db
-
-Use /archive --help for more commands.
-```
-
-**Initialize archive** (`/archive --init [months]`):
-```bash
-# Initialize with 6 months history (default)
-/archive --init
-
-# Initialize with 12 months history
-/archive --init 12
-
-# Initialize with 3 months history
-/archive --init 3
-```
-
-Output:
-```
-✅ Archive Initialized
-
-Downloaded: 4,523 emails (6 months)
-Stored: 4,523 messages
-Time: 45.3s
-
-Run /archive --stats to see archive details.
-```
-
-**Incremental sync** (`/archive --sync`):
-```bash
-/archive --sync
-```
-
-Output:
-```
-✅ Archive Sync Complete
-
-Added: 42 new messages
-Deleted: 3 messages
-Duration: 2.1s
-```
-
-**Search archive** (`/archive --search <query> --limit N`):
-```bash
-# Search for "contract"
-/archive --search contract
-
-# Search with limit
-/archive --search "budget review" --limit 20
-
-# Search by sender
-/archive --search "from:john@example.com"
-```
-
-Output:
-```
-📬 Found 8 emails matching: contract
-
-• Q4 Contract Review
-  From: john@example.com | 2025-12-05
-
-• Contract Amendment - Acme Corp
-  From: sarah@acmecorp.com | 2025-12-01
-
-• Re: Service Contract Renewal
-  From: mike@vendor.com | 2025-11-28
-
-...
-```
-
-**Note**: Currently Gmail-only. Outlook archiving coming in Phase I.5.
-
----
-
 ## ✉️ Email Commands
 
-### `/email [--list|--create|--send|--delete|--search]`
+### `/email <subcommand> [options]`
 
-**Summary**: Manage email drafts stored in Supabase
+**Summary**: Manage emails and drafts
 
-**Description**: Drafts are stored in Supabase (not Gmail/Outlook drafts). When sent, they go through Gmail or Outlook API based on user's connected provider. This is a Superhuman-style approach where drafts live in Zylch.
+**Description**: Unified email management with positional subcommands. Drafts are stored in Supabase. Emails are synced from Gmail/Outlook.
 
-**Options**:
+**Subcommands**:
 
-**List drafts** (`/email --list --draft`):
+**List emails** (`/email list`):
 ```bash
-# List recent drafts
-/email --list --draft
+# List recent emails
+/email list
 
-# List last 5 drafts
-/email --list --draft --limit 5
+# List last 5 emails
+/email list --limit 5
+
+# List drafts
+/email list --draft
 ```
 
-**Create draft** (`/email --create`):
+**Create draft** (`/email create`):
 ```bash
 # Create draft to specific recipient
-/email --create --to mario@example.com --subject "Meeting follow-up"
-
-# Create draft (opens editor)
-/email --create
+/email create --to mario@example.com --subject "Meeting follow-up"
 ```
 
-**Send draft** (`/email --send <draft_id>`):
+**Send draft** (`/email send <draft_id>`):
 ```bash
-/email --send abc123
+/email send abc123
 ```
 
-**Delete draft** (`/email --delete <draft_id>`):
+**Delete draft** (`/email delete <draft_id>`):
 ```bash
-/email --delete abc123
+/email delete abc123
 ```
 
-**Search emails** (`/email --search`):
+**Search emails** (`/email search <query>`):
 ```bash
 # Search by keyword
-/email --search "budget proposal"
+/email search "budget proposal"
 
-# Search by sender
-/email --search --from john@example.com
-
-# Search with date range
-/email --search "contract" --days 30
+# Search with limit
+/email search "contract" --limit 20
 ```
 
 **Provider Routing**: Emails are sent via Gmail API (if Google connected) or Outlook API (if Microsoft connected).
@@ -1066,59 +922,6 @@ Restore: Use /share colleague@example.com to share again.
 
 ---
 
-### `/sharing [--authorize]`
-
-**Summary**: Show sharing status
-
-**Description**: Lists all sharing connections - who you're sharing with (outgoing) and who's sharing with you (incoming).
-
-**Options**:
-
-**Show status** (`/sharing`):
-```bash
-/sharing
-```
-
-Output:
-```
-📊 Sharing Status
-
-📤 Your Recipients (you share with them)
-✅ colleague@example.com (authorized)
-⏳ teammate@example.com (pending)
-
-📥 Sharing With You (you receive their data)
-✅ boss@example.com (authorized)
-⏳ partner@client.com - Pending your authorization
-   → /sharing --authorize partner@client.com
-
-Commands: /share <email> | /revoke <email>
-```
-
-**Icons**:
-- ✅ Authorized (sharing active)
-- ⏳ Pending (awaiting authorization)
-- ❌ Revoked (sharing stopped)
-
-**Authorize incoming share** (`/sharing --authorize <email>`):
-```bash
-/sharing --authorize partner@client.com
-```
-
-Output:
-```
-✅ Sharing Authorized
-
-From: partner@client.com
-
-You will now receive their shared data:
-• Contact intelligence
-• Relationship context
-• Avatar data
-```
-
----
-
 ## 🔧 Configuration Commands
 
 ### `/model [haiku|sonnet|opus|auto]`
@@ -1279,23 +1082,6 @@ Pro tip: Use /cache to inspect cached data.
 
 # 3. Add VIP notification
 /trigger --add email_received "When email from john@client.com arrives, send me SMS"
-```
-
----
-
-### Sharing with Team
-
-**Goal**: Share relationship intelligence with colleague.
-
-```bash
-# 1. Send share request
-/share colleague@example.com
-
-# 2. Ask colleague to authorize
-"Ask colleague to run: /sharing --authorize your@email.com"
-
-# 3. Verify sharing active
-/sharing
 ```
 
 ---
