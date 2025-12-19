@@ -387,8 +387,7 @@ API clients should include in context for future requests:
 
 async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> str:
     """Handle /memory command - entity-centric memory management."""
-    if '--help' in args or not args:
-        return """**🧠 Entity Memory System**
+    help_text = """**🧠 Entity Memory System**
 
 **Usage:**
 • `/memory search <query>` - Search memories (hybrid FTS + semantic)
@@ -405,6 +404,9 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 Use `/agent process` to extract facts from synced data:
 • `/agent process` - Process all data
 • `/agent process email` - Process only emails"""
+
+    if not args or 'help' in args or '--help' in args:
+        return help_text
 
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch_memory import BlobStorage, HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig
@@ -570,14 +572,12 @@ Memory will be searchable via hybrid search."""
 Run `/agent process` to rebuild memory from your synced data."""
 
         else:
-            # Unknown subcommand
-            return f"""❌ Unknown subcommand: `{args[0]}`
-
-Use `/memory --help` to see available commands."""
+            # Unknown subcommand - show error + help
+            return f"❌ Unknown subcommand: `{args[0]}`\n\n{help_text}"
 
     except Exception as e:
         logger.error(f"Error in /memory command: {e}", exc_info=True)
-        return f"**❌ Error:** {str(e)}\n\nUse `/memory --help` for usage information."
+        return f"**❌ Error:** {str(e)}\n\n{help_text}"
 
 
 async def handle_trigger(args: List[str], owner_id: str, user_email: str = None) -> str:
@@ -586,15 +586,14 @@ async def handle_trigger(args: List[str], owner_id: str, user_email: str = None)
 
     TRIGGER_TYPES = ['session_start', 'email_received', 'sms_received', 'call_received']
 
-    if '--help' in args or not args:
-        return """**⚡ Triggered Instructions**
+    help_text = """**⚡ Triggered Instructions**
 
 **Usage:**
-• `/trigger` or `/trigger --list` - List all triggers
-• `/trigger --types` - Show trigger types
-• `/trigger --add <type> <instruction>` - Add trigger
-• `/trigger --remove <id>` - Remove trigger
-• `/trigger --toggle <id>` - Enable/disable trigger
+• `/trigger` or `/trigger list` - List all triggers
+• `/trigger types` - Show trigger types
+• `/trigger add <type> <instruction>` - Add trigger
+• `/trigger remove <id>` - Remove trigger
+• `/trigger toggle <id>` - Enable/disable trigger
 
 **Trigger types:**
 • `session_start` - When starting conversation
@@ -604,15 +603,18 @@ async def handle_trigger(args: List[str], owner_id: str, user_email: str = None)
 
 **Examples:**
 ```
-/trigger --add session_start "Say good morning and list my meetings for today"
-/trigger --add email_received "Summarize important emails from unknown senders"
-/trigger --remove abc123
+/trigger add session_start "Say good morning and list my meetings for today"
+/trigger add email_received "Summarize important emails from unknown senders"
+/trigger remove abc123
 ```"""
+
+    if not args or 'help' in args or '--help' in args:
+        return help_text
 
     try:
         client = SupabaseClient()
 
-        if '--types' in args:
+        if 'types' in args or '--types' in args:
             return """**⚡ Available Trigger Types**
 
 • `session_start` - Fires when you start a new conversation
@@ -620,9 +622,9 @@ async def handle_trigger(args: List[str], owner_id: str, user_email: str = None)
 • `sms_received` - Fires when SMS arrives (via MrCall)
 • `call_received` - Fires when phone call comes in (via MrCall)
 
-**Usage:** `/trigger --add <type> <instruction>`"""
+**Usage:** `/trigger add <type> <instruction>`"""
 
-        elif '--list' in args or len(args) == 0:
+        elif 'list' in args or '--list' in args or len(args) == 0:
             # List triggers
             triggers = client.list_triggers(owner_id)
 
@@ -632,9 +634,9 @@ async def handle_trigger(args: List[str], owner_id: str, user_email: str = None)
 You haven't created any triggers yet.
 
 **Get started:**
-`/trigger --add session_start "Summarize my unread emails"`
+`/trigger add session_start "Summarize my unread emails"`
 
-Use `/trigger --help` for more options."""
+Use `/trigger help` for more options."""
 
             output = f"**⚡ Your Triggers** ({len(triggers)} total)\n\n"
             for t in triggers:

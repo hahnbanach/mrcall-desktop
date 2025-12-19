@@ -1,10 +1,9 @@
-"""Draft composition skill with memory and pattern integration."""
+"""Draft composition skill with memory integration."""
 
 import json
 from typing import Any, Dict, List
 from anthropic import Anthropic
 from zylch.skills.base import BaseSkill, SkillContext
-from zylch.services.pattern_service import PatternService
 from zylch.config import settings
 import logging
 
@@ -12,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class DraftComposerSkill(BaseSkill):
-    """Compose email drafts with personalized style and patterns."""
+    """Compose email drafts with personalized style."""
 
     def __init__(self, anthropic_api_key: str = ""):
         """Initialize DraftComposerSkill.
@@ -22,7 +21,7 @@ class DraftComposerSkill(BaseSkill):
         """
         super().__init__(
             skill_name="draft_composer",
-            description="Compose email drafts using memory rules and learned patterns (semantic search)"
+            description="Compose email drafts using memory rules"
         )
         if not anthropic_api_key:
             raise ValueError(
@@ -30,26 +29,11 @@ class DraftComposerSkill(BaseSkill):
                 "Please run `/connect anthropic` to configure your API key."
             )
         self.client = Anthropic(api_key=anthropic_api_key)
-        self.pattern_service = PatternService() if settings.pattern_store_enabled else None
 
     async def pre_execute(self, context: SkillContext):
-        """Load context: thread, memory rules, patterns."""
+        """Load context: thread, memory rules."""
         # Memory rules already in context.memory_rules
-
-        # Retrieve similar successful patterns using semantic search
-        if self.pattern_service and settings.pattern_store_enabled:
-            try:
-                patterns = self.pattern_service.retrieve_similar_patterns(
-                    intent=context.intent,
-                    skill="draft_composer",
-                    user_id=context.user_id,
-                    limit=settings.pattern_max_results
-                )
-                context.patterns = patterns
-                logger.info(f"Retrieved {len(patterns)} similar patterns (semantic search)")
-            except Exception as e:
-                logger.warning(f"Failed to retrieve patterns: {e}")
-                context.patterns = []
+        context.patterns = []
 
     async def execute(self, context: SkillContext) -> Any:
         """Generate draft using Sonnet with memory + patterns."""
