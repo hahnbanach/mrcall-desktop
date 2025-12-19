@@ -1,5 +1,6 @@
 """Hybrid search combining FTS and semantic search."""
 
+import json
 import logging
 from dataclasses import dataclass
 from typing import List, Optional
@@ -153,7 +154,11 @@ class HybridSearchEngine:
         # Compute similarities
         scored = []
         for s in sentences.data:
-            emb = np.array(s["embedding"])
+            # Supabase returns embedding as string, need to parse it
+            emb_data = s["embedding"]
+            if isinstance(emb_data, str):
+                emb_data = json.loads(emb_data)
+            emb = np.array(emb_data, dtype=np.float32)
             sim = float(np.dot(query_embedding, emb) /
                        (np.linalg.norm(query_embedding) * np.linalg.norm(emb)))
             scored.append((sim, s["sentence_text"]))
