@@ -110,7 +110,10 @@ class MemoryWorker:
         return self._custom_prompt is not None
 
     async def process_email(self, email: Dict) -> bool:
-        """Process single email to extract and store facts.
+        """Process single email to extract and store entities.
+
+        Each email may contain multiple entities (people, companies, etc.).
+        Each entity is stored as a separate blob with reconsolidation.
 
         Args:
             email: Email dict with id, from_email, to_email, subject, body_plain, date
@@ -137,53 +140,75 @@ class MemoryWorker:
                 self.storage.mark_email_processed(self.owner_id, email_id)
                 return True
 
-            # Step 1: Extract facts from email
-            facts = self._extract_facts(email, contact_email)
-            if not facts or facts.strip().upper() == "SKIP":
-                logger.debug(f"No facts extracted from {email_id}")
+            # Step 1: Extract entities from email (may be multiple)
+            entities = self._extract_entities(email, contact_email)
+            if not entities:
+                logger.debug(f"No entities extracted from {email_id}")
                 # Still mark as processed so we don't retry
                 self.storage.mark_email_processed(self.owner_id, email_id)
                 return True
 
-            # Step 2: Search for existing blob about this entity
-            existing = self.hybrid_search.find_for_reconsolidation(
-                owner_id=self.owner_id,
-                content=facts,
-                namespace=self.namespace
-            )
+            logger.debug(f"Extracted {len(entities)} entities from email {email_id}")
 
-            # Step 3: Reconsolidate or create new
+            # Step 2: Process each entity separately
             event_desc = f"Extracted from email {email_id} ({email.get('date', 'unknown date')})"
 
-            if existing:
-                # Merge with existing blob
-                logger.debug(f"Found existing blob {existing.blob_id} for reconsolidation (score={existing.hybrid_score:.2f})")
-                merged_content = self.llm_merge.merge(existing.content, facts)
+            for i, entity_content in enumerate(entities):
+                await self._upsert_entity(entity_content, event_desc, email_id, i + 1, len(entities))
 
-                self.blob_storage.update_blob(
-                    blob_id=existing.blob_id,
-                    owner_id=self.owner_id,
-                    content=merged_content,
-                    event_description=event_desc
-                )
-                logger.info(f"Reconsolidated blob {existing.blob_id} with email {email_id}")
-            else:
-                # Create new blob
-                blob = self.blob_storage.store_blob(
-                    owner_id=self.owner_id,
-                    namespace=self.namespace,
-                    content=facts,
-                    event_description=event_desc
-                )
-                logger.info(f"Created new blob {blob['id']} from email {email_id}")
-
-            # Step 4: Mark email as processed
+            # Step 3: Mark email as processed
             self.storage.mark_email_processed(self.owner_id, email_id)
             return True
 
         except Exception as e:
             logger.error(f"Error processing email {email_id}: {e}", exc_info=True)
             return False
+
+    async def _upsert_entity(
+        self,
+        entity_content: str,
+        event_desc: str,
+        email_id: str,
+        entity_num: int,
+        total_entities: int
+    ) -> None:
+        """Upsert a single entity blob with reconsolidation.
+
+        Args:
+            entity_content: The entity blob content
+            event_desc: Event description for the blob
+            email_id: Source email ID (for logging)
+            entity_num: Which entity this is (1-indexed)
+            total_entities: Total entities from this email
+        """
+        # Search for existing blob about this entity
+        existing = self.hybrid_search.find_for_reconsolidation(
+            owner_id=self.owner_id,
+            content=entity_content,
+            namespace=self.namespace
+        )
+
+        if existing:
+            # Merge with existing blob
+            logger.debug(f"Found existing blob {existing.blob_id} for reconsolidation (score={existing.hybrid_score:.2f})")
+            merged_content = self.llm_merge.merge(existing.content, entity_content)
+
+            self.blob_storage.update_blob(
+                blob_id=existing.blob_id,
+                owner_id=self.owner_id,
+                content=merged_content,
+                event_description=event_desc
+            )
+            logger.info(f"Reconsolidated blob {existing.blob_id} with email {email_id} (entity {entity_num}/{total_entities})")
+        else:
+            # Create new blob
+            blob = self.blob_storage.store_blob(
+                owner_id=self.owner_id,
+                namespace=self.namespace,
+                content=entity_content,
+                event_description=event_desc
+            )
+            logger.info(f"Created new blob {blob['id']} from email {email_id} (entity {entity_num}/{total_entities})")
 
     async def process_batch(self, emails: List[Dict]) -> int:
         """Process batch of emails.
@@ -205,24 +230,25 @@ class MemoryWorker:
         logger.info(f"Batch complete: {processed}/{len(emails)} processed")
         return processed
 
-    def _extract_facts(self, email: Dict, contact_email: str) -> str:
+    def _extract_entities(self, email: Dict, contact_email: str) -> List[str]:
         """Extract entities from email using LLM.
 
         Requires user's custom prompt (from /agent train email).
+        Returns a list of entity blobs (one per entity found).
 
         Args:
             email: Email dict
             contact_email: Email address of the contact
 
         Returns:
-            Extracted entity as string, or empty string if no prompt configured
+            List of extracted entity blobs, or empty list if no prompt configured or SKIP
         """
         try:
             # Get the extraction prompt (user's custom only, no default)
             prompt_template = self._get_extraction_prompt()
             if not prompt_template:
                 logger.warning("Skipping extraction - no custom prompt configured")
-                return ""
+                return []
 
             # Get email body, prefer body_plain, fall back to snippet
             body = email.get("body_plain", "") or email.get("snippet", "")
@@ -246,14 +272,49 @@ class MemoryWorker:
 
             response = self.anthropic.messages.create(
                 model="claude-3-5-haiku-20241022",
-                max_tokens=512,
+                max_tokens=1024,  # Increased for multiple entities
                 messages=[{"role": "user", "content": prompt}]
             )
-            return response.content[0].text.strip()
+            raw_output = response.content[0].text.strip()
+
+            # Check for SKIP
+            if raw_output.upper() == "SKIP":
+                return []
+
+            # Split by entity delimiter
+            entities = self._parse_entities(raw_output)
+            return entities
 
         except Exception as e:
-            logger.error(f"Failed to extract facts: {e}")
-            return ""
+            logger.error(f"Failed to extract entities: {e}")
+            return []
+
+    def _parse_entities(self, raw_output: str) -> List[str]:
+        """Parse LLM output into separate entity blobs.
+
+        Args:
+            raw_output: Raw LLM output potentially containing multiple entities
+
+        Returns:
+            List of entity blob strings
+        """
+        # Split by the entity delimiter
+        ENTITY_DELIMITER = "---ENTITY---"
+
+        if ENTITY_DELIMITER in raw_output:
+            parts = raw_output.split(ENTITY_DELIMITER)
+        else:
+            # Single entity or old format - treat as one
+            parts = [raw_output]
+
+        entities = []
+        for part in parts:
+            part = part.strip()
+            # Validate it looks like an entity blob (has #Identifiers)
+            if part and "#Identifiers" in part:
+                entities.append(part)
+
+        return entities
 
     async def process_calendar_event(self, event: Dict) -> bool:
         """Process single calendar event to extract and store facts.
