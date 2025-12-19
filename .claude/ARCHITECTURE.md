@@ -238,7 +238,7 @@ Interactive command-line interface:
 - `/sync` - Sync emails, calendar, pipedrive (data only, no processing)
 - `/email list|create|send|delete|search` - Email and draft management
 - `/agent train email` - Generate personalized extraction agent from email patterns
-- `/memory process` - Extract facts from synced data into blobs (uses personalized prompt)
+- `/agent process` - Extract facts from synced data into blobs (uses personalized agent)
 - `/memory search` - Search entity memories
 - `/gaps` - Show relationship gaps
 - Natural conversation with agent
@@ -249,7 +249,7 @@ Interactive command-line interface:
 ```
 Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
                                           ↓
-                              /memory process (MemoryWorker)
+                              /agent process (MemoryWorker)
                                           ↓
                            Extract facts via Haiku LLM
                                           ↓
@@ -269,9 +269,9 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
 
 **Commands**:
 - `/sync` - Fetches data to local DB (no processing)
-- `/memory process` - Process all unprocessed data into blobs
-- `/memory process email` - Process only emails
-- `/memory process calendar` - Process only calendar events
+- `/agent process` - Process all unprocessed data into blobs
+- `/agent process email` - Process only emails
+- `/agent process calendar` - Process only calendar events
 - `/memory search <query>` - Hybrid FTS + semantic search
 - `/memory --reset` - Delete blobs AND reset processing timestamps
 
@@ -790,7 +790,7 @@ Claude Sonnet generates personalized agent
     ↓
 Stored in agent_prompts table
     ↓
-/memory process email uses personalized agent
+/agent process email uses personalized agent
 ```
 
 ### Commands
@@ -798,12 +798,14 @@ Stored in agent_prompts table
 | Command | Purpose |
 |---------|---------|
 | `/agent train email` | Analyze email patterns and generate personalized agent |
+| `/agent process` | Process all data into memory (uses personalized agent) |
+| `/agent process email` | Process only emails |
 | `/agent show email` | Display current personalized agent |
 | `/agent reset email` | Delete custom agent |
 
 ### Gate on Memory Processing
 
-When user runs `/memory process email` without a custom agent, they see a recommendation:
+When user runs `/agent process email` without a custom agent, they see a recommendation:
 ```
 ⚠️ No personalized extraction agent found
 
