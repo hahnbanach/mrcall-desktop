@@ -437,7 +437,7 @@ Body preview: {body}
             frequent_contacts=contacts_text
         )
 
-        logger.info("Generating personalized prompt with Claude...")
+        logger.info("Training email analyzer agent...")
 
         response = self.anthropic.messages.create(
             model="claude-sonnet-4-20250514",
