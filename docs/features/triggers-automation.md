@@ -480,7 +480,7 @@ asyncio.run(main())
 
 ## Related Documentation
 
-- **[Memory System](memory-system.md)** - Always-on behavioral memory (vs event-driven triggers)
+- **[Entity Memory System](entity-memory-system.md)** - Entity-centric memory with hybrid search
 - **[Email Archive](email-archive.md)** - Source of `email_received` events
 - **[Webhook Integration](../../zylch/api/routes/webhooks.py)** - Webhook handlers that queue events
 - **[Architecture](../../.claude/ARCHITECTURE.md#automation)** - Automation layer design

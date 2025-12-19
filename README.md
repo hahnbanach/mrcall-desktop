@@ -208,7 +208,7 @@ Zylch AI provides HTTP API endpoints for web/mobile integration. See `docs/api/c
 - [Email Archive](docs/features/email-archive.md) - Two-tier email storage system
 - [Relationship Intelligence](docs/features/relationship-intelligence.md) - Person-centric gap detection
 - [Avatar Aggregation](docs/features/avatar-aggregation.md) - Contact intelligence system
-- [Memory System](docs/features/memory-system.md) - Behavioral memory with reconsolidation
+- [Entity Memory System](docs/features/entity-memory-system.md) - Entity-centric memory with hybrid search
 - [Triggers & Automation](docs/features/triggers-automation.md) - Event-driven automation
 - [Sharing System](docs/features/sharing-system.md) - Team intelligence sharing
 - [MrCall Integration](docs/features/mrcall-integration.md) - Telephony & WhatsApp

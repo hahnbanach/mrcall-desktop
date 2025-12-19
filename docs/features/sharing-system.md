@@ -655,7 +655,7 @@ Revoke an accepted authorization.
 
 ## Related Documentation
 
-- **[Memory System](memory-system.md)** - ZylchMemory namespace architecture used for shared intel storage
+- **[Entity Memory System](entity-memory-system.md)** - Entity-centric memory with hybrid search
 - **[Relationship Intelligence](relationship-intelligence.md)** - Contact intelligence enriched by shared intel
 - **[Avatar Aggregation](avatar-aggregation.md)** - Person-centric contact profiles that include shared intel
 - **[Architecture](../../.claude/ARCHITECTURE.md#sharing-system)** - Sharing system design philosophy
