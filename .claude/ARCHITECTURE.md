@@ -237,7 +237,7 @@ Hybrid: 0.85 → "/sync 2"
 Interactive command-line interface:
 - `/sync` - Sync emails, calendar, pipedrive (data only, no processing)
 - `/email list|create|send|delete|search` - Email and draft management
-- `/train build memory-email` - Generate personalized extraction prompt from email patterns
+- `/train build email` - Generate personalized extraction prompt from email patterns
 - `/memory process` - Extract facts from synced data into blobs (uses personalized prompt)
 - `/memory search` - Search entity memories
 - `/gaps` - Show relationship gaps
@@ -757,7 +757,7 @@ The default memory extraction prompt uses generic rules for classifying emails (
 
 ### Solution: Learn from User's Email Patterns
 
-The `/train build memory-email` command analyzes the user's recent emails (up to 100) to understand their communication context:
+The `/train build email` command analyzes the user's recent emails (up to 100) to understand their communication context:
 
 1. **Recent emails** = Sample of communication patterns, contacts, topics
 2. **User's sent emails** = Role, business context, signature patterns
@@ -779,7 +779,7 @@ The LLM judges email importance based on **tone and content** (not reply history
 ```
 /sync → emails stored in DB
     ↓
-/train build memory-email
+/train build email
     ↓
 PromptBuilder analyzes:
   - 100 recent emails (sample)
@@ -797,9 +797,9 @@ Stored in user_prompts table
 
 | Command | Purpose |
 |---------|---------|
-| `/train build memory-email` | Analyze email patterns and generate personalized prompt |
-| `/train show memory-email` | Display current personalized prompt |
-| `/train reset memory-email` | Delete custom prompt, revert to default |
+| `/train build email` | Analyze email patterns and generate personalized prompt |
+| `/train show email` | Display current personalized prompt |
+| `/train reset email` | Delete custom prompt, revert to default |
 
 ### Gate on Memory Processing
 
@@ -808,7 +808,7 @@ When user runs `/memory process email` without a custom prompt, they see a recom
 ⚠️ No personalized extraction prompt found
 
 For better memory extraction, create a personalized prompt first:
-/train build memory-email
+/train build email
 ```
 
 ### Database
