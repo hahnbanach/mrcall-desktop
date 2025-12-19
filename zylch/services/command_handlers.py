@@ -269,7 +269,7 @@ Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
             if has_custom_prompt:
                 lines.append("\n✅ **Done!** Run `/memory process` to extract memories.")
             else:
-                lines.append("\n✅ **Done!** Run `/train build memory-email` then `/memory process`.")
+                lines.append("\n✅ **Done!** Run `/train build email` then `/memory process`.")
         return "\n".join(lines)
 
     except Exception as e:
@@ -404,19 +404,19 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 **Before processing emails:**
 First, create a personalized extraction prompt:
 ```
-/train build memory-email
+/train build email
 ```
 This learns YOUR patterns for better cold outreach detection and VIP prioritization.
 
 **Examples:**
-• `/train build memory-email` - Create personalized prompt first
+• `/train build email` - Create personalized prompt first
 • `/memory process email` - Process emails with your custom prompt
 • `/memory search John Smith`
 • `/memory store "Mario prefers formal Italian in emails"`
 
 **How it works:**
 1. `/sync` fetches emails, calendar, and Pipedrive
-2. `/train build memory-email` learns your patterns (recommended)
+2. `/train build email` learns your patterns (recommended)
 3. `/memory process` extracts facts using personalized prompt
 4. `/memory search` finds information using hybrid FTS + semantic search"""
 
@@ -468,7 +468,7 @@ Connect your Anthropic account:
 For better memory extraction, create a personalized prompt first:
 
 ```
-/train build memory-email
+/train build email
 ```
 
 This analyzes your email patterns to understand:
@@ -1784,13 +1784,13 @@ Run `/sync` first to fetch latest emails.''',
         'description': '''Build and manage personalized prompts that learn from your email patterns.
 
 **Usage:**
-- `/train build memory-email` - Analyze your emails to create personalized extraction prompt
-- `/train show memory-email` - Display your current prompt
-- `/train reset memory-email` - Delete custom prompt, return to default
+- `/train build email` - Analyze your emails to create personalized extraction prompt
+- `/train show email` - Display your current prompt
+- `/train reset email` - Delete custom prompt, return to default
 
 **How it works:**
 1. Run `/sync` to sync your email history
-2. `/train build memory-email` analyzes patterns:
+2. `/train build email` analyzes patterns:
    - Who you reply to (VIP contacts)
    - What you ignore (cold outreach)
    - Your role and business context
@@ -2106,13 +2106,13 @@ async def handle_train(args: List[str], config: ToolConfig, owner_id: str) -> st
         return """**🎓 Train Personalized Prompts**
 
 **Usage:**
-• `/train build memory-email` - Analyze your emails and create personalized extraction prompt
-• `/train show memory-email` - Show your current email memory prompt
-• `/train reset memory-email` - Reset to default prompt
+• `/train build email` - Analyze your emails and create personalized extraction prompt
+• `/train show email` - Show your current email memory prompt
+• `/train reset email` - Reset to default prompt
 
 **How it works:**
 1. Run `/sync` first to ensure emails are available
-2. `/train build memory-email` analyzes your sent/received patterns
+2. `/train build email` analyzes your sent/received patterns
 3. Creates a personalized prompt that understands:
    - Who matters to you (VIP contacts)
    - What to extract from their emails
@@ -2132,14 +2132,14 @@ async def handle_train(args: List[str], config: ToolConfig, owner_id: str) -> st
 
         # Normalize prompt type
         prompt_type_normalized = None
-        if prompt_type == 'memory-email':
+        if prompt_type == 'email':
             prompt_type_normalized = 'memory_email'
         elif prompt_type:
-            return f"❌ Unknown prompt type: `{prompt_type}`\n\nAvailable types: `memory-email`"
+            return f"❌ Unknown prompt type: `{prompt_type}`\n\nAvailable types: `email`"
 
         if cmd == 'build':
             if not prompt_type_normalized:
-                return "❌ Missing prompt type.\n\nUsage: `/train build memory-email`"
+                return "❌ Missing prompt type.\n\nUsage: `/train build email`"
 
             if prompt_type_normalized == 'memory_email':
                 # Check sync status first
@@ -2148,7 +2148,7 @@ async def handle_train(args: List[str], config: ToolConfig, owner_id: str) -> st
                     return """❌ **Please sync your emails first**
 
 Run `/sync` to synchronize your email history.
-Then run `/train build memory-email` again."""
+Then run `/train build email` again."""
 
                 # Check email count
                 emails = storage.get_emails(owner_id, limit=1)
@@ -2194,12 +2194,12 @@ Please ensure your account is properly connected via `/connect`."""
 - How to assess importance from tone/content
 
 **Next steps:**
-- `/train show memory-email` to review the prompt
+- `/train show email` to review the prompt
 - `/memory process email` to extract memories using this prompt"""
 
         elif cmd == 'show':
             if not prompt_type_normalized:
-                return "❌ Missing prompt type.\n\nUsage: `/train show memory-email`"
+                return "❌ Missing prompt type.\n\nUsage: `/train show email`"
 
             prompt_content = storage.get_user_prompt(owner_id, prompt_type_normalized)
             if not prompt_content:
@@ -2227,11 +2227,11 @@ Create one with:
 {display_content}
 ---
 
-_Use `/train reset memory-email` to delete and return to default._"""
+_Use `/train reset email` to delete and return to default._"""
 
         elif cmd == 'reset':
             if not prompt_type_normalized:
-                return "❌ Missing prompt type.\n\nUsage: `/train reset memory-email`"
+                return "❌ Missing prompt type.\n\nUsage: `/train reset email`"
 
             deleted = storage.delete_user_prompt(owner_id, prompt_type_normalized)
             if deleted:
@@ -2248,9 +2248,9 @@ Recreate with: `/train build {prompt_type}`"""
             return f"""❌ Unknown subcommand: `{cmd}`
 
 **Available commands:**
-- `/train build memory-email`
-- `/train show memory-email`
-- `/train reset memory-email`"""
+- `/train build email`
+- `/train show email`
+- `/train reset email`"""
 
     except Exception as e:
         logger.error(f"Error in /train: {e}", exc_info=True)

@@ -1,4 +1,4 @@
-# Plan: `/prompt build memory-email` Command
+# Plan: `/prompt build email` Command
 
 ## Overview
 
@@ -141,9 +141,9 @@ Output ONLY the prompt text, nothing else."""
 **File:** `zylch/services/command_handlers.py`
 
 Add `/prompt` command with subcommands:
-- `/prompt build memory-email` - Generate personalized email memory prompt
-- `/prompt show memory-email` - Display current prompt
-- `/prompt reset memory-email` - Delete and return to default
+- `/prompt build email` - Generate personalized email memory prompt
+- `/prompt show email` - Display current prompt
+- `/prompt reset email` - Delete and return to default
 
 ```python
 async def handle_prompt(args: List[str], config: ToolConfig, owner_id: str) -> str:
@@ -153,20 +153,20 @@ async def handle_prompt(args: List[str], config: ToolConfig, owner_id: str) -> s
         return """**📝 Prompt Management**
 
 **Usage:**
-• `/prompt build memory-email` - Analyze your emails and create personalized extraction prompt
-• `/prompt show memory-email` - Show your current email memory prompt
-• `/prompt reset memory-email` - Reset to default prompt
+• `/prompt build email` - Analyze your emails and create personalized extraction prompt
+• `/prompt show email` - Show your current email memory prompt
+• `/prompt reset email` - Reset to default prompt
 
 **How it works:**
 1. Run `/sync` first to ensure emails are available
-2. `/prompt build memory-email` analyzes your sent/received patterns
+2. `/prompt build email` analyzes your sent/received patterns
 3. Creates a personalized prompt stored in your account
 4. `/memory process email` uses this prompt for extraction"""
 
     cmd = args[0]
     prompt_type = args[1] if len(args) > 1 else None
 
-    if cmd == 'build' and prompt_type == 'memory-email':
+    if cmd == 'build' and prompt_type == 'email':
         # Check sync status first
         sync_state = storage.get_sync_state(owner_id)
         if not sync_state or not sync_state.get('full_sync_completed'):
@@ -197,7 +197,7 @@ Analyzed {email_count} emails to learn your patterns.
 - Topics you engage with
 - Cold outreach patterns to ignore
 
-Use `/prompt show memory-email` to review.
+Use `/prompt show email` to review.
 Use `/memory process email` to extract memories using this prompt."""
 ```
 
@@ -231,7 +231,7 @@ When user runs `/memory process email` without a custom prompt, show:
 ⚠️ **No personalized prompt found**
 
 For better results, create a personalized extraction prompt first:
-  `/prompt build memory-email`
+  `/prompt build email`
 
 This analyzes your email patterns to understand:
 - Who matters to you
@@ -257,13 +257,13 @@ Continue with default prompt? (less accurate for cold outreach detection)
 
 ## Testing Plan
 
-1. **No emails synced:** `/prompt build memory-email` → Error message
-2. **Few emails:** `/prompt build memory-email` → Error, suggest more sync
+1. **No emails synced:** `/prompt build email` → Error message
+2. **Few emails:** `/prompt build email` → Error, suggest more sync
 3. **Sufficient emails:** Generate prompt, store in DB, confirm success
-4. **Show prompt:** `/prompt show memory-email` → Display stored prompt
+4. **Show prompt:** `/prompt show email` → Display stored prompt
 5. **Memory process without prompt:** Show warning/gate
 6. **Memory process with prompt:** Use personalized prompt for extraction
-7. **Reset:** `/prompt reset memory-email` → Delete, confirm
+7. **Reset:** `/prompt reset email` → Delete, confirm
 
 ---
 

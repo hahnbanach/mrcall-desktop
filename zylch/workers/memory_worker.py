@@ -83,7 +83,7 @@ class MemoryWorker:
         """Get extraction prompt - user-specific only.
 
         Loads user's custom prompt from DB on first call, caches for subsequent calls.
-        Returns None if no custom prompt exists (user must run /train build memory-email first).
+        Returns None if no custom prompt exists (user must run /train build email first).
 
         Returns:
             The extraction prompt, or None if not configured
@@ -95,7 +95,7 @@ class MemoryWorker:
             if self._custom_prompt:
                 logger.info("Using user's custom memory_email prompt")
             else:
-                logger.warning("No custom prompt found - user must run /train build memory-email first")
+                logger.warning("No custom prompt found - user must run /train build email first")
 
         return self._custom_prompt
 
@@ -208,7 +208,7 @@ class MemoryWorker:
     def _extract_facts(self, email: Dict, contact_email: str) -> str:
         """Extract entities from email using LLM.
 
-        Requires user's custom prompt (from /train build memory-email).
+        Requires user's custom prompt (from /train build email).
 
         Args:
             email: Email dict
