@@ -2100,6 +2100,7 @@ async def handle_train(args: List[str], config: ToolConfig, owner_id: str) -> st
     """Handle /train command - train personalized prompts from user data."""
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch.services.prompt_builder import PromptBuilder
+    from zylch.api.token_storage import get_email
 
     if '--help' in args or not args:
         return """**🎓 Train Personalized Prompts**
@@ -2166,8 +2167,16 @@ Need at least some emails to analyze patterns."""
 Connect your Anthropic account:
 `/connect anthropic`"""
 
+                # Get user's email address
+                user_email = get_email(owner_id)
+                if not user_email:
+                    return """❌ **User email not found**
+
+Your email address is required to identify sent vs received emails.
+Please ensure your account is properly connected via `/connect`."""
+
                 # Build the prompt
-                builder = PromptBuilder(storage, owner_id, anthropic_key)
+                builder = PromptBuilder(storage, owner_id, anthropic_key, user_email)
                 prompt_content, metadata = await builder.build_memory_email_prompt()
 
                 # Store in DB

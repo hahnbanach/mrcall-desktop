@@ -24,6 +24,7 @@ DEFAULT_EXTRACT_FACTS_PROMPT = """Extract key facts about the contact from this 
 
 FROM: {from_email}
 TO: {to_email}
+CC: {cc_email}
 SUBJECT: {subject}
 DATE: {date}
 
@@ -246,9 +247,17 @@ class MemoryWorker:
             # Get the extraction prompt (user's custom or default)
             prompt_template = self._get_extraction_prompt()
 
+            # Format cc_email (may be list or string or None)
+            cc_raw = email.get("cc_email") or email.get("cc") or []
+            if isinstance(cc_raw, list):
+                cc_email = ", ".join(cc_raw) if cc_raw else "(none)"
+            else:
+                cc_email = cc_raw if cc_raw else "(none)"
+
             prompt = prompt_template.format(
                 from_email=email.get("from_email", "unknown"),
                 to_email=", ".join(email.get("to_email", [])) if isinstance(email.get("to_email"), list) else email.get("to_email", "unknown"),
+                cc_email=cc_email,
                 subject=email.get("subject", "(no subject)"),
                 date=email.get("date", "unknown"),
                 body=body[:4000],  # Limit body size

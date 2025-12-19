@@ -78,6 +78,7 @@ The prompt must include:
 The generated prompt will receive these template variables:
 - {{from_email}} - Sender's email
 - {{to_email}} - Recipient(s)
+- {{cc_email}} - CC recipients (or "(none)" if empty)
 - {{subject}} - Email subject
 - {{date}} - Email date
 - {{body}} - Email body (truncated)
@@ -93,7 +94,8 @@ class PromptBuilder:
         self,
         storage: SupabaseStorage,
         owner_id: str,
-        anthropic_api_key: str
+        anthropic_api_key: str,
+        user_email: str
     ):
         """Initialize PromptBuilder.
 
@@ -101,10 +103,13 @@ class PromptBuilder:
             storage: SupabaseStorage instance
             owner_id: Firebase UID
             anthropic_api_key: Anthropic API key for LLM calls
+            user_email: User's email address (for identifying sent vs received)
         """
         self.storage = storage
         self.owner_id = owner_id
         self.anthropic = anthropic.Anthropic(api_key=anthropic_api_key)
+        self.user_email = user_email.lower() if user_email else ''
+        self.user_domain = user_email.split('@')[1].lower() if user_email and '@' in user_email else ''
 
     async def build_memory_email_prompt(self) -> Tuple[str, Dict[str, Any]]:
         """Analyze user's emails and generate personalized extraction prompt.
@@ -114,9 +119,9 @@ class PromptBuilder:
         """
         logger.info(f"Building memory email prompt for {self.owner_id}")
 
-        # Step 1: Get user's email domain (to identify their own emails)
-        user_domain = self._get_user_domain()
-        logger.info(f"User domain: {user_domain}")
+        # Use user_domain from constructor (derived from user_email parameter)
+        user_domain = self.user_domain
+        logger.info(f"User email: {self.user_email}, domain: {user_domain}")
 
         # Step 2: Sample emails - replied vs ignored
         replied_threads = self._get_replied_threads(user_domain, limit=50)
@@ -156,33 +161,6 @@ class PromptBuilder:
         }
 
         return prompt_content, metadata
-
-    def _get_user_domain(self) -> str:
-        """Get user's email domain from their sent emails."""
-        # Query emails where user is the sender (check to_emails exists and from_email matches owner patterns)
-        # We'll look at emails where from_email contains common user patterns
-        emails = self.storage.get_emails(self.owner_id, limit=100)
-
-        # Count from_email domains where user appears to be sender
-        # (emails going OUT have user's email in from_email)
-        domain_counts: Counter = Counter()
-
-        for email in emails:
-            from_email = email.get('from_email', '')
-            if '@' in from_email:
-                domain = from_email.split('@')[1].lower()
-                # Skip common email providers - we want the user's business domain
-                if domain not in ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com']:
-                    domain_counts[domain] += 1
-
-        # Also check the most common domain in to_emails patterns
-        # The user's domain likely appears frequently
-
-        if domain_counts:
-            return domain_counts.most_common(1)[0][0]
-
-        # Fallback: return empty string
-        return ''
 
     def _get_replied_threads(self, user_domain: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Get email threads where the user replied (high-value relationships).
