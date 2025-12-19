@@ -116,10 +116,9 @@ class ToolFactory:
             current_business_id: Current StarChat business ID for contact tools
 
         Returns:
-            Tuple of (tools, session_state, persona_analyzer):
+            Tuple of (tools, session_state):
             - tools: List of initialized tool instances
             - session_state: SessionState for runtime updates
-            - persona_analyzer: PersonaAnalyzer for user persona learning
 
         Raises:
             Exception: If required services fail to initialize

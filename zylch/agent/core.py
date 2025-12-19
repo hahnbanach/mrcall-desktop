@@ -193,13 +193,7 @@ class ZylchAIAgent:
             "content": assistant_message
         })
 
-        # Post-message hook: trigger background persona analysis
         self.message_count += 1
-        if self.persona_analyzer:
-            self.persona_analyzer.analyze_conversation(
-                self.conversation_history,
-                self.message_count
-            )
 
         return assistant_message
 
