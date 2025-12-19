@@ -343,9 +343,9 @@ memories = zylch_memory.retrieve_memories(
     {
         "id": "UUID888",
         "namespace": "user:mario_123",
-        "content": "John Doe is our contact at Newco and has become a customer. He prefers email communication.",
+        "content": "#Identifiers\n\nEntity type: Person.\nName: John Doe.\nEmail: john.doe@newco.com.\nLinkedIn Profile: linkedin.com/in/johndoe.\n\n#About\n\nJohn is our contact at Newco and has become a customer. He prefers email communication.",
         "hybrid_score": 0.92,
-        "matching_sentences": ["John Doe is our contact at Newco and has become a customer."]
+        "matching_sentences": ["John is our contact at Newco and has become a customer."]
     }
 ]
 ```
