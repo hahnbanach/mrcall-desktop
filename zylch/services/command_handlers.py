@@ -265,11 +265,11 @@ Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
         else:
             # Check if user has trained a custom prompt
             storage = SupabaseStorage.get_instance()
-            has_custom_prompt = storage.get_user_prompt(owner_id, 'memory_email') is not None
+            has_custom_prompt = storage.get_agent_prompt(owner_id, 'email') is not None
             if has_custom_prompt:
                 lines.append("\n✅ **Done!** Run `/memory process` to extract memories.")
             else:
-                lines.append("\n✅ **Done!** Run `/train build email` then `/memory process`.")
+                lines.append("\n✅ **Done!** Run `/agent train email` then `/memory process`.")
         return "\n".join(lines)
 
     except Exception as e:
@@ -402,22 +402,22 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 • `/memory --reset` - Delete ALL memories AND reset processing timestamps
 
 **Before processing emails:**
-First, create a personalized extraction prompt:
+First, create a personalized extraction agent:
 ```
-/train build email
+/agent train email
 ```
 This learns YOUR patterns for better cold outreach detection and VIP prioritization.
 
 **Examples:**
-• `/train build email` - Create personalized prompt first
-• `/memory process email` - Process emails with your custom prompt
+• `/agent train email` - Create personalized agent first
+• `/memory process email` - Process emails with your custom agent
 • `/memory search John Smith`
 • `/memory store "Mario prefers formal Italian in emails"`
 
 **How it works:**
 1. `/sync` fetches emails, calendar, and Pipedrive
-2. `/train build email` learns your patterns (recommended)
-3. `/memory process` extracts facts using personalized prompt
+2. `/agent train email` learns your patterns (recommended)
+3. `/memory process` extracts entities using personalized agent
 4. `/memory search` finds information using hybrid FTS + semantic search"""
 
     from zylch.storage.supabase_client import SupabaseStorage
@@ -463,12 +463,12 @@ Connect your Anthropic account:
                 # Show recommendation to build custom prompt first
                 unprocessed_count = len(storage.get_unprocessed_emails(owner_id, limit=1))
                 if unprocessed_count > 0:
-                    return """⚠️ **No personalized extraction prompt found**
+                    return """⚠️ **No personalized extraction agent found**
 
-For better memory extraction, create a personalized prompt first:
+For better memory extraction, create a personalized agent first:
 
 ```
-/train build email
+/agent train email
 ```
 
 This analyzes your email patterns to understand:
@@ -476,7 +476,7 @@ This analyzes your email patterns to understand:
 - **What to ignore** (cold outreach specific to you)
 - **Your role/context** (founder vs investor vs engineer)
 
-The personalized prompt significantly improves:
+The personalized agent significantly improves:
 - Cold outreach detection
 - Relevant fact extraction
 - VIP contact prioritization"""
@@ -1778,28 +1778,28 @@ Run `/sync` first to fetch latest emails.''',
         'usage': '/jobs [--cancel <id>]',
         'description': 'Lists scheduled reminders and jobs. Use `--cancel <id>` to cancel a job.',
     },
-    '/train': {
-        'summary': 'Train personalized prompts from your data',
-        'usage': '/train [build|show|reset] <type>',
-        'description': '''Build and manage personalized prompts that learn from your email patterns.
+    '/agent': {
+        'summary': 'Manage AI agents for data extraction',
+        'usage': '/agent [train|show|reset] <type>',
+        'description': '''Build and manage personalized agents that learn from your data patterns.
 
 **Usage:**
-- `/train build email` - Analyze your emails to create personalized extraction prompt
-- `/train show email` - Display your current prompt
-- `/train reset email` - Delete custom prompt, return to default
+- `/agent train email` - Analyze your emails to create personalized extraction agent
+- `/agent show email` - Display your current agent
+- `/agent reset email` - Delete custom agent
 
 **How it works:**
 1. Run `/sync` to sync your email history
-2. `/train build email` analyzes patterns:
+2. `/agent train email` analyzes patterns:
    - Who you reply to (VIP contacts)
    - What you ignore (cold outreach)
    - Your role and business context
-3. Creates a personalized prompt stored in your account
-4. `/memory process email` uses this prompt for smarter extraction
+3. Creates a personalized agent stored in your account
+4. `/memory process email` uses this agent for smarter extraction
 
 **Why personalize?**
 - Better cold outreach detection specific to YOU
-- VIP contacts get detailed fact extraction
+- VIP contacts get detailed entity extraction
 - Your role/context understood (founder vs investor vs engineer)
 - Significantly improved memory quality''',
     },
@@ -2096,28 +2096,28 @@ Shows your scheduled reminders and jobs.
         return f"❌ **Error:** {str(e)}"
 
 
-async def handle_train(args: List[str], config: ToolConfig, owner_id: str) -> str:
-    """Handle /train command - train personalized prompts from user data."""
+async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> str:
+    """Handle /agent command - manage personalized agents for data extraction."""
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch.services.prompt_builder import PromptBuilder
+    from zylch.services.email_agent_builder import EmailAgentBuilder
     from zylch.api.token_storage import get_email
 
     if '--help' in args or not args:
-        return """**🎓 Train Personalized Prompts**
+        return """**🤖 Manage AI Agents**
 
 **Usage:**
-• `/train build email` - Analyze your emails and create personalized extraction prompt
-• `/train show email` - Show your current email memory prompt
-• `/train reset email` - Reset to default prompt
+• `/agent train email` - Analyze your emails and create personalized extraction agent
+• `/agent show email` - Show your current email agent
+• `/agent reset email` - Delete custom agent
 
 **How it works:**
 1. Run `/sync` first to ensure emails are available
-2. `/train build email` analyzes your sent/received patterns
-3. Creates a personalized prompt that understands:
+2. `/agent train email` analyzes your sent/received patterns
+3. Creates a personalized agent that understands:
    - Who matters to you (VIP contacts)
    - What to extract from their emails
    - What to ignore (cold outreach, etc.)
-4. `/memory process email` uses this prompt for extraction
+4. `/memory process email` uses this agent for extraction
 
 **Why personalize?**
 - The system learns YOUR patterns, not generic rules
@@ -2128,27 +2128,24 @@ async def handle_train(args: List[str], config: ToolConfig, owner_id: str) -> st
     try:
         storage = SupabaseStorage.get_instance()
         cmd = args[0].lower()
-        prompt_type = args[1].lower() if len(args) > 1 else None
+        agent_type = args[1].lower() if len(args) > 1 else None
 
-        # Normalize prompt type
-        prompt_type_normalized = None
-        if prompt_type == 'email':
-            prompt_type_normalized = 'memory_email'
-        elif prompt_type:
-            return f"❌ Unknown prompt type: `{prompt_type}`\n\nAvailable types: `email`"
+        # Validate agent type
+        if agent_type and agent_type != 'email':
+            return f"❌ Unknown agent type: `{agent_type}`\n\nAvailable types: `email`"
 
-        if cmd == 'build':
-            if not prompt_type_normalized:
-                return "❌ Missing prompt type.\n\nUsage: `/train build email`"
+        if cmd == 'train':
+            if not agent_type:
+                return "❌ Missing agent type.\n\nUsage: `/agent train email`"
 
-            if prompt_type_normalized == 'memory_email':
+            if agent_type == 'email':
                 # Check sync status first
                 sync_state = storage.get_sync_state(owner_id)
                 if not sync_state or not sync_state.get('full_sync_completed'):
                     return """❌ **Please sync your emails first**
 
 Run `/sync` to synchronize your email history.
-Then run `/train build email` again."""
+Then run `/agent train email` again."""
 
                 # Check email count
                 emails = storage.get_emails(owner_id, limit=1)
@@ -2175,14 +2172,14 @@ Connect your Anthropic account:
 Your email address is required to identify sent vs received emails.
 Please ensure your account is properly connected via `/connect`."""
 
-                # Build the prompt
-                builder = PromptBuilder(storage, owner_id, anthropic_key, user_email)
-                prompt_content, metadata = await builder.build_memory_email_prompt()
+                # Build the agent
+                builder = EmailAgentBuilder(storage, owner_id, anthropic_key, user_email)
+                agent_prompt, metadata = await builder.build_memory_email_prompt()
 
                 # Store in DB
-                storage.store_user_prompt(owner_id, 'memory_email', prompt_content, metadata)
+                storage.store_agent_prompt(owner_id, 'email', agent_prompt, metadata)
 
-                return f"""✅ **Email memory prompt created**
+                return f"""✅ **Email agent created**
 
 **Analyzed:**
 - {metadata.get('emails_analyzed', 0)} recent emails
@@ -2194,66 +2191,65 @@ Please ensure your account is properly connected via `/connect`."""
 - How to assess importance from tone/content
 
 **Next steps:**
-- `/train show email` to review the prompt
-- `/memory process email` to extract memories using this prompt"""
+- `/agent show email` to review the agent
+- `/memory process email` to extract entities using this agent"""
 
         elif cmd == 'show':
-            if not prompt_type_normalized:
-                return "❌ Missing prompt type.\n\nUsage: `/train show email`"
+            if not agent_type:
+                return "❌ Missing agent type.\n\nUsage: `/agent show email`"
 
-            prompt_content = storage.get_user_prompt(owner_id, prompt_type_normalized)
-            if not prompt_content:
-                return f"""❌ **No custom prompt found for `{prompt_type}`**
+            agent_prompt = storage.get_agent_prompt(owner_id, agent_type)
+            if not agent_prompt:
+                return f"""❌ **No custom agent found for `{agent_type}`**
 
 Create one with:
-`/train build {prompt_type}`"""
+`/agent train {agent_type}`"""
 
             # Get metadata too
-            meta = storage.get_user_prompt_metadata(owner_id, prompt_type_normalized)
+            meta = storage.get_agent_prompt_metadata(owner_id, agent_type)
             meta_info = ""
             if meta:
                 metadata = meta.get('metadata', {})
                 created = meta.get('created_at', '')[:10] if meta.get('created_at') else 'unknown'
-                meta_info = f"\n_Created: {created} | VIPs: {metadata.get('vip_contacts_count', 'N/A')} | Noise patterns: {metadata.get('noise_patterns_count', 'N/A')}_\n"
+                meta_info = f"\n_Created: {created} | Frequent contacts: {metadata.get('frequent_contacts_count', 'N/A')}_\n"
 
             # Truncate if too long for display
-            display_content = prompt_content
-            if len(prompt_content) > 2000:
-                display_content = prompt_content[:2000] + f"\n\n_... ({len(prompt_content) - 2000} more characters)_"
+            display_content = agent_prompt
+            if len(agent_prompt) > 2000:
+                display_content = agent_prompt[:2000] + f"\n\n_... ({len(agent_prompt) - 2000} more characters)_"
 
-            return f"""**📝 Your Email Memory Prompt**
+            return f"""**🤖 Your Email Agent**
 {meta_info}
 ---
 {display_content}
 ---
 
-_Use `/train reset email` to delete and return to default._"""
+_Use `/agent reset email` to delete._"""
 
         elif cmd == 'reset':
-            if not prompt_type_normalized:
-                return "❌ Missing prompt type.\n\nUsage: `/train reset email`"
+            if not agent_type:
+                return "❌ Missing agent type.\n\nUsage: `/agent reset email`"
 
-            deleted = storage.delete_user_prompt(owner_id, prompt_type_normalized)
+            deleted = storage.delete_agent_prompt(owner_id, agent_type)
             if deleted:
-                return f"""✅ **Prompt reset**
+                return f"""✅ **Agent deleted**
 
-Your custom `{prompt_type}` prompt has been deleted.
-Memory extraction will use the default prompt.
+Your custom `{agent_type}` agent has been deleted.
 
-Recreate with: `/train build {prompt_type}`"""
+Recreate with: `/agent train {agent_type}`"""
             else:
-                return f"❌ No custom prompt found for `{prompt_type}`"
+                return f"❌ No custom agent found for `{agent_type}`"
 
         else:
             return f"""❌ Unknown subcommand: `{cmd}`
 
 **Available commands:**
-- `/train build email`
-- `/train show email`
-- `/train reset email`"""
+- `/agent train email`
+- `/agent show email`
+- `/agent reset email`"""
 
     except Exception as e:
-        logger.error(f"Error in /train: {e}", exc_info=True)
+        logger.error(f"Error in /agent: {e}", exc_info=True)
         return f"❌ **Error:** {str(e)}"
 
 
@@ -2278,7 +2274,7 @@ COMMAND_HANDLERS = {
     '/calendar': handle_calendar,
     '/tasks': handle_tasks,
     '/jobs': handle_jobs,
-    '/train': handle_train,
+    '/agent': handle_agent,
 }
 
 
@@ -2656,13 +2652,16 @@ COMMAND_TRIGGERS = {
         "cancel {job_id:text}",
     ],
 
-    # --- Training (Personalized extraction prompts) ---
-    '/train': [
-        # Build
-        "train zylch from email",
+    # --- Agent (Personalized extraction agents) ---
+    '/agent': [
+        # Train
+        "train email agent",
+        "create email agent",
         # Show
-        "let me see your training prompts",
+        "show email agent",
+        "let me see your agents",
         # Reset
-        "reset training",
+        "reset email agent",
+        "delete email agent",
     ],
 }
