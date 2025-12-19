@@ -1,10 +1,13 @@
 """Hybrid search combining FTS and semantic search."""
 
+import logging
 from dataclasses import dataclass
 from typing import List, Optional
 import numpy as np
 
 from .embeddings import EmbeddingEngine
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_FTS_WEIGHT = 0.5  # Configurable balance between FTS and semantic
 
@@ -98,16 +101,36 @@ class HybridSearchEngine:
 
         Returns blob if hybrid_score > RECONSOLIDATION_THRESHOLD.
         """
+        logger.debug(f"Reconsolidation search query (first 200 chars): {content[:200]}")
+
         results = self.search(
             owner_id=owner_id,
             query=content,
             namespace=namespace,
-            limit=1,
+            limit=5,  # Get top 5 to see alternatives in logs
             alpha=0.5  # Balanced for reconsolidation
         )
 
-        if results and results[0].hybrid_score >= self.RECONSOLIDATION_THRESHOLD:
-            return results[0]
+        if not results:
+            logger.debug("Reconsolidation: No results from hybrid search")
+            return None
+
+        top_result = results[0]
+        logger.debug(
+            f"Reconsolidation: Top result blob_id={top_result.blob_id}, "
+            f"hybrid={top_result.hybrid_score:.3f}, fts={top_result.fts_score:.3f}, "
+            f"semantic={top_result.semantic_score:.3f}"
+        )
+
+        if top_result.hybrid_score >= self.RECONSOLIDATION_THRESHOLD:
+            logger.debug(
+                f"Reconsolidation: MATCH (score {top_result.hybrid_score:.3f} >= {self.RECONSOLIDATION_THRESHOLD})"
+            )
+            return top_result
+
+        logger.debug(
+            f"Reconsolidation: NO MATCH (score {top_result.hybrid_score:.3f} < {self.RECONSOLIDATION_THRESHOLD})"
+        )
         return None
 
     def _get_matching_sentences(

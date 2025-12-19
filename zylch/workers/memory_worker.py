@@ -180,6 +180,7 @@ class MemoryWorker:
             total_entities: Total entities from this email
         """
         # Search for existing blob about this entity
+        logger.debug(f"Upserting entity, searching with: {entity_content[:200]}...")
         existing = self.hybrid_search.find_for_reconsolidation(
             owner_id=self.owner_id,
             content=entity_content,
