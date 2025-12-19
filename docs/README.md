@@ -20,7 +20,7 @@ This documentation is organized into the following sections:
 - **[Avatar Aggregation](features/avatar-aggregation.md)** - Person-centric contact intelligence *(coming soon)*
 - **[Triggers & Automation](features/triggers-automation.md)** - Event-driven workflow automation *(coming soon)*
 - **[Sharing System](features/sharing-system.md)** - Consent-based intelligence sharing *(coming soon)*
-- **[Memory System](features/memory-system.md)** - Entity-centric persistent memory with hybrid search and reconsolidation
+- **[Entity Memory System](features/entity-memory-system.md)** - Entity-centric persistent memory with hybrid search and reconsolidation
 - **[MrCall Integration](features/mrcall-integration.md)** - Telephony and WhatsApp integration *(coming soon)*
 
 ### Future Development
@@ -72,7 +72,7 @@ This documentation is organized into the following sections:
 - **Tasks**: See [Relationship Intelligence](features/relationship-intelligence.md)
 - **Automation**: See [Triggers & Automation](features/triggers-automation.md) *(coming soon)*
 - **Sharing**: See [Sharing System](features/sharing-system.md) *(coming soon)*
-- **Memory**: See [Memory System](features/memory-system.md) *(coming soon)*
+- **Memory**: See [Entity Memory System](features/entity-memory-system.md)
 
 ### By Technology
 - **Gmail API**: [Gmail OAuth](guides/gmail-oauth.md), [Email Archive](features/email-archive.md)

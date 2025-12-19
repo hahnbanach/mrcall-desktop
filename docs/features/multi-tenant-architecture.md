@@ -663,7 +663,7 @@ python scripts/populate_business_memory.py
 
 ### Documentation
 - **ZylchMemory Architecture**: `zylch_memory/ZYLCH_MEMORY_ARCHITECTURE.md`
-- **Memory System**: `docs/features/memory-system.md`
+- **Entity Memory System**: `docs/features/entity-memory-system.md`
 - **Quick Start**: `docs/setup/quick-start.md`
 
 ### Implementation

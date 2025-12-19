@@ -572,7 +572,7 @@ mem.store_memory(
 - Mirrors human memory consolidation
 - Prevents memory pollution
 
-**See**: [Memory System](../features/memory-system.md)
+**See**: [Entity Memory System](../features/entity-memory-system.md)
 
 ---
 
@@ -1103,7 +1103,7 @@ Gmail Push API
 - **[Calendar Integration](../features/calendar-integration.md)** - Google/Microsoft calendars
 - **[Relationship Intelligence](../features/relationship-intelligence.md)** - Gap detection
 - **[Avatar Aggregation](../features/avatar-aggregation.md)** - Person-centric intelligence
-- **[Memory System](../features/memory-system.md)** - Vector-based memory with reconsolidation
+- **[Entity Memory System](../features/entity-memory-system.md)** - Entity-centric memory with hybrid search
 - **[Triggers & Automation](../features/triggers-automation.md)** - Event-driven automation
 - **[Sharing System](../features/sharing-system.md)** - Consent-based intelligence sharing
 - **[MrCall Integration](../features/mrcall-integration.md)** - Telephony and WhatsApp

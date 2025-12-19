@@ -29,7 +29,7 @@ This replaces the old direct Email → Avatar computation pattern.
 3. Current memory system: zylch_memory/zylch_memory/core.py
 4. Memory Agent worker: zylch/workers/memory_worker.py
 5. CRM Agent worker: zylch/workers/crm_worker.py
-6. Memory documentation: docs/features/memory-system.md
+6. Memory documentation: docs/features/entity-memory-system.md
 7. Avatar documentation: docs/features/avatar-aggregation.md
 
 ## DELIVERABLES

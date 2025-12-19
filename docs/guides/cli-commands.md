@@ -1392,7 +1392,7 @@ const handleMessage = async (message) => {
 ## Related Documentation
 
 - **[Triggers & Automation](../features/triggers-automation.md)** - Event-driven automation system
-- **[Memory System](../features/memory-system.md)** - Behavioral memory and patterns
+- **[Entity Memory System](../features/entity-memory-system.md)** - Entity-centric memory with hybrid search
 - **[Sharing System](../features/sharing-system.md)** - Consent-based intelligence sharing
 - **[MrCall Integration](../features/mrcall-integration.md)** - Telephony and WhatsApp
 - **[Email Archive](../features/email-archive.md)** - Email archiving details

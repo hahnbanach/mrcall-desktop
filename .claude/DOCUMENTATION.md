@@ -26,7 +26,7 @@ zylch/
 │   │   ├── relationship-intelligence.md
 │   │   ├── task-management.md
 │   │   ├── calendar-integration.md
-│   │   └── memory-system.md
+│   │   └── entity-memory-system.md
 │   ├── api/                     # API documentation
 │   │   └── chat-api.md
 │   ├── setup/                   # Setup guides
