@@ -340,8 +340,7 @@ async def handle_model(args: List[str]) -> str:
         'auto': None
     }
 
-    if not args or '--help' in args:
-        return f"""**🤖 AI Model Selection**
+    help_text = f"""**🤖 AI Model Selection**
 
 **Available models:**
 • `haiku` - Claude 3.5 Haiku (fast, economical)
@@ -361,9 +360,12 @@ Pass `forced_model` in context for subsequent requests:
 }}
 ```"""
 
+    if not args or 'help' in args or '--help' in args:
+        return help_text
+
     model_choice = args[0].lower()
     if model_choice not in model_map:
-        return f"❌ Unknown model: `{model_choice}`\n\nUse: haiku, sonnet, opus, auto"
+        return f"❌ Unknown model: `{model_choice}`\n\n{help_text}"
 
     model_id = model_map[model_choice]
 
@@ -650,15 +652,15 @@ Use `/trigger help` for more options."""
                 output += f"{status} **{trigger_type}** (ID: `{trigger_id}`)\n"
                 output += f"   {instruction}\n\n"
 
-            output += "**Commands:** `/trigger --remove <id>` | `/trigger --toggle <id>`"
+            output += "**Commands:** `/trigger remove <id>` | `/trigger toggle <id>`"
             return output
 
-        elif '--add' in args:
+        elif 'add' in args or '--add' in args:
             # Add trigger
-            add_idx = args.index('--add') + 1
+            add_idx = (args.index('add') if 'add' in args else args.index('--add')) + 1
 
             if len(args) < add_idx + 2:
-                return "❌ **Error:** Missing arguments\n\n**Usage:** `/trigger --add <type> <instruction>`\n\nExample: `/trigger --add session_start \"Say good morning\"`"
+                return "❌ **Error:** Missing arguments\n\n**Usage:** `/trigger add <type> <instruction>`\n\nExample: `/trigger add session_start \"Say good morning\"`"
 
             trigger_type = args[add_idx]
             # Join remaining args as instruction
@@ -680,12 +682,12 @@ This trigger will fire automatically when the event occurs."""
             else:
                 return "❌ **Error:** Failed to create trigger. Please try again."
 
-        elif '--remove' in args:
+        elif 'remove' in args or '--remove' in args:
             # Remove trigger
-            remove_idx = args.index('--remove') + 1
+            remove_idx = (args.index('remove') if 'remove' in args else args.index('--remove')) + 1
 
             if len(args) <= remove_idx:
-                return "❌ **Error:** Missing trigger ID\n\n**Usage:** `/trigger --remove <id>`"
+                return "❌ **Error:** Missing trigger ID\n\n**Usage:** `/trigger remove <id>`"
 
             trigger_id = args[remove_idx]
             success = client.remove_trigger(owner_id, trigger_id)
@@ -695,12 +697,12 @@ This trigger will fire automatically when the event occurs."""
             else:
                 return f"❌ **Error:** Could not find trigger with ID `{trigger_id[:8]}`"
 
-        elif '--toggle' in args:
+        elif 'toggle' in args or '--toggle' in args:
             # Toggle trigger active status
-            toggle_idx = args.index('--toggle') + 1
+            toggle_idx = (args.index('toggle') if 'toggle' in args else args.index('--toggle')) + 1
 
             if len(args) <= toggle_idx:
-                return "❌ **Error:** Missing trigger ID\n\n**Usage:** `/trigger --toggle <id>`"
+                return "❌ **Error:** Missing trigger ID\n\n**Usage:** `/trigger toggle <id>`"
 
             trigger_id = args[toggle_idx]
 
@@ -722,24 +724,23 @@ This trigger will fire automatically when the event occurs."""
 
         else:
             # Default: list triggers
-            return await handle_trigger(['--list'], owner_id, user_email)
+            return await handle_trigger(['list'], owner_id, user_email)
 
     except Exception as e:
         logger.error(f"Error in /trigger command: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}\n\nUse `/trigger --help` for usage information."
+        return f"❌ **Error:** {str(e)}\n\n{help_text}"
 
 
 async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) -> str:
     """Handle /mrcall command - MrCall integration."""
     from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
 
-    if '--help' in args:
-        return """**📞 MrCall Integration**
+    help_text = """**📞 MrCall Integration**
 
 **Usage:**
 • `/mrcall` - Show current MrCall link
 • `/mrcall <business_id>` - Link to MrCall business
-• `/mrcall --unlink` - Remove MrCall link
+• `/mrcall unlink` - Remove MrCall link
 
 **Example:**
 • `/mrcall 3002475397`
@@ -751,10 +752,13 @@ Links your Zylch assistant to a MrCall/StarChat business for:
 • Call transcript sync
 • Trigger automation (sms_received, call_received)"""
 
+    if 'help' in args or '--help' in args:
+        return help_text
+
     try:
         client = SupabaseClient()
 
-        if '--unlink' in args:
+        if 'unlink' in args or '--unlink' in args:
             # Remove link
             success = client.remove_mrcall_link(owner_id)
             if success:
@@ -779,8 +783,8 @@ Links your Zylch assistant to a MrCall/StarChat business for:
 • `sms_received` triggers
 
 **Commands:**
-• `/mrcall --unlink` - Disconnect
-• `/trigger --add call_received "..."` - Add call automation"""
+• `/mrcall unlink` - Disconnect
+• `/trigger add call_received "..."` - Add call automation"""
             else:
                 return """**📞 MrCall Status**
 
@@ -816,7 +820,7 @@ Your Zylch is now connected to MrCall!
 
 **Next steps:**
 1. Configure your MrCall assistant to forward to Zylch
-2. Add triggers: `/trigger --add call_received "Summarize the call"`
+2. Add triggers: `/trigger add call_received "Summarize the call"`
 3. Test with a phone call
 
 **Need help?** Contact support@zylchai.com"""
@@ -825,7 +829,7 @@ Your Zylch is now connected to MrCall!
 
     except Exception as e:
         logger.error(f"Error in /mrcall command: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}\n\nUse `/mrcall --help` for usage information."
+        return f"❌ **Error:** {str(e)}\n\n{help_text}"
 
 
 async def handle_share(args: List[str], owner_id: str, user_email: str = None) -> str:
@@ -833,8 +837,7 @@ async def handle_share(args: List[str], owner_id: str, user_email: str = None) -
     import re
     from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
 
-    if '--help' in args or not args:
-        return """**🔗 Data Sharing**
+    help_text = """**🔗 Data Sharing**
 
 **Usage:** `/share <email>`
 
@@ -855,8 +858,10 @@ Registers a recipient to receive shared data from you.
 
 **Commands:**
 • `/share <email>` - Send share request
-• `/revoke <email>` - Cancel sharing
-• `/sharing` - View all sharing status"""
+• `/revoke <email>` - Cancel sharing"""
+
+    if not args or 'help' in args or '--help' in args:
+        return help_text
 
     try:
         client = SupabaseClient()
@@ -906,7 +911,7 @@ Use `/revoke {recipient_email}` to cancel this sharing."""
 
     except Exception as e:
         logger.error(f"Error in /share command: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}\n\nUse `/share --help` for usage information."
+        return f"❌ **Error:** {str(e)}\n\n{help_text}"
 
 
 async def handle_revoke(args: List[str], owner_id: str, user_email: str = None) -> str:
@@ -914,8 +919,7 @@ async def handle_revoke(args: List[str], owner_id: str, user_email: str = None) 
     import re
     from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
 
-    if '--help' in args or not args:
-        return """**❌ Revoke Sharing**
+    help_text = """**❌ Revoke Sharing**
 
 **Usage:** `/revoke <email>`
 
@@ -925,6 +929,9 @@ Revokes data sharing access for a recipient.
 
 This stops sharing your data with the specified user.
 They will no longer receive updates from you."""
+
+    if not args or 'help' in args or '--help' in args:
+        return help_text
 
     try:
         client = SupabaseClient()
@@ -957,7 +964,7 @@ Use `/sharing` to see your current sharing connections."""
 
     except Exception as e:
         logger.error(f"Error in /revoke command: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}\n\nUse `/revoke --help` for usage information."
+        return f"❌ **Error:** {str(e)}\n\n{help_text}"
 
 
 async def handle_connect(args: List[str], owner_id: str, user_email: str = None) -> str:
@@ -1074,8 +1081,7 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
     import uuid
     import shlex
 
-    if '--help' in args or not args:
-        return """**📧 Email Command**
+    help_text = """**📧 Email Command**
 
 **List:**
 • `/email list [--limit N]` - List recent emails
@@ -1100,6 +1106,9 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
 • `/email send abc123`
 
 **Note:** Drafts are stored in Zylch. When you send, it routes through your connected Gmail or Outlook."""
+
+    if not args or 'help' in args or '--help' in args:
+        return help_text
 
     try:
         supabase = SupabaseStorage.get_instance().client
@@ -1409,12 +1418,12 @@ Message ID: `{sent_id[:12] if sent_id else 'N/A'}`"""
 
             return output
 
-        # Unknown subcommand
-        return f"❌ Unknown subcommand: `{subcommand}`\n\nUse `/email --help` to see available options."
+        # Unknown subcommand - show error + help
+        return f"❌ Unknown subcommand: `{subcommand}`\n\n{help_text}"
 
     except Exception as e:
         logger.error(f"Error in /email command: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}"
+        return f"❌ **Error:** {str(e)}\n\n{help_text}"
 
 
 # Command help texts - source of truth for all clients (CLI, web, mobile)
@@ -1599,8 +1608,7 @@ async def handle_stats(args: List[str], owner_id: str) -> str:
     from zylch.storage.supabase_client import SupabaseStorage
     from datetime import datetime, timedelta, timezone
 
-    if '--help' in args:
-        return """**📊 Email Statistics**
+    help_text = """**📊 Email Statistics**
 
 **Usage:** `/stats`
 
@@ -1609,6 +1617,9 @@ Shows statistics about your synced emails:
 - Unread count
 - Date range
 - Open conversations needing response"""
+
+    if 'help' in args or '--help' in args:
+        return help_text
 
     try:
         supabase = SupabaseStorage.get_instance().client
@@ -1664,7 +1675,7 @@ Run `/sync` to update or `/briefing` for task details."""
 
     except Exception as e:
         logger.error(f"Error in /stats: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}"
+        return f"❌ **Error:** {str(e)}\n\n{help_text}"
 
 
 async def handle_calendar(args: List[str], config: ToolConfig, owner_id: str) -> str:
@@ -1673,8 +1684,7 @@ async def handle_calendar(args: List[str], config: ToolConfig, owner_id: str) ->
     from zylch.api.token_storage import get_provider, get_email
     from datetime import datetime, timedelta, timezone
 
-    if '--help' in args:
-        return """**📅 Calendar**
+    help_text = """**📅 Calendar**
 
 **Usage:** `/calendar [days] [--limit N]`
 
@@ -1688,6 +1698,9 @@ Shows your upcoming calendar events.
 - `/calendar` - Events for next 7 days
 - `/calendar 1` - Today only
 - `/calendar 30 --limit 50` - Next month"""
+
+    if 'help' in args or '--help' in args:
+        return help_text
 
     try:
         # Parse arguments
@@ -1756,7 +1769,7 @@ Run `/sync` to fetch calendar events."""
 
     except Exception as e:
         logger.error(f"Error in /calendar: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}"
+        return f"❌ **Error:** {str(e)}\n\n{help_text}"
 
 
 async def handle_tasks(args: List[str], owner_id: str) -> str:
@@ -1764,8 +1777,7 @@ async def handle_tasks(args: List[str], owner_id: str) -> str:
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch.services.task_formatter import filter_own_emails, format_task_list
 
-    if '--help' in args:
-        return """**✅ Tasks**
+    help_text = """**✅ Tasks**
 
 **Usage:** `/tasks [--limit N]`
 
@@ -1777,6 +1789,9 @@ Shows your open tasks (emails needing response).
 **Related:**
 - `/briefing` - Full daily briefing with context
 - `/sync` - Sync emails to update tasks"""
+
+    if 'help' in args or '--help' in args:
+        return help_text
 
     try:
         supabase = SupabaseStorage.get_instance().client
@@ -1814,33 +1829,35 @@ Run `/sync` to check for new emails."""
 
     except Exception as e:
         logger.error(f"Error in /tasks: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}"
+        return f"❌ **Error:** {str(e)}\n\n{help_text}"
 
 
 async def handle_jobs(args: List[str], owner_id: str) -> str:
     """Handle /jobs command - list scheduled jobs."""
     from zylch.services.scheduler import ZylchScheduler
 
-    if '--help' in args:
-        return """**⏰ Scheduled Jobs**
+    help_text = """**⏰ Scheduled Jobs**
 
-**Usage:** `/jobs [--cancel <id>]`
+**Usage:** `/jobs [cancel <id>]`
 
 Shows your scheduled reminders and jobs.
 
 **Options:**
-- `--cancel <id>` - Cancel a job by ID
+- `cancel <id>` - Cancel a job by ID
 
 **Related:**
 - "remind me in 2 hours" - Schedule via Claude
 - `/trigger` - Event-driven automation"""
 
+    if 'help' in args or '--help' in args:
+        return help_text
+
     try:
         scheduler = ZylchScheduler(owner_id=owner_id)
 
-        # Handle cancel
-        if '--cancel' in args:
-            idx = args.index('--cancel')
+        # Handle cancel (accept both 'cancel' and '--cancel')
+        if 'cancel' in args or '--cancel' in args:
+            idx = args.index('cancel') if 'cancel' in args else args.index('--cancel')
             if idx + 1 < len(args):
                 job_id = args[idx + 1]
                 success = scheduler.cancel_job(job_id)
@@ -1849,7 +1866,7 @@ Shows your scheduled reminders and jobs.
                 else:
                     return f"❌ **Job not found:** `{job_id[:8]}`"
             else:
-                return "❌ Missing job ID. Usage: `/jobs --cancel <id>`"
+                return "❌ Missing job ID. Usage: `/jobs cancel <id>`"
 
         # List jobs
         jobs = scheduler.list_jobs()
@@ -1861,7 +1878,7 @@ Shows your scheduled reminders and jobs.
 
 **Create one:**
 - "remind me in 2 hours to call Mario"
-- `/trigger --add session_start "Check my emails"`"""
+- `/trigger add session_start "Check my emails"`"""
 
         output = f"**⏰ Scheduled Jobs** ({len(jobs)} found)\n\n"
 
@@ -1877,12 +1894,12 @@ Shows your scheduled reminders and jobs.
             output += f"   {description}\n"
             output += f"   Next: {next_run}\n\n"
 
-        output += "_Use `/jobs --cancel <id>` to cancel._"
+        output += "_Use `/jobs cancel <id>` to cancel._"
         return output
 
     except Exception as e:
         logger.error(f"Error in /jobs: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}"
+        return f"❌ **Error:** {str(e)}\n\n{help_text}"
 
 
 async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> str:
@@ -1891,8 +1908,7 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
     from zylch.services.email_agent_builder import EmailAgentBuilder
     from zylch.api.token_storage import get_email
 
-    if '--help' in args or not args:
-        return """**🤖 Manage AI Agents**
+    help_text = """**🤖 Manage AI Agents**
 
 **Training:**
 • `/agent train email` - Create personalized extraction agent from your email patterns
@@ -1912,6 +1928,9 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 2. `/agent train email` - Create personalized agent (recommended)
 3. `/agent process` - Extract facts into memory blobs
 4. `/memory search <query>` - Find stored information"""
+
+    if not args or 'help' in args or '--help' in args:
+        return help_text
 
     try:
         storage = SupabaseStorage.get_instance()
@@ -2109,16 +2128,12 @@ Recreate with: `/agent train {agent_type}`"""
                 return f"❌ No custom agent found for `{agent_type}`"
 
         else:
-            return f"""❌ Unknown subcommand: `{cmd}`
-
-**Available commands:**
-- `/agent train email`
-- `/agent show email`
-- `/agent reset email`"""
+            # Unknown subcommand - show error + help
+            return f"❌ Unknown subcommand: `{cmd}`\n\n{help_text}"
 
     except Exception as e:
         logger.error(f"Error in /agent: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}"
+        return f"❌ **Error:** {str(e)}\n\n{help_text}"
 
 
 # Export all handlers

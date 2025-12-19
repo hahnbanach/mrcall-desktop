@@ -26,7 +26,6 @@ class ZylchAIAgent:
         max_tokens: int = 4096,
         email_style_prompt: Optional[str] = None,
         memory_system: Optional[Any] = None,
-        persona_analyzer: Optional[Any] = None,
         triggered_instructions: Optional[List[str]] = None,
     ):
         """Initialize Zylch AI agent.
@@ -38,7 +37,6 @@ class ZylchAIAgent:
             max_tokens: Maximum tokens for response
             email_style_prompt: Custom email style instructions
             memory_system: ZylchMemory instance (optional)
-            persona_analyzer: PersonaAnalyzer instance (optional)
             triggered_instructions: List of triggered instructions (optional, for prompt injection)
         """
         self.client = anthropic.Anthropic(api_key=api_key)
@@ -48,12 +46,11 @@ class ZylchAIAgent:
         self.max_tokens = max_tokens
         self.email_style_prompt = email_style_prompt
         self.memory_system = memory_system
-        self.persona_analyzer = persona_analyzer
         self.triggered_instructions = triggered_instructions or []
         self.conversation_history: List[Dict[str, Any]] = []
         self.message_count = 0
 
-        logger.info(f"Initialized Zylch AI agent with {len(tools)} tools{' and memory system' if memory_system else ''}{' and persona analyzer' if persona_analyzer else ''}{f' and {len(self.triggered_instructions)} triggered instructions' if self.triggered_instructions else ''}")
+        logger.info(f"Initialized Zylch AI agent with {len(tools)} tools{' and memory system' if memory_system else ''}{f' and {len(self.triggered_instructions)} triggered instructions' if self.triggered_instructions else ''}")
 
     def _get_tool_schemas(self) -> List[Dict[str, Any]]:
         """Get Anthropic tool schemas for all registered tools.
@@ -124,13 +121,6 @@ class ZylchAIAgent:
                     memory_prompt = "\n\n**BEHAVIORAL CORRECTIONS:**\n" + "\n".join(memory_lines)
                     system_prompt += memory_prompt
                     logger.info(f"Injected {len(memories)} memory rules for channel={channel}")
-
-        # Inject persona information if available
-        if self.persona_analyzer:
-            persona_prompt = self.persona_analyzer.get_persona_prompt()
-            if persona_prompt:
-                system_prompt += f"\n\n**ABOUT THE USER:**\n{persona_prompt}"
-                logger.info("Injected user persona into system prompt")
 
         # Inject triggered instructions (for prompt awareness - NOT for execution)
         # Note: Trigger execution happens elsewhere (e.g., ChatService.execute_session_start_triggers)

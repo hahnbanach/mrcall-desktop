@@ -385,25 +385,12 @@ class ToolFactory:
         tools.append(_GetTasksTool(session_state=session_state))
         logger.info("Get Tasks tool initialized (pre-computed avatars)")
 
-        # Initialize PersonaAnalyzer for user persona learning
-        from ..services.persona_analyzer import PersonaAnalyzer
-        persona_analyzer = PersonaAnalyzer(
-            zylch_memory=zylch_memory,
-            owner_id=config.owner_id,
-            anthropic_api_key=config.anthropic_api_key,
-            model="claude-3-5-haiku-20241022",
-            analysis_interval=5,
-            enabled=True
-        )
-        logger.info("PersonaAnalyzer initialized for user persona learning")
-
         # Store service client references for CLI access
         ToolFactory._starchat_client = starchat
         ToolFactory._email_archive = email_archive
-        ToolFactory._persona_analyzer = persona_analyzer
 
         logger.info(f"Initialized {len(tools)} tools")
-        return tools, session_state, persona_analyzer
+        return tools, session_state
 
     @staticmethod
     async def create_memory_system(config: ToolConfig) -> ZylchMemory:
