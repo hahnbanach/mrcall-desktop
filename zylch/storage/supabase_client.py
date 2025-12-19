@@ -76,8 +76,8 @@ class SupabaseStorage:
 
         return result.data[0] if result.data else {}
 
-    def store_emails_batch(self, owner_id: str, emails: List[Dict[str, Any]]) -> int:
-        """Store multiple emails in batch."""
+    def store_emails_batch(self, owner_id: str, emails: List[Dict[str, Any]], chunk_size: int = 50) -> int:
+        """Store multiple emails in batch, chunked to avoid timeouts."""
         if not emails:
             return 0
 
@@ -104,12 +104,17 @@ class SupabaseStorage:
                 'updated_at': datetime.now(timezone.utc).isoformat()
             })
 
-        result = self.client.table('emails').upsert(
-            data,
-            on_conflict='owner_id,gmail_id'
-        ).execute()
+        # Chunk the data to avoid timeout on large batches
+        total_stored = 0
+        for i in range(0, len(data), chunk_size):
+            chunk = data[i:i + chunk_size]
+            result = self.client.table('emails').upsert(
+                chunk,
+                on_conflict='owner_id,gmail_id'
+            ).execute()
+            total_stored += len(result.data) if result.data else 0
 
-        return len(result.data) if result.data else 0
+        return total_stored
 
     def get_emails(
         self,
