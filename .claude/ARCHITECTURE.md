@@ -237,7 +237,7 @@ Hybrid: 0.85 → "/sync 2"
 Interactive command-line interface:
 - `/sync` - Sync emails, calendar, pipedrive (data only, no processing)
 - `/email list|create|send|delete|search` - Email and draft management
-- `/train build email` - Generate personalized extraction prompt from email patterns
+- `/agent train email` - Generate personalized extraction agent from email patterns
 - `/memory process` - Extract facts from synced data into blobs (uses personalized prompt)
 - `/memory search` - Search entity memories
 - `/gaps` - Show relationship gaps
@@ -369,7 +369,7 @@ for contact_email, threads in person_threads.items():
 | `triage_training_samples` | Anonymized training data + user corrections |
 | `email_read_events` | Email read tracking events (SendGrid + custom pixel) |
 | `sendgrid_message_mapping` | SendGrid message ID to Zylch message ID mapping |
-| `user_prompts` | Personalized prompts generated from user email patterns |
+| `agent_prompts` | Personalized agents generated from user email patterns |
 
 **Email Triage Tables** (December 2025):
 
@@ -757,13 +757,13 @@ The default memory extraction prompt uses generic rules for classifying emails (
 
 ### Solution: Learn from User's Email Patterns
 
-The `/train build email` command analyzes the user's recent emails (up to 100) to understand their communication context:
+The `/agent train email` command analyzes the user's recent emails (up to 100) to understand their communication context:
 
 1. **Recent emails** = Sample of communication patterns, contacts, topics
 2. **User's sent emails** = Role, business context, signature patterns
 3. **Frequent contacts** = People who appear multiple times
 
-The LLM judges email importance based on **tone and content** (not reply history), generating a personalized extraction prompt that understands:
+The LLM judges email importance based on **tone and content** (not reply history), generating a personalized extraction agent that understands:
 - The user's role (founder vs investor vs engineer)
 - Types of emails they receive
 - How to assess importance from email content itself
@@ -771,51 +771,51 @@ The LLM judges email importance based on **tone and content** (not reply history
 ### Architecture
 
 **Key Files**:
-- `zylch/services/prompt_builder.py` - PromptBuilder class that analyzes patterns
-- `zylch/workers/memory_worker.py` - Uses personalized prompt for extraction (includes CC field)
-- `zylch/storage/migrations/006_user_prompts.sql` - Database table
+- `zylch/services/email_agent_builder.py` - EmailAgentBuilder class that analyzes patterns
+- `zylch/workers/memory_worker.py` - Uses personalized agent for extraction (includes CC field)
+- `zylch/storage/migrations/007_rename_user_prompts_to_agent_prompts.sql` - Database migration
 
 **Data Flow**:
 ```
 /sync → emails stored in DB
     ↓
-/train build email
+/agent train email
     ↓
-PromptBuilder analyzes:
+EmailAgentBuilder analyzes:
   - 100 recent emails (sample)
   - Sent emails (user profile)
   - Frequent contacts
     ↓
-Claude Sonnet generates personalized prompt
+Claude Sonnet generates personalized agent
     ↓
-Stored in user_prompts table
+Stored in agent_prompts table
     ↓
-/memory process email uses personalized prompt
+/memory process email uses personalized agent
 ```
 
 ### Commands
 
 | Command | Purpose |
 |---------|---------|
-| `/train build email` | Analyze email patterns and generate personalized prompt |
-| `/train show email` | Display current personalized prompt |
-| `/train reset email` | Delete custom prompt, revert to default |
+| `/agent train email` | Analyze email patterns and generate personalized agent |
+| `/agent show email` | Display current personalized agent |
+| `/agent reset email` | Delete custom agent |
 
 ### Gate on Memory Processing
 
-When user runs `/memory process email` without a custom prompt, they see a recommendation:
+When user runs `/memory process email` without a custom agent, they see a recommendation:
 ```
-⚠️ No personalized extraction prompt found
+⚠️ No personalized extraction agent found
 
-For better memory extraction, create a personalized prompt first:
-/train build email
+For better memory extraction, create a personalized agent first:
+/agent train email
 ```
 
 ### Database
 
-**Table: `user_prompts`**
-- `id`, `owner_id`, `prompt_type`, `prompt_content`, `metadata`, timestamps
-- Unique constraint on `(owner_id, prompt_type)`
+**Table: `agent_prompts`**
+- `id`, `owner_id`, `agent_type`, `agent_prompt`, `metadata`, timestamps
+- Unique constraint on `(owner_id, agent_type)`
 - Metadata includes: emails_analyzed count, frequent_contacts_count
 
 ### Benefits

@@ -2804,110 +2804,110 @@ class SupabaseStorage:
             logger.error(f"Failed to update message read_events: {e}")
 
     # ==========================================
-    # USER PROMPTS
+    # AGENT PROMPTS
     # ==========================================
 
-    def get_user_prompt(self, owner_id: str, prompt_type: str) -> Optional[str]:
-        """Get user's custom prompt by type.
+    def get_agent_prompt(self, owner_id: str, agent_type: str) -> Optional[str]:
+        """Get user's agent prompt by type.
 
         Args:
             owner_id: Firebase UID
-            prompt_type: Type of prompt (e.g., 'memory_email')
+            agent_type: Type of agent (e.g., 'email')
 
         Returns:
-            Prompt content if exists, None otherwise
+            Agent prompt if exists, None otherwise
         """
         try:
-            result = self.client.table('user_prompts')\
-                .select('prompt_content')\
+            result = self.client.table('agent_prompts')\
+                .select('agent_prompt')\
                 .eq('owner_id', owner_id)\
-                .eq('prompt_type', prompt_type)\
+                .eq('agent_type', agent_type)\
                 .limit(1)\
                 .execute()
 
             if result.data:
-                return result.data[0].get('prompt_content')
+                return result.data[0].get('agent_prompt')
             return None
 
         except Exception as e:
-            logger.warning(f"Failed to get user prompt: {e}")
+            logger.warning(f"Failed to get agent prompt: {e}")
             return None
 
-    def store_user_prompt(
+    def store_agent_prompt(
         self,
         owner_id: str,
-        prompt_type: str,
-        content: str,
+        agent_type: str,
+        prompt: str,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Store or update a user's custom prompt.
+        """Store or update a user's agent prompt.
 
         Args:
             owner_id: Firebase UID
-            prompt_type: Type of prompt (e.g., 'memory_email')
-            content: The prompt content
+            agent_type: Type of agent (e.g., 'email')
+            prompt: The agent prompt
             metadata: Optional metadata (generation stats, etc.)
 
         Returns:
-            The stored prompt record
+            The stored agent prompt record
         """
         data = {
             'owner_id': owner_id,
-            'prompt_type': prompt_type,
-            'prompt_content': content,
+            'agent_type': agent_type,
+            'agent_prompt': prompt,
             'metadata': metadata or {},
             'updated_at': datetime.now(timezone.utc).isoformat()
         }
 
-        result = self.client.table('user_prompts').upsert(
+        result = self.client.table('agent_prompts').upsert(
             data,
-            on_conflict='owner_id,prompt_type'
+            on_conflict='owner_id,agent_type'
         ).execute()
 
-        logger.info(f"Stored user prompt: {owner_id}/{prompt_type}")
+        logger.info(f"Stored agent prompt: {owner_id}/{agent_type}")
         return result.data[0] if result.data else {}
 
-    def delete_user_prompt(self, owner_id: str, prompt_type: str) -> bool:
-        """Delete a user's custom prompt.
+    def delete_agent_prompt(self, owner_id: str, agent_type: str) -> bool:
+        """Delete a user's agent prompt.
 
         Args:
             owner_id: Firebase UID
-            prompt_type: Type of prompt to delete
+            agent_type: Type of agent to delete
 
         Returns:
             True if deleted, False otherwise
         """
         try:
-            result = self.client.table('user_prompts')\
+            result = self.client.table('agent_prompts')\
                 .delete()\
                 .eq('owner_id', owner_id)\
-                .eq('prompt_type', prompt_type)\
+                .eq('agent_type', agent_type)\
                 .execute()
 
             deleted = len(result.data) > 0 if result.data else False
             if deleted:
-                logger.info(f"Deleted user prompt: {owner_id}/{prompt_type}")
+                logger.info(f"Deleted agent prompt: {owner_id}/{agent_type}")
             return deleted
 
         except Exception as e:
-            logger.error(f"Failed to delete user prompt: {e}")
+            logger.error(f"Failed to delete agent prompt: {e}")
             return False
 
-    def get_user_prompt_metadata(self, owner_id: str, prompt_type: str) -> Optional[Dict[str, Any]]:
-        """Get metadata for a user's prompt.
+    def get_agent_prompt_metadata(self, owner_id: str, agent_type: str) -> Optional[Dict[str, Any]]:
+        """Get metadata for a user's agent prompt.
 
         Args:
             owner_id: Firebase UID
-            prompt_type: Type of prompt
+            agent_type: Type of agent
 
         Returns:
             Metadata dict if exists, None otherwise
         """
         try:
-            result = self.client.table('user_prompts')\
+            result = self.client.table('agent_prompts')\
                 .select('metadata, created_at, updated_at')\
                 .eq('owner_id', owner_id)\
-                .eq('prompt_type', prompt_type)\
+                .eq('agent_type', agent_type)\
                 .limit(1)\
                 .execute()
 
@@ -2920,7 +2920,7 @@ class SupabaseStorage:
             return None
 
         except Exception as e:
-            logger.warning(f"Failed to get user prompt metadata: {e}")
+            logger.warning(f"Failed to get agent prompt metadata: {e}")
             return None
 
 

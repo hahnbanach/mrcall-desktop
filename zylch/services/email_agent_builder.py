@@ -1,4 +1,4 @@
-"""Prompt Builder - Generates personalized prompts from user's email patterns.
+"""Email Agent Builder - Generates personalized email extraction agent from user's email patterns.
 
 Analyzes the user's email history to understand:
 - Who they engage with (replied emails = VIP contacts)
@@ -6,7 +6,7 @@ Analyzes the user's email history to understand:
 - Their role and business context
 - Topics they care about
 
-Then generates a self-contained prompt for memory extraction.
+Then generates a self-contained agent prompt for entity extraction from emails.
 """
 
 import logging
@@ -21,8 +21,8 @@ from zylch.storage.supabase_client import SupabaseStorage
 logger = logging.getLogger(__name__)
 
 
-# Meta-prompt used to generate the final extraction prompt
-META_PROMPT = """You are analyzing a user's email history to create a personalized prompt for their AI assistant.
+# Meta-prompt used to generate the email agent
+EMAIL_AGENT_META_PROMPT = """You are analyzing a user's email history to create a personalized prompt for their AI assistant.
 
 Your goal: Generate a prompt that will be used to EXTRACT ENTITIES from emails and store them in memory.
 
@@ -99,8 +99,8 @@ The generated prompt will receive these template variables:
 OUTPUT ONLY THE PROMPT TEXT. No explanations, no markdown code blocks. Just the prompt itself."""
 
 
-class PromptBuilder:
-    """Builds personalized prompts by analyzing user's email patterns."""
+class EmailAgentBuilder:
+    """Builds personalized email agent by analyzing user's email patterns."""
 
     def __init__(
         self,
@@ -431,7 +431,7 @@ Body preview: {body}
         """Generate the final extraction prompt using Claude."""
         contacts_text = '\n'.join(f"- {c}" for c in frequent_contacts) if frequent_contacts else "None identified yet."
 
-        meta_prompt = META_PROMPT.format(
+        meta_prompt = EMAIL_AGENT_META_PROMPT.format(
             user_profile=user_profile,
             email_samples=email_samples,
             frequent_contacts=contacts_text
