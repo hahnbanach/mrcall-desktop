@@ -19,30 +19,6 @@ from zylch_memory import BlobStorage, HybridSearchEngine, LLMMergeService, Embed
 logger = logging.getLogger(__name__)
 
 
-# Default prompt to extract facts from email (used when no custom prompt exists)
-DEFAULT_EXTRACT_FACTS_PROMPT = """Extract key facts about the contact from this email.
-
-FROM: {from_email}
-TO: {to_email}
-CC: {cc_email}
-SUBJECT: {subject}
-DATE: {date}
-
-BODY:
-{body}
-
----
-
-Write a concise summary of what we learned about {contact_email} from this email.
-Include:
-- Any personal details (phone, LinkedIn, location, company, role)
-- Communication preferences or patterns
-- Topics discussed or interests shown
-- Action items or commitments made
-- Relationship context (how they know the user)
-
-Output ONLY the facts as natural language prose (2-5 sentences). If no meaningful facts, output "No significant facts."
-"""
 
 
 class MemoryWorker:
@@ -103,13 +79,14 @@ class MemoryWorker:
 
         logger.info(f"MemoryWorker initialized for namespace={self.namespace}")
 
-    def _get_extraction_prompt(self) -> str:
-        """Get extraction prompt - user-specific or default.
+    def _get_extraction_prompt(self) -> Optional[str]:
+        """Get extraction prompt - user-specific only.
 
         Loads user's custom prompt from DB on first call, caches for subsequent calls.
+        Returns None if no custom prompt exists (user must run /train build memory-email first).
 
         Returns:
-            The extraction prompt to use
+            The extraction prompt, or None if not configured
         """
         if not self._custom_prompt_loaded:
             self._custom_prompt = self.storage.get_user_prompt(self.owner_id, 'memory_email')
@@ -118,9 +95,9 @@ class MemoryWorker:
             if self._custom_prompt:
                 logger.info("Using user's custom memory_email prompt")
             else:
-                logger.debug("No custom prompt found, using default")
+                logger.warning("No custom prompt found - user must run /train build memory-email first")
 
-        return self._custom_prompt if self._custom_prompt else DEFAULT_EXTRACT_FACTS_PROMPT
+        return self._custom_prompt
 
     def has_custom_prompt(self) -> bool:
         """Check if user has a custom extraction prompt.
@@ -162,7 +139,7 @@ class MemoryWorker:
 
             # Step 1: Extract facts from email
             facts = self._extract_facts(email, contact_email)
-            if not facts or facts == "No significant facts.":
+            if not facts or facts.strip().upper() == "SKIP":
                 logger.debug(f"No facts extracted from {email_id}")
                 # Still mark as processed so we don't retry
                 self.storage.mark_email_processed(self.owner_id, email_id)
@@ -229,23 +206,26 @@ class MemoryWorker:
         return processed
 
     def _extract_facts(self, email: Dict, contact_email: str) -> str:
-        """Extract facts from email using LLM.
+        """Extract entities from email using LLM.
 
-        Uses user's custom prompt if available, otherwise falls back to default.
+        Requires user's custom prompt (from /train build memory-email).
 
         Args:
             email: Email dict
             contact_email: Email address of the contact
 
         Returns:
-            Extracted facts as natural language string
+            Extracted entity as string, or empty string if no prompt configured
         """
         try:
+            # Get the extraction prompt (user's custom only, no default)
+            prompt_template = self._get_extraction_prompt()
+            if not prompt_template:
+                logger.warning("Skipping extraction - no custom prompt configured")
+                return ""
+
             # Get email body, prefer body_plain, fall back to snippet
             body = email.get("body_plain", "") or email.get("snippet", "")
-
-            # Get the extraction prompt (user's custom or default)
-            prompt_template = self._get_extraction_prompt()
 
             # Format cc_email (may be list or string or None)
             cc_raw = email.get("cc_email") or email.get("cc") or []

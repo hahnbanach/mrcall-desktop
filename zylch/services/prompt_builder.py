@@ -24,7 +24,14 @@ logger = logging.getLogger(__name__)
 # Meta-prompt used to generate the final extraction prompt
 META_PROMPT = """You are analyzing a user's email history to create a personalized prompt for their AI assistant.
 
-Your goal: Generate a prompt that will be used to extract relevant information from emails and store it in memory.
+Your goal: Generate a prompt that will be used to EXTRACT ENTITIES from emails and store them in memory.
+
+CRITICAL CONCEPT - ENTITY EXTRACTION:
+The memory system stores ONE BLOB PER ENTITY (person, company, project, etc.). Each blob has:
+- **#Identifiers section**: Unique identifiers that allow reconsolidation (merging) when the same entity appears again
+- **#About section**: Natural language description of what we know about this entity
+
+When the same entity appears in multiple emails, the system uses identifiers to MERGE information into ONE blob, not create duplicates.
 
 === USER'S PROFILE ===
 {user_profile}
@@ -37,7 +44,7 @@ Your goal: Generate a prompt that will be used to extract relevant information f
 
 ---
 
-Based on this analysis, generate a COMPLETE, SELF-CONTAINED prompt that will be used to extract facts from emails.
+Based on this analysis, generate a COMPLETE, SELF-CONTAINED prompt that will be used to extract ENTITIES from emails.
 
 The prompt must include:
 
@@ -47,12 +54,24 @@ The prompt must include:
    - What they care about professionally
    - What they are NOT (e.g., "NOT an investor" if they ignore fundraising asks)
 
-2. **WHAT TO EXTRACT** (for relevant emails)
-   - Contact details (phone, LinkedIn, location)
-   - Company and role information
-   - Topics discussed and interests
-   - Action items and commitments
-   - Relationship context
+2. **ENTITY EXTRACTION** (the core task)
+   An entity is anything which can have properties and can be connected to other entities (person, company, contract, project, document, agreement, deal, event, etc.).
+
+   The prompt must instruct to extract entities in this format:
+
+   ```
+   #Identifiers
+
+   Entity type: [what kind of entity this is].
+   Name: [Full name or official name].
+   [Any other identifiers relevant to this entity type: email, phone, LinkedIn, website, VAT/Tax ID, contract number, document ID, etc.]
+
+   #About
+
+   [2-5 sentences describing what we know about this entity: role, company, relationship to user, topics discussed, preferences, action items, etc.]
+   ```
+
+   IDENTIFIERS ARE CRITICAL: They enable the memory system to recognize "this is the same entity" and merge information. Without identifiers, we get duplicate blobs.
 
 3. **IMPORTANCE ASSESSMENT**
    - Specific cold outreach patterns this user ignores
@@ -60,13 +79,13 @@ The prompt must include:
    - Personal/direct emails deserve detailed extraction
    - Marketing, newsletters, automated notifications can be skipped
    - Types of requests they never engage with
-   - Email messages clearly written with AI 
-
+   - Email messages clearly written with AI
 
 4. **OUTPUT FORMAT**
    The prompt should instruct the LLM to output:
-   - Natural language prose (2-5 sentences)
-   - "No significant facts." if the email is automated/marketing/noise
+   - The entity in the #Identifiers / #About format above
+   - Include ALL available identifiers (email, phone, LinkedIn, etc.)
+   - If the email is automated/marketing/noise or contains no extractable entity, output only: SKIP
 
 The generated prompt will receive these template variables:
 - {{from_email}} - Sender's email
