@@ -62,8 +62,8 @@ class ChatService:
                 "Please run `/connect anthropic` to set up your API key."
             )
 
-        # Create all tools using factory (returns tuple: tools, session_state, persona_analyzer)
-        tools, session_state, persona_analyzer = await ToolFactory.create_all_tools(config, current_business_id=None)
+        # Create all tools using factory (returns tuple: tools, session_state)
+        tools, session_state = await ToolFactory.create_all_tools(config, current_business_id=None)
         logger.info(f"Created {len(tools)} tools")
 
         # Create memory system
@@ -79,7 +79,6 @@ class ChatService:
             model_selector=model_selector,
             email_style_prompt=config.email_style_prompt,
             memory_system=memory,
-            persona_analyzer=persona_analyzer,
         )
 
         self._initialized = True
