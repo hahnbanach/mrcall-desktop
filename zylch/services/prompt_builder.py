@@ -65,6 +65,7 @@ The prompt must include:
    - Types of requests they never engage with
    - Newsletter/marketing patterns
    - Be specific based on the ignored emails
+   - Email messages clearly written with AI 
 
 4. **VIP TREATMENT**
    - List specific domains/contacts that always deserve detailed extraction
