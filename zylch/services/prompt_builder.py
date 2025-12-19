@@ -26,20 +26,14 @@ META_PROMPT = """You are analyzing a user's email history to create a personaliz
 
 Your goal: Generate a prompt that will be used to extract relevant information from emails and store it in memory.
 
-=== USER'S PROFILE (inferred from their emails) ===
+=== USER'S PROFILE ===
 {user_profile}
 
-=== EMAILS THEY REPLIED TO (high priority - these people matter) ===
-{replied_samples}
+=== SAMPLE OF RECENT EMAILS ===
+{email_samples}
 
-=== EMAILS THEY IGNORED (low priority - these are noise/cold outreach) ===
-{ignored_samples}
-
-=== VIP CONTACTS (frequent correspondence) ===
-{vip_contacts}
-
-=== PATTERNS IN IGNORED EMAILS ===
-{noise_patterns}
+=== FREQUENT CONTACTS ===
+{frequent_contacts}
 
 ---
 
@@ -51,7 +45,6 @@ The prompt must include:
    - Their role (founder, engineer, executive, etc.)
    - Their company/domain
    - What they care about professionally
-   - What they are NOT (e.g., "NOT an investor" if they ignore fundraising asks)
 
 2. **WHAT TO EXTRACT** (for relevant emails)
    - Contact details (phone, LinkedIn, location)
@@ -60,20 +53,15 @@ The prompt must include:
    - Action items and commitments
    - Relationship context
 
-3. **WHAT TO SKIP OR MINIMIZE**
-   - Specific cold outreach patterns this user ignores
-   - Types of requests they never engage with
-   - Newsletter/marketing patterns
-   - Be specific based on the ignored emails
+3. **IMPORTANCE ASSESSMENT**
+   - Judge importance based on the EMAIL'S TONE AND CONTENT, not reply history
+   - Personal/direct emails deserve detailed extraction
+   - Marketing, newsletters, automated notifications can be skipped
 
-4. **VIP TREATMENT**
-   - List specific domains/contacts that always deserve detailed extraction
-   - These are the user's most engaged contacts
-
-5. **OUTPUT FORMAT**
+4. **OUTPUT FORMAT**
    The prompt should instruct the LLM to output:
    - Natural language prose (2-5 sentences)
-   - "No significant facts." if the email is noise/cold outreach
+   - "No significant facts." if the email is automated/marketing/noise
 
 The generated prompt will receive these template variables:
 - {{from_email}} - Sender's email
@@ -123,44 +111,68 @@ class PromptBuilder:
         user_domain = self.user_domain
         logger.info(f"User email: {self.user_email}, domain: {user_domain}")
 
-        # Step 2: Sample emails - replied vs ignored
-        replied_threads = self._get_replied_threads(user_domain, limit=50)
-        ignored_emails = self._get_ignored_emails(user_domain, limit=50)
+        # Step 1: Get recent emails (100 max, regardless of reply status)
+        recent_emails = self._get_recent_emails(limit=100)
+        logger.info(f"Found {len(recent_emails)} recent emails")
 
-        logger.info(f"Found {len(replied_threads)} replied threads, {len(ignored_emails)} ignored emails")
-
-        # Step 3: Analyze user profile from their sent emails
+        # Step 2: Analyze user profile from their sent emails
         user_profile = self._analyze_user_profile(user_domain)
 
-        # Step 4: Identify VIP contacts
-        vip_contacts = self._identify_vip_contacts(replied_threads, user_domain)
+        # Step 3: Identify frequent contacts
+        frequent_contacts = self._identify_frequent_contacts(recent_emails, user_domain)
 
-        # Step 5: Identify noise patterns
-        noise_patterns = self._analyze_noise_patterns(ignored_emails)
+        # Step 4: Format samples for the meta-prompt (show variety)
+        email_samples = self._format_email_samples(recent_emails, max_samples=15)
 
-        # Step 6: Format samples for the meta-prompt
-        replied_samples = self._format_email_samples(replied_threads, max_samples=10)
-        ignored_samples = self._format_email_samples(ignored_emails, max_samples=10)
-
-        # Step 7: Generate the prompt using Claude
+        # Step 5: Generate the prompt using Claude
         prompt_content = self._generate_prompt(
             user_profile=user_profile,
-            replied_samples=replied_samples,
-            ignored_samples=ignored_samples,
-            vip_contacts=vip_contacts,
-            noise_patterns=noise_patterns
+            email_samples=email_samples,
+            frequent_contacts=frequent_contacts
         )
 
         metadata = {
             'generated_at': datetime.now(timezone.utc).isoformat(),
             'user_domain': user_domain,
-            'replied_threads_analyzed': len(replied_threads),
-            'ignored_emails_analyzed': len(ignored_emails),
-            'vip_contacts_count': len(vip_contacts),
-            'noise_patterns_count': len(noise_patterns)
+            'emails_analyzed': len(recent_emails),
+            'frequent_contacts_count': len(frequent_contacts)
         }
 
         return prompt_content, metadata
+
+    def _get_recent_emails(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get recent emails regardless of reply status.
+
+        Args:
+            limit: Max number of emails to fetch
+
+        Returns:
+            List of email dicts, sorted by date (newest first)
+        """
+        emails = self.storage.get_emails(self.owner_id, limit=limit)
+        # Sort by date (newest first)
+        emails.sort(key=lambda e: e.get('date_timestamp', 0), reverse=True)
+        return emails
+
+    def _identify_frequent_contacts(
+        self,
+        emails: List[Dict[str, Any]],
+        user_domain: str
+    ) -> List[str]:
+        """Identify contacts with most email activity.
+
+        Returns list of email addresses with frequent correspondence.
+        """
+        contact_counts: Counter = Counter()
+
+        for email in emails:
+            from_email = email.get('from_email', '')
+            if from_email and (not user_domain or user_domain not in from_email.lower()):
+                contact_counts[from_email.lower()] += 1
+
+        # Return top contacts (at least 2 emails)
+        frequent = [email for email, count in contact_counts.most_common(20) if count >= 2]
+        return frequent
 
     def _get_replied_threads(self, user_domain: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Get email threads where the user replied (high-value relationships).
@@ -389,21 +401,16 @@ Body preview: {body}
     def _generate_prompt(
         self,
         user_profile: str,
-        replied_samples: str,
-        ignored_samples: str,
-        vip_contacts: List[str],
-        noise_patterns: List[str]
+        email_samples: str,
+        frequent_contacts: List[str]
     ) -> str:
         """Generate the final extraction prompt using Claude."""
-        vip_text = '\n'.join(f"- {c}" for c in vip_contacts) if vip_contacts else "None identified yet."
-        noise_text = '\n'.join(f"- {p}" for p in noise_patterns) if noise_patterns else "None identified yet."
+        contacts_text = '\n'.join(f"- {c}" for c in frequent_contacts) if frequent_contacts else "None identified yet."
 
         meta_prompt = META_PROMPT.format(
             user_profile=user_profile,
-            replied_samples=replied_samples,
-            ignored_samples=ignored_samples,
-            vip_contacts=vip_text,
-            noise_patterns=noise_text
+            email_samples=email_samples,
+            frequent_contacts=contacts_text
         )
 
         logger.info("Generating personalized prompt with Claude...")
