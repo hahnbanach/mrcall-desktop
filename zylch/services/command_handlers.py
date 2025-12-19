@@ -40,9 +40,9 @@ async def handle_help() -> str:
 • `/briefing [days]` - Daily briefing with context
 • `/jobs` - Scheduled reminders and jobs
 
-**🧠 Memory & Automation:**
-• `/memory [search|store|stats|list]` - Entity memory with hybrid search
-• `/agent [train|show|reset] email` - Personalized extraction agents
+**🧠 Memory & Agents:**
+• `/agent [train|process|show|reset]` - Train agents and process data into memory
+• `/memory [search|store|stats|list]` - Search and manage entity memories
 • `/trigger` - Event-driven automation
 
 **📡 Integrations:**
@@ -267,9 +267,9 @@ Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
             storage = SupabaseStorage.get_instance()
             has_custom_prompt = storage.get_agent_prompt(owner_id, 'email') is not None
             if has_custom_prompt:
-                lines.append("\n✅ **Done!** Run `/memory process` to extract memories.")
+                lines.append("\n✅ **Done!** Run `/agent process` to extract memories.")
             else:
-                lines.append("\n✅ **Done!** Run `/agent train email` then `/memory process`.")
+                lines.append("\n✅ **Done!** Run `/agent train email` then `/agent process`.")
         return "\n".join(lines)
 
     except Exception as e:
@@ -391,34 +391,20 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
         return """**🧠 Entity Memory System**
 
 **Usage:**
-• `/memory process` - Process all unprocessed data into memory blobs
-• `/memory process email` - Process only emails
-• `/memory process calendar` - Process only calendar events
-• `/memory process pipedrive` - Process only Pipedrive deals
 • `/memory search <query>` - Search memories (hybrid FTS + semantic)
 • `/memory store <content>` - Store new memory (with auto-reconsolidation)
 • `/memory stats` - Show memory statistics
 • `/memory list [limit]` - List recent memories
 • `/memory --reset` - Delete ALL memories AND reset processing timestamps
 
-**Before processing emails:**
-First, create a personalized extraction agent:
-```
-/agent train email
-```
-This learns YOUR patterns for better cold outreach detection and VIP prioritization.
-
 **Examples:**
-• `/agent train email` - Create personalized agent first
-• `/memory process email` - Process emails with your custom agent
 • `/memory search John Smith`
 • `/memory store "Mario prefers formal Italian in emails"`
 
-**How it works:**
-1. `/sync` fetches emails, calendar, and Pipedrive
-2. `/agent train email` learns your patterns (recommended)
-3. `/memory process` extracts entities using personalized agent
-4. `/memory search` finds information using hybrid FTS + semantic search"""
+**Processing data into memory:**
+Use `/agent process` to extract facts from synced data:
+• `/agent process` - Process all data
+• `/agent process email` - Process only emails"""
 
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch_memory import BlobStorage, HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig
@@ -437,86 +423,7 @@ This learns YOUR patterns for better cold outreach detection and VIP prioritizat
         # Normalize args - accept both 'search' and '--search'
         cmd = args[0].lstrip('-') if args else ''
 
-        if cmd == 'process':
-            # Process synced data into memory blobs
-            from zylch.workers.memory_worker import MemoryWorker
-
-            service = args[1].lower() if len(args) > 1 else 'all'
-            valid_services = ['all', 'email', 'calendar', 'pipedrive']
-
-            if service not in valid_services:
-                return f"❌ Unknown service: `{service}`\n\nValid options: `email`, `calendar`, `pipedrive`, or omit for all."
-
-            # Get Anthropic API key from user's stored key or system settings
-            anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
-
-            if not anthropic_key:
-                return """❌ **Anthropic API key required**
-
-Connect your Anthropic account:
-`/connect anthropic`"""
-
-            worker = MemoryWorker(storage=storage, owner_id=owner_id, anthropic_api_key=anthropic_key)
-
-            # Gate: Check if processing emails without a custom prompt
-            if service in ['all', 'email'] and not worker.has_custom_prompt():
-                # Show recommendation to build custom prompt first
-                unprocessed_count = len(storage.get_unprocessed_emails(owner_id, limit=1))
-                if unprocessed_count > 0:
-                    return """⚠️ **No personalized extraction agent found**
-
-For better memory extraction, create a personalized agent first:
-
-```
-/agent train email
-```
-
-This analyzes your email patterns to understand:
-- **Who matters to you** (VIP contacts get detailed extraction)
-- **What to ignore** (cold outreach specific to you)
-- **Your role/context** (founder vs investor vs engineer)
-
-The personalized agent significantly improves:
-- Cold outreach detection
-- Relevant fact extraction
-- VIP contact prioritization"""
-
-            results = []
-
-            # Process emails
-            if service in ['all', 'email']:
-                unprocessed_emails = storage.get_unprocessed_emails(owner_id, limit=100)
-                if unprocessed_emails:
-                    processed = await worker.process_batch(unprocessed_emails)
-                    prompt_note = " (using custom prompt)" if worker.has_custom_prompt() else " (using default prompt)"
-                    results.append(f"📧 **Emails:** {processed}/{len(unprocessed_emails)} processed{prompt_note}")
-                else:
-                    results.append("📧 **Emails:** No unprocessed emails")
-
-            # Process calendar events
-            if service in ['all', 'calendar']:
-                unprocessed_events = storage.get_unprocessed_calendar_events(owner_id, limit=100)
-                if unprocessed_events:
-                    processed = await worker.process_calendar_batch(unprocessed_events)
-                    results.append(f"📅 **Calendar:** {processed}/{len(unprocessed_events)} processed")
-                else:
-                    results.append("📅 **Calendar:** No unprocessed events")
-
-            # Process pipedrive deals
-            if service in ['all', 'pipedrive']:
-                unprocessed_deals = storage.get_unprocessed_pipedrive_deals(owner_id, limit=100)
-                if unprocessed_deals:
-                    processed = await worker.process_pipedrive_batch(unprocessed_deals)
-                    results.append(f"💼 **Pipedrive:** {processed}/{len(unprocessed_deals)} processed")
-                else:
-                    results.append("💼 **Pipedrive:** No unprocessed deals")
-
-            output = "**🧠 Memory Processing Complete**\n\n"
-            output += "\n".join(results)
-            output += "\n\nUse `/memory search <query>` to find stored information."
-            return output
-
-        elif cmd == 'search':
+        if cmd == 'search':
             # Search memories
             if len(args) < 2:
                 return "❌ Missing query\n\nUsage: `/memory search <query>`"
@@ -660,7 +567,7 @@ Memory will be searchable via hybrid search."""
 • {reset_counts.get('calendar_events', 0)} calendar events marked as unprocessed
 • {reset_counts.get('pipedrive_deals', 0)} Pipedrive deals marked as unprocessed
 
-Run `/memory process` to rebuild memory from your synced data."""
+Run `/agent process` to rebuild memory from your synced data."""
 
         else:
             # Unknown subcommand
@@ -1566,14 +1473,8 @@ Run `/sync` first to fetch latest emails.''',
     },
     '/memory': {
         'summary': 'Entity memory system',
-        'usage': '/memory [process|search|store|stats|list|--reset] <args>',
-        'description': '''Process synced data into memory blobs, search, and manage entity memories.
-
-**Processing:**
-- `/memory process` - Process all unprocessed data into blobs
-- `/memory process email` - Process only unprocessed emails
-- `/memory process calendar` - Process only unprocessed calendar events
-- `/memory process pipedrive` - Process only unprocessed Pipedrive deals
+        'usage': '/memory [search|store|stats|list|--reset] <args>',
+        'description': '''Search and manage entity memories.
 
 **Searching:**
 - `/memory search <query>` - Search memories (hybrid FTS + semantic)
@@ -1584,10 +1485,8 @@ Run `/sync` first to fetch latest emails.''',
 - `/memory list [limit]` - List recent memories
 - `/memory --reset` - Delete ALL memories AND reset processing timestamps
 
-**Workflow:**
-1. `/sync` - Fetches emails/calendar/pipedrive to local DB
-2. `/memory process` - Extracts facts into blobs
-3. `/memory search <query>` - Finds stored information''',
+**Processing:**
+Use `/agent process` to extract facts from synced data into memory.''',
     },
     '/email': {
         'summary': 'List emails, manage drafts, search',
@@ -1669,29 +1568,28 @@ Run `/sync` first to fetch latest emails.''',
         'description': 'Lists scheduled reminders and jobs. Use `--cancel <id>` to cancel a job.',
     },
     '/agent': {
-        'summary': 'Manage AI agents for data extraction',
-        'usage': '/agent [train|show|reset] <type>',
-        'description': '''Build and manage personalized agents that learn from your data patterns.
+        'summary': 'Train agents and process data into memory',
+        'usage': '/agent [train|process|show|reset] <type>',
+        'description': '''Train personalized agents and process synced data into memory.
 
-**Usage:**
-- `/agent train email` - Analyze your emails to create personalized extraction agent
+**Training:**
+- `/agent train email` - Create personalized extraction agent from your email patterns
+
+**Processing:**
+- `/agent process` - Process all unprocessed data into memory
+- `/agent process email` - Process only emails
+- `/agent process calendar` - Process only calendar events
+- `/agent process pipedrive` - Process only Pipedrive deals
+
+**Management:**
 - `/agent show email` - Display your current agent
 - `/agent reset email` - Delete custom agent
 
-**How it works:**
-1. Run `/sync` to sync your email history
-2. `/agent train email` analyzes patterns:
-   - Who you reply to (VIP contacts)
-   - What you ignore (cold outreach)
-   - Your role and business context
-3. Creates a personalized agent stored in your account
-4. `/memory process email` uses this agent for smarter extraction
-
-**Why personalize?**
-- Better cold outreach detection specific to YOU
-- VIP contacts get detailed entity extraction
-- Your role/context understood (founder vs investor vs engineer)
-- Significantly improved memory quality''',
+**Workflow:**
+1. `/sync` - Fetch emails/calendar/pipedrive
+2. `/agent train email` - Create personalized agent (recommended)
+3. `/agent process` - Extract facts into memory blobs
+4. `/memory search <query>` - Find stored information''',
     },
 }
 
@@ -1995,33 +1893,112 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
     if '--help' in args or not args:
         return """**🤖 Manage AI Agents**
 
-**Usage:**
-• `/agent train email` - Analyze your emails and create personalized extraction agent
+**Training:**
+• `/agent train email` - Create personalized extraction agent from your email patterns
+
+**Processing:**
+• `/agent process` - Process all unprocessed data into memory
+• `/agent process email` - Process only emails
+• `/agent process calendar` - Process only calendar events
+• `/agent process pipedrive` - Process only Pipedrive deals
+
+**Management:**
 • `/agent show email` - Show your current email agent
 • `/agent reset email` - Delete custom agent
 
-**How it works:**
-1. Run `/sync` first to ensure emails are available
-2. `/agent train email` analyzes your sent/received patterns
-3. Creates a personalized agent that understands:
-   - Who matters to you (VIP contacts)
-   - What to extract from their emails
-   - What to ignore (cold outreach, etc.)
-4. `/memory process email` uses this agent for extraction
-
-**Why personalize?**
-- The system learns YOUR patterns, not generic rules
-- VIP contacts get detailed extraction
-- Cold outreach patterns specific to YOU are filtered
-- Your role/context is understood (founder vs investor vs engineer)"""
+**Workflow:**
+1. `/sync` - Fetch emails/calendar/pipedrive
+2. `/agent train email` - Create personalized agent (recommended)
+3. `/agent process` - Extract facts into memory blobs
+4. `/memory search <query>` - Find stored information"""
 
     try:
         storage = SupabaseStorage.get_instance()
         cmd = args[0].lower()
+
+        if cmd == 'process':
+            # Process synced data into memory blobs
+            from zylch.workers.memory_worker import MemoryWorker
+
+            service = args[1].lower() if len(args) > 1 else 'all'
+            valid_services = ['all', 'email', 'calendar', 'pipedrive']
+
+            if service not in valid_services:
+                return f"❌ Unknown service: `{service}`\n\nValid options: `email`, `calendar`, `pipedrive`, or omit for all."
+
+            # Get Anthropic API key from user's stored key or system settings
+            anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
+
+            if not anthropic_key:
+                return """❌ **Anthropic API key required**
+
+Connect your Anthropic account:
+`/connect anthropic`"""
+
+            worker = MemoryWorker(storage=storage, owner_id=owner_id, anthropic_api_key=anthropic_key)
+
+            # Gate: Check if processing emails without a custom prompt
+            if service in ['all', 'email'] and not worker.has_custom_prompt():
+                # Show recommendation to build custom prompt first
+                unprocessed_count = len(storage.get_unprocessed_emails(owner_id, limit=1))
+                if unprocessed_count > 0:
+                    return """⚠️ **No personalized extraction agent found**
+
+For better memory extraction, create a personalized agent first:
+
+```
+/agent train email
+```
+
+This analyzes your email patterns to understand:
+- **Who matters to you** (VIP contacts get detailed extraction)
+- **What to ignore** (cold outreach specific to you)
+- **Your role/context** (founder vs investor vs engineer)
+
+The personalized agent significantly improves:
+- Cold outreach detection
+- Relevant fact extraction
+- VIP contact prioritization"""
+
+            results = []
+
+            # Process emails
+            if service in ['all', 'email']:
+                unprocessed_emails = storage.get_unprocessed_emails(owner_id, limit=100)
+                if unprocessed_emails:
+                    processed = await worker.process_batch(unprocessed_emails)
+                    prompt_note = " (using custom agent)" if worker.has_custom_prompt() else " (using default agent)"
+                    results.append(f"📧 **Emails:** {processed}/{len(unprocessed_emails)} processed{prompt_note}")
+                else:
+                    results.append("📧 **Emails:** No unprocessed emails")
+
+            # Process calendar events
+            if service in ['all', 'calendar']:
+                unprocessed_events = storage.get_unprocessed_calendar_events(owner_id, limit=100)
+                if unprocessed_events:
+                    processed = await worker.process_calendar_batch(unprocessed_events)
+                    results.append(f"📅 **Calendar:** {processed}/{len(unprocessed_events)} processed")
+                else:
+                    results.append("📅 **Calendar:** No unprocessed events")
+
+            # Process pipedrive deals
+            if service in ['all', 'pipedrive']:
+                unprocessed_deals = storage.get_unprocessed_pipedrive_deals(owner_id, limit=100)
+                if unprocessed_deals:
+                    processed = await worker.process_pipedrive_batch(unprocessed_deals)
+                    results.append(f"💼 **Pipedrive:** {processed}/{len(unprocessed_deals)} processed")
+                else:
+                    results.append("💼 **Pipedrive:** No unprocessed deals")
+
+            output = "**🧠 Memory Processing Complete**\n\n"
+            output += "\n".join(results)
+            output += "\n\nUse `/memory search <query>` to find stored information."
+            return output
+
         agent_type = args[1].lower() if len(args) > 1 else None
 
-        # Validate agent type
-        if agent_type and agent_type != 'email':
+        # Validate agent type for train/show/reset commands
+        if cmd in ['train', 'show', 'reset'] and agent_type and agent_type != 'email':
             return f"❌ Unknown agent type: `{agent_type}`\n\nAvailable types: `email`"
 
         if cmd == 'train':
@@ -2082,7 +2059,7 @@ Please ensure your account is properly connected via `/connect`."""
 
 **Next steps:**
 - `/agent show email` to review the agent
-- `/memory process email` to extract entities using this agent"""
+- `/agent process email` to extract entities using this agent"""
 
         elif cmd == 'show':
             if not agent_type:
@@ -2274,16 +2251,6 @@ COMMAND_TRIGGERS = {
 
     # --- Memory System ---
     '/memory': [
-        # Process (extract facts from synced data)
-        "process memory",
-        "process emails into memory",
-        "process calendar into memory",
-        "process pipedrive into memory",
-        "process deals into memory",
-        "extract facts from emails",
-        "extract facts from pipedrive",
-        "build memory from synced data",
-        "run memory agent",
         # Search
         "search memory",
         "search memory for {query:text}",
@@ -2530,11 +2497,21 @@ COMMAND_TRIGGERS = {
         "cancel {job_id:text}",
     ],
 
-    # --- Agent (Personalized extraction agents) ---
+    # --- Agent (Training and processing) ---
     '/agent': [
         # Train
         "train email agent",
         "create email agent",
+        # Process (extract facts from synced data)
+        "process memory",
+        "process emails into memory",
+        "process calendar into memory",
+        "process pipedrive into memory",
+        "process deals into memory",
+        "extract facts from emails",
+        "extract facts from pipedrive",
+        "build memory from synced data",
+        "run memory agent",
         # Show
         "show email agent",
         "let me see your agents",
