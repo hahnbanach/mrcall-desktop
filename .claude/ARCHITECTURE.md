@@ -273,7 +273,7 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
 - `/agent process email` - Process only emails
 - `/agent process calendar` - Process only calendar events
 - `/memory search <query>` - Hybrid FTS + semantic search
-- `/memory --reset` - Delete blobs AND reset processing timestamps
+- `/memory reset` - Delete blobs AND reset processing timestamps
 
 **Reconsolidation**: When storing new facts, system searches for existing blob about same entity (hybrid score ≥ 0.65). If found, LLM merges old + new content. This prevents duplicate blobs about same person/topic.
 
@@ -721,19 +721,19 @@ hybrid_score = alpha * FTS_score + (1-alpha) * semantic_score
 | `/memory store <content>` | Store with auto-reconsolidation |
 | `/memory stats` | Show blob/sentence counts |
 | `/memory list [limit]` | List recent blobs |
-| `/memory --reset` | Delete ALL blobs (irreversible) |
+| `/memory reset` | Delete ALL blobs (irreversible) |
 
 ### Fresh Start (Rebuild Everything)
 
 To rebuild memory from scratch:
 
 ```bash
-/memory --reset       # Delete all blobs first
+/memory reset         # Delete all blobs first
 /sync --reset         # Clear emails/calendar (warns about memory)
 /sync --days 30       # Re-sync and process into fresh blobs
 ```
 
-**`/sync --reset`** clears emails and calendar, then warns to run `/memory --reset` if you want fresh memory too.
+**`/sync --reset`** clears emails and calendar, then warns to run `/memory reset` if you want fresh memory too.
 
 ### Database Schema
 

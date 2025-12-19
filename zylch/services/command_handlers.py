@@ -148,7 +148,7 @@ Next `/sync` will perform a full re-sync from scratch.
 
 ⚠️ **Memory note:** Your memory blobs still exist. If you want fresh memory:
 ```
-/memory --reset
+/memory reset
 ```
 Then run `/sync --days <n>` to rebuild memory from re-synced emails."""
         except Exception as e:
@@ -395,7 +395,7 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 • `/memory store <content>` - Store new memory (with auto-reconsolidation)
 • `/memory stats` - Show memory statistics
 • `/memory list [limit]` - List recent memories
-• `/memory --reset` - Delete ALL memories AND reset processing timestamps
+• `/memory reset` - Delete ALL memories AND reset processing timestamps
 
 **Examples:**
 • `/memory search John Smith`
@@ -1441,7 +1441,7 @@ Also runs Memory Agent to extract facts from emails into entity blobs.
 - `/sync --reset` - Reset sync state, then run `/sync` to re-sync
 
 **Fresh start:** To rebuild everything from scratch:
-1. `/memory --reset` - Clear memory blobs
+1. `/memory reset` - Clear memory blobs
 2. `/sync --reset` - Clear emails/calendar
 3. `/sync --days 30` - Re-sync and rebuild memory''',
     },
@@ -1473,7 +1473,7 @@ Run `/sync` first to fetch latest emails.''',
     },
     '/memory': {
         'summary': 'Entity memory system',
-        'usage': '/memory [search|store|stats|list|--reset] <args>',
+        'usage': '/memory [search|store|stats|list|reset] <args>',
         'description': '''Search and manage entity memories.
 
 **Searching:**
@@ -1483,7 +1483,7 @@ Run `/sync` first to fetch latest emails.''',
 **Management:**
 - `/memory stats` - Show memory statistics
 - `/memory list [limit]` - List recent memories
-- `/memory --reset` - Delete ALL memories AND reset processing timestamps
+- `/memory reset` - Delete ALL memories AND reset processing timestamps
 
 **Processing:**
 Use `/agent process` to extract facts from synced data into memory.''',
@@ -2194,7 +2194,7 @@ COMMAND_TRIGGERS = {
         "get emails from the last {days:int} days",
         "fetch emails from the past {days:int} days",
     ],
-    '/memory --reset': [
+    '/memory reset': [
         "reset memory",
         "clear memory",
         "delete memory",
