@@ -2185,16 +2185,13 @@ Please ensure your account is properly connected via `/connect`."""
                 return f"""✅ **Email memory prompt created**
 
 **Analyzed:**
-- {metadata.get('replied_threads_analyzed', 0)} threads you replied to
-- {metadata.get('ignored_emails_analyzed', 0)} emails you ignored
-- {metadata.get('vip_contacts_count', 0)} VIP contacts identified
-- {metadata.get('noise_patterns_count', 0)} noise patterns detected
+- {metadata.get('emails_analyzed', 0)} recent emails
+- {metadata.get('frequent_contacts_count', 0)} frequent contacts identified
 
 **What was learned:**
 - Your role and business context
-- VIP contacts who deserve detailed extraction
-- Cold outreach patterns specific to you
-- Topics you engage with vs ignore
+- Types of emails you receive
+- How to assess importance from tone/content
 
 **Next steps:**
 - `/train show memory-email` to review the prompt
