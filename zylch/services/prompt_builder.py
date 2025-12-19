@@ -169,7 +169,8 @@ class PromptBuilder:
         """
         # Strategy: Find threads where there are multiple emails,
         # and at least one email is FROM the user's domain (indicating they replied)
-        emails = self.storage.get_emails(self.owner_id, limit=500)
+        # Fetch 300 emails - enough to get ~100 threads for analysis
+        emails = self.storage.get_emails(self.owner_id, limit=300)
 
         # Group by thread_id
         threads: Dict[str, List[Dict]] = {}
@@ -208,7 +209,8 @@ class PromptBuilder:
 
         These represent contacts/patterns the user ignores.
         """
-        emails = self.storage.get_emails(self.owner_id, limit=500)
+        # Fetch 300 emails - enough to get ~100 threads for analysis
+        emails = self.storage.get_emails(self.owner_id, limit=300)
 
         # Group by thread_id
         threads: Dict[str, List[Dict]] = {}
