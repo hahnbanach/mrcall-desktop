@@ -23,7 +23,7 @@ Output ONLY the merged memory text, nothing else."""
 class LLMMergeService:
     """LLM-assisted memory merge for reconsolidation."""
 
-    def __init__(self, api_key: str, model: str = "claude-3-5-haiku-20241022"):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model
 
