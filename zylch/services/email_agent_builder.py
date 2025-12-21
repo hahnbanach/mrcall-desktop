@@ -21,50 +21,6 @@ from zylch.storage.supabase_client import SupabaseStorage
 logger = logging.getLogger(__name__)
 
 # Fixed suffix appended to all generated prompts to ensure entity delimiter is used
-ENTITY_FORMAT_SUFFIX = """
-
----
-
-CRITICAL OUTPUT FORMAT:
-- Extract exactly 3 types: person, company, topic
-- Separate each with ---ENTITY--- on its own line
-- Each blob MUST have 3 sections: #Identifiers, #About (1 sentence), #History (narrative)
-- If email is noise/marketing, output only: SKIP
-
-Example:
-#Identifiers
-Entity type: person
-Name: John Doe
-Email: john@example.com
-Company: Acme Corp
-
-#About
-John Doe is the sales director at Acme Corp.
-
-#History
-In December 2025 John reached out about a potential partnership with MrCall. He is interested in integrating with their CRM system.
----ENTITY---
-#Identifiers
-Entity type: company
-Name: Acme Corp
-Website: acme.com
-
-#About
-Acme Corp is a B2B software company specializing in CRM solutions.
-
-#History
-Acme Corp contacted MrCall in December 2025 about integrating AI phone assistants into their CRM platform.
----ENTITY---
-#Identifiers
-Entity type: topic
-Name: Acme Corp CRM integration
-
-#About
-Project to integrate MrCall AI phone assistants with Acme Corp's CRM platform.
-
-#History
-In December 2025 John Doe from Acme Corp initiated discussions about integrating MrCall into their CRM. They are evaluating the Essential plan for their sales team.
-"""
 
 # Meta-prompt used to generate the email agent
 EMAIL_AGENT_META_PROMPT = """You are analyzing a user's email history to create a personalized prompt for their AI assistant.
@@ -98,9 +54,6 @@ Entity types:
 
 === SAMPLE OF RECENT EMAILS ===
 {email_samples}
-
-=== FREQUENT CONTACTS ===
-{frequent_contacts}
 
 ---
 
@@ -139,36 +92,43 @@ The prompt must include:
    ```
    #Identifiers
    Entity type: person
-   Name: Francesco Spina
-   Email: francesco.spina@tiscali.it
-   Company: Tiscali
+   Name: Name Familyname 
+   Email: email@example.com
+   Company: Company Name if available
 
    #About
-   Francesco Spina is a business development manager at Tiscali.
+   About the person: what have you learned about the person reading emails? Where do they work, live, what are their relationship with the user?
 
    #History
-   In December 2025 Francesco received a signed contract from Mario for MrCall integration.
+    What did the person communicate to the user? What the user communicated to them?
+
+NB You already have information about the user, you MUST NOT not create any `person` entity about the user!!
+
    ---ENTITY---
    #Identifiers
    Entity type: company
-   Name: Tiscali
-   Website: tiscali.it
+   Name: Name of the company
+   Website: company.tld
 
    #About
-   Tiscali is an Italian telecommunications company.
+   Very short description of the company: particularly what it does if known
 
    #History
-   In 2024 Mario initiated contact with Tiscali about integrating MrCall. In December 2025 a contract was signed.
+   Again, which type of communication did the user have with the company?
+   
+   NB No `company` entity must be created about the user's company
+
    ---ENTITY---
    #Identifiers
    Entity type: topic
-   Name: Tiscali partnership opportunity
+   Name: Name of the topic
 
    #About
-   Partnership project to integrate MrCall AI phone assistants with Tiscali's services.
+   What is it? A collaboration? An offer? A request for work? A candidacy? Anything we should trace over time, eg NOT calls, booking. 
 
    #History
-   In 2024 Mario initiated contact with Tiscali about integrating MrCall. Francesco Spina is the main contact. In December 2025 Mario sent a signed contract to Francesco.
+   On this date the user started talking about this topic with a `person` or a `company`
+   
    ```
 
 5. **IMPORTANCE ASSESSMENT**
@@ -212,6 +172,56 @@ class EmailAgentBuilder:
         self.user_email = user_email.lower() if user_email else ''
         self.user_domain = user_email.split('@')[1].lower() if user_email and '@' in user_email else ''
 
+    def _get_entity_format_suffix(self) -> str:
+        """Return the entity format suffix with user_email interpolated."""
+        return f"""
+
+---
+
+CRITICAL OUTPUT FORMAT:
+- You can only extract 3 types of entities: `person`, `company`, `topic`
+- In case a single email contains more entities, you must create different sections, each one with its own #IDENTIFIERS, #ABOUT and #HISTORY.
+- Each entity is separated by ---ENTITY--- on its own line
+- If email is noise/marketing, output only: SKIP
+
+Example: The email is from john@acme.com to {self.user_email} about asking for a meeting. {self.user_email} is the user.
+
+In this case you have 2 `person` (John and the user), 1 `company` (Acme). But because {self.user_email} is the user, they must not be considered as entity to be created/updated.
+
+#Identifiers
+Entity type: person
+Name: John Doe
+Email: john@acme.com
+Company: Acme Corp
+
+#About
+John Doe is the sales director at Acme Corp.
+
+#History
+In December 2025 John reached out to {self.user_email} asking for a meeting about a potential partnership with NewCo.
+---ENTITY---
+#Identifiers
+Entity type: company
+Name: Acme Corp
+Website: acme.com
+
+#About
+Acme Corp is a B2B software company specializing in CRM solutions.
+
+#History
+Acme Corp contacted MrCall in December 2025 about a possible partnership.
+---ENTITY---
+#Identifiers
+Entity type: topic
+Name: Acme Corp CRM collaboration
+
+#About
+Project to offer MrCall on Acme's website.
+
+#History
+In December 2025 John Doe from Acme Corp initiated discussions about selling MrCall to their customers.
+"""
+
     async def build_memory_email_prompt(self) -> Tuple[str, Dict[str, Any]]:
         """Analyze user's emails and generate personalized extraction prompt.
 
@@ -230,25 +240,20 @@ class EmailAgentBuilder:
 
         # Step 2: Analyze user profile from their sent emails
         user_profile = self._analyze_user_profile(user_domain)
-
-        # Step 3: Identify frequent contacts
-        frequent_contacts = self._identify_frequent_contacts(recent_emails, user_domain)
-
+        logger.debug(f"user_profile: {user_profile}")
         # Step 4: Format samples for the meta-prompt (show variety)
         email_samples = self._format_email_samples(recent_emails, max_samples=15)
 
         # Step 5: Generate the prompt using Claude
         prompt_content = self._generate_prompt(
             user_profile=user_profile,
-            email_samples=email_samples,
-            frequent_contacts=frequent_contacts
+            email_samples=email_samples
         )
 
         metadata = {
             'generated_at': datetime.now(timezone.utc).isoformat(),
             'user_domain': user_domain,
-            'emails_analyzed': len(recent_emails),
-            'frequent_contacts_count': len(frequent_contacts)
+            'emails_analyzed': len(recent_emails)
         }
 
         return prompt_content, metadata
@@ -266,106 +271,6 @@ class EmailAgentBuilder:
         # Sort by date (newest first)
         emails.sort(key=lambda e: e.get('date_timestamp', 0), reverse=True)
         return emails
-
-    def _identify_frequent_contacts(
-        self,
-        emails: List[Dict[str, Any]],
-        user_domain: str
-    ) -> List[str]:
-        """Identify contacts with most email activity.
-
-        Returns list of email addresses with frequent correspondence.
-        """
-        contact_counts: Counter = Counter()
-
-        for email in emails:
-            from_email = email.get('from_email', '')
-            if from_email and (not user_domain or user_domain not in from_email.lower()):
-                contact_counts[from_email.lower()] += 1
-
-        # Return top contacts (at least 2 emails)
-        frequent = [email for email, count in contact_counts.most_common(20) if count >= 2]
-        return frequent
-
-    def _get_replied_threads(self, user_domain: str, limit: int = 50) -> List[Dict[str, Any]]:
-        """Get email threads where the user replied (high-value relationships).
-
-        These represent contacts the user actively engages with.
-        """
-        # Strategy: Find threads where there are multiple emails,
-        # and at least one email is FROM the user's domain (indicating they replied)
-        # Fetch 300 emails - enough to get ~100 threads for analysis
-        emails = self.storage.get_emails(self.owner_id, limit=300)
-
-        # Group by thread_id
-        threads: Dict[str, List[Dict]] = {}
-        for email in emails:
-            tid = email.get('thread_id', '')
-            if tid:
-                if tid not in threads:
-                    threads[tid] = []
-                threads[tid].append(email)
-
-        # Find threads where user sent at least one email
-        replied_threads = []
-        for tid, thread_emails in threads.items():
-            user_sent = False
-            external_emails = []
-
-            for email in thread_emails:
-                from_email = email.get('from_email', '')
-                if user_domain and user_domain in from_email.lower():
-                    user_sent = True
-                else:
-                    external_emails.append(email)
-
-            # If user sent something AND there are external emails, this is a replied thread
-            if user_sent and external_emails:
-                # Use the most recent external email as the sample
-                external_emails.sort(key=lambda e: e.get('date_timestamp', 0), reverse=True)
-                replied_threads.append(external_emails[0])
-
-        # Sort by date and limit
-        replied_threads.sort(key=lambda e: e.get('date_timestamp', 0), reverse=True)
-        return replied_threads[:limit]
-
-    def _get_ignored_emails(self, user_domain: str, limit: int = 50) -> List[Dict[str, Any]]:
-        """Get emails the user never replied to (potential noise/cold outreach).
-
-        These represent contacts/patterns the user ignores.
-        """
-        # Fetch 300 emails - enough to get ~100 threads for analysis
-        emails = self.storage.get_emails(self.owner_id, limit=300)
-
-        # Group by thread_id
-        threads: Dict[str, List[Dict]] = {}
-        for email in emails:
-            tid = email.get('thread_id', '')
-            if tid:
-                if tid not in threads:
-                    threads[tid] = []
-                threads[tid].append(email)
-
-        # Find threads where user never sent anything
-        ignored_emails = []
-        for tid, thread_emails in threads.items():
-            user_sent = False
-
-            for email in thread_emails:
-                from_email = email.get('from_email', '')
-                if user_domain and user_domain in from_email.lower():
-                    user_sent = True
-                    break
-
-            # If user never sent anything, all emails in this thread were ignored
-            if not user_sent and thread_emails:
-                # Use the most recent email as the sample
-                thread_emails.sort(key=lambda e: e.get('date_timestamp', 0), reverse=True)
-                ignored_emails.append(thread_emails[0])
-
-        # Sort by date and limit
-        ignored_emails.sort(key=lambda e: e.get('date_timestamp', 0), reverse=True)
-        return ignored_emails[:limit]
 
     def _analyze_user_profile(self, user_domain: str) -> str:
         """Extract user context from their sent emails.
@@ -412,82 +317,6 @@ class EmailAgentBuilder:
 
         return '\n'.join(profile_parts)
 
-    def _identify_vip_contacts(
-        self,
-        replied_threads: List[Dict[str, Any]],
-        user_domain: str
-    ) -> List[str]:
-        """Identify high-engagement contacts (VIPs).
-
-        Returns list of email addresses/domains with highest engagement.
-        """
-        # Count how many times user replied to each contact
-        contact_counts: Counter = Counter()
-
-        for email in replied_threads:
-            from_email = email.get('from_email', '')
-            if from_email and (not user_domain or user_domain not in from_email.lower()):
-                contact_counts[from_email.lower()] += 1
-
-        # Return contacts with 2+ interactions
-        vips = [email for email, count in contact_counts.most_common(20) if count >= 2]
-        return vips
-
-    def _analyze_noise_patterns(self, ignored_emails: List[Dict[str, Any]]) -> List[str]:
-        """Identify common patterns in ignored emails.
-
-        Returns list of pattern descriptions.
-        """
-        patterns = []
-
-        # Analyze sender domains
-        sender_domains: Counter = Counter()
-        for email in ignored_emails:
-            from_email = email.get('from_email', '')
-            if '@' in from_email:
-                domain = from_email.split('@')[1].lower()
-                sender_domains[domain] += 1
-
-        # Domains that appear frequently in ignored emails
-        for domain, count in sender_domains.most_common(5):
-            if count >= 3:
-                patterns.append(f"Emails from {domain} (ignored {count} times)")
-
-        # Analyze subject patterns
-        subjects = [e.get('subject', '') for e in ignored_emails if e.get('subject')]
-
-        # Common words in ignored subjects
-        subject_words: Counter = Counter()
-        for subject in subjects:
-            for word in subject.lower().split():
-                if len(word) > 4:  # Skip short words
-                    subject_words[word] += 1
-
-        # Words that appear frequently in ignored subjects
-        common_words = [word for word, count in subject_words.most_common(10) if count >= 3]
-        if common_words:
-            patterns.append(f"Common words in ignored subjects: {', '.join(common_words)}")
-
-        # Check for fundraising patterns
-        fundraising_signals = ['raising', 'series', 'investor', 'fund', 'investment', 'pitch']
-        fundraising_count = sum(
-            1 for e in ignored_emails
-            if any(s in (e.get('body_plain', '') or e.get('subject', '')).lower() for s in fundraising_signals)
-        )
-        if fundraising_count >= 3:
-            patterns.append(f"Fundraising/investment asks ({fundraising_count} ignored)")
-
-        # Check for sales patterns
-        sales_signals = ['demo', 'schedule a call', 'would love to', 'partnership', 'collaborate']
-        sales_count = sum(
-            1 for e in ignored_emails
-            if any(s in (e.get('body_plain', '') or '').lower() for s in sales_signals)
-        )
-        if sales_count >= 3:
-            patterns.append(f"Sales/partnership outreach ({sales_count} ignored)")
-
-        return patterns
-
     def _format_email_samples(
         self,
         emails: List[Dict[str, Any]],
@@ -514,16 +343,12 @@ Body preview: {body}
     def _generate_prompt(
         self,
         user_profile: str,
-        email_samples: str,
-        frequent_contacts: List[str]
+        email_samples: str
     ) -> str:
         """Generate the final extraction prompt using Claude."""
-        contacts_text = '\n'.join(f"- {c}" for c in frequent_contacts) if frequent_contacts else "None identified yet."
-
         meta_prompt = EMAIL_AGENT_META_PROMPT.format(
             user_profile=user_profile,
-            email_samples=email_samples,
-            frequent_contacts=contacts_text
+            email_samples=email_samples
         )
 
         logger.info("Training email analyzer agent...")
@@ -537,7 +362,7 @@ Body preview: {body}
         prompt_content = response.content[0].text.strip()
 
         # Append fixed suffix to ensure entity delimiter is always present
-        prompt_content += ENTITY_FORMAT_SUFFIX
+        prompt_content += self._get_entity_format_suffix()
 
         logger.info(f"Generated prompt ({len(prompt_content)} chars)")
         return prompt_content
