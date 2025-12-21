@@ -26,36 +26,64 @@ ENTITY_FORMAT_SUFFIX = """
 ---
 
 CRITICAL OUTPUT FORMAT:
-- If multiple entities are found, separate each with ---ENTITY--- on its own line
-- Output ONE blob per entity, never combine multiple entities into one blob
-- Example with 2 entities:
+- Extract exactly 3 types: person, company, topic
+- Separate each with ---ENTITY--- on its own line
+- PERSON and COMPANY blobs: minimal identifiers + 1 sentence #About
+- TOPIC blobs: the full narrative, referencing people/companies by name
+- If email is noise/marketing, output only: SKIP
+
+Example:
 #Identifiers
 Entity type: person
 Name: John Doe
 Email: john@example.com
+Company: Acme Corp
+
 #About
-John is a customer...
+John Doe is the sales director at Acme Corp.
 ---ENTITY---
 #Identifiers
 Entity type: company
 Name: Acme Corp
 Website: acme.com
+
 #About
-Acme Corp is...
+Acme Corp is a software company.
+---ENTITY---
+#Identifiers
+Entity type: topic
+Name: Acme Corp partnership discussion
+
+#About
+In December 2025 John Doe from Acme Corp reached out about a potential partnership. He is interested in integrating MrCall with their CRM system.
 """
 
 # Meta-prompt used to generate the email agent
 EMAIL_AGENT_META_PROMPT = """You are analyzing a user's email history to create a personalized prompt for their AI assistant.
 
-Your goal: Generate a prompt that will be used to EXTRACT ENTITIES from emails and store them in memory.
+Your goal: Generate a prompt that extracts THREE types of entities from emails:
 
-CRITICAL CONCEPT - ONE BLOB PER ENTITY:
-The memory system stores ONE BLOB PER ENTITY (person, company, project, etc.). Each blob has:
-- **#Identifiers section**: Unique identifiers that allow reconsolidation (merging) when the same entity appears again
-- **#About section**: Natural language description of what we know about this entity
+1. **PERSON** - Who is this person?
+   - Name (required)
+   - Email (if available)
+   - Phone (if available)
+   - Company they work for (if known)
+   - Role/title (if known)
 
-IMPORTANT: An email may mention MULTIPLE entities. Each entity MUST be output as a SEPARATE blob.
-When the same entity appears in multiple emails, the system uses identifiers to MERGE information into ONE blob, not create duplicates.
+   The #About section should be 1 sentence max: their role and company.
+
+2. **COMPANY** - What is this organization?
+   - Name (required)
+   - Website (if available)
+   - Address (if available)
+   - VAT/Tax ID (if available)
+
+   The #About section should be 1 sentence max: what the company does.
+
+3. **TOPIC** - What is the relationship/story about?
+   - Name: A short descriptive title (e.g., "MrCall integration for PC Dépannage", "Barcelona trip December 2025")
+
+   The #About section contains the narrative: what happened, when, who was involved (reference by name), current status, next steps.
 
 === USER'S PROFILE ===
 {user_profile}
@@ -68,58 +96,56 @@ When the same entity appears in multiple emails, the system uses identifiers to 
 
 ---
 
-Based on this analysis, generate a COMPLETE, SELF-CONTAINED prompt that will be used to extract ENTITIES from emails.
+Generate a COMPLETE, SELF-CONTAINED prompt that will extract these 3 entity types.
 
 The prompt must include:
 
 1. **USER CONTEXT**
-   - Their role (founder, engineer, executive, etc.)
-   - Their company/domain
-   - What they care about professionally
-   - What they are NOT (e.g., "NOT an investor" if they ignore fundraising asks)
+   - Their role and company
+   - What topics they care about (sales, support, partnerships, personal)
+   - What they ignore (cold outreach, marketing)
 
-2. **ENTITY EXTRACTION** (the core task)
-   An entity is anything which can have properties and can be connected to other entities (person, company, contract, project, document, agreement, deal, event, etc.).
+2. **EXTRACTION RULES**
+   - Extract PERSON for each individual mentioned (sender, recipients, people referenced)
+   - Extract COMPANY for each organization mentioned
+   - Extract TOPIC for the main subject/relationship being discussed
+   - Keep PERSON and COMPANY blobs minimal (identifiers + 1 sentence)
+   - Put the narrative in TOPIC blobs
+   - Reference people/companies by name in topics, don't duplicate info
 
-   The prompt must instruct to extract EACH entity in this format, with entities separated by the delimiter `---ENTITY---`:
+3. **OUTPUT FORMAT**
+   Each entity separated by ---ENTITY---:
 
    ```
    #Identifiers
-
-   Entity type: [what kind of entity this is].
-   Name: [Full name or official name].
-   [Any other identifiers relevant to this entity type: email, phone, LinkedIn, website, VAT/Tax ID, contract number, document ID, etc.]
+   Entity type: person
+   Name: Francesco Spina
+   Email: francesco.spina@tiscali.it
+   Company: Tiscali
 
    #About
-
-   [2-5 sentences describing what we know about this entity: role, company, relationship to user, topics discussed, preferences, action items, etc.]
+   Francesco Spina is a business development manager at Tiscali.
    ---ENTITY---
    #Identifiers
+   Entity type: company
+   Name: Tiscali
+   Website: tiscali.it
 
-   Entity type: [next entity type].
-   Name: [next entity name].
-   ...
+   #About
+   Tiscali is an Italian telecommunications company.
+   ---ENTITY---
+   #Identifiers
+   Entity type: topic
+   Name: Tiscali partnership opportunity
+
+   #About
+   In 2024 Mario initiated contact with Tiscali about integrating MrCall. Francesco Spina is the main contact. In December 2025 Mario sent a signed contract to Francesco.
    ```
 
-   CRITICAL RULES:
-   - Output ONE BLOB PER ENTITY - never combine multiple entities into one blob
-   - Separate each entity with `---ENTITY---` on its own line
-   - IDENTIFIERS ARE CRITICAL: They enable the memory system to recognize "this is the same entity" and merge information. Without identifiers, we get duplicate blobs.
-   - Focus on PEOPLE and COMPANIES as primary entities. Only extract other entity types (projects, contracts, etc.) if they have clear identifiers.
-
-3. **IMPORTANCE ASSESSMENT**
-   - Specific cold outreach patterns this user ignores
-   - Judge importance based on the EMAIL'S TONE AND CONTENT, not just reply history
-   - Personal/direct emails deserve detailed extraction
-   - Marketing, newsletters, automated notifications can be skipped
-   - Types of requests they never engage with
-   - Email messages clearly written with AI
-
-4. **OUTPUT FORMAT**
-   The prompt should instruct the LLM to output:
-   - ONE blob per entity, separated by `---ENTITY---`
-   - Include ALL available identifiers (email, phone, LinkedIn, etc.)
-   - If the email is automated/marketing/noise or contains no extractable entity, output only: SKIP
+4. **IMPORTANCE ASSESSMENT**
+   - SKIP automated emails, newsletters, marketing
+   - Extract from: customer communications, business discussions, personal relationships
+   - Judge by email tone and content
 
 The generated prompt will receive these template variables:
 - {{from_email}} - Sender's email
