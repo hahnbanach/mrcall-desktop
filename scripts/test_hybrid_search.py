@@ -24,9 +24,9 @@ from zylch_memory import EmbeddingEngine, ZylchMemoryConfig
 
 def get_supabase_client():
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        print("Error: SUPABASE_URL and SUPABASE_SERVICE_KEY must be set")
+        print("Error: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
         sys.exit(1)
     return create_client(url, key)
 
