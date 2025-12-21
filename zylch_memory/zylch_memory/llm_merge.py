@@ -15,8 +15,10 @@ Rules:
 1. Use ONLY information explicitly present in the memories above - do NOT add external knowledge
 2. Preserve ALL facts from both memories
 3. Resolve conflicts - new information wins for time-sensitive facts (titles, locations, status)
-4. Keep the result concise and well-organized
-5. Maximum 500 words
+4. #Identifiers: merge all unique identifiers
+5. #About: keep as ONE sentence (update only if new info changes the definition)
+6. #History: append new events chronologically, keep concise
+7. Maximum 500 words total
 
 OUTPUT FORMAT (required):
 #Identifiers
@@ -25,7 +27,10 @@ Name: [name]
 [other identifiers as available: Email, Phone, Company, Website, etc.]
 
 #About
-[Natural language prose describing what we know about this entity]
+[One sentence describing what/who this entity is]
+
+#History
+[Chronological narrative of events and interactions]
 
 Output ONLY the merged memory in this exact format, nothing else."""
 

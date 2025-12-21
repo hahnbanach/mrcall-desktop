@@ -28,8 +28,7 @@ ENTITY_FORMAT_SUFFIX = """
 CRITICAL OUTPUT FORMAT:
 - Extract exactly 3 types: person, company, topic
 - Separate each with ---ENTITY--- on its own line
-- PERSON and COMPANY blobs: minimal identifiers + 1 sentence #About
-- TOPIC blobs: the full narrative, referencing people/companies by name
+- Each blob MUST have 3 sections: #Identifiers, #About (1 sentence), #History (narrative)
 - If email is noise/marketing, output only: SKIP
 
 Example:
@@ -41,6 +40,9 @@ Company: Acme Corp
 
 #About
 John Doe is the sales director at Acme Corp.
+
+#History
+In December 2025 John reached out about a potential partnership with MrCall. He is interested in integrating with their CRM system.
 ---ENTITY---
 #Identifiers
 Entity type: company
@@ -48,14 +50,20 @@ Name: Acme Corp
 Website: acme.com
 
 #About
-Acme Corp is a software company.
+Acme Corp is a B2B software company specializing in CRM solutions.
+
+#History
+Acme Corp contacted MrCall in December 2025 about integrating AI phone assistants into their CRM platform.
 ---ENTITY---
 #Identifiers
 Entity type: topic
-Name: Acme Corp partnership discussion
+Name: Acme Corp CRM integration
 
 #About
-In December 2025 John Doe from Acme Corp reached out about a potential partnership. He is interested in integrating MrCall with their CRM system.
+Project to integrate MrCall AI phone assistants with Acme Corp's CRM platform.
+
+#History
+In December 2025 John Doe from Acme Corp initiated discussions about integrating MrCall into their CRM. They are evaluating the Essential plan for their sales team.
 """
 
 # Meta-prompt used to generate the email agent
