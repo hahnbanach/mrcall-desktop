@@ -2196,15 +2196,10 @@ Create one with:
                 created = meta.get('created_at', '')[:10] if meta.get('created_at') else 'unknown'
                 meta_info = f"\n_Created: {created} | Frequent contacts: {metadata.get('frequent_contacts_count', 'N/A')}_\n"
 
-            # Truncate if too long for display
-            display_content = agent_prompt
-            if len(agent_prompt) > 2000:
-                display_content = agent_prompt[:2000] + f"\n\n_... ({len(agent_prompt) - 2000} more characters)_"
-
             return f"""**🤖 Your Email Agent**
 {meta_info}
 ---
-{display_content}
+{agent_prompt}
 ---
 
 _Use `/agent reset email` to delete._"""
