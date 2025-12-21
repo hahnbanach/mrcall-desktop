@@ -12,13 +12,22 @@ NEW INFORMATION:
 {new}
 
 Rules:
-1. Preserve ALL facts from both memories
-2. Resolve conflicts - new information wins for time-sensitive facts (titles, locations, status)
-3. Keep the result concise and well-organized
-4. Use natural language prose, not bullet points
+1. Use ONLY information explicitly present in the memories above - do NOT add external knowledge
+2. Preserve ALL facts from both memories
+3. Resolve conflicts - new information wins for time-sensitive facts (titles, locations, status)
+4. Keep the result concise and well-organized
 5. Maximum 500 words
 
-Output ONLY the merged memory text, nothing else."""
+OUTPUT FORMAT (required):
+#Identifiers
+Entity type: [person/company/topic]
+Name: [name]
+[other identifiers as available: Email, Phone, Company, Website, etc.]
+
+#About
+[Natural language prose describing what we know about this entity]
+
+Output ONLY the merged memory in this exact format, nothing else."""
 
 class LLMMergeService:
     """LLM-assisted memory merge for reconsolidation."""
