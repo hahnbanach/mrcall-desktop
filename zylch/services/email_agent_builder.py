@@ -105,7 +105,19 @@ The prompt must include:
    - What topics they care about (sales, support, partnerships, personal)
    - What they ignore (cold outreach, marketing)
 
-2. **EXTRACTION RULES**
+2. **USER'S OWN ENTITIES**
+   The generated prompt MUST include a section listing entities about the email owner themselves, extracted from the analysis above:
+   - The user as a PERSON (name, emails, role)
+   - The user's COMPANY (name, website, what they do)
+   - The user's PRODUCTS/SERVICES as TOPIC entities
+
+   This section should say something like:
+   "The following entities belong to the email owner. When they appear in emails, create or update the corresponding blobs:
+   - PERSON: [user's name], [user's email], [role] at [company]
+   - COMPANY: [company name], [website], [what they do]
+   - TOPIC: [product/service name] - [brief description]"
+
+3. **EXTRACTION RULES**
    - Extract PERSON for each individual mentioned (sender, recipients, people referenced)
    - Extract COMPANY for each organization mentioned
    - Extract TOPIC for the main subject/relationship being discussed
@@ -113,7 +125,7 @@ The prompt must include:
    - Put the narrative in TOPIC blobs
    - Reference people/companies by name in topics, don't duplicate info
 
-3. **OUTPUT FORMAT**
+4. **OUTPUT FORMAT**
    Each entity separated by ---ENTITY---:
 
    ```
@@ -142,7 +154,7 @@ The prompt must include:
    In 2024 Mario initiated contact with Tiscali about integrating MrCall. Francesco Spina is the main contact. In December 2025 Mario sent a signed contract to Francesco.
    ```
 
-4. **IMPORTANCE ASSESSMENT**
+5. **IMPORTANCE ASSESSMENT**
    - SKIP automated emails, newsletters, marketing
    - Extract from: customer communications, business discussions, personal relationships
    - Judge by email tone and content
