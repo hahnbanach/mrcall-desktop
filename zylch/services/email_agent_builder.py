@@ -69,29 +69,29 @@ In December 2025 John Doe from Acme Corp initiated discussions about integrating
 # Meta-prompt used to generate the email agent
 EMAIL_AGENT_META_PROMPT = """You are analyzing a user's email history to create a personalized prompt for their AI assistant.
 
-Your goal: Generate a prompt that extracts THREE types of entities from emails:
+Your goal: Generate a prompt that extracts THREE types of entities from emails.
+
+Each entity blob has 3 sections:
+- **#Identifiers**: Stable facts for matching (name, email, website, etc.)
+- **#About**: One sentence definition (who/what this entity IS) - rarely changes
+- **#History**: Evolving narrative (what's HAPPENING over time) - accumulates with each email
+
+Entity types:
 
 1. **PERSON** - Who is this person?
-   - Name (required)
-   - Email (if available)
-   - Phone (if available)
-   - Company they work for (if known)
-   - Role/title (if known)
-
-   The #About section should be 1 sentence max: their role and company.
+   #Identifiers: Name (required), Email, Phone, Company, Role/title
+   #About: One sentence describing their role and company
+   #History: Their interactions and what they're doing (e.g., "She's looking for a phone assistant", "He set up his MrCall account in October")
 
 2. **COMPANY** - What is this organization?
-   - Name (required)
-   - Website (if available)
-   - Address (if available)
-   - VAT/Tax ID (if available)
+   #Identifiers: Name (required), Website, Address, VAT/Tax ID
+   #About: One sentence describing what the company does
+   #History: The relationship with this company over time (e.g., "They signed up for Essential plan in November, requested WhatsApp integration in December")
 
-   The #About section should be 1 sentence max: what the company does.
-
-3. **TOPIC** - What is the relationship/story about?
-   - Name: A short descriptive title (e.g., "MrCall integration for PC Dépannage", "Barcelona trip December 2025")
-
-   The #About section contains the narrative: what happened, when, who was involved (reference by name), current status, next steps.
+3. **TOPIC** - What is the relationship/project/matter about?
+   #Identifiers: Name (short descriptive title, e.g., "MrCall integration for PC Dépannage")
+   #About: One sentence describing what this topic is
+   #History: Chronological narrative of events, who was involved (reference by name), current status, next steps
 
 === USER'S PROFILE ===
 {user_profile}
@@ -134,7 +134,7 @@ The prompt must include:
    - Reference people/companies by name in topics, don't duplicate info
 
 4. **OUTPUT FORMAT**
-   Each entity separated by ---ENTITY---:
+   Each entity separated by ---ENTITY---, with 3 sections each (#Identifiers, #About, #History):
 
    ```
    #Identifiers
@@ -145,6 +145,9 @@ The prompt must include:
 
    #About
    Francesco Spina is a business development manager at Tiscali.
+
+   #History
+   In December 2025 Francesco received a signed contract from Mario for MrCall integration.
    ---ENTITY---
    #Identifiers
    Entity type: company
@@ -153,12 +156,18 @@ The prompt must include:
 
    #About
    Tiscali is an Italian telecommunications company.
+
+   #History
+   In 2024 Mario initiated contact with Tiscali about integrating MrCall. In December 2025 a contract was signed.
    ---ENTITY---
    #Identifiers
    Entity type: topic
    Name: Tiscali partnership opportunity
 
    #About
+   Partnership project to integrate MrCall AI phone assistants with Tiscali's services.
+
+   #History
    In 2024 Mario initiated contact with Tiscali about integrating MrCall. Francesco Spina is the main contact. In December 2025 Mario sent a signed contract to Francesco.
    ```
 
