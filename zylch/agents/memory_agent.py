@@ -309,21 +309,25 @@ class MemoryWorker:
             List of entity blob strings
         """
         # Split by the entity delimiter
+        logging.debug("_parse_entities CALLED")
         ENTITY_DELIMITER = "---ENTITY---"
 
         if ENTITY_DELIMITER in raw_output:
             parts = raw_output.split(ENTITY_DELIMITER)
+            logging.debug(f"Entities delimiter found: {parts}")
         else:
             # Single entity or old format - treat as one
             parts = [raw_output]
+            logging.debug(f"Entities delimiter NOT found: {parts}")
 
         entities = []
         for part in parts:
             part = part.strip()
-            # Validate it looks like an entity blob (has #Identifiers)
-            if part and "#Identifiers" in part:
+            # Validate
+            if part:
                 entities.append(part)
-
+            else:
+                logging.warning("ENTITIES NOT ADDED")
         return entities
 
     async def process_calendar_event(self, event: Dict) -> bool:
