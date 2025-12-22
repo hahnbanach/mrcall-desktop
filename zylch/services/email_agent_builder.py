@@ -24,14 +24,14 @@ logger = logging.getLogger(__name__)
 # Meta-prompt used to generate the email agent
 EMAIL_AGENT_META_PROMPT = """You are analyzing a user's email history to create a personalized prompt for their AI assistant.
 
-Your goal: Generate a prompt that extracts THREE types of entities from emails.
+Your goal: Generate a prompt that extracts entities from emails.
 
 Each entity blob has 3 sections:
 - **#IDENTIFIERS**: Stable facts for matching (name, email, website, etc.)
 - **#ABOUT**: One sentence definition (who/what this entity IS) - rarely changes
 - **#HISTORY**: Evolving narrative (what's HAPPENING over time) - accumulates with each email
 
-Entity types:
+Entity can only be of 3 types:
 
 1. **PERSON** - Who is this person?
    #IDENTIFIERS: Name (required), Email, Phone, Company, Role/title
@@ -56,7 +56,7 @@ Entity types:
 
 ---
 
-Generate a COMPLETE, SELF-CONTAINED prompt that will extract entities (any number!). Entities MUST be of these 3 entity types.
+Generate a COMPLETE, SELF-CONTAINED prompt that will extract entities (any number!). Entities MUST be of these 3 entity types
 
 The prompt must include:
 
@@ -65,20 +65,21 @@ The prompt must include:
    - What projects they care about (sales, support, partnerships, personal)
    - What they ignore (cold outreach, marketing)
 
-2. **USER'S OWN ENTITIES**
+2. **USER'S OWN ENTITIES NOT TO BE RE-EXTRACTED**
    The generated prompt MUST include a section listing entities about the email owner themselves, extracted from the analysis above:
    - The user as a PERSON (name, emails, role)
    - The user's COMPANY (name, website, what they do)
+   REMEMBER: DO NOT EXTRACT THIS PERSON OR COMPANY ENTITIES!! If you do so, we slow the process and make it useless. 
 
    This section should say something like:
    "The following entities belong to the email owner. When they appear in emails DO NOT create or update the corresponding blobs:
-   - PERSON: [user's name], [user's email], [role] at [company]
-   - COMPANY: [company name], [website], [what they do]
+   - USER_PERSON: [user's name], [user's email], [role] at [company] (DO NOT extract entity describing this person!)
+   - USER_COMPANY: [company name], [website], [what they do] (DO NOT extract entity describing this company!)
 
 3. **EXTRACTION RULES**
-   - Extract PERSON for each individual mentioned (sender, recipients, people referenced), if any
-   - Extract COMPANY for each organization mentioned, if any
-   - Extract PROJECT for the main subject/relationship being discussed, if any
+   - Extract PERSON for each individual mentioned (sender, recipients, people referenced), if any WITH THE EXCEPTION OF THE USER_PERSON: don't extract entity about the USER_PERSON
+   - Extract COMPANY for each organization mentioned, if any WITH THE EXCEPTION OF THE USER_COMPANY: don't extract entity about the USER_COMPANY
+   - Extract PROJECT for the main subject/relationship being discussed, if any. Remember: PROJECTS are generic entities, do not quote other companies in a PROJECT's #ABOUT section!
    - Keep #ABOUT section minimal
    - Put the narrative in #HISTORY
    - Reference people/companies by name in #HISTORY, don't duplicate info
@@ -99,7 +100,7 @@ The prompt must include:
    #HISTORY
     What did the person communicate to the user? What the user communicated to them?
 
-NB You already have information about the user, you MUST NOT not create any `person` entity about the user!!
+NB DO NOT CREATE PERSON entity about USER_PERSON!!
 
    ---ENTITY---
    #IDENTIFIERS
@@ -113,7 +114,7 @@ NB You already have information about the user, you MUST NOT not create any `per
    #HISTORY
    Again, which type of communication did the user have with the company?
    
-   NB No `company` entity must be created about the user's company
+   NB DO NOT CREATE COMPANY entity about USER_COMPANY
 
    ---ENTITY---
    #IDENTIFIERS
@@ -121,7 +122,7 @@ NB You already have information about the user, you MUST NOT not create any `per
    Name: Name of the project
 
    #ABOUT
-   What is it? A collaboration? An offer? A request for work? A candidacy? Anything we should trace over time, eg NOT calls, booking. 
+   What is it? A collaboration? An offer? A request for work? A candidacy? Anything we should trace over time, eg NOT calls, booking. NO COMPANY EXEPT USER_COMPANY should be quoted here!
 
    #HISTORY
    On this date the user started talking about this project with a `person` or a `company`
