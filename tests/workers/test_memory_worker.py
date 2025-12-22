@@ -1,5 +1,5 @@
 """
-Unit tests for memory_worker.py
+Unit tests for memory_agent.py
 
 Tests cover phone number extraction, LinkedIn URL extraction, reconsolidation logic,
 and the full email processing pipeline with mocked dependencies.

@@ -1776,7 +1776,7 @@ async def handle_tasks(args: List[str], owner_id: str) -> str:
     """Handle /tasks command - list items needing action using LLM analysis."""
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch.services.task_formatter import format_task_items
-    from zylch.workers.task_worker import TaskWorker
+    from zylch.agents.task_agent import TaskWorker
     from zylch.api.token_storage import get_email
 
     help_text = """**✅ Tasks**
@@ -1972,7 +1972,7 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 
         if cmd == 'process':
             # Process synced data into memory blobs
-            from zylch.workers.memory_worker import MemoryWorker
+            from zylch.agents.memory_agent import MemoryWorker
 
             service = args[1].lower() if len(args) > 1 else 'all'
             valid_services = ['all', 'email', 'calendar', 'pipedrive']
@@ -2021,6 +2021,7 @@ The personalized agent significantly improves:
                 unprocessed_emails = storage.get_unprocessed_emails(owner_id, limit=100)
                 if unprocessed_emails:
                     processed = await worker.process_batch(unprocessed_emails)
+                    #TODO Wrong! We do not have custom agent
                     prompt_note = " (using custom agent)" if worker.has_custom_prompt() else " (using default agent)"
                     results.append(f"📧 **Emails:** {processed}/{len(unprocessed_emails)} processed{prompt_note}")
                 else:

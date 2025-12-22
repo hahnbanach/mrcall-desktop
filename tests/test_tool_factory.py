@@ -7,7 +7,7 @@ from pathlib import Path
 from zylch.tools.factory import ToolFactory
 from zylch.tools.config import ToolConfig
 from zylch.tools.base import Tool
-from zylch.agent.models import ModelSelector
+from zylch.assistant.models import ModelSelector
 from zylch.memory import ZylchMemory
 
 

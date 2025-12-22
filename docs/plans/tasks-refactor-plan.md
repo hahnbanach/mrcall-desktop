@@ -136,7 +136,7 @@ In `command_handlers.py`, replace `handle_tasks()`:
 ```python
 async def handle_tasks(args: List[str], owner_id: str) -> str:
     """Handle /tasks command - analyze events and show actionable items."""
-    from zylch.workers.task_worker import TaskWorker
+    from zylch.agents.task_agent import TaskWorker
 
     # ... help text ...
 

@@ -11,7 +11,7 @@ from zylch.config import settings
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 
 # Silence noisy third-party loggers
-for noisy_logger in ["hpack", "httpcore", "httpx", "h2", "h11"]:
+for noisy_logger in ["hpack", "httpcore", "httpx", "h2", "h11", "urllib3", "cachecontrol"]:
     logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)

@@ -3,8 +3,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from zylch.agent import ZylchAIAgent
-from zylch.agent.models import ModelSelector
+from zylch.assistant import ZylchAIAgent
+from zylch.assistant.models import ModelSelector
 from zylch.tools.base import Tool, ToolResult, ToolStatus
 
 
