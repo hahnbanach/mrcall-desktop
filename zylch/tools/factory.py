@@ -65,7 +65,7 @@ from .email_archive import EmailArchiveManager
 from .email_sync import EmailSyncManager
 # TaskManager removed - legacy file-based system replaced by Supabase avatars
 from ..memory import ZylchMemory, ZylchMemoryConfig
-from ..agent.models import ModelSelector
+from ..assistant.models import ModelSelector
 from .instruction_tools import (
     AddTriggeredInstructionTool,
     ListTriggeredInstructionsTool,

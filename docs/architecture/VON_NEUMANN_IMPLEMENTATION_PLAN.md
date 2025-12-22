@@ -344,7 +344,7 @@ async def run_full_sync(owner_id: str, days_back: int = 30):
 ### 3.2 Memory Agent Implementation
 
 ```python
-# zylch/workers/memory_worker.py
+# zylch/workers/memory_agent.py
 class MemoryWorker:
     def __init__(self, storage: SupabaseStorage, memory: ZylchMemory):
         self.storage = storage

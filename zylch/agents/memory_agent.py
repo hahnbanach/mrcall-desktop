@@ -121,7 +121,7 @@ class MemoryWorker:
         """
         email_id = email.get("id", "unknown")
         try:
-            logger.debug(f"Processing email {email_id}")
+            logger.info(f"Processing email {email_id}")
 
             # Determine the contact (the other party, not the user)
             from_email = email.get("from_email", "")
@@ -180,7 +180,7 @@ class MemoryWorker:
             total_entities: Total entities from this email
         """
         # Search for existing blob about this entity
-        logger.debug(f"Upserting entity, searching with: {entity_content[:200]}...")
+        logger.info(f"Upserting entity, searching with: {entity_content[:200]}...")
         existing = self.hybrid_search.find_for_reconsolidation(
             owner_id=self.owner_id,
             content=entity_content,
@@ -191,8 +191,17 @@ class MemoryWorker:
             # Merge with existing blob
             logger.debug(f"Found existing blob {existing.blob_id} for reconsolidation (score={existing.hybrid_score:.2f})")
             merged_content = self.llm_merge.merge(existing.content, entity_content)
-            if 'SKIP' in merged_content and len(merged_content) < 10:
+            if 'SKIP' in merged_content.upper() and len(merged_content) < 10:
+                blob = self.blob_storage.store_blob(
+                    owner_id=self.owner_id,
+                    namespace=self.namespace,
+                    content=entity_content,
+                    event_description=event_desc
+                )
                 logger.info("Merging skipped")
+                logger.info(f"Created new blob {blob['id']} from email {email_id} (entity {entity_num}/{total_entities})")
+
+
             self.blob_storage.update_blob(
                 blob_id=existing.blob_id,
                 owner_id=self.owner_id,
@@ -243,6 +252,7 @@ class MemoryWorker:
         Returns:
             List of extracted entity blobs, or empty list if no prompt configured or SKIP
         """
+        logging.debug("_extract_entities called")
         try:
             # Get the extraction prompt (user's custom only, no default)
             prompt_template = self._get_extraction_prompt()
@@ -276,7 +286,7 @@ class MemoryWorker:
                 messages=[{"role": "user", "content": prompt}]
             )
             raw_output = response.content[0].text.strip()
-
+            logging.debug(f"RAW OUTPUT:\n{raw_output}")
             # Check for SKIP
             if raw_output.upper() == "SKIP":
                 return []

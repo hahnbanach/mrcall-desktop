@@ -7,7 +7,7 @@ import time
 import anthropic
 
 from zylch.tools import ToolFactory, ToolConfig
-from zylch.agent.core import ZylchAIAgent
+from zylch.assistant.core import ZylchAIAgent
 from zylch.config import settings
 from zylch.storage.supabase_client import SupabaseStorage
 

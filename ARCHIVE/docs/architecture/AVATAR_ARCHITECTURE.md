@@ -1339,7 +1339,8 @@ supabase db push
 
 import asyncio
 from zylch.storage.supabase_client import SupabaseStorage
-from zylch.workers.avatar_compute_worker import AvatarComputeWorker
+from zylch.agents.avatar_compute_worker import AvatarComputeWorker
+
 
 async def backfill_avatars(owner_id: str, batch_size: int = 50):
     """Backfill avatars for all contacts in owner's email archive.
@@ -1398,6 +1399,7 @@ async def backfill_avatars(owner_id: str, batch_size: int = 50):
         await asyncio.sleep(60)  # Rate limit: 1 batch per minute
 
     print("✓ Backfill complete!")
+
 
 # Run for specific user
 if __name__ == "__main__":

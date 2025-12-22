@@ -615,9 +615,11 @@ class AvatarComputeWorker:
 - No sub-minute triggers
 
 **Option B: In-Process Background Thread**
+
 ```python
 # zylch/api/main.py
-from zylch.workers.avatar_compute_worker import AvatarComputeWorker
+from zylch.agents.avatar_compute_worker import AvatarComputeWorker
+
 
 @app.on_event("startup")
 async def start_background_worker():

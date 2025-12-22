@@ -16,7 +16,7 @@ the Von Neumann model:
 - WORKING MEMORY/CRM (registers) = computed state, the present
 
 ### New Architecture Flow
-1. **Email arrives** → triggers Memory Agent (memory_worker.py)
+1. **Email arrives** → triggers Memory Agent (memory_agent.py)
 2. **Memory Agent** → extracts facts/knowledge → writes to Memory table
 3. **CRM Agent** (crm_worker.py) → reads Memory + email_archive → computes Avatar state
 4. **Avatar state** → stored in avatars table (Working Memory/CRM)
@@ -27,7 +27,7 @@ This replaces the old direct Email → Avatar computation pattern.
 1. Architecture overview: docs/architecture/VON_NEUMANN_MEMORY.md
 2. Current architecture: .claude/ARCHITECTURE.md
 3. Current memory system: zylch_memory/zylch_memory/core.py
-4. Memory Agent worker: zylch/workers/memory_worker.py
+4. Memory Agent worker: zylch/workers/memory_agent.py
 5. CRM Agent worker: zylch/workers/crm_worker.py
 6. Memory documentation: docs/features/entity-memory-system.md
 7. Avatar documentation: docs/features/avatar-aggregation.md
@@ -113,7 +113,7 @@ Design Von Neumann Memory Architecture for Zylch.
 - docs/architecture/VON_NEUMANN_MEMORY.md (START HERE)
 - .claude/ARCHITECTURE.md
 - zylch_memory/zylch_memory/core.py
-- zylch/workers/memory_worker.py (Memory Agent)
+- zylch/workers/memory_agent.py (Memory Agent)
 - zylch/workers/crm_worker.py (CRM Agent)
 
 ## DELIVERABLES
