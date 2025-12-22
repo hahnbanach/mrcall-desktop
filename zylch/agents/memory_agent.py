@@ -201,7 +201,6 @@ class MemoryWorker:
                 logger.info("Merging skipped")
                 logger.info(f"Created new blob {blob['id']} from email {email_id} (entity {entity_num}/{total_entities})")
 
-
             self.blob_storage.update_blob(
                 blob_id=existing.blob_id,
                 owner_id=self.owner_id,
@@ -311,23 +310,26 @@ class MemoryWorker:
         # Split by the entity delimiter
         logging.debug("_parse_entities CALLED")
         ENTITY_DELIMITER = "---ENTITY---"
-
+        entities = []
         if ENTITY_DELIMITER in raw_output:
             parts = raw_output.split(ENTITY_DELIMITER)
             logging.debug(f"Entities delimiter found: {parts}")
+        elif raw_output.count("#IDENTIFIER") > 1:
+            parts = [raw_output]
+            logging.warning(f"More than 1 #IDENTIFIER without delimiter, skipping: {parts}")
+            return entities
         else:
-            # Single entity or old format - treat as one
+            # Single entity
             parts = [raw_output]
             logging.debug(f"Entities delimiter NOT found: {parts}")
 
-        entities = []
         for part in parts:
             part = part.strip()
             # Validate
-            if part:
+            if part and "#IDENTIFIERS" in part.upper():
                 entities.append(part)
             else:
-                logging.warning("ENTITIES NOT ADDED")
+                logging.warning("ENTITIES NOT ADDED: empty or no #IDENTIFIER")
         return entities
 
     async def process_calendar_event(self, event: Dict) -> bool:
