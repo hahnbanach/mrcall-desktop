@@ -191,7 +191,8 @@ class MemoryWorker:
             # Merge with existing blob
             logger.debug(f"Found existing blob {existing.blob_id} for reconsolidation (score={existing.hybrid_score:.2f})")
             merged_content = self.llm_merge.merge(existing.content, entity_content)
-
+            if 'SKIP' in merged_content and len(merged_content) < 10:
+                logger.info("Merging skipped")
             self.blob_storage.update_blob(
                 blob_id=existing.blob_id,
                 owner_id=self.owner_id,

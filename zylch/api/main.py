@@ -9,6 +9,11 @@ from zylch.api.firebase_auth import initialize_firebase
 from zylch.config import settings
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
+
+# Silence noisy third-party loggers
+for noisy_logger in ["hpack", "httpcore", "httpx", "h2", "h11"]:
+    logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 # Create FastAPI app
