@@ -7,7 +7,7 @@ to analyze each event and determine if user action is needed.
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set
 
 import anthropic
@@ -146,8 +146,14 @@ class TaskWorker:
                 self.storage.store_task_item(self.owner_id, result)
                 action_count += 1
 
-        # Process calendar events
-        events = self.storage.get_calendar_events(self.owner_id, limit=50)
+        # Process calendar events (next 14 days)
+        now = datetime.now(timezone.utc)
+        end_date = now + timedelta(days=14)
+        events = self.storage.get_calendar_events(
+            self.owner_id,
+            start_time=now,
+            end_time=end_date
+        )
         for event in events:
             event_id = event.get('id', '')
 
