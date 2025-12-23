@@ -6,7 +6,6 @@ to analyze each event and determine if user action is needed.
 
 import json
 import logging
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set
 
@@ -17,6 +16,35 @@ from zylch.storage.supabase_client import SupabaseStorage
 from zylch_memory import HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig
 
 logger = logging.getLogger(__name__)
+
+# Tool definition for structured task decision output
+TASK_DECISION_TOOL = {
+    "name": "task_decision",
+    "description": "Report whether the user needs to take action on this event",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "action_required": {
+                "type": "boolean",
+                "description": "True if user needs to take action, False otherwise"
+            },
+            "urgency": {
+                "type": "string",
+                "enum": ["high", "medium", "low"],
+                "description": "high=service outage/billing, medium=technical questions, low=general"
+            },
+            "suggested_action": {
+                "type": "string",
+                "description": "Brief description of what user should do"
+            },
+            "reason": {
+                "type": "string",
+                "description": "Why this needs attention"
+            }
+        },
+        "required": ["action_required"]
+    }
+}
 
 
 def get_my_emails() -> Set[str]:
@@ -243,74 +271,38 @@ class TaskWorker:
         logger.debug(f"[TASK] Blob context length: {len(blob_context)}")
         logger.debug(f"[TASK] Formatted prompt:\n{formatted_prompt[:500]}...")
 
-        # Call classification model for fast/cheap per-event analysis
+        # Call classification model with tool use for structured output
         try:
             response = self.anthropic.messages.create(
                 model=settings.classification_model,
                 max_tokens=200,
+                tools=[TASK_DECISION_TOOL],
+                tool_choice={"type": "tool", "name": "task_decision"},
                 messages=[{"role": "user", "content": formatted_prompt}]
             )
 
-            result_text = response.content[0].text.strip()
-            logger.debug(f"[TASK] LLM response: {result_text}")
-            return self._parse_action_response(result_text)
+            # Extract result from tool use response
+            for block in response.content:
+                if block.type == "tool_use" and block.name == "task_decision":
+                    result = block.input
+                    logger.debug(f"[TASK] Tool response: {result}")
+
+                    if result.get("action_required"):
+                        return {
+                            'action_required': True,
+                            'urgency': result.get('urgency', 'medium'),
+                            'suggested_action': result.get('suggested_action', ''),
+                            'reason': result.get('reason', ''),
+                            'analyzed_at': datetime.now(timezone.utc).isoformat()
+                        }
+                    return None
+
+            logger.warning(f"[TASK] No tool_use block in response for {event_type}")
+            return None
 
         except Exception as e:
             logger.error(f"LLM call failed for {event_type} event: {e}")
             return None
-
-    def _parse_action_response(self, response: str) -> Optional[Dict[str, Any]]:
-        """Parse LLM response into structured action data.
-
-        Expected formats:
-        - ACTION: high | Reply to proposal | John asked a direct question
-        - NO_ACTION: Newsletter, user ignores these
-        """
-        response = response.strip()
-
-        # Check for NO_ACTION
-        if response.upper().startswith("NO_ACTION"):
-            return None
-
-        # Check for ACTION
-        if response.upper().startswith("ACTION"):
-            # Parse: ACTION: urgency | suggested_action | reason
-            match = re.match(
-                r'ACTION:\s*(\w+)\s*\|\s*([^|]+)\s*\|\s*(.+)',
-                response,
-                re.IGNORECASE
-            )
-
-            if match:
-                urgency = match.group(1).lower()
-                suggested_action = match.group(2).strip()
-                reason = match.group(3).strip()
-
-                # Validate urgency
-                if urgency not in ('high', 'medium', 'low'):
-                    urgency = 'medium'
-
-                return {
-                    'action_required': True,
-                    'urgency': urgency,
-                    'suggested_action': suggested_action,
-                    'reason': reason,
-                    'analyzed_at': datetime.now(timezone.utc).isoformat()
-                }
-
-            # Fallback: try simpler parsing
-            parts = response.split(':', 1)
-            if len(parts) > 1:
-                content = parts[1].strip()
-                return {
-                    'action_required': True,
-                    'urgency': 'medium',
-                    'suggested_action': content[:100],
-                    'reason': content,
-                    'analyzed_at': datetime.now(timezone.utc).isoformat()
-                }
-
-        return None
 
     def _get_blob_for_contact(self, contact_email: str) -> str:
         """Get memory blob content for a contact."""
