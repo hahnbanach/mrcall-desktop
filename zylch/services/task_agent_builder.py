@@ -147,7 +147,7 @@ class TaskAgentBuilder:
             'generated_at': datetime.now(timezone.utc).isoformat(),
             'user_domain': self.user_domain,
             'threads_analyzed': len(threads),
-            'contacts_found': len(contact_emails),
+            'frequent_contacts_count': len(contact_emails),
             'blobs_found': len(blobs)
         }
 
