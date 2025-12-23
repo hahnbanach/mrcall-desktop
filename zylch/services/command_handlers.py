@@ -4,6 +4,7 @@ All handlers return markdown-formatted strings (no print statements).
 No Anthropic API calls in these handlers.
 """
 import logging
+from datetime import datetime, timezone
 from typing import List, Dict, Any
 from pathlib import Path
 import json
