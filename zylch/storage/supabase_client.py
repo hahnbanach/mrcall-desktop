@@ -11,6 +11,43 @@ from zylch.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Lazy-loaded embedding engine singleton
+_embedding_engine = None
+
+def _get_embedding_engine():
+    """Get or create the embedding engine singleton."""
+    global _embedding_engine
+    if _embedding_engine is None:
+        try:
+            from zylch_memory.embeddings import EmbeddingEngine
+            _embedding_engine = EmbeddingEngine()
+            logger.info("EmbeddingEngine initialized for email semantic search")
+        except ImportError:
+            logger.warning("zylch_memory not available, embeddings disabled")
+            return None
+    return _embedding_engine
+
+def _generate_email_embedding(email: Dict[str, Any]) -> Optional[List[float]]:
+    """Generate embedding for an email's subject + body."""
+    engine = _get_embedding_engine()
+    if engine is None:
+        return None
+
+    # Combine subject and body (truncate body to avoid huge embeddings)
+    subject = email.get('subject', '') or ''
+    body = email.get('body_plain', '') or email.get('snippet', '') or ''
+    text = f"{subject} {body[:2000]}".strip()
+
+    if not text:
+        return None
+
+    try:
+        embedding = engine.encode(text)
+        return embedding.tolist()
+    except Exception as e:
+        logger.debug(f"Failed to generate embedding: {e}")
+        return None
+
 
 class SupabaseStorage:
     """Multi-tenant storage backend using Supabase.
@@ -47,7 +84,10 @@ class SupabaseStorage:
     # ==========================================
 
     def store_email(self, owner_id: str, email: Dict[str, Any]) -> Dict[str, Any]:
-        """Store a single email."""
+        """Store a single email with embedding for semantic search."""
+        # Generate embedding for semantic search
+        embedding = _generate_email_embedding(email)
+
         data = {
             'owner_id': owner_id,
             'gmail_id': email['id'],
@@ -69,6 +109,10 @@ class SupabaseStorage:
             'updated_at': datetime.now(timezone.utc).isoformat()
         }
 
+        # Add embedding if available
+        if embedding is not None:
+            data['embedding'] = embedding
+
         result = self.client.table('emails').upsert(
             data,
             on_conflict='owner_id,gmail_id'
@@ -77,13 +121,19 @@ class SupabaseStorage:
         return result.data[0] if result.data else {}
 
     def store_emails_batch(self, owner_id: str, emails: List[Dict[str, Any]], chunk_size: int = 50) -> int:
-        """Store multiple emails in batch, chunked to avoid timeouts."""
+        """Store multiple emails in batch with embeddings, chunked to avoid timeouts."""
         if not emails:
             return 0
 
+        # Generate embeddings for all emails (batched for efficiency)
+        logger.debug(f"Generating embeddings for {len(emails)} emails...")
+
         data = []
         for email in emails:
-            data.append({
+            # Generate embedding for semantic search
+            embedding = _generate_email_embedding(email)
+
+            record = {
                 'owner_id': owner_id,
                 'gmail_id': email['id'],
                 'thread_id': email['thread_id'],
@@ -102,7 +152,13 @@ class SupabaseStorage:
                 'in_reply_to': email.get('in_reply_to'),
                 'references': email.get('references'),
                 'updated_at': datetime.now(timezone.utc).isoformat()
-            })
+            }
+
+            # Add embedding if available
+            if embedding is not None:
+                record['embedding'] = embedding
+
+            data.append(record)
 
         # Chunk the data to avoid timeout on large batches
         total_stored = 0
@@ -114,6 +170,7 @@ class SupabaseStorage:
             ).execute()
             total_stored += len(result.data) if result.data else 0
 
+        logger.debug(f"Stored {total_stored} emails with embeddings")
         return total_stored
 
     def get_emails(
@@ -205,14 +262,66 @@ class SupabaseStorage:
         self,
         owner_id: str,
         query: str,
-        limit: int = 100
+        limit: int = 20,
+        alpha: float = 0.5  # FTS weight (0=semantic only, 1=FTS only, 0.5=balanced)
     ) -> List[Dict[str, Any]]:
-        """Full-text search emails."""
-        # Use Postgres full-text search via RPC
-        result = self.client.rpc('search_emails', {
-            'search_query': query,
-            'user_id': owner_id,
-            'result_limit': limit
+        """Hybrid search emails (FTS + semantic + exact pattern).
+
+        Combines:
+        - Full-text search with 'simple' config (language-agnostic)
+        - Semantic search using embeddings (works across languages)
+        - Exact pattern matching on email headers (for email/phone/URL)
+
+        Args:
+            owner_id: User's Firebase UID
+            query: Search query text
+            limit: Max results to return
+            alpha: FTS weight (0-1). Higher = more FTS influence, lower = more semantic.
+
+        Returns:
+            List of matching emails with scores
+        """
+        # Generate query embedding for semantic search
+        engine = _get_embedding_engine()
+        if engine is None:
+            # Fallback to old FTS-only search if embeddings unavailable
+            logger.warning("Embeddings unavailable, falling back to FTS-only search")
+            result = self.client.rpc('search_emails', {
+                'search_query': query,
+                'user_id': owner_id,
+                'result_limit': limit
+            }).execute()
+            return result.data or []
+
+        try:
+            query_embedding = engine.encode(query).tolist()
+        except Exception as e:
+            logger.warning(f"Failed to encode query, falling back to FTS: {e}")
+            result = self.client.rpc('search_emails', {
+                'search_query': query,
+                'user_id': owner_id,
+                'result_limit': limit
+            }).execute()
+            return result.data or []
+
+        # Detect exact patterns (email, phone, URL) for header matching
+        exact_pattern = None
+        try:
+            from zylch_memory.pattern_detection import detect_pattern
+            pattern = detect_pattern(query)
+            if pattern:
+                exact_pattern = pattern.value
+        except ImportError:
+            pass  # Pattern detection not available
+
+        # Call hybrid search RPC
+        result = self.client.rpc('hybrid_search_emails', {
+            'p_owner_id': owner_id,
+            'p_query': query,
+            'p_query_embedding': query_embedding,
+            'p_fts_weight': alpha,
+            'p_limit': limit,
+            'p_exact_pattern': exact_pattern
         }).execute()
 
         return result.data or []
@@ -2697,8 +2806,10 @@ class SupabaseStorage:
             return 0
 
 
-# Create search_emails function in Supabase (run once via SQL Editor):
+# DEPRECATED: Old FTS-only search function (kept for fallback)
+# Now using hybrid_search_emails from migrations/010_email_hybrid_search.sql
 """
+-- OLD FTS-only function (deprecated):
 CREATE OR REPLACE FUNCTION search_emails(
     search_query TEXT,
     user_id UUID,
@@ -2715,4 +2826,7 @@ BEGIN
     LIMIT result_limit;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- NEW: Hybrid search with semantic + FTS + exact pattern matching
+-- See: zylch/storage/migrations/010_email_hybrid_search.sql
 """
