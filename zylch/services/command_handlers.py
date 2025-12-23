@@ -472,7 +472,10 @@ Use `/agent process` to extract facts from synced data:
 
             output = f"**🔍 Search Results** ({len(results)} found)\n\n"
             for i, r in enumerate(results, 1):
-                score_info = f"hybrid: {r.hybrid_score:.2f} (FTS: {r.fts_score:.2f}, semantic: {r.semantic_score:.2f})"
+                if r.exact_score > 0:
+                    score_info = f"hybrid: {r.hybrid_score:.2f} (exact: {r.exact_score:.1f}, FTS: {r.fts_score:.2f}, semantic: {r.semantic_score:.2f})"
+                else:
+                    score_info = f"hybrid: {r.hybrid_score:.2f} (FTS: {r.fts_score:.2f}, semantic: {r.semantic_score:.2f})"
                 content_preview = r.content[:200] + "..." if len(r.content) > 200 else r.content
                 output += f"**{i}.** {content_preview}\n"
                 output += f"   _Score: {score_info}_\n\n"
