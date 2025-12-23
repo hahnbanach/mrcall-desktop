@@ -206,15 +206,25 @@ class TaskWorker:
             return None
 
         # Format the prompt with event data
+        # Support both {var} and {{var}} formats (LLM may generate either)
         try:
+            event_data_json = json.dumps(event_data, default=str)
             formatted_prompt = prompt.replace(
                 "{{event_type}}", event_type
             ).replace(
-                "{{event_data}}", json.dumps(event_data, default=str)
+                "{event_type}", event_type
+            ).replace(
+                "{{event_data}}", event_data_json
+            ).replace(
+                "{event_data}", event_data_json
             ).replace(
                 "{{blob_context}}", blob_context
             ).replace(
+                "{blob_context}", blob_context
+            ).replace(
                 "{{user_email}}", self.user_email
+            ).replace(
+                "{user_email}", self.user_email
             )
         except Exception as e:
             logger.error(f"Failed to format prompt: {e}")
