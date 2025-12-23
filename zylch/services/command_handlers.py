@@ -2090,6 +2090,115 @@ Run `/tasks refresh` to re-analyze with fresh AI check."""
         return f"❌ **Error:** {str(e)}\n\n{help_text}"
 
 
+async def handle_task_detail(task_num: int, owner_id: str) -> str:
+    """Handle 'more on #N' - show full email/event for a task.
+
+    Args:
+        task_num: 1-indexed task number from /tasks output
+        owner_id: Firebase UID
+
+    Returns:
+        Formatted task detail or error message
+    """
+    from zylch.storage.supabase_client import SupabaseStorage
+
+    try:
+        storage = SupabaseStorage.get_instance()
+
+        # Get all tasks (same order as displayed in /tasks)
+        tasks = storage.get_task_items(owner_id, action_required=True)
+
+        if not tasks:
+            return "No tasks found. Run `/tasks refresh` first."
+
+        if task_num < 1 or task_num > len(tasks):
+            return f"Task #{task_num} not found. Valid range: #1 - #{len(tasks)}"
+
+        task = tasks[task_num - 1]  # 0-indexed
+        event_type = task.get('event_type')
+        event_id = task.get('event_id')
+
+        if event_type == 'email':
+            # Fetch full email from emails table using gmail_id
+            email = storage.get_email_by_id(owner_id, event_id)
+            if not email:
+                return f"Email not found for task #{task_num}. It may have been deleted."
+
+            # Format email details
+            from_display = email.get('from_name') or email.get('from_email', 'Unknown')
+            from_email = email.get('from_email', '')
+            subject = email.get('subject', '(no subject)')
+            date = email.get('date', '')
+            body = email.get('body_plain') or email.get('snippet', '(no content)')
+
+            # Build response
+            output = f"""**📧 Task #{task_num} - Email Details**
+
+**From:** {from_display} <{from_email}>
+**Subject:** {subject}
+**Date:** {date}
+
+---
+{body}
+---
+
+**🎯 Suggested Action:** {task.get('suggested_action', 'Review and respond')}
+**📋 Reason:** {task.get('reason', 'Requires your attention')}
+**⚡ Urgency:** {task.get('urgency', 'medium')}"""
+
+            return output
+
+        elif event_type == 'calendar':
+            # Fetch calendar event by google_event_id
+            result = storage.client.table('calendar_events')\
+                .select('*')\
+                .eq('owner_id', owner_id)\
+                .eq('google_event_id', event_id)\
+                .limit(1)\
+                .execute()
+
+            if not result.data:
+                return f"Calendar event not found for task #{task_num}."
+
+            event = result.data[0]
+            summary = event.get('summary', '(no title)')
+            description = event.get('description', '(no description)')
+            start_time = event.get('start_time', '')
+            end_time = event.get('end_time', '')
+            location = event.get('location', '')
+            attendees = event.get('attendees', [])
+
+            # Format attendees
+            attendee_str = ', '.join(attendees[:5]) if attendees else 'None listed'
+            if len(attendees) > 5:
+                attendee_str += f" (+{len(attendees) - 5} more)"
+
+            output = f"""**📅 Task #{task_num} - Calendar Event**
+
+**Event:** {summary}
+**When:** {start_time} - {end_time}
+**Location:** {location or 'Not specified'}
+**Attendees:** {attendee_str}
+
+**Description:**
+{description}
+
+---
+
+**🎯 Suggested Action:** {task.get('suggested_action', 'Review and prepare')}
+**📋 Reason:** {task.get('reason', 'Requires your attention')}
+**⚡ Urgency:** {task.get('urgency', 'medium')}"""
+
+            return output
+
+        else:
+            return f"Unknown event type: {event_type}"
+
+    except Exception as e:
+        logger.error(f"Error in handle_task_detail: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}"
+
+
 async def handle_jobs(args: List[str], owner_id: str) -> str:
     """Handle /jobs command - list scheduled jobs."""
     from zylch.services.scheduler import ZylchScheduler
