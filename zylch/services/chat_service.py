@@ -175,6 +175,27 @@ class ChatService:
                 logger.info(f"Semantic match: '{user_message}' -> {matched_command}")
                 user_message = matched_command  # Rewrite as slash command
 
+            # TASK DETAIL PATTERN - Match "more on #N", "details #N", "show #N", "task #N"
+            import re
+            task_detail_match = re.match(r'(?:more\s+(?:on|about)|details?|show|task)\s*#?(\d+)', user_message.lower().strip())
+            if task_detail_match:
+                task_num = int(task_detail_match.group(1))
+                logger.info(f"Task detail match: '{user_message}' -> task #{task_num}")
+                from zylch.services.command_handlers import handle_task_detail
+                owner_id = (context.get("user_id") if context else None) or user_id
+                response_text = await handle_task_detail(task_num, owner_id)
+                return {
+                    "response": self._prepend_notification(response_text, notification_banner),
+                    "tool_calls": [],
+                    "metadata": {
+                        "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                        "command": "task_detail",
+                        "task_num": task_num,
+                        "instant": True
+                    },
+                    "session_id": session_id
+                }
+
             # INTERCEPT SLASH COMMANDS - NEVER SEND TO ANTHROPIC
             if user_message.strip().startswith('/'):
                 from zylch.services.command_handlers import COMMAND_HANDLERS, COMMAND_HELP
