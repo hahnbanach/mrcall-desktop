@@ -2619,6 +2619,45 @@ class SupabaseStorage:
             logger.error(f"Failed to mark task complete: {e}")
             return False
 
+    def get_task_items_stats(self, owner_id: str) -> Optional[Dict[str, Any]]:
+        """Get task items statistics for a user.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            Dict with total, action_required, completed, last_analyzed
+        """
+        try:
+            # Get all task items
+            result = self.client.table('task_items')\
+                .select('action_required, completed_at, analyzed_at')\
+                .eq('owner_id', owner_id)\
+                .execute()
+
+            if not result.data:
+                return None
+
+            items = result.data
+            total = len(items)
+            action_required = sum(1 for i in items if i.get('action_required'))
+            completed = sum(1 for i in items if i.get('completed_at'))
+
+            # Find most recent analyzed_at
+            analyzed_dates = [i.get('analyzed_at') for i in items if i.get('analyzed_at')]
+            last_analyzed = max(analyzed_dates)[:10] if analyzed_dates else 'Never'
+
+            return {
+                'total': total,
+                'action_required': action_required,
+                'completed': completed,
+                'last_analyzed': last_analyzed
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get task items stats: {e}")
+            return None
+
     def clear_task_items(self, owner_id: str) -> int:
         """Clear all task items for a user (for refresh).
 

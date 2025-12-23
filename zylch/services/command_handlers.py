@@ -1955,12 +1955,15 @@ async def handle_tasks(args: List[str], owner_id: str) -> str:
 
     help_text = """**✅ Tasks**
 
-**Usage:** `/tasks [refresh]`
+**Usage:** `/tasks [subcommand]`
 
 Shows items needing your action, analyzed by AI.
 
-**Options:**
+**Subcommands:**
+- (none) - Show current task items
 - `refresh` - Re-analyze events with fresh LLM call
+- `status` - Show task analysis statistics
+- `reset` - Clear task cache
 
 **Setup:**
 1. `/sync` - Fetch emails and calendar
@@ -1977,6 +1980,33 @@ Shows items needing your action, analyzed by AI.
 
     try:
         storage = SupabaseStorage.get_instance()
+
+        # Handle subcommands
+        if args and args[0] == 'status':
+            # Get task statistics
+            stats = storage.get_task_items_stats(owner_id)
+            if not stats:
+                return """**📊 Task Status**
+
+No task items found. Run `/tasks refresh` to analyze your events."""
+
+            return f"""**📊 Task Status**
+
+| Metric | Value |
+|--------|-------|
+| Total analyzed | {stats.get('total', 0)} |
+| Action required | {stats.get('action_required', 0)} |
+| Completed | {stats.get('completed', 0)} |
+| Last analyzed | {stats.get('last_analyzed', 'Never')} |
+
+Run `/tasks` to see items needing action."""
+
+        if args and args[0] == 'reset':
+            # Clear task cache
+            storage.clear_task_items(owner_id)
+            return """**✅ Task Cache Cleared**
+
+Task items have been deleted. Run `/tasks refresh` to re-analyze."""
 
         # Check if task agent is trained
         task_prompt = storage.get_agent_prompt(owner_id, 'tasks')
