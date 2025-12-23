@@ -240,7 +240,7 @@ class Settings(BaseSettings):
 
     # Skill System Configuration
     skill_router_model: str = Field(
-        default="claude-3-5-haiku-20241022",
+        default="claude-sonnet-4-20250514",
         description="Model for intent classification (router)"
     )
     skill_execution_model: str = Field(
@@ -248,7 +248,7 @@ class Settings(BaseSettings):
         description="Model for skill execution"
     )
     skill_pattern_model: str = Field(
-        default="claude-3-5-haiku-20241022",
+        default="claude-sonnet-4-20250514",
         description="Model for pattern matching"
     )
 

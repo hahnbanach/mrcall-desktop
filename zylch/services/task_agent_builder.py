@@ -29,7 +29,7 @@ TASK_AGENT_META_PROMPT = """You are analyzing a user's communication history to 
 
 Your goal: Generate a prompt that an AI agent will use to analyze individual events and decide if the user needs to take action.
 
-=== LAST 100 EMAIL THREADS ===
+=== LAST {search_limit} EMAIL THREADS ===
 {threads}
 
 === MEMORY BLOBS FOR CONTACTS IN THESE THREADS ===
@@ -115,6 +115,7 @@ class TaskAgentBuilder:
             storage.client,
             self.embedding_engine
         )
+        self.search_limit = 100
 
     async def build_task_prompt(self) -> Tuple[str, Dict[str, Any]]:
         """Analyze user's history and generate task detection prompt.
@@ -124,8 +125,8 @@ class TaskAgentBuilder:
         """
         logger.info(f"Building task detection prompt for {self.owner_id}")
 
-        # Step 1: Get last 100 threads with full conversation context
-        threads = self._get_recent_threads(limit=100)
+        # Step 1: Get last self.search_limit threads with full conversation context
+        threads = self._get_recent_threads(limit=self.search_limit)
         logger.info(f"Found {len(threads)} threads for analysis")
 
         # Step 2: Extract contacts from these threads
@@ -153,14 +154,14 @@ class TaskAgentBuilder:
 
         return prompt_content, metadata
 
-    def _get_recent_threads(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def _get_recent_threads(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get recent email threads with full conversation context.
 
         Returns threads (grouped emails) rather than individual emails,
         so the LLM can see response patterns.
         """
-        # Fetch enough emails to get ~20 threads
-        emails = self.storage.get_emails(self.owner_id, limit=300)
+        # Fetch enough emails to get ~self.search_limit threads
+        emails = self.storage.get_emails(self.owner_id, limit=self.search_limit*3)
 
         # Group by thread_id
         threads: Dict[str, List[Dict]] = {}
@@ -208,7 +209,7 @@ class TaskAgentBuilder:
         blobs = []
         namespace = f"user:{self.owner_id}"
 
-        for email in contact_emails[:20]:  # Limit to avoid too many searches
+        for email in contact_emails[:self.search_limit]:  # Limit to avoid too many searches
             try:
                 results = self.hybrid_search.search(
                     owner_id=self.owner_id,
@@ -279,7 +280,8 @@ Body: {body}
         """Generate the final task detection prompt using Claude."""
         meta_prompt = TASK_AGENT_META_PROMPT.format(
             threads=threads_text,
-            blobs=blobs_text
+            blobs=blobs_text,
+            search_limit=self.search_limit
         )
 
         logger.info("Training task detection agent...")
