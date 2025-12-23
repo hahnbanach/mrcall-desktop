@@ -29,6 +29,11 @@ def detect_pattern(query: str) -> Optional[DetectedPattern]:
     """
     query = query.strip()
 
+    # Strip surrounding quotes (user may type "email@example.com")
+    if (query.startswith('"') and query.endswith('"')) or \
+       (query.startswith("'") and query.endswith("'")):
+        query = query[1:-1]
+
     # Check for email pattern
     if re.fullmatch(EMAIL_REGEX, query, re.IGNORECASE):
         return DetectedPattern(type="email", value=query)
