@@ -7,6 +7,7 @@ from typing import List, Optional
 import numpy as np
 
 from .embeddings import EmbeddingEngine
+from .pattern_detection import detect_pattern
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ class SearchResult:
     namespace: str
     fts_score: float
     semantic_score: float
+    exact_score: float
     hybrid_score: float
     events: list
     matching_sentences: List[str]
@@ -55,6 +57,10 @@ class HybridSearchEngine:
         """
         fts_weight = alpha if alpha is not None else self.default_alpha
 
+        # Detect identifier pattern for exact matching
+        pattern = detect_pattern(query)
+        exact_pattern = pattern.value if pattern else None
+
         # Generate query embedding
         query_embedding = self.embeddings.encode(query)
 
@@ -67,7 +73,8 @@ class HybridSearchEngine:
                 "p_query_embedding": query_embedding.tolist(),
                 "p_namespace": namespace,
                 "p_fts_weight": fts_weight,
-                "p_limit": limit
+                "p_limit": limit,
+                "p_exact_pattern": exact_pattern
             }
         ).execute()
 
@@ -85,6 +92,7 @@ class HybridSearchEngine:
                 namespace=row["namespace"],
                 fts_score=row["fts_score"],
                 semantic_score=row["semantic_score"],
+                exact_score=row.get("exact_score", 0.0),
                 hybrid_score=row["hybrid_score"],
                 events=row["events"],
                 matching_sentences=sentences
