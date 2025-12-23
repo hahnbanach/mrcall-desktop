@@ -64,8 +64,7 @@ class HybridSearchEngine:
         # Generate query embedding
         query_embedding = self.embeddings.encode(query)
 
-        # Build RPC params - include p_exact_pattern only if we have a pattern
-        # This maintains backward compatibility with old function signature
+        # Build RPC params - always include p_exact_pattern (can be NULL)
         rpc_params = {
             "p_owner_id": owner_id,
             "p_query": query,
@@ -73,9 +72,8 @@ class HybridSearchEngine:
             "p_namespace": namespace,
             "p_fts_weight": fts_weight,
             "p_limit": limit,
+            "p_exact_pattern": exact_pattern,  # None becomes SQL NULL
         }
-        if exact_pattern is not None:
-            rpc_params["p_exact_pattern"] = exact_pattern
 
         # Call Supabase hybrid search function
         result = self.supabase.rpc(
