@@ -2056,7 +2056,7 @@ Last sync was **{hours_ago:.1f} hours ago**.
 
 Run `/sync` first to get fresh emails, then `/tasks refresh`."""
             except Exception as e:
-                logger.debug(f"Could not check last sync: {e}")
+                logger.warning(f"Could not check last sync: {e}")
 
         # Create worker and get tasks
         worker = TaskWorker(storage, owner_id, anthropic_key, user_email)
