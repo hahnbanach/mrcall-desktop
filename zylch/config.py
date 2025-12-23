@@ -24,14 +24,13 @@ class Settings(BaseSettings):
         description="Log level: DEBUG, INFO, WARNING, ERROR"
     )
 
-    # Anthropic - REMOVED from .env, now BYOK only via Supabase
     # Users set their Anthropic API key via /connect anthropic command
     default_model: str = Field(
         default="claude-sonnet-4-20250514",
         description="Default model for general tasks"
     )
     classification_model: str = Field(
-        default="claude-3-5-haiku-20241022",
+        default="claude-sonnet-4-20250514",
         description="Fast model for classification"
     )
     executive_model: str = Field(
