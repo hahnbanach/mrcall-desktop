@@ -29,7 +29,7 @@ TASK_AGENT_META_PROMPT = """You are analyzing a user's communication history to 
 
 Your goal: Generate a prompt that an AI agent will use to analyze individual events and decide if the user needs to take action.
 
-=== LAST 20 EMAIL THREADS ===
+=== LAST 100 EMAIL THREADS ===
 {threads}
 
 === MEMORY BLOBS FOR CONTACTS IN THESE THREADS ===
@@ -124,8 +124,8 @@ class TaskAgentBuilder:
         """
         logger.info(f"Building task detection prompt for {self.owner_id}")
 
-        # Step 1: Get last 20 threads with full conversation context
-        threads = self._get_recent_threads(limit=20)
+        # Step 1: Get last 100 threads with full conversation context
+        threads = self._get_recent_threads(limit=100)
         logger.info(f"Found {len(threads)} threads for analysis")
 
         # Step 2: Extract contacts from these threads
