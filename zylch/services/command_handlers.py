@@ -2102,11 +2102,14 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
     """
     from zylch.storage.supabase_client import SupabaseStorage
 
+    logger.debug(f"[TASK_DETAIL] Requested task #{task_num} for owner {owner_id}")
+
     try:
         storage = SupabaseStorage.get_instance()
 
         # Get all tasks (same order as displayed in /tasks)
         tasks = storage.get_task_items(owner_id, action_required=True)
+        logger.debug(f"[TASK_DETAIL] Found {len(tasks)} tasks with action_required=True")
 
         if not tasks:
             return "No tasks found. Run `/tasks refresh` first."
@@ -2117,10 +2120,14 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
         task = tasks[task_num - 1]  # 0-indexed
         event_type = task.get('event_type')
         event_id = task.get('event_id')
+        logger.debug(f"[TASK_DETAIL] Task #{task_num}: event_type={event_type}, event_id={event_id}")
 
         if event_type == 'email':
             # Fetch full email from emails table using gmail_id
             email = storage.get_email_by_id(owner_id, event_id)
+            logger.debug(f"[TASK_DETAIL] get_email_by_id result: {'found' if email else 'NOT FOUND'}")
+            if email:
+                logger.debug(f"[TASK_DETAIL] Email subject: {email.get('subject', '(none)')[:50]}")
             if not email:
                 return f"Email not found for task #{task_num}. It may have been deleted."
 
@@ -2156,6 +2163,7 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
                 .eq('google_event_id', event_id)\
                 .limit(1)\
                 .execute()
+            logger.debug(f"[TASK_DETAIL] Calendar query result: {len(result.data) if result.data else 0} events")
 
             if not result.data:
                 return f"Calendar event not found for task #{task_num}."
