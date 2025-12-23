@@ -134,9 +134,20 @@ class TaskWorker:
         analyzed_count = 0
         action_count = 0
 
-        # Process emails
-        emails = self.storage.get_emails(self.owner_id, limit=50)
-        for email in emails:
+        # Process emails - only analyze latest email per thread
+        all_emails = self.storage.get_emails(self.owner_id, limit=200)
+
+        # Group by thread_id, keep only latest email per thread
+        threads: Dict[str, Dict] = {}
+        for email in all_emails:
+            thread_id = email.get('thread_id') or email.get('id')
+            existing = threads.get(thread_id)
+            if not existing or (email.get('date_timestamp') or 0) > (existing.get('date_timestamp') or 0):
+                threads[thread_id] = email
+
+        logger.debug(f"[TASK] {len(all_emails)} emails -> {len(threads)} unique threads")
+
+        for email in threads.values():
             from_email = email.get('from_email', '').lower()
 
             # Skip user's own emails (the single logical rule)
