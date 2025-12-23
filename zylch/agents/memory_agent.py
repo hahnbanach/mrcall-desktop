@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 
 import anthropic
 
+from zylch.config import settings
 from zylch.storage.supabase_client import SupabaseStorage
 from zylch_memory import BlobStorage, HybridSearchEngine, LLMMergeService, EmbeddingEngine, ZylchMemoryConfig
 
@@ -280,7 +281,7 @@ class MemoryWorker:
             )
 
             response = self.anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=settings.default_model,
                 max_tokens=1024,  # Increased for multiple entities
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -440,7 +441,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
 """
 
             response = self.anthropic.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model=settings.classification_model,
                 max_tokens=512,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -560,7 +561,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
 """
 
             response = self.anthropic.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model=settings.classification_model,
                 max_tokens=512,
                 messages=[{"role": "user", "content": prompt}]
             )
