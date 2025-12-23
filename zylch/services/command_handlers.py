@@ -2123,9 +2123,9 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
         logger.debug(f"[TASK_DETAIL] Task #{task_num}: event_type={event_type}, event_id={event_id}")
 
         if event_type == 'email':
-            # Fetch full email from emails table using gmail_id
-            email = storage.get_email_by_id(owner_id, event_id)
-            logger.debug(f"[TASK_DETAIL] get_email_by_id result: {'found' if email else 'NOT FOUND'}")
+            # Fetch full email from emails table using Supabase UUID
+            email = storage.get_email_by_supabase_id(owner_id, event_id)
+            logger.debug(f"[TASK_DETAIL] get_email_by_supabase_id result: {'found' if email else 'NOT FOUND'}")
             if email:
                 logger.debug(f"[TASK_DETAIL] Email subject: {email.get('subject', '(none)')[:50]}")
             if not email:

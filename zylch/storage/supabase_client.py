@@ -154,6 +154,21 @@ class SupabaseStorage:
 
         return result.data[0] if result.data else None
 
+    def get_email_by_supabase_id(self, owner_id: str, supabase_id: str) -> Optional[Dict[str, Any]]:
+        """Get a single email by Supabase UUID (id column).
+
+        Note: This is different from get_email_by_id() which queries by gmail_id.
+        Use this when you have the Supabase internal ID (e.g., from task_items.event_id).
+        """
+        result = self.client.table('emails')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('id', supabase_id)\
+            .limit(1)\
+            .execute()
+
+        return result.data[0] if result.data else None
+
     def get_threads_in_window(self, owner_id: str, days_back: int = 30) -> List[str]:
         """Get thread IDs with activity in the last N days.
 
