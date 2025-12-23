@@ -2126,6 +2126,17 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
             # Fetch full email from emails table using Supabase UUID
             email = storage.get_email_by_supabase_id(owner_id, event_id)
             logger.debug(f"[TASK_DETAIL] get_email_by_supabase_id result: {'found' if email else 'NOT FOUND'}")
+
+            # If found, get the latest email in the same thread (for older task items)
+            if email and email.get('thread_id'):
+                thread_emails = storage.get_thread_emails(owner_id, email['thread_id'])
+                if thread_emails and len(thread_emails) > 1:
+                    # get_thread_emails returns ASC order, so last is latest
+                    latest = thread_emails[-1]
+                    if latest.get('id') != email.get('id'):
+                        logger.debug(f"[TASK_DETAIL] Using latest email in thread: {latest.get('subject', '(none)')[:50]}")
+                        email = latest
+
             if email:
                 logger.debug(f"[TASK_DETAIL] Email subject: {email.get('subject', '(none)')[:50]}")
             if not email:
