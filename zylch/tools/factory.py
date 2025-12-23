@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional
 
 import anthropic
 
+from zylch.config import settings
 from .base import Tool, ToolResult, ToolStatus
 
 
@@ -1569,7 +1570,7 @@ Write ONLY the email body (no subject), ready to be copied into a draft."""
 
             # Generate draft with Claude Sonnet
             response = self.anthropic_client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=settings.default_model,
                 max_tokens=1500,
                 messages=[{
                     "role": "user",

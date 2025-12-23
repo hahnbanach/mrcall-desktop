@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 
 import anthropic
 
+from zylch.config import settings
 from .base import Tool, ToolResult, ToolStatus
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ class WebSearchTool(Tool):
 
             # Use Anthropic to search and synthesize
             response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",  # Sonnet 4 for quality research
+                model=settings.default_model,
                 max_tokens=1024,
                 messages=[{
                     "role": "user",

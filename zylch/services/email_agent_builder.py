@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import anthropic
 
+from zylch.config import settings
 from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)
@@ -357,7 +358,7 @@ Body preview: {body}
         logger.info("Training email analyzer agent...")
 
         response = self.anthropic.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=settings.default_model,
             max_tokens=4000,
             messages=[{"role": "user", "content": meta_prompt}]
         )

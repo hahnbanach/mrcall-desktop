@@ -11,6 +11,8 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
+from zylch.config import settings
+
 # Avoid circular imports
 if TYPE_CHECKING:
     from zylch.storage.supabase_client import SupabaseStorage
@@ -782,7 +784,7 @@ Respond with JSON only:
 
         try:
             response = self.anthropic_client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=settings.default_model,
                 max_tokens=1000,
                 messages=[{
                     "role": "user",
@@ -1024,7 +1026,7 @@ IMPORTANT: User's personal rules have ABSOLUTE PRIORITY over all other criteria.
 REMEMBER: RETURN ONLY THE JSON OBJECT, NOTHING ELSE. NO MARKDOWN, NO EXPLANATIONS."""
 
             response = self.anthropic_client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=settings.default_model,
                 max_tokens=300,
                 messages=[{
                     "role": "user",

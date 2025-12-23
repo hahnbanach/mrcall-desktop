@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import anthropic
 from bs4 import BeautifulSoup
 
+from zylch.config import settings
+
 if TYPE_CHECKING:
     from zylch.storage.supabase_client import SupabaseStorage
 
@@ -577,7 +579,7 @@ class EmailSyncManager:
 
         try:
             response = self.anthropic_client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=settings.default_model,
                 max_tokens=800,
                 tools=[classify_tool],
                 tool_choice={"type": "tool", "name": "classify_thread"},

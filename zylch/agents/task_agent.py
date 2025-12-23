@@ -220,10 +220,10 @@ class TaskWorker:
             logger.error(f"Failed to format prompt: {e}")
             return None
 
-        # Call Haiku for fast/cheap per-event analysis
+        # Call classification model for fast/cheap per-event analysis
         try:
             response = self.anthropic.messages.create(
-                model="claude-haiku-3-5-20241022",
+                model=settings.classification_model,
                 max_tokens=200,
                 messages=[{"role": "user", "content": formatted_prompt}]
             )
