@@ -77,45 +77,25 @@ class TaskWorker:
         """Check if user has a trained task prompt."""
         return self._get_task_prompt() is not None
 
-    async def get_tasks(self, refresh: bool = False) -> tuple[List[Dict[str, Any]], Optional[str]]:
+    async def get_tasks(self, refresh: bool = False) -> tuple[List[Dict[str, Any]], None]:
         """Get actionable tasks, optionally refreshing analysis.
 
         Args:
             refresh: If True, re-analyze all events. If False, return cached results.
 
         Returns:
-            Tuple of (task items that need action, stale data warning or None)
+            Tuple of (task items that need action, None for compatibility)
         """
-        stale_warning = None
         if refresh:
             # Clear existing and re-analyze
             self.storage.clear_task_items(self.owner_id)
-            stale_warning = await self._analyze_recent_events()
+            await self._analyze_recent_events()
 
         tasks = self.storage.get_task_items(self.owner_id, action_required=True)
-        return tasks, stale_warning
+        return tasks, None
 
-    async def _analyze_recent_events(self) -> Optional[str]:
-        """Analyze recent events one-by-one using trained prompt.
-
-        Returns:
-            Warning message if data may be stale, None otherwise
-        """
-        # Check last sync time
-        stale_warning = None
-        try:
-            result = self.storage.client.table('sync_state').select('last_sync').eq('owner_id', self.owner_id).execute()
-            if result.data:
-                last_sync_str = result.data[0].get('last_sync')
-                if last_sync_str:
-                    last_sync = datetime.fromisoformat(last_sync_str.replace('Z', '+00:00'))
-                    hours_ago = (datetime.now(timezone.utc) - last_sync).total_seconds() / 3600
-                    if hours_ago > 6:
-                        stale_warning = f"⚠️ Last sync was {hours_ago:.1f} hours ago - data may be stale. Run `/sync` first."
-                        logger.warning(f"[TASK] {stale_warning}")
-        except Exception as e:
-            logger.debug(f"[TASK] Could not check last sync time: {e}")
-
+    async def _analyze_recent_events(self) -> None:
+        """Analyze recent events one-by-one using trained prompt."""
         user_emails = get_my_emails()
 
         # Load trained prompt (contains baked-in behavioral patterns)
@@ -216,7 +196,6 @@ class TaskWorker:
         # TODO: Process mrcall when available
 
         logger.info(f"Analyzed {analyzed_count} events, found {action_count} actions")
-        return stale_warning
 
     async def _analyze_event(
         self,

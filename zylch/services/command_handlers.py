@@ -2040,37 +2040,46 @@ Connect your Anthropic account:
         # Check for refresh flag
         refresh = 'refresh' in args
 
+        # Check last sync time BEFORE starting analysis
+        if refresh:
+            try:
+                result = storage.client.table('sync_state').select('last_sync').eq('owner_id', owner_id).execute()
+                if result.data:
+                    last_sync_str = result.data[0].get('last_sync')
+                    if last_sync_str:
+                        last_sync_dt = datetime.fromisoformat(last_sync_str.replace('Z', '+00:00'))
+                        hours_ago = (datetime.now(timezone.utc) - last_sync_dt).total_seconds() / 3600
+                        if hours_ago > 6:
+                            return f"""⚠️ **Stale Data Warning**
+
+Last sync was **{hours_ago:.1f} hours ago**.
+
+Run `/sync` first to get fresh emails, then `/tasks refresh`."""
+            except Exception as e:
+                logger.debug(f"Could not check last sync: {e}")
+
         # Create worker and get tasks
         worker = TaskWorker(storage, owner_id, anthropic_key, user_email)
-        tasks, stale_warning = await worker.get_tasks(refresh=refresh)
-
-        # Build result
-        result_parts = []
-
-        # Add stale data warning if present
-        if stale_warning:
-            result_parts.append(stale_warning)
-            result_parts.append("")
+        tasks, _ = await worker.get_tasks(refresh=refresh)
 
         if not tasks:
             if refresh:
-                result_parts.append("""**✅ Tasks**
+                return """**✅ Tasks**
 
 🎉 No action needed! You're all caught up.
 
-Analyzed recent emails and calendar - nothing requires your attention.""")
+Analyzed recent emails and calendar - nothing requires your attention."""
             else:
-                result_parts.append("""**✅ Tasks**
+                return """**✅ Tasks**
 
 🎉 No action needed! You're all caught up.
 
-Run `/tasks refresh` to re-analyze with fresh AI check.""")
-        else:
-            result_parts.append(format_task_items(tasks))
-            if refresh:
-                result_parts.append("\n_Freshly analyzed with AI_")
+Run `/tasks refresh` to re-analyze with fresh AI check."""
 
-        return "\n".join(result_parts)
+        result = format_task_items(tasks)
+        if refresh:
+            result += "\n\n_Freshly analyzed with AI_"
+        return result
 
     except ValueError as e:
         # Task prompt not found
