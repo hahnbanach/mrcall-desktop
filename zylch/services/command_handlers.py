@@ -73,9 +73,29 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
     from zylch.tools.gcalendar import GoogleCalendarClient
     from zylch.storage.supabase_client import SupabaseStorage
 
-    # Check for status subcommand (accept both 'status' and '--status')
-    status_check = 'status' in args or '--status' in args
-    if status_check:
+    help_text = """**🔄 Sync**
+
+**Usage:**
+• `/sync` - Sync emails and calendar (incremental)
+• `/sync status` - Show sync status
+• `/sync reset` - Clear all synced data
+• `/sync --days N` - Sync last N days
+
+**Examples:**
+• `/sync` - Quick incremental sync
+• `/sync --days 90` - Sync last 90 days
+• `/sync status` - Check last sync time"""
+
+    # --help option (check first)
+    if '--help' in args:
+        return help_text
+
+    # Separate positional args from options
+    positional = [a for a in args if not a.startswith('--')]
+    subcommand = positional[0].lower() if positional else None
+
+    # Subcommand: status
+    if subcommand == 'status':
         logger.info(f"[/sync] Status check for owner_id={owner_id}")
         try:
             supabase = SupabaseStorage()
@@ -116,14 +136,13 @@ async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
 📧 **Emails archived:** {email_count:,}
 📅 **Calendar events:** {event_count:,}
 
-Run `/sync` or `/sync days <n>` to sync more data."""
+Run `/sync` or `/sync --days N` to sync more data."""
         except Exception as e:
             logger.error(f"[/sync] Failed to get sync status: {e}")
             return f"❌ **Error getting sync status:** {str(e)}"
 
-    # Check for reset subcommand (accept both 'reset' and '--reset')
-    reset_sync = 'reset' in args or '--reset' in args
-    if reset_sync:
+    # Subcommand: reset
+    if subcommand == 'reset':
         logger.info(f"[/sync] Reset flag detected, clearing all sync data for owner_id={owner_id}")
         try:
             supabase = SupabaseStorage()
@@ -150,19 +169,19 @@ Next `/sync` will perform a full re-sync from scratch.
 ```
 /memory reset
 ```
-Then run `/sync days <n>` to rebuild memory from re-synced emails."""
+Then run `/sync --days N` to rebuild memory from re-synced emails."""
         except Exception as e:
             logger.error(f"[/sync] Failed to reset sync state: {e}")
             return f"❌ **Error resetting sync state:** {str(e)}"
 
-    # Parse days parameter (accept both 'days' and '--days')
+    # Parse --days option
     days_back = 30
     for i, arg in enumerate(args):
-        if arg in ['days', '--days'] and i + 1 < len(args):
+        if arg == '--days' and i + 1 < len(args):
             try:
                 days_back = int(args[i + 1])
             except ValueError:
-                return f"❌ **Error:** `{args[i + 1]}` is not a valid number\n\n**Usage:** `/sync days <number>`"
+                return f"❌ **Error:** `{args[i + 1]}` is not a valid number\n\n**Usage:** `/sync --days N`"
             break
 
     try:
@@ -360,7 +379,11 @@ Pass `forced_model` in context for subsequent requests:
 }}
 ```"""
 
-    if not args or 'help' in args or '--help' in args:
+    # --help option (check first)
+    if '--help' in args:
+        return help_text
+
+    if not args:
         return help_text
 
     model_choice = args[0].lower()
@@ -407,7 +430,11 @@ Use `/agent process` to extract facts from synced data:
 • `/agent process` - Process all data
 • `/agent process email` - Process only emails"""
 
-    if not args or 'help' in args or '--help' in args:
+    # --help option (check first)
+    if '--help' in args:
+        return help_text
+
+    if not args:
         return help_text
 
     from zylch.storage.supabase_client import SupabaseStorage
@@ -610,13 +637,19 @@ async def handle_trigger(args: List[str], owner_id: str, user_email: str = None)
 /trigger remove abc123
 ```"""
 
-    if not args or 'help' in args or '--help' in args:
+    # --help option (check first)
+    if '--help' in args:
         return help_text
+
+    # Separate positional args from options
+    positional = [a for a in args if not a.startswith('--')]
+    subcommand = positional[0].lower() if positional else None
 
     try:
         client = SupabaseClient()
 
-        if 'types' in args or '--types' in args:
+        # Subcommand: types
+        if subcommand == 'types':
             return """**⚡ Available Trigger Types**
 
 • `session_start` - Fires when you start a new conversation
@@ -626,8 +659,8 @@ async def handle_trigger(args: List[str], owner_id: str, user_email: str = None)
 
 **Usage:** `/trigger add <type> <instruction>`"""
 
-        elif 'list' in args or '--list' in args or len(args) == 0:
-            # List triggers
+        # Subcommand: list (or no subcommand)
+        if subcommand == 'list' or subcommand is None:
             triggers = client.list_triggers(owner_id)
 
             if not triggers:
@@ -638,7 +671,7 @@ You haven't created any triggers yet.
 **Get started:**
 `/trigger add session_start "Summarize my unread emails"`
 
-Use `/trigger help` for more options."""
+Use `/trigger --help` for more options."""
 
             output = f"**⚡ Your Triggers** ({len(triggers)} total)\n\n"
             for t in triggers:
@@ -655,16 +688,13 @@ Use `/trigger help` for more options."""
             output += "**Commands:** `/trigger remove <id>` | `/trigger toggle <id>`"
             return output
 
-        elif 'add' in args or '--add' in args:
-            # Add trigger
-            add_idx = (args.index('add') if 'add' in args else args.index('--add')) + 1
-
-            if len(args) < add_idx + 2:
+        # Subcommand: add
+        if subcommand == 'add':
+            if len(positional) < 3:
                 return "❌ **Error:** Missing arguments\n\n**Usage:** `/trigger add <type> <instruction>`\n\nExample: `/trigger add session_start \"Say good morning\"`"
 
-            trigger_type = args[add_idx]
-            # Join remaining args as instruction
-            instruction = ' '.join(args[add_idx + 1:])
+            trigger_type = positional[1]
+            instruction = ' '.join(positional[2:])
 
             if trigger_type not in TRIGGER_TYPES:
                 return f"❌ **Error:** Invalid trigger type: `{trigger_type}`\n\n**Valid types:** {', '.join(TRIGGER_TYPES)}"
@@ -682,14 +712,13 @@ This trigger will fire automatically when the event occurs."""
             else:
                 return "❌ **Error:** Failed to create trigger. Please try again."
 
-        elif 'remove' in args or '--remove' in args:
-            # Remove trigger
-            remove_idx = (args.index('remove') if 'remove' in args else args.index('--remove')) + 1
+        # Subcommand: remove
+        if subcommand == 'remove':
+            trigger_id = positional[1] if len(positional) > 1 else None
 
-            if len(args) <= remove_idx:
+            if not trigger_id:
                 return "❌ **Error:** Missing trigger ID\n\n**Usage:** `/trigger remove <id>`"
 
-            trigger_id = args[remove_idx]
             success = client.remove_trigger(owner_id, trigger_id)
 
             if success:
@@ -697,16 +726,13 @@ This trigger will fire automatically when the event occurs."""
             else:
                 return f"❌ **Error:** Could not find trigger with ID `{trigger_id[:8]}`"
 
-        elif 'toggle' in args or '--toggle' in args:
-            # Toggle trigger active status
-            toggle_idx = (args.index('toggle') if 'toggle' in args else args.index('--toggle')) + 1
+        # Subcommand: toggle
+        if subcommand == 'toggle':
+            trigger_id = positional[1] if len(positional) > 1 else None
 
-            if len(args) <= toggle_idx:
+            if not trigger_id:
                 return "❌ **Error:** Missing trigger ID\n\n**Usage:** `/trigger toggle <id>`"
 
-            trigger_id = args[toggle_idx]
-
-            # Get current status
             triggers = client.list_triggers(owner_id)
             current_trigger = next((t for t in triggers if t['id'].startswith(trigger_id)), None)
 
@@ -722,9 +748,8 @@ This trigger will fire automatically when the event occurs."""
             else:
                 return f"❌ **Error:** Could not update trigger"
 
-        else:
-            # Default: list triggers
-            return await handle_trigger(['list'], owner_id, user_email)
+        # Unknown subcommand
+        return f"❌ Unknown subcommand: `{subcommand}`\n\n{help_text}"
 
     except Exception as e:
         logger.error(f"Error in /trigger command: {e}", exc_info=True)
@@ -752,21 +777,27 @@ Links your Zylch assistant to a MrCall/StarChat business for:
 • Call transcript sync
 • Trigger automation (sms_received, call_received)"""
 
-    if 'help' in args or '--help' in args:
+    # --help option (check first)
+    if '--help' in args:
         return help_text
+
+    # Separate positional args from options
+    positional = [a for a in args if not a.startswith('--')]
+    subcommand = positional[0].lower() if positional else None
 
     try:
         client = SupabaseClient()
 
-        if 'unlink' in args or '--unlink' in args:
-            # Remove link
+        # Subcommand: unlink
+        if subcommand == 'unlink':
             success = client.remove_mrcall_link(owner_id)
             if success:
                 return "✅ **MrCall Unlinked**\n\nYour Zylch is no longer connected to a MrCall business."
             else:
                 return "❌ **Error:** No MrCall link found to remove."
 
-        elif len(args) == 0:
+        # No subcommand: show status
+        if subcommand is None:
             # Show current link
             link = client.get_mrcall_link(owner_id)
 
@@ -801,18 +832,17 @@ Connect your Zylch to a MrCall business to enable:
 
 Contact support@zylchai.com to get your MrCall business ID."""
 
-        else:
-            # Link to business
-            business_id = args[0]
+        # Subcommand is business_id (positional arg)
+        business_id = subcommand
 
-            # Validate business_id (should be numeric or alphanumeric)
-            if not business_id.replace('-', '').replace('_', '').isalnum():
-                return f"❌ **Error:** Invalid business ID format: `{business_id}`"
+        # Validate business_id (should be numeric or alphanumeric)
+        if not business_id.replace('-', '').replace('_', '').isalnum():
+            return f"❌ **Error:** Invalid business ID format: `{business_id}`"
 
-            result = client.set_mrcall_link(owner_id, business_id)
+        result = client.set_mrcall_link(owner_id, business_id)
 
-            if result:
-                return f"""✅ **MrCall Linked**
+        if result:
+            return f"""✅ **MrCall Linked**
 
 **Business ID:** `{business_id}`
 
@@ -824,8 +854,8 @@ Your Zylch is now connected to MrCall!
 3. Test with a phone call
 
 **Need help?** Contact support@zylchai.com"""
-            else:
-                return "❌ **Error:** Failed to link MrCall business. Please try again."
+        else:
+            return "❌ **Error:** Failed to link MrCall business. Please try again."
 
     except Exception as e:
         logger.error(f"Error in /mrcall command: {e}", exc_info=True)
@@ -860,7 +890,11 @@ Registers a recipient to receive shared data from you.
 • `/share <email>` - Send share request
 • `/revoke <email>` - Cancel sharing"""
 
-    if not args or 'help' in args or '--help' in args:
+    # --help option (check first)
+    if '--help' in args:
+        return help_text
+
+    if not args:
         return help_text
 
     try:
@@ -930,7 +964,11 @@ Revokes data sharing access for a recipient.
 This stops sharing your data with the specified user.
 They will no longer receive updates from you."""
 
-    if not args or 'help' in args or '--help' in args:
+    # --help option (check first)
+    if '--help' in args:
+        return help_text
+
+    if not args:
         return help_text
 
     try:
@@ -973,15 +1011,103 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
     Usage:
     - /connect - List all available providers
     - /connect <provider> - Initiate connection for specific provider
+    - /connect status - Show connection status
+    - /connect reset <provider> - Disconnect a provider
     """
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch.integrations.registry import get_available_providers, get_category_emoji
+    from zylch.integrations.registry import get_available_providers, get_category_emoji, get_connection_status
+
+    help_text = """**📡 Connections**
+
+**Usage:**
+• `/connect` - List available providers
+• `/connect <provider>` - Connect to a provider
+• `/connect status` - Show all connection statuses
+• `/connect reset <provider>` - Disconnect a provider
+
+**Providers:**
+• `google` - Gmail & Google Calendar
+• `microsoft` - Outlook & Calendar
+• `mrcall` - MrCall/StarChat phone
+• `anthropic` - Claude AI (BYOK)
+• `pipedrive` - Pipedrive CRM
+• `vonage` - Vonage SMS
+
+**Examples:**
+• `/connect mrcall` - Connect MrCall
+• `/connect status` - Check what's connected
+• `/connect reset google` - Disconnect Google"""
+
+    # --help option (check first, before any processing)
+    if '--help' in args:
+        return help_text
+
+    # Separate positional args from options
+    positional = [a for a in args if not a.startswith('--')]
+    subcommand = positional[0].lower() if positional else None
 
     try:
         supabase = SupabaseStorage()
 
-        # If no args, show all available providers
-        if not args:
+        # Subcommand: status
+        if subcommand == 'status':
+            status_data = get_connection_status(supabase, owner_id, include_unavailable=False)
+            connections = status_data.get('connections', [])
+
+            if not connections:
+                return "**📡 Connection Status**\n\n❌ No providers available"
+
+            output = f"**📡 Connection Status** ({status_data['connected_count']}/{status_data['available_count']} connected)\n\n"
+
+            for conn in connections:
+                emoji = get_category_emoji(conn.get('category', ''))
+                status = conn.get('status', 'disconnected')
+                name = conn['display_name']
+
+                if status == 'connected':
+                    email = conn.get('connected_email', '')
+                    output += f"✅ {emoji} **{name}**"
+                    if email:
+                        output += f" ({email})"
+                    output += "\n"
+                else:
+                    output += f"⬚ {emoji} {name} - `/connect {conn['provider_key']}`\n"
+
+            return output
+
+        # Subcommand: reset
+        if subcommand == 'reset':
+            provider_key = positional[1].lower() if len(positional) > 1 else None
+
+            if not provider_key:
+                return "❌ Missing provider\n\n**Usage:** `/connect reset <provider>`\n\nExample: `/connect reset google`"
+
+            from zylch.api.token_storage import (
+                delete_user_credentials,
+                delete_mrcall_credentials,
+                delete_anthropic_key,
+            )
+
+            delete_funcs = {
+                'google': delete_user_credentials,
+                'mrcall': delete_mrcall_credentials,
+                'anthropic': delete_anthropic_key,
+            }
+
+            if provider_key not in delete_funcs:
+                return f"❌ Cannot reset `{provider_key}`\n\nSupported: google, mrcall, anthropic"
+
+            try:
+                success = delete_funcs[provider_key](owner_id)
+                if success:
+                    return f"✅ **{provider_key.title()}** disconnected\n\nRun `/connect {provider_key}` to reconnect."
+                else:
+                    return f"❌ Failed to disconnect {provider_key} (may not be connected)"
+            except Exception as e:
+                return f"❌ Error disconnecting {provider_key}: {str(e)}"
+
+        # No subcommand: list all available providers
+        if subcommand is None:
             providers = get_available_providers(supabase, include_unavailable=False)
 
             if not providers:
@@ -996,8 +1122,8 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
 
             return output
 
-        # Connect to specific provider
-        provider_key = args[0].lower()
+        # Connect to specific provider (subcommand is the provider key)
+        provider_key = subcommand
 
         # Get provider info
         result = supabase.client.table('integration_providers')\
@@ -1035,7 +1161,7 @@ For API clients, redirect user to:
 
 After authorization, tokens will be stored automatically.
 
-Run `/connections` to verify connection."""
+Run `/connect` to verify connection."""
 
         # API key provider - show configuration instructions
         else:
@@ -1052,7 +1178,7 @@ This integration requires manual configuration.
 **Setup:**
 1. Get your credentials from {provider['display_name']}
 2. Store them securely in environment variables or database
-3. Run `/connections` to verify connection
+3. Run `/connect` to verify connection
 
 **Documentation:** {provider.get('documentation_url', 'Contact support for setup help')}"""
 
@@ -1107,7 +1233,11 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
 
 **Note:** Drafts are stored in Zylch. When you send, it routes through your connected Gmail or Outlook."""
 
-    if not args or 'help' in args or '--help' in args:
+    # --help option (check first)
+    if '--help' in args:
+        return help_text
+
+    if not args:
         return help_text
 
     try:
@@ -1435,25 +1565,27 @@ COMMAND_HELP = {
     },
     '/sync': {
         'summary': 'Sync emails and calendar',
-        'usage': '/sync [days <n>] [status] [reset]',
+        'usage': '/sync [status|reset] [--days N]',
         'description': '''Fetches new emails from Gmail and calendar events from Google Calendar.
 
 **Subcommands:**
-- `days <n>` - Number of days to sync (default: 30 for first sync, incremental after)
 - `status` - Show sync status (last sync time, email count, event count)
 - `reset` - Clear sync state and force full re-sync (warns about memory)
 
+**Options:**
+- `--days N` - Number of days to sync (default: 30 for first sync, incremental after)
+
 **Examples:**
 - `/sync` - Sync with defaults (incremental after first sync)
-- `/sync days 1` - Sync only last 1 day (useful for testing)
-- `/sync days 300` - Sync last 300 days
+- `/sync --days 1` - Sync only last 1 day (useful for testing)
+- `/sync --days 300` - Sync last 300 days
 - `/sync status` - Check sync status without syncing
 - `/sync reset` - Reset sync state, then run `/sync` to re-sync
 
 **Fresh start:** To rebuild everything from scratch:
 1. `/memory reset` - Clear memory blobs
 2. `/sync reset` - Clear emails/calendar
-3. `/sync days 30` - Re-sync and rebuild memory''',
+3. `/sync --days 30` - Re-sync and rebuild memory''',
     },
     '/briefing': {
         'summary': 'Daily briefing of tasks and unanswered conversations',
@@ -1518,13 +1650,37 @@ Use `/agent process` to extract facts from synced data into memory.''',
     },
     '/trigger': {
         'summary': 'Manage event triggers',
-        'usage': '/trigger [--list|--add|--remove]',
-        'description': 'Configure automated triggers for events like new emails.',
+        'usage': '/trigger [types|list|add|remove|enable|disable] [args]',
+        'description': '''Configure automated triggers for events like new emails.
+
+**Subcommands:**
+- `types` - Show available trigger types
+- `list` - List configured triggers (default)
+- `add <type> <instruction>` - Add a new trigger
+- `remove <id>` - Remove a trigger by ID
+- `enable <id>` - Enable a trigger
+- `disable <id>` - Disable a trigger
+
+**Examples:**
+- `/trigger` - List all triggers
+- `/trigger types` - Show trigger types
+- `/trigger add email_received "Summarize new emails"` - Add trigger
+- `/trigger remove 123` - Remove trigger''',
     },
     '/mrcall': {
         'summary': 'MrCall integration',
-        'usage': '/mrcall [--status|--sync]',
-        'description': 'Manage MrCall telephony integration.',
+        'usage': '/mrcall [unlink] [<business_id>]',
+        'description': '''Manage MrCall telephony integration.
+
+**Subcommands:**
+- (none) - Show current MrCall connection status
+- `unlink` - Disconnect MrCall integration
+- `<business_id>` - Link to specific business
+
+**Examples:**
+- `/mrcall` - Show connection status
+- `/mrcall unlink` - Disconnect MrCall
+- `/mrcall 12345` - Link to business 12345''',
     },
     '/share': {
         'summary': 'Share access with others',
@@ -1543,18 +1699,23 @@ Use `/agent process` to extract facts from synced data into memory.''',
     },
     '/connect': {
         'summary': 'Manage external integrations',
-        'usage': '/connect [provider]',
-        'description': '''View and manage external service connections (Google, Microsoft, Anthropic, etc.).
+        'usage': '/connect [status|reset <provider>|<provider>] [--help]',
+        'description': '''View and manage external service connections.
 
-**Usage:**
-- `/connect` - List all available integrations and their status
-- `/connect google` - Connect Google (Gmail + Calendar)
-- `/connect microsoft` - Connect Microsoft (Outlook + Calendar)
-- `/connect anthropic` - Connect Anthropic Claude API
+**Subcommands:**
+- (none) - List available providers
+- `status` - Show all connection statuses
+- `reset <provider>` - Disconnect a provider
+- `<provider>` - Connect to a provider
+
+**Options:**
+- `--help` - Show this help
 
 **Examples:**
-- `/connect` - Show connection status
-- `/connect anthropic` - Add your Anthropic API key''',
+- `/connect` - List providers
+- `/connect mrcall` - Connect MrCall
+- `/connect status` - Check connections
+- `/connect reset google` - Disconnect Google''',
     },
     # Phase 1: High-impact commands (replacing tools)
     '/stats': {
@@ -1574,8 +1735,16 @@ Use `/agent process` to extract facts from synced data into memory.''',
     },
     '/jobs': {
         'summary': 'Scheduled jobs and reminders',
-        'usage': '/jobs [--cancel <id>]',
-        'description': 'Lists scheduled reminders and jobs. Use `--cancel <id>` to cancel a job.',
+        'usage': '/jobs [cancel <id>]',
+        'description': '''Lists scheduled reminders and jobs.
+
+**Subcommands:**
+- (none) - List all scheduled jobs
+- `cancel <id>` - Cancel a specific job by ID
+
+**Examples:**
+- `/jobs` - Show all scheduled jobs
+- `/jobs cancel abc123` - Cancel job abc123''',
     },
     '/agent': {
         'summary': 'Train agents and process data into memory',
@@ -1618,7 +1787,8 @@ Shows statistics about your synced emails:
 - Date range
 - Open conversations needing response"""
 
-    if 'help' in args or '--help' in args:
+    # --help option (check first)
+    if '--help' in args:
         return help_text
 
     try:
@@ -1699,7 +1869,8 @@ Shows your upcoming calendar events.
 - `/calendar 1` - Today only
 - `/calendar 30 --limit 50` - Next month"""
 
-    if 'help' in args or '--help' in args:
+    # --help option (check first)
+    if '--help' in args:
         return help_text
 
     try:
@@ -1797,7 +1968,8 @@ Shows items needing your action, analyzed by AI.
 - `/agent train tasks` - Train/retrain task detection
 - `/agent show tasks` - View trained agent"""
 
-    if 'help' in args or '--help' in args:
+    # --help option (check first)
+    if '--help' in args:
         return help_text
 
     try:
@@ -1876,24 +2048,28 @@ async def handle_jobs(args: List[str], owner_id: str) -> str:
 
 Shows your scheduled reminders and jobs.
 
-**Options:**
+**Subcommands:**
 - `cancel <id>` - Cancel a job by ID
 
 **Related:**
 - "remind me in 2 hours" - Schedule via Claude
 - `/trigger` - Event-driven automation"""
 
-    if 'help' in args or '--help' in args:
+    # --help option (check first)
+    if '--help' in args:
         return help_text
+
+    # Separate positional args from options
+    positional = [a for a in args if not a.startswith('--')]
+    subcommand = positional[0].lower() if positional else None
 
     try:
         scheduler = ZylchScheduler(owner_id=owner_id)
 
-        # Handle cancel (accept both 'cancel' and '--cancel')
-        if 'cancel' in args or '--cancel' in args:
-            idx = args.index('cancel') if 'cancel' in args else args.index('--cancel')
-            if idx + 1 < len(args):
-                job_id = args[idx + 1]
+        # Subcommand: cancel
+        if subcommand == 'cancel':
+            job_id = positional[1] if len(positional) > 1 else None
+            if job_id:
                 success = scheduler.cancel_job(job_id)
                 if success:
                     return f"✅ **Job cancelled:** `{job_id[:8]}`"
@@ -1963,7 +2139,11 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 3. `/agent process` - Extract facts into memory blobs
 4. `/memory search <query>` - Find stored information"""
 
-    if not args or 'help' in args or '--help' in args:
+    # --help option (check first)
+    if '--help' in args:
+        return help_text
+
+    if not args:
         return help_text
 
     try:
@@ -2401,7 +2581,7 @@ COMMAND_TRIGGERS = {
         "connect",
         "connections",
         "integrations",
-        "connect my account",
+        "link mrcall",
         "link google",
         "link outlook",
         "set up integration",

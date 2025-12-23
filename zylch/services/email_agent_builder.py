@@ -122,7 +122,12 @@ NB DO NOT CREATE PERSON entity about USER_PERSON!!
    Name: Name of the project
 
    #ABOUT
-   What is it? A collaboration? An offer? A request for work? A candidacy? Anything we should trace over time, eg NOT calls, booking. NO COMPANY EXEPT USER_COMPANY should be quoted here!
+   What is it? A collaboration? An offer? A request for work? A candidacy? Anything we should trace over time, eg NOT calls, booking. NO COMPANY EXEPT USER_COMPANY should be quoted here! This section must be very informative: it might be for example
+   . a recurrent technical problem -> which kind of email does the user normally send? 
+   . an offer -> data about the offer like features, prices, timeline
+   . a type of collaboration/sales -> what are the terms of the deals?
+   . a product -> features and prices
+   All the information above will be used to answer other people asking information about the same project
 
    #HISTORY
    On this date the user started talking about this project with a `person` or a `company`
