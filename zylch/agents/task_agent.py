@@ -77,24 +77,45 @@ class TaskWorker:
         """Check if user has a trained task prompt."""
         return self._get_task_prompt() is not None
 
-    async def get_tasks(self, refresh: bool = False) -> List[Dict[str, Any]]:
+    async def get_tasks(self, refresh: bool = False) -> tuple[List[Dict[str, Any]], Optional[str]]:
         """Get actionable tasks, optionally refreshing analysis.
 
         Args:
             refresh: If True, re-analyze all events. If False, return cached results.
 
         Returns:
-            List of task items that need action
+            Tuple of (task items that need action, stale data warning or None)
         """
+        stale_warning = None
         if refresh:
             # Clear existing and re-analyze
             self.storage.clear_task_items(self.owner_id)
-            await self._analyze_recent_events()
+            stale_warning = await self._analyze_recent_events()
 
-        return self.storage.get_task_items(self.owner_id, action_required=True)
+        tasks = self.storage.get_task_items(self.owner_id, action_required=True)
+        return tasks, stale_warning
 
-    async def _analyze_recent_events(self):
-        """Analyze recent events one-by-one using trained prompt."""
+    async def _analyze_recent_events(self) -> Optional[str]:
+        """Analyze recent events one-by-one using trained prompt.
+
+        Returns:
+            Warning message if data may be stale, None otherwise
+        """
+        # Check last sync time
+        stale_warning = None
+        try:
+            result = self.storage.client.table('sync_state').select('last_sync').eq('owner_id', self.owner_id).execute()
+            if result.data:
+                last_sync_str = result.data[0].get('last_sync')
+                if last_sync_str:
+                    last_sync = datetime.fromisoformat(last_sync_str.replace('Z', '+00:00'))
+                    hours_ago = (datetime.now(timezone.utc) - last_sync).total_seconds() / 3600
+                    if hours_ago > 6:
+                        stale_warning = f"⚠️ Last sync was {hours_ago:.1f} hours ago - data may be stale. Run `/sync` first."
+                        logger.warning(f"[TASK] {stale_warning}")
+        except Exception as e:
+            logger.debug(f"[TASK] Could not check last sync time: {e}")
+
         user_emails = get_my_emails()
 
         # Load trained prompt (contains baked-in behavioral patterns)
@@ -130,7 +151,7 @@ class TaskWorker:
                 'to_email': email.get('to_email'),
                 'subject': email.get('subject'),
                 'date': email.get('date'),
-                'body': (email.get('body_plain') or email.get('snippet', ''))[:1000],
+                'body': email.get('body_plain') or email.get('snippet', ''),
                 'thread_id': email.get('thread_id')
             }
 
@@ -195,6 +216,7 @@ class TaskWorker:
         # TODO: Process mrcall when available
 
         logger.info(f"Analyzed {analyzed_count} events, found {action_count} actions")
+        return stale_warning
 
     async def _analyze_event(
         self,
@@ -236,6 +258,12 @@ class TaskWorker:
             logger.error(f"Failed to format prompt: {e}")
             return None
 
+        # Debug logging
+        logger.debug(f"[TASK] Analyzing {event_type}")
+        logger.debug(f"[TASK] Event data: {event_data_json}")
+        logger.debug(f"[TASK] Blob context length: {len(blob_context)}")
+        logger.debug(f"[TASK] Formatted prompt:\n{formatted_prompt[:500]}...")
+
         # Call classification model for fast/cheap per-event analysis
         try:
             response = self.anthropic.messages.create(
@@ -245,6 +273,7 @@ class TaskWorker:
             )
 
             result_text = response.content[0].text.strip()
+            logger.debug(f"[TASK] LLM response: {result_text}")
             return self._parse_action_response(result_text)
 
         except Exception as e:

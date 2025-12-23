@@ -2042,26 +2042,35 @@ Connect your Anthropic account:
 
         # Create worker and get tasks
         worker = TaskWorker(storage, owner_id, anthropic_key, user_email)
-        tasks = await worker.get_tasks(refresh=refresh)
+        tasks, stale_warning = await worker.get_tasks(refresh=refresh)
+
+        # Build result
+        result_parts = []
+
+        # Add stale data warning if present
+        if stale_warning:
+            result_parts.append(stale_warning)
+            result_parts.append("")
 
         if not tasks:
             if refresh:
-                return """**✅ Tasks**
+                result_parts.append("""**✅ Tasks**
 
 🎉 No action needed! You're all caught up.
 
-Analyzed recent emails and calendar - nothing requires your attention."""
+Analyzed recent emails and calendar - nothing requires your attention.""")
             else:
-                return """**✅ Tasks**
+                result_parts.append("""**✅ Tasks**
 
 🎉 No action needed! You're all caught up.
 
-Run `/tasks refresh` to re-analyze with fresh AI check."""
+Run `/tasks refresh` to re-analyze with fresh AI check.""")
+        else:
+            result_parts.append(format_task_items(tasks))
+            if refresh:
+                result_parts.append("\n_Freshly analyzed with AI_")
 
-        result = format_task_items(tasks)
-        if refresh:
-            result += "\n\n_Freshly analyzed with AI_"
-        return result
+        return "\n".join(result_parts)
 
     except ValueError as e:
         # Task prompt not found
