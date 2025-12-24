@@ -419,6 +419,7 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 • `/memory search <query>` - Search memories (hybrid FTS + semantic)
 • `/memory store <content>` - Store new memory (with auto-reconsolidation)
 • `/memory store --force <content>` - Force create new blob (skip merge)
+• `/memory delete <blob_id>` - Delete a specific memory blob
 • `/memory stats` - Show memory statistics
 • `/memory list [limit]` - List recent memories
 • `/memory reset` - Delete ALL memories AND reset processing timestamps
@@ -479,8 +480,8 @@ Use `/agent process` to extract facts from synced data:
                     score_info = f"hybrid: {r.hybrid_score:.2f} (exact: {r.exact_score:.1f}, FTS: {r.fts_score:.2f}, semantic: {r.semantic_score:.2f})"
                 else:
                     score_info = f"hybrid: {r.hybrid_score:.2f} (FTS: {r.fts_score:.2f}, semantic: {r.semantic_score:.2f})"
-                # Show full blob content (no truncation)
-                output += f"**{i}.** {r.content}\n"
+                # Show full blob content with ID (no truncation)
+                output += f"**{i}.** (ID: `{r.blob_id}`) {r.content}\n"
                 output += f"   _Score: {score_info}_\n\n"
 
             return output
@@ -535,6 +536,36 @@ New content added to existing entity blob."""
 **Content:** {content[:100]}{'...' if len(content) > 100 else ''}
 
 Memory will be searchable via hybrid search."""
+
+        elif cmd == 'delete':
+            # Delete a specific memory blob
+            if len(args) < 2:
+                return "❌ Missing blob ID\n\nUsage: `/memory delete <blob_id>`"
+
+            blob_id = args[1]
+
+            try:
+                # Delete the blob (owner_id check ensures user can only delete their own)
+                result = supabase.table('blobs')\
+                    .delete()\
+                    .eq('owner_id', owner_id)\
+                    .eq('id', blob_id)\
+                    .execute()
+
+                if result.data:
+                    # Also delete associated sentences
+                    supabase.table('blob_sentences')\
+                        .delete()\
+                        .eq('blob_id', blob_id)\
+                        .execute()
+
+                    return f"✅ **Memory deleted** (ID: `{blob_id[:8]}...`)"
+                else:
+                    return f"❌ Blob not found: `{blob_id}`\n\nMake sure you're using the full blob ID from `/memory search`."
+
+            except Exception as e:
+                logger.error(f"Failed to delete blob {blob_id}: {e}")
+                return f"❌ Failed to delete: {str(e)}"
 
         elif cmd == 'stats':
             # Memory statistics
