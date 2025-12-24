@@ -4,11 +4,29 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
+import colorlog
+
 from zylch.api.routes import sync, chat, admin, webhooks, data, auth, commands, connections, memory
 from zylch.api.firebase_auth import initialize_firebase
 from zylch.config import settings
 
-logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
+# Configure colored logging
+handler = colorlog.StreamHandler()
+handler.setFormatter(colorlog.ColoredFormatter(
+    '%(log_color)s%(levelname)-8s%(reset)s %(name)s: %(message)s',
+    log_colors={
+        'DEBUG': 'cyan',
+        'INFO': 'green',
+        'WARNING': 'yellow',
+        'ERROR': 'red',
+        'CRITICAL': 'red,bg_white',
+    }
+))
+
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    handlers=[handler]
+)
 
 # Silence noisy third-party loggers
 for noisy_logger in ["hpack", "httpcore", "httpx", "h2", "h11", "urllib3", "cachecontrol", "sentence_transformers"]:
