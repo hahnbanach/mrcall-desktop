@@ -187,8 +187,9 @@ CRITICAL OUTPUT FORMAT:
 - In case a single email contains more entities, you must create different sections, each one with its own #IDENTIFIERS, #ABOUT and #HISTORY.
 - Each entity is separated by ---ENTITY--- on its own line
 - If email is noise/marketing, output only: SKIP
+- The output should NOT contain sensitive data like password, account numbers, credit cards
 
-Example: The email is from john@acme.com to {self.user_email} about asking for a meeting because he finds our IT Consulting Offer too expansive. {self.user_email} is the user.
+Example: The email is from john@acme.com to {self.user_email} about asking for a meeting because he finds our IT Consulting Offer too expansive. He also says he is using password 123908kjhkjhHjkh to enter his account, but it does not work. {self.user_email} is the user.
 
 In this case you have 2 `person` (John and the user), 1 `company` (Acme). But because {self.user_email} is the user, they must not be considered as entity to be created/updated.
 
@@ -202,7 +203,7 @@ Company: Acme Corp
 John Doe is the sales director at Acme Corp.
 
 #HISTORY
-In December 2025 John reached out to {self.user_email} asking for a meeting about the offer we sent
+In December 2025 John reached out to {self.user_email} asking for a meeting about the offer we sent. He also wrote his password does not work. [DOO NOT substitute sensitive data with strings, just do not report them]
 ---ENTITY---
 #IDENTIFIERS
 Entity type: COMPANY
