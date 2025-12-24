@@ -113,7 +113,7 @@ class HybridSearchEngine:
 
         Returns blob if hybrid_score > RECONSOLIDATION_THRESHOLD.
         """
-        logger.debug(f"Reconsolidation search query (first 200 chars): {content[:200]}")
+        logger.debug(f"Reconsolidation search query: {content}")
 
         results = self.search(
             owner_id=owner_id,

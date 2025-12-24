@@ -22,7 +22,7 @@ NEW ENTITY:
 #FIRST RULE
 If you think EXISTING_ENTITY and NEW_ENTITY are not about the same entity, JUST PRODUCE ONE WORD: 
 
-SKIP
+INSERT
 
 #OTHER Rules:
 1. There must be **1** entity in the resulting entity: the resulting #IDENTIFIERS section must describe **1** entity. 
