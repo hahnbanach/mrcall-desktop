@@ -418,6 +418,7 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 **Usage:**
 • `/memory search <query>` - Search memories (hybrid FTS + semantic)
 • `/memory store <content>` - Store new memory (with auto-reconsolidation)
+• `/memory store --force <content>` - Force create new blob (skip merge)
 • `/memory stats` - Show memory statistics
 • `/memory list [limit]` - List recent memories
 • `/memory reset` - Delete ALL memories AND reset processing timestamps
@@ -425,6 +426,7 @@ async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> s
 **Examples:**
 • `/memory search John Smith`
 • `/memory store "Mario prefers formal Italian in emails"`
+• `/memory store --force "New entity that must be separate"`
 
 **Processing data into memory:**
 Use `/agent process` to extract facts from synced data:
@@ -477,25 +479,32 @@ Use `/agent process` to extract facts from synced data:
                     score_info = f"hybrid: {r.hybrid_score:.2f} (exact: {r.exact_score:.1f}, FTS: {r.fts_score:.2f}, semantic: {r.semantic_score:.2f})"
                 else:
                     score_info = f"hybrid: {r.hybrid_score:.2f} (FTS: {r.fts_score:.2f}, semantic: {r.semantic_score:.2f})"
-                content_preview = r.content[:200] + "..." if len(r.content) > 200 else r.content
-                output += f"**{i}.** {content_preview}\n"
+                # Show full blob content (no truncation)
+                output += f"**{i}.** {r.content}\n"
                 output += f"   _Score: {score_info}_\n\n"
 
             return output
 
         elif cmd == 'store':
-            # Store new memory (with auto-reconsolidation)
-            if len(args) < 2:
-                return "❌ Missing content\n\nUsage: `/memory store <content>`"
+            # Store new memory (with optional auto-reconsolidation)
+            # Check for --force flag to skip consolidation
+            force_new = '--force' in args
+            args_content = [a for a in args[1:] if a != '--force']
 
-            content = ' '.join(args[1:])
+            if not args_content:
+                return "❌ Missing content\n\nUsage: `/memory store <content>` or `/memory store --force <content>`"
 
-            # Check for reconsolidation candidate
-            existing = search_engine.find_for_reconsolidation(
-                owner_id=owner_id,
-                content=content,
-                namespace=namespace
-            )
+            content = ' '.join(args_content)
+
+            # Skip reconsolidation if --force flag is set
+            existing = None
+            if not force_new:
+                # Check for reconsolidation candidate
+                existing = search_engine.find_for_reconsolidation(
+                    owner_id=owner_id,
+                    content=content,
+                    namespace=namespace
+                )
 
             if existing:
                 # Reconsolidate: append to existing
@@ -513,14 +522,15 @@ Use `/agent process` to extract facts from synced data:
 New content added to existing entity blob."""
 
             else:
-                # Create new blob
+                # Create new blob (always if --force, or if no match found)
                 result = blob_storage.store_blob(
                     owner_id=owner_id,
                     namespace=namespace,
                     content=content,
-                    event_description="Created via /memory store"
+                    event_description="Created via /memory store" + (" (forced)" if force_new else "")
                 )
-                return f"""✅ **Memory stored** (ID: {result['id'][:8]}...)
+                force_msg = " (forced new blob)" if force_new else ""
+                return f"""✅ **Memory stored{force_msg}** (ID: {result['id'][:8]}...)
 
 **Content:** {content[:100]}{'...' if len(content) > 100 else ''}
 
