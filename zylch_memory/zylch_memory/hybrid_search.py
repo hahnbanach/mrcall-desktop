@@ -75,11 +75,23 @@ class HybridSearchEngine:
             "p_exact_pattern": exact_pattern,  # None becomes SQL NULL
         }
 
+        # Debug: Log query being sent to FTS
+        logger.debug(f"FTS query (first 200 chars): {query[:200]}")
+        logger.debug(f"Exact pattern: {exact_pattern}")
+
         # Call Supabase hybrid search function
         result = self.supabase.rpc(
             "hybrid_search_blobs",
             rpc_params
         ).execute()
+
+        # Debug: Log FTS scores for each result
+        for row in result.data or []:
+            logger.debug(
+                f"Result: {row['content'][:50]}... | "
+                f"FTS: {row['fts_score']:.3f}, semantic: {row['semantic_score']:.3f}, "
+                f"exact: {row.get('exact_score', 0):.3f}, hybrid: {row['hybrid_score']:.3f}"
+            )
 
         # Get matching sentences for each result
         results = []
