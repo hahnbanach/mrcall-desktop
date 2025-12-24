@@ -181,7 +181,9 @@ class MemoryWorker:
             total_entities: Total entities from this email
         """
         # Search for existing blob about this entity
-        logger.info(f"Upserting entity, searching with: {entity_content[:200]}...")
+
+
+        logger.info(f"Upserting entity, searching with:\n{entity_content}\n\n")
         existing = self.hybrid_search.find_for_reconsolidation(
             owner_id=self.owner_id,
             content=entity_content,
@@ -192,7 +194,7 @@ class MemoryWorker:
             # Merge with existing blob
             logger.debug(f"Found existing blob {existing.blob_id} for reconsolidation (score={existing.hybrid_score:.2f})")
             merged_content = self.llm_merge.merge(existing.content, entity_content)
-            if 'SKIP' in merged_content.upper() and len(merged_content) < 10:
+            if 'INSERT' in merged_content.upper() and len(merged_content) < 10:
                 blob = self.blob_storage.store_blob(
                     owner_id=self.owner_id,
                     namespace=self.namespace,
@@ -201,7 +203,7 @@ class MemoryWorker:
                 )
                 logger.info("Merging skipped")
                 logger.info(f"Created new blob {blob['id']} from email {email_id} (entity {entity_num}/{total_entities})")
-
+                return
             self.blob_storage.update_blob(
                 blob_id=existing.blob_id,
                 owner_id=self.owner_id,
@@ -209,6 +211,7 @@ class MemoryWorker:
                 event_description=event_desc
             )
             logger.info(f"Reconsolidated blob {existing.blob_id} with email {email_id} (entity {entity_num}/{total_entities})")
+            return
         else:
             # Create new blob
             blob = self.blob_storage.store_blob(
@@ -218,6 +221,7 @@ class MemoryWorker:
                 event_description=event_desc
             )
             logger.info(f"Created new blob {blob['id']} from email {email_id} (entity {entity_num}/{total_entities})")
+            return
 
     async def process_batch(self, emails: List[Dict]) -> int:
         """Process batch of emails.
