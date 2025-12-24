@@ -4,7 +4,7 @@ Analyzes the user's email history to understand:
 - Who they engage with (replied emails = VIP contacts)
 - What they ignore (cold outreach patterns)
 - Their role and business context
-- Projects they care about
+- Template of email they send
 
 Then generates a self-contained agent prompt for entity extraction from emails.
 """
@@ -44,10 +44,10 @@ Entity can only be of 3 types:
    #ABOUT: One sentence describing what the company does
    #HISTORY: What information we gathered about the company in this email exchange (e.g., "They signed up for a plan", "Started collaboration")
 
-3. **PROJECT** - Projects, type of collaborations, products, services, offers etc which are NOT bound to a single PERSON, but can be reproduced for others. E.g. an offer for a certain service can be made for multiple customers, a product sold to different people, a sales agreement with various companies etc.
-   #IDENTIFIERS: Name (short descriptive title, e.g., "Product...")
-   #ABOUT: A paragraph describing what this PROJECT is
-   #HISTORY: Very short description of what happened in this email regarding the PROJECT
+3. **TEMPLATE** - Information about a single topic, extracted about collaborations, products, services, offers etc which are NOT bound to a single PERSON, but can be reproduced for others. E.g. an offer for a certain service can be made for multiple customers, a product sold to different people, a sales agreement with various companies, information about prices etc.
+   #IDENTIFIERS: Name (short descriptive title, e.g., "Product Price", "IT Consulting offer" etc )
+   #ABOUT: A paragraph describing what this TEMPLATE is about.
+   #HISTORY: Very short description of what happened in this email regarding the template. Eg. 2025-12-22 "The user sent a revised offer for..."
 
 === USER'S PROFILE ===
 {user_profile}
@@ -63,7 +63,7 @@ The prompt must include:
 
 1. **USER CONTEXT**
    - Their role and company
-   - What projects they care about (sales, support, partnerships, personal)
+   - What projects they care about (sales, support, partnerships, personal), which kind of email do they send? You need to extract this information in order for other agents to be able to send similar email, with similar content
    - What they ignore (cold outreach, marketing)
 
 2. **USER'S OWN ENTITIES NOT TO BE RE-EXTRACTED**
@@ -80,7 +80,7 @@ The prompt must include:
 3. **EXTRACTION RULES**
    - Extract PERSON for each individual mentioned (sender, recipients, people referenced), if any WITH THE EXCEPTION OF THE USER_PERSON: don't extract entity about the USER_PERSON
    - Extract COMPANY for each organization mentioned, if any WITH THE EXCEPTION OF THE USER_COMPANY: don't extract entity about the USER_COMPANY
-   - Extract PROJECT for the main subject/relationship being discussed, if any. Remember: PROJECTS are generic entities, do not quote other companies in a PROJECT's #ABOUT section!
+   - Extract TEMPLATES for the main topic of conversations in the communication. Remember: TEMPLATES are generic entities, do not quote other companies in a TEMPLATES's #ABOUT section!
    - Keep #ABOUT section minimal
    - Put the narrative in #HISTORY
    - Reference people/companies by name in #HISTORY, don't duplicate info
@@ -90,7 +90,7 @@ The prompt must include:
 
    ```
    #IDENTIFIERS
-   Entity type: person
+   Entity type: PERSON
    Name: Name Familyname 
    Email: email@example.com
    Company: Company Name if available
@@ -105,7 +105,7 @@ NB DO NOT CREATE PERSON entity about USER_PERSON!!
 
    ---ENTITY---
    #IDENTIFIERS
-   Entity type: company
+   Entity type: COMPANY
    Name: Name of the company
    Website: company.tld
 
@@ -119,8 +119,8 @@ NB DO NOT CREATE PERSON entity about USER_PERSON!!
 
    ---ENTITY---
    #IDENTIFIERS
-   Entity type: project
-   Name: Name of the project
+   Entity type: TEMPLATE
+   Name: Name of the TEMPLATE
 
    #ABOUT
    What is it? A collaboration? An offer? A request for work? A candidacy? Anything we should trace over time, eg NOT calls, booking. NO COMPANY EXEPT USER_COMPANY should be quoted here! This section must be very informative: it might be for example
@@ -128,10 +128,10 @@ NB DO NOT CREATE PERSON entity about USER_PERSON!!
    . an offer -> data about the offer like features, prices, timeline
    . a type of collaboration/sales -> what are the terms of the deals?
    . a product -> features and prices
-   All the information above will be used to answer other people asking information about the same project
+   All the information above will be used to answer other people asking information about the same TEMPLATE
 
    #HISTORY
-   On this date the user started talking about this project with a `person` or a `company`
+   On this date the user started talking about this TEMPLATE with a `person` or a `company`
    
    ```
 
@@ -183,17 +183,17 @@ class EmailAgentBuilder:
 ---
 
 CRITICAL OUTPUT FORMAT:
-- You can extract any amount of entities, and they MUST be one of these 3 types: `person`, `company`, `project`
+- You can extract any amount of entities, and they MUST be one of these 3 types: `PERSON`, `COMPANY`, `TEMPLATE`
 - In case a single email contains more entities, you must create different sections, each one with its own #IDENTIFIERS, #ABOUT and #HISTORY.
 - Each entity is separated by ---ENTITY--- on its own line
 - If email is noise/marketing, output only: SKIP
 
-Example: The email is from john@acme.com to {self.user_email} about asking for a meeting. {self.user_email} is the user.
+Example: The email is from john@acme.com to {self.user_email} about asking for a meeting because he finds our IT Consulting Offer too expansive. {self.user_email} is the user.
 
 In this case you have 2 `person` (John and the user), 1 `company` (Acme). But because {self.user_email} is the user, they must not be considered as entity to be created/updated.
 
 #IDENTIFIERS
-Entity type: person
+Entity type: PERSON
 Name: John Doe
 Email: john@acme.com
 Company: Acme Corp
@@ -202,10 +202,10 @@ Company: Acme Corp
 John Doe is the sales director at Acme Corp.
 
 #HISTORY
-In December 2025 John reached out to {self.user_email} asking for a meeting about a potential partnership with NewCo.
+In December 2025 John reached out to {self.user_email} asking for a meeting about the offer we sent
 ---ENTITY---
 #IDENTIFIERS
-Entity type: company
+Entity type: COMPANY
 Name: Acme Corp
 Website: acme.com
 
@@ -213,17 +213,17 @@ Website: acme.com
 Acme Corp is a B2B software company specializing in CRM solutions.
 
 #HISTORY
-Acme Corp contacted MrCall in December 2025 about a possible partnership.
+Acme Corp contacted MrCall in December 2025 about a possible IT Consulting Offer
 ---ENTITY---
 #IDENTIFIERS
-Entity type: project
-Name: Acme Corp CRM collaboration
+Entity type: TEMPLATE
+Name: IT Consulting Offer
 
 #ABOUT
-Project to offer our service on Acme's website.
+Our company's IT Consulting Offer includes [blah blah blah]. Prices are etc etc. Deliverables are etc etc. ANY USEFUL INFORMATION TO BE EVENTUALLY USED BY THE ASSISTANT FOR WRITING AN EMAIL WITH AN OFFER 
 
 #HISTORY
-In December 2025 John Doe from Acme Corp initiated discussions about selling MrCall to their customers.
+In December 2025 John Doe from Acme Corp initiated discussions about the offer...
 """
 
     async def build_memory_email_prompt(self) -> Tuple[str, Dict[str, Any]]:
@@ -293,9 +293,9 @@ In December 2025 John Doe from Acme Corp initiated discussions about selling MrC
         if not user_sent_emails:
             return f"User's domain: {user_domain if user_domain else 'unknown'}"
 
-        # Extract signature patterns, common phrases, project
+        # Extract signature and subj
         signatures = []
-        projects = []
+        subjects = []
 
         for email in user_sent_emails[:20]:  # Sample last 20 sent emails
             body = email.get('body_plain', '') or ''
@@ -305,15 +305,15 @@ In December 2025 John Doe from Acme Corp initiated discussions about selling MrC
                 signature_area = body[-300:]
                 signatures.append(signature_area)
 
-            # Collect subjects for projects
+            # Collect subjects for templates
             subject = email.get('subject', '')
             if subject:
-                projects.append(subject)
+                subjects.append(subject)
 
         profile_parts = [f"Domain: {user_domain if user_domain else 'unknown'}"]
 
-        if projects:
-            profile_parts.append(f"Recent email projects: {', '.join(projects[:10])}")
+        if subjects:
+            profile_parts.append(f"Recent email subjects: {', '.join(subjects[:10])}")
 
         if signatures:
             # Just include one signature sample for role detection
