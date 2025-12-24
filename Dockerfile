@@ -18,6 +18,9 @@ COPY zylch_memory/ ./zylch_memory/
 COPY data/ ./data/
 COPY pyproject.toml .
 
+# Install zylch_memory as a local package
+RUN pip install --no-cache-dir ./zylch_memory/
+
 # Create non-root user for security
 RUN useradd -m -u 1000 zylch && \
     chown -R zylch:zylch /app
