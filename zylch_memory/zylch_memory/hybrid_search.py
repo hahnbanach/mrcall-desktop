@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import List, Optional
 import numpy as np
@@ -10,6 +11,22 @@ from .embeddings import EmbeddingEngine
 from .pattern_detection import detect_pattern
 
 logger = logging.getLogger(__name__)
+
+
+def extract_identifiers_section(content: str) -> str:
+    """Extract #IDENTIFIERS section from blob content for FTS matching.
+
+    FTS should only match against entity identifiers (names, types),
+    not the semantic content in #ABOUT or #HISTORY.
+
+    Returns:
+        The #IDENTIFIERS section content, or full content if no section found.
+    """
+    match = re.search(r'#IDENTIFIERS(.*?)#ABOUT', content, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    # Fallback: if no #IDENTIFIERS/#ABOUT structure, use full content
+    return content
 
 DEFAULT_FTS_WEIGHT = 0.5  # Configurable balance between FTS and semantic
 
@@ -61,22 +78,25 @@ class HybridSearchEngine:
         pattern = detect_pattern(query)
         exact_pattern = pattern.value if pattern else None
 
-        # Generate query embedding
+        # Generate query embedding (uses full query for semantic search)
         query_embedding = self.embeddings.encode(query)
+
+        # Extract #IDENTIFIERS section for FTS (matches stored tsv which also uses only #IDENTIFIERS)
+        fts_query = extract_identifiers_section(query)
 
         # Build RPC params - always include p_exact_pattern (can be NULL)
         rpc_params = {
             "p_owner_id": owner_id,
-            "p_query": query,
-            "p_query_embedding": query_embedding.tolist(),
+            "p_query": fts_query,  # FTS uses only #IDENTIFIERS section
+            "p_query_embedding": query_embedding.tolist(),  # Semantic uses full query
             "p_namespace": namespace,
             "p_fts_weight": fts_weight,
             "p_limit": limit,
             "p_exact_pattern": exact_pattern,  # None becomes SQL NULL
         }
 
-        # Debug: Log FULL query being sent to FTS
-        logger.debug(f"FTS query:\n{query}")
+        # Debug: Log FTS query (extracted identifiers only)
+        logger.debug(f"FTS query (extracted #IDENTIFIERS):\n{fts_query}")
         logger.debug(f"Exact pattern: {exact_pattern}")
 
         # Call Supabase hybrid search function
