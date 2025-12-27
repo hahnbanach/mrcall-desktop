@@ -810,7 +810,7 @@ contact_stats AS (
             THEN snippet END) as last_email_snippet
     FROM email_archive
     WHERE owner_id = $1
-      AND (from_email = $3 OR $3 = ANY(to_emails))
+      AND (from_email = $3 OR $3 = ANY(to_email))
 )
 SELECT
     email_count,
@@ -820,7 +820,7 @@ SELECT
     -- Relationship strength: emails per week over last 90 days
     (SELECT COUNT(*) FROM email_archive
      WHERE owner_id = $1
-       AND (from_email = $3 OR $3 = ANY(to_emails))
+       AND (from_email = $3 OR $3 = ANY(to_email))
        AND date > NOW() - INTERVAL '90 days'
     ) / 13.0 as relationship_strength
 FROM contact_stats;

@@ -123,10 +123,9 @@ zylch/
 │   ├── DOCUMENTATION.md
 │   └── TESTING.md
 ├── zylch/
-│   ├── agent/
-│   │   ├── core.py              # ZylchAIAgent
-│   │   ├── models.py
-│   │   └── prompts.py
+│   ├── agents/
+│   │   ├── memory_agent.py      # Memory extraction agent
+│   │   └── task_agent.py        # Task detection agent
 │   ├── api/
 │   │   ├── main.py              # FastAPI app
 │   │   └── routes/
@@ -149,12 +148,12 @@ zylch/
 │   │   ├── archive_service.py
 │   │   ├── assistant_manager.py
 │   │   ├── chat_service.py
-│   │   ├── command_handlers.py    # Slash command handlers
-│   │   ├── gap_service.py
-│   │   ├── persona_analyzer.py
+│   │   ├── command_handlers.py         # Slash command handlers
+│   │   ├── email_memory_agent_trainer.py
+│   │   ├── email_task_agent_trainer.py
 │   │   ├── scheduler.py
 │   │   ├── sync_service.py
-│   │   ├── trigger_service.py     # Event-driven trigger worker
+│   │   ├── trigger_service.py          # Event-driven trigger worker
 │   │   ├── validation_service.py
 │   │   └── webhook_processor.py
 │   ├── sharing/
@@ -261,12 +260,14 @@ MY_EMAILS=mario@example.com,*@mrcall.ai
 | `thread_analysis` | AI-generated summaries and analysis |
 | `calendar_events` | Calendar events |
 | `sync_state` | Gmail/Outlook history IDs |
-| `relationship_gaps` | Detected gaps |
 | `oauth_tokens` | Encrypted tokens (Google, Microsoft, Anthropic) |
+| `scheduled_jobs` | Scheduled reminders and timed actions |
 | `triggers` | Triggered instructions |
 | `trigger_events` | Event queue |
 | `sharing_auth` | Sharing authorizations |
 | `memories` | Avatar/memory system (pg_vector) |
+| `agent_prompts` | Personalized agent prompts |
+| `task_items` | Detected tasks |
 | `email_read_events` | Email read tracking events |
 | `sendgrid_message_mapping` | SendGrid message ID mapping |
 
@@ -342,16 +343,17 @@ When desktop/mobile apps are developed, we may explore local-first storage:
 ### Interactive Commands
 ```
 /help                      # Show all commands
-/sync                      # Full sync (email + calendar + gaps)
-/gaps                      # Show relationship gaps
+/sync                      # Full sync (email + calendar)
+/tasks                     # Show detected tasks
 /archive --stats           # Archive statistics
 /archive --search <query>  # Search emails
-/memory --list             # List behavioral memories
-/memory --add              # Add behavioral memory
+/memory search <query>     # Search memory blobs
+/memory list               # List memories
+/agent memory train        # Train memory agent
+/agent task train          # Train task agent
+/connect                   # Show integrations status
+/connect --help            # Show connect help
 /trigger --list            # List triggered instructions
-/trigger --add             # Add triggered instruction
-/cache --clear             # Clear caches
-/model <haiku|sonnet|opus> # Switch AI model
 /tutorial                  # Start tutorial
 /quit                      # Exit
 ```
@@ -416,11 +418,11 @@ When desktop/mobile apps are developed, we may explore local-first storage:
 |---------|--------|---------|
 | `/help` | ✅ | `handle_help()` |
 | `/sync` | ✅ | `handle_sync()` |
-| `/gaps` | ✅ | `handle_gaps()` |
+| `/tasks` | ✅ | `handle_tasks()` |
 | `/archive` | ✅ | `handle_archive()` |
-| `/cache` | ✅ | `handle_cache()` |
 | `/memory` | ✅ | `handle_memory()` |
-| `/model` | ✅ | `handle_model()` |
+| `/agent` | ✅ | `handle_agent()` |
+| `/connect` | ✅ | `handle_connect()` |
 | `/trigger` | ✅ | `handle_trigger()` |
 | `/mrcall` | ✅ | `handle_mrcall()` |
 | `/share` | ✅ | `handle_share()` |

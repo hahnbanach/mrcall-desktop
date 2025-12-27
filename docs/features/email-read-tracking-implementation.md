@@ -358,7 +358,7 @@ FROM messages
 LEFT JOIN email_read_events ON messages.id = email_read_events.message_id
 WHERE messages.owner_id = $1
     AND messages.from_email = ANY($2)  -- Owner's emails
-    AND messages.to_emails && $3       -- Contact's emails
+    AND messages.to_email && $3       -- Contact's emails
     AND messages.date > NOW() - INTERVAL '30 days'
 ```
 

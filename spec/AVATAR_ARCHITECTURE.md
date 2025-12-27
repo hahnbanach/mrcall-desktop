@@ -432,7 +432,7 @@ def should_compute_avatar(owner_id: str, contact_id: str) -> bool:
         SELECT COUNT(*) FROM emails
         WHERE owner_id = %s
           AND (from_email IN (SELECT identifier FROM identifier_map WHERE contact_id = %s)
-               OR to_emails::jsonb @> (SELECT jsonb_agg(identifier) FROM identifier_map WHERE contact_id = %s))
+               OR to_email::jsonb @> (SELECT jsonb_agg(identifier) FROM identifier_map WHERE contact_id = %s))
           AND created_at > %s
     """, (owner_id, contact_id, contact_id, avatar.last_computed))
 
@@ -761,12 +761,12 @@ class AvatarAggregator:
                 e.subject,
                 e.date,
                 e.from_email,
-                e.to_emails,
+                e.to_email,
                 e.snippet,
                 e.body_plain
             FROM emails e
             WHERE e.owner_id = %s
-              AND (e.from_email = ANY(%s) OR e.to_emails::jsonb ?| %s)
+              AND (e.from_email = ANY(%s) OR e.to_email::jsonb ?| %s)
             ORDER BY e.date DESC
             LIMIT 50
         """, (owner_id, emails, emails))

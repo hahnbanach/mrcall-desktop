@@ -219,25 +219,18 @@ Semantic score: 0.90
 Hybrid: 0.85 → "/sync 2"
 ```
 
-**Phase 1 Commands** (replacing high-frequency tools):
-| Command | Replaces Tool | Semantic Triggers |
-|---------|---------------|-------------------|
-| `/stats` | `_EmailStatsTool` | "email stats", "how many emails" |
-| `/email list --draft` | `_ListDraftsTool` | "my drafts", "show drafts" |
-| `/calendar` | `ListCalendarEventsTool` | "my calendar", "meetings today" |
-| `/tasks` | `_GetTasksTool` | "my tasks", "todo list" |
-| `/jobs` | `ListScheduledJobsTool` | "scheduled jobs", "my reminders" |
-
 **Performance**: <100ms matching (embeddings cached after first load)
 
 ### 7. CLI (`zylch/cli/main.py`)
 Interactive command-line interface:
 - `/sync` - Sync emails, calendar, pipedrive (data only, no processing)
 - `/email list|create|send|delete|search` - Email and draft management
-- `/agent train email` - Generate personalized extraction agent from email patterns
-- `/agent process` - Extract facts from synced data into blobs (uses personalized agent)
+- `/agent memory train [email|calendar|all]` - Generate personalized memory extraction agent
+- `/agent memory process [email|calendar|all]` - Extract facts from synced data into memory blobs
+- `/agent task train [email|calendar|all]` - Generate personalized task detection agent
+- `/agent task process [email|calendar|all]` - Detect tasks from synced data
 - `/memory search` - Search entity memories
-- `/gaps` - Show relationship gaps
+- `/tasks` - Show detected tasks
 - Natural conversation with agent
 
 ### 8. Memory System (Entity-Centric Blobs)
@@ -451,6 +444,21 @@ Backend decodes automatically on startup (`zylch/api/firebase_auth.py`).
 - **NEVER** bypass StarChat authentication with direct PostgreSQL access
 - **ALWAYS** use StarChat REST API endpoints with proper authentication
 - All data access must go through authenticated API calls
+
+### /connect Command Architecture
+
+The `/connect` command is split between CLI and backend:
+
+**Client-side (CLI):**
+- `/connect` - Show status (OAuth requires local browser)
+- `/connect <provider>` - Start OAuth flow
+
+**Backend:**
+- `/connect --help` - Show help
+- `/connect reset <provider>` - Disconnect provider
+- `/connect status` - Show status
+
+Supported providers for reset: google, microsoft, mrcall, anthropic, pipedrive, vonage
 
 ## Security & Privacy
 
@@ -673,10 +681,24 @@ During `/sync`, the Memory Agent processes unprocessed emails:
 4. **Mark email as processed** via `memory_processed_at` column
 
 **Key Files**:
-- `zylch/workers/memory_worker.py` - MemoryWorker class
+- `zylch/agents/memory_agent.py` - MemoryAgent class
 - `zylch_memory/blob_storage.py` - BlobStorage (store/update blobs)
 - `zylch_memory/hybrid_search.py` - HybridSearchEngine (FTS + semantic)
 - `zylch_memory/llm_merge.py` - LLMMergeService (reconsolidation)
+
+### Task Agent (Task Processing)
+
+The Task Agent processes emails and calendar events to detect actionable tasks:
+
+1. **Fetch unprocessed items** using `task_processed_at IS NULL`
+2. **Group emails by thread** - only analyze latest per thread
+3. **Apply trained prompt** for task detection (from `/agent task train`)
+4. **Store task items** in `task_items` table
+5. **Mark as processed** via `task_processed_at` column
+
+**Key Files**:
+- `zylch/agents/task_agent.py` - TaskAgent class
+- `zylch/services/email_task_agent_trainer.py` - EmailTaskAgentTrainer for prompt generation
 
 ### Hybrid Search
 
@@ -721,7 +743,13 @@ To rebuild memory from scratch:
 - `id`, `blob_id`, `owner_id`, `sentence_text`, `embedding`
 
 **Column: `emails.memory_processed_at`**
-- NULL = not processed, timestamp = when processed
+- NULL = not processed by memory agent, timestamp = when processed
+
+**Column: `emails.task_processed_at`**
+- NULL = not processed by task agent, timestamp = when processed
+
+**Column: `calendar_events.task_processed_at`**
+- NULL = not processed by task agent, timestamp = when processed
 
 ## Personalized Prompts System (December 2025)
 
@@ -734,7 +762,7 @@ The default memory extraction prompt uses generic rules for classifying emails (
 
 ### Solution: Learn from User's Email Patterns
 
-The `/agent train email` command analyzes the user's recent emails (up to 100) to understand their communication context:
+The `/agent memory train email` command analyzes the user's recent emails (up to 100) to understand their communication context:
 
 1. **Recent emails** = Sample of communication patterns, contacts, topics
 2. **User's sent emails** = Role, business context, signature patterns
@@ -748,17 +776,18 @@ The LLM judges email importance based on **tone and content** (not reply history
 ### Architecture
 
 **Key Files**:
-- `zylch/services/email_agent_builder.py` - EmailAgentBuilder class that analyzes patterns
-- `zylch/workers/memory_worker.py` - Uses personalized agent for extraction (includes CC field)
-- `zylch/storage/migrations/007_rename_user_prompts_to_agent_prompts.sql` - Database migration
+- `zylch/services/email_memory_agent_trainer.py` - EmailMemoryAgentTrainer class that analyzes patterns
+- `zylch/services/email_task_agent_trainer.py` - EmailTaskAgentTrainer for task detection prompts
+- `zylch/agents/memory_agent.py` - Uses personalized agent for extraction
+- `zylch/agents/task_agent.py` - Uses personalized agent for task detection
 
 **Data Flow**:
 ```
 /sync → emails stored in DB
     ↓
-/agent train email
+/agent memory train email
     ↓
-EmailAgentBuilder analyzes:
+EmailMemoryAgentTrainer analyzes:
   - 100 recent emails (sample)
   - Sent emails (user profile)
   - Frequent contacts
@@ -767,27 +796,30 @@ Claude Sonnet generates personalized agent
     ↓
 Stored in agent_prompts table
     ↓
-/agent process email uses personalized agent
+/agent memory process email uses personalized agent
 ```
 
 ### Commands
 
 | Command | Purpose |
 |---------|---------|
-| `/agent train email` | Analyze email patterns and generate personalized agent |
-| `/agent process` | Process all data into memory (uses personalized agent) |
-| `/agent process email` | Process only emails |
-| `/agent show email` | Display current personalized agent |
-| `/agent reset email` | Delete custom agent |
+| `/agent memory train [email\|calendar\|all]` | Generate personalized memory extraction agent |
+| `/agent memory process [email\|calendar\|all]` | Process data into memory blobs |
+| `/agent memory show [email\|calendar]` | Display current memory agent |
+| `/agent memory reset [email\|calendar]` | Delete memory agent |
+| `/agent task train [email\|calendar\|all]` | Generate personalized task detection agent |
+| `/agent task process [email\|calendar\|all]` | Detect tasks from data |
+| `/agent task show [email\|calendar]` | Display current task agent |
+| `/agent task reset [email\|calendar]` | Delete task agent |
 
-### Gate on Memory Processing
+### Gate on Processing
 
-When user runs `/agent process email` without a custom agent, they see a recommendation:
+When user runs `/agent memory process email` without a custom agent, they see a recommendation:
 ```
 ⚠️ No personalized extraction agent found
 
 For better memory extraction, create a personalized agent first:
-/agent train email
+/agent memory train email
 ```
 
 ### Database
