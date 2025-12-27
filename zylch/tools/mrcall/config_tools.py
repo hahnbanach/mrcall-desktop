@@ -4,6 +4,10 @@ Provides tools for configuring MrCall AI phone assistants:
 - get_assistant_catalog: Get available configuration variables
 - configure_assistant: Modify variables with preview+confirm workflow
 - save_mrcall_admin_rule: Save admin-level rules (explicit command only)
+
+TODO: ConfigureAssistantTool and SaveMrCallAdminRuleTool are currently disabled in factory.py
+because they depend on the removed zylch_memory system. They need to be migrated to use
+Supabase tables for admin rules and modification templates.
 """
 
 import logging
