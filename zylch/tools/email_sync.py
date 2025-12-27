@@ -49,8 +49,9 @@ def clean_html(html: str) -> str:
         text = re.sub(r'\s+', ' ', text)
 
         return text.strip()
-    except Exception:
-        # Fallback: simple regex strip
+    except Exception as e:
+        # Fallback: simple regex strip (log the failure)
+        logger.warning(f"HTML parsing failed, using regex fallback: {e}")
         return re.sub(r'<[^>]+>', '', html)
 
 
@@ -403,16 +404,13 @@ class EmailSyncManager:
             participants.update(to_addrs)
             participants.update(cc_addrs)
 
-        # Analyze with SONNET if available (precision > cost)
-        if self.anthropic_client:
-            analysis = self._agent_analyze(last_message, all_messages)
-        else:
-            # Fallback: basic analysis without AI
-            analysis = {
-                "summary": last_message.get('snippet', '')[:200],
-                "open": True,
-                "expected_action": None
-            }
+        # Analyze with SONNET - Anthropic client required
+        if not self.anthropic_client:
+            raise ValueError(
+                "Anthropic client required for thread analysis. "
+                "Please run `/connect anthropic` to configure your API key."
+            )
+        analysis = self._agent_analyze(last_message, all_messages)
 
         # Build thread data
         thread_data = {
@@ -596,13 +594,11 @@ class EmailSyncManager:
                     logger.debug(f"Thread analysis: {result}")
                     return result
 
-            # Fallback if no tool use found (shouldn't happen with tool_choice)
-            logger.warning("No tool_use block found in response, using fallback")
-            return {
-                "summary": last_message.get('snippet', '')[:200],
-                "open": True,
-                "expected_action": None
-            }
+            # No tool_use block found - this is an error (shouldn't happen with tool_choice)
+            raise ValueError(
+                f"No tool_use block in Claude response for thread analysis. "
+                f"Response content: {response.content}"
+            )
 
         except Exception as e:
             logger.warning(f"Thread analysis failed: {e}, using fallback")
@@ -692,23 +688,25 @@ class EmailSyncManager:
         Email dates are in RFC2822 format like "Thu, 20 Nov 2025 10:30:59 +0100".
         This method is critical for sorting messages by actual time, not alphabetically!
 
-        Returns datetime.min if parsing fails, so failed parses sort to beginning.
+        Raises ValueError if parsing fails - do not silently corrupt sort order.
         """
         if not date_str:
-            return datetime.min
+            raise ValueError("Empty date string - cannot parse email date")
 
+        # Try RFC2822 format first
         try:
-            # Parse RFC2822 format
             dt = parsedate_to_datetime(date_str)
             return dt.replace(tzinfo=None)  # Make naive for comparison
-        except:
+        except Exception as rfc_error:
             # Fallback: try ISO format
             try:
                 dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
                 return dt.replace(tzinfo=None)
-            except:
-                # If all parsing fails, return datetime.min so it sorts to beginning
-                return datetime.min
+            except Exception as iso_error:
+                raise ValueError(
+                    f"Failed to parse email date '{date_str}': "
+                    f"RFC2822 error: {rfc_error}, ISO error: {iso_error}"
+                )
 
     def search_threads(
         self,

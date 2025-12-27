@@ -234,6 +234,12 @@ class SyncService:
                     person_name = deal.get('person_name') or (deal.get('person_id') or {}).get('name', '')
                     org_name = deal.get('org_name') or (deal.get('org_id') or {}).get('name', '')
 
+                    # Log missing data - these are important for CRM sync
+                    if not person_name:
+                        logger.error(f"[pipedrive_sync] Missing person_name for deal {deal_id}")
+                    if not org_name:
+                        logger.error(f"[pipedrive_sync] Missing org_name for deal {deal_id}")
+
                     # Upsert deal into table
                     self.supabase.client.table('pipedrive_deals').upsert({
                         'owner_id': self.owner_id,
@@ -254,7 +260,7 @@ class SyncService:
                     deals_synced += 1
 
                 except Exception as e:
-                    logger.warning(f"[pipedrive_sync] Failed to store deal {deal.get('id')}: {e}")
+                    logger.error(f"[pipedrive_sync] Failed to store deal {deal.get('id')}: {e}")
 
             logger.info(f"[pipedrive_sync] Complete: {deals_synced} deals synced to table")
             return {
