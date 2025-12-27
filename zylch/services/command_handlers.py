@@ -2878,7 +2878,6 @@ COMMAND_TRIGGERS = {
         "morning update",
         "daily",
         "today",
-        "gaps",
         "tasks",
         "what tasks do I have",
         "show me unanswered emails",

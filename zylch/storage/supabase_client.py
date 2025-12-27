@@ -484,57 +484,6 @@ class SupabaseStorage:
         return len(result.data) > 0 if result.data else False
 
     # ==========================================
-    # RELATIONSHIP GAPS
-    # ==========================================
-
-    def store_gap(self, owner_id: str, gap: Dict[str, Any]) -> Dict[str, Any]:
-        """Store a relationship gap."""
-        data = {
-            'owner_id': owner_id,
-            'gap_type': gap['gap_type'],
-            'contact_email': gap.get('contact_email'),
-            'contact_name': gap.get('contact_name'),
-            'details': gap.get('details'),
-            'priority': gap.get('priority'),
-            'suggested_action': gap.get('suggested_action')
-        }
-
-        result = self.client.table('relationship_gaps').insert(data).execute()
-
-        return result.data[0] if result.data else {}
-
-    def get_unresolved_gaps(self, owner_id: str) -> List[Dict[str, Any]]:
-        """Get unresolved gaps for user."""
-        result = self.client.table('relationship_gaps')\
-            .select('*')\
-            .eq('owner_id', owner_id)\
-            .is_('resolved_at', 'null')\
-            .order('priority', desc=True)\
-            .execute()
-
-        return result.data or []
-
-    def resolve_gap(self, owner_id: str, gap_id: str) -> bool:
-        """Mark a gap as resolved."""
-        result = self.client.table('relationship_gaps')\
-            .update({'resolved_at': datetime.now(timezone.utc).isoformat()})\
-            .eq('owner_id', owner_id)\
-            .eq('id', gap_id)\
-            .execute()
-
-        return len(result.data) > 0 if result.data else False
-
-    def clear_gaps(self, owner_id: str) -> int:
-        """Clear all unresolved gaps (before regenerating)."""
-        result = self.client.table('relationship_gaps')\
-            .delete()\
-            .eq('owner_id', owner_id)\
-            .is_('resolved_at', 'null')\
-            .execute()
-
-        return len(result.data) if result.data else 0
-
-    # ==========================================
     # CALENDAR EVENTS
     # ==========================================
 
@@ -622,7 +571,7 @@ class SupabaseStorage:
         return len(result.data) if result.data else 0
 
     def get_all_calendar_events(self, owner_id: str) -> List[Dict[str, Any]]:
-        """Get all calendar events for a user (for RelationshipAnalyzer)."""
+        """Get all calendar events for a user."""
         result = self.client.table('calendar_events')\
             .select('*')\
             .eq('owner_id', owner_id)\
@@ -630,31 +579,6 @@ class SupabaseStorage:
             .execute()
 
         return result.data or []
-
-    # ==========================================
-    # BATCH OPERATIONS FOR GAPS
-    # ==========================================
-
-    def store_gaps_batch(self, owner_id: str, gaps: List[Dict[str, Any]]) -> int:
-        """Store multiple relationship gaps in batch."""
-        if not gaps:
-            return 0
-
-        data = []
-        for gap in gaps:
-            data.append({
-                'owner_id': owner_id,
-                'gap_type': gap['gap_type'],
-                'contact_email': gap.get('contact_email'),
-                'contact_name': gap.get('contact_name'),
-                'details': gap.get('details'),
-                'priority': gap.get('priority'),
-                'suggested_action': gap.get('suggested_action')
-            })
-
-        result = self.client.table('relationship_gaps').insert(data).execute()
-
-        return len(result.data) if result.data else 0
 
     # ==========================================
     # OAUTH TOKENS (with encryption for sensitive data)
