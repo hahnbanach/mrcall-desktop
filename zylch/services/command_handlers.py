@@ -442,7 +442,7 @@ Use `/agent process` to extract facts from synced data:
         return help_text
 
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch_memory import BlobStorage, HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig, LLMMergeService
+    from zylch.memory import BlobStorage, HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig, LLMMergeService
 
     try:
         # Initialize services

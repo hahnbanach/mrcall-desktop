@@ -13,7 +13,7 @@ import anthropic
 
 from zylch.config import settings
 from zylch.storage.supabase_client import SupabaseStorage
-from zylch_memory import HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig
+from zylch.memory import HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig
 
 logger = logging.getLogger(__name__)
 
