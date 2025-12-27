@@ -2,6 +2,7 @@
 
 from typing import Dict, Any, Optional, List
 import logging
+import shlex
 import time
 
 import anthropic
@@ -200,7 +201,18 @@ class ChatService:
             if user_message.strip().startswith('/'):
                 from zylch.services.command_handlers import COMMAND_HANDLERS, COMMAND_HELP
 
-                parts = user_message.strip().split()
+                # Use shlex to properly handle quoted strings
+                # e.g. /memory store "hello world" → args = ['store', 'hello world']
+                try:
+                    parts = shlex.split(user_message.strip())
+                except ValueError as e:
+                    # Return error for malformed quotes
+                    return {
+                        "response": f"❌ **Malformed command**: {e}\n\nCheck your quotes are properly closed.",
+                        "tool_calls": [],
+                        "metadata": {"error": True}
+                    }
+
                 cmd = parts[0].lower()
                 args = parts[1:] if len(parts) > 1 else []
                 execution_time_ms = (time.time() - start_time) * 1000

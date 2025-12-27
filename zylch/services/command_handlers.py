@@ -442,7 +442,7 @@ Use `/agent process` to extract facts from synced data:
         return help_text
 
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch_memory import BlobStorage, HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig
+    from zylch_memory import BlobStorage, HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig, LLMMergeService
 
     try:
         # Initialize services
@@ -452,6 +452,11 @@ Use `/agent process` to extract facts from synced data:
         embedding_engine = EmbeddingEngine(mem_config)
         blob_storage = BlobStorage(supabase, embedding_engine)
         search_engine = HybridSearchEngine(supabase, embedding_engine)
+
+        # Initialize LLM merge service (for reconsolidation)
+        llm_merge = None
+        if config.anthropic_api_key:
+            llm_merge = LLMMergeService(api_key=config.anthropic_api_key)
 
         namespace = f"user:{owner_id}"
 
@@ -498,42 +503,73 @@ Use `/agent process` to extract facts from synced data:
             content = ' '.join(args_content)
 
             # Skip reconsolidation if --force flag is set
-            existing = None
-            if not force_new:
-                # Check for reconsolidation candidate
-                existing = search_engine.find_for_reconsolidation(
+            if force_new:
+                # Create new blob (forced)
+                result = blob_storage.store_blob(
                     owner_id=owner_id,
+                    namespace=namespace,
                     content=content,
-                    namespace=namespace
+                    event_description="Created via /memory store (forced)"
                 )
+                return f"""✅ **Memory stored (forced new blob)** (ID: {result['id']})
 
-            if existing:
-                # Reconsolidate: append to existing
-                merged_content = f"{existing.content}\n\n{content}"
-                result = blob_storage.update_blob(
+**Content:** {content}
+
+Memory will be searchable via hybrid search."""
+
+            # Get top 3 candidates above threshold (same logic as memory_agent.py)
+            existing_blobs = search_engine.find_candidates_for_reconsolidation(
+                owner_id=owner_id,
+                content=content,
+                namespace=namespace,
+                limit=3
+            )
+
+            upserted = False
+            upserted_result = None
+            matched_blob = None
+
+            # Fail if candidates exist but no API key for LLM merge
+            if existing_blobs and not llm_merge:
+                return "❌ **Cannot reconsolidate**: Anthropic API key not configured. Use `--force` to create a new blob instead."
+
+            for existing in existing_blobs:
+                merged_content = llm_merge.merge(existing.content, content)
+
+                # If LLM says INSERT (entities don't match), try next candidate
+                if 'INSERT' in merged_content.upper() and len(merged_content) < 10:
+                    logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
+                    continue
+
+                # Successful merge
+                upserted_result = blob_storage.update_blob(
                     blob_id=existing.blob_id,
                     owner_id=owner_id,
                     content=merged_content,
                     event_description="Reconsolidated via /memory store"
                 )
-                return f"""✅ **Memory reconsolidated** (ID: {result['id'][:8]}...)
+                matched_blob = existing
+                upserted = True
+                break
 
-**Merged with existing memory** (score: {existing.hybrid_score:.2f})
+            if upserted:
+                return f"""✅ **Memory reconsolidated** (ID: {upserted_result['id']})
 
-New content added to existing entity blob."""
+**Merged with existing memory** (score: {matched_blob.hybrid_score:.2f})
+
+New content merged into existing entity blob."""
 
             else:
-                # Create new blob (always if --force, or if no match found)
+                # No suitable blob found, create new
                 result = blob_storage.store_blob(
                     owner_id=owner_id,
                     namespace=namespace,
                     content=content,
-                    event_description="Created via /memory store" + (" (forced)" if force_new else "")
+                    event_description="Created via /memory store"
                 )
-                force_msg = " (forced new blob)" if force_new else ""
-                return f"""✅ **Memory stored{force_msg}** (ID: {result['id'][:8]}...)
+                return f"""✅ **Memory stored** (ID: {result['id']})
 
-**Content:** {content[:100]}{'...' if len(content) > 100 else ''}
+**Content:** {content}
 
 Memory will be searchable via hybrid search."""
 

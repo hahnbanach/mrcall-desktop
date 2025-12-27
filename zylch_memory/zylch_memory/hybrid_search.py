@@ -178,6 +178,36 @@ class HybridSearchEngine:
         )
         return None
 
+    def find_candidates_for_reconsolidation(
+        self,
+        owner_id: str,
+        content: str,
+        namespace: str,
+        limit: int = 3
+    ) -> List[SearchResult]:
+        """Find top candidate blobs for reconsolidation (above threshold).
+
+        Returns list of candidates to try merging with.
+        """
+        logger.debug("Finding reconsolidation candidates for content")
+
+        results = self.search(
+            owner_id=owner_id,
+            query=content,
+            namespace=namespace,
+            limit=limit,
+            alpha=0.5
+        )
+
+        # Filter by threshold
+        candidates = [r for r in results if r.hybrid_score >= self.RECONSOLIDATION_THRESHOLD]
+
+        logger.debug(f"Found {len(candidates)} candidates above threshold {self.RECONSOLIDATION_THRESHOLD}")
+        for i, c in enumerate(candidates, 1):
+            logger.debug(f"  Candidate {i}: blob_id={c.blob_id}, hybrid={c.hybrid_score:.3f}")
+
+        return candidates
+
     def _get_matching_sentences(
         self,
         blob_id: str,
