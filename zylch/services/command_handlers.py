@@ -1698,6 +1698,10 @@ Use `/agent process` to extract facts from synced data into memory.''',
         'usage': '/revoke <email>',
         'description': 'Remove shared access from a user.',
     },
+    # NOTE: /connect is partially handled client-side by the CLI for OAuth (requires local browser).
+    # The CLI intercepts /connect and /connect <provider> for OAuth flows.
+    # Only /connect --help, /connect reset, and /connect status reach the backend.
+    # See zylch-cli/zylch_cli/cli.py lines 419-434 for client-side handling.
     '/connect': {
         'summary': 'Manage external integrations',
         'usage': '/connect [status|reset <provider>|<provider>] [--help]',
@@ -2663,6 +2667,7 @@ COMMAND_HANDLERS = {
     '/email': handle_email,
     '/trigger': handle_trigger,
     '/mrcall': handle_mrcall,
+    # NOTE: /connect is partially handled client-side by CLI for OAuth. Only --help, reset, status reach backend.
     '/connect': handle_connect,
     '/share': handle_share,
     '/revoke': handle_revoke,
