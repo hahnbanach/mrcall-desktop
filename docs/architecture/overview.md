@@ -103,10 +103,10 @@ Zylch follows a **three-tier architecture**:
 
 **Service Layer** (`zylch/services/`)
 - **SyncService**: Email/calendar synchronization
-- **GapService**: Relationship gap detection
 - **ChatService**: Conversational AI orchestration
 - **TriggerService**: Event-driven automation (background worker)
 - **CommandHandlers**: Slash command processing
+- **AvatarAggregator**: Per-contact intelligence computation
 
 **Why Services?**
 - Single source of truth (no duplication between CLI and API)
@@ -169,9 +169,9 @@ def create_all_tools(config, memory, owner_id):
     tools = [
         _SyncEmailsTool(sync_service),
         _GetContactTool(starchat_client),
-        _SaveContactTool(starchat_client, memory),
-        _SearchLocalMemoryTool(memory),
-        _GetTasksTool(gap_service),
+        _GetWhatsAppContactsTool(starchat_client),
+        _SearchLocalMemoryTool(memory, search_engine),
+        _GetTasksTool(supabase_client),
         # ... more tools
     ]
     return tools
@@ -578,51 +578,37 @@ mem.store_memory(
 
 ### Two-Layer Memory Architecture
 
-**Layer 1: Identifier Map** (fast lookup)
-- **Purpose**: O(1) lookup from any identifier to person
-- **Technology**: Supabase with indexed queries
-- **Maps**: email/phone/name → contact_id (12-char MD5 hash)
-- **Benefit**: Avoids expensive API calls (Gmail 10+ seconds) when contact is known
-
-**Layer 2: Semantic Memory** (vector-based)
+**Semantic Memory** (vector-based)
 - **Purpose**: Vector-based semantic storage with reconsolidation
 - **Technology**: Supabase pg_vector + sentence-transformers
 - **Embedding**: 384-dim vectors (all-MiniLM-L6-v2)
 - **Index**: HNSW (Hierarchical Navigable Small World) - 150x faster than brute-force
 
-**Memory Lookup Flow**:
+**Memory Search Flow**:
 
 ```
 User: "info su Luigi"
        │
        ▼
 ┌──────────────────────────┐
-│ 1. Identifier Map Lookup │ ← O(1), <1ms
-│    (Supabase index)      │
+│ 1. Hybrid Search         │ ← FTS + Semantic
+│    (Supabase pg_vector)  │
 └──────┬───────────────────┘
        │
-       ├─ Found & Fresh (TTL 7 days) → RETURN CACHED
-       ├─ Found & Stale → Return cached + suggest refresh
-       └─ Not Found → Proceed to remote searches
+       └─ Combines keyword (FTS) and semantic (cosine) scoring
        │
        ▼
 ┌──────────────────────────┐
-│ 2. Remote Searches       │ ← Only if not cached
-│    (ONLY IF NEEDED)      │
+│ 2. Avatar Lookup         │ ← Pre-computed intelligence
+│    (if available)        │
 └──────────────────────────┘
-       │
-       ├─ StarChat CRM search
-       ├─ Local email archive search
-       ├─ Gmail API search (10+ seconds!)
-       └─ Calendar events search
 ```
 
 **Performance Benefits**:
-- **Cached contact**: <1ms (Supabase index)
-- **Uncached contact**: 2-15s (remote APIs)
-- **Cache hit rate**: ~85% (most queries are repeat lookups)
+- **Memory search**: <100ms (hybrid scoring)
+- **Avatar retrieval**: <50ms (pre-computed)
 
-**See**: [Avatar Aggregation](../features/avatar-aggregation.md)
+**See**: [Entity Memory System](../features/entity-memory-system.md)
 
 ---
 
@@ -890,9 +876,9 @@ creds = storage.get_oauth_token(owner_id, "anthropic")
 - Multi-thread task detection
 - Relationship strength scoring
 
-**Implementation**: Avatar aggregation service
+**Implementation**: Avatar aggregation service (`zylch/services/avatar_aggregator.py`)
 
-**See**: [Avatar Aggregation](../features/avatar-aggregation.md)
+**See**: [Relationship Intelligence](../features/relationship-intelligence.md)
 
 ---
 

@@ -124,7 +124,7 @@ Before first deployment, run SQL migration:
 
 1. Connect to Supabase SQL Editor
 2. Run contents of `docs/migration/001_add_avatar_fields_v3.sql`
-3. Verify tables created: `avatars`, `identifier_map`, `memory` (replaces avatar_compute_queue)
+3. Verify tables created: `avatars`, `avatar_compute_queue`, `memories`, `scheduled_jobs`
 
 ### 5. Deploy
 
