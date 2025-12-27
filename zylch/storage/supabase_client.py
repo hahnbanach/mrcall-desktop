@@ -19,7 +19,7 @@ def _get_embedding_engine():
     global _embedding_engine
     if _embedding_engine is None:
         try:
-            from zylch_memory.embeddings import EmbeddingEngine
+            from zylch.memory import EmbeddingEngine
             _embedding_engine = EmbeddingEngine()
             logger.info("EmbeddingEngine initialized for email semantic search")
         except ImportError:
@@ -307,7 +307,7 @@ class SupabaseStorage:
         # Detect exact patterns (email, phone, URL) for header matching
         exact_pattern = None
         try:
-            from zylch_memory.pattern_detection import detect_pattern
+            from zylch.memory import detect_pattern
             pattern = detect_pattern(query)
             if pattern:
                 exact_pattern = pattern.value
