@@ -48,12 +48,11 @@ Run locally with `uvicorn zylch.api.main:app --reload --port 8000` - connects to
 
 ## Core Components
 
-### 1. Agent System (`zylch/agent/`)
-- **Purpose**: Orchestrates AI conversations with tool access
+### 1. Agents (`zylch/agents/`)
+- **Purpose**: Specialized background agents for data processing
 - **Key Files**:
-  - `core.py`: Main agent logic, tool orchestration
-  - `models.py`: Agent data models
-  - `prompts.py`: System prompts and templates
+  - `memory_agent.py`: Extracts facts from emails/calendar into memory blobs
+  - `task_agent.py`: Task detection and processing agent
 
 ### 2. Tools (`zylch/tools/`)
 Modular tools for agent capabilities:
@@ -107,8 +106,6 @@ Supabase (thread_analysis) ← AI summaries stored here
 **Key Services**:
 - **SyncService**: Email/calendar synchronization
   - `sync_emails()`, `sync_calendar()`, `run_full_sync()`
-- **GapService**: Relationship gap analysis
-  - `analyze_gaps()`, `get_gaps_summary()`, `get_email_tasks()`
 - **ChatService**: Conversational AI (wraps CLI for tool access)
 - **ArchiveService**: Email archive operations
 - **CommandHandlers**: Slash command processing (v0.3.0+)
@@ -296,27 +293,7 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
 - Complete history preserved
 - Efficient AI analysis (only recent emails)
 
-### Decision 2: Person-Centric Task Detection
-
-**Problem**: Thread-based gaps miss follow-ups across multiple threads
-
-**Solution**: Aggregate threads by contact email, detect tasks at person level
-
-**Implementation** (`relationship_analyzer.py:find_email_tasks()`):
-```python
-# Group threads by contact
-person_threads = {}
-for thread in threads:
-    contact_email = extract_contact(thread)
-    person_threads[contact_email].append(thread)
-
-# Detect tasks per person
-for contact_email, threads in person_threads.items():
-    last_thread = max(threads, key=lambda t: t['last_email']['date'])
-    needs_action = detect_task(last_thread, person_context=threads)
-```
-
-### Decision 3: Manual Closure Persistence
+### Decision 2: Manual Closure Persistence
 
 **Problem**: User-closed threads reopened after sync
 
@@ -325,16 +302,16 @@ for contact_email, threads in person_threads.items():
 - Preserved during sync (NEVER re-analyze manually closed threads)
 - Respected by gap analysis
 
-### Decision 4: Auto-Sync After Email Send
+### Decision 3: Auto-Sync After Email Send
 
-**Problem**: Gap analysis outdated after sending emails
+**Problem**: Analysis outdated after sending emails
 
 **Solution**: Trigger incremental sync after `send_gmail_draft`
 - Adds 1-3s latency to email send (acceptable)
 - Keeps cache current automatically
 - Implementation in `factory.py:_SendDraftTool`
 
-### Decision 5: Chat API Wraps CLI
+### Decision 4: Chat API Wraps CLI
 
 **Problem**: Duplicating tool initialization for HTTP API
 
@@ -357,8 +334,8 @@ for contact_email, threads in person_threads.items():
 | `thread_analysis` | AI-generated summaries and analysis |
 | `calendar_events` | Calendar events |
 | `sync_state` | Gmail/Outlook history IDs, last sync timestamps |
-| `relationship_gaps` | Detected relationship gaps |
 | `oauth_tokens` | All tokens (Google, Microsoft, Anthropic, MrCall) - encrypted |
+| `scheduled_jobs` | Scheduled reminders and timed actions |
 | `triggers` | Triggered instructions |
 | `trigger_events` | Event queue for trigger processing |
 | `sharing_auth` | Sharing authorizations |

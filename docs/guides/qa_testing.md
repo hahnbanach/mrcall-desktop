@@ -48,8 +48,8 @@ Zylch answers questions like:
    - Decrypts tokens using `ENCRYPTION_KEY`
    - Fetches emails from Gmail API
    - Stores emails in Supabase `emails` table with `owner_id` (Row-Level Security)
-4. Memory Agent processes emails → Extracts phone numbers, LinkedIn URLs → Stores in `identifier_map`
-5. User runs `/gaps` → RelationshipAnalyzer identifies action items → Returns gaps with read tracking indicators
+4. Memory Agent processes emails → Extracts facts → Stores in memory blobs
+5. User runs `/tasks` or `/briefing` → Avatar system returns computed tasks with read tracking indicators
 
 ### Key Database Tables
 | Table | Purpose |
@@ -57,11 +57,12 @@ Zylch answers questions like:
 | `emails` | Raw email data (from_email, subject, body_plain, thread_id) |
 | `oauth_tokens` | Encrypted OAuth credentials (Google, Microsoft, Anthropic keys) |
 | `sync_state` | Tracks last sync history_id for incremental sync |
-| `identifier_map` | Maps identifiers (email, phone, LinkedIn) to contact_id |
 | `avatars` | Computed relationship views per contact |
-| `relationship_gaps` | Detected action items (email_task, meeting_no_followup, silent_contact) |
+| `avatar_compute_queue` | Background processing queue for avatar computation |
 | `thread_analysis` | Per-thread intelligence cache |
 | `email_triage` | Email priority classification (urgent/normal/low/noise) |
+| `scheduled_jobs` | Scheduled reminders and timed actions |
+| `memories` | Vector-based memory storage (pg_vector) |
 
 ## 3. Prerequisites
 

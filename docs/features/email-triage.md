@@ -47,17 +47,17 @@ The Email Triage System solves a critical bug where support emails were incorrec
 │                 │                                                       │
 │                 ▼                                                       │
 │  ┌──────────────────────────────────────┐                               │
-│  │ relationship_analyzer.py             │                               │
+│  │ Email Task Agent                     │                               │
 │  │                                      │                               │
-│  │ 1. _get_contact_importance()         │ Evaluate importance rules     │
+│  │ 1. Get contact importance            │ Evaluate importance rules     │
 │  │    → Loads rules from Supabase       │                               │
 │  │    → evaluate_rules(rules, contact)  │                               │
 │  │                                      │                               │
-│  │ 2. _analyze_person_for_task()        │ Ask Claude with context       │
+│  │ 2. Analyze for tasks                 │ Ask Claude with context       │
 │  │    → Injects importance context      │                               │
 │  │    → Claude returns verdict          │                               │
 │  │                                      │                               │
-│  │ 3. _collect_training_sample()        │ Collect anonymized data       │
+│  │ 3. Collect training sample           │ Collect anonymized data       │
 │  │    → Anonymize with TriageAnonymizer │                               │
 │  │    → Store to triage_training_samples│                               │
 │  └──────────────────────────────────────┘                               │
@@ -73,7 +73,7 @@ The Email Triage System solves a critical bug where support emails were incorrec
 | Importance Rules | `zylch/models/importance_rules.py` | User-configurable contact importance | 32 tests |
 | Rules API | `zylch/api/routes/settings.py` | CRUD endpoints for rules | — |
 | ML Anonymizer | `zylch/ml/anonymizer.py` | PII anonymization for training data | — |
-| Training Collector | `zylch/tools/relationship_analyzer.py:232` | Collects samples after Claude analysis | — |
+| Training Collector | Email task agent | Collects samples after Claude analysis | — |
 
 ## Auto-Reply Detection (RFC 3834)
 
@@ -185,7 +185,7 @@ Uses regex-based parsing instead of Python `eval()` for security. Supported expr
 
 The system automatically collects anonymized training samples after each Claude analysis for future small model fine-tuning.
 
-**Collection Point** (`relationship_analyzer.py:849`):
+**Collection Point** (email task agent):
 
 ```python
 result = json.loads(result_text)  # Claude's verdict
@@ -369,9 +369,7 @@ CREATE TABLE triage_training_samples (
 | `models/importance_rules.py` | 17-91 | `ImportanceRule` | Rule dataclass with evaluate/serialize |
 | `models/importance_rules.py` | 94-125 | `evaluate_rules()` | Priority-ordered rule evaluation |
 | `models/importance_rules.py` | 128-305 | `safe_eval_condition()` | Secure regex-based evaluation |
-| `tools/relationship_analyzer.py` | 183-207 | `_get_contact_importance()` | Load and evaluate rules |
-| `tools/relationship_analyzer.py` | 232-312 | `_collect_training_sample()` | Anonymize and store training data |
-| `tools/relationship_analyzer.py` | 849 | — | Collection hook after Claude |
+| `services/email_task_agent_trainer.py` | — | Email task agent | Task detection with importance rules |
 | `tools/email_sync.py` | varies | `_analyze_thread()` | Early-exit for auto-replies |
 | `tools/email_sync.py` | varies | `_build_auto_reply_thread_data()` | Thread data without Claude |
 | `ml/anonymizer.py` | 17-255 | `TriageAnonymizer` | PII detection and replacement |
@@ -493,7 +491,7 @@ tests/
 
 | File | Changes |
 |------|---------|
-| `tools/relationship_analyzer.py` | Added `_get_contact_importance()`, `_collect_training_sample()`, auto-reply filtering |
+| `services/email_task_agent_trainer.py` | Task detection with importance rules and auto-reply filtering |
 | `tools/email_sync.py` | Added early-exit for auto-replies, `_build_auto_reply_thread_data()` |
 | `tools/gmail.py` | Extract RFC 3834 headers in `_parse_message()` |
 | `storage/supabase_client.py` | Added `store_training_sample()`, `get_importance_rules()`, `get_contact_by_email()` |
