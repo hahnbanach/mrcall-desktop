@@ -5,6 +5,22 @@ Supports:
 - One-time reminders ("remind me in 30 minutes")
 - Recurring tasks ("every morning at 9am")
 - Conditional timeouts ("if no reply in 24 hours, send follow-up")
+
+TODO: Decidere strategia di esecuzione dei job schedulati
+------------------------------------------------------
+Opzione 1 - WORKER (processo separato):
+  - Un processo background che fa polling ogni X secondi
+  - Esegue i job per TUTTI gli utenti
+  - Pro: Job eseguiti puntualmente, indipendentemente dall'attività utente
+  - Contro: Richiede un processo separato (costo infra, complessità)
+
+Opzione 2 - PIGGYBACK (esecuzione su richiesta):
+  - I job vengono eseguiti quando l'utente fa una richiesta
+  - Chiamare process_due_jobs() all'inizio di ogni request
+  - Pro: Nessun processo extra, zero costi infrastrutturali
+  - Contro: Job eseguiti solo quando l'utente interagisce (ritardi possibili)
+
+Per ora process_due_jobs() è pronto ma non chiamato automaticamente.
 """
 
 import logging

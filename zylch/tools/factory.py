@@ -60,8 +60,6 @@ from .outlook_calendar import OutlookCalendarClient
 from .starchat import StarChatClient
 from .pipedrive import PipedriveClient
 # VonageClient imported dynamically in SMS tools at execution time
-from ..cache.json_cache import JSONCache
-from ..cache.identifier_map import IdentifierMapCache, normalize_phone, normalize_name
 from .email_archive import EmailArchiveManager
 from .email_sync import EmailSyncManager
 # TaskManager removed - legacy file-based system replaced by Supabase avatars
@@ -221,18 +219,6 @@ class ToolFactory:
             ToolFactory._email_client = email_client
             ToolFactory._calendar_client = calendar
 
-            # Cache
-            cache = JSONCache(
-                cache_dir=config.cache_dir,
-                ttl_days=config.cache_ttl_days,
-            )
-
-            # Identifier map cache for person-centric lookups (7-day TTL)
-            identifier_cache = IdentifierMapCache(
-                cache_dir=config.cache_dir,
-                ttl_days=7  # Freshness TTL for contacts
-            )
-
             # Email archive manager (lazy auth - won't fail if Gmail not configured)
             email_archive = None
             try:
@@ -291,7 +277,7 @@ class ToolFactory:
         # Email tools (7-8 tools, +1 if zylch_memory) - Gmail or Outlook
         tools.extend(ToolFactory._create_gmail_tools(
             email_client, calendar, email_sync, zylch_memory,
-            starchat, identifier_cache, config.owner_id, config.zylch_assistant_id,
+            starchat, config.owner_id, config.zylch_assistant_id,
             anthropic_api_key=config.anthropic_api_key
         ))
 
@@ -301,13 +287,11 @@ class ToolFactory:
         # Task management tools removed - legacy file-based system
         # Tasks now served by get_tasks tool (line ~380) which queries Supabase avatars
 
-        # Contact tools (5 tools) - use session_state for dynamic business_id
-        # Includes search_local_memory with hybrid FTS + semantic search
+        # Memory search tools (search_local_memory with hybrid FTS + semantic search)
         tools.extend(ToolFactory._create_contact_tools(
             starchat,
             session_state,
             zylch_memory,
-            identifier_cache,
             search_engine,
             config.owner_id,
             config.zylch_assistant_id
@@ -434,14 +418,13 @@ class ToolFactory:
         email_sync_manager=None,
         zylch_memory=None,
         starchat_client=None,
-        identifier_cache=None,
         owner_id: str = "owner_default",
         zylch_assistant_id: str = "default_assistant",
         anthropic_api_key: str = ""
     ) -> List[Tool]:
         """Create Gmail-related tools."""
         tools = [
-            _GmailSearchTool(gmail_client, zylch_memory, identifier_cache, owner_id, zylch_assistant_id),
+            _GmailSearchTool(gmail_client, zylch_memory, owner_id, zylch_assistant_id),
             _CreateDraftTool(gmail_client),
             _ListDraftsTool(gmail_client),
             _EditDraftTool(gmail_client),
@@ -481,21 +464,18 @@ class ToolFactory:
         starchat_client,
         session_state: SessionState,
         zylch_memory=None,
-        identifier_cache: IdentifierMapCache = None,
         search_engine: Optional[HybridSearchEngine] = None,
         owner_id: str = "owner_default",
         zylch_assistant_id: str = "default_assistant"
     ) -> List[Tool]:
-        """Create contact management tools.
+        """Create memory search tools.
 
         ZYLCH IS PERSON-CENTRIC: A person can have multiple emails/phones.
-        search_local_memory provides fast O(1) lookup before expensive remote calls.
+        search_local_memory provides hybrid FTS + semantic search.
         """
         return [
-            _SearchLocalMemoryTool(zylch_memory, identifier_cache, search_engine, owner_id, zylch_assistant_id),
-            _SaveContactTool(starchat_client, session_state, zylch_memory, identifier_cache, owner_id, zylch_assistant_id),
+            _SearchLocalMemoryTool(zylch_memory, search_engine, owner_id, zylch_assistant_id),
             _GetContactTool(starchat_client, session_state),
-            _ListContactsTool(starchat_client, session_state),
             _GetWhatsAppContactsTool(starchat_client, session_state),
         ]
 
@@ -703,12 +683,11 @@ class ToolFactory:
 # ============================================================================
 
 class _GmailSearchTool(Tool):
-    """Gmail search tool for contact enrichment with auto-caching."""
+    """Gmail search tool for contact enrichment."""
     def __init__(
         self,
         gmail_client,
         zylch_memory=None,
-        identifier_cache=None,
         owner_id: str = "owner_default",
         zylch_assistant_id: str = "default_assistant"
     ):
@@ -718,7 +697,6 @@ class _GmailSearchTool(Tool):
         )
         self.gmail = gmail_client
         self.zylch_memory = zylch_memory
-        self.identifier_cache = identifier_cache
         self.owner_id = owner_id
         self.zylch_assistant_id = zylch_assistant_id
 
@@ -763,70 +741,6 @@ class _GmailSearchTool(Tool):
                     contacts[to_email.lower()] = to_name
 
         return [{"email": email, "name": name} for email, name in contacts.items()]
-
-    def _auto_cache_contact(self, contact_name: str, email: str, message_count: int) -> Optional[int]:
-        """Auto-cache contact in ZylchMemory after successful Gmail search.
-
-        This saves the contact locally so future searches are instant (no Gmail API call needed).
-
-        Args:
-            contact_name: Name of the contact (if known)
-            email: Email address
-            message_count: Number of email exchanges found
-
-        Returns:
-            Memory ID if saved, None otherwise
-        """
-        if not self.zylch_memory or not self.identifier_cache:
-            return None
-
-        try:
-            contacts_namespace = f"{self.owner_id}:{self.zylch_assistant_id}:contacts"
-
-            # Build a minimal memory entry from Gmail search results
-            memory_parts = []
-            if contact_name:
-                memory_parts.append(f"Name: {contact_name}")
-            if email:
-                memory_parts.append(f"Email: {email}")
-            memory_parts.append(f"Gmail exchanges: {message_count}")
-            memory_parts.append(f"Source: Gmail search auto-cache")
-
-            memory_content = " | ".join(memory_parts)
-            display_name = contact_name or email
-
-            # Store in ZylchMemory (with reconsolidation - will update if similar exists)
-            memory_id_str = self.zylch_memory.store_memory(
-                namespace=contacts_namespace,
-                category="person",
-                context=f"Contact discovered via Gmail search: {display_name}",
-                pattern=memory_content,
-                examples=[],
-                confidence=0.6  # Lower confidence for auto-cached (not explicitly saved)
-            )
-            memory_id = int(memory_id_str) if memory_id_str else None
-
-            # Register identifiers for O(1) lookup
-            if memory_id:
-                identifiers = []
-                if email:
-                    identifiers.append(("email", email))
-                if contact_name:
-                    identifiers.append(("name", contact_name))
-
-                self.identifier_cache.register(
-                    identifiers=identifiers,
-                    memory_id=memory_id,
-                    owner_id=self.owner_id,
-                    assistant_id=self.zylch_assistant_id
-                )
-                logger.info(f"Auto-cached contact from Gmail search: {display_name} (memory_id={memory_id})")
-
-            return memory_id
-
-        except Exception as e:
-            logger.warning(f"Failed to auto-cache contact (non-fatal): {e}")
-            return None
 
     async def execute(
         self,
@@ -937,30 +851,6 @@ class _GmailSearchTool(Tool):
                 message = f"{warning}\n{message}"
             if not search_all_history and len(unique_messages) == 0:
                 message += "\n💡 No results in last year. Use search_all_history=true to search from 2020 (more expensive)."
-
-            # AUTO-CACHE: Save contact to local memory for instant future lookups
-            # This means next time user asks about this contact, no Gmail API call needed!
-            if len(unique_messages) > 0:
-                # Determine contact name (original query if it's a name, or extract from messages)
-                contact_name = contact if not self._is_email(contact) else None
-
-                # Try to extract name from message headers if we only have email
-                if not contact_name and unique_messages:
-                    for msg in unique_messages[:3]:
-                        from_email, from_name = self._extract_email_from_header(msg.get('from', ''))
-                        if from_name and from_email in emails_to_search:
-                            contact_name = from_name
-                            break
-
-                # Cache each email found
-                for email_addr in emails_to_search:
-                    self._auto_cache_contact(
-                        contact_name=contact_name,
-                        email=email_addr,
-                        message_count=len(unique_messages)
-                    )
-
-                message += "\n✅ Contact auto-cached for instant future lookups."
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
@@ -1988,13 +1878,11 @@ class _SearchLocalMemoryTool(Tool):
     1. User asks "info su Luigi"
     2. Hybrid search combines FTS and semantic search for best results
     3. Returns top results ranked by hybrid_score (FTS + semantic)
-    4. Falls back to identifier_cache for O(1) lookup if needed
     """
 
     def __init__(
         self,
         zylch_memory,
-        identifier_cache: IdentifierMapCache,
         search_engine: Optional[HybridSearchEngine] = None,
         owner_id: str = "owner_default",
         zylch_assistant_id: str = "default_assistant"
@@ -2004,7 +1892,6 @@ class _SearchLocalMemoryTool(Tool):
             description="Search local memory for person/contact info using hybrid FTS + semantic search. ALWAYS call this FIRST before remote searches (Gmail, StarChat, web). Returns ranked results by relevance."
         )
         self.zylch_memory = zylch_memory
-        self.identifier_cache = identifier_cache
         self.search_engine = search_engine
         self.owner_id = owner_id
         self.zylch_assistant_id = zylch_assistant_id
@@ -2075,80 +1962,11 @@ class _SearchLocalMemoryTool(Tool):
                     message="\n".join(output)
                 )
 
-            # Fallback to identifier_cache if hybrid search not available
-            if not self.identifier_cache:
-                return ToolResult(
-                    status=ToolStatus.SUCCESS,
-                    data={"not_found": True},
-                    message="Search engines not initialized. Proceed with remote searches."
-                )
-
-            # Legacy O(1) lookup in identifier_map
-            match = self.identifier_cache.lookup(
-                query=query,
-                owner_id=self.owner_id,
-                assistant_id=self.zylch_assistant_id
-            )
-
-            if not match:
-                logger.info(f"No local match for query: {query}")
-                return ToolResult(
-                    status=ToolStatus.SUCCESS,
-                    data={"not_found": True, "query": query},
-                    message=f"Contact '{query}' not found in local memory. Proceed with remote searches."
-                )
-
-            memory_id = match.get("memory_id")
-            is_fresh = self.identifier_cache.is_fresh(
-                query=query,
-                owner_id=self.owner_id,
-                assistant_id=self.zylch_assistant_id
-            )
-
-            # Retrieve full data from ZylchMemory
-            person_data = None
-            if self.zylch_memory:
-                contacts_namespace = f"{self.owner_id}:{self.zylch_assistant_id}:contacts"
-                memories = self.zylch_memory.retrieve_memories(
-                    query=query,
-                    category="person",
-                    namespace=contacts_namespace,
-                    limit=1
-                )
-
-                if memories:
-                    person_data = {
-                        "pattern": memories[0].get("pattern", ""),
-                        "context": memories[0].get("context", ""),
-                        "confidence": memories[0].get("confidence", 0),
-                        "updated_at": match.get("updated_at"),
-                    }
-
-            all_identifiers = self.identifier_cache.get_all_for_memory(
-                memory_id=memory_id,
-                owner_id=self.owner_id,
-                assistant_id=self.zylch_assistant_id
-            )
-
-            result_data = {
-                "found": True,
-                "fresh": is_fresh,
-                "needs_refresh": not is_fresh,
-                "memory_id": memory_id,
-                "query": query,
-                "identifiers": [{"type": t, "value": v} for t, v in all_identifiers],
-                "person_data": person_data
-            }
-
-            if is_fresh:
-                message = f"Found fresh contact data for '{query}' in local memory."
-            else:
-                message = f"Found contact data for '{query}' but it may be stale."
-
+            # No search engine available
             return ToolResult(
                 status=ToolStatus.SUCCESS,
-                data=result_data,
-                message=message
+                data={"not_found": True},
+                message="Search engine not initialized. Proceed with remote searches."
             )
 
         except Exception as e:
@@ -2172,246 +1990,6 @@ class _SearchLocalMemoryTool(Tool):
                     }
                 },
                 "required": ["query"]
-            }
-        }
-
-
-class _SaveContactTool(Tool):
-    """Tool to save enriched contact to MrCall assistant and ZylchMemory."""
-    def __init__(self, starchat_client, session_state: SessionState, zylch_memory=None, identifier_cache: IdentifierMapCache = None, owner_id="owner_default", zylch_assistant_id="default_assistant"):
-        super().__init__(
-            name="save_contact",
-            description="Save enriched contact data to BOTH StarChat (structured contact) AND ZylchMemory (semantic person-centric namespace). Single call saves to both locations."
-        )
-        self.starchat = starchat_client
-        self.identifier_cache = identifier_cache
-        self.session_state = session_state
-        self.zylch_memory = zylch_memory
-        self.owner_id = owner_id
-        self.zylch_assistant_id = zylch_assistant_id
-
-    async def execute(
-        self,
-        email: str,
-        name: Optional[str] = None,
-        phone: Optional[str] = None,
-        company: Optional[str] = None,
-        notes: Optional[str] = None,
-        relationship_type: str = "unknown",
-        priority_score: str = "5",
-    ):
-        # Check if business is selected (get current value from session state)
-        business_id = self.session_state.get_business_id()
-        if not business_id:
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error="No MrCall assistant selected. Use /mrcall <id> to select one."
-            )
-
-        try:
-            # Prepare contact data matching CrmContact schema
-            contact_data = {
-                "provider": "2hb"  # Required value for StarChat database constraint
-            }
-
-            # Email must be a list of CrmContactEmail objects
-            if email:
-                contact_data["emails"] = [{"address": email}]
-
-            # Phone must be a list of CrmContactPhone objects
-            if phone:
-                contact_data["phones"] = [{"number": phone}]
-
-            # Name must be a CrmContactName object
-            if name:
-                # Try to parse name into first/last
-                name_parts = name.strip().split(None, 1)
-                name_obj = {
-                    "first": name_parts[0] if name_parts else name
-                }
-                if len(name_parts) > 1:
-                    name_obj["last"] = name_parts[1]
-
-                contact_data["name"] = name_obj
-                contact_data["displayName"] = name
-
-            # Organizations if company provided
-            if company:
-                contact_data["organizations"] = [{"company": company}]
-
-            # Notes
-            if notes:
-                contact_data["notes"] = [{"note": notes}]
-
-            # Prepare variables
-            variables = {
-                "RELATIONSHIP_TYPE": relationship_type,
-                "PRIORITY_SCORE": priority_score,
-                "LAST_ENRICHED": datetime.now().isoformat(),
-                "ENRICHMENT_SOURCES": json.dumps(["gmail", "web_search", "zylch"]),
-                "EMAIL_ADDRESS": email,  # Store for searchability (workaround for API limitation)
-            }
-
-            if phone:
-                variables["PHONE_NUMBER"] = phone  # Store for searchability
-
-            if company:
-                variables["COMPANY_INFO"] = company
-            if notes:
-                variables["NOTES"] = notes
-
-            contact_data["variables"] = variables
-
-            # Check if contact already exists (proper upsert logic)
-            logger.info(f"Checking for existing contact with email={email}, business_id={business_id}")
-            existing_contacts = await self.starchat.search_contacts(
-                email=email,
-                business_id=business_id
-            )
-            logger.info(f"Found {len(existing_contacts)} existing contacts")
-
-            if existing_contacts:
-                # Update existing contact - use ID from first match
-                existing_id = existing_contacts[0].get("id")
-                logger.info(f"Contact exists (id: {existing_id}), updating instead of creating")
-                contact_data["id"] = existing_id
-
-                # Merge variables with existing ones to preserve other fields
-                if "variables" in existing_contacts[0]:
-                    merged_vars = existing_contacts[0]["variables"].copy()
-                    merged_vars.update(contact_data["variables"])
-                    contact_data["variables"] = merged_vars
-            else:
-                logger.info(f"Contact does not exist, creating new")
-
-            # Save to StarChat (create if new, update if has id)
-            result = await self.starchat.create_contact(
-                contact_data,
-                business_id=business_id
-            )
-
-            # ALSO save to ZylchMemory (person-centric, SINGLE namespace for all contacts)
-            # ZYLCH IS PERSON-CENTRIC: One namespace for all contacts, identifier_map for fast lookup
-            memory_id = None
-            if self.zylch_memory:
-                try:
-                    # TODO: STARCHAT_REQUEST - When available, use contact_id from StarChat
-                    # instead of generating email-based fallback
-                    # contact_id = await self.starchat.lookup_by_email(email)["contact_id"]
-
-                    # Use SINGLE namespace for all contacts (enables cross-contact semantic search)
-                    contacts_namespace = f"{self.owner_id}:{self.zylch_assistant_id}:contacts"
-
-                    # Build semantic summary for memory
-                    memory_parts = []
-                    if name:
-                        memory_parts.append(f"Name: {name}")
-                    if email:
-                        memory_parts.append(f"Email: {email}")
-                    if phone:
-                        memory_parts.append(f"Phone: {phone}")
-                    if company:
-                        memory_parts.append(f"Company: {company}")
-                    if relationship_type and relationship_type != "unknown":
-                        memory_parts.append(f"Relationship: {relationship_type}")
-                    if notes:
-                        memory_parts.append(f"Notes: {notes}")
-
-                    memory_content = " | ".join(memory_parts)
-
-                    # Store in zylch_memory (single namespace for semantic search)
-                    memory_id_str = self.zylch_memory.store_memory(
-                        namespace=contacts_namespace,
-                        category="person",
-                        context=f"Contact profile for {name or email}",
-                        pattern=memory_content,
-                        examples=[],
-                        confidence=0.9  # High confidence for explicitly saved contacts
-                    )
-                    memory_id = int(memory_id_str) if memory_id_str else None
-
-                    logger.info(f"✅ Saved contact to ZylchMemory: namespace={contacts_namespace}, memory_id={memory_id}")
-                except Exception as e:
-                    # Don't fail the whole operation if zylch_memory save fails
-                    logger.warning(f"Failed to save to ZylchMemory (non-fatal): {e}")
-
-            # Register ALL identifiers in the identifier_map for O(1) lookup
-            # PERSON-CENTRIC: Multiple emails/phones can point to the same person
-            if self.identifier_cache and memory_id:
-                try:
-                    identifiers = []
-                    if email:
-                        identifiers.append(("email", email))
-                    if phone:
-                        identifiers.append(("phone", phone))
-                    if name:
-                        identifiers.append(("name", name))
-
-                    self.identifier_cache.register(
-                        identifiers=identifiers,
-                        memory_id=memory_id,
-                        owner_id=self.owner_id,
-                        assistant_id=self.zylch_assistant_id
-                    )
-                    logger.info(f"✅ Registered {len(identifiers)} identifiers in cache for memory_id={memory_id}")
-                except Exception as e:
-                    logger.warning(f"Failed to register identifiers (non-fatal): {e}")
-
-            action = "updated" if existing_contacts else "created"
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data=result,
-                message=f"Contact {action} in assistant: {business_id} (also saved to ZylchMemory)"
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to save contact: {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=str(e)
-            )
-
-    def get_schema(self):
-        return {
-            "name": self.name,
-            "description": "Save enriched contact information to the selected MrCall assistant's contact list. IMPORTANT: Always ask the user for explicit approval before saving. Say something like: 'Would you like me to save this contact to your assistant?'",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "email": {
-                        "type": "string",
-                        "description": "Contact email address"
-                    },
-                    "name": {
-                        "type": "string",
-                        "description": "Contact name"
-                    },
-                    "phone": {
-                        "type": "string",
-                        "description": "Contact phone number"
-                    },
-                    "company": {
-                        "type": "string",
-                        "description": "Company name and info"
-                    },
-                    "notes": {
-                        "type": "string",
-                        "description": "Summary notes about the contact"
-                    },
-                    "relationship_type": {
-                        "type": "string",
-                        "description": "Relationship type: customer, lead, partner, prospect, unknown",
-                        "default": "unknown"
-                    },
-                    "priority_score": {
-                        "type": "string",
-                        "description": "Priority score 1-10",
-                        "default": "5"
-                    }
-                },
-                "required": ["email"]
             }
         }
 
@@ -2538,81 +2116,6 @@ class _GetContactTool(Tool):
                         "description": "Contact ID to retrieve (if known)"
                     }
                 }
-            }
-        }
-
-
-class _ListContactsTool(Tool):
-    """Wrapper for ListAllContactsTool that uses current business_id."""
-    def __init__(self, starchat_client, session_state: SessionState):
-        super().__init__(
-            name="list_all_contacts",
-            description="List all contacts associated with your selected business in StarChat"
-        )
-        self.starchat = starchat_client
-        self.session_state = session_state
-
-    async def execute(self, limit: Optional[int] = None) -> ToolResult:
-        """Execute contact listing using current business_id."""
-        # Check if business is selected
-        business_id = self.session_state.get_business_id()
-        if not business_id:
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error="No MrCall assistant selected. Use /mrcall <id> to select one."
-            )
-
-        try:
-            logger.info(f"Listing all contacts for business: {business_id}")
-
-            contacts = await self.starchat.search_contacts_paginated(
-                business_id=business_id,
-                page_size=100,
-                max_total=limit
-            )
-
-            # Group by relationship type for better summary
-            by_relationship = {}
-            for contact in contacts:
-                vars = contact.get('variables', {})
-                rel_type = vars.get('RELATIONSHIP_TYPE', 'unknown')
-                if rel_type not in by_relationship:
-                    by_relationship[rel_type] = []
-                by_relationship[rel_type].append(contact)
-
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data={
-                    "total_contacts": len(contacts),
-                    "by_relationship": {k: len(v) for k, v in by_relationship.items()},
-                    "contacts": contacts
-                },
-                message=f"Found {len(contacts)} total contacts: {', '.join(f'{k}={len(v)}' for k, v in sorted(by_relationship.items(), key=lambda x: len(x[1]), reverse=True))}"
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to list contacts: {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=str(e)
-            )
-
-    def get_schema(self) -> Dict[str, Any]:
-        """Get Anthropic function schema."""
-        return {
-            "name": self.name,
-            "description": self.description + ". Automatically uses the selected business from /business command. Returns all contacts with their relationship types and metadata.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum total results to fetch (optional, default=fetch all)"
-                    }
-                },
-                "required": []
             }
         }
 
