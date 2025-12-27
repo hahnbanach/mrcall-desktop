@@ -1097,16 +1097,24 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
                 delete_user_credentials,
                 delete_mrcall_credentials,
                 delete_anthropic_key,
+                delete_pipedrive_key,
+                delete_vonage_keys,
             )
 
+            # Note: delete_user_credentials deletes both google and microsoft
+            # For microsoft-only deletion, use supabase.delete_oauth_token directly
             delete_funcs = {
                 'google': delete_user_credentials,
+                'microsoft': lambda oid: supabase.delete_oauth_token(oid, 'microsoft'),
                 'mrcall': delete_mrcall_credentials,
                 'anthropic': delete_anthropic_key,
+                'pipedrive': delete_pipedrive_key,
+                'vonage': delete_vonage_keys,
             }
 
             if provider_key not in delete_funcs:
-                return f"❌ Cannot reset `{provider_key}`\n\nSupported: google, mrcall, anthropic"
+                supported = ', '.join(sorted(delete_funcs.keys()))
+                return f"❌ Cannot reset `{provider_key}`\n\nSupported: {supported}"
 
             try:
                 success = delete_funcs[provider_key](owner_id)
