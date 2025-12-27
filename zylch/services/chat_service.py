@@ -252,8 +252,8 @@ class ChatService:
                         # /briefing and /tasks only need args and owner_id
                         response_text = await handler(args, owner_id)
                     elif cmd in ['/memory', '/email', '/train', '/agent']:
-                        # /memory, /email, /train, /agent need config and owner_id
-                        config = ToolConfig.from_settings()
+                        # /memory, /email, /train, /agent need config with BYOK credentials
+                        config = ToolConfig.from_settings_with_owner(owner_id)
                         response_text = await handler(args, config, owner_id)
                     elif cmd in ['/trigger', '/mrcall', '/share', '/revoke', '/connect']:
                         # These need args, owner_id, and optionally email
