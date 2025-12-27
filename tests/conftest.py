@@ -138,8 +138,6 @@ def cleanup_test_data(storage, test_owner_id):
     #     storage.client.table('emails').delete().eq('owner_id', test_owner_id).execute()
     #     # Clean up avatars
     #     storage.client.table('avatars').delete().eq('owner_id', test_owner_id).execute()
-    #     # Clean up identifier_map
-    #     storage.client.table('identifier_map').delete().eq('owner_id', test_owner_id).execute()
     # except Exception:
     #     pass
 
