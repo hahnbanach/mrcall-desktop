@@ -297,14 +297,6 @@ Then run `/sync --days N` to rebuild memory from re-synced emails."""
         return f"❌ **Sync failed:** {str(e)}"
 
 
-async def handle_clear() -> str:
-    """Handle /clear command."""
-    return """✅ **History Cleared**
-
-**📝 Client Note:** The server doesn't maintain history.
-Clear your local `conversation_history` array."""
-
-
 async def handle_briefing(args: List[str], owner_id: str) -> str:
     """Handle /briefing command - Show daily briefing of tasks and unanswered conversations.
 
@@ -349,66 +341,6 @@ async def handle_briefing(args: List[str], owner_id: str) -> str:
     except Exception as e:
         logger.error(f"Briefing failed: {e}", exc_info=True)
         return f"❌ **Briefing failed:** {str(e)}"
-
-
-async def handle_model(args: List[str]) -> str:
-    """Handle /model command - AI model selection."""
-    model_map = {
-        'haiku': 'claude-3-5-haiku-20241022',
-        'sonnet': 'claude-3-5-sonnet-20241022',
-        'opus': 'claude-3-opus-20240229',
-        'auto': None
-    }
-
-    help_text = f"""**🤖 AI Model Selection**
-
-**Available models:**
-• `haiku` - Claude 3.5 Haiku (fast, economical)
-• `sonnet` - Claude 3.5 Sonnet (balanced) ⭐ default
-• `opus` - Claude 3 Opus (powerful, expensive)
-• `auto` - Automatic selection
-
-**Usage:** `/model sonnet`
-
-**Note for API clients:** Model selection is per-session.
-Pass `forced_model` in context for subsequent requests:
-```json
-{{
-  "context": {{
-    "forced_model": "claude-3-5-haiku-20241022"
-  }}
-}}
-```"""
-
-    # --help option (check first)
-    if '--help' in args:
-        return help_text
-
-    if not args:
-        return help_text
-
-    model_choice = args[0].lower()
-    if model_choice not in model_map:
-        return f"❌ Unknown model: `{model_choice}`\n\n{help_text}"
-
-    model_id = model_map[model_choice]
-
-    if model_id:
-        return f"""✅ **Model selected: {model_choice}**
-
-Model ID: `{model_id}`
-
-**For this to take effect:**
-API clients should include in context for future requests:
-```json
-{{
-  "context": {{
-    "forced_model": "{model_id}"
-  }}
-}}
-```"""
-    else:
-        return "✅ **Automatic model selection enabled**\n\nZylch will choose the best model for each task."
 
 
 async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> str:
@@ -1689,11 +1621,6 @@ Analyzes email threads to detect tasks you need to act on.
 
 Run `/sync` first to fetch latest emails.''',
     },
-    '/model': {
-        'summary': 'Switch AI model',
-        'usage': '/model [haiku|sonnet|opus]',
-        'description': 'Switch between Claude models for different speed/quality tradeoffs.',
-    },
     '/memory': {
         'summary': 'Entity memory system',
         'usage': '/memory [search|store|stats|list|reset] <args>',
@@ -1772,11 +1699,6 @@ Use `/agent process` to extract facts from synced data into memory.''',
         'summary': 'Revoke shared access',
         'usage': '/revoke <email>',
         'description': 'Remove shared access from a user.',
-    },
-    '/clear': {
-        'summary': 'Clear conversation history',
-        'usage': '/clear',
-        'description': 'Clears the conversation history. Note: Server is stateless, this clears client-side history.',
     },
     '/connect': {
         'summary': 'Manage external integrations',
@@ -2670,9 +2592,7 @@ COMMAND_HANDLERS = {
     '/echo': handle_echo,
     '/help': handle_help,
     '/sync': handle_sync,
-    '/clear': handle_clear,
     '/briefing': handle_briefing,
-    '/model': handle_model,
     '/memory': handle_memory,
     '/email': handle_email,
     '/trigger': handle_trigger,
@@ -2767,31 +2687,6 @@ COMMAND_TRIGGERS = {
         "aiuto",
         "ayuda",
         "aide",
-    ],
-
-    # --- Clear ---
-    '/clear': [
-        "clear",
-        "reset",
-        "clear history",
-        "reset conversation",
-        "start fresh",
-        "new conversation",
-        "clear chat",
-        "erase",
-        "start over",
-    ],
-
-    # --- Model Selection ---
-    '/model': [
-        "change AI model",
-        "switch model",
-        "use faster model",
-        "use smarter model",
-        "change to {model:model}",
-        "switch to {model:model}",
-        "use {model:model}",
-        "use {model:model} model",
     ],
 
     # --- Memory System ---
