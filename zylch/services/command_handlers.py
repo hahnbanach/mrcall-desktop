@@ -1750,28 +1750,43 @@ Use `/agent process` to extract facts from synced data into memory.''',
 - `/jobs cancel abc123` - Cancel job abc123''',
     },
     '/agent': {
-        'summary': 'Train agents and process data into memory',
-        'usage': '/agent [train|process|show|reset] <type>',
-        'description': '''Train personalized agents and process synced data into memory.
+        'summary': 'Train agents and process data into memory or tasks',
+        'usage': '/agent <domain> <action> [channel]',
+        'description': '''Train personalized agents and process synced data.
 
-**Training:**
-- `/agent train email` - Create personalized extraction agent from your email patterns
+**Domains:**
+- `memory` - Extract facts and entities into memory blobs
+- `task` - Detect actionable items and create tasks
 
-**Processing:**
-- `/agent process` - Process all unprocessed data into memory
-- `/agent process email` - Process only emails
-- `/agent process calendar` - Process only calendar events
-- `/agent process pipedrive` - Process only Pipedrive deals
+**Actions:**
+- `train` - Create personalized agent from your patterns
+- `process` - Run agent on unprocessed data
+- `show` - Display current agent prompt
+- `reset` - Delete custom agent
 
-**Management:**
-- `/agent show email` - Display your current agent
-- `/agent reset email` - Delete custom agent
+**Channels:**
+- `email` - Email data only
+- `calendar` - Calendar data only
+- `all` - Both email and calendar (train/process only)
+
+**Memory commands:**
+- `/agent memory train [email|calendar|all]`
+- `/agent memory process [email|calendar|all]`
+- `/agent memory show [email|calendar]`
+- `/agent memory reset [email|calendar]`
+
+**Task commands:**
+- `/agent task train [email|calendar|all]`
+- `/agent task process [email|calendar|all]`
+- `/agent task show [email|calendar]`
+- `/agent task reset [email|calendar]`
 
 **Workflow:**
-1. `/sync` - Fetch emails/calendar/pipedrive
-2. `/agent train email` - Create personalized agent (recommended)
-3. `/agent process` - Extract facts into memory blobs
-4. `/memory search <query>` - Find stored information''',
+1. `/sync` - Fetch emails/calendar
+2. `/agent memory train email` - Create memory extraction agent
+3. `/agent memory process email` - Extract entities into memory
+4. `/agent task train email` - Create task detection agent
+5. `/agent task process email` - Detect actionable items''',
     },
 }
 
@@ -2292,299 +2307,352 @@ Shows your scheduled reminders and jobs.
 
 
 async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> str:
-    """Handle /agent command - manage personalized agents for data extraction."""
+    """Handle /agent command - manage personalized agents for memory and task processing.
+
+    Command structure:
+        /agent <domain> <action> [channel]
+
+    Domains: memory, task
+    Actions: train, process, show, reset
+    Channels: email, calendar, all (default)
+    """
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch.services.email_agent_builder import EmailAgentBuilder
     from zylch.api.token_storage import get_email
 
     help_text = """**🤖 Manage AI Agents**
 
-**Training:**
-• `/agent train email` - Create personalized extraction agent from your email patterns
+**Memory Agents** (extract facts into memory blobs):
+• `/agent memory train [email|calendar]` - Create extraction agent
+• `/agent memory process [email|calendar]` - Process data into memory
+• `/agent memory show [email|calendar]` - Show current agent
+• `/agent memory reset [email|calendar]` - Delete agent
 
-**Processing:**
-• `/agent process` - Process all unprocessed data into memory
-• `/agent process email` - Process only emails
-• `/agent process calendar` - Process only calendar events
-• `/agent process pipedrive` - Process only Pipedrive deals
-
-**Management:**
-• `/agent show email` - Show your current email agent
-• `/agent reset email` - Delete custom agent
+**Task Agents** (detect actionable items):
+• `/agent task train [email|calendar]` - Create task detection agent
+• `/agent task process [email|calendar]` - Analyze and create tasks
+• `/agent task show [email|calendar]` - Show current agent
+• `/agent task reset [email|calendar]` - Delete agent
 
 **Workflow:**
-1. `/sync` - Fetch emails/calendar/pipedrive
-2. `/agent train email` - Create personalized agent (recommended)
-3. `/agent process` - Extract facts into memory blobs
-4. `/memory search <query>` - Find stored information"""
+1. `/sync` - Fetch emails/calendar
+2. `/agent memory train email` - Create memory agent
+3. `/agent memory process email` - Extract facts
+4. `/agent task train email` - Create task agent
+5. `/agent task process email` - Detect tasks"""
 
     # --help option (check first)
     if '--help' in args:
         return help_text
 
-    if not args:
+    if len(args) < 2:
         return help_text
 
     try:
         storage = SupabaseStorage.get_instance()
-        cmd = args[0].lower()
 
-        if cmd == 'process':
-            # Process synced data into memory blobs
-            from zylch.agents.memory_agent import MemoryWorker
+        domain = args[0].lower()  # 'memory' or 'task'
+        action = args[1].lower()  # 'train', 'process', 'show', 'reset'
+        channel = args[2].lower() if len(args) > 2 else 'email'  # 'email', 'calendar', 'all'
 
-            service = args[1].lower() if len(args) > 1 else 'all'
-            valid_services = ['all', 'email', 'calendar', 'pipedrive']
+        valid_domains = ['memory', 'task']
+        valid_actions = ['train', 'process', 'show', 'reset']
+        valid_channels = ['email', 'calendar', 'all']
 
-            if service not in valid_services:
-                return f"❌ Unknown service: `{service}`\n\nValid options: `email`, `calendar`, `pipedrive`, or omit for all."
+        if domain not in valid_domains:
+            return f"❌ Unknown domain: `{domain}`\n\nValid domains: `memory`, `task`\n\n{help_text}"
 
-            # Get Anthropic API key from user's stored key or system settings
-            anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
+        if action not in valid_actions:
+            return f"❌ Unknown action: `{action}`\n\nValid actions: `train`, `process`, `show`, `reset`"
 
-            if not anthropic_key:
-                return """❌ **Anthropic API key required**
+        if channel not in valid_channels:
+            return f"❌ Unknown channel: `{channel}`\n\nValid channels: `email`, `calendar`, `all`"
 
-Connect your Anthropic account:
-`/connect anthropic`"""
+        # Get common requirements
+        anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
+        user_email = get_email(owner_id)
 
-            worker = MemoryWorker(storage=storage, owner_id=owner_id, anthropic_api_key=anthropic_key)
+        # Build agent_type for DB storage (e.g., 'memory_email', 'task_calendar')
+        def get_agent_type(domain: str, channel: str) -> str:
+            return f"{domain}_{channel}"
 
-            # Gate: Check if processing emails without a custom prompt
-            if service in ['all', 'email'] and not worker.has_custom_prompt():
-                # Show recommendation to build custom prompt first
-                unprocessed_count = len(storage.get_unprocessed_emails(owner_id, limit=1))
-                if unprocessed_count > 0:
-                    return """⚠️ **No personalized extraction agent found**
+        # =====================
+        # MEMORY DOMAIN
+        # =====================
+        if domain == 'memory':
+            if action == 'train':
+                return await _handle_memory_train(storage, owner_id, channel, anthropic_key, user_email)
 
-For better memory extraction, create a personalized agent first:
+            elif action == 'process':
+                return await _handle_memory_process(storage, owner_id, channel, anthropic_key)
 
-```
-/agent train email
-```
+            elif action == 'show':
+                return await _handle_agent_show(storage, owner_id, domain, channel)
 
-This analyzes your email patterns to understand:
-- **Who matters to you** (VIP contacts get detailed extraction)
-- **What to ignore** (cold outreach specific to you)
-- **Your role/context** (founder vs investor vs engineer)
+            elif action == 'reset':
+                return await _handle_agent_reset(storage, owner_id, domain, channel)
 
-The personalized agent significantly improves:
-- Cold outreach detection
-- Relevant fact extraction
-- VIP contact prioritization"""
+        # =====================
+        # TASK DOMAIN
+        # =====================
+        elif domain == 'task':
+            if action == 'train':
+                return await _handle_task_train(storage, owner_id, channel, anthropic_key, user_email)
 
-            results = []
+            elif action == 'process':
+                return await _handle_task_process(storage, owner_id, channel, anthropic_key, user_email)
 
-            # Process emails
-            if service in ['all', 'email']:
-                unprocessed_emails = storage.get_unprocessed_emails(owner_id, limit=100)
-                if unprocessed_emails:
-                    processed = await worker.process_batch(unprocessed_emails)
-                    #TODO Wrong! We do not have custom agent
-                    prompt_note = " (using custom agent)" if worker.has_custom_prompt() else " (using default agent)"
-                    results.append(f"📧 **Emails:** {processed}/{len(unprocessed_emails)} processed{prompt_note}")
-                else:
-                    results.append("📧 **Emails:** No unprocessed emails")
+            elif action == 'show':
+                return await _handle_agent_show(storage, owner_id, domain, channel)
 
-            # Process calendar events
-            if service in ['all', 'calendar']:
-                unprocessed_events = storage.get_unprocessed_calendar_events(owner_id, limit=100)
-                if unprocessed_events:
-                    processed = await worker.process_calendar_batch(unprocessed_events)
-                    results.append(f"📅 **Calendar:** {processed}/{len(unprocessed_events)} processed")
-                else:
-                    results.append("📅 **Calendar:** No unprocessed events")
+            elif action == 'reset':
+                return await _handle_agent_reset(storage, owner_id, domain, channel)
 
-            # Process pipedrive deals
-            if service in ['all', 'pipedrive']:
-                unprocessed_deals = storage.get_unprocessed_pipedrive_deals(owner_id, limit=100)
-                if unprocessed_deals:
-                    processed = await worker.process_pipedrive_batch(unprocessed_deals)
-                    results.append(f"💼 **Pipedrive:** {processed}/{len(unprocessed_deals)} processed")
-                else:
-                    results.append("💼 **Pipedrive:** No unprocessed deals")
+        return help_text
 
-            output = "**🧠 Memory Processing Complete**\n\n"
-            output += "\n".join(results)
-            output += "\n\nUse `/memory search <query>` to find stored information."
-            return output
+    except Exception as e:
+        logger.error(f"Error in /agent: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}\n\n{help_text}"
 
-        agent_type = args[1].lower() if len(args) > 1 else None
 
-        # Validate agent type for train/show/reset commands
-        valid_agent_types = ['email', 'tasks']
-        if cmd in ['train', 'show', 'reset'] and agent_type and agent_type not in valid_agent_types:
-            return f"❌ Unknown agent type: `{agent_type}`\n\nAvailable types: `email`, `tasks`"
+# =====================
+# MEMORY AGENT HELPERS
+# =====================
 
-        if cmd == 'train':
-            if not agent_type:
-                return "❌ Missing agent type.\n\nUsage: `/agent train email`"
+async def _handle_memory_train(storage, owner_id: str, channel: str, anthropic_key: str, user_email: str) -> str:
+    """Train memory extraction agent for specified channel."""
+    from zylch.services.email_memory_agent_trainer import EmailMemoryAgentTrainer
 
-            if agent_type == 'email':
-                # Check sync status first
-                sync_state = storage.get_sync_state(owner_id)
-                if not sync_state or not sync_state.get('full_sync_completed'):
-                    return """❌ **Please sync your emails first**
-
-Run `/sync` to synchronize your email history.
-Then run `/agent train email` again."""
-
-                # Check email count
-                emails = storage.get_emails(owner_id, limit=1)
-                if not emails:
-                    return """❌ **No emails found**
-
-Run `/sync days 90` to sync more email history.
-Need at least some emails to analyze patterns."""
-
-                # Get Anthropic API key from user's stored key or system settings
-                anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
-
-                if not anthropic_key:
-                    return """❌ **Anthropic API key required**
+    if not anthropic_key:
+        return """❌ **Anthropic API key required**
 
 Connect your Anthropic account:
 `/connect anthropic`"""
 
-                # Get user's email address
-                user_email = get_email(owner_id)
-                if not user_email:
-                    return """❌ **User email not found**
+    if not user_email:
+        return """❌ **User email not found**
 
 Your email address is required to identify sent vs received emails.
 Please ensure your account is properly connected via `/connect`."""
 
-                # Build the agent
-                builder = EmailAgentBuilder(storage, owner_id, anthropic_key, user_email)
-                agent_prompt, metadata = await builder.build_memory_email_prompt()
+    # Check sync status
+    sync_state = storage.get_sync_state(owner_id)
+    if not sync_state or not sync_state.get('full_sync_completed'):
+        return """❌ **Please sync first**
 
-                # Store in DB
-                storage.store_agent_prompt(owner_id, 'email', agent_prompt, metadata)
+Run `/sync` to synchronize your data.
+Then run this command again."""
 
-                return f"""✅ **Email agent created**
+    channels_to_train = [channel] if channel != 'all' else ['email', 'calendar']
+    results = []
 
-**Analyzed:**
-- {metadata.get('emails_analyzed', 0)} recent emails
-- {metadata.get('frequent_contacts_count', 0)} frequent contacts identified
+    for ch in channels_to_train:
+        if ch == 'email':
+            emails = storage.get_emails(owner_id, limit=1)
+            if not emails:
+                results.append(f"📧 **Email:** No emails found - skipped")
+                continue
 
-**What was learned:**
-- Your role and business context
-- Types of emails you receive
-- How to assess importance from tone/content
+            builder = EmailMemoryAgentTrainer(storage, owner_id, anthropic_key, user_email)
+            agent_prompt, metadata = await builder.build_memory_email_prompt()
+            storage.store_agent_prompt(owner_id, 'memory_email', agent_prompt, metadata)
+            results.append(f"📧 **Email:** Agent created ({metadata.get('emails_analyzed', 0)} emails analyzed)")
+
+        elif ch == 'calendar':
+            # Calendar memory training - placeholder for future implementation
+            results.append(f"📅 **Calendar:** Not yet implemented")
+
+    return f"""✅ **Memory Agent Training Complete**
+
+{chr(10).join(results)}
 
 **Next steps:**
-- `/agent show email` to review the agent
-- `/agent process email` to extract entities using this agent"""
+- `/agent memory show {channel}` to review
+- `/agent memory process {channel}` to extract facts"""
 
-            elif agent_type == 'tasks':
-                # Check sync status first
-                sync_state = storage.get_sync_state(owner_id)
-                if not sync_state or not sync_state.get('full_sync_completed'):
-                    return """❌ **Please sync your emails first**
 
-Run `/sync` to synchronize your email history.
-Then run `/agent train tasks` again."""
+async def _handle_memory_process(storage, owner_id: str, channel: str, anthropic_key: str) -> str:
+    """Process data into memory blobs for specified channel."""
+    from zylch.agents.memory_agent import MemoryWorker
 
-                # Check email count
-                emails = storage.get_emails(owner_id, limit=1)
-                if not emails:
-                    return """❌ **No emails found**
-
-Run `/sync days 90` to sync more email history.
-Need at least some emails to analyze patterns."""
-
-                # Get Anthropic API key
-                anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
-
-                if not anthropic_key:
-                    return """❌ **Anthropic API key required**
+    if not anthropic_key:
+        return """❌ **Anthropic API key required**
 
 Connect your Anthropic account:
 `/connect anthropic`"""
 
-                # Get user's email address
-                user_email = get_email(owner_id)
-                if not user_email:
-                    return """❌ **User email not found**
+    worker = MemoryWorker(storage=storage, owner_id=owner_id, anthropic_api_key=anthropic_key)
+
+    channels_to_process = [channel] if channel != 'all' else ['email', 'calendar']
+    results = []
+
+    for ch in channels_to_process:
+        if ch == 'email':
+            # Check for custom agent
+            if not storage.get_agent_prompt(owner_id, 'memory_email'):
+                return """⚠️ **No memory agent found for email**
+
+Train your memory agent first:
+`/agent memory train email`"""
+
+            unprocessed = storage.get_unprocessed_emails(owner_id, limit=100)
+            if unprocessed:
+                processed = await worker.process_batch(unprocessed)
+                results.append(f"📧 **Email:** {processed}/{len(unprocessed)} processed")
+            else:
+                results.append("📧 **Email:** No unprocessed emails")
+
+        elif ch == 'calendar':
+            unprocessed = storage.get_unprocessed_calendar_events(owner_id, limit=100)
+            if unprocessed:
+                processed = await worker.process_calendar_batch(unprocessed)
+                results.append(f"📅 **Calendar:** {processed}/{len(unprocessed)} processed")
+            else:
+                results.append("📅 **Calendar:** No unprocessed events")
+
+    return f"""**🧠 Memory Processing Complete**
+
+{chr(10).join(results)}
+
+Use `/memory search <query>` to find stored information."""
+
+
+# =====================
+# TASK AGENT HELPERS
+# =====================
+
+async def _handle_task_train(storage, owner_id: str, channel: str, anthropic_key: str, user_email: str) -> str:
+    """Train task detection agent for specified channel."""
+    from zylch.services.email_task_agent_trainer import EmailTaskAgentTrainer
+
+    if not anthropic_key:
+        return """❌ **Anthropic API key required**
+
+Connect your Anthropic account:
+`/connect anthropic`"""
+
+    if not user_email:
+        return """❌ **User email not found**
 
 Your email address is required to identify sent vs received emails.
 Please ensure your account is properly connected via `/connect`."""
 
-                # Build the task agent
-                from zylch.services.task_agent_builder import TaskAgentBuilder
+    # Check sync status
+    sync_state = storage.get_sync_state(owner_id)
+    if not sync_state or not sync_state.get('full_sync_completed'):
+        return """❌ **Please sync first**
 
-                builder = TaskAgentBuilder(storage, owner_id, anthropic_key, user_email)
-                agent_prompt, metadata = await builder.build_task_prompt()
+Run `/sync` to synchronize your data.
+Then run this command again."""
 
-                # Store in DB
-                storage.store_agent_prompt(owner_id, 'tasks', agent_prompt, metadata)
+    channels_to_train = [channel] if channel != 'all' else ['email', 'calendar']
+    results = []
 
-                return f"""✅ **Task detection agent created**
+    for ch in channels_to_train:
+        if ch == 'email':
+            emails = storage.get_emails(owner_id, limit=1)
+            if not emails:
+                results.append(f"📧 **Email:** No emails found - skipped")
+                continue
 
-**Analyzed:**
-- {metadata.get('threads_analyzed', 0)} email threads
-- {metadata.get('contacts_found', 0)} contacts identified
-- {metadata.get('blobs_found', 0)} memory blobs for context
+            builder = EmailTaskAgentTrainer(storage, owner_id, anthropic_key, user_email)
+            agent_prompt, metadata = await builder.build_task_prompt()
+            storage.store_agent_prompt(owner_id, 'task_email', agent_prompt, metadata)
+            results.append(f"📧 **Email:** Agent created ({metadata.get('threads_analyzed', 0)} threads analyzed)")
 
-**What was learned:**
-- Your typical response patterns
-- VIP contacts who get quick responses
-- Types of emails you ignore
-- Commitment phrases you use
+        elif ch == 'calendar':
+            # Calendar task training - placeholder for future implementation
+            results.append(f"📅 **Calendar:** Not yet implemented")
+
+    return f"""✅ **Task Agent Training Complete**
+
+{chr(10).join(results)}
 
 **Next steps:**
-- `/agent show tasks` to review the agent
-- `/tasks` to see items needing action
-- `/tasks refresh` to re-analyze with fresh LLM call"""
+- `/agent task show {channel}` to review
+- `/agent task process {channel}` to detect tasks"""
 
-        elif cmd == 'show':
-            if not agent_type:
-                return "❌ Missing agent type.\n\nUsage: `/agent show email`"
 
-            agent_prompt = storage.get_agent_prompt(owner_id, agent_type)
-            if not agent_prompt:
-                return f"""❌ **No custom agent found for `{agent_type}`**
+async def _handle_task_process(storage, owner_id: str, channel: str, anthropic_key: str, user_email: str) -> str:
+    """Process data to detect actionable tasks for specified channel."""
+    from zylch.agents.task_agent import TaskWorker
+
+    if not anthropic_key:
+        return """❌ **Anthropic API key required**
+
+Connect your Anthropic account:
+`/connect anthropic`"""
+
+    channels_to_process = [channel] if channel != 'all' else ['email', 'calendar']
+    results = []
+
+    for ch in channels_to_process:
+        if ch == 'email':
+            # Check for custom agent
+            if not storage.get_agent_prompt(owner_id, 'task_email'):
+                return """⚠️ **No task agent found for email**
+
+Train your task agent first:
+`/agent task train email`"""
+
+            worker = TaskWorker(storage, owner_id, anthropic_key, user_email or '')
+            tasks, stats = await worker.get_tasks(refresh=True)
+            results.append(f"📧 **Email:** {len(tasks)} actionable items found")
+
+        elif ch == 'calendar':
+            # Calendar task processing - placeholder for future implementation
+            results.append(f"📅 **Calendar:** Not yet implemented")
+
+    return f"""**✅ Task Processing Complete**
+
+{chr(10).join(results)}
+
+Use `/briefing` to see your task summary."""
+
+
+# =====================
+# SHARED AGENT HELPERS
+# =====================
+
+async def _handle_agent_show(storage, owner_id: str, domain: str, channel: str) -> str:
+    """Show agent prompt for specified domain and channel."""
+    agent_type = f"{domain}_{channel}"
+
+    agent_prompt = storage.get_agent_prompt(owner_id, agent_type)
+    if not agent_prompt:
+        return f"""❌ **No agent found for `{domain} {channel}`**
 
 Create one with:
-`/agent train {agent_type}`"""
+`/agent {domain} train {channel}`"""
 
-            # Get metadata too
-            meta = storage.get_agent_prompt_metadata(owner_id, agent_type)
-            meta_info = ""
-            if meta:
-                metadata = meta.get('metadata', {})
-                created = meta.get('created_at', '')[:10] if meta.get('created_at') else 'unknown'
-                meta_info = f"\n_Created: {created} | Frequent contacts: {metadata.get('frequent_contacts_count', 'N/A')}_\n"
+    meta = storage.get_agent_prompt_metadata(owner_id, agent_type)
+    meta_info = ""
+    if meta:
+        metadata = meta.get('metadata', {})
+        created = meta.get('created_at', '')[:10] if meta.get('created_at') else 'unknown'
+        meta_info = f"\n_Created: {created}_\n"
 
-            return f"""**🤖 Your Email Agent**
+    return f"""**🤖 Your {domain.title()} Agent ({channel})**
 {meta_info}
 ---
 {agent_prompt}
 ---
 
-_Use `/agent reset email` to delete._"""
+_Use `/agent {domain} reset {channel}` to delete._"""
 
-        elif cmd == 'reset':
-            if not agent_type:
-                return "❌ Missing agent type.\n\nUsage: `/agent reset email`"
 
-            deleted = storage.delete_agent_prompt(owner_id, agent_type)
-            if deleted:
-                return f"""✅ **Agent deleted**
+async def _handle_agent_reset(storage, owner_id: str, domain: str, channel: str) -> str:
+    """Delete agent prompt for specified domain and channel."""
+    agent_type = f"{domain}_{channel}"
 
-Your custom `{agent_type}` agent has been deleted.
+    deleted = storage.delete_agent_prompt(owner_id, agent_type)
+    if deleted:
+        return f"""✅ **Agent deleted**
 
-Recreate with: `/agent train {agent_type}`"""
-            else:
-                return f"❌ No custom agent found for `{agent_type}`"
+Your `{domain} {channel}` agent has been deleted.
 
-        else:
-            # Unknown subcommand - show error + help
-            return f"❌ Unknown subcommand: `{cmd}`\n\n{help_text}"
-
-    except Exception as e:
-        logger.error(f"Error in /agent: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}\n\n{help_text}"
+Recreate with: `/agent {domain} train {channel}`"""
+    else:
+        return f"❌ No agent found for `{domain} {channel}`"
 
 
 # Export all handlers
@@ -2938,24 +3006,38 @@ COMMAND_TRIGGERS = {
 
     # --- Agent (Training and processing) ---
     '/agent': [
-        # Train
-        "train email agent",
-        "create email agent",
-        # Process (extract facts from synced data)
-        "process memory",
+        # Memory train
+        "train memory agent",
+        "train email memory agent",
+        "create memory extraction agent",
+        "train agent to extract memory",
+        # Memory process
         "process emails into memory",
         "process calendar into memory",
-        "process pipedrive into memory",
-        "process deals into memory",
         "extract facts from emails",
-        "extract facts from pipedrive",
-        "build memory from synced data",
+        "extract entities from emails",
+        "build memory from emails",
         "run memory agent",
+        # Task train
+        "train task agent",
+        "train email task agent",
+        "create task detection agent",
+        "train agent to detect tasks",
+        # Task process
+        "detect tasks from emails",
+        "find tasks in emails",
+        "process emails into tasks",
+        "run task agent",
+        "what tasks do I have",
         # Show
+        "show memory agent",
+        "show task agent",
         "show email agent",
         "let me see your agents",
         # Reset
-        "reset email agent",
-        "delete email agent",
+        "reset memory agent",
+        "reset task agent",
+        "delete memory agent",
+        "delete task agent",
     ],
 }
