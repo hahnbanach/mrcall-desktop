@@ -105,8 +105,13 @@ class HybridSearchEngine:
             rpc_params
         ).execute()
 
+        # Check for query failure
+        if result.data is None:
+            logger.error("Hybrid search returned None - possible database error")
+            return []
+
         # Debug: Log FTS scores for each result (full content)
-        for row in result.data or []:
+        for row in result.data:
             logger.debug(
                 f"Result blob_id={row['blob_id']}:\n{row['content']}\n"
                 f"FTS: {row['fts_score']:.3f}, semantic: {row['semantic_score']:.3f}, "
@@ -116,7 +121,7 @@ class HybridSearchEngine:
 
         # Get matching sentences for each result
         results = []
-        for row in result.data or []:
+        for row in result.data:
             sentences = self._get_matching_sentences(
                 row["blob_id"],
                 owner_id,

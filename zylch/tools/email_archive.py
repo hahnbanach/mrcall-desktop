@@ -289,9 +289,9 @@ class EmailArchiveManager:
                         new_messages.append(archive_msg)
 
                     except Exception as e:
-                        # 404 errors are normal (deleted/archived messages)
+                        # 404 errors are normal (deleted/archived messages) but still log at ERROR
                         if "404" in str(e) or "not found" in str(e).lower():
-                            logger.debug(f"Skipping message {msg_id}: not found (deleted or archived)")
+                            logger.error(f"Skipping message {msg_id}: not found (deleted or archived)")
                         else:
                             logger.error(f"Error fetching message {msg_id}: {e}")
 
@@ -505,7 +505,7 @@ class EmailArchiveManager:
         Returns:
             Message in archive format
         """
-        # Parse date to timestamp and ISO format
+        # Parse date to timestamp and ISO format - no fallback, fail loudly
         date_timestamp = None
         date_iso = None
         if gmail_msg.get('date'):
@@ -513,11 +513,10 @@ class EmailArchiveManager:
                 dt = parsedate_to_datetime(gmail_msg['date'])
                 date_timestamp = int(dt.timestamp())
                 date_iso = dt.isoformat()
-            except:
-                # Fallback to current time if parsing fails
-                now = datetime.now(timezone.utc)
-                date_timestamp = int(now.timestamp())
-                date_iso = now.isoformat()
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to parse email date '{gmail_msg['date']}' for message {gmail_msg.get('id')}: {e}"
+                )
 
         # Extract email from "Name <email>" format
         from_email = None
