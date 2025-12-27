@@ -332,7 +332,6 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
 | `triggers` | Triggered instructions |
 | `trigger_events` | Event queue for trigger processing |
 | `sharing_auth` | Sharing authorizations |
-| `memories` | Avatar/memory system (pg_vector) |
 | `user_notifications` | System notifications for users |
 | `email_triage` | AI triage verdicts per thread |
 | `importance_rules` | User-configurable contact importance rules |

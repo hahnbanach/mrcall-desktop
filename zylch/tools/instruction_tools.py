@@ -6,8 +6,12 @@ when specific events occur. For example:
 - "When a new email arrives from someone I don't know, create a contact" (email_received trigger)
 - "When a prospect replies, invite them to call the demo number" (email_received trigger)
 
-Triggered instructions are stored in ZylchMemory and executed when their trigger event occurs.
-This is different from behavioral memory (/memory), which contains always-on behavioral rules.
+TODO: These tools are currently disabled in factory.py because they depend on the removed
+zylch_memory system. They need to be migrated to use the Supabase `triggers` table instead.
+The table schema already exists (see ARCHITECTURE.md).
+
+NOTE: This file is kept for future use - do not delete. Just needs migration from
+zylch_memory.store_memory()/retrieve_memories() to Supabase triggers table CRUD.
 """
 
 import json
