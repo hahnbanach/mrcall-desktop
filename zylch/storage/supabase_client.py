@@ -19,8 +19,9 @@ def _get_embedding_engine():
     global _embedding_engine
     if _embedding_engine is None:
         try:
-            from zylch.memory import EmbeddingEngine
-            _embedding_engine = EmbeddingEngine()
+            from zylch.memory import EmbeddingEngine, ZylchMemoryConfig
+            config = ZylchMemoryConfig()
+            _embedding_engine = EmbeddingEngine(config)
             logger.info("EmbeddingEngine initialized for email semantic search")
         except ImportError:
             logger.warning("zylch_memory not available, embeddings disabled")
