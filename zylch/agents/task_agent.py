@@ -141,9 +141,22 @@ class TaskWorker:
         # Group by thread_id, keep only latest email per thread
         threads: Dict[str, Dict] = {}
         for email in all_emails:
-            thread_id = email.get('thread_id') or email.get('id')
+            email_id = email.get('id')
+            thread_id = email.get('thread_id')
+            if not thread_id:
+                logger.error(f"Email {email_id} missing thread_id, using email id as fallback")
+                thread_id = email_id
+
             existing = threads.get(thread_id)
-            if not existing or (email.get('date_timestamp') or 0) > (existing.get('date_timestamp') or 0):
+            date_timestamp = email.get('date_timestamp')
+            existing_timestamp = existing.get('date_timestamp') if existing else None
+
+            if date_timestamp is None:
+                logger.error(f"Email {email_id} missing date_timestamp")
+            if existing_timestamp is None and existing:
+                logger.error(f"Existing email {existing.get('id')} missing date_timestamp")
+
+            if not existing or (date_timestamp or 0) > (existing_timestamp or 0):
                 threads[thread_id] = email
 
         logger.debug(f"[TASK] {len(all_emails)} unprocessed emails -> {len(threads)} unique threads")

@@ -93,15 +93,11 @@ class GmailClient:
                 with open(token_path, "rb") as token:
                     creds = pickle.load(token)
 
-        # If no valid credentials, request new ones
-        # Use try-except to handle timezone comparison errors in Google OAuth library
-        try:
-            creds_valid = creds and creds.valid
-            creds_expired = creds.expired if creds else False
-        except TypeError:
-            # Timezone-aware vs naive datetime comparison error
-            creds_valid = False
-            creds_expired = True
+        # Check if credentials are valid
+        # Note: Google OAuth library may raise TypeError on timezone-aware vs naive datetime comparison
+        # We let this propagate rather than silently assuming credentials are expired
+        creds_valid = creds and creds.valid
+        creds_expired = creds.expired if creds else False
 
         if not creds_valid:
             if creds and creds_expired and creds.refresh_token:
@@ -236,7 +232,7 @@ class GmailClient:
                     try:
                         plain_text = base64.urlsafe_b64decode(body_data).decode('utf-8')
                     except Exception as e:
-                        logger.debug(f"Failed to decode plain text: {e}")
+                        logger.error(f"Failed to decode plain text: {e}")
 
             # Extract text/html
             elif mime_type == 'text/html':
@@ -245,7 +241,7 @@ class GmailClient:
                     try:
                         html_text = base64.urlsafe_b64decode(body_data).decode('utf-8')
                     except Exception as e:
-                        logger.debug(f"Failed to decode HTML: {e}")
+                        logger.error(f"Failed to decode HTML: {e}")
 
         return plain_text, html_text
 
@@ -274,7 +270,7 @@ class GmailClient:
             try:
                 body = base64.urlsafe_b64decode(body_data).decode('utf-8')
             except Exception as e:
-                logger.debug(f"Failed to decode body: {e}")
+                logger.error(f"Failed to decode body: {e}")
 
         return {
             'id': msg['id'],
