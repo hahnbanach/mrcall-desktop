@@ -38,7 +38,7 @@ def test_email_data():
     def _create_email(
         gmail_id: str,
         from_email: str,
-        to_emails: str,
+        to_email: str,
         subject: str,
         body: str,
         date_offset_days: int = 0
@@ -49,8 +49,8 @@ def test_email_data():
             'thread_id': f'thread_{gmail_id}',
             'from_email': from_email,
             'from_name': from_email.split('@')[0].replace('.', ' ').title(),
-            'to_emails': to_emails,
-            'cc_emails': '',
+            'to_email': to_email,
+            'cc_email': '',
             'subject': subject,
             'date': date.isoformat(),
             'date_timestamp': int(date.timestamp()),
@@ -151,7 +151,7 @@ def sample_emails_with_contact_info(test_email_data, test_contact_data):
     emails.append(test_email_data(
         gmail_id='test_email_001',
         from_email=f"{test_contact_data['john']['name']} <{test_contact_data['john']['email']}>",
-        to_emails='owner@example.com',
+        to_email='owner@example.com',
         subject='Partnership Discussion',
         body=f"""Hi,
 
@@ -167,7 +167,7 @@ LinkedIn: {test_contact_data['john']['linkedin']}""",
     emails.append(test_email_data(
         gmail_id='test_email_002',
         from_email=f"{test_contact_data['jane']['name']} <{test_contact_data['jane']['email']}>",
-        to_emails='owner@example.com',
+        to_email='owner@example.com',
         subject='Follow-up Meeting',
         body=f"""Hello,
 
@@ -182,7 +182,7 @@ Regards,
     emails.append(test_email_data(
         gmail_id='test_email_003',
         from_email='owner@example.com',
-        to_emails=f"{test_contact_data['bob']['name']} <{test_contact_data['bob']['email']}>",
+        to_email=f"{test_contact_data['bob']['name']} <{test_contact_data['bob']['email']}>",
         subject='Project Update',
         body='Just wanted to update you on the project status.',
         date_offset_days=3
@@ -192,7 +192,7 @@ Regards,
     emails.append(test_email_data(
         gmail_id='test_email_004',
         from_email=f"{test_contact_data['alice']['name']} <{test_contact_data['alice']['email']}>",
-        to_emails='owner@example.com',
+        to_email='owner@example.com',
         subject='Quick Question',
         body=f"""Hi,
 
@@ -207,7 +207,7 @@ I have a quick question about the proposal.
     emails.append(test_email_data(
         gmail_id='test_email_005',
         from_email=f"{test_contact_data['charlie']['name']} <{test_contact_data['charlie']['email']}>",
-        to_emails='owner@example.com',
+        to_email='owner@example.com',
         subject='Contract Review',
         body=f"""Hello,
 

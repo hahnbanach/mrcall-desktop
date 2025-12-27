@@ -344,7 +344,7 @@ CREATE TABLE emails (
   thread_id TEXT,
   message_id TEXT UNIQUE,
   from_email TEXT,
-  to_emails TEXT[],
+  to_email TEXT[],
   subject TEXT,
   body_plain TEXT,
   body_html TEXT,

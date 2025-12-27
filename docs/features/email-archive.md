@@ -382,8 +382,8 @@ CREATE TABLE messages (
     thread_id TEXT NOT NULL,       -- Gmail thread ID
     from_email TEXT,               -- Sender email
     from_name TEXT,                -- Sender name
-    to_emails TEXT,                -- Recipients
-    cc_emails TEXT,                -- CC recipients
+    to_email TEXT,                -- Recipients
+    cc_email TEXT,                -- CC recipients
     subject TEXT,                  -- Email subject
     date TEXT NOT NULL,            -- RFC2822 date
     date_timestamp INTEGER,        -- Unix timestamp

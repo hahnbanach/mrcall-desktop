@@ -110,8 +110,8 @@ class SQLiteArchiveBackend(EmailArchiveBackend):
                 thread_id TEXT NOT NULL,
                 from_email TEXT,
                 from_name TEXT,
-                to_emails TEXT,
-                cc_emails TEXT,
+                to_email TEXT,
+                cc_email TEXT,
                 subject TEXT,
                 date TEXT NOT NULL,
                 date_timestamp INTEGER,
@@ -213,7 +213,7 @@ class SQLiteArchiveBackend(EmailArchiveBackend):
         for msg in messages:
             cursor.execute("""
                 INSERT OR REPLACE INTO messages (
-                    id, thread_id, from_email, from_name, to_emails, cc_emails,
+                    id, thread_id, from_email, from_name, to_email, cc_email,
                     subject, date, date_timestamp, snippet, body_plain, body_html,
                     labels, message_id_header, in_reply_to, "references",
                     created_at, updated_at
@@ -223,8 +223,8 @@ class SQLiteArchiveBackend(EmailArchiveBackend):
                 msg['thread_id'],
                 msg.get('from_email'),
                 msg.get('from_name'),
-                msg.get('to_emails'),
-                msg.get('cc_emails'),
+                msg.get('to_email'),
+                msg.get('cc_email'),
                 msg.get('subject'),
                 msg['date'],
                 msg.get('date_timestamp'),

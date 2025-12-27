@@ -140,8 +140,8 @@ graph TD
     'owner_id': 'firebase-uid-123',
     'from_email': 'luigi.scrosati@example.com',
     'from_name': 'Luigi Scrosati',
-    'to_emails': 'mario@zylchai.com',
-    'cc_emails': '',
+    'to_email': 'mario@zylchai.com',
+    'cc_email': '',
     'date': '2025-12-07T10:30:00Z',
     'subject': 'Invoice 2025-12 Payment Reminder',
     'body_plain': 'Hi Mario, just following up on invoice...',
@@ -163,7 +163,7 @@ def extract_email_metadata(message: dict) -> dict:
     owner_email = get_owner_email(message['owner_id'])
     if message['from_email'] == owner_email:
         direction = 'outgoing'
-    elif owner_email in message['to_emails']:
+    elif owner_email in message['to_email']:
         direction = 'incoming'
     else:
         direction = 'cc'  # Owner was CC'd
@@ -173,10 +173,10 @@ def extract_email_metadata(message: dict) -> dict:
     for email in parse_email_list(message['from_email']):
         if email != owner_email:
             participants.add(email)
-    for email in parse_email_list(message['to_emails']):
+    for email in parse_email_list(message['to_email']):
         if email != owner_email:
             participants.add(email)
-    for email in parse_email_list(message['cc_emails']):
+    for email in parse_email_list(message['cc_email']):
         if email != owner_email:
             participants.add(email)
 
@@ -711,8 +711,8 @@ CREATE TABLE email_messages (
     owner_id TEXT NOT NULL,
     from_email TEXT NOT NULL,
     from_name TEXT,
-    to_emails TEXT,
-    cc_emails TEXT,
+    to_email TEXT,
+    cc_email TEXT,
     date TIMESTAMP NOT NULL,
     subject TEXT,
     body_plain TEXT,
@@ -930,7 +930,7 @@ db.insert('email_messages', {
     'owner_id': 'mario-firebase-uid',
     'from_email': 'luigi.scrosati@example.com',
     'from_name': 'Luigi Scrosati',
-    'to_emails': 'mario@zylchai.com',
+    'to_email': 'mario@zylchai.com',
     'date': '2025-12-07T10:30:00Z',
     'subject': 'Invoice 2025-12 Payment Reminder',
     'body_plain': 'Hi Mario, just following up on invoice 2025-12...',

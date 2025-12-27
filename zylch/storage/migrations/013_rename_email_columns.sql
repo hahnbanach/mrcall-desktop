@@ -1,32 +1,11 @@
--- Migration: Add hybrid search (FTS + semantic + exact pattern) support for emails
+-- Migration: Rename to_emails -> to_email and cc_emails -> cc_email
 -- Run via Supabase SQL Editor
 
--- 1. Add embedding column for semantic search
-ALTER TABLE emails ADD COLUMN IF NOT EXISTS embedding vector(384);
+-- Rename columns
+ALTER TABLE emails RENAME COLUMN to_emails TO to_email;
+ALTER TABLE emails RENAME COLUMN cc_emails TO cc_email;
 
--- 2. Add tsvector for FTS with 'simple' language config (language-agnostic)
--- Note: We need to drop and recreate if switching from 'english' to 'simple'
-DO $$
-BEGIN
-    -- Check if column exists
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'emails' AND column_name = 'tsv'
-    ) THEN
-        ALTER TABLE emails ADD COLUMN tsv TSVECTOR
-            GENERATED ALWAYS AS (
-                to_tsvector('simple', COALESCE(subject, '') || ' ' || COALESCE(body_plain, ''))
-            ) STORED;
-    END IF;
-END $$;
-
--- 3. Create indices for efficient search
-CREATE INDEX IF NOT EXISTS emails_embedding_idx ON emails
-    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-CREATE INDEX IF NOT EXISTS emails_tsv_idx ON emails USING gin(tsv);
-
--- 4. Create hybrid search function for emails
--- Combines: FTS (language-agnostic) + semantic (embedding similarity) + exact pattern (ILIKE on headers)
+-- Update the hybrid_search_emails function to use new column names
 CREATE OR REPLACE FUNCTION hybrid_search_emails(
     p_owner_id TEXT,
     p_query TEXT,
@@ -98,6 +77,3 @@ BEGIN
     LIMIT p_limit;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 5. Grant execute permission to authenticated users
-GRANT EXECUTE ON FUNCTION hybrid_search_emails TO authenticated;

@@ -73,7 +73,7 @@ CREATE TABLE emails (
   gmail_message_id TEXT,
   thread_id TEXT,
   from_email TEXT,
-  to_emails TEXT,
+  to_email TEXT,
   subject TEXT,
   body TEXT,
   date TIMESTAMP,
