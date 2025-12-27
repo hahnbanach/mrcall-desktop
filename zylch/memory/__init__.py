@@ -1,17 +1,24 @@
-"""Memory system for behavioral learning."""
+"""Memory system for zylch."""
 
-import sys
-from pathlib import Path
-
-# Add zylch_memory to path
-_zylch_memory_path = Path(__file__).parent.parent.parent / "zylch_memory"
-if _zylch_memory_path.exists():
-    sys.path.insert(0, str(_zylch_memory_path))
-
-from zylch_memory.core import ZylchMemory
-from zylch_memory.config import ZylchMemoryConfig
-
-# Legacy imports for backward compatibility (deprecated)
+from .core import ZylchMemory
+from .config import ZylchMemoryConfig
+from .embeddings import EmbeddingEngine
+from .blob_storage import BlobStorage
+from .hybrid_search import HybridSearchEngine, SearchResult
+from .llm_merge import LLMMergeService
+from .text_processing import split_sentences
+from .pattern_detection import detect_pattern
 from .reasoning_bank import ReasoningBankMemory
 
-__all__ = ['ZylchMemory', 'ZylchMemoryConfig', 'ReasoningBankMemory']
+__all__ = [
+    'ZylchMemory',
+    'ZylchMemoryConfig',
+    'EmbeddingEngine',
+    'BlobStorage',
+    'HybridSearchEngine',
+    'SearchResult',
+    'LLMMergeService',
+    'split_sentences',
+    'detect_pattern',
+    'ReasoningBankMemory',
+]
