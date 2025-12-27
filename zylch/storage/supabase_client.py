@@ -1776,6 +1776,166 @@ class SupabaseStorage:
 
         return counts
 
+    # ============================================================
+    # Task Agent Processing (task_processed_at)
+    # ============================================================
+
+    def get_unprocessed_emails_for_task(
+        self,
+        owner_id: str,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Get emails not yet processed by Task Agent.
+
+        Args:
+            owner_id: Firebase UID
+            limit: Maximum number of emails to return
+
+        Returns:
+            List of email dicts with all fields needed for task analysis
+        """
+        result = self.client.table('emails')\
+            .select('id, from_email, to_email, body_plain, snippet, subject, date_timestamp, thread_id')\
+            .eq('owner_id', owner_id)\
+            .is_('task_processed_at', 'null')\
+            .order('date_timestamp', desc=True)\
+            .limit(limit)\
+            .execute()
+
+        return result.data or []
+
+    def mark_email_task_processed(
+        self,
+        owner_id: str,
+        email_id: str
+    ) -> None:
+        """Mark an email as processed by Task Agent.
+
+        Args:
+            owner_id: Firebase UID
+            email_id: Email ID to mark
+        """
+        self.client.table('emails')\
+            .update({'task_processed_at': datetime.now(timezone.utc).isoformat()})\
+            .eq('owner_id', owner_id)\
+            .eq('id', email_id)\
+            .execute()
+
+    def mark_emails_task_processed(
+        self,
+        owner_id: str,
+        email_ids: List[str]
+    ) -> None:
+        """Mark multiple emails as processed by Task Agent.
+
+        Args:
+            owner_id: Firebase UID
+            email_ids: List of email IDs to mark
+        """
+        if not email_ids:
+            return
+
+        self.client.table('emails')\
+            .update({'task_processed_at': datetime.now(timezone.utc).isoformat()})\
+            .eq('owner_id', owner_id)\
+            .in_('id', email_ids)\
+            .execute()
+
+    def get_unprocessed_calendar_events_for_task(
+        self,
+        owner_id: str,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """Get calendar events not yet processed by Task Agent.
+
+        Args:
+            owner_id: Firebase UID
+            limit: Maximum number of events to return
+
+        Returns:
+            List of event dicts
+        """
+        result = self.client.table('calendar_events')\
+            .select('id, summary, description, location, start_time, end_time, attendees')\
+            .eq('owner_id', owner_id)\
+            .is_('task_processed_at', 'null')\
+            .order('start_time', desc=True)\
+            .limit(limit)\
+            .execute()
+
+        return result.data or []
+
+    def mark_calendar_event_task_processed(
+        self,
+        owner_id: str,
+        event_id: str
+    ) -> None:
+        """Mark a calendar event as processed by Task Agent.
+
+        Args:
+            owner_id: Firebase UID
+            event_id: Event ID to mark
+        """
+        self.client.table('calendar_events')\
+            .update({'task_processed_at': datetime.now(timezone.utc).isoformat()})\
+            .eq('owner_id', owner_id)\
+            .eq('id', event_id)\
+            .execute()
+
+    def mark_calendar_events_task_processed(
+        self,
+        owner_id: str,
+        event_ids: List[str]
+    ) -> None:
+        """Mark multiple calendar events as processed by Task Agent.
+
+        Args:
+            owner_id: Firebase UID
+            event_ids: List of event IDs to mark
+        """
+        if not event_ids:
+            return
+
+        self.client.table('calendar_events')\
+            .update({'task_processed_at': datetime.now(timezone.utc).isoformat()})\
+            .eq('owner_id', owner_id)\
+            .in_('id', event_ids)\
+            .execute()
+
+    def reset_task_processing_timestamps(
+        self,
+        owner_id: str,
+        channel: str = 'all'
+    ) -> Dict[str, int]:
+        """Reset task_processed_at timestamps for specified channel(s).
+
+        Args:
+            owner_id: Firebase UID
+            channel: 'email', 'calendar', or 'all'
+
+        Returns:
+            Dict with counts of reset items per channel
+        """
+        counts = {}
+
+        if channel in ('email', 'all'):
+            result = self.client.table('emails')\
+                .update({'task_processed_at': None})\
+                .eq('owner_id', owner_id)\
+                .not_.is_('task_processed_at', 'null')\
+                .execute()
+            counts['emails'] = len(result.data) if result.data else 0
+
+        if channel in ('calendar', 'all'):
+            result = self.client.table('calendar_events')\
+                .update({'task_processed_at': None})\
+                .eq('owner_id', owner_id)\
+                .not_.is_('task_processed_at', 'null')\
+                .execute()
+            counts['calendar_events'] = len(result.data) if result.data else 0
+
+        return counts
+
     def get_unprocessed_pipedrive_deals(
         self,
         owner_id: str,
