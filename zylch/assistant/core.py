@@ -25,7 +25,6 @@ class ZylchAIAgent:
         model_selector: Optional[ModelSelector] = None,
         max_tokens: int = 4096,
         email_style_prompt: Optional[str] = None,
-        memory_system: Optional[Any] = None,
         triggered_instructions: Optional[List[str]] = None,
     ):
         """Initialize Zylch AI agent.
@@ -36,7 +35,6 @@ class ZylchAIAgent:
             model_selector: Model selection logic (optional)
             max_tokens: Maximum tokens for response
             email_style_prompt: Custom email style instructions
-            memory_system: ZylchMemory instance (optional)
             triggered_instructions: List of triggered instructions (optional, for prompt injection)
         """
         self.client = anthropic.Anthropic(api_key=api_key)
@@ -45,12 +43,11 @@ class ZylchAIAgent:
         self.model_selector = model_selector or ModelSelector()
         self.max_tokens = max_tokens
         self.email_style_prompt = email_style_prompt
-        self.memory_system = memory_system
         self.triggered_instructions = triggered_instructions or []
         self.conversation_history: List[Dict[str, Any]] = []
         self.message_count = 0
 
-        logger.info(f"Initialized Zylch AI agent with {len(tools)} tools{' and memory system' if memory_system else ''}{f' and {len(self.triggered_instructions)} triggered instructions' if self.triggered_instructions else ''}")
+        logger.info(f"Initialized Zylch AI agent with {len(tools)} tools{f' and {len(self.triggered_instructions)} triggered instructions' if self.triggered_instructions else ''}")
 
     def _get_tool_schemas(self) -> List[Dict[str, Any]]:
         """Get Anthropic tool schemas for all registered tools.
@@ -92,35 +89,6 @@ class ZylchAIAgent:
         system_prompt = get_system_prompt() + get_system_prompt_base(self.email_style_prompt)
         if context and context.get("current_business_id"):
             system_prompt += f"\n\n**CURRENT SESSION:**\n✅ Selected MrCall Assistant: {context['current_business_id']}\nYou CAN save contacts directly to this assistant."
-
-        # Inject memory prompt (global + personal rules for channel)
-        if self.memory_system:
-            # Get channel from context, default to email
-            channel = context.get("channel", "email") if context else "email"
-            user_id = context.get("user_id") if context else None
-
-            # Retrieve relevant memories using semantic search
-            memories = self.memory_system.retrieve_memories(
-                query=f"interacting with contacts via {channel}",
-                category=channel,
-                user_id=user_id,
-                limit=5
-            )
-
-            if memories:
-                # Build memory prompt from retrieved memories
-                # Memory fields: context (when to apply), pattern (what to do)
-                memory_lines = []
-                for mem in memories:
-                    if mem.get('context') and mem.get('pattern'):
-                        memory_lines.append(
-                            f"- When: {mem['context']} → {mem['pattern']}"
-                        )
-
-                if memory_lines:
-                    memory_prompt = "\n\n**BEHAVIORAL CORRECTIONS:**\n" + "\n".join(memory_lines)
-                    system_prompt += memory_prompt
-                    logger.info(f"Injected {len(memories)} memory rules for channel={channel}")
 
         # Inject triggered instructions (for prompt awareness - NOT for execution)
         # Note: Trigger execution happens elsewhere (e.g., ChatService.execute_session_start_triggers)

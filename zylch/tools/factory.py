@@ -63,17 +63,18 @@ from .pipedrive import PipedriveClient
 from .email_archive import EmailArchiveManager
 from .email_sync import EmailSyncManager
 # TaskManager removed - legacy file-based system replaced by Supabase avatars
-from ..memory import ZylchMemory, ZylchMemoryConfig
+from ..memory import EmbeddingEngine
 from ..assistant.models import ModelSelector
-from .instruction_tools import (
-    AddTriggeredInstructionTool,
-    ListTriggeredInstructionsTool,
-    RemoveTriggeredInstructionTool,
-)
+# Triggered instruction tools disabled - pending migration to Supabase triggers table
+# from .instruction_tools import (
+#     AddTriggeredInstructionTool,
+#     ListTriggeredInstructionsTool,
+#     RemoveTriggeredInstructionTool,
+# )
 from .sms_tools import (
     SendSMSTool,
     SendVerificationCodeTool,
-    VerifyCodeTool,
+    # VerifyCodeTool disabled - needs migration to Supabase verification_codes table
 )
 from .call_tools import InitiateCallTool
 from .scheduler_tools import (
@@ -249,20 +250,16 @@ class ToolFactory:
             # Vonage SMS: credentials are loaded dynamically per-user in SendSMSTool.execute()
             # No client initialization needed here - tool is always available
 
-            # Initialize zylch_memory for person-centric memory
-            zylch_memory = await ToolFactory.create_memory_system(config)
-
-            # Initialize hybrid search engine for better memory search
-            search_engine = None
-            if zylch_memory:
-                from zylch.storage.supabase_client import SupabaseStorage
-                supabase_storage = SupabaseStorage.get_instance()
-                search_engine = HybridSearchEngine(
-                    supabase_client=supabase_storage.client,
-                    embedding_engine=zylch_memory.embedding_engine,
-                    default_alpha=0.3  # FTS weight (0.3 = 70% semantic, 30% FTS)
-                )
-                logger.info("Hybrid search engine initialized")
+            # Initialize hybrid search engine for blob search
+            from zylch.storage.supabase_client import SupabaseStorage
+            supabase_storage = SupabaseStorage.get_instance()
+            embedding_engine = EmbeddingEngine()
+            search_engine = HybridSearchEngine(
+                supabase_client=supabase_storage.client,
+                embedding_engine=embedding_engine,
+                default_alpha=0.3  # FTS weight (0.3 = 70% semantic, 30% FTS)
+            )
+            logger.info("Hybrid search engine initialized")
 
             # TaskManager removed - legacy file-based system replaced by Supabase avatars
             # Tasks are now served by get_tasks tool which queries pre-computed avatars
@@ -274,11 +271,10 @@ class ToolFactory:
         # Initialize tools list
         tools = []
 
-        # Email tools (7-8 tools, +1 if zylch_memory) - Gmail or Outlook
+        # Email tools (7 tools) - Gmail or Outlook
         tools.extend(ToolFactory._create_gmail_tools(
-            email_client, calendar, email_sync, zylch_memory,
-            starchat, config.owner_id, config.zylch_assistant_id,
-            anthropic_api_key=config.anthropic_api_key
+            email_client, calendar, email_sync,
+            config.owner_id, config.zylch_assistant_id
         ))
 
         # Email sync tools (4 tools)
@@ -291,7 +287,6 @@ class ToolFactory:
         tools.extend(ToolFactory._create_contact_tools(
             starchat,
             session_state,
-            zylch_memory,
             search_engine,
             config.owner_id,
             config.zylch_assistant_id
@@ -312,14 +307,12 @@ class ToolFactory:
             tools.extend(ToolFactory._create_mrcall_tools(
                 starchat_client=starchat,
                 session_state=session_state,
-                zylch_memory=zylch_memory,
                 anthropic_api_key=config.anthropic_api_key
             ))
 
         # Sharing tools (4 tools) - for intelligence sharing between users
         if config.user_email:
             sharing_tools = ToolFactory._create_sharing_tools(
-                zylch_memory=zylch_memory,
                 cache_dir=config.cache_dir,
                 owner_id=config.owner_id,
                 user_email=config.user_email,
@@ -329,17 +322,16 @@ class ToolFactory:
             logger.info(f"Sharing tools initialized ({len(sharing_tools)} tools)")
 
         # Triggered instruction tools (3 tools) - for event-driven automation
-        tools.extend(ToolFactory._create_trigger_tools(
-            zylch_memory=zylch_memory,
-            owner_id=config.owner_id,
-            zylch_assistant_id=config.zylch_assistant_id
-        ))
-        logger.info("Triggered instruction tools initialized")
+        # TODO: These tools currently disabled - need to be updated to use Supabase triggers table
+        # tools.extend(ToolFactory._create_trigger_tools(
+        #     owner_id=config.owner_id,
+        #     zylch_assistant_id=config.zylch_assistant_id
+        # ))
+        # logger.info("Triggered instruction tools initialized")
 
         # SMS tools (always available - credentials loaded per-user at execution time)
         tools.extend(ToolFactory._create_sms_tools(
             session_state=session_state,
-            zylch_memory=zylch_memory,
             owner_id=config.owner_id,
             zylch_assistant_id=config.zylch_assistant_id
         ))
@@ -378,24 +370,6 @@ class ToolFactory:
         return tools, session_state
 
     @staticmethod
-    async def create_memory_system(config: ToolConfig) -> ZylchMemory:
-        """Create and initialize memory system.
-
-        Args:
-            config: Tool configuration
-
-        Returns:
-            Initialized ZylchMemory instance
-        """
-        memory_config = ZylchMemoryConfig(
-            db_path=Path(config.cache_dir) / "zylch_memory.db",
-            index_dir=Path(config.cache_dir) / "indices"
-        )
-        memory = ZylchMemory(config=memory_config)
-        logger.info("ZylchMemory system initialized (semantic search enabled)")
-        return memory
-
-    @staticmethod
     def create_model_selector(config: ToolConfig) -> ModelSelector:
         """Create model selector with configuration.
 
@@ -416,15 +390,12 @@ class ToolFactory:
         gmail_client,
         calendar_client,
         email_sync_manager=None,
-        zylch_memory=None,
-        starchat_client=None,
         owner_id: str = "owner_default",
         zylch_assistant_id: str = "default_assistant",
-        anthropic_api_key: str = ""
     ) -> List[Tool]:
         """Create Gmail-related tools."""
-        tools = [
-            _GmailSearchTool(gmail_client, zylch_memory, owner_id, zylch_assistant_id),
+        return [
+            _GmailSearchTool(gmail_client, owner_id, zylch_assistant_id),
             _CreateDraftTool(gmail_client),
             _ListDraftsTool(gmail_client),
             _EditDraftTool(gmail_client),
@@ -432,19 +403,6 @@ class ToolFactory:
             _SendDraftTool(gmail_client, email_sync_manager),
             _RefreshGoogleAuthTool(gmail_client, calendar_client),
         ]
-
-        # Add memory-based draft tool if zylch_memory available and API key present
-        if zylch_memory and starchat_client and anthropic_api_key:
-            tools.append(_DraftEmailFromMemoryTool(
-                gmail_client,
-                zylch_memory,
-                starchat_client,
-                owner_id,
-                zylch_assistant_id,
-                anthropic_api_key=anthropic_api_key
-            ))
-
-        return tools
 
     @staticmethod
     def _create_email_sync_tools(email_sync_manager) -> List[Tool]:
@@ -463,7 +421,6 @@ class ToolFactory:
     def _create_contact_tools(
         starchat_client,
         session_state: SessionState,
-        zylch_memory=None,
         search_engine: Optional[HybridSearchEngine] = None,
         owner_id: str = "owner_default",
         zylch_assistant_id: str = "default_assistant"
@@ -474,7 +431,7 @@ class ToolFactory:
         search_local_memory provides hybrid FTS + semantic search.
         """
         return [
-            _SearchLocalMemoryTool(zylch_memory, search_engine, owner_id, zylch_assistant_id),
+            _SearchLocalMemoryTool(search_engine, owner_id, zylch_assistant_id),
             _GetContactTool(starchat_client, session_state),
             _GetWhatsAppContactsTool(starchat_client, session_state),
         ]
@@ -501,37 +458,31 @@ class ToolFactory:
     def _create_mrcall_tools(
         starchat_client,
         session_state: SessionState,
-        zylch_memory,
         anthropic_api_key: str
     ) -> List[Tool]:
         """Create MrCall assistant configuration tools.
 
         These tools enable natural language configuration of MrCall assistants.
         Features:
-        - Two-level memory: Admin (global rules) + Business (per-assistant)
         - Preview + confirm workflow for all changes
         - Variable preservation during prompt modifications
         """
         from .mrcall import (
             GetAssistantCatalogTool,
-            ConfigureAssistantTool,
-            SaveMrCallAdminRuleTool,
+            # TODO: ConfigureAssistantTool and SaveMrCallAdminRuleTool disabled - need migration to Supabase
+            # ConfigureAssistantTool,
+            # SaveMrCallAdminRuleTool,
         )
 
         return [
             GetAssistantCatalogTool(starchat_client, session_state),
-            ConfigureAssistantTool(
-                starchat_client,
-                session_state,
-                zylch_memory,
-                anthropic_api_key
-            ),
-            SaveMrCallAdminRuleTool(starchat_client, session_state, zylch_memory),
+            # TODO: These tools need migration from zylch_memory to Supabase
+            # ConfigureAssistantTool(starchat_client, session_state, anthropic_api_key),
+            # SaveMrCallAdminRuleTool(starchat_client, session_state),
         ]
 
     @staticmethod
     def _create_sharing_tools(
-        zylch_memory,
         cache_dir: str,
         owner_id: str,
         user_email: str,
@@ -539,97 +490,24 @@ class ToolFactory:
     ) -> List[Tool]:
         """Create intelligence sharing tools.
 
-        These tools enable sharing contact intelligence between Zylch users.
-        Features:
-        - Share intel with authorized recipients
-        - Retrieve shared intel when looking up contacts
-        - Accept/reject share requests
+        TODO: These tools currently disabled - need migration from zylch_memory to Supabase blobs.
         """
-        from .sharing_tools import (
-            ShareContactIntelTool,
-            GetSharedIntelTool,
-            AcceptShareRequestTool,
-            RejectShareRequestTool,
-        )
-        from ..sharing import SharingAuthorizationManager, IntelShareManager
+        # TODO: Re-enable when IntelShareManager is migrated to use Supabase blobs
+        # from .sharing_tools import (
+        #     ShareContactIntelTool,
+        #     GetSharedIntelTool,
+        #     AcceptShareRequestTool,
+        #     RejectShareRequestTool,
+        # )
+        # from ..sharing import SharingAuthorizationManager, IntelShareManager
+        return []
 
-        # Initialize sharing managers
-        sharing_db_path = Path(cache_dir) / "sharing.db"
-        auth_manager = SharingAuthorizationManager(db_path=sharing_db_path)
-        intel_share_manager = IntelShareManager(
-            zylch_memory=zylch_memory,
-            auth_manager=auth_manager
-        )
-
-        # Register current user
-        if user_email:
-            auth_manager.register_user(
-                owner_id=owner_id,
-                email=user_email,
-                display_name=user_display_name
-            )
-
-        return [
-            ShareContactIntelTool(
-                intel_share_manager=intel_share_manager,
-                auth_manager=auth_manager,
-                owner_id=owner_id,
-                user_email=user_email,
-                user_display_name=user_display_name
-            ),
-            GetSharedIntelTool(
-                intel_share_manager=intel_share_manager,
-                owner_id=owner_id,
-                user_email=user_email
-            ),
-            AcceptShareRequestTool(
-                intel_share_manager=intel_share_manager,
-                auth_manager=auth_manager,
-                owner_id=owner_id,
-                user_email=user_email
-            ),
-            RejectShareRequestTool(
-                auth_manager=auth_manager,
-                user_email=user_email
-            ),
-        ]
-
-    @staticmethod
-    def _create_trigger_tools(
-        zylch_memory,
-        owner_id: str,
-        zylch_assistant_id: str
-    ) -> List[Tool]:
-        """Create triggered instruction tools.
-
-        These tools allow users to create event-driven automation that executes
-        when specific triggers occur. For example:
-        - "All'inizio di ogni sessione devi dirmi Buongiorno Mario..." (session_start)
-        - "When a new email arrives from someone I don't know, create a contact" (email_received)
-        - "When a prospect replies, invite them to call the demo number" (email_received)
-        """
-        return [
-            AddTriggeredInstructionTool(
-                zylch_memory=zylch_memory,
-                owner_id=owner_id,
-                zylch_assistant_id=zylch_assistant_id
-            ),
-            ListTriggeredInstructionsTool(
-                zylch_memory=zylch_memory,
-                owner_id=owner_id,
-                zylch_assistant_id=zylch_assistant_id
-            ),
-            RemoveTriggeredInstructionTool(
-                zylch_memory=zylch_memory,
-                owner_id=owner_id,
-                zylch_assistant_id=zylch_assistant_id
-            ),
-        ]
+    # _create_trigger_tools removed - tools disabled pending migration to Supabase triggers table
+    # See instruction_tools.py for the tool implementations
 
     @staticmethod
     def _create_sms_tools(
         session_state,
-        zylch_memory,
         owner_id: str,
         zylch_assistant_id: str
     ) -> List[Tool]:
@@ -640,21 +518,17 @@ class ToolFactory:
         Tools:
         - send_sms: Send a text message to a phone number
         - send_verification_code: Send a 6-digit code for phone verification
-        - verify_sms_code: Verify a code that was sent via SMS
+        NOTE: verify_sms_code disabled - needs migration to Supabase verification_codes table
         """
         return [
             SendSMSTool(session_state=session_state),
             SendVerificationCodeTool(
                 session_state=session_state,
-                zylch_memory=zylch_memory,
                 owner_id=owner_id,
                 zylch_assistant_id=zylch_assistant_id
             ),
-            VerifyCodeTool(
-                zylch_memory=zylch_memory,
-                owner_id=owner_id,
-                zylch_assistant_id=zylch_assistant_id
-            ),
+            # TODO: VerifyCodeTool disabled - needs migration to Supabase verification_codes table
+            # VerifyCodeTool(owner_id=owner_id, zylch_assistant_id=zylch_assistant_id),
         ]
 
     @staticmethod
@@ -687,7 +561,6 @@ class _GmailSearchTool(Tool):
     def __init__(
         self,
         gmail_client,
-        zylch_memory=None,
         owner_id: str = "owner_default",
         zylch_assistant_id: str = "default_assistant"
     ):
@@ -696,7 +569,6 @@ class _GmailSearchTool(Tool):
             description="Search Gmail for emails from or to a contact to understand relationship"
         )
         self.gmail = gmail_client
-        self.zylch_memory = zylch_memory
         self.owner_id = owner_id
         self.zylch_assistant_id = zylch_assistant_id
 
@@ -1324,219 +1196,6 @@ class _RefreshGoogleAuthTool(Tool):
         }
 
 
-class _DraftEmailFromMemoryTool(Tool):
-    """Draft email using person-centric memory (relationship + business context)."""
-    def __init__(
-        self,
-        gmail_client,
-        zylch_memory,
-        starchat_client,
-        owner_id: str = "owner_default",
-        zylch_assistant_id: str = "default_assistant",
-        anthropic_api_key: str = ""
-    ):
-        super().__init__(
-            name="draft_email_from_memory",
-            description="Draft personalized email using relationship memory, business info, and user style"
-        )
-        self.gmail = gmail_client
-        self.zylch_memory = zylch_memory
-        self.starchat = starchat_client
-        self.owner_id = owner_id
-        self.zylch_assistant_id = zylch_assistant_id
-        self.anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key)
-
-    async def execute(
-        self,
-        contact_email: str,
-        topic: str,
-        user_id: str = "mario"
-    ):
-        """Draft email using multi-namespace memory retrieval.
-
-        Args:
-            contact_email: Recipient email address
-            topic: Email topic/purpose (e.g., "offerta servizi outbound")
-            user_id: User identifier (default: "mario")
-        """
-        try:
-            # Get contact_id from StarChat (async context - use await)
-            contact = None
-            try:
-                contact = await self.starchat.get_contact_by_email(contact_email)
-            except Exception as e:
-                logger.debug(f"Contact not found in StarChat for {contact_email}: {e}")
-
-            contact_id = contact.get('id') if contact else f"email_{contact_email.replace('@', '_at_')}"
-
-            # 1. Retrieve person memory (multi-tenant namespace)
-            person_namespace = f"{self.owner_id}:{self.zylch_assistant_id}:{contact_id}"
-            person_memories = self.zylch_memory.retrieve_memories(
-                query=f"relationship communication style preferences {topic}",
-                namespace=person_namespace,
-                category="person",
-                limit=3
-            )
-
-            # 2. Retrieve user style memory (assistant-level namespace)
-            assistant_namespace = f"{self.owner_id}:{self.zylch_assistant_id}"
-            user_memories = self.zylch_memory.retrieve_memories(
-                query=f"email writing style {topic}",
-                namespace=assistant_namespace,
-                category="style",
-                limit=2
-            )
-
-            # 3. Retrieve business memory (ALWAYS, as "reference text")
-            # First: get core identity (mission, values, what we do)
-            business_identity = self.zylch_memory.retrieve_memories(
-                query="company mission values services core business identity",
-                namespace=assistant_namespace,
-                category="business",
-                limit=5
-            )
-
-            # Second: get topic-specific info (services, pricing, policies)
-            business_specific = self.zylch_memory.retrieve_memories(
-                query=f"business services products pricing policies {topic}",
-                namespace=assistant_namespace,
-                category="business",
-                limit=3
-            )
-
-            # Build context sections
-            person_context = "\n".join([
-                f"- {m['pattern']}" for m in person_memories
-            ]) if person_memories else "No relationship information available."
-
-            user_context = "\n".join([
-                f"- {m['pattern']}" for m in user_memories
-            ]) if user_memories else "Use standard professional style."
-
-            # Business identity: always remember what we do
-            business_identity_text = "\n".join([
-                f"- {m['pattern']}" for m in business_identity
-            ]) if business_identity else "We sell AI phone assistants and business communication services, NOTHING else."
-
-            # Topic-specific business info
-            business_specific_text = "\n".join([
-                f"- {m['pattern']}" for m in business_specific
-            ]) if business_specific else ""
-
-            # Compose prompt for Claude
-            prompt = f"""Write a professional email draft for {contact_email} on topic: {topic}
-
-╔═══════════════════════════════════════════════════════════════╗
-║  BUSINESS IDENTITY (ALWAYS REMEMBER - REFERENCE TEXT)         ║
-╚═══════════════════════════════════════════════════════════════╝
-
-{business_identity_text}
-
-⚠️  IMPORTANT: This is our business identity. ALWAYS keep in mind what
-we sell (AI phone assistants, not fried chicken!), our values, and our
-policies. DO NOT make up services or prices not mentioned above.
-
-───────────────────────────────────────────────────────────────
-
-RELATIONSHIP CONTEXT WITH THIS CLIENT:
-{person_context}
-
-USER'S WRITING STYLE ({user_id}):
-{user_context}
-
-RELEVANT BUSINESS DETAILS FOR THIS TOPIC:
-{business_specific_text if business_specific_text else "Use the general business identity info above."}
-
-───────────────────────────────────────────────────────────────
-
-INSTRUCTIONS:
-1. Use appropriate tone based on relationship (formal/informal)
-2. Follow the user's writing style
-3. Include ONLY documented business info above (DO NOT make things up!)
-4. Be specific and actionable
-5. ALWAYS respect company policies (e.g., no spam, GDPR compliance)
-6. Sign as "Mario" (or the user's name)
-
-Write ONLY the email body (no subject), ready to be copied into a draft."""
-
-            # Generate draft with Claude Sonnet
-            response = self.anthropic_client.messages.create(
-                model=settings.default_model,
-                max_tokens=1500,
-                messages=[{
-                    "role": "user",
-                    "content": prompt
-                }]
-            )
-
-            draft_body = response.content[0].text.strip()
-
-            # Extract suggested subject if Claude provided one
-            subject = f"Re: {topic}"  # Default
-            if draft_body.startswith("Subject:"):
-                lines = draft_body.split("\n", 1)
-                subject = lines[0].replace("Subject:", "").strip()
-                draft_body = lines[1].strip() if len(lines) > 1 else draft_body
-
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data={
-                    "subject": subject,
-                    "body": draft_body,
-                    "to": contact_email,
-                    "person_memories_used": len(person_memories),
-                    "user_memories_used": len(user_memories),
-                    "business_identity_used": len(business_identity),
-                    "business_specific_used": len(business_specific)
-                },
-                message=f"✅ Email draft created for {contact_email}\n\n"
-                        f"📧 Subject: {subject}\n\n"
-                        f"📄 Body:\n"
-                        f"{'─' * 70}\n"
-                        f"{draft_body}\n"
-                        f"{'─' * 70}\n\n"
-                        f"📊 Memories used:\n"
-                        f"   👤 Person: {len(person_memories)}\n"
-                        f"   ✍️  User style: {len(user_memories)}\n"
-                        f"   🏢 Business identity: {len(business_identity)} (always loaded)\n"
-                        f"   📋 Business topic-specific: {len(business_specific)}\n\n"
-                        f"Do you want me to create a Gmail draft with this text?"
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to draft email from memory: {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=f"Error creating draft: {str(e)}"
-            )
-
-    def get_schema(self):
-        return {
-            "name": self.name,
-            "description": "Create a personalized email draft using relationship memory, business info, and user's style. Uses semantic search on 3 namespaces (person, user, business) to compose a contextually rich email. ALWAYS use this tool when user asks to write emails/offers to known contacts.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "contact_email": {
-                        "type": "string",
-                        "description": "Recipient email address"
-                    },
-                    "topic": {
-                        "type": "string",
-                        "description": "Email topic/purpose (e.g., 'outbound services offer', 'follow-up meeting', 'pricing question reply')"
-                    },
-                    "user_id": {
-                        "type": "string",
-                        "description": "User ID (default: 'mario')",
-                        "default": "mario"
-                    }
-                },
-                "required": ["contact_email", "topic"]
-            }
-        }
-
-
 class _SyncEmailsTool(Tool):
     """Sync emails from Gmail and cache with intelligent analysis."""
     def __init__(self, email_sync_manager):
@@ -1869,7 +1528,7 @@ class _GetTasksTool(Tool):
 
 
 class _SearchLocalMemoryTool(Tool):
-    """Search local ZylchMemory for person info using hybrid FTS + semantic search.
+    """Search local memory (blobs) for person info using hybrid FTS + semantic search.
 
     ZYLCH IS PERSON-CENTRIC: A person can have multiple emails/phones.
     This tool uses hybrid search (FTS + semantic) for better recall and precision.
@@ -1882,7 +1541,6 @@ class _SearchLocalMemoryTool(Tool):
 
     def __init__(
         self,
-        zylch_memory,
         search_engine: Optional[HybridSearchEngine] = None,
         owner_id: str = "owner_default",
         zylch_assistant_id: str = "default_assistant"
@@ -1891,7 +1549,6 @@ class _SearchLocalMemoryTool(Tool):
             name="search_local_memory",
             description="Search local memory for person/contact info using hybrid FTS + semantic search. ALWAYS call this FIRST before remote searches (Gmail, StarChat, web). Returns ranked results by relevance."
         )
-        self.zylch_memory = zylch_memory
         self.search_engine = search_engine
         self.owner_id = owner_id
         self.zylch_assistant_id = zylch_assistant_id
@@ -1980,7 +1637,7 @@ class _SearchLocalMemoryTool(Tool):
     def get_schema(self):
         return {
             "name": self.name,
-            "description": "Search local ZylchMemory for person/contact info. CRITICAL: ALWAYS call this FIRST when user asks about a person (e.g., 'info on Luigi', 'who is Mario?', 'tell me about Connecto'). This avoids expensive 10+ second remote API calls if data is already cached.",
+            "description": "Search local memory (blobs) for person/contact info. CRITICAL: ALWAYS call this FIRST when user asks about a person (e.g., 'info on Luigi', 'who is Mario?', 'tell me about Connecto'). This avoids expensive 10+ second remote API calls if data is already cached.",
             "input_schema": {
                 "type": "object",
                 "properties": {
