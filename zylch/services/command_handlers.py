@@ -1045,6 +1045,10 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
 • `/connect status` - Check what's connected
 • `/connect reset google` - Disconnect Google"""
 
+    # DEBUG: Log what args we received
+    logger.debug(f"[CONNECT] Received args: {args}, type: {type(args)}")
+    logger.debug(f"[CONNECT] '--help' in args: {'--help' in args}")
+
     # --help option (check first, before any processing)
     if '--help' in args:
         return help_text
