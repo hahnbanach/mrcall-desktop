@@ -9,10 +9,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 EXPECTED_TABLES = [
-    'emails', 'sync_state', 'thread_analysis', 'relationship_gaps',
+    'emails', 'sync_state', 'thread_analysis',
     'calendar_events', 'patterns', 'memories', 'avatars',
-    'identifier_map', 'avatar_compute_queue', 'oauth_tokens',
-    'triggers', 'trigger_events', 'sharing_auth'
+    'avatar_compute_queue', 'oauth_tokens',
+    'triggers', 'trigger_events', 'sharing_auth', 'scheduled_jobs'
 ]
 
 def verify_schema():

@@ -122,8 +122,7 @@ async def test_create_all_tools_success(
          patch('zylch.tools.factory.GmailClient', return_value=mock_gmail_client), \
          patch('zylch.tools.factory.GoogleCalendarClient', return_value=mock_calendar_client), \
          patch('zylch.tools.factory.EmailArchiveManager', return_value=mock_email_archive), \
-         patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync), \
-         patch('zylch.tools.factory.JSONCache'):
+         patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync):
 
         result = await ToolFactory.create_all_tools(mock_config, current_business_id="test_business_123")
         tools, session_state = result
@@ -162,8 +161,7 @@ async def test_create_all_tools_with_pipedrive(
          patch('zylch.tools.factory.GoogleCalendarClient', return_value=mock_calendar_client), \
          patch('zylch.tools.factory.EmailArchiveManager', return_value=mock_email_archive), \
          patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync), \
-         patch('zylch.tools.factory.PipedriveClient', return_value=mock_pipedrive), \
-         patch('zylch.tools.factory.JSONCache'):
+         patch('zylch.tools.factory.PipedriveClient', return_value=mock_pipedrive):
 
         result = await ToolFactory.create_all_tools(mock_config, current_business_id="test_business_123")
         tools, session_state = result
@@ -190,8 +188,7 @@ async def test_create_all_tools_without_business_id(
          patch('zylch.tools.factory.GmailClient', return_value=mock_gmail_client), \
          patch('zylch.tools.factory.GoogleCalendarClient', return_value=mock_calendar_client), \
          patch('zylch.tools.factory.EmailArchiveManager', return_value=mock_email_archive), \
-         patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync), \
-         patch('zylch.tools.factory.JSONCache'):
+         patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync):
 
         result = await ToolFactory.create_all_tools(mock_config, current_business_id=None)
         tools, session_state = result
@@ -253,8 +250,7 @@ async def test_tool_categories(
          patch('zylch.tools.factory.GmailClient', return_value=mock_gmail_client), \
          patch('zylch.tools.factory.GoogleCalendarClient', return_value=mock_calendar_client), \
          patch('zylch.tools.factory.EmailArchiveManager', return_value=mock_email_archive), \
-         patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync), \
-         patch('zylch.tools.factory.JSONCache'):
+         patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync):
 
         result = await ToolFactory.create_all_tools(mock_config)
         tools, session_state = result
@@ -279,10 +275,8 @@ async def test_tool_categories(
         # Task tool (1) - uses pre-computed avatars from Supabase
         assert "get_tasks" in tool_names
 
-        # Contact tools (3)
-        assert "save_contact" in tool_names
+        # Memory/contact tools (2) - search_local_memory, get_contact
         assert "get_contact" in tool_names
-        assert "list_all_contacts" in tool_names
 
         # Calendar tools (4)
         assert "list_calendar_events" in tool_names
