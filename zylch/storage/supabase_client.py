@@ -2731,6 +2731,299 @@ class SupabaseStorage:
             return 0
 
 
+    # ==================== Scheduled Jobs ====================
+
+    def create_scheduled_job(
+        self,
+        owner_id: str,
+        job_type: str,
+        message: str,
+        callback_type: str = 'notification',
+        metadata: Optional[Dict[str, Any]] = None,
+        run_at: Optional[datetime] = None,
+        cron_expression: Optional[str] = None,
+        interval_seconds: Optional[int] = None,
+        condition_key: Optional[str] = None,
+        timeout_seconds: Optional[int] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Create a scheduled job.
+
+        Args:
+            owner_id: Firebase UID
+            job_type: 'reminder', 'recurring', or 'conditional'
+            message: Job message/instruction
+            callback_type: Type of callback (default: 'notification')
+            metadata: Additional job metadata
+            run_at: When to run (for one-time jobs)
+            cron_expression: Cron expression (for recurring jobs)
+            interval_seconds: Interval in seconds (for interval jobs)
+            condition_key: Key for conditional timeouts
+            timeout_seconds: Timeout in seconds (for conditional jobs)
+
+        Returns:
+            Created job record or None on error
+        """
+        try:
+            # Calculate next_run_at
+            next_run_at = run_at
+            if job_type == 'conditional' and timeout_seconds:
+                next_run_at = datetime.now(timezone.utc) + timedelta(seconds=timeout_seconds)
+
+            data = {
+                'owner_id': owner_id,
+                'job_type': job_type,
+                'message': message,
+                'callback_type': callback_type,
+                'metadata': metadata or {},
+                'run_at': run_at.isoformat() if run_at else None,
+                'cron_expression': cron_expression,
+                'interval_seconds': interval_seconds,
+                'condition_key': condition_key,
+                'timeout_seconds': timeout_seconds,
+                'next_run_at': next_run_at.isoformat() if next_run_at else None,
+                'status': 'pending'
+            }
+
+            result = self.client.table('scheduled_jobs').insert(data).execute()
+
+            if result.data:
+                logger.info(f"Created scheduled job {result.data[0]['id']} for {owner_id}")
+                return result.data[0]
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to create scheduled job: {e}")
+            return None
+
+    def get_scheduled_jobs(
+        self,
+        owner_id: str,
+        status: Optional[str] = None,
+        job_type: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get scheduled jobs for a user.
+
+        Args:
+            owner_id: Firebase UID
+            status: Filter by status (pending, completed, cancelled, failed)
+            job_type: Filter by job type
+
+        Returns:
+            List of job records
+        """
+        try:
+            query = self.client.table('scheduled_jobs')\
+                .select('*')\
+                .eq('owner_id', owner_id)
+
+            if status:
+                query = query.eq('status', status)
+            if job_type:
+                query = query.eq('job_type', job_type)
+
+            query = query.order('next_run_at', desc=False)
+            result = query.execute()
+
+            return result.data or []
+
+        except Exception as e:
+            logger.error(f"Failed to get scheduled jobs: {e}")
+            return []
+
+    def get_due_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get jobs that are due for execution.
+
+        Args:
+            limit: Maximum number of jobs to return
+
+        Returns:
+            List of due job records
+        """
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+
+            result = self.client.table('scheduled_jobs')\
+                .select('*')\
+                .eq('status', 'pending')\
+                .lte('next_run_at', now)\
+                .order('next_run_at', desc=False)\
+                .limit(limit)\
+                .execute()
+
+            return result.data or []
+
+        except Exception as e:
+            logger.error(f"Failed to get due jobs: {e}")
+            return []
+
+    def update_job_status(
+        self,
+        job_id: str,
+        status: str,
+        error: Optional[str] = None,
+        next_run_at: Optional[datetime] = None
+    ) -> bool:
+        """Update job status.
+
+        Args:
+            job_id: Job UUID
+            status: New status
+            error: Error message (for failed jobs)
+            next_run_at: Next run time (for recurring jobs)
+
+        Returns:
+            True if updated successfully
+        """
+        try:
+            data = {
+                'status': status,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }
+
+            if status == 'running':
+                data['last_run_at'] = datetime.now(timezone.utc).isoformat()
+
+            if status == 'completed' or status == 'failed':
+                # Increment run count
+                pass  # Handled separately if needed
+
+            if error:
+                data['last_error'] = error
+
+            if next_run_at:
+                data['next_run_at'] = next_run_at.isoformat()
+                data['status'] = 'pending'  # Reset to pending for next run
+
+            result = self.client.table('scheduled_jobs')\
+                .update(data)\
+                .eq('id', job_id)\
+                .execute()
+
+            return bool(result.data)
+
+        except Exception as e:
+            logger.error(f"Failed to update job status: {e}")
+            return False
+
+    def increment_job_run_count(self, job_id: str) -> bool:
+        """Increment job run count.
+
+        Args:
+            job_id: Job UUID
+
+        Returns:
+            True if updated successfully
+        """
+        try:
+            # Get current count
+            result = self.client.table('scheduled_jobs')\
+                .select('run_count')\
+                .eq('id', job_id)\
+                .execute()
+
+            if result.data:
+                current_count = result.data[0].get('run_count', 0) or 0
+                self.client.table('scheduled_jobs')\
+                    .update({'run_count': current_count + 1})\
+                    .eq('id', job_id)\
+                    .execute()
+                return True
+            return False
+
+        except Exception as e:
+            logger.error(f"Failed to increment job run count: {e}")
+            return False
+
+    def cancel_job(self, owner_id: str, job_id: str) -> bool:
+        """Cancel a scheduled job.
+
+        Args:
+            owner_id: Firebase UID (for ownership check)
+            job_id: Job UUID
+
+        Returns:
+            True if cancelled successfully
+        """
+        try:
+            result = self.client.table('scheduled_jobs')\
+                .update({
+                    'status': 'cancelled',
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                })\
+                .eq('id', job_id)\
+                .eq('owner_id', owner_id)\
+                .eq('status', 'pending')\
+                .execute()
+
+            if result.data:
+                logger.info(f"Cancelled job {job_id}")
+                return True
+            return False
+
+        except Exception as e:
+            logger.error(f"Failed to cancel job: {e}")
+            return False
+
+    def cancel_by_condition_key(self, owner_id: str, condition_key: str) -> int:
+        """Cancel all jobs with a specific condition key.
+
+        Args:
+            owner_id: Firebase UID
+            condition_key: Condition key to match
+
+        Returns:
+            Number of jobs cancelled
+        """
+        try:
+            result = self.client.table('scheduled_jobs')\
+                .update({
+                    'status': 'cancelled',
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                })\
+                .eq('owner_id', owner_id)\
+                .eq('condition_key', condition_key)\
+                .eq('status', 'pending')\
+                .execute()
+
+            count = len(result.data) if result.data else 0
+            if count > 0:
+                logger.info(f"Cancelled {count} jobs with condition_key={condition_key}")
+            return count
+
+        except Exception as e:
+            logger.error(f"Failed to cancel by condition key: {e}")
+            return 0
+
+    def delete_completed_jobs(self, owner_id: str, older_than_days: int = 30) -> int:
+        """Delete old completed/cancelled/failed jobs.
+
+        Args:
+            owner_id: Firebase UID
+            older_than_days: Delete jobs older than this many days
+
+        Returns:
+            Number of jobs deleted
+        """
+        try:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=older_than_days)).isoformat()
+
+            result = self.client.table('scheduled_jobs')\
+                .delete()\
+                .eq('owner_id', owner_id)\
+                .in_('status', ['completed', 'cancelled', 'failed'])\
+                .lt('updated_at', cutoff)\
+                .execute()
+
+            count = len(result.data) if result.data else 0
+            if count > 0:
+                logger.info(f"Deleted {count} old jobs for {owner_id}")
+            return count
+
+        except Exception as e:
+            logger.error(f"Failed to delete completed jobs: {e}")
+            return 0
+
+
 # DEPRECATED: Old FTS-only search function (kept for fallback)
 # Now using hybrid_search_emails from migrations/010_email_hybrid_search.sql
 """

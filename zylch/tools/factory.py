@@ -370,15 +370,16 @@ class ToolFactory:
             logger.info("Call tool initialized (StarChat/MrCall)")
 
         # Scheduler tools (5 tools) - for reminders and timed actions
-        scheduler_db_path = Path(config.cache_dir) / "scheduler.db"
+        # Use Supabase for persistence (multi-tenant, multi-instance)
+        from zylch.storage.supabase_client import SupabaseStorage
+        scheduler_supabase = SupabaseStorage.get_instance()
         scheduler = ZylchScheduler(
-            db_path=scheduler_db_path,
             owner_id=config.owner_id,
-            zylch_assistant_id=config.zylch_assistant_id
+            supabase_storage=scheduler_supabase,
         )
         scheduler.start()
         tools.extend(ToolFactory._create_scheduler_tools(scheduler))
-        logger.info("Scheduler tools initialized (APScheduler)")
+        logger.info("Scheduler tools initialized (Supabase)")
 
         # Get Tasks tool - returns pre-formatted task list from avatars
         # Much faster than having Claude format the list (~5s vs 27s)
