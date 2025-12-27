@@ -134,8 +134,9 @@ class TaskWorker:
         analyzed_count = 0
         action_count = 0
 
-        # Process emails - only analyze latest email per thread
-        all_emails = self.storage.get_emails(self.owner_id, limit=200)
+        # Process emails - only unprocessed ones, and only latest per thread
+        # Use task_processed_at to track which emails have been analyzed
+        all_emails = self.storage.get_unprocessed_emails_for_task(self.owner_id, limit=200)
 
         # Group by thread_id, keep only latest email per thread
         threads: Dict[str, Dict] = {}
@@ -145,19 +146,20 @@ class TaskWorker:
             if not existing or (email.get('date_timestamp') or 0) > (existing.get('date_timestamp') or 0):
                 threads[thread_id] = email
 
-        logger.debug(f"[TASK] {len(all_emails)} emails -> {len(threads)} unique threads")
+        logger.debug(f"[TASK] {len(all_emails)} unprocessed emails -> {len(threads)} unique threads")
 
         for email in threads.values():
             from_email = email.get('from_email', '').lower()
+            email_id = email.get('id', '')
 
             # Skip user's own emails (the single logical rule)
             if from_email in user_emails:
+                # Mark as processed but don't create task item
+                self.storage.mark_email_task_processed(self.owner_id, email_id)
                 continue
             if self.user_domain and self.user_domain in from_email:
-                continue
-
-            # Check if already analyzed
-            if self.storage.task_item_exists(self.owner_id, 'email', email.get('id', '')):
+                # Mark as processed but don't create task item
+                self.storage.mark_email_task_processed(self.owner_id, email_id)
                 continue
 
             # Get blob context for this contact
@@ -178,28 +180,24 @@ class TaskWorker:
             result = await self._analyze_event('email', event_data, blob_context)
             analyzed_count += 1
 
+            # Mark as processed regardless of result
+            self.storage.mark_email_task_processed(self.owner_id, email_id)
+
             if result:
-                result['event_id'] = email.get('id', '')
+                result['event_id'] = email_id
                 result['event_type'] = 'email'
                 result['contact_email'] = from_email
                 result['contact_name'] = email.get('from_name', '')
                 self.storage.store_task_item(self.owner_id, result)
                 action_count += 1
 
-        # Process calendar events (next 14 days)
-        now = datetime.now(timezone.utc)
-        end_date = now + timedelta(days=14)
-        events = self.storage.get_calendar_events(
-            self.owner_id,
-            start_time=now,
-            end_time=end_date
-        )
+        # Process calendar events - only unprocessed ones
+        # Use task_processed_at to track which events have been analyzed
+        events = self.storage.get_unprocessed_calendar_events_for_task(self.owner_id, limit=100)
+        logger.debug(f"[TASK] Found {len(events)} unprocessed calendar events")
+
         for event in events:
             event_id = event.get('id', '')
-
-            # Check if already analyzed
-            if self.storage.task_item_exists(self.owner_id, 'calendar', event_id):
-                continue
 
             # Get attendees for context
             attendees = event.get('attendees', [])
@@ -223,6 +221,9 @@ class TaskWorker:
 
             result = await self._analyze_event('calendar', event_data, blob_context)
             analyzed_count += 1
+
+            # Mark as processed regardless of result
+            self.storage.mark_calendar_event_task_processed(self.owner_id, event_id)
 
             if result:
                 result['event_id'] = event_id
