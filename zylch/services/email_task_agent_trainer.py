@@ -84,8 +84,8 @@ The generated prompt will receive these template variables:
 OUTPUT ONLY THE PROMPT TEXT. No explanations, no markdown code blocks. Just the prompt itself."""
 
 
-class TaskAgentBuilder:
-    """Builds personalized task detection prompt by analyzing user patterns."""
+class EmailTaskAgentTrainer:
+    """Builds personalized task detection prompt by analyzing user email patterns."""
 
     def __init__(
         self,
@@ -94,7 +94,7 @@ class TaskAgentBuilder:
         anthropic_api_key: str,
         user_email: str
     ):
-        """Initialize TaskAgentBuilder.
+        """Initialize EmailTaskAgentTrainer.
 
         Args:
             storage: SupabaseStorage instance

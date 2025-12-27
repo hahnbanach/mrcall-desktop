@@ -152,8 +152,8 @@ The generated prompt will receive these template variables:
 OUTPUT ONLY THE PROMPT TEXT. No explanations, no markdown code blocks. Just the prompt itself."""
 
 
-class EmailAgentBuilder:
-    """Builds personalized email agent by analyzing user's email patterns."""
+class EmailMemoryAgentTrainer:
+    """Builds personalized email memory agent by analyzing user's email patterns."""
 
     def __init__(
         self,
