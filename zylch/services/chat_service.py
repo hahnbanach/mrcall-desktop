@@ -217,6 +217,8 @@ class ChatService:
                 args = parts[1:] if len(parts) > 1 else []
                 execution_time_ms = (time.time() - start_time) * 1000
 
+                logger.debug(f"[CMD] Parsed command: cmd={cmd}, args={args}, '--help' in args={'--help' in args}, cmd in COMMAND_HELP={cmd in COMMAND_HELP}")
+
                 # Check --help first (before dispatching to handler)
                 if '--help' in args and cmd in COMMAND_HELP:
                     help_info = COMMAND_HELP[cmd]
