@@ -26,7 +26,7 @@ firebase-admin>=6.0.0
 sqlalchemy>=2.0.0
 
 # Scheduling
-apscheduler>=3.10.0
+croniter>=1.4.0  # Cron expression parsing for recurring jobs
 
 # ML/Vector Search (zylch_memory dependencies)
 # Use CPU-only torch to avoid 3GB+ NVIDIA CUDA libraries
