@@ -197,6 +197,26 @@ class ChatService:
                     "session_id": session_id
                 }
 
+            # TASK CLOSE PATTERN - Match "close #N", "done #N", "complete #N", "finish #N"
+            task_close_match = re.match(r'(?:close|done|complete|finish)\s*#?(\d+)', user_message.lower().strip())
+            if task_close_match:
+                task_num = int(task_close_match.group(1))
+                logger.info(f"Task close match: '{user_message}' -> close task #{task_num}")
+                from zylch.services.command_handlers import handle_task_close
+                owner_id = (context.get("user_id") if context else None) or user_id
+                response_text = await handle_task_close(task_num, owner_id)
+                return {
+                    "response": self._prepend_notification(response_text, notification_banner),
+                    "tool_calls": [],
+                    "metadata": {
+                        "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                        "command": "task_close",
+                        "task_num": task_num,
+                        "instant": True
+                    },
+                    "session_id": session_id
+                }
+
             # INTERCEPT SLASH COMMANDS - NEVER SEND TO ANTHROPIC
             if user_message.strip().startswith('/'):
                 from zylch.services.command_handlers import COMMAND_HANDLERS, COMMAND_HELP

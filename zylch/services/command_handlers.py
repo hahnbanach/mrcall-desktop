@@ -2198,6 +2198,47 @@ def _load_blob_context(storage, owner_id: str, blob_ids: list) -> str:
         return ""
 
 
+async def handle_task_close(task_num: int, owner_id: str) -> str:
+    """Close/complete a task by its display number.
+
+    Args:
+        task_num: 1-indexed task number from /tasks output
+        owner_id: Firebase UID
+
+    Returns:
+        Confirmation message or error
+    """
+    from zylch.storage.supabase_client import SupabaseStorage
+    storage = SupabaseStorage.get_instance()
+
+    # Get all tasks (same order as displayed in /tasks)
+    tasks = storage.get_task_items(owner_id, action_required=True)
+
+    if not tasks:
+        return "No tasks found."
+
+    # Group by urgency: high -> medium -> low (same as display)
+    high_medium = [t for t in tasks if t.get('urgency') in ('high', 'medium')]
+    low = [t for t in tasks if t.get('urgency') == 'low']
+    tasks = high_medium + low
+
+    if task_num < 1 or task_num > len(tasks):
+        return f"Task #{task_num} not found. Valid range: #1 - #{len(tasks)}"
+
+    task = tasks[task_num - 1]  # 0-indexed
+    task_id = task.get('id')
+    contact = task.get('contact_name') or task.get('contact_email') or 'Unknown'
+    action = task.get('suggested_action', '')
+
+    # Mark as complete
+    success = storage.mark_task_complete(owner_id, task_id)
+
+    if success:
+        return f"**✅ Task #{task_num} closed**\n\n**{contact}** - marked as complete."
+    else:
+        return f"**❌ Failed to close task #{task_num}**"
+
+
 async def handle_task_detail(task_num: int, owner_id: str) -> str:
     """Handle 'more on #N' - show full email/event for a task.
 
