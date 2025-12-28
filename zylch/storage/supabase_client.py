@@ -337,6 +337,152 @@ class SupabaseStorage:
 
         return len(result.data) > 0 if result.data else False
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # DRAFTS - Email drafts stored in Supabase
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def create_draft(
+        self,
+        owner_id: str,
+        to: str | list,
+        subject: str,
+        body: str,
+        in_reply_to: str = None,
+        references: list = None,
+        thread_id: str = None,
+        provider: str = 'google'
+    ) -> Dict[str, Any]:
+        """Create a draft email in Supabase.
+
+        Args:
+            owner_id: Firebase UID
+            to: Recipient email(s)
+            subject: Email subject
+            body: Email body text
+            in_reply_to: Message-ID for replies
+            references: List of message IDs for threading
+            thread_id: Gmail/Outlook thread ID
+            provider: 'google' or 'microsoft'
+
+        Returns:
+            Created draft record with UUID id
+        """
+        to_list = to if isinstance(to, list) else [to]
+        result = self.client.table('drafts').insert({
+            'owner_id': owner_id,
+            'to_addresses': to_list,
+            'subject': subject,
+            'body': body,
+            'in_reply_to': in_reply_to,
+            'references': references or [],
+            'thread_id': thread_id,
+            'provider': provider,
+            'status': 'draft'
+        }).execute()
+        return result.data[0] if result.data else None
+
+    def list_drafts(self, owner_id: str, status: str = 'draft') -> List[Dict[str, Any]]:
+        """List drafts for a user.
+
+        Args:
+            owner_id: Firebase UID
+            status: Filter by status ('draft', 'sending', 'sent', 'failed')
+
+        Returns:
+            List of draft records, newest first
+        """
+        result = self.client.table('drafts')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('status', status)\
+            .order('created_at', desc=True)\
+            .execute()
+        return result.data or []
+
+    def get_draft(self, owner_id: str, draft_id: str) -> Dict[str, Any] | None:
+        """Get a specific draft by ID.
+
+        Args:
+            owner_id: Firebase UID
+            draft_id: UUID of the draft
+
+        Returns:
+            Draft record or None
+        """
+        try:
+            result = self.client.table('drafts')\
+                .select('*')\
+                .eq('owner_id', owner_id)\
+                .eq('id', draft_id)\
+                .single()\
+                .execute()
+            return result.data
+        except Exception:
+            return None
+
+    def update_draft(
+        self,
+        owner_id: str,
+        draft_id: str,
+        updates: Dict[str, Any]
+    ) -> Dict[str, Any] | None:
+        """Update a draft.
+
+        Args:
+            owner_id: Firebase UID
+            draft_id: UUID of the draft
+            updates: Fields to update
+
+        Returns:
+            Updated draft record or None
+        """
+        result = self.client.table('drafts')\
+            .update(updates)\
+            .eq('owner_id', owner_id)\
+            .eq('id', draft_id)\
+            .execute()
+        return result.data[0] if result.data else None
+
+    def delete_draft(self, owner_id: str, draft_id: str) -> bool:
+        """Delete a draft.
+
+        Args:
+            owner_id: Firebase UID
+            draft_id: UUID of the draft
+
+        Returns:
+            True if deleted, False otherwise
+        """
+        result = self.client.table('drafts')\
+            .delete()\
+            .eq('owner_id', owner_id)\
+            .eq('id', draft_id)\
+            .execute()
+        return len(result.data) > 0 if result.data else False
+
+    def mark_draft_sent(
+        self,
+        owner_id: str,
+        draft_id: str,
+        sent_message_id: str
+    ) -> Dict[str, Any] | None:
+        """Mark draft as sent after email was delivered.
+
+        Args:
+            owner_id: Firebase UID
+            draft_id: UUID of the draft
+            sent_message_id: Gmail/Outlook message ID after sending
+
+        Returns:
+            Updated draft record or None
+        """
+        from datetime import datetime, timezone
+        return self.update_draft(owner_id, draft_id, {
+            'status': 'sent',
+            'sent_at': datetime.now(timezone.utc).isoformat(),
+            'sent_message_id': sent_message_id
+        })
+
     def get_email_stats(self, owner_id: str) -> Dict[str, Any]:
         """Get email archive statistics."""
         # Count total emails

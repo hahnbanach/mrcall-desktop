@@ -320,6 +320,9 @@ class GmailClient:
         subject: str,
         body: str,
         from_email: Optional[str] = None,
+        in_reply_to: Optional[str] = None,
+        references: Optional[str] = None,
+        thread_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Send email via Gmail API.
 
@@ -328,6 +331,9 @@ class GmailClient:
             subject: Email subject
             body: Email body (plain text or HTML)
             from_email: Sender email (optional)
+            in_reply_to: Message-ID of email being replied to (for threading)
+            references: References header for conversation threading
+            thread_id: Gmail thread ID to place message in (for replies)
 
         Returns:
             Sent message info
@@ -347,16 +353,29 @@ class GmailClient:
         if from_email:
             message['from'] = from_email
 
+        # Add threading headers if this is a reply
+        if in_reply_to:
+            message['In-Reply-To'] = in_reply_to
+        if references:
+            message['References'] = references
+
         # Encode message
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
 
         try:
+            # Build request body
+            send_body = {'raw': raw_message}
+
+            # Include threadId to place message in existing conversation
+            if thread_id:
+                send_body['threadId'] = thread_id
+
             sent_message = self.service.users().messages().send(
                 userId='me',
-                body={'raw': raw_message}
+                body=send_body
             ).execute()
 
-            logger.info(f"Sent email to {to}: {subject}")
+            logger.info(f"Sent email to {to}: {subject}" + (f" in thread {thread_id}" if thread_id else ""))
             return sent_message
 
         except Exception as e:

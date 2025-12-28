@@ -269,7 +269,7 @@ class ToolFactory:
 
         # Email tools (7 tools) - Gmail or Outlook
         tools.extend(ToolFactory._create_gmail_tools(
-            email_client, calendar, email_sync,
+            email_client, calendar, supabase_storage, email_sync,
             config.owner_id, config.zylch_assistant_id
         ))
 
@@ -388,6 +388,7 @@ class ToolFactory:
     def _create_gmail_tools(
         gmail_client,
         calendar_client,
+        storage,
         email_sync_manager=None,
         owner_id: str = "owner_default",
         zylch_assistant_id: str = "default_assistant",
@@ -395,11 +396,11 @@ class ToolFactory:
         """Create Gmail-related tools."""
         return [
             _GmailSearchTool(gmail_client, owner_id, zylch_assistant_id),
-            _CreateDraftTool(gmail_client),
-            _ListDraftsTool(gmail_client),
+            _CreateDraftTool(storage, owner_id),
+            _ListDraftsTool(storage, owner_id),
             _EditDraftTool(gmail_client),
             _UpdateDraftTool(gmail_client),
-            _SendDraftTool(gmail_client, email_sync_manager),
+            _SendDraftTool(gmail_client, storage, owner_id),
             _RefreshGoogleAuthTool(gmail_client, calendar_client),
         ]
 
@@ -762,24 +763,38 @@ class _GmailSearchTool(Tool):
 
 
 class _CreateDraftTool(Tool):
-    """Create a Gmail draft."""
-    def __init__(self, gmail_client):
+    """Create a draft email in Supabase."""
+    def __init__(self, storage, owner_id: str):
         super().__init__(
-            name="create_gmail_draft",
-            description="Create a draft email in Gmail that the user can review and send later"
+            name="create_draft",
+            description="Create a draft email that the user can review and send later"
         )
-        self.gmail = gmail_client
+        self.storage = storage
+        self.owner_id = owner_id
 
     async def execute(self, to: str, subject: str, body: str, in_reply_to: str = None, references: str = None, thread_id: str = None):
         try:
-            draft = self.gmail.create_draft(
+            # Convert references string to list if needed
+            refs_list = None
+            if references:
+                refs_list = [r.strip() for r in references.split()] if isinstance(references, str) else references
+
+            draft = self.storage.create_draft(
+                owner_id=self.owner_id,
                 to=to,
                 subject=subject,
                 body=body,
                 in_reply_to=in_reply_to,
-                references=references,
+                references=refs_list,
                 thread_id=thread_id
             )
+
+            if not draft:
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error="Failed to create draft in database"
+                )
 
             thread_info = " (in reply to thread)" if in_reply_to else ""
             return ToolResult(
@@ -792,8 +807,7 @@ class _CreateDraftTool(Tool):
                         f"{'─' * 70}\n"
                         f"{body}\n"
                         f"{'─' * 70}\n\n"
-                        f"The draft is now available in Gmail Drafts folder. "
-                        f"You can review and send it anytime."
+                        f"Draft saved. Say 'send it' when ready to send."
             )
         except Exception as e:
             logger.error(f"Failed to create draft: {e}")
@@ -806,7 +820,7 @@ class _CreateDraftTool(Tool):
     def get_schema(self):
         return {
             "name": self.name,
-            "description": "Create a draft email in Gmail. The draft will be saved in Gmail's Drafts folder for the user to review and send later. If this is a REPLY to an existing email, you MUST provide the in_reply_to and references headers from the original message to keep the draft in the same conversation thread.",
+            "description": "Create a draft email. The draft is saved locally and can be sent later. If this is a REPLY to an existing email, provide the in_reply_to and references headers from the original message.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -824,15 +838,15 @@ class _CreateDraftTool(Tool):
                     },
                     "in_reply_to": {
                         "type": "string",
-                        "description": "Message-ID of the email being replied to (REQUIRED for replies to keep draft in thread). Find this in the original message headers."
+                        "description": "Message-ID of the email being replied to (for replies)"
                     },
                     "references": {
                         "type": "string",
-                        "description": "References header from the original message (REQUIRED for replies to maintain conversation history). Copy this from the original message headers."
+                        "description": "References header from the original message (for replies)"
                     },
                     "thread_id": {
                         "type": "string",
-                        "description": "Gmail thread ID from search_emails result (CRITICAL for replies). When replying, you MUST pass this to keep the draft in the conversation thread."
+                        "description": "Gmail thread ID (for replies to keep in conversation)"
                     }
                 },
                 "required": ["to", "subject", "body"]
@@ -841,48 +855,47 @@ class _CreateDraftTool(Tool):
 
 
 class _ListDraftsTool(Tool):
-    """List all Gmail drafts."""
-    def __init__(self, gmail_client):
+    """List all drafts from Supabase."""
+    def __init__(self, storage, owner_id: str):
         super().__init__(
-            name="list_gmail_drafts",
-            description="List all draft emails in Gmail"
+            name="list_drafts",
+            description="List all draft emails"
         )
-        self.gmail = gmail_client
+        self.storage = storage
+        self.owner_id = owner_id
 
     async def execute(self):
         try:
-            drafts = self.gmail.list_drafts()
+            drafts = self.storage.list_drafts(self.owner_id)
 
             if not drafts:
                 return ToolResult(
                     status=ToolStatus.SUCCESS,
                     data={"drafts": []},
-                    message="📭 No drafts found in Gmail."
+                    message="📭 No drafts found."
                 )
 
-            # Get details for each draft
+            # Format draft details
             draft_details = []
             for draft in drafts[:20]:  # Limit to 20 most recent
-                draft_id = draft['id']
-                try:
-                    details = self.gmail.get_draft(draft_id)
-                    draft_details.append({
-                        'id': draft_id,
-                        'to': details['to'],
-                        'subject': details['subject'],
-                        'body_preview': details['body'][:100] + '...' if len(details['body']) > 100 else details['body']
-                    })
-                except Exception as e:
-                    logger.warning(f"Failed to get details for draft {draft_id}: {e}")
-                    continue
+                to_addresses = draft.get('to_addresses', [])
+                to_str = ', '.join(to_addresses) if to_addresses else 'Unknown'
+                body = draft.get('body', '')
+                draft_details.append({
+                    'id': draft['id'],
+                    'to': to_str,
+                    'subject': draft.get('subject', '(no subject)'),
+                    'body_preview': body[:100] + '...' if len(body) > 100 else body,
+                    'created_at': draft.get('created_at')
+                })
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
                 data={"drafts": draft_details},
-                message=f"📧 Trovate {len(draft_details)} bozze:\n\n" +
+                message=f"📧 Found {len(draft_details)} drafts:\n\n" +
                        "\n".join([
-                           f"**Draft {i+1}** (ID: {d['id']})\n"
-                           f"📧 A: {d['to']}\n"
+                           f"**Draft {i+1}** (ID: {d['id'][:8]}...)\n"
+                           f"📧 To: {d['to']}\n"
                            f"📝 Subject: {d['subject']}\n"
                            f"Preview: {d['body_preview']}\n"
                            for i, d in enumerate(draft_details)
@@ -900,7 +913,7 @@ class _ListDraftsTool(Tool):
     def get_schema(self):
         return {
             "name": self.name,
-            "description": "List all draft emails currently saved in Gmail. Returns draft IDs, recipients, subjects, and previews.",
+            "description": "List all draft emails. Returns draft IDs, recipients, subjects, and previews.",
             "input_schema": {
                 "type": "object",
                 "properties": {},
@@ -1078,47 +1091,92 @@ class _UpdateDraftTool(Tool):
 
 
 class _SendDraftTool(Tool):
-    """Send a Gmail draft."""
-    def __init__(self, gmail_client, email_sync_manager=None):
+    """Send a draft from Supabase via Gmail/Outlook API."""
+    def __init__(self, gmail_client, storage, owner_id: str):
         super().__init__(
-            name="send_gmail_draft",
-            description="Send a Gmail draft email"
+            name="send_draft",
+            description="Send a draft email"
         )
         self.gmail = gmail_client
-        self.email_sync = email_sync_manager
+        self.storage = storage
+        self.owner_id = owner_id
 
-    async def execute(self, draft_id: str):
+    async def execute(self, draft_id: str = None):
         try:
-            # Get draft details before sending
-            draft = self.gmail.get_draft(draft_id)
-
-            # Send the draft
-            sent_message = self.gmail.send_draft(draft_id)
-
-            # Auto-sync email cache after send (updates threads.json and gap analysis)
-            if self.email_sync:
-                logger.info("🔄 Syncing email cache after send...")
-                try:
-                    sync_result = self.email_sync.sync_emails(
-                        days_back=1,  # Only last 24 hours (fast incremental)
-                        force_full=False
+            # If no draft_id, get the most recent draft
+            if not draft_id:
+                drafts = self.storage.list_drafts(self.owner_id)
+                if not drafts:
+                    return ToolResult(
+                        status=ToolStatus.ERROR,
+                        data=None,
+                        error="No drafts found. Create a draft first."
                     )
-                    updated = sync_result.get('updated_threads', 0)
-                    logger.info(f"✅ Cache updated: {updated} threads refreshed")
-                except Exception as e:
-                    # Non-critical - user can manually run /sync if needed
-                    logger.warning(f"Post-send cache sync failed (non-critical): {e}")
+                draft = drafts[0]  # Most recent
+                draft_id = draft['id']
+            else:
+                # Get draft from Supabase
+                draft = self.storage.get_draft(self.owner_id, draft_id)
+
+            if not draft:
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error=f"Draft not found: {draft_id}"
+                )
+
+            # Extract email details
+            to_addresses = draft.get('to_addresses', [])
+            to = ', '.join(to_addresses) if to_addresses else None
+            subject = draft.get('subject', '')
+            body = draft.get('body', '')
+            in_reply_to = draft.get('in_reply_to')
+            references = draft.get('references')
+            thread_id = draft.get('thread_id')
+
+            if not to:
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error="Draft has no recipient address"
+                )
+
+            # Send via Gmail API
+            sent_message = self.gmail.send_message(
+                to=to,
+                subject=subject,
+                body=body,
+                in_reply_to=in_reply_to,
+                references=' '.join(references) if references else None,
+                thread_id=thread_id
+            )
+
+            # Mark draft as sent in Supabase
+            self.storage.mark_draft_sent(
+                self.owner_id,
+                draft_id,
+                sent_message.get('id', '')
+            )
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
                 data={"message_id": sent_message.get('id')},
                 message=f"📧 Email sent successfully!\n"
-                        f"✉️  To: {draft['to']}\n"
-                        f"📝 Subject: {draft['subject']}\n\n"
-                        f"Email sent and draft removed from Drafts folder."
+                        f"✉️  To: {to}\n"
+                        f"📝 Subject: {subject}\n\n"
+                        f"Email sent and draft marked as sent."
             )
         except Exception as e:
             logger.error(f"Failed to send draft: {e}")
+            # Mark as failed if we have a draft_id
+            if draft_id:
+                try:
+                    self.storage.update_draft(self.owner_id, draft_id, {
+                        'status': 'failed',
+                        'error_message': str(e)
+                    })
+                except Exception:
+                    pass
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
@@ -1128,16 +1186,16 @@ class _SendDraftTool(Tool):
     def get_schema(self):
         return {
             "name": self.name,
-            "description": "Send a Gmail draft. The draft will be sent immediately and removed from the Drafts folder. IMPORTANT: Always confirm with the user before sending.",
+            "description": "Send a draft email. If no draft_id provided, sends the most recent draft. IMPORTANT: Always confirm with the user before sending.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "draft_id": {
                         "type": "string",
-                        "description": "Gmail draft ID to send (returned when draft was created)"
+                        "description": "Draft ID to send (optional - uses most recent if not provided)"
                     }
                 },
-                "required": ["draft_id"]
+                "required": []
             }
         }
 
