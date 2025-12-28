@@ -2138,6 +2138,12 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
         if not tasks:
             return "No tasks found. Run `/tasks refresh` first."
 
+        # Apply same low-task limit as format_task_items() (10 max)
+        high_medium = [t for t in tasks if t.get('urgency') in ('high', 'medium')]
+        low = [t for t in tasks if t.get('urgency') == 'low'][:10]
+        tasks = high_medium + low
+        logger.debug(f"[TASK_DETAIL] After low limit: {len(tasks)} tasks")
+
         if task_num < 1 or task_num > len(tasks):
             return f"Task #{task_num} not found. Valid range: #1 - #{len(tasks)}"
 
