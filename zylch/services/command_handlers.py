@@ -17,6 +17,49 @@ from zylch.config import settings
 logger = logging.getLogger(__name__)
 
 
+def format_task_items(tasks: list) -> str:
+    """Format task items as numbered list grouped by urgency."""
+    if not tasks:
+        return "🎉 No action needed! You're all caught up."
+
+    lines = ["**📋 Tasks Needing Action**\n"]
+
+    # Group by urgency
+    high = [t for t in tasks if t.get('urgency') == 'high']
+    medium = [t for t in tasks if t.get('urgency') == 'medium']
+    low = [t for t in tasks if t.get('urgency') == 'low'][:10]  # Limit low to 10
+
+    idx = 1
+    if high:
+        lines.append("🔴 **HIGH PRIORITY:**")
+        for task in high:
+            name = task.get('contact_name') or task.get('contact_email', 'Unknown')
+            action = task.get('suggested_action', 'Review')
+            lines.append(f"{idx}. **{name}**: {action}")
+            idx += 1
+        lines.append("")
+
+    if medium:
+        lines.append("⚡ **MEDIUM PRIORITY:**")
+        for task in medium:
+            name = task.get('contact_name') or task.get('contact_email', 'Unknown')
+            action = task.get('suggested_action', 'Review')
+            lines.append(f"{idx}. **{name}**: {action}")
+            idx += 1
+        lines.append("")
+
+    if low:
+        lines.append("💤 **LOW PRIORITY:**")
+        for task in low:
+            name = task.get('contact_name') or task.get('contact_email', 'Unknown')
+            action = task.get('suggested_action', 'Review')
+            lines.append(f"{idx}. **{name}**: {action}")
+            idx += 1
+
+    lines.append(f"\n**Total: {idx - 1} items** | `more on #N` for details")
+    return "\n".join(lines)
+
+
 async def handle_echo(args: List[str] = None) -> str:
     """Echo back the provided text."""
     if not args:
@@ -1978,7 +2021,6 @@ Run `/sync` to fetch calendar events."""
 async def handle_tasks(args: List[str], owner_id: str) -> str:
     """Handle /tasks command - list items needing action using LLM analysis."""
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch.services.task_formatter import format_task_items
     from zylch.agents.task_agent import TaskWorker
     from zylch.api.token_storage import get_email
 
