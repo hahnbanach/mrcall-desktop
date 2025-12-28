@@ -34,8 +34,8 @@ class MemoryWorker:
         self,
         storage: SupabaseStorage,
         owner_id: str,
-        api_key: str = "",
-        provider: str = "anthropic"
+        api_key: str,
+        provider: str
     ):
         """Initialize MemoryWorker.
 

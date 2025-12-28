@@ -2103,13 +2103,14 @@ This analyzes your email patterns to understand:
 
 Then run `/tasks` again."""
 
-        # Get Anthropic API key
-        anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
-        if not anthropic_key:
-            return """❌ **Anthropic API key required**
+        # Get LLM provider and API key
+        from zylch.api.token_storage import get_active_llm_provider
+        llm_provider, api_key = get_active_llm_provider(owner_id)
+        if not api_key or not llm_provider:
+            return """❌ **LLM API key required**
 
-Connect your Anthropic account:
-`/connect anthropic`"""
+Connect your LLM provider:
+`/connect anthropic` or `/connect openai` or `/connect mistral`"""
 
         # Get user email
         user_email = get_email(owner_id) or ''
@@ -2136,7 +2137,7 @@ Run `/sync` first to get fresh emails, then `/tasks refresh`."""
                 logger.warning(f"Could not check last sync: {e}")
 
         # Create worker and get tasks
-        worker = TaskWorker(storage, owner_id, anthropic_key, user_email)
+        worker = TaskWorker(storage, owner_id, api_key, llm_provider, user_email)
         tasks, _ = await worker.get_tasks(refresh=refresh)
 
         if not tasks:
@@ -2524,7 +2525,8 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
             return f"❌ Unknown channel: `{channel}`\n\nValid channels: `email`, `calendar`, `all`"
 
         # Get common requirements
-        anthropic_key = storage.get_anthropic_key(owner_id) or settings.anthropic_api_key
+        from zylch.api.token_storage import get_active_llm_provider
+        llm_provider, api_key = get_active_llm_provider(owner_id)
         user_email = get_email(owner_id)
 
         # Build agent_type for DB storage (e.g., 'memory_email', 'task_calendar')
@@ -2536,10 +2538,10 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
         # =====================
         if domain == 'memory':
             if action == 'train':
-                return await _handle_memory_train(storage, owner_id, channel, anthropic_key, user_email)
+                return await _handle_memory_train(storage, owner_id, channel, api_key, llm_provider, user_email)
 
             elif action == 'process':
-                return await _handle_memory_process(storage, owner_id, channel, anthropic_key)
+                return await _handle_memory_process(storage, owner_id, channel, api_key, llm_provider)
 
             elif action == 'show':
                 return await _handle_agent_show(storage, owner_id, domain, channel)
@@ -2552,10 +2554,10 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
         # =====================
         elif domain == 'task':
             if action == 'train':
-                return await _handle_task_train(storage, owner_id, channel, anthropic_key, user_email)
+                return await _handle_task_train(storage, owner_id, channel, api_key, llm_provider, user_email)
 
             elif action == 'process':
-                return await _handle_task_process(storage, owner_id, channel, anthropic_key, user_email)
+                return await _handle_task_process(storage, owner_id, channel, api_key, llm_provider, user_email)
 
             elif action == 'show':
                 return await _handle_agent_show(storage, owner_id, domain, channel)
@@ -2574,15 +2576,15 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 # MEMORY AGENT HELPERS
 # =====================
 
-async def _handle_memory_train(storage, owner_id: str, channel: str, anthropic_key: str, user_email: str) -> str:
+async def _handle_memory_train(storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str) -> str:
     """Train memory extraction agent for specified channel."""
     from zylch.services.email_memory_agent_trainer import EmailMemoryAgentTrainer
 
-    if not anthropic_key:
-        return """❌ **Anthropic API key required**
+    if not api_key or not llm_provider:
+        return """❌ **LLM API key required**
 
-Connect your Anthropic account:
-`/connect anthropic`"""
+Connect your LLM provider:
+`/connect anthropic` or `/connect openai` or `/connect mistral`"""
 
     if not user_email:
         return """❌ **User email not found**
@@ -2608,7 +2610,7 @@ Then run this command again."""
                 results.append(f"📧 **Email:** No emails found - skipped")
                 continue
 
-            builder = EmailMemoryAgentTrainer(storage, owner_id, anthropic_key, user_email)
+            builder = EmailMemoryAgentTrainer(storage, owner_id, api_key, user_email, llm_provider)
             agent_prompt, metadata = await builder.build_memory_email_prompt()
             storage.store_agent_prompt(owner_id, 'memory_email', agent_prompt, metadata)
             results.append(f"📧 **Email:** Agent created ({metadata.get('emails_analyzed', 0)} emails analyzed)")
@@ -2626,7 +2628,7 @@ Then run this command again."""
 - `/agent memory process {channel}` to extract facts"""
 
 
-async def _handle_memory_process(storage, owner_id: str, channel: str, anthropic_key: str) -> str:
+async def _handle_memory_process(storage, owner_id: str, channel: str, api_key: str, llm_provider: str) -> str:
     """Start memory processing as a background job.
 
     Creates a background job that runs in a thread pool, returning immediately.
@@ -2635,11 +2637,11 @@ async def _handle_memory_process(storage, owner_id: str, channel: str, anthropic
     import asyncio
     from zylch.services.job_executor import JobExecutor
 
-    if not anthropic_key:
-        return """❌ **Anthropic API key required**
+    if not api_key or not llm_provider:
+        return """❌ **LLM API key required**
 
-Connect your Anthropic account:
-`/connect anthropic`"""
+Connect your LLM provider:
+`/connect anthropic` or `/connect openai` or `/connect mistral`"""
 
     # Check for custom agent before starting job
     if channel in ['email', 'all']:
@@ -2672,7 +2674,8 @@ Job ID: `{job['id']}`"""
         asyncio.create_task(executor.execute_job(
             job["id"],
             owner_id,
-            anthropic_key,
+            api_key,
+            llm_provider,
             ""  # user_email not needed for memory processing
         ))
 
@@ -2694,15 +2697,15 @@ Job ID: `{job['id']}`
 # TASK AGENT HELPERS
 # =====================
 
-async def _handle_task_train(storage, owner_id: str, channel: str, anthropic_key: str, user_email: str) -> str:
+async def _handle_task_train(storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str) -> str:
     """Train task detection agent for specified channel."""
     from zylch.services.email_task_agent_trainer import EmailTaskAgentTrainer
 
-    if not anthropic_key:
-        return """❌ **Anthropic API key required**
+    if not api_key or not llm_provider:
+        return """❌ **LLM API key required**
 
-Connect your Anthropic account:
-`/connect anthropic`"""
+Connect your LLM provider:
+`/connect anthropic` or `/connect openai` or `/connect mistral`"""
 
     if not user_email:
         return """❌ **User email not found**
@@ -2728,7 +2731,7 @@ Then run this command again."""
                 results.append(f"📧 **Email:** No emails found - skipped")
                 continue
 
-            builder = EmailTaskAgentTrainer(storage, owner_id, anthropic_key, user_email)
+            builder = EmailTaskAgentTrainer(storage, owner_id, api_key, user_email, llm_provider)
             agent_prompt, metadata = await builder.build_task_prompt()
             storage.store_agent_prompt(owner_id, 'task_email', agent_prompt, metadata)
             results.append(f"📧 **Email:** Agent created ({metadata.get('threads_analyzed', 0)} threads analyzed)")
@@ -2746,7 +2749,7 @@ Then run this command again."""
 - `/agent task process {channel}` to detect tasks"""
 
 
-async def _handle_task_process(storage, owner_id: str, channel: str, anthropic_key: str, user_email: str) -> str:
+async def _handle_task_process(storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str) -> str:
     """Start task detection as a background job.
 
     Creates a background job that runs in a thread pool, returning immediately.
@@ -2755,11 +2758,11 @@ async def _handle_task_process(storage, owner_id: str, channel: str, anthropic_k
     import asyncio
     from zylch.services.job_executor import JobExecutor
 
-    if not anthropic_key:
-        return """❌ **Anthropic API key required**
+    if not api_key or not llm_provider:
+        return """❌ **LLM API key required**
 
-Connect your Anthropic account:
-`/connect anthropic`"""
+Connect your LLM provider:
+`/connect anthropic` or `/connect openai` or `/connect mistral`"""
 
     # Check for custom agent before starting job
     if channel in ['email', 'all']:
@@ -2792,7 +2795,8 @@ Job ID: `{job['id']}`"""
         asyncio.create_task(executor.execute_job(
             job["id"],
             owner_id,
-            anthropic_key,
+            api_key,
+            llm_provider,
             user_email or ""
         ))
 

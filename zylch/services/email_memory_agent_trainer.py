@@ -160,7 +160,7 @@ class EmailMemoryAgentTrainer:
         owner_id: str,
         api_key: str,
         user_email: str,
-        provider: str = "anthropic"
+        provider: str
     ):
         """Initialize PromptBuilder.
 

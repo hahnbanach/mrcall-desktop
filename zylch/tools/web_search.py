@@ -26,7 +26,7 @@ class WebSearchTool(Tool):
     explaining this limitation.
     """
 
-    def __init__(self, api_key: str, provider: str = "anthropic"):
+    def __init__(self, api_key: str, provider: str):
         super().__init__(
             name="web_search",
             description="Search the web for current information. Use when user explicitly asks to search online or needs up-to-date information."
