@@ -1445,12 +1445,12 @@ async def mrcall_oauth_callback(
     try:
         token_url = f"{settings.mrcall_base_url.rstrip('/')}/oauth/token"
         request_body = {
-            "grantType": "authorization_code",
+            "grant_type": "authorization_code",
             "code": code,
-            "redirectUri": "http://localhost:8766/callback",
-            "clientId": settings.mrcall_client_id,
-            "clientSecret": settings.mrcall_client_secret,
-            "codeVerifier": code_verifier
+            "redirect_uri": "http://localhost:8766/callback",
+            "client_id": settings.mrcall_client_id,
+            "client_secret": settings.mrcall_client_secret,
+            "code_verifier": code_verifier
         }
 
         # DEBUG: Log exactly what we're sending
