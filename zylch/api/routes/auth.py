@@ -1447,12 +1447,12 @@ async def mrcall_oauth_callback(
             token_response = await client.post(
                 f"{settings.mrcall_base_url.rstrip('/')}/oauth/token",
                 json={
-                    "grant_type": "authorization_code",
+                    "grantType": "authorization_code",
                     "code": code,
-                    "redirect_uri": "http://localhost:8766/callback",
-                    "client_id": settings.mrcall_client_id,
-                    "client_secret": settings.mrcall_client_secret,
-                    "code_verifier": code_verifier
+                    "redirectUri": "http://localhost:8766/callback",
+                    "clientId": settings.mrcall_client_id,
+                    "clientSecret": settings.mrcall_client_secret,
+                    "codeVerifier": code_verifier
                 },
                 headers={"Content-Type": "application/json"}
             )
