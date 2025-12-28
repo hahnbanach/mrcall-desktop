@@ -1446,7 +1446,7 @@ async def mrcall_oauth_callback(
         async with httpx.AsyncClient() as client:
             token_response = await client.post(
                 f"{settings.mrcall_base_url.rstrip('/')}/oauth/token",
-                data={
+                json={
                     "grant_type": "authorization_code",
                     "code": code,
                     "redirect_uri": "http://localhost:8766/callback",
@@ -1454,7 +1454,7 @@ async def mrcall_oauth_callback(
                     "client_secret": settings.mrcall_client_secret,
                     "code_verifier": code_verifier
                 },
-                headers={"Content-Type": "application/x-www-form-urlencoded"}
+                headers={"Content-Type": "application/json"}
             )
 
             if token_response.status_code != 200:
