@@ -43,7 +43,7 @@ class ZylchScheduler:
     Example usage:
     - "Ricordami tra 30 minuti di chiamare Marco"
     - "Se non ricevo risposta entro domani, inviami alert"
-    - "Ogni giorno alle 9, fammi il briefing"
+    - "Ogni giorno alle 9, mostra i miei task"
     """
 
     def __init__(
