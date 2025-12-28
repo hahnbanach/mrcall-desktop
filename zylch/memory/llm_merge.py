@@ -1,16 +1,18 @@
 """LLM-assisted memory reconsolidation."""
 import logging
 
-import anthropic
 from typing import Optional
+
+from zylch.llm import LLMClient, PROVIDER_MODELS
 
 
 class LLMMergeService:
     """LLM-assisted memory merge for reconsolidation."""
 
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
-        self.client = anthropic.Anthropic(api_key=api_key)
-        self.model = model
+    def __init__(self, api_key: str, provider: str = "anthropic", model: str = None):
+        self.provider = provider
+        self.model = model or PROVIDER_MODELS.get(provider, PROVIDER_MODELS["anthropic"])
+        self.client = LLMClient(api_key=api_key, provider=provider)
         self.MERGE_PROMPT = """Merge these entities into a SINGLE ENTITY:
 
 EXISTING_ENTITY:
@@ -59,7 +61,7 @@ Output ONLY the merged entity in this exact format, nothing else."""
             Merged content string
         """
         logging.info("MERGING CALLED")
-        response = self.client.messages.create(
+        response = self.client.create_message_sync(
             model=self.model,
             max_tokens=1024,
             messages=[{

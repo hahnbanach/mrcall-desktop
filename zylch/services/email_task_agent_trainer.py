@@ -15,9 +15,8 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-import anthropic
-
 from zylch.config import settings
+from zylch.llm import LLMClient, PROVIDER_MODELS
 from zylch.storage.supabase_client import SupabaseStorage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig
 
@@ -91,20 +90,24 @@ class EmailTaskAgentTrainer:
         self,
         storage: SupabaseStorage,
         owner_id: str,
-        anthropic_api_key: str,
-        user_email: str
+        api_key: str,
+        user_email: str,
+        provider: str = "anthropic"
     ):
         """Initialize EmailTaskAgentTrainer.
 
         Args:
             storage: SupabaseStorage instance
             owner_id: Firebase UID
-            anthropic_api_key: Anthropic API key for LLM calls
+            api_key: LLM API key
             user_email: User's email address (for identifying sent vs received)
+            provider: LLM provider (anthropic, openai, mistral)
         """
         self.storage = storage
         self.owner_id = owner_id
-        self.anthropic = anthropic.Anthropic(api_key=anthropic_api_key)
+        self.provider = provider
+        self.model = PROVIDER_MODELS.get(provider, settings.default_model)
+        self.client = LLMClient(api_key=api_key, provider=provider)
         self.user_email = user_email.lower() if user_email else ''
         self.user_domain = user_email.split('@')[1].lower() if user_email and '@' in user_email else ''
 
@@ -277,17 +280,17 @@ Body: {body}
         return '\n'.join(formatted)
 
     def _generate_prompt(self, threads_text: str, blobs_text: str) -> str:
-        """Generate the final task detection prompt using Claude."""
+        """Generate the final task detection prompt using LLM."""
         meta_prompt = TASK_AGENT_META_PROMPT.format(
             threads=threads_text,
             blobs=blobs_text,
             search_limit=self.search_limit
         )
 
-        logger.info("Training task detection agent...")
+        logger.info(f"Training task detection agent (provider: {self.provider})...")
 
-        response = self.anthropic.messages.create(
-            model=settings.default_model,
+        response = self.client.create_message_sync(
+            model=self.model,
             max_tokens=4000,
             messages=[{"role": "user", "content": meta_prompt}]
         )

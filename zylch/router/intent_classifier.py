@@ -1,29 +1,32 @@
-"""Lightweight Haiku-based intent classification."""
+"""Lightweight intent classification using LLM."""
 
 import json
 from typing import Dict, Any, List, Optional
-from anthropic import Anthropic
+
 from zylch.config import settings
+from zylch.llm import LLMClient, PROVIDER_MODELS
 
 
 class IntentRouter:
     """Routes user input to appropriate skill(s)."""
 
-    def __init__(self, skill_registry, anthropic_api_key: str = ""):
+    def __init__(self, skill_registry, api_key: str = "", provider: str = "anthropic"):
         """Initialize IntentRouter.
 
         Args:
             skill_registry: Registry of available skills
-            anthropic_api_key: Anthropic API key (BYOK - from Supabase)
+            api_key: LLM API key (BYOK - from Supabase)
+            provider: LLM provider (anthropic, openai, mistral)
         """
-        if not anthropic_api_key:
+        if not api_key:
             raise ValueError(
-                "Anthropic API key required for IntentRouter. "
-                "Please run `/connect anthropic` to configure your API key."
+                "LLM API key required for IntentRouter. "
+                "Please run `/connect <provider>` to configure your API key."
             )
-        self.client = Anthropic(api_key=anthropic_api_key)
+        self.provider = provider
+        self.router_model = PROVIDER_MODELS.get(provider, settings.skill_router_model)
+        self.client = LLMClient(api_key=api_key, provider=provider)
         self.skill_registry = skill_registry
-        self.router_model = settings.skill_router_model  # From config!
 
     async def classify_intent(
         self,
@@ -73,8 +76,8 @@ Rules:
 """
 
         try:
-            response = self.client.messages.create(
-                model=self.router_model,  # Configurable!
+            response = await self.client.create_message(
+                model=self.router_model,
                 max_tokens=500,
                 temperature=0,
                 messages=[{
