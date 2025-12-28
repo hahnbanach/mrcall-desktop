@@ -2073,11 +2073,17 @@ No task items found. Run `/tasks refresh` to analyze your events."""
 Run `/tasks` to see items needing action."""
 
         if args and args[0] == 'reset':
-            # Clear task cache
-            storage.clear_task_items(owner_id)
-            return """**✅ Task Cache Cleared**
+            # Clear task cache AND reset processing timestamps
+            deleted_count = storage.clear_task_items(owner_id)
+            ts_counts = storage.reset_task_processing_timestamps(owner_id, 'all')
 
-Task items have been deleted. Run `/tasks refresh` to re-analyze."""
+            return f"""**✅ Task Data Reset**
+
+- {deleted_count} task items deleted
+- {ts_counts.get('emails', 0)} emails reset
+- {ts_counts.get('calendar_events', 0)} calendar events reset
+
+Run `/tasks refresh` to re-analyze."""
 
         # Check if task agent is trained
         task_prompt = storage.get_agent_prompt(owner_id, 'tasks')
