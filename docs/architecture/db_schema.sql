@@ -320,11 +320,26 @@ CREATE TABLE public.task_items (
   created_at timestamp with time zone DEFAULT now(),
   analyzed_at timestamp with time zone,
   completed_at timestamp with time zone,
+  sources jsonb DEFAULT '{}'::jsonb,
   CONSTRAINT task_items_pkey PRIMARY KEY (id)
 );
--- thread_analysis table has been dropped (deprecated)
--- Email search now uses vector/FTS on emails table directly.
--- Task intelligence comes from task_items table with sources JSONB.
+CREATE TABLE public.thread_analysis (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  owner_id text NOT NULL,
+  thread_id text NOT NULL,
+  contact_email text,
+  contact_name text,
+  last_email_date timestamp with time zone,
+  last_email_direction text,
+  analysis jsonb,
+  needs_action boolean DEFAULT false,
+  task_description text,
+  priority integer,
+  manually_closed boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT thread_analysis_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.trigger_events (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   owner_id text NOT NULL,

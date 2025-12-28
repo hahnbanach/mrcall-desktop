@@ -425,9 +425,9 @@ SAMPLE_THREAD = {
 ```python
 from tests.fixtures import SAMPLE_EMAIL, SAMPLE_THREAD
 
-def test_thread_analysis():
-    result = analyze_thread(SAMPLE_THREAD)
-    assert result['requires_action']
+def test_task_extraction():
+    result = extract_tasks(SAMPLE_THREAD)
+    assert result['action_required']
 ```
 
 ## Continuous Integration

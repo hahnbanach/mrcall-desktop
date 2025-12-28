@@ -97,13 +97,13 @@ CREATE INDEX idx_identifiers_value ON contact_identifiers(identifier_value);
 **Modified Tables**:
 
 ```sql
--- Add avatar_id to existing thread_analysis table
-ALTER TABLE thread_analysis ADD COLUMN avatar_id UUID REFERENCES avatars(id);
-CREATE INDEX idx_thread_analysis_avatar ON thread_analysis(avatar_id);
-
 -- Add avatar_id to relationship_gaps table
 ALTER TABLE relationship_gaps ADD COLUMN avatar_id UUID REFERENCES avatars(id);
 CREATE INDEX idx_gaps_avatar ON relationship_gaps(avatar_id);
+
+-- Add avatar_id to task_items table
+ALTER TABLE task_items ADD COLUMN avatar_id UUID REFERENCES avatars(id);
+CREATE INDEX idx_task_items_avatar ON task_items(avatar_id);
 ```
 
 ### 0.2 Data Backfill Strategy
@@ -126,8 +126,8 @@ class AvatarBackfillService:
         # Source 1: task_manager.py JSON cache (if exists)
         tasks_cache = self._load_legacy_tasks_cache()
 
-        # Source 2: Supabase thread_analysis table (30-day window)
-        thread_analyses = await self._get_thread_analyses(owner_id)
+        # Source 2: Supabase task_items table (with sources JSONB)
+        task_items = await self._get_task_items(owner_id)
 
         # Source 3: Supabase emails table (contact extraction)
         contact_threads = await self._group_threads_by_contact(owner_id)
