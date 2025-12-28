@@ -43,7 +43,7 @@ class SessionState:
 
 from .config import ToolConfig
 from ..config import settings
-from zylch.memory import HybridSearchEngine
+from zylch.memory import EmbeddingEngine, HybridSearchEngine, ZylchMemoryConfig
 from .gcalendar import (
     ListCalendarEventsTool,
     CreateCalendarEventTool,
