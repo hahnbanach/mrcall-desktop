@@ -3,22 +3,16 @@ import logging
 
 from typing import Optional
 
-from ..llm import LLMClient
+from zylch.llm import LLMClient, PROVIDER_MODELS
 
 
 class LLMMergeService:
     """LLM-assisted memory merge for reconsolidation."""
 
-    def __init__(self, api_key: str, provider: str = "anthropic", model: Optional[str] = None):
-        """Initialize LLM merge service.
-
-        Args:
-            api_key: API key for the LLM provider
-            provider: LLM provider (anthropic, openai, mistral)
-            model: Optional model override (uses provider default if not specified)
-        """
-        self.client = LLMClient(api_key=api_key, provider=provider, model=model)
+    def __init__(self, api_key: str, provider: str = "anthropic", model: str = None):
         self.provider = provider
+        self.model = model or PROVIDER_MODELS.get(provider, PROVIDER_MODELS["anthropic"])
+        self.client = LLMClient(api_key=api_key, provider=provider)
         self.MERGE_PROMPT = """Merge these entities into a SINGLE ENTITY:
 
 EXISTING_ENTITY:
@@ -68,12 +62,12 @@ Output ONLY the merged entity in this exact format, nothing else."""
         """
         logging.info("MERGING CALLED")
         response = self.client.create_message_sync(
+            model=self.model,
+            max_tokens=1024,
             messages=[{
                 "role": "user",
                 "content": self.MERGE_PROMPT.format(existing=existing, new=new)
-            }],
-            max_tokens=1024,
+            }]
         )
-        result = response.content[0].text.strip() if response.content else ""
-        logging.info(f"MERGING ENTITIES:\nexisting: {existing}\nnew:{new}\nresult:{result}\n\n")
-        return result
+        logging.info(f"MERGING ENTITIES:\nexisting: {existing}\nnew:{new}\nresult:{response.content[0].text.strip()}\n\n")
+        return response.content[0].text.strip()

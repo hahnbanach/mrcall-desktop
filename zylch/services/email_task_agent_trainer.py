@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from zylch.config import settings
-from zylch.llm import LLMClient
+from zylch.llm import LLMClient, PROVIDER_MODELS
 from zylch.storage.supabase_client import SupabaseStorage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig
 
@@ -99,12 +99,14 @@ class EmailTaskAgentTrainer:
         Args:
             storage: SupabaseStorage instance
             owner_id: Firebase UID
-            api_key: API key for the LLM provider
+            api_key: LLM API key
             user_email: User's email address (for identifying sent vs received)
             provider: LLM provider (anthropic, openai, mistral)
         """
         self.storage = storage
         self.owner_id = owner_id
+        self.provider = provider
+        self.model = PROVIDER_MODELS.get(provider, settings.default_model)
         self.client = LLMClient(api_key=api_key, provider=provider)
         self.user_email = user_email.lower() if user_email else ''
         self.user_domain = user_email.split('@')[1].lower() if user_email and '@' in user_email else ''
@@ -285,11 +287,12 @@ Body: {body}
             search_limit=self.search_limit
         )
 
-        logger.info("Training task detection agent...")
+        logger.info(f"Training task detection agent (provider: {self.provider})...")
 
         response = self.client.create_message_sync(
-            messages=[{"role": "user", "content": meta_prompt}],
-            max_tokens=4000
+            model=self.model,
+            max_tokens=4000,
+            messages=[{"role": "user", "content": meta_prompt}]
         )
 
         prompt_content = response.content[0].text.strip()

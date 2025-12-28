@@ -84,10 +84,7 @@ class CalendarStore:
             # Extract start_time for indexing
             start_time = event_data.get('start')
             if start_time and isinstance(start_time, str):
-                try:
-                    start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-                except:
-                    start_dt = None
+                start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
             else:
                 start_dt = None
 

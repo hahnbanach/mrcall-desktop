@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from zylch.config import settings
-from zylch.llm import LLMClient
+from zylch.llm import LLMClient, PROVIDER_MODELS
 from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)
@@ -167,12 +167,14 @@ class EmailMemoryAgentTrainer:
         Args:
             storage: SupabaseStorage instance
             owner_id: Firebase UID
-            api_key: API key for the LLM provider
+            api_key: LLM API key
             user_email: User's email address (for identifying sent vs received)
             provider: LLM provider (anthropic, openai, mistral)
         """
         self.storage = storage
         self.owner_id = owner_id
+        self.provider = provider
+        self.model = PROVIDER_MODELS.get(provider, settings.default_model)
         self.client = LLMClient(api_key=api_key, provider=provider)
         self.user_email = user_email.lower() if user_email else ''
         self.user_domain = user_email.split('@')[1].lower() if user_email and '@' in user_email else ''
@@ -357,14 +359,15 @@ Body preview: {body}
             email_samples=email_samples
         )
 
-        logger.info("Training email analyzer agent...")
+        logger.info(f"Training email analyzer agent (provider: {self.provider})...")
 
         response = self.client.create_message_sync(
-            messages=[{"role": "user", "content": meta_prompt}],
+            model=self.model,
             max_tokens=4000,
+            messages=[{"role": "user", "content": meta_prompt}]
         )
 
-        prompt_content = response.content[0].text.strip() if response.content else ""
+        prompt_content = response.content[0].text.strip()
 
         # Append fixed suffix to ensure entity delimiter is always present
         prompt_content += self._get_entity_format_suffix()

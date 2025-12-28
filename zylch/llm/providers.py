@@ -116,16 +116,16 @@ def format_provider_info_message(provider: str) -> str:
     ]
 
     if info["is_eu"]:
-        lines.append(f"**Region:** 🇪🇺 European Union (GDPR compliant)")
+        lines.append(f"**Region:** EU (GDPR compliant)")
 
     lines.append("")
     lines.append("**Features:**")
 
     for feature in ["tool_calling", "web_search", "prompt_caching", "vision"]:
         enabled = info["features"].get(feature, False)
-        icon = "✅" if enabled else "❌"
+        icon = "Y" if enabled else "N"
         feature_name = feature.replace("_", " ").title()
-        lines.append(f"  {icon} {feature_name}")
+        lines.append(f"  [{icon}] {feature_name}")
 
     if info["unavailable_features"]:
         lines.append("")
