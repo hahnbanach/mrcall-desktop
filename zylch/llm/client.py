@@ -252,6 +252,85 @@ class LLMClient:
 
         return "auto"
 
+    def _convert_messages_to_openai_format(
+        self, messages: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Convert Anthropic-style messages to OpenAI format for LiteLLM.
+
+        Handles:
+        - Assistant messages with tool_use blocks → assistant with tool_calls
+        - User messages with tool_result blocks → tool role messages
+
+        This is necessary because core.py stores conversation history in Anthropic format,
+        but LiteLLM expects OpenAI format.
+        """
+        converted = []
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content")
+
+            # Handle tool results (Anthropic puts these in user messages)
+            if role == "user" and isinstance(content, list):
+                tool_results = [c for c in content if isinstance(c, dict) and c.get("type") == "tool_result"]
+                if tool_results:
+                    # Convert each tool_result to a separate tool message
+                    for result in tool_results:
+                        result_content = result.get("content", "")
+                        # Handle case where content might be a list (e.g., with images)
+                        if isinstance(result_content, list):
+                            result_content = json.dumps(result_content)
+                        converted.append({
+                            "role": "tool",
+                            "tool_call_id": result.get("tool_use_id", ""),
+                            "content": str(result_content),
+                        })
+                    continue
+
+            # Handle assistant messages with tool use blocks
+            if role == "assistant" and isinstance(content, list):
+                text_parts = []
+                tool_calls = []
+                for block in content:
+                    if isinstance(block, dict):
+                        if block.get("type") == "tool_use":
+                            tool_calls.append({
+                                "id": block.get("id", ""),
+                                "type": "function",
+                                "function": {
+                                    "name": block.get("name", ""),
+                                    "arguments": json.dumps(block.get("input", {})),
+                                }
+                            })
+                        elif block.get("type") == "text":
+                            text_parts.append(block.get("text", ""))
+                    elif hasattr(block, "type"):  # ToolUseBlock or TextBlock dataclass
+                        if block.type == "tool_use":
+                            tool_calls.append({
+                                "id": block.id,
+                                "type": "function",
+                                "function": {
+                                    "name": block.name,
+                                    "arguments": json.dumps(block.input),
+                                }
+                            })
+                        elif block.type == "text":
+                            text_parts.append(block.text)
+
+                assistant_msg = {"role": "assistant"}
+                if text_parts:
+                    assistant_msg["content"] = "\n".join(text_parts)
+                if tool_calls:
+                    assistant_msg["tool_calls"] = tool_calls
+                    if "content" not in assistant_msg:
+                        assistant_msg["content"] = None  # OpenAI requires content field
+                converted.append(assistant_msg)
+                continue
+
+            # Pass through other messages unchanged
+            converted.append(msg)
+
+        return converted
+
     async def create_message(
         self,
         messages: List[Dict[str, Any]],
@@ -280,8 +359,9 @@ class LLMClient:
         """
         litellm_model = self._get_litellm_model(model)
 
-        # Build messages with system prompt
-        full_messages = list(messages)  # Copy to avoid mutating original
+        # Convert messages from Anthropic format to OpenAI format
+        # This handles tool_use blocks and tool_result blocks in conversation history
+        full_messages = self._convert_messages_to_openai_format(messages)
         if system:
             full_messages = [{"role": "system", "content": system}] + full_messages
 
@@ -337,8 +417,8 @@ class LLMClient:
         """
         litellm_model = self._get_litellm_model(model)
 
-        # Build messages with system prompt
-        full_messages = list(messages)
+        # Convert messages from Anthropic format to OpenAI format
+        full_messages = self._convert_messages_to_openai_format(messages)
         if system:
             full_messages = [{"role": "system", "content": system}] + full_messages
 
