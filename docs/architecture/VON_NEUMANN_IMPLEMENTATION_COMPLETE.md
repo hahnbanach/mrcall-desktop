@@ -1,7 +1,13 @@
 # Von Neumann Memory Architecture - Implementation Complete ✓
 
+> **⚠️ HISTORICAL - PARTIALLY SUPERSEDED**
+>
+> The Memory Agent portion of this architecture is active. **The CRM Agent → Avatar portion was never fully implemented** - the avatars table write pipeline was never built.
+>
+> **Current Reality:** Tasks come from `task_items` table (via Task Agent). See `.claude/ARCHITECTURE.md` for up-to-date architecture.
+
 **Date**: December 9, 2025
-**Status**: Complete
+**Status**: Partially Complete (Memory Agent only)
 **Timeline**: Implemented in 1 session (planned 6 weeks, accelerated via swarm coordination)
 
 ---

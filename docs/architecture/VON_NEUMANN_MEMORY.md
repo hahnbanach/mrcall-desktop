@@ -1,5 +1,11 @@
 # Zylch Von Neumann Memory Architecture
 
+> **⚠️ HISTORICAL DESIGN DOC**
+>
+> This document describes a planned architecture. **The Avatar system was never implemented** - the CRM Agent write pipeline was never built.
+>
+> **Current Reality:** Tasks come from `task_items` table via `/tasks` command. See `.claude/ARCHITECTURE.md` for up-to-date architecture.
+
 ## Overview
 
 Zylch's data architecture is inspired by the **Von Neumann machine model**, separating long-term storage (Memory) from working state (CRM/Avatar).

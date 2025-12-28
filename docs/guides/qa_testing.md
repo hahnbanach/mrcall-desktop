@@ -49,7 +49,8 @@ Zylch answers questions like:
    - Fetches emails from Gmail API
    - Stores emails in Supabase `emails` table with `owner_id` (Row-Level Security)
 4. Memory Agent processes emails → Extracts facts → Stores in memory blobs
-5. User runs `/tasks` or `/briefing` → Avatar system returns computed tasks with read tracking indicators
+5. Task Agent processes emails → Detects tasks → Stores in `task_items` with sources
+6. User runs `/tasks` → Returns tasks sorted by urgency (high → medium → low)
 
 ### Key Database Tables
 | Table | Purpose |
@@ -57,8 +58,6 @@ Zylch answers questions like:
 | `emails` | Raw email data (from_email, subject, body_plain, thread_id) |
 | `oauth_tokens` | Encrypted OAuth credentials (Google, Microsoft, Anthropic keys) |
 | `sync_state` | Tracks last sync history_id for incremental sync |
-| `avatars` | Computed relationship views per contact |
-| `avatar_compute_queue` | Background processing queue for avatar computation |
 | `task_items` | Task items with sources JSONB for data traceability |
 | `email_triage` | Email priority classification (urgent/normal/low/noise) |
 | `scheduled_jobs` | Scheduled reminders and timed actions |
@@ -581,22 +580,23 @@ AND identifier_type = 'linkedin';
 -- Expected: linkedin.com/in/testuser with confidence 1.0
 ```
 
-### Scenario 4: Avatar Status Changes
+### Scenario 4: Task Status Changes
 
 **Setup:**
-1. Have a contact with recent email exchange (status: "open")
-2. Wait 7 days without interaction
-3. Run `/sync` and `/gaps`
+1. Have an email thread with action required
+2. Run `/sync` and `/agent task process email`
+3. Run `/tasks`
 
 **Expected:**
-- Contact appears in "Silent Contacts" in `/gaps`
-- Avatar's `relationship_status` may change
+- Task appears sorted by urgency
+- Task shows action_required = true
 
 **Verification:**
 ```sql
-SELECT contact_id, display_name, relationship_status, relationship_score, suggested_action
-FROM avatars
-WHERE owner_id = 'YOUR_OWNER_ID';
+SELECT id, email_id, urgency, suggested_action, action_required
+FROM task_items
+WHERE owner_id = 'YOUR_OWNER_ID'
+ORDER BY urgency;
 ```
 
 ## 7. Email Read Tracking Tests
@@ -790,12 +790,9 @@ Zylch: 📋 Relationship Gaps Analysis
 ```
 
 **Behind the scenes:**
-- **Avatar aggregator** queries `emails.read_events` JSONB to get read stats
-- **CRM worker** computes:
-  - Status: `waiting_unread` if email unread 3+ days
-  - Priority boost: +2 for unread 7+ days, +1 for unread 3+ days
-  - Action context: "Recipient has NOT read your email..." in LLM prompt
-- **Task formatter** adds indicators:
+- Read events stored in `emails.read_events` JSONB
+- Task system can use read status to inform urgency decisions
+- Display indicators:
   - `📧❌ (unread Xd)` - Email sent X days ago, not opened
   - `📧✓ (read Xd ago)` - Email was opened X days ago
 
@@ -936,16 +933,16 @@ AND (body_plain LIKE '%555%' OR body_plain LIKE '%linkedin%')
 LIMIT 5;
 ```
 
-### Issue: No avatars in avatars table
+### Issue: No tasks in task_items table
 
 **Symptoms:**
-`identifier_map` has entries but `avatars` table is empty
+Emails are synced but `/tasks` shows nothing
 
 **Cause:**
-Avatar computation is triggered by CRM Agent (separate worker, not auto-run locally)
+Task processing runs separately from sync
 
 **Solution:**
-Avatars are computed on-demand by sync or gap analysis. They populate over time.
+Run `/agent task process email` after sync to detect tasks from emails.
 
 ### Issue: /gaps shows nothing
 

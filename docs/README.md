@@ -17,7 +17,7 @@ This documentation is organized into the following sections:
   - [Implementation Guide](features/email-read-tracking-implementation.md) - Setup and configuration
 - **[Calendar Integration](features/calendar-integration.md)** - Google Calendar with Meet links
 - **[Relationship Intelligence](features/relationship-intelligence.md)** - Gap detection and task extraction
-- **[Avatar Aggregation](features/avatar-aggregation.md)** - Person-centric contact intelligence *(coming soon)*
+- **[Task Management](features/task-management.md)** - Task detection from emails and calendars
 - **[Triggers & Automation](features/triggers-automation.md)** - Event-driven workflow automation *(coming soon)*
 - **[Sharing System](features/sharing-system.md)** - Consent-based intelligence sharing *(coming soon)*
 - **[Entity Memory System](features/entity-memory-system.md)** - Entity-centric persistent memory with hybrid search and reconsolidation
@@ -168,7 +168,7 @@ Zylch AI
 │   ├── Memory System (person-centric with reconsolidation)
 │   ├── Relationship Analyzer (gap detection)
 │   ├── Task Manager (person-centric task extraction)
-│   └── Avatar Aggregator (multi-source contact enrichment)
+│   └── Task Agent (task detection from communications)
 │
 ├── Automation Layer
 │   ├── Trigger Service (event-driven workflows)

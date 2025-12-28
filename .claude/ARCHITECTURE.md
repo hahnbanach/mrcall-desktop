@@ -24,7 +24,7 @@
 | Calendar events                                     | Supabase | `calendar_events` |
 | Sync state                                          | Supabase | `sync_state` |
 | Triggers                                            | Supabase | `triggers`, `trigger_events` |
-| Memory/Avatars                                      | Supabase | pg_vector tables |
+| Memory blobs                                        | Supabase | `blobs`, `blob_sentences` (pg_vector) |
 
 **NEVER use local filesystem for:**
 - Token storage (no pickle files)
@@ -41,7 +41,7 @@ Zylch is an AI-powered email assistant that provides relationship intelligence, 
 
 **Local development uses the SAME architecture as production:**
 - Firebase Auth for user authentication
-- Supabase for all data storage (emails, calendar, tokens, avatars)
+- Supabase for all data storage (emails, calendar, tokens, tasks, memory blobs)
 - Same OAuth flows as production (server-side, not InstalledAppFlow)
 - No separate local database or file-based token storage
 
@@ -121,7 +121,7 @@ Supabase (task_items) ← Tasks with sources stored here
 
 Background workers notify users of failures via `user_notifications` table. Notifications are shown once in chat (prepended to response), then marked read.
 
-**Key files**: `supabase_client.py` (`create_notification()`), `chat_service.py` (injection), `avatar_compute_worker.py` (creates on missing API key)
+**Key files**: `supabase_client.py` (`create_notification()`), `chat_service.py` (injection)
 
 **Pattern**: CLI and API both use the same service layer functions
 
@@ -270,7 +270,7 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
 
 ### Task Display: `get_tasks` Tool
 
-`_GetTasksTool` in `factory.py` returns pre-formatted task list from pre-computed avatars (~5s vs 27s for LLM formatting). Avatars are computed by background worker after `/sync`.
+`_GetTasksTool` in `factory.py` queries the `task_items` table directly, applying urgency ordering (high → medium → low) and limiting low-urgency tasks to 10. Tasks are populated by `/agent task process` after email sync.
 
 ## Key Architectural Decisions
 
@@ -868,9 +868,9 @@ The Email Read Tracking System enables Zylch to detect when recipients open emai
    - **PRIMARY**: SendGrid webhooks for batch/campaign emails (no custom pixel injection needed)
    - **SECONDARY**: Custom 1x1 tracking pixel for individual emails
 
-2. **Intelligence Integration**: Read tracking data flows into the avatar/briefing system:
-   - Status computation: New statuses `waiting_unread`, `waiting_acknowledged`
-   - Priority boosting: +2 for unread 7+ days, +1 for unread 3+ days
+2. **Intelligence Integration**: Read tracking data flows into the task system:
+   - Status computation: Unread/read tracking per email
+   - Priority context for follow-up decisions
    - LLM context: Enhanced action generation with read awareness
    - Display indicators: `📧❌ (unread 5d)` or `📧✓ (read 4d ago)`
 
@@ -885,11 +885,8 @@ The Email Read Tracking System enables Zylch to detect when recipients open emai
 **Components**:
 - `zylch/api/routes/webhooks.py` - SendGrid webhook handler with ECDSA signature verification
 - `zylch/api/routes/tracking.py` - Tracking pixel endpoint (1x1 transparent GIF)
-- `zylch/services/avatar_aggregator.py` - Read tracking data integration (lines 230-351)
-- `zylch/workers/crm_worker.py` - Status/priority/action generation with read awareness
-- `zylch/services/task_formatter.py` - Display indicators in briefing
-- `zylch/storage/supabase_client.py` - Database operations (lines 2311-2583)
-- `zylch/storage/migrations/003_email_read_tracking.sql` - Database schema (~400 lines)
+- `zylch/storage/supabase_client.py` - Database operations
+- `zylch/storage/migrations/003_email_read_tracking.sql` - Database schema
 
 **Database tables**: `email_read_events`, `sendgrid_message_mapping`, `messages.read_events` (JSONB)
 
@@ -897,10 +894,7 @@ The Email Read Tracking System enables Zylch to detect when recipients open emai
 - `POST /api/webhooks/sendgrid` - Receive SendGrid open events
 - `GET /api/track/pixel/{tracking_id}` - Serve tracking pixel
 
-**Briefing Integration**: Read indicators appear in `/briefing` command output, showing:
-- Which emails have been read with timestamps
-- Which emails remain unread with days since sent
-- Enhanced LLM suggestions: "Follow up on proposal - unread for 5 days"
+**Task Integration**: Read indicators can inform task urgency via LLM suggestions: "Follow up on proposal - unread for 5 days"
 
 ## Future Development TODOs
 
