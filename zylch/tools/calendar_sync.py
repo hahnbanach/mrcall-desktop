@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-import anthropic
+from zylch.llm import LLMClient, PROVIDER_MODELS
 
 if TYPE_CHECKING:
     from zylch.storage.supabase_client import SupabaseStorage
@@ -27,7 +27,8 @@ class CalendarSyncManager:
         self,
         calendar_client,
         cache_dir: str = "cache/calendar",
-        anthropic_api_key: Optional[str] = None,
+        api_key: Optional[str] = None,
+        provider: str = "anthropic",
         days_back: int = 30,
         days_forward: int = 30,
         my_emails: Optional[List[str]] = None,
@@ -39,7 +40,8 @@ class CalendarSyncManager:
         Args:
             calendar_client: Calendar client (GoogleCalendarClient or OutlookCalendarClient)
             cache_dir: Directory to store calendar cache
-            anthropic_api_key: API key for event analysis
+            api_key: LLM API key for event analysis
+            provider: LLM provider (anthropic, openai, mistral)
             days_back: Days in past to sync (default: 30)
             days_forward: Days in future to sync (default: 30)
             my_emails: List of my email addresses (for identifying external attendees)
@@ -49,7 +51,8 @@ class CalendarSyncManager:
         self.calendar = calendar_client
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key) if anthropic_api_key else None
+        self.provider = provider
+        self.llm_client = LLMClient(api_key=api_key, provider=provider) if api_key else None
         self.days_back = days_back
         self.days_forward = days_forward
         self.my_emails = my_emails or []

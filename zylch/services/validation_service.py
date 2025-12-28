@@ -1,15 +1,16 @@
 """Command validation service with AI-powered semantic analysis.
 
 This service provides validation for Zylch CLI commands before execution,
-using Claude AI to detect semantic issues and provide helpful feedback.
+using LLM to detect semantic issues and provide helpful feedback.
 """
 
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from enum import Enum
-import anthropic
 import json
 import logging
+
+from zylch.llm import LLMClient, PROVIDER_MODELS
 
 logger = logging.getLogger(__name__)
 
@@ -37,18 +38,20 @@ class ValidationResult:
 class CommandValidator:
     """AI-powered semantic command validator.
 
-    Uses Claude Haiku for fast, cost-effective validation of user commands.
+    Uses LLM for fast, cost-effective validation of user commands.
     Detects semantic issues like using /trigger for always-on behavior.
     """
 
-    def __init__(self, anthropic_api_key: str):
+    def __init__(self, api_key: str, provider: str = "anthropic"):
         """Initialize validator.
 
         Args:
-            anthropic_api_key: Anthropic API key for Claude access
+            api_key: LLM API key
+            provider: LLM provider (anthropic, openai, mistral)
         """
-        self.client = anthropic.Anthropic(api_key=anthropic_api_key)
-        self.model = "claude-3-5-haiku-20241022"  # Fast + cheap
+        self.provider = provider
+        self.model = PROVIDER_MODELS.get(provider, PROVIDER_MODELS["anthropic"])
+        self.client = LLMClient(api_key=api_key, provider=provider)
 
     async def validate_command(
         self,
@@ -167,7 +170,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
 }}"""
 
     async def _get_ai_validation(self, prompt: str) -> Dict[str, Any]:
-        """Get AI validation response using Haiku.
+        """Get AI validation response.
 
         Args:
             prompt: Validation prompt
@@ -175,7 +178,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
         Returns:
             Parsed JSON response from AI
         """
-        response = self.client.messages.create(
+        response = await self.client.create_message(
             model=self.model,
             max_tokens=1024,
             messages=[
