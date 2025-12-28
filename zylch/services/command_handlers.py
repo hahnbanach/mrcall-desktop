@@ -113,14 +113,11 @@ async def handle_sync(args: List[str], config, owner_id: str) -> str:
             if last_sync:
                 # Parse and format the timestamp nicely
                 from datetime import datetime
-                try:
-                    if isinstance(last_sync, str):
-                        dt = datetime.fromisoformat(last_sync.replace('Z', '+00:00'))
-                        last_sync_display = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
-                    else:
-                        last_sync_display = str(last_sync)
-                except:
-                    last_sync_display = str(last_sync)
+                if isinstance(last_sync, str):
+                    dt = datetime.fromisoformat(last_sync.replace('Z', '+00:00'))
+                    last_sync_display = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+                else:
+                    last_sync_display = last_sync.strftime('%Y-%m-%d %H:%M:%S UTC')
             else:
                 last_sync_display = "Never"
 
@@ -1954,13 +1951,9 @@ Run `/sync` to fetch calendar events."""
         for event in result.data:
             # Parse start time
             start_str = event.get('start_time', '')
-            try:
-                start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
-                event_date = start_dt.strftime('%A, %B %d')
-                event_time = start_dt.strftime('%H:%M')
-            except:
-                event_date = start_str[:10] if start_str else 'Unknown'
-                event_time = ''
+            start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+            event_date = start_dt.strftime('%A, %B %d')
+            event_time = start_dt.strftime('%H:%M')
 
             # Group by date
             if event_date != current_date:
