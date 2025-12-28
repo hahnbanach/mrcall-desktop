@@ -2083,7 +2083,7 @@ Run `/tasks` to see items needing action."""
 - {ts_counts.get('emails', 0)} emails reset
 - {ts_counts.get('calendar_events', 0)} calendar events reset
 
-Run `/tasks refresh` to re-analyze."""
+Run `/agent task process` to re-analyze."""
 
         # Check if task agent is trained
         task_prompt = storage.get_agent_prompt(owner_id, 'tasks')
