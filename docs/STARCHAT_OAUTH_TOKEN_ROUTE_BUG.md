@@ -299,6 +299,61 @@ After applying the fix, verify:
 
 ---
 
+---
+
+## Additional Issue: Documentation vs Implementation Mismatch
+
+### Problem
+
+The official partner documentation uses **snake_case** field names, but the actual StarChat implementation expects **camelCase**.
+
+### Documentation Shows (snake_case)
+
+**File:** `docs/operational/partner-oauth-integration-guide.md` (lines 227-234 and 380-404)
+
+```json
+{
+  "grant_type": "authorization_code",
+  "code": "AUTHORIZATION_CODE",
+  "client_id": "YOUR_CLIENT_ID",
+  "client_secret": "YOUR_CLIENT_SECRET",
+  "redirect_uri": "https://yourapp.com/oauth/callback",
+  "code_verifier": "YOUR_CODE_VERIFIER_IF_USING_PKCE"
+}
+```
+
+### Implementation Expects (camelCase)
+
+**File:** `OAuthAuthorizationCode.scala:121-134`
+
+```json
+{
+  "grantType": "authorization_code",
+  "code": "...",
+  "clientId": "...",
+  "clientSecret": "...",
+  "redirectUri": "...",
+  "codeVerifier": "..."
+}
+```
+
+### Proof from Testing
+
+| Request Format | StarChat Response |
+|----------------|-------------------|
+| snake_case (`grant_type`) | `DecodingFailure at .grantType: Missing required field` |
+| camelCase (`grantType`) | `DecodingFailure at .targetOwner: Missing required field` |
+
+The first error proves StarChat is looking for `grantType` (camelCase), not `grant_type` (snake_case).
+
+### Recommendation
+
+Either:
+1. **Update documentation** to use camelCase field names to match the Scala case class definitions, OR
+2. **Add JSON serialization configuration** in Scala to accept both snake_case and camelCase (e.g., using circe's `SnakeCaseCodec` or similar)
+
+---
+
 ## Contact
 
 For questions about this issue, contact the Zylch integration team.
