@@ -255,7 +255,8 @@ def has_google_credentials(owner_id: str) -> bool:
 
 
 # ==========================================
-# Anthropic API Key Management
+# LLM Provider API Key Management
+# Supports: Anthropic, OpenAI, Mistral
 # ==========================================
 
 def save_anthropic_key(owner_id: str, api_key: str) -> bool:
@@ -298,6 +299,84 @@ def delete_anthropic_key(owner_id: str) -> bool:
     supabase.delete_anthropic_key(owner_id)
     logger.info(f"Deleted Anthropic API key for owner {owner_id}")
     return True
+
+
+def save_llm_provider_key(owner_id: str, provider: str, api_key: str) -> bool:
+    """Save API key for any LLM provider.
+
+    Args:
+        owner_id: Firebase UID
+        provider: LLM provider (anthropic, openai, mistral)
+        api_key: Provider's API key
+
+    Returns:
+        True if saved successfully
+    """
+    supabase = _get_supabase()
+    return supabase.save_provider_credentials(
+        owner_id=owner_id,
+        provider_key=provider,
+        credentials_dict={"api_key": api_key}
+    )
+
+
+def get_llm_provider_key(owner_id: str, provider: str) -> Optional[str]:
+    """Get API key for a specific LLM provider.
+
+    Args:
+        owner_id: Firebase UID
+        provider: LLM provider (anthropic, openai, mistral)
+
+    Returns:
+        API key or None if not found
+    """
+    supabase = _get_supabase()
+    credentials = supabase.get_provider_credentials(owner_id, provider)
+    if credentials:
+        return credentials.get("api_key")
+    return None
+
+
+def get_active_llm_provider(owner_id: str) -> tuple[Optional[str], Optional[str]]:
+    """Get the active LLM provider and API key for a user.
+
+    Checks providers in order: Anthropic, OpenAI, Mistral.
+    Returns the first configured provider.
+
+    Args:
+        owner_id: Firebase UID
+
+    Returns:
+        Tuple of (provider_name, api_key) or (None, None) if none configured
+    """
+    # Check providers in preferred order
+    for provider in ["anthropic", "openai", "mistral"]:
+        api_key = get_llm_provider_key(owner_id, provider)
+        if api_key:
+            return provider, api_key
+
+    # Also check legacy Anthropic key storage for backward compatibility
+    anthropic_key = get_anthropic_key(owner_id)
+    if anthropic_key:
+        return "anthropic", anthropic_key
+
+    return None, None
+
+
+def delete_llm_provider_key(owner_id: str, provider: str) -> bool:
+    """Delete API key for an LLM provider.
+
+    Args:
+        owner_id: Firebase UID
+        provider: LLM provider (anthropic, openai, mistral)
+
+    Returns:
+        True if deleted
+    """
+    supabase = _get_supabase()
+    success = supabase.delete_provider_credentials(owner_id, provider)
+    logger.info(f"Deleted {provider} API key for owner {owner_id}")
+    return success
 
 
 # ==========================================

@@ -8,10 +8,10 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-import anthropic
 from bs4 import BeautifulSoup
 
 from zylch.config import settings
+from zylch.llm import LLMClient
 
 if TYPE_CHECKING:
     from zylch.storage.supabase_client import SupabaseStorage
@@ -68,7 +68,8 @@ class EmailSyncManager:
         self,
         email_archive,  # CHANGED: EmailArchiveManager instead of gmail_client
         cache_dir: str = "cache/emails",
-        anthropic_api_key: str = None,
+        api_key: str = None,
+        provider: str = "anthropic",
         days_back: int = 30,
         owner_id: Optional[str] = None,
         supabase_storage: Optional['SupabaseStorage'] = None,
@@ -78,7 +79,8 @@ class EmailSyncManager:
         Args:
             email_archive: EmailArchiveManager instance (reads from archive, not Gmail)
             cache_dir: Directory to store intelligence cache
-            anthropic_api_key: API key for Haiku analysis
+            api_key: API key for the LLM provider
+            provider: LLM provider (anthropic, openai, mistral)
             days_back: Days back for intelligence window (default: 30)
             owner_id: User's Firebase UID (required for Supabase backend)
             supabase_storage: Optional SupabaseStorage instance for multi-tenant
@@ -86,7 +88,7 @@ class EmailSyncManager:
         self.archive = email_archive  # CHANGED: use archive instead of gmail
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key) if anthropic_api_key else None
+        self.llm_client = LLMClient(api_key=api_key, provider=provider) if api_key else None
         self.days_back = 30  # Fixed: always 1 month intelligence window
         self.owner_id = owner_id
         self.supabase = supabase_storage
@@ -330,11 +332,11 @@ class EmailSyncManager:
             participants.update(to_addrs)
             participants.update(cc_addrs)
 
-        # Analyze with SONNET - Anthropic client required
-        if not self.anthropic_client:
+        # Analyze with LLM - client required
+        if not self.llm_client:
             raise ValueError(
-                "Anthropic client required for thread analysis. "
-                "Please run `/connect anthropic` to configure your API key."
+                "LLM client required for thread analysis. "
+                "Please run `/connect <provider>` to configure your API key."
             )
         analysis = self._agent_analyze(last_message, all_messages)
 
@@ -502,15 +504,11 @@ class EmailSyncManager:
         }
 
         try:
-            response = self.anthropic_client.messages.create(
-                model=settings.default_model,
+            response = self.llm_client.create_message_sync(
+                messages=[{"role": "user", "content": prompt}],
                 max_tokens=800,
                 tools=[classify_tool],
-                tool_choice={"type": "tool", "name": "classify_thread"},
-                messages=[{
-                    "role": "user",
-                    "content": prompt
-                }]
+                tool_choice={"type": "tool", "name": "classify_thread"}
             )
 
             # Extract tool use result
@@ -522,7 +520,7 @@ class EmailSyncManager:
 
             # No tool_use block found - this is an error (shouldn't happen with tool_choice)
             raise ValueError(
-                f"No tool_use block in Claude response for thread analysis. "
+                f"No tool_use block in LLM response for thread analysis. "
                 f"Response content: {response.content}"
             )
 

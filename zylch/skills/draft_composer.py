@@ -2,7 +2,7 @@
 
 import json
 from typing import Any, Dict, List
-from anthropic import Anthropic
+from zylch.llm import LLMClient
 from zylch.skills.base import BaseSkill, SkillContext
 from zylch.config import settings
 import logging
@@ -13,22 +13,24 @@ logger = logging.getLogger(__name__)
 class DraftComposerSkill(BaseSkill):
     """Compose email drafts with personalized style."""
 
-    def __init__(self, anthropic_api_key: str = ""):
+    def __init__(self, api_key: str = "", provider: str = "anthropic"):
         """Initialize DraftComposerSkill.
 
         Args:
-            anthropic_api_key: Anthropic API key (BYOK - from Supabase)
+            api_key: API key for the LLM provider (BYOK - from Supabase)
+            provider: LLM provider (anthropic, openai, mistral)
         """
         super().__init__(
             skill_name="draft_composer",
             description="Compose email drafts using memory rules"
         )
-        if not anthropic_api_key:
+        if not api_key:
             raise ValueError(
-                "Anthropic API key required for DraftComposerSkill. "
-                "Please run `/connect anthropic` to configure your API key."
+                f"API key required for DraftComposerSkill. "
+                f"Please run `/connect {provider}` to configure your API key."
             )
-        self.client = Anthropic(api_key=anthropic_api_key)
+        self.client = LLMClient(api_key=api_key, provider=provider)
+        self.provider = provider
 
     async def pre_execute(self, context: SkillContext):
         """Load context: thread, memory rules."""
@@ -77,8 +79,11 @@ Important: Return ONLY the JSON, no markdown code blocks or extra text.
             # Use configured execution model with prompt caching if enabled
             messages = [{"role": "user", "content": prompt}]
 
-            # Add prompt caching if enabled (cache memory and pattern sections)
-            if settings.enable_prompt_caching and (memory_section or pattern_section):
+            # Add prompt caching if enabled AND using Anthropic (cache memory and pattern sections)
+            # Prompt caching is an Anthropic-exclusive feature
+            if (settings.enable_prompt_caching and
+                self.provider == "anthropic" and
+                (memory_section or pattern_section)):
                 # Use cache control blocks for static content
                 cache_blocks = []
 
@@ -118,11 +123,10 @@ Important: Return ONLY the JSON, no markdown code blocks or extra text."""
 
                 messages = [{"role": "user", "content": cache_blocks}]
 
-            response = self.client.messages.create(
-                model=self.execution_model,
+            response = await self.client.create_message(
+                messages=messages,
                 max_tokens=2000,
-                temperature=0.7,
-                messages=messages
+                temperature=0.7
             )
 
             # Parse result

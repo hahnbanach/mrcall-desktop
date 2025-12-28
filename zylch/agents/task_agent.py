@@ -9,9 +9,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set
 
-import anthropic
-
 from zylch.config import settings
+from zylch.llm import LLMClient
 from zylch.storage.supabase_client import SupabaseStorage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig
 
@@ -59,20 +58,22 @@ class TaskWorker:
         self,
         storage: SupabaseStorage,
         owner_id: str,
-        anthropic_api_key: str,
-        user_email: str = ""
+        api_key: str,
+        user_email: str = "",
+        provider: str = "anthropic"
     ):
         """Initialize TaskWorker.
 
         Args:
             storage: SupabaseStorage instance
             owner_id: Firebase UID
-            anthropic_api_key: Anthropic API key for LLM calls
+            api_key: API key for the LLM provider
             user_email: User's email address
+            provider: LLM provider (anthropic, openai, mistral)
         """
         self.storage = storage
         self.owner_id = owner_id
-        self.anthropic = anthropic.Anthropic(api_key=anthropic_api_key)
+        self.client = LLMClient(api_key=api_key, provider=provider)
         self.user_email = user_email.lower() if user_email else ''
         self.user_domain = user_email.split('@')[1].lower() if user_email and '@' in user_email else ''
 
@@ -309,12 +310,11 @@ class TaskWorker:
 
         # Call classification model with tool use for structured output
         try:
-            response = self.anthropic.messages.create(
-                model=settings.classification_model,
+            response = await self.client.create_message(
+                messages=[{"role": "user", "content": formatted_prompt}],
                 max_tokens=200,
                 tools=[TASK_DECISION_TOOL],
-                tool_choice={"type": "tool", "name": "task_decision"},
-                messages=[{"role": "user", "content": formatted_prompt}]
+                tool_choice={"type": "tool", "name": "task_decision"}
             )
 
             # Extract result from tool use response

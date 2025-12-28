@@ -1,10 +1,9 @@
-"""Core Zylch AI agent using Anthropic SDK."""
+"""Core Zylch AI agent using LLM abstraction layer."""
 
 import logging
 from typing import Any, Dict, List, Optional
 
-import anthropic
-
+from ..llm import LLMClient
 from .models import ModelSelector
 from .prompts import get_system_prompt, get_system_prompt_base
 from ..tools.base import Tool, ToolResult, ToolStatus
@@ -26,18 +25,21 @@ class ZylchAIAgent:
         max_tokens: int = 4096,
         email_style_prompt: Optional[str] = None,
         triggered_instructions: Optional[List[str]] = None,
+        provider: str = "anthropic",
     ):
         """Initialize Zylch AI agent.
 
         Args:
-            api_key: Anthropic API key
+            api_key: API key for the LLM provider
             tools: List of available tools
             model_selector: Model selection logic (optional)
             max_tokens: Maximum tokens for response
             email_style_prompt: Custom email style instructions
             triggered_instructions: List of triggered instructions (optional, for prompt injection)
+            provider: LLM provider (anthropic, openai, mistral)
         """
-        self.client = anthropic.Anthropic(api_key=api_key)
+        self.client = LLMClient(api_key=api_key, provider=provider)
+        self.provider = provider
         self.tools = tools
         self.tool_map = {tool.name: tool for tool in tools}
         self.model_selector = model_selector or ModelSelector()
@@ -47,7 +49,7 @@ class ZylchAIAgent:
         self.conversation_history: List[Dict[str, Any]] = []
         self.message_count = 0
 
-        logger.info(f"Initialized Zylch AI agent with {len(tools)} tools{f' and {len(self.triggered_instructions)} triggered instructions' if self.triggered_instructions else ''}")
+        logger.info(f"Initialized Zylch AI agent with {len(tools)} tools, provider={provider}{f' and {len(self.triggered_instructions)} triggered instructions' if self.triggered_instructions else ''}")
 
     def _get_tool_schemas(self) -> List[Dict[str, Any]]:
         """Get Anthropic tool schemas for all registered tools.
@@ -99,12 +101,12 @@ class ZylchAIAgent:
             logger.info(f"Injected {len(self.triggered_instructions)} triggered instructions into system prompt")
 
         # Create message with tool support (with current date/time)
-        response = self.client.messages.create(
-            model=model,
-            max_tokens=self.max_tokens,
+        # Note: model selection is now handled by LLMClient based on provider
+        response = await self.client.create_message(
+            messages=self.conversation_history,
             system=system_prompt,
             tools=self._get_tool_schemas(),
-            messages=self.conversation_history
+            max_tokens=self.max_tokens
         )
 
         # Handle tool use loop
@@ -141,12 +143,11 @@ class ZylchAIAgent:
             })
 
             # Continue conversation with tool results (with current date/time)
-            response = self.client.messages.create(
-                model=model,
-                max_tokens=self.max_tokens,
+            response = await self.client.create_message(
+                messages=self.conversation_history,
                 system=system_prompt,  # Use same system prompt with context
                 tools=self._get_tool_schemas(),
-                messages=self.conversation_history
+                max_tokens=self.max_tokens
             )
 
         # Extract final text response
