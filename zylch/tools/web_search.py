@@ -1,4 +1,8 @@
-"""Web search tool using Anthropic's built-in web search capability."""
+"""Web search tool using Anthropic's built-in web search capability.
+
+NOTE: This feature is Anthropic-exclusive. OpenAI and Mistral do not have
+equivalent built-in web search functionality.
+"""
 
 import logging
 from typing import Any, Dict, Optional
@@ -6,6 +10,7 @@ from typing import Any, Dict, Optional
 import anthropic
 
 from zylch.config import settings
+from zylch.llm import PROVIDER_FEATURES
 from .base import Tool, ToolResult, ToolStatus
 
 logger = logging.getLogger(__name__)
@@ -15,14 +20,25 @@ class WebSearchTool(Tool):
     """Web search tool using Anthropic's built-in web search (Brave Search backend).
 
     Uses Claude's web_search_20250305 tool for real-time web search with citations.
+
+    NOTE: This is an Anthropic-exclusive feature. Other providers (OpenAI, Mistral)
+    do not have equivalent built-in web search. Users will see a clear message
+    explaining this limitation.
     """
 
-    def __init__(self, anthropic_api_key: str):
+    def __init__(self, api_key: str, provider: str = "anthropic"):
         super().__init__(
             name="web_search",
             description="Search the web for current information. Use when user explicitly asks to search online or needs up-to-date information."
         )
-        self.client = anthropic.Anthropic(api_key=anthropic_api_key)
+        self.provider = provider
+        self.supports_web_search = PROVIDER_FEATURES.get(provider, {}).get("web_search", False)
+
+        # Only initialize Anthropic client if provider supports web search
+        if self.supports_web_search:
+            self.client = anthropic.Anthropic(api_key=api_key)
+        else:
+            self.client = None
 
     async def execute(
         self,
@@ -40,6 +56,18 @@ class WebSearchTool(Tool):
         Returns:
             ToolResult with search findings and citations
         """
+        # Check if provider supports web search
+        if not self.supports_web_search:
+            return ToolResult(
+                status=ToolStatus.ERROR,
+                data=None,
+                error=(
+                    f"Web search is not available with {self.provider}. "
+                    f"This feature is exclusive to Anthropic. "
+                    f"To use web search, please run `/connect anthropic` to switch providers."
+                )
+            )
+
         try:
             # Build enhanced query
             search_query = query

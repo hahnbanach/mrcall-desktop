@@ -1063,7 +1063,9 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
 • `google` - Gmail & Google Calendar
 • `microsoft` - Outlook & Calendar
 • `mrcall` - MrCall/StarChat phone
-• `anthropic` - Claude AI (BYOK)
+• `anthropic` - Claude AI (BYOK) - includes web search & prompt caching
+• `openai` - OpenAI GPT-4 (BYOK)
+• `mistral` - Mistral AI (BYOK) - EU-based for GDPR
 • `pipedrive` - Pipedrive CRM
 • `vonage` - Vonage SMS
 
@@ -1126,6 +1128,7 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
                 delete_anthropic_key,
                 delete_pipedrive_key,
                 delete_vonage_keys,
+                delete_llm_provider_key,
             )
 
             # Note: delete_user_credentials deletes both google and microsoft
@@ -1135,6 +1138,8 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
                 'microsoft': lambda oid: supabase.delete_oauth_token(oid, 'microsoft'),
                 'mrcall': delete_mrcall_credentials,
                 'anthropic': delete_anthropic_key,
+                'openai': lambda oid: delete_llm_provider_key(oid, 'openai'),
+                'mistral': lambda oid: delete_llm_provider_key(oid, 'mistral'),
                 'pipedrive': delete_pipedrive_key,
                 'vonage': delete_vonage_keys,
             }
