@@ -1,5 +1,15 @@
 # Architecture Overview
 
+> **⚠️ PARTIALLY OUTDATED**
+>
+> This document describes a planned "Von Neumann Memory Architecture" with an `avatars` table as a computed view. **The avatar system was never implemented** - the write pipeline was never built.
+>
+> **Current Reality (December 2025):**
+> - Tasks come from `task_items` table, populated by `task_agent.py`
+> - Use `/tasks` command (not `/briefing`) to view tasks
+> - The `avatars`, `avatar_compute_queue`, and `identifier_map` tables have been dropped
+> - See `.claude/ARCHITECTURE.md` for the authoritative, up-to-date architecture
+
 ## Table of Contents
 
 - [System Overview](#system-overview)

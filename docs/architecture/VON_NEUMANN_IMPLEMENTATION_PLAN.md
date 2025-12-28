@@ -1,5 +1,11 @@
 # Von Neumann Memory Architecture - Implementation Plan
 
+> **⚠️ HISTORICAL DESIGN DOC**
+>
+> This document describes a planned architecture. **The Avatar/CRM Agent system was never implemented** - the write pipeline was never built.
+>
+> **Current Reality:** Tasks come from `task_items` table via `/tasks` command. See `.claude/ARCHITECTURE.md` for up-to-date architecture.
+
 ## Executive Summary
 
 This document defines the implementation of Zylch's Von Neumann memory architecture where Memory is the single source of truth and Avatar/CRM is a computed, volatile view.

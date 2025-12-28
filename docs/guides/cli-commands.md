@@ -111,7 +111,6 @@ Triggers support typed parameters using `{param:type}` syntax:
 📅 Calendar & Tasks:
 • /calendar [days] - Show upcoming events
 • /tasks - List open tasks (needs response)
-• /briefing [days] - Daily briefing with context
 • /jobs - Scheduled reminders and jobs
 
 🧠 Memory & Automation:
@@ -230,7 +229,7 @@ Date Range: 2024-06-15 → 2025-12-16
 
 Open Conversations: 12 need response
 
-Run /sync to update or /briefing for task details.
+Run /sync to update or /tasks for details.
 ```
 
 **Semantic Triggers**: "stats", "email stats", "inbox statistics", "how many emails", "unread count"
@@ -283,7 +282,7 @@ Wednesday, December 18
 
 **Summary**: List open tasks (emails needing response)
 
-**Description**: Shows your open tasks - emails that need response, based on pre-computed avatar analysis. Tasks are sorted by relationship score (priority).
+**Description**: Shows your open tasks - emails that need response. Tasks are sorted by urgency (high → medium → low).
 
 **Arguments**:
 - `--limit N` - Max tasks to show (default: 50)
@@ -360,7 +359,7 @@ Use /jobs --cancel <id> to cancel.
 
 **Summary**: Analyze email threads for unanswered conversations
 
-**Description**: Queries pre-computed avatars (from `/sync`) to detect relationship gaps - emails requiring action, meetings needing follow-up, or contacts going silent.
+**Description**: Analyzes `task_items` to detect relationship gaps - emails requiring action, meetings needing follow-up, or contacts going silent.
 
 **Arguments**:
 - `days` - Number of days to analyze (default: 7)
@@ -376,8 +375,6 @@ Use /jobs --cancel <id> to cancel.
 # Analyze last 30 days
 /gaps 30
 
-# Alternative name
-/briefing
 ```
 
 **Output**:
@@ -417,7 +414,7 @@ Use /jobs --cancel <id> to cancel.
 - 5-7: Medium priority (moderate urgency)
 - 3-4: Low priority (older conversations)
 
-**Note**: Must run `/sync` first to populate avatar data.
+**Note**: Must run `/sync` first to fetch emails, then `/agent task process` to detect tasks.
 
 ---
 
@@ -868,16 +865,16 @@ The recipient needs to authorize this sharing from their Zylch account.
 Once authorized, they will receive:
 • Your contact intelligence
 • Relationship context
-• Avatar data
+• Task data
 
 Manage: /sharing | /revoke colleague@example.com
 ```
 
 **What Gets Shared**:
-- Contact avatars (relationship intelligence)
+- Contact intelligence
 - Email threads metadata (not content)
 - Calendar meeting context
-- Relationship strength scores
+- Task data
 
 **Privacy**: Email/calendar content is NOT shared, only metadata and intelligence.
 
@@ -1272,7 +1269,7 @@ const handleMessage = async (message) => {
 |---------|----------------|-------|
 | `/help` | <10ms | Static text |
 | `/sync` | 2-10s | Depends on email count |
-| `/gaps` | <100ms | Pre-computed avatars |
+| `/gaps` | <100ms | Queries task_items |
 | `/memory --list` | <50ms | SQLite query |
 | `/trigger --add` | <100ms | Supabase insert |
 | `/cache` | <10ms | File read |
@@ -1323,19 +1320,18 @@ const handleMessage = async (message) => {
 **Symptom**: `/gaps` returns "No gaps found"
 
 **Common Causes**:
-1. No avatars computed yet → Wait 5 minutes after `/sync`
+1. No tasks detected yet → Run `/agent task process` after sync
 2. All conversations closed → Correct behavior
-3. Relationship score threshold too high → Check avatar scores
+3. No action_required tasks → Check task_items table
 
 **Fix**:
 ```bash
 # Check sync status
 /sync --status
 
-# Verify avatars queued
-# (should show "X contacts queued for analysis")
+# Process emails into tasks
+/agent task process email
 
-# Wait 5 minutes for background worker
 # Then retry
 /gaps
 ```

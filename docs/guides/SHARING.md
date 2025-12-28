@@ -16,14 +16,14 @@ Zylch's sharing system allows users to share their relational intelligence with 
 2. System creates:       Pending share request in database
 3. Recipient sees:       Incoming request in /sharing
 4. Recipient authorizes: /sharing --authorize sender@example.com
-5. Data flows:           Sender's avatars → Recipient's context
+5. Data flows:           Sender's task data → Recipient's context
 ```
 
 ### What Gets Shared
 
 | Data Type | Description |
 |-----------|-------------|
-| **Contact Avatars** | Vector representations of people |
+| **Contact Intelligence** | Information about people |
 | **Relationship Context** | How you know each person |
 | **Email Intelligence** | Communication patterns, preferences |
 | **Meeting History** | Past interactions with contacts |
@@ -62,7 +62,7 @@ The recipient needs to authorize this sharing from their Zylch account.
 Once authorized, they will receive:
 • Your contact intelligence
 • Relationship context
-• Avatar data
+• Task data
 ```
 
 ### Revoke Access
@@ -137,7 +137,7 @@ Accepts a share request from another user.
 You will now receive their shared data:
 • Contact intelligence
 • Relationship context
-• Avatar data
+• Task data
 ```
 
 ## Database Schema
@@ -201,7 +201,7 @@ Data only flows after explicit authorization by the recipient:
 1. **Sender creates request** - Status is `pending`
 2. **No data shared yet** - Recipient hasn't consented
 3. **Recipient authorizes** - Status becomes `authorized`
-4. **Data flows** - Avatars/context shared
+4. **Data flows** - Task data/context shared
 
 ### Revocation
 
@@ -215,7 +215,7 @@ Data only flows after explicit authorization by the recipient:
 - **Email content**: Never shared (only patterns/metadata)
 - **Calendar details**: Never shared
 - **Personal preferences**: Never shared
-- **Avatars**: Shared as vector embeddings (not raw data)
+- **Task data**: Shared as structured data (not raw email content)
 
 ## Use Cases
 

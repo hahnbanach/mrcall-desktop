@@ -274,19 +274,19 @@ TRACKING_DATA_RETENTION_DAYS=90   # Auto-delete after 90 days (CCPA compliance)
 
 ---
 
-## Briefing Integration (/gaps Command)
+## Task System Integration
 
-### How Read Tracking Integrates with Intelligence
+### How Read Tracking Integrates with Tasks
 
-**Goal**: Notify users in `/briefing` about email read status
+**Goal**: Notify users in `/tasks` about email read status
 - "John read your email 3 days ago, time for a follow-up"
 - "Mario hasn't opened your proposal (sent 5 days ago)"
 
 ### Integration Points
 
-**1. Avatar Context Building** (`avatar_aggregator.py`)
-- Add `_get_read_tracking_data()` method to query read events
-- Include read tracking in `build_context()` output:
+**1. Task Agent Enhancement** (`task_agent.py`)
+- Query `emails.read_events` JSONB when processing tasks
+- Include read tracking context in task detection:
   ```python
   'read_tracking': {
       'sent_emails_count': N,
@@ -294,37 +294,28 @@ TRACKING_DATA_RETENTION_DAYS=90   # Auto-delete after 90 days (CCPA compliance)
       'unread_count': N,
       'last_sent': timestamp,
       'last_read': timestamp,
-      'avg_read_delay_hours': float,
-      'last_unread_email': {...}
   }
   ```
 
-**2. Status Computation** (`crm_worker.py`)
-- Enhance `_compute_status()` with read-aware logic:
-  - `waiting_unread`: Email sent but not read (3+ days)
-  - `waiting_acknowledged`: Email read but no response (3+ days)
-  - `waiting`: Recently sent/read, give them time
-  - `open`: Contact sent last, owner needs to respond
+**2. Urgency Computation**
+- Enhance urgency with read-aware logic:
+  - Boost urgency if email unread 7+ days
+  - Boost urgency if email unread 3+ days
+  - Factor read status into follow-up timing
 
-**3. Priority Boosting** (`crm_worker.py`)
-- Update `_compute_priority()` to boost unread emails:
-  - +2 priority: Unread for 7+ days
-  - +1 priority: Unread for 3+ days
-  - +1 priority: Read 5+ days ago, no response
-
-**4. LLM Prompt Enhancement** (`crm_worker.py`)
-- Add read context to `_generate_suggested_action()` prompt:
+**3. LLM Prompt Enhancement** (`task_agent.py`)
+- Add read context to task detection prompt:
   ```
   ⚠️ IMPORTANT: Recipient has NOT read your email sent 5 days ago
   📖 Recipient READ your email 4 days ago but hasn't responded
   ```
 
-**5. Briefing Display** (`task_formatter.py`)
+**4. Task Display**
 - Add read tracking indicators:
   - `📧❌ (unread 5d)` - Email not opened
   - `📧✓ (read 4d ago)` - Email opened but no response
 
-### Example Briefing Output
+### Example Task Output
 
 **Before (Current)**:
 ```
@@ -368,14 +359,9 @@ WHERE messages.owner_id = $1
 
 | File | Modification | Purpose |
 |------|--------------|---------|
-| `zylch/services/avatar_aggregator.py` | Add `_get_read_tracking_data()` | Query read events |
-| `zylch/services/avatar_aggregator.py` | Update `build_context()` | Include read_tracking field |
-| `zylch/workers/crm_worker.py` | Update `_compute_status()` | Read-aware status logic |
-| `zylch/workers/crm_worker.py` | Update `_compute_priority()` | Priority boost for unread |
-| `zylch/workers/crm_worker.py` | Update `_generate_suggested_action()` | Enhanced LLM prompt |
-| `zylch/services/task_formatter.py` | Add read indicators | Display 📧❌ / 📧✓ |
-| `zylch/api/routes/webhooks.py` | New file | SendGrid webhook handler |
-| `zylch/api/routes/tracking.py` | New file | Tracking pixel endpoint |
+| `zylch/agents/task_agent.py` | Add read tracking context | Query read events during task detection |
+| `zylch/api/routes/webhooks.py` | SendGrid webhook handler | Receive open events |
+| `zylch/api/routes/tracking.py` | Tracking pixel endpoint | Serve 1x1 GIF |
 | `zylch/storage/supabase_client.py` | Add methods | Read tracking queries |
 
 ---
@@ -383,9 +369,9 @@ WHERE messages.owner_id = $1
 ## Next Steps
 
 1. ✅ Review and approve proposal
-2. ✅ Design briefing integration
+2. ✅ Design task system integration
 3. ⏳ Start Phase 1 (Database Setup)
-4. ⏳ Implement avatar integration
+4. ⏳ Implement task agent integration
 5. ⏳ Configure SendGrid webhook
 6. ⏳ Test end-to-end flow
 
@@ -394,4 +380,4 @@ WHERE messages.owner_id = $1
 ## Questions?
 
 - **Full Proposal**: See `email-read-tracking.md` for detailed technical specifications
-- **Briefing Integration**: See above for avatar system integration details
+- **Task Integration**: See above for task system integration details
