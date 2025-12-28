@@ -1530,9 +1530,9 @@ class _GetTasksTool(Tool):
             urgency_order = {'high': 0, 'medium': 1, 'low': 2}
             tasks = sorted(tasks, key=lambda t: urgency_order.get(t.get('urgency'), 9))
 
-            # Limit low-urgency tasks to 10
+            # Group by urgency: high -> medium -> low (no limits)
             high_medium = [t for t in tasks if t.get('urgency') in ('high', 'medium')]
-            low = [t for t in tasks if t.get('urgency') == 'low'][:10]
+            low = [t for t in tasks if t.get('urgency') == 'low']
             tasks = high_medium + low
 
             if not tasks:

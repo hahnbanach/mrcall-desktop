@@ -27,7 +27,7 @@ def format_task_items(tasks: list) -> str:
     # Group by urgency
     high = [t for t in tasks if t.get('urgency') == 'high']
     medium = [t for t in tasks if t.get('urgency') == 'medium']
-    low = [t for t in tasks if t.get('urgency') == 'low'][:10]  # Limit low to 10
+    low = [t for t in tasks if t.get('urgency') == 'low']
 
     idx = 1
     if high:
@@ -2216,11 +2216,11 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
         if not tasks:
             return "No tasks found. Run `/tasks refresh` first."
 
-        # Apply same low-task limit as format_task_items() (10 max)
+        # Group by urgency: high -> medium -> low (no limits)
         high_medium = [t for t in tasks if t.get('urgency') in ('high', 'medium')]
-        low = [t for t in tasks if t.get('urgency') == 'low'][:10]
+        low = [t for t in tasks if t.get('urgency') == 'low']
         tasks = high_medium + low
-        logger.debug(f"[TASK_DETAIL] After low limit: {len(tasks)} tasks")
+        logger.debug(f"[TASK_DETAIL] Total tasks after grouping: {len(tasks)}")
 
         if task_num < 1 or task_num > len(tasks):
             return f"Task #{task_num} not found. Valid range: #1 - #{len(tasks)}"
