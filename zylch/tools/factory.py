@@ -564,8 +564,8 @@ class _GmailSearchTool(Tool):
         zylch_assistant_id: str = "default_assistant"
     ):
         super().__init__(
-            name="search_gmail",
-            description="Search Gmail for emails from or to a contact to understand relationship"
+            name="search_provider_emails",
+            description="Search email provider for emails from or to a contact to understand relationship"
         )
         self.gmail = gmail_client
         self.owner_id = owner_id
@@ -923,11 +923,11 @@ class _ListDraftsTool(Tool):
 
 
 class _EditDraftTool(Tool):
-    """Edit a Gmail draft interactively with nano editor."""
+    """Edit a draft interactively with nano editor."""
     def __init__(self, gmail_client):
         super().__init__(
-            name="edit_gmail_draft",
-            description="Open a Gmail draft in nano editor for manual editing"
+            name="edit_draft",
+            description="Open a draft in nano editor for manual editing"
         )
         self.gmail = gmail_client
 
@@ -1021,11 +1021,11 @@ class _EditDraftTool(Tool):
 
 
 class _UpdateDraftTool(Tool):
-    """Update an existing Gmail draft."""
+    """Update an existing draft."""
     def __init__(self, gmail_client):
         super().__init__(
-            name="update_gmail_draft",
-            description="Update an existing Gmail draft with new content"
+            name="update_draft",
+            description="Update an existing draft with new content"
         )
         self.gmail = gmail_client
 
