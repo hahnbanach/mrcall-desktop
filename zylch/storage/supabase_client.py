@@ -2708,7 +2708,8 @@ class SupabaseStorage:
                 'urgency': item.get('urgency'),
                 'reason': item.get('reason'),
                 'suggested_action': item.get('suggested_action'),
-                'analyzed_at': item.get('analyzed_at')
+                'analyzed_at': item.get('analyzed_at'),
+                'sources': item.get('sources', {})  # JSONB tracking data sources
             }
 
             self.client.table('task_items')\
