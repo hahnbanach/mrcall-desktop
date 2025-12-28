@@ -5,7 +5,7 @@ Replace rule-based `/tasks` with LLM-reasoning approach that analyzes events and
 
 ## Current Flow (to remove)
 ```
-Query avatars table → Filter by relationship_score → Format as list
+Query task_items table → Format as list
 ```
 
 ## New Flow
@@ -149,9 +149,9 @@ async def handle_tasks(args: List[str], owner_id: str) -> str:
     return format_task_list(tasks)  # Update task_formatter.py
 ```
 
-### 4. Update `task_formatter.py`
+### 4. Update Task Formatting
 
-Change from avatar-based to action-based formatting:
+Change to action-based formatting:
 
 ```python
 def format_task_list(tasks: List[dict]) -> str:

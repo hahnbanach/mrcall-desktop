@@ -41,7 +41,7 @@ Unlike traditional email clients that show thread-by-thread views, Zylch AI aggr
 - **Email Archive**: Permanent SQLite storage with full-text search (FTS5)
 
 ### Task Management & Contact Intelligence
-- **Von Neumann Memory Architecture**: Intelligent contact management with persistent memory storage and computed avatar views (see `docs/architecture/VON_NEUMANN_IMPLEMENTATION_COMPLETE.md`)
+- **Memory Architecture**: Intelligent contact management with persistent memory storage (blobs)
 - **Person-Centric Tasks**: Aggregate all email threads per contact into unified view
 - **Priority Scoring**: 1-10 urgency score based on relationship context
 - **Status Tracking**: Open, waiting, closed - know what needs action
@@ -136,7 +136,7 @@ Zylch AI uses this to identify which emails are yours vs. contacts:
 ```bash
 /sync [days]   - Run morning sync (emails + calendar + gap analysis)
                  Examples: /sync (default 30 days), /sync 3 (last 3 days)
-/gaps          - Show relationship gaps briefing
+/tasks         - Show detected tasks
 ```
 
 ### Archive Management
@@ -207,7 +207,7 @@ Zylch AI provides HTTP API endpoints for web/mobile integration. See `docs/api/c
 **✨ Core Features**
 - [Email Archive](docs/features/email-archive.md) - Two-tier email storage system
 - [Relationship Intelligence](docs/features/relationship-intelligence.md) - Person-centric gap detection
-- [Avatar Aggregation](docs/features/avatar-aggregation.md) - Contact intelligence system
+- [Task System](docs/features/relationship-intelligence.md) - Task detection and management
 - [Entity Memory System](docs/features/entity-memory-system.md) - Entity-centric memory with hybrid search
 - [Triggers & Automation](docs/features/triggers-automation.md) - Event-driven automation
 - [Sharing System](docs/features/sharing-system.md) - Team intelligence sharing

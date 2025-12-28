@@ -10,7 +10,7 @@
 
 - OAuth tokens → Supabase `oauth_tokens` (encrypted with Fernet)
 - All user data → Supabase (scoped by `owner_id`)
-- Memory/Avatars → Supabase pg_vector
+- Memory/Blobs → Supabase pg_vector
 
 **NEVER use `credentials/`, `cache/`, or local pickle files. These are LEGACY and UNUSED.**
 
@@ -431,7 +431,7 @@ When desktop/mobile apps are developed, we may explore local-first storage:
 | `/tutorial` | ✅ | `handle_tutorial()` |
 
 **Performance Optimization** (Complete):
-- [x] `get_tasks` tool — Returns pre-formatted task list from avatars (avoids 27s LLM formatting)
+- [x] `get_tasks` tool — Returns pre-formatted task list from task_items (avoids 27s LLM formatting)
 - [x] Update `/gaps` to show task details, not just counts
 - [x] `/gaps` no longer loads ZylchMemory (removed ~1min ML model load)
 
@@ -509,11 +509,10 @@ When desktop/mobile apps are developed, we may explore local-first storage:
   - [x] `record_custom_pixel_read_event()`
   - [x] `_update_message_read_events()`
 - [x] Intelligence integration
-  - [x] Avatar aggregator: `_get_read_tracking_data()` method
-  - [x] CRM worker: Status computation with `waiting_unread`, `waiting_acknowledged`
-  - [x] CRM worker: Priority boosting (+2 for unread 7+ days, +1 for unread 3+ days)
-  - [x] CRM worker: Enhanced LLM action generation with read context
-  - [x] Task formatter: Display indicators `📧❌ (unread 5d)` or `📧✓ (read 4d ago)`
+  - [x] Task agent: Read tracking data method
+  - [x] Task agent: Priority boosting (+2 for unread 7+ days, +1 for unread 3+ days)
+  - [x] Task agent: Enhanced LLM action generation with read context
+  - [x] Task display: Display indicators `📧❌ (unread 5d)` or `📧✓ (read 4d ago)`
 - [x] Documentation
   - [x] Feature documentation (`docs/features/email-read-tracking.md`)
   - [x] Implementation guide (`docs/features/email-read-tracking-implementation.md`)
@@ -524,11 +523,11 @@ When desktop/mobile apps are developed, we may explore local-first storage:
 
 **Deliverables**:
 - ✅ Dual tracking system operational (SendGrid webhooks + custom pixel)
-- ✅ Read tracking data integrated into avatar/briefing system
+- ✅ Read tracking data integrated into task system
 - ✅ Database schema with multi-tenant RLS
 - ✅ Privacy-compliant (US laws: CAN-SPAM, CCPA)
 - ✅ 90-day data retention with auto-cleanup
-- ✅ Briefing shows read indicators for all tasks
+- ✅ Task list shows read indicators for all tasks
 - ✅ Complete documentation suite
 
 **Next Steps** (Pending Testing):
@@ -704,7 +703,7 @@ When desktop/mobile apps are developed, we may explore local-first storage:
 - [ ] Implement caching strategy:
   - [ ] Cache relationship gaps (5 min TTL)
   - [ ] Cache tasks (10 min TTL)
-  - [ ] Cache contact avatars (1 hour TTL)
+  - [ ] Cache contact memory (1 hour TTL)
 - [ ] Implement rate limiting per user/tier
 - [ ] Add Sentry for error tracking
 - [ ] Set up logging and monitoring

@@ -59,10 +59,11 @@ Reaching out from Sesamers where we are curating...
 
 ## Overview
 
-Zylch AI uses an **Avatar System** that aggregates intelligence per-contact. Each avatar contains:
-- Communication patterns across all channels (email, calendar, etc.)
-- Pending tasks and action items
-- Relationship health indicators
+Zylch AI uses a **Task Detection System** that identifies actionable items from emails and calendar events. Tasks are stored in the `task_items` table with:
+- Contact attribution (who the task relates to)
+- Urgency levels (high, medium, low)
+- Suggested actions
+- Source traceability (which emails/blobs informed the task)
 
 ## Key Concept
 
@@ -77,25 +78,27 @@ Zylch AI uses an **Avatar System** that aggregates intelligence per-contact. Eac
 Data Flow:
 ├─ sync_emails() → Supabase `emails` table
 ├─ sync_calendar() → Supabase `calendar_events` table
-└─ Avatar Worker (background) → Supabase `avatars` table
-    ├─ Per-contact aggregation
+└─ Task Agent (during sync) → Supabase `task_items` table
+    ├─ Per-email analysis
     ├─ Task detection via LLM
-    └─ Priority scoring
+    └─ Urgency scoring
 ```
 
 ## Components
 
-### 1. Avatar System (`zylch/services/avatar_aggregator.py`)
-- Aggregates data per-contact (email address)
-- Computes tasks, status, priority
-- Stores in Supabase `avatars` table with `pg_vector` embeddings
+### 1. Task Agent (`zylch/tools/task_agent.py`)
+- Analyzes emails for actionable items
+- Determines urgency (high/medium/low)
+- Generates suggested actions
+- Stores in Supabase `task_items` table
 
 ### 2. Task Detection
-Each avatar contains:
-- All threads with this contact
-- All calendar events involving this contact
-- AI-computed tasks (what Mario needs to do)
-- Read tracking data (if enabled)
+Each task contains:
+- Contact email and name
+- Suggested action (what Mario needs to do)
+- Reason (why this is a task)
+- Urgency level
+- Sources (email IDs and blob IDs for context)
 
 ## Task Examples
 A TASK is needed when:
@@ -123,13 +126,14 @@ $ /sync
 📅 Syncing calendar...
    ✅ Calendar sync complete: 3 events
 
-⏳ Avatar computation queued
+🔍 Analyzing for tasks...
+   ✅ Found 3 tasks
 ```
 
-### `/briefing` or `/tasks` - View your tasks
-Shows actionable tasks computed from avatars:
+### `/tasks` - View your tasks
+Shows actionable tasks:
 ```bash
-$ /briefing
+$ /tasks
 
 📋 YOUR TASKS
 ============================================================
@@ -157,19 +161,18 @@ All data is stored in Supabase with `owner_id` scoping:
 |-------|---------|
 | `emails` | Email metadata and content |
 | `calendar_events` | Calendar events |
-| `avatars` | Per-contact intelligence blobs |
-| `avatar_compute_queue` | Background processing queue |
+| `task_items` | Detected tasks with urgency |
+| `blobs` | Semantic memory for context |
 
 ## Testing
 
 ### Run tests:
 ```bash
-pytest tests/test_avatar_aggregator.py
+pytest tests/test_task_agent.py
 ```
 
 ## References
 
 - **Email sync**: `zylch/services/sync_service.py`
-- **Avatar aggregation**: `zylch/services/avatar_aggregator.py`
-- **Task formatting**: `zylch/services/task_formatter.py`
-- **Background worker**: `zylch/workers/avatar_compute_worker.py`
+- **Task detection**: `zylch/tools/task_agent.py`
+- **Command handlers**: `zylch/services/command_handlers.py`

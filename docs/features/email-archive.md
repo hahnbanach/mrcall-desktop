@@ -193,7 +193,7 @@ You: /sync
 🔍 Step 4: Analyzing gaps...
 ✅ Gap analysis complete
 
-✅ Morning sync complete! Use /gaps to see your briefing.
+✅ Morning sync complete! Use /tasks to see your tasks.
 ```
 
 ## HTTP API

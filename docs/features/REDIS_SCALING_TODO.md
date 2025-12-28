@@ -20,7 +20,7 @@
 **Use Cases**:
 - Cache email threads for instant task building
 - Cache relationship gaps for fast `/gaps` command
-- Cache contact avatars for quick lookups
+- Cache tasks for quick lookups
 - Session storage for multi-request workflows
 - Rate limiting per user
 
@@ -122,16 +122,16 @@ else:
     return tasks
 
 
-# 3. Contact Avatars (1 hour TTL)
-cache_key = f"avatar:{contact_email}"
-cached_avatar = await redis.get(cache_key)
+# 3. Contact Memory (1 hour TTL)
+cache_key = f"contact_memory:{contact_email}"
+cached_memory = await redis.get(cache_key)
 
-if cached_avatar:
-    return json.loads(cached_avatar)
+if cached_memory:
+    return json.loads(cached_memory)
 else:
-    avatar = await avatar_aggregator.get_avatar(contact_email)
-    await redis.setex(cache_key, 3600, json.dumps(avatar))  # 1 hour TTL
-    return avatar
+    memory = await blob_service.get_contact_blobs(contact_email)
+    await redis.setex(cache_key, 3600, json.dumps(memory))  # 1 hour TTL
+    return memory
 ```
 
 **Cache Invalidation**:

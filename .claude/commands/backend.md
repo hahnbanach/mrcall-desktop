@@ -9,7 +9,7 @@ NAMESPACE: zylch
 MEMORY CONTEXT:
 Query these namespaces:
 - zylch (backend decisions, API design)
-- zylch-memory (avatar/memory architecture)
+- zylch-memory (blob/memory architecture)
 - default (general context)
 
 READ FIRST:

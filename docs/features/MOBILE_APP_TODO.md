@@ -112,7 +112,7 @@ function MobileApp() {
 
 **Key Screens**:
 1. **Gaps Screen**: Swipeable cards for relationship gaps
-2. **Tasks Screen**: Person-centric task list with avatars
+2. **Tasks Screen**: Person-centric task list
 3. **Contacts Screen**: Searchable contact list with intelligence
 4. **Chat Screen**: Conversational AI interface
 5. **Settings Screen**: Account, notifications, sync preferences
