@@ -6,6 +6,7 @@ authors = [{name = "MrCall", email = "info@mrcall.ai"}]
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.39.0",
+    "litellm>=1.50.0",  # Unified LLM interface for multi-provider support
     "google-auth-oauthlib>=1.2.0",
     "google-api-python-client>=2.108.0",
     "httpx>=0.25.0",

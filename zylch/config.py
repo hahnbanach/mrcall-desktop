@@ -24,18 +24,27 @@ class Settings(BaseSettings):
         description="Log level: DEBUG, INFO, WARNING, ERROR"
     )
 
-    # Users set their Anthropic API key via /connect anthropic command
+    # LLM Provider Configuration
+    # Users set their API key via /connect anthropic, /connect openai, or /connect mistral
+    llm_provider: str = Field(
+        default="anthropic",
+        description="LLM provider: anthropic, openai, mistral"
+    )
+
+    # Note: The actual model used is determined by the provider.
+    # These legacy fields are kept for backward compatibility but are overridden by llm_provider.
+    # See zylch/llm/providers.py for PROVIDER_MODELS mapping.
     default_model: str = Field(
         default="claude-sonnet-4-20250514",
-        description="Default model for general tasks"
+        description="Default model (legacy - now determined by llm_provider)"
     )
     classification_model: str = Field(
         default="claude-sonnet-4-20250514",
-        description="Fast model for classification"
+        description="Classification model (legacy - now uses same model as default)"
     )
     executive_model: str = Field(
         default="claude-opus-4-20250514",
-        description="Premium model for executive communications"
+        description="Executive model (legacy - now uses same model as default)"
     )
 
     # Google OAuth (shared by Gmail, Calendar, etc.)

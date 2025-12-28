@@ -1,13 +1,12 @@
 """LLM helper functions for prompt modification.
 
-Uses Claude to modify assistant prompts while preserving StarChat variables.
+Uses LLM to modify assistant prompts while preserving StarChat variables.
 """
 
 import logging
-import os
 from typing import List, Optional, Tuple, Dict, Any
 
-from anthropic import Anthropic
+from zylch.llm import LLMClient
 
 from .variable_utils import (
     extract_variables,
@@ -24,8 +23,8 @@ async def modify_prompt_with_llm(
     user_request: str,
     admin_rules: Optional[List[str]] = None,
     similar_patterns: Optional[List[Dict[str, Any]]] = None,
-    model: str = "claude-3-5-haiku-20241022",
-    anthropic_api_key: Optional[str] = None,
+    api_key: Optional[str] = None,
+    provider: str = "anthropic",
 ) -> Tuple[str, Dict[str, Any]]:
     """Modify a prompt using LLM while preserving variables.
 
@@ -34,8 +33,8 @@ async def modify_prompt_with_llm(
         user_request: User's modification request
         admin_rules: Optional list of admin rules to apply
         similar_patterns: Optional list of similar past modifications for context
-        model: Anthropic model to use (default: claude-3-5-haiku-20241022)
-        anthropic_api_key: API key (defaults to env var)
+        api_key: API key for the LLM provider
+        provider: LLM provider (anthropic, openai, mistral)
 
     Returns:
         Tuple of (modified_prompt, validation_result)
@@ -101,23 +100,22 @@ IMPORTANT:
 MODIFIED PROMPT:"""
 
     # Call LLM - BYOK only, no env var fallback
-    if not anthropic_api_key:
+    if not api_key:
         raise ValueError(
-            "Anthropic API key required. "
-            "Please run `/connect anthropic` to configure your API key."
+            f"API key required. "
+            f"Please run `/connect {provider}` to configure your API key."
         )
-    client = Anthropic(api_key=anthropic_api_key)
+    client = LLMClient(api_key=api_key, provider=provider)
 
-    logger.info(f"Calling LLM to modify prompt (model: {model})")
+    logger.info(f"Calling LLM to modify prompt (provider: {provider})")
 
-    response = client.messages.create(
-        model=model,
+    response = await client.create_message(
+        messages=[{"role": "user", "content": modification_prompt}],
         max_tokens=4000,
         temperature=0.3,
-        messages=[{"role": "user", "content": modification_prompt}]
     )
 
-    modified_prompt = response.content[0].text.strip()
+    modified_prompt = response.content[0].text.strip() if response.content else ""
 
     # First, check for placeholders
     is_valid, placeholder_error = validate_no_placeholders(modified_prompt)

@@ -1,29 +1,30 @@
-"""Lightweight Haiku-based intent classification."""
+"""Lightweight LLM-based intent classification."""
 
 import json
 from typing import Dict, Any, List, Optional
-from anthropic import Anthropic
+
 from zylch.config import settings
+from zylch.llm import LLMClient
 
 
 class IntentRouter:
     """Routes user input to appropriate skill(s)."""
 
-    def __init__(self, skill_registry, anthropic_api_key: str = ""):
+    def __init__(self, skill_registry, api_key: str = "", provider: str = "anthropic"):
         """Initialize IntentRouter.
 
         Args:
             skill_registry: Registry of available skills
-            anthropic_api_key: Anthropic API key (BYOK - from Supabase)
+            api_key: API key for the LLM provider (BYOK - from Supabase)
+            provider: LLM provider (anthropic, openai, mistral)
         """
-        if not anthropic_api_key:
+        if not api_key:
             raise ValueError(
-                "Anthropic API key required for IntentRouter. "
-                "Please run `/connect anthropic` to configure your API key."
+                f"API key required for IntentRouter. "
+                f"Please run `/connect {provider}` to configure your API key."
             )
-        self.client = Anthropic(api_key=anthropic_api_key)
+        self.client = LLMClient(api_key=api_key, provider=provider)
         self.skill_registry = skill_registry
-        self.router_model = settings.skill_router_model  # From config!
 
     async def classify_intent(
         self,
@@ -73,18 +74,17 @@ Rules:
 """
 
         try:
-            response = self.client.messages.create(
-                model=self.router_model,  # Configurable!
-                max_tokens=500,
-                temperature=0,
+            response = await self.client.create_message(
                 messages=[{
                     "role": "user",
                     "content": classification_prompt
-                }]
+                }],
+                max_tokens=500,
+                temperature=0,
             )
 
             # Parse JSON response
-            result_text = response.content[0].text
+            result_text = response.content[0].text if response.content else ""
 
             # Extract JSON from potential markdown code blocks
             if "```json" in result_text:
