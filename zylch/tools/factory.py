@@ -8,8 +8,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-import anthropic
-
 from zylch.config import settings
 from .base import Tool, ToolResult, ToolStatus
 
@@ -233,7 +231,7 @@ class ToolFactory:
                 email_sync = EmailSyncManager(
                     email_archive=email_archive,
                     cache_dir=config.cache_dir + "/emails",
-                    anthropic_api_key=config.anthropic_api_key,
+                    api_key=config.anthropic_api_key,
                     days_back=30,
                 )
 
@@ -290,8 +288,12 @@ class ToolFactory:
         # Calendar tools (4 tools)
         tools.extend(ToolFactory._create_calendar_tools(calendar))
 
-        # Web search tool (1 tool)
-        tools.append(WebSearchTool(anthropic_api_key=config.anthropic_api_key))
+        # Web search tool (1 tool) - Anthropic-only feature
+        # Pass provider so WebSearchTool can show clear error for non-Anthropic providers
+        tools.append(WebSearchTool(
+            api_key=config.anthropic_api_key,
+            provider=getattr(config, 'llm_provider', 'anthropic')
+        ))
 
         # Pipedrive tools (2 tools) - optional
         if pipedrive:
@@ -302,7 +304,8 @@ class ToolFactory:
             tools.extend(ToolFactory._create_mrcall_tools(
                 starchat_client=starchat,
                 session_state=session_state,
-                anthropic_api_key=config.anthropic_api_key
+                api_key=config.anthropic_api_key,
+                provider=getattr(config, 'llm_provider', 'anthropic')
             ))
 
         # Sharing tools (4 tools) - for intelligence sharing between users
@@ -449,7 +452,8 @@ class ToolFactory:
     def _create_mrcall_tools(
         starchat_client,
         session_state: SessionState,
-        anthropic_api_key: str
+        api_key: str,
+        provider: str = "anthropic"
     ) -> List[Tool]:
         """Create MrCall assistant configuration tools.
 
@@ -468,7 +472,8 @@ class ToolFactory:
         return [
             GetAssistantCatalogTool(starchat_client, session_state),
             # TODO: These tools need migration from zylch_memory to Supabase
-            # ConfigureAssistantTool(starchat_client, session_state, anthropic_api_key),
+            # When re-enabled, pass api_key and provider:
+            # ConfigureAssistantTool(starchat_client, session_state, api_key, provider),
             # SaveMrCallAdminRuleTool(starchat_client, session_state),
         ]
 

@@ -7,10 +7,11 @@ using LLM to detect semantic issues and provide helpful feedback.
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from enum import Enum
+import anthropic
 import json
 import logging
 
-from ..llm import LLMClient
+from zylch.llm import LLMClient, PROVIDER_MODELS
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class ValidationResult:
 class CommandValidator:
     """AI-powered semantic command validator.
 
-    Uses LLM for fast validation of user commands.
+    Uses LLM for fast, cost-effective validation of user commands.
     Detects semantic issues like using /trigger for always-on behavior.
     """
 
@@ -46,9 +47,11 @@ class CommandValidator:
         """Initialize validator.
 
         Args:
-            api_key: API key for the LLM provider
+            api_key: LLM API key
             provider: LLM provider (anthropic, openai, mistral)
         """
+        self.provider = provider
+        self.model = PROVIDER_MODELS.get(provider, PROVIDER_MODELS["anthropic"])
         self.client = LLMClient(api_key=api_key, provider=provider)
 
     async def validate_command(
@@ -177,14 +180,15 @@ Return ONLY valid JSON (no markdown, no code blocks):
             Parsed JSON response from AI
         """
         response = await self.client.create_message(
+            model=self.model,
+            max_tokens=1024,
             messages=[
                 {"role": "user", "content": prompt}
-            ],
-            max_tokens=1024,
+            ]
         )
 
         # Extract JSON from response
-        content = response.content[0].text if response.content else ""
+        content = response.content[0].text
 
         # Parse JSON (handle markdown code blocks if AI includes them)
         if "```json" in content:

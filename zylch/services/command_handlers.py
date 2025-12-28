@@ -113,14 +113,11 @@ async def handle_sync(args: List[str], config, owner_id: str) -> str:
             if last_sync:
                 # Parse and format the timestamp nicely
                 from datetime import datetime
-                try:
-                    if isinstance(last_sync, str):
-                        dt = datetime.fromisoformat(last_sync.replace('Z', '+00:00'))
-                        last_sync_display = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
-                    else:
-                        last_sync_display = str(last_sync)
-                except:
-                    last_sync_display = str(last_sync)
+                if isinstance(last_sync, str):
+                    dt = datetime.fromisoformat(last_sync.replace('Z', '+00:00'))
+                    last_sync_display = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+                else:
+                    last_sync_display = last_sync.strftime('%Y-%m-%d %H:%M:%S UTC')
             else:
                 last_sync_display = "Never"
 
@@ -1063,7 +1060,9 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
 • `google` - Gmail & Google Calendar
 • `microsoft` - Outlook & Calendar
 • `mrcall` - MrCall/StarChat phone
-• `anthropic` - Claude AI (BYOK)
+• `anthropic` - Claude AI (BYOK) - includes web search & prompt caching
+• `openai` - OpenAI GPT-4 (BYOK)
+• `mistral` - Mistral AI (BYOK) - EU-based for GDPR
 • `pipedrive` - Pipedrive CRM
 • `vonage` - Vonage SMS
 
@@ -1126,6 +1125,7 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
                 delete_anthropic_key,
                 delete_pipedrive_key,
                 delete_vonage_keys,
+                delete_llm_provider_key,
             )
 
             # Note: delete_user_credentials deletes both google and microsoft
@@ -1135,6 +1135,8 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
                 'microsoft': lambda oid: supabase.delete_oauth_token(oid, 'microsoft'),
                 'mrcall': delete_mrcall_credentials,
                 'anthropic': delete_anthropic_key,
+                'openai': lambda oid: delete_llm_provider_key(oid, 'openai'),
+                'mistral': lambda oid: delete_llm_provider_key(oid, 'mistral'),
                 'pipedrive': delete_pipedrive_key,
                 'vonage': delete_vonage_keys,
             }
@@ -1949,13 +1951,9 @@ Run `/sync` to fetch calendar events."""
         for event in result.data:
             # Parse start time
             start_str = event.get('start_time', '')
-            try:
-                start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
-                event_date = start_dt.strftime('%A, %B %d')
-                event_time = start_dt.strftime('%H:%M')
-            except:
-                event_date = start_str[:10] if start_str else 'Unknown'
-                event_time = ''
+            start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+            event_date = start_dt.strftime('%A, %B %d')
+            event_time = start_dt.strftime('%H:%M')
 
             # Group by date
             if event_date != current_date:
@@ -2549,7 +2547,7 @@ async def _handle_memory_process(storage, owner_id: str, channel: str, anthropic
 Connect your Anthropic account:
 `/connect anthropic`"""
 
-    worker = MemoryWorker(storage=storage, owner_id=owner_id, anthropic_api_key=anthropic_key)
+    worker = MemoryWorker(storage=storage, owner_id=owner_id, api_key=anthropic_key)
 
     channels_to_process = [channel] if channel != 'all' else ['email', 'calendar']
     results = []

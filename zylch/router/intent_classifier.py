@@ -1,10 +1,10 @@
-"""Lightweight LLM-based intent classification."""
+"""Lightweight intent classification using LLM."""
 
 import json
 from typing import Dict, Any, List, Optional
 
 from zylch.config import settings
-from zylch.llm import LLMClient
+from zylch.llm import LLMClient, PROVIDER_MODELS
 
 
 class IntentRouter:
@@ -15,14 +15,16 @@ class IntentRouter:
 
         Args:
             skill_registry: Registry of available skills
-            api_key: API key for the LLM provider (BYOK - from Supabase)
+            api_key: LLM API key (BYOK - from Supabase)
             provider: LLM provider (anthropic, openai, mistral)
         """
         if not api_key:
             raise ValueError(
-                f"API key required for IntentRouter. "
-                f"Please run `/connect {provider}` to configure your API key."
+                "LLM API key required for IntentRouter. "
+                "Please run `/connect <provider>` to configure your API key."
             )
+        self.provider = provider
+        self.router_model = PROVIDER_MODELS.get(provider, settings.skill_router_model)
         self.client = LLMClient(api_key=api_key, provider=provider)
         self.skill_registry = skill_registry
 
@@ -75,16 +77,17 @@ Rules:
 
         try:
             response = await self.client.create_message(
+                model=self.router_model,
+                max_tokens=500,
+                temperature=0,
                 messages=[{
                     "role": "user",
                     "content": classification_prompt
-                }],
-                max_tokens=500,
-                temperature=0,
+                }]
             )
 
             # Parse JSON response
-            result_text = response.content[0].text if response.content else ""
+            result_text = response.content[0].text
 
             # Extract JSON from potential markdown code blocks
             if "```json" in result_text:

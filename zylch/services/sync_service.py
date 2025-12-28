@@ -173,7 +173,7 @@ class SyncService:
 
         calendar_sync = CalendarSyncManager(
             calendar_client=calendar,
-            anthropic_api_key=self.anthropic_api_key,
+            api_key=self.anthropic_api_key,
             my_emails=my_emails_list,
             owner_id=self.owner_id,
             supabase_storage=self.supabase

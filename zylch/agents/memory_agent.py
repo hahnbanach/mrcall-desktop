@@ -11,9 +11,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-import anthropic
-
 from zylch.config import settings
+from zylch.llm import LLMClient
 from zylch.storage.supabase_client import SupabaseStorage
 from zylch.memory import BlobStorage, HybridSearchEngine, LLMMergeService, EmbeddingEngine, ZylchMemoryConfig
 
@@ -35,26 +34,27 @@ class MemoryWorker:
         self,
         storage: SupabaseStorage,
         owner_id: str,
-        anthropic_api_key: str = ""
+        api_key: str = "",
+        provider: str = "anthropic"
     ):
         """Initialize MemoryWorker.
 
         Args:
             storage: SupabaseStorage instance
             owner_id: Firebase UID for namespace
-            anthropic_api_key: Anthropic API key for LLM operations
+            api_key: API key for the LLM provider
+            provider: LLM provider (anthropic, openai, mistral)
         """
         self.storage = storage
         self.owner_id = owner_id
         self.namespace = f"user:{owner_id}"
 
         # BYOK - API key must be provided, no env var fallback
-        if not anthropic_api_key:
+        if not api_key:
             raise ValueError(
-                "Anthropic API key required for memory extraction. "
-                "Please run `/connect anthropic` to configure your API key."
+                f"API key required for memory extraction. "
+                f"Please run `/connect {provider}` to configure your API key."
             )
-        api_key = anthropic_api_key
 
         # Initialize components
         config = ZylchMemoryConfig()
@@ -67,10 +67,10 @@ class MemoryWorker:
             storage.client,
             self.embedding_engine
         )
-        self.llm_merge = LLMMergeService(api_key)
+        self.llm_merge = LLMMergeService(api_key, provider)
 
-        # Also use Anthropic for fact extraction
-        self.anthropic = anthropic.Anthropic(api_key=api_key)
+        # LLM client for fact extraction
+        self.client = LLMClient(api_key=api_key, provider=provider)
 
         # Cache for user's custom prompt (lazy loaded)
         self._custom_prompt: Optional[str] = None
@@ -284,10 +284,9 @@ class MemoryWorker:
                 contact_email=contact_email
             )
 
-            response = self.anthropic.messages.create(
-                model=settings.default_model,
-                max_tokens=1024,  # Increased for multiple entities
-                messages=[{"role": "user", "content": prompt}]
+            response = self.client.create_message_sync(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1024  # Increased for multiple entities
             )
             raw_output = response.content[0].text.strip()
             logging.debug(f"RAW OUTPUT:\n{raw_output}")
@@ -444,10 +443,9 @@ Include:
 Output ONLY the facts as natural language prose (2-5 sentences). If no meaningful facts, output "No significant facts."
 """
 
-            response = self.anthropic.messages.create(
-                model=settings.classification_model,
-                max_tokens=512,
-                messages=[{"role": "user", "content": prompt}]
+            response = self.client.create_message_sync(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=512
             )
             return response.content[0].text.strip()
 
@@ -564,10 +562,9 @@ Include:
 Output ONLY the facts as natural language prose (2-5 sentences). If no meaningful facts, output "No significant facts."
 """
 
-            response = self.anthropic.messages.create(
-                model=settings.classification_model,
-                max_tokens=512,
-                messages=[{"role": "user", "content": prompt}]
+            response = self.client.create_message_sync(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=512
             )
             return response.content[0].text.strip()
 

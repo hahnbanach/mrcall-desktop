@@ -4,9 +4,10 @@ Uses LLM to modify assistant prompts while preserving StarChat variables.
 """
 
 import logging
+import os
 from typing import List, Optional, Tuple, Dict, Any
 
-from zylch.llm import LLMClient
+from zylch.llm import LLMClient, PROVIDER_MODELS
 
 from .variable_utils import (
     extract_variables,
@@ -23,6 +24,7 @@ async def modify_prompt_with_llm(
     user_request: str,
     admin_rules: Optional[List[str]] = None,
     similar_patterns: Optional[List[Dict[str, Any]]] = None,
+    model: str = None,
     api_key: Optional[str] = None,
     provider: str = "anthropic",
 ) -> Tuple[str, Dict[str, Any]]:
@@ -33,7 +35,8 @@ async def modify_prompt_with_llm(
         user_request: User's modification request
         admin_rules: Optional list of admin rules to apply
         similar_patterns: Optional list of similar past modifications for context
-        api_key: API key for the LLM provider
+        model: LLM model to use (defaults to provider's default model)
+        api_key: LLM API key
         provider: LLM provider (anthropic, openai, mistral)
 
     Returns:
@@ -102,20 +105,26 @@ MODIFIED PROMPT:"""
     # Call LLM - BYOK only, no env var fallback
     if not api_key:
         raise ValueError(
-            f"API key required. "
-            f"Please run `/connect {provider}` to configure your API key."
+            "LLM API key required. "
+            "Please run `/connect <provider>` to configure your API key."
         )
+
+    # Use provider's default model if not specified
+    if not model:
+        model = PROVIDER_MODELS.get(provider, PROVIDER_MODELS["anthropic"])
+
     client = LLMClient(api_key=api_key, provider=provider)
 
-    logger.info(f"Calling LLM to modify prompt (provider: {provider})")
+    logger.info(f"Calling LLM to modify prompt (provider: {provider}, model: {model})")
 
     response = await client.create_message(
-        messages=[{"role": "user", "content": modification_prompt}],
+        model=model,
         max_tokens=4000,
         temperature=0.3,
+        messages=[{"role": "user", "content": modification_prompt}]
     )
 
-    modified_prompt = response.content[0].text.strip() if response.content else ""
+    modified_prompt = response.content[0].text.strip()
 
     # First, check for placeholders
     is_valid, placeholder_error = validate_no_placeholders(modified_prompt)

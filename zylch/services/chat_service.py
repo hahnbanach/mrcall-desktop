@@ -5,7 +5,11 @@ import logging
 import shlex
 import time
 
-import anthropic
+from litellm.exceptions import (
+    AuthenticationError,
+    RateLimitError,
+    APIConnectionError,
+)
 
 from zylch.tools import ToolFactory, ToolConfig
 from zylch.assistant.core import ZylchAIAgent
@@ -349,11 +353,11 @@ class ChatService:
                 "session_id": session_id if session_id else None
             }
 
-        except anthropic.AuthenticationError as e:
+        except AuthenticationError as e:
             # Invalid API key
             logger.error(f"Authentication error: {e}")
             execution_time_ms = (time.time() - start_time) * 1000
-            error_msg = "Authentication failed: Invalid Anthropic API key. Please run `/connect anthropic` to update your API key."
+            error_msg = "Authentication failed: Invalid API key. Please run `/connect <provider>` to update your API key."
 
             return {
                 "response": self._prepend_notification(error_msg, notification_banner),
@@ -366,7 +370,7 @@ class ChatService:
                 "session_id": session_id if session_id else None
             }
 
-        except anthropic.RateLimitError as e:
+        except RateLimitError as e:
             # Rate limit exceeded
             logger.error(f"Rate limit error: {e}")
             execution_time_ms = (time.time() - start_time) * 1000
@@ -383,11 +387,11 @@ class ChatService:
                 "session_id": session_id if session_id else None
             }
 
-        except anthropic.APIConnectionError as e:
+        except APIConnectionError as e:
             # Network/connection issues
             logger.error(f"API connection error: {e}")
             execution_time_ms = (time.time() - start_time) * 1000
-            error_msg = "Unable to connect to Anthropic API. Please check your internet connection and try again."
+            error_msg = "Unable to connect to the LLM API. Please check your internet connection and try again."
 
             return {
                 "response": self._prepend_notification(error_msg, notification_banner),
