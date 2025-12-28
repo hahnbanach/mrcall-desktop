@@ -2764,14 +2764,21 @@ class SupabaseStorage:
             if action_required is not None:
                 query = query.eq('action_required', action_required)
 
-            # Order by urgency (high first) then by analyzed_at
+            # Fetch with analyzed_at order, then sort by urgency in Python
+            # (Supabase client doesn't support CASE expressions in order())
             result = query\
-                .order('urgency', desc=False)\
                 .order('analyzed_at', desc=True)\
                 .limit(limit)\
                 .execute()
 
-            return result.data or []
+            tasks = result.data or []
+
+            # Sort by urgency priority: high → medium → low
+            # Python's stable sort preserves analyzed_at desc order within each urgency
+            urgency_order = {'high': 0, 'medium': 1, 'low': 2}
+            tasks.sort(key=lambda t: urgency_order.get(t.get('urgency'), 9))
+
+            return tasks
 
         except Exception as e:
             logger.error(f"Failed to get task items: {e}")
