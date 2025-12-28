@@ -10,7 +10,7 @@ from zylch.llm import LLMClient, PROVIDER_MODELS
 class IntentRouter:
     """Routes user input to appropriate skill(s)."""
 
-    def __init__(self, skill_registry, api_key: str = "", provider: str = "anthropic"):
+    def __init__(self, skill_registry, api_key: str, provider: str):
         """Initialize IntentRouter.
 
         Args:

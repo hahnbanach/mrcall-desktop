@@ -227,11 +227,12 @@ class ToolFactory:
 
             # Email sync manager
             email_sync = None
-            if email_archive:
+            if email_archive and config.anthropic_api_key and config.llm_provider:
                 email_sync = EmailSyncManager(
                     email_archive=email_archive,
-                    cache_dir=config.cache_dir + "/emails",
                     api_key=config.anthropic_api_key,
+                    provider=config.llm_provider,
+                    cache_dir=config.cache_dir + "/emails",
                     days_back=30,
                 )
 
@@ -456,7 +457,7 @@ class ToolFactory:
         starchat_client,
         session_state: SessionState,
         api_key: str,
-        provider: str = "anthropic"
+        provider: str
     ) -> List[Tool]:
         """Create MrCall assistant configuration tools.
 

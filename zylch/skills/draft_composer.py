@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class DraftComposerSkill(BaseSkill):
     """Compose email drafts with personalized style."""
 
-    def __init__(self, api_key: str = "", provider: str = "anthropic"):
+    def __init__(self, api_key: str, provider: str):
         """Initialize DraftComposerSkill.
 
         Args:

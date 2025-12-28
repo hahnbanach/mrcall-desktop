@@ -9,7 +9,7 @@ from zylch.llm import LLMClient, PROVIDER_MODELS
 class LLMMergeService:
     """LLM-assisted memory merge for reconsolidation."""
 
-    def __init__(self, api_key: str, provider: str = "anthropic", model: str = None):
+    def __init__(self, api_key: str, provider: str, model: str = None):
         self.provider = provider
         self.model = model or PROVIDER_MODELS.get(provider, PROVIDER_MODELS["anthropic"])
         self.client = LLMClient(api_key=api_key, provider=provider)

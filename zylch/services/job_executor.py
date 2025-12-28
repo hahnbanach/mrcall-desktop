@@ -38,7 +38,8 @@ class JobExecutor:
         self,
         job_id: str,
         owner_id: str,
-        anthropic_key: str,
+        api_key: str,
+        llm_provider: str,
         user_email: str = ""
     ) -> None:
         """Entry point: claim job and dispatch to appropriate handler.
@@ -49,7 +50,8 @@ class JobExecutor:
         Args:
             job_id: Background job UUID
             owner_id: Firebase UID
-            anthropic_key: User's Anthropic API key (BYOK)
+            api_key: User's LLM API key (BYOK)
+            llm_provider: LLM provider name (anthropic, openai, mistral)
             user_email: User's email address (for task filtering)
         """
         try:
@@ -67,11 +69,11 @@ class JobExecutor:
             # Dispatch to appropriate handler
             if job_type == "memory_process":
                 await self._execute_memory_process(
-                    job_id, owner_id, channel, anthropic_key
+                    job_id, owner_id, channel, api_key, llm_provider
                 )
             elif job_type == "task_process":
                 await self._execute_task_process(
-                    job_id, owner_id, channel, anthropic_key, user_email
+                    job_id, owner_id, channel, api_key, llm_provider, user_email
                 )
             elif job_type == "sync":
                 await self._execute_sync(
@@ -94,7 +96,8 @@ class JobExecutor:
         job_id: str,
         owner_id: str,
         channel: str,
-        anthropic_key: str
+        api_key: str,
+        llm_provider: str
     ) -> None:
         """Execute memory processing in thread pool.
 
@@ -102,7 +105,8 @@ class JobExecutor:
             job_id: Background job UUID
             owner_id: Firebase UID
             channel: 'email', 'calendar', or 'all'
-            anthropic_key: User's Anthropic API key
+            api_key: User's LLM API key
+            llm_provider: LLM provider name (anthropic, openai, mistral)
         """
         storage = self.storage  # Capture for closure
 
@@ -113,7 +117,8 @@ class JobExecutor:
             worker = MemoryWorker(
                 storage=storage,
                 owner_id=owner_id,
-                api_key=anthropic_key
+                api_key=api_key,
+                provider=llm_provider
             )
 
             # Check if user has custom prompt
@@ -182,7 +187,8 @@ class JobExecutor:
         job_id: str,
         owner_id: str,
         channel: str,
-        anthropic_key: str,
+        api_key: str,
+        llm_provider: str,
         user_email: str
     ) -> None:
         """Execute task detection in thread pool.
@@ -191,7 +197,8 @@ class JobExecutor:
             job_id: Background job UUID
             owner_id: Firebase UID
             channel: 'email', 'calendar', or 'all'
-            anthropic_key: User's Anthropic API key
+            api_key: User's LLM API key
+            llm_provider: LLM provider name (anthropic, openai, mistral)
             user_email: User's email address
         """
         storage = self.storage
@@ -203,7 +210,8 @@ class JobExecutor:
             worker = TaskWorker(
                 storage=storage,
                 owner_id=owner_id,
-                api_key=anthropic_key,
+                api_key=api_key,
+                provider=llm_provider,
                 user_email=user_email
             )
 

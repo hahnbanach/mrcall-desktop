@@ -60,6 +60,8 @@ class ToolConfig:
     # ============================================
 
     # BYOK Credentials (fetched from Supabase, not env vars)
+    # LLM Provider (anthropic, openai, mistral)
+    llm_provider: str = ""
     # Anthropic (BYOK via /connect anthropic)
     anthropic_api_key: str = ""
 
@@ -173,10 +175,19 @@ class ToolConfig:
             storage = SupabaseStorage.get_instance()
 
         # Fetch BYOK credentials from Supabase
-        # Anthropic
-        anthropic_key = storage.get_anthropic_key(owner_id)
-        if anthropic_key:
-            config.anthropic_api_key = anthropic_key
+        # LLM Provider (detect active provider)
+        from ..api.token_storage import get_active_llm_provider
+        provider, api_key = get_active_llm_provider(owner_id)
+        if provider and api_key:
+            config.llm_provider = provider
+            config.anthropic_api_key = api_key  # Store in anthropic_api_key for backward compat
+
+        # Anthropic (legacy check - only if not already set by get_active_llm_provider)
+        if not config.anthropic_api_key:
+            anthropic_key = storage.get_anthropic_key(owner_id)
+            if anthropic_key:
+                config.anthropic_api_key = anthropic_key
+                config.llm_provider = "anthropic"
 
         # Pipedrive
         pipedrive_token = storage.get_pipedrive_key(owner_id)
