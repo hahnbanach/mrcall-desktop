@@ -323,8 +323,9 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
 
 | Table | Purpose |
 |-------|---------|
-| `email_archive` | Email metadata and content |
-| `thread_analysis` | AI-generated summaries and analysis |
+| `emails` | Email metadata and content |
+| `thread_analysis` | **DEPRECATED** - Was used for AI summaries. Now tasks come from `task_items`. |
+| `task_items` | Task items with `sources` JSONB for data traceability |
 | `calendar_events` | Calendar events |
 | `sync_state` | Gmail/Outlook history IDs, last sync timestamps |
 | `oauth_tokens` | All tokens (Google, Microsoft, Anthropic, MrCall) - encrypted |

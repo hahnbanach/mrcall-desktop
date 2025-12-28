@@ -2114,6 +2114,38 @@ Run `/tasks refresh` to re-analyze with fresh AI check."""
         return f"❌ **Error:** {str(e)}\n\n{help_text}"
 
 
+def _load_blob_context(storage, owner_id: str, blob_ids: list) -> str:
+    """Load blob content from sources for task detail display.
+
+    Args:
+        storage: SupabaseStorage instance
+        owner_id: Firebase UID
+        blob_ids: List of blob UUIDs from task sources
+
+    Returns:
+        Concatenated blob content, or empty string if none found
+    """
+    if not blob_ids:
+        return ""
+
+    try:
+        contents = []
+        for blob_id in blob_ids[:3]:  # Limit to 3 blobs
+            result = storage.client.table('blobs')\
+                .select('content')\
+                .eq('owner_id', owner_id)\
+                .eq('id', blob_id)\
+                .limit(1)\
+                .execute()
+            if result.data:
+                contents.append(result.data[0].get('content', '')[:500])  # Truncate
+
+        return "\n\n".join(contents)
+    except Exception as e:
+        logger.warning(f"Failed to load blob context: {e}")
+        return ""
+
+
 async def handle_task_detail(task_num: int, owner_id: str) -> str:
     """Handle 'more on #N' - show full email/event for a task.
 
@@ -2150,7 +2182,8 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
         task = tasks[task_num - 1]  # 0-indexed
         event_type = task.get('event_type')
         event_id = task.get('event_id')
-        logger.debug(f"[TASK_DETAIL] Task #{task_num}: event_type={event_type}, event_id={event_id}")
+        sources = task.get('sources', {})
+        logger.debug(f"[TASK_DETAIL] Task #{task_num}: event_type={event_type}, event_id={event_id}, sources={sources}")
 
         if event_type == 'email':
             # Fetch full email from emails table using Supabase UUID
@@ -2193,6 +2226,13 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
 **🎯 Suggested Action:** {task.get('suggested_action', 'Review and respond')}
 **📋 Reason:** {task.get('reason', 'Requires your attention')}
 **⚡ Urgency:** {task.get('urgency', 'medium')}"""
+
+            # Add blob context if available in sources
+            blob_ids = sources.get('blobs', [])
+            if blob_ids:
+                blob_content = _load_blob_context(storage, owner_id, blob_ids)
+                if blob_content:
+                    output += f"\n\n**🧠 Context (from memory):**\n{blob_content}"
 
             return output
 
@@ -2237,6 +2277,13 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
 **🎯 Suggested Action:** {task.get('suggested_action', 'Review and prepare')}
 **📋 Reason:** {task.get('reason', 'Requires your attention')}
 **⚡ Urgency:** {task.get('urgency', 'medium')}"""
+
+            # Add blob context if available in sources
+            blob_ids = sources.get('blobs', [])
+            if blob_ids:
+                blob_content = _load_blob_context(storage, owner_id, blob_ids)
+                if blob_content:
+                    output += f"\n\n**🧠 Context (from memory):**\n{blob_content}"
 
             return output
 

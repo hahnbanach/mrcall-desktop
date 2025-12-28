@@ -176,7 +176,7 @@ class TaskWorker:
                 continue
 
             # Get blob context for this contact
-            blob_context = self._get_blob_for_contact(from_email)
+            blob_context, blob_id = self._get_blob_for_contact(from_email)
 
             # Prepare event data
             event_data = {
@@ -201,6 +201,11 @@ class TaskWorker:
                 result['event_type'] = 'email'
                 result['contact_email'] = from_email
                 result['contact_name'] = email.get('from_name', '')
+                # Track all data sources used to create this task
+                result['sources'] = {
+                    'emails': [email_id],
+                    'blobs': [blob_id] if blob_id else []
+                }
                 self.storage.store_task_item(self.owner_id, result)
                 action_count += 1
 
@@ -218,8 +223,9 @@ class TaskWorker:
 
             # Get blob context for first attendee (if any)
             blob_context = "(no prior context)"
+            blob_id = None
             if attendee_emails:
-                blob_context = self._get_blob_for_contact(attendee_emails[0])
+                blob_context, blob_id = self._get_blob_for_contact(attendee_emails[0])
 
             # Prepare event data
             event_data = {
@@ -243,6 +249,11 @@ class TaskWorker:
                 result['event_type'] = 'calendar'
                 result['contact_email'] = attendee_emails[0] if attendee_emails else None
                 result['contact_name'] = event.get('summary', '')
+                # Track all data sources used to create this task
+                result['sources'] = {
+                    'calendar_events': [event_id],
+                    'blobs': [blob_id] if blob_id else []
+                }
                 self.storage.store_task_item(self.owner_id, result)
                 action_count += 1
 
@@ -329,10 +340,14 @@ class TaskWorker:
             logger.error(f"LLM call failed for {event_type} event: {e}")
             return None
 
-    def _get_blob_for_contact(self, contact_email: str) -> str:
-        """Get memory blob content for a contact."""
+    def _get_blob_for_contact(self, contact_email: str) -> tuple:
+        """Get memory blob content and ID for a contact.
+
+        Returns:
+            Tuple of (content: str, blob_id: str or None)
+        """
         if not contact_email:
-            return "(no prior context)"
+            return "(no prior context)", None
 
         try:
             namespace = f"user:{self.owner_id}"
@@ -344,9 +359,9 @@ class TaskWorker:
             )
 
             if results:
-                return results[0].content[:500]  # Truncate for prompt size
+                return results[0].content[:500], results[0].blob_id  # Truncate for prompt size
 
         except Exception as e:
             logger.warning(f"Failed to get blob for {contact_email}: {e}")
 
-        return "(no prior context)"
+        return "(no prior context)", None
