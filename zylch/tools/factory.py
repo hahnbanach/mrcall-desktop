@@ -274,7 +274,9 @@ class ToolFactory:
         ))
 
         # Email sync tools (4 tools)
-        tools.extend(ToolFactory._create_email_sync_tools(email_sync))
+        tools.extend(ToolFactory._create_email_sync_tools(
+            email_sync, supabase_storage, config.owner_id
+        ))
 
         # Memory search tools (search_local_memory with hybrid FTS + semantic search)
         tools.extend(ToolFactory._create_contact_tools(
@@ -402,11 +404,11 @@ class ToolFactory:
         ]
 
     @staticmethod
-    def _create_email_sync_tools(email_sync_manager) -> List[Tool]:
+    def _create_email_sync_tools(email_sync_manager, storage, owner_id: str) -> List[Tool]:
         """Create email sync tools."""
         return [
             _SyncEmailsTool(email_sync_manager),
-            _SearchEmailsTool(email_sync_manager),
+            _SearchEmailsTool(email_sync_manager, storage, owner_id),
             _CloseEmailThreadTool(email_sync_manager),
             _EmailStatsTool(email_sync_manager),
         ]
@@ -1243,13 +1245,15 @@ class _SyncEmailsTool(Tool):
 
 
 class _SearchEmailsTool(Tool):
-    """Search cached emails with filters."""
-    def __init__(self, email_sync_manager):
+    """Search emails using Supabase hybrid search (FTS + semantic)."""
+    def __init__(self, email_sync_manager, storage, owner_id: str):
         super().__init__(
             name="search_emails",
-            description="Search cached emails with intelligent filters"
+            description="Search emails with hybrid FTS + semantic search"
         )
         self.email_sync = email_sync_manager
+        self.storage = storage
+        self.owner_id = owner_id
 
     async def execute(
         self,
@@ -1258,53 +1262,44 @@ class _SearchEmailsTool(Tool):
         expected_action: Optional[str] = None
     ):
         try:
-            threads = self.email_sync.search_threads(
-                query=query,
-                open_only=open_only,
-                expected_action=expected_action
-            )
+            # Use Supabase hybrid search (FTS + semantic + exact pattern)
+            if self.storage and query:
+                emails = self.storage.search_emails(self.owner_id, query, limit=20)
 
-            # Format results for display
-            results = []
-            for thread in threads[:20]:  # Limit to 20 results
-                last_email = thread.get("last_email", {})
-                results.append({
-                    "subject": thread.get("subject"),
-                    "participants": thread.get("participants"),
-                    "summary": thread.get("summary"),
-                    "open": thread.get("open"),
-                    "expected_action": thread.get("expected_action"),
-                    "date": last_email.get("date"),  # Real email date
-                    "from": last_email.get("from"),  # Sender
-                    "to": last_email.get("to"),  # Primary recipient
-                    "cc": last_email.get("cc"),  # CC recipients
-                    "body": last_email.get("body"),  # Full email body
-                    # CRITICAL: Threading headers for replies
-                    "message_id": last_email.get("message_id"),  # Message-ID header
-                    "in_reply_to": last_email.get("in_reply_to"),  # In-Reply-To header
-                    "references": last_email.get("references"),  # References header
-                    "thread_id": thread.get("thread_id"),  # Gmail thread ID
-                    "last_updated": thread.get("last_updated")  # Cache timestamp
-                })
+                # Format results for LLM consumption
+                results = []
+                for email in emails:
+                    results.append({
+                        "subject": email.get("subject"),
+                        "from": email.get("sender"),
+                        "to": email.get("recipient"),
+                        "cc": email.get("cc"),
+                        "date": email.get("date"),
+                        "body": email.get("body_text", "")[:2000],  # Limit body size
+                        # CRITICAL: Threading headers for replies
+                        "message_id": email.get("message_id"),
+                        "in_reply_to": email.get("in_reply_to"),
+                        "references": email.get("references"),
+                        "thread_id": email.get("thread_id"),
+                        "gmail_id": email.get("gmail_id"),
+                        # Search score for ranking info
+                        "score": email.get("combined_score", email.get("score", 0))
+                    })
 
-            # Get date range from cache metadata
-            cache_info = self.email_sync.get_cache_info() if hasattr(self.email_sync, 'get_cache_info') else {}
-            date_from = cache_info.get('oldest_email', 'unknown')
-            date_to = cache_info.get('newest_email', 'unknown')
+                message = f"Found {len(emails)} emails matching '{query}'"
+                return ToolResult(
+                    status=ToolStatus.SUCCESS,
+                    data={"threads": results, "total": len(emails)},
+                    message=message
+                )
 
-            message = f"Found {len(threads)} conversations"
-            if date_from != 'unknown' and date_to != 'unknown':
-                message += f" (from {date_from} to {date_to})"
-            if open_only:
-                message += " [open only]"
-            if expected_action:
-                message += f" [requires {expected_action}]"
-
+            # Fallback: no query provided
             return ToolResult(
                 status=ToolStatus.SUCCESS,
-                data={"threads": results, "total": len(threads)},
-                message=message
+                data={"threads": [], "total": 0},
+                message="No search query provided. Use 'query' parameter to search emails."
             )
+
         except Exception as e:
             logger.error(f"Email search failed: {e}")
             return ToolResult(
@@ -1316,26 +1311,16 @@ class _SearchEmailsTool(Tool):
     def get_schema(self):
         return {
             "name": self.name,
-            "description": "Cerca nelle email cachate. Puoi filtrare per parole chiave, solo email aperte, o per azione richiesta (answer/reminder). Usa questo per trovare email specifiche o vedere cosa richiede azione. IMPORTANT: Results include threading headers (message_id, in_reply_to, references, thread_id) needed to create draft replies that stay in the conversation thread.",
+            "description": "Search emails using hybrid FTS + semantic search. Finds emails by keywords, names, or topics. IMPORTANT: Results include threading headers (message_id, in_reply_to, references, thread_id) needed to create draft replies that stay in the conversation thread.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Parole chiave da cercare (cerca in oggetto e riassunto)"
-                    },
-                    "open_only": {
-                        "type": "boolean",
-                        "description": "Solo conversazioni aperte che richiedono azione",
-                        "default": False
-                    },
-                    "expected_action": {
-                        "type": "string",
-                        "enum": ["answer", "reminder"],
-                        "description": "Filtra per tipo di azione: 'answer' (devo rispondere) o 'reminder' (devo fare reminder)"
+                        "description": "Search query - keywords, names, or topics to find in emails"
                     }
                 },
-                "required": []
+                "required": ["query"]
             }
         }
 
