@@ -391,14 +391,11 @@ class CalendarSyncManager:
             if contact_email in event.get('attendees', []):
                 # Apply date filter if specified
                 if cutoff_date:
-                    try:
-                        start_dt = datetime.fromisoformat(
-                            event['start'].replace('Z', '+00:00')
-                        )
-                        if start_dt < cutoff_date:
-                            continue
-                    except:
-                        pass
+                    start_dt = datetime.fromisoformat(
+                        event['start'].replace('Z', '+00:00')
+                    )
+                    if start_dt < cutoff_date:
+                        continue
 
                 matching_events.append(event)
 
@@ -433,24 +430,21 @@ class CalendarSyncManager:
 
         for event in cache['events'].values():
             # Filter by date
-            try:
-                start_dt = datetime.fromisoformat(
-                    event['start'].replace('Z', '+00:00')
-                )
-                if start_dt < cutoff_date:
-                    continue
-
-                # Filter by past/future
-                if only_past and not event.get('is_past', False):
-                    continue
-
-                # Filter by external attendees
-                if only_external and not event.get('external_attendees', []):
-                    continue
-
-                meetings.append(event)
-            except:
+            start_dt = datetime.fromisoformat(
+                event['start'].replace('Z', '+00:00')
+            )
+            if start_dt < cutoff_date:
                 continue
+
+            # Filter by past/future
+            if only_past and not event.get('is_past', False):
+                continue
+
+            # Filter by external attendees
+            if only_external and not event.get('external_attendees', []):
+                continue
+
+            meetings.append(event)
 
         # Sort by start time (most recent first)
         meetings.sort(
@@ -492,19 +486,16 @@ class CalendarSyncManager:
 
             if query_lower in summary or query_lower in description:
                 # Apply date filters
-                try:
-                    start_dt = datetime.fromisoformat(
-                        event['start'].replace('Z', '+00:00')
-                    )
+                start_dt = datetime.fromisoformat(
+                    event['start'].replace('Z', '+00:00')
+                )
 
-                    if cutoff_past and start_dt < cutoff_past:
-                        continue
-                    if cutoff_future and start_dt > cutoff_future:
-                        continue
+                if cutoff_past and start_dt < cutoff_past:
+                    continue
+                if cutoff_future and start_dt > cutoff_future:
+                    continue
 
-                    matching.append(event)
-                except:
-                    matching.append(event)  # Include if date parsing fails
+                matching.append(event)
 
         # Sort by start time (most recent first)
         matching.sort(

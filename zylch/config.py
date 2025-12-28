@@ -56,6 +56,10 @@ class Settings(BaseSettings):
         default="~/.zylch/google_tokens",
         description="Directory for Google OAuth token storage"
     )
+    google_credentials_path: str = Field(
+        default="~/.zylch/google_credentials.json",
+        description="Path to Google OAuth credentials JSON file"
+    )
 
     # Firebase Authentication (for dashboard integration)
     firebase_service_account_base64: str = Field(
