@@ -277,6 +277,134 @@ class SyncService:
                 "deals_synced": 0
             }
 
+    async def sync_mrcall(self, limit: int = 1, debug: bool = True, firebase_token: str = None, business_id: str = None) -> Dict[str, Any]:
+        """Fetch conversations from MrCall for debugging/testing.
+
+        This is a proof-of-concept to verify MrCall API integration works.
+        No actual sync to database - just fetches and prints in DEBUG mode.
+
+        Args:
+            limit: Number of conversations to fetch (default: 1)
+            debug: If True, print conversation data to stdout
+            firebase_token: MrCall OAuth access token for authentication
+            business_id: Optional business ID override (otherwise fetched from storage)
+
+        Returns:
+            Result dict with conversations fetched
+        """
+        import json
+        import httpx
+
+        logger.info(f"[mrcall_sync] Starting (limit={limit}, debug={debug})")
+
+        # Check if storage is configured
+        if not self.supabase or not self.owner_id:
+            logger.info("[mrcall_sync] Skipping - no Supabase/owner_id")
+            return {
+                "success": True,
+                "skipped": True,
+                "reason": "No storage configured",
+                "conversations_fetched": 0
+            }
+
+        # Get MrCall business ID from credentials or simple link
+        if not business_id:
+            # Try to get from OAuth credentials first
+            mrcall_creds = self.supabase.get_provider_credentials(self.owner_id, 'mrcall')
+            if mrcall_creds and mrcall_creds.get('business_id'):
+                business_id = mrcall_creds.get('business_id')
+            else:
+                # Fall back to simple link (legacy)
+                business_id = self.supabase.get_mrcall_link(self.owner_id)
+
+        if not business_id:
+            logger.info("[mrcall_sync] Skipping - MrCall not linked")
+            return {
+                "success": True,
+                "skipped": True,
+                "reason": "MrCall not linked. Use /mrcall <business_id> to link.",
+                "conversations_fetched": 0
+            }
+
+        # Require access token for API auth
+        if not firebase_token:
+            logger.error("[mrcall_sync] No access token provided")
+            return {
+                "success": False,
+                "error": "MrCall access token required. Run /connect mrcall to authenticate.",
+                "conversations_fetched": 0
+            }
+
+        try:
+            # Call MrCall conversation search API
+            url = "https://api.mrcall.ai/mrcall/v1/mrcall/customer/conversation/search"
+            headers = {
+                "auth": firebase_token,
+                "Content-Type": "application/json"
+            }
+            body = {
+                "businessId": business_id,
+                "from": 0,
+                "size": limit,
+                "lightweight": True,  # Don't include audio
+                "asc": False  # Most recent first
+            }
+
+            logger.info(f"[mrcall_sync] Calling API: {url}")
+            logger.debug(f"[mrcall_sync] Request body: {json.dumps(body)}")
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, headers=headers, json=body)
+                response.raise_for_status()
+                data = response.json()
+
+            # Parse response - it should be SearchResults with 'items' array
+            conversations = data.get('items', []) if isinstance(data, dict) else data
+            total = data.get('total', len(conversations)) if isinstance(data, dict) else len(conversations)
+
+            logger.info(f"[mrcall_sync] Fetched {len(conversations)} conversation(s) (total: {total})")
+
+            # DEBUG: Print the conversation data
+            if debug and conversations:
+                print(f"\n{'='*60}")
+                print(f"MrCall DEBUG: Retrieved {len(conversations)} conversation(s)")
+                print(f"Business ID: {business_id}")
+                print(f"{'='*60}")
+                for i, conv in enumerate(conversations):
+                    print(f"\n--- Conversation {i+1} ---")
+                    print(f"ID: {conv.get('id')}")
+                    print(f"Timestamp: {conv.get('startTimestamp')}")
+                    print(f"Contact: {conv.get('contactName', 'Unknown')} ({conv.get('contactNumber', 'N/A')})")
+                    print(f"Duration: {conv.get('duration', 0) / 1000:.1f}s")
+                    print(f"Subject: {conv.get('subject', 'N/A')}")
+                    print(f"Body: {conv.get('body', 'N/A')[:200]}...")
+                    if conv.get('values'):
+                        print(f"Values: {json.dumps(conv.get('values'), indent=2, default=str)}")
+                print(f"\n{'='*60}\n")
+
+            return {
+                "success": True,
+                "conversations_fetched": len(conversations),
+                "total_available": total,
+                "business_id": business_id,
+                "debug": debug
+            }
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"[mrcall_sync] HTTP error: {e.response.status_code} - {e.response.text}")
+            return {
+                "success": False,
+                "error": f"MrCall API error: {e.response.status_code}",
+                "conversations_fetched": 0
+            }
+        except Exception as e:
+            logger.error(f"[mrcall_sync] Failed: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "conversations_fetched": 0
+            }
+
     async def run_full_sync(self, days_back: Optional[int] = None) -> Dict[str, Any]:
         """Run full sync workflow: emails + calendar + Pipedrive.
 

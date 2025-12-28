@@ -80,11 +80,13 @@ async def handle_sync(args: List[str], config, owner_id: str) -> str:
 • `/sync status` - Show sync status
 • `/sync reset` - Clear all synced data
 • `/sync --days N` - Sync last N days
+• `/sync mrcall` - Test MrCall conversation fetch (debug)
 
 **Examples:**
 • `/sync` - Quick incremental sync
 • `/sync --days 90` - Sync last 90 days
-• `/sync status` - Check last sync time"""
+• `/sync status` - Check last sync time
+• `/sync mrcall` - Fetch latest MrCall conversation"""
 
     # --help option (check first)
     if '--help' in args:
@@ -173,6 +175,78 @@ Then run `/sync --days N` to rebuild memory from re-synced emails."""
         except Exception as e:
             logger.error(f"[/sync] Failed to reset sync state: {e}")
             return f"❌ **Error resetting sync state:** {str(e)}"
+
+    # Subcommand: mrcall - Test MrCall API integration
+    if subcommand == 'mrcall':
+        logger.info(f"[/sync] MrCall test for owner_id={owner_id}")
+        try:
+            from zylch.api.token_storage import get_mrcall_credentials
+            supabase = SupabaseStorage()
+
+            # Get MrCall OAuth credentials (includes access_token and business_id)
+            mrcall_creds = get_mrcall_credentials(owner_id)
+            if not mrcall_creds or not mrcall_creds.get('access_token'):
+                # Check if there's a simple mrcall link (without OAuth)
+                business_id = supabase.get_mrcall_link(owner_id)
+                if business_id:
+                    return f"""📞 **MrCall Sync (Debug)**
+
+⚠️ **MrCall linked but no OAuth token**
+
+Your MrCall is linked to business `{business_id}` but OAuth credentials are missing.
+
+**To complete setup:**
+1. Run `/connect mrcall` to authenticate with MrCall
+2. Then run `/sync mrcall` again"""
+                else:
+                    return """📞 **MrCall Sync (Debug)**
+
+⚠️ **MrCall not connected**
+
+**To connect MrCall:**
+1. Run `/mrcall <business_id>` to link your business
+2. Or run `/connect mrcall` for full OAuth setup"""
+
+            # Create minimal SyncService for MrCall test
+            sync_service = SyncService(
+                owner_id=owner_id,
+                supabase_storage=supabase
+            )
+
+            # Run MrCall sync (debug mode) - use access_token for API auth
+            result = await sync_service.sync_mrcall(
+                limit=1,
+                debug=True,
+                firebase_token=mrcall_creds.get('access_token'),
+                business_id=mrcall_creds.get('business_id')
+            )
+
+            if result.get('skipped'):
+                return f"""📞 **MrCall Sync (Debug)**
+
+⚠️ **Skipped:** {result.get('reason', 'Unknown reason')}
+
+**To link MrCall:**
+1. Get your MrCall business ID
+2. Run `/mrcall <business_id>`"""
+
+            if result.get('success'):
+                return f"""📞 **MrCall Sync (Debug)**
+
+✅ **Success!**
+• Business ID: `{result.get('business_id')}`
+• Conversations fetched: {result.get('conversations_fetched')}
+• Total available: {result.get('total_available', 'N/A')}
+
+Check the console/logs for conversation details."""
+            else:
+                return f"""📞 **MrCall Sync (Debug)**
+
+❌ **Error:** {result.get('error', 'Unknown error')}"""
+
+        except Exception as e:
+            logger.error(f"[/sync] MrCall test failed: {e}", exc_info=True)
+            return f"❌ **MrCall test failed:** {str(e)}"
 
     # Parse --days option
     days_back = 30
