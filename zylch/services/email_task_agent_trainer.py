@@ -57,7 +57,8 @@ The generated prompt must:
 2. **DECISION CRITERIA**
    The prompt should instruct the agent to consider:
    - Is there an unanswered question directed at the user?
-   - Did the user make a commitment that needs follow-up?
+   - Did the user make a commitment that needs follow-up? If yes, it needs a task
+   - Did the user answer without commitment to follow-up? DEFINITELY not an open task!
    - Is this from someone the user typically responds to quickly?
    - Has unusual time passed without response (based on this user's pattern)?
    - Is there a deadline or time-sensitive element?

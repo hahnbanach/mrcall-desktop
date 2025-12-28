@@ -230,7 +230,6 @@ Zylch AI provides HTTP API endpoints for web/mobile integration. See `docs/api/c
 
 ## Costs
 
-- **Thread sync** (30 days, 1000 emails): ~$0.92 (Haiku)
 - **Task build** (200 contacts): ~$1.40 (Sonnet)
 - **Single task update**: <$0.01 (Sonnet)
 
@@ -242,17 +241,16 @@ Total initial sync: **~$2.50** for 1000 emails + 200 contacts
 
 ### Email & Thread Management
 ```
-You: search emails from luisa boni
+You: search emails from Joanna Goodall
 You: show thread #5
-You: write a reminder for email #5
-You: save it  # Creates Gmail draft
+You: write an answer # Creates draft in Zylch
 You: list drafts
-You: edit draft  # Opens nano editor
+You: edit draft #1 # Opens nano editor
 ```
 
 ### Task Management (Person-Centric)
 ```
-You: status di Luisa Boni
+You: status di Joanna Goodall
 # Shows: all threads aggregated, priority score, action needed
 
 You: show urgent tasks  # score >= 8
