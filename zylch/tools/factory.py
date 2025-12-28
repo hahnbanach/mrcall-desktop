@@ -253,7 +253,8 @@ class ToolFactory:
             # Initialize hybrid search engine for blob search
             from zylch.storage.supabase_client import SupabaseStorage
             supabase_storage = SupabaseStorage.get_instance()
-            embedding_engine = EmbeddingEngine()
+            mem_config = ZylchMemoryConfig()
+            embedding_engine = EmbeddingEngine(mem_config)
             search_engine = HybridSearchEngine(
                 supabase_client=supabase_storage.client,
                 embedding_engine=embedding_engine,
