@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 EXPECTED_TABLES = [
-    'emails', 'sync_state', 'thread_analysis',
-    'calendar_events', 'patterns', 'memories', 'avatars',
+    'emails', 'sync_state', 'task_items',
+    'calendar_events', 'patterns', 'blobs', 'avatars',
     'avatar_compute_queue', 'oauth_tokens',
     'triggers', 'trigger_events', 'sharing_auth', 'scheduled_jobs'
 ]

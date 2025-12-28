@@ -17,8 +17,8 @@ DELETE FROM identifier_map;
 -- 4. Delete relationship gaps
 DELETE FROM relationship_gaps;
 
--- 5. Delete thread analysis
-DELETE FROM thread_analysis;
+-- 5. Delete task items
+DELETE FROM task_items;
 
 -- 6. Delete calendar events
 DELETE FROM calendar_events;
@@ -26,8 +26,8 @@ DELETE FROM calendar_events;
 -- 7. Delete patterns
 DELETE FROM patterns;
 
--- 8. Delete memories
-DELETE FROM memories;
+-- 8. Delete blobs
+DELETE FROM blobs;
 
 -- 9. Delete emails
 DELETE FROM emails;
@@ -56,13 +56,13 @@ SELECT 'identifier_map', COUNT(*) FROM identifier_map
 UNION ALL
 SELECT 'relationship_gaps', COUNT(*) FROM relationship_gaps
 UNION ALL
-SELECT 'thread_analysis', COUNT(*) FROM thread_analysis
+SELECT 'task_items', COUNT(*) FROM task_items
 UNION ALL
 SELECT 'calendar_events', COUNT(*) FROM calendar_events
 UNION ALL
 SELECT 'patterns', COUNT(*) FROM patterns
 UNION ALL
-SELECT 'memories', COUNT(*) FROM memories
+SELECT 'blobs', COUNT(*) FROM blobs
 UNION ALL
 SELECT 'emails', COUNT(*) FROM emails
 UNION ALL
