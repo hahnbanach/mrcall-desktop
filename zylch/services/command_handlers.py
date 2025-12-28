@@ -64,7 +64,7 @@ async def handle_help() -> str:
 **💡 Tip:** Chat naturally! "show my tasks", "email stats", "what's on my calendar"."""
 
 
-async def handle_sync(args: List[str], config, memory, owner_id: str) -> str:
+async def handle_sync(args: List[str], config, owner_id: str) -> str:
     """Handle /sync command without calling Anthropic."""
     from zylch.services.sync_service import SyncService
     from zylch.tools.factory import ToolFactory
