@@ -67,9 +67,6 @@ class ChatService:
         tools, session_state = await ToolFactory.create_all_tools(config, current_business_id=None)
         logger.info(f"Created {len(tools)} tools")
 
-        # Create memory system
-        memory = await ToolFactory.create_memory_system(config)
-
         # Create model selector
         model_selector = ToolFactory.create_model_selector(config)
 
@@ -79,7 +76,6 @@ class ChatService:
             tools=tools,
             model_selector=model_selector,
             email_style_prompt=config.email_style_prompt,
-            memory_system=memory,
         )
 
         self._initialized = True
@@ -246,10 +242,9 @@ class ChatService:
 
                     # Call handler based on required parameters
                     if cmd == '/sync':
-                        # /sync needs config, memory, and owner_id
+                        # /sync needs config and owner_id
                         config = ToolConfig.from_settings()
-                        memory = await ToolFactory.create_memory_system(config)
-                        response_text = await handler(args, config, memory, owner_id)
+                        response_text = await handler(args, config, owner_id)
                     elif cmd in ['/briefing', '/tasks']:
                         # /briefing and /tasks only need args and owner_id
                         response_text = await handler(args, owner_id)
