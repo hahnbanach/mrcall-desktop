@@ -136,8 +136,8 @@ def cleanup_test_data(storage, test_owner_id):
     # try:
     #     # Clean up emails
     #     storage.client.table('emails').delete().eq('owner_id', test_owner_id).execute()
-    #     # Clean up avatars
-    #     storage.client.table('avatars').delete().eq('owner_id', test_owner_id).execute()
+    #     # Clean up task_items
+    #     storage.client.table('task_items').delete().eq('owner_id', test_owner_id).execute()
     # except Exception:
     #     pass
 

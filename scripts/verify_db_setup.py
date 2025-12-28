@@ -10,9 +10,9 @@ load_dotenv()
 
 EXPECTED_TABLES = [
     'emails', 'sync_state', 'task_items',
-    'calendar_events', 'patterns', 'blobs', 'avatars',
-    'avatar_compute_queue', 'oauth_tokens',
-    'triggers', 'trigger_events', 'sharing_auth', 'scheduled_jobs'
+    'calendar_events', 'patterns', 'blobs',
+    'oauth_tokens', 'triggers', 'trigger_events',
+    'sharing_auth', 'scheduled_jobs'
 ]
 
 def verify_schema():
@@ -54,11 +54,11 @@ def verify_schema():
         print(f"\n❌ Missing tables: {', '.join(missing_tables)}")
         return False
     else:
-        print("\n✅ All 14 tables installed successfully!")
+        print(f"\n✅ All {len(EXPECTED_TABLES)} tables installed successfully!")
         print("\n📋 Next steps:")
-        print("   1. Run avatar system with: python -m zylch.cli.main")
+        print("   1. Start Zylch with: python -m zylch.cli.main")
         print("   2. Sync emails with: /sync 7")
-        print("   3. Check avatars with API or CLI")
+        print("   3. Check tasks with: /tasks")
         return True
 
 if __name__ == '__main__':

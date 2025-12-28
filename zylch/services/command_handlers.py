@@ -38,7 +38,6 @@ async def handle_help() -> str:
 **📅 Calendar & Tasks:**
 • `/calendar [days]` - Show upcoming events
 • `/tasks` - List open tasks (needs response)
-• `/briefing [days]` - Daily briefing with context
 • `/jobs` - Scheduled reminders and jobs
 
 **🧠 Memory & Agents:**
@@ -289,52 +288,6 @@ Then run `/sync --days N` to rebuild memory from re-synced emails."""
     except Exception as e:
         logger.error(f"Sync failed: {e}")
         return f"❌ **Sync failed:** {str(e)}"
-
-
-async def handle_briefing(args: List[str], owner_id: str) -> str:
-    """Handle /briefing command - Show daily briefing of tasks and unanswered conversations.
-
-    Usage: /briefing [days]
-
-    This queries pre-computed avatars (NOT real-time LLM calls).
-    Avatars are updated in background after each /sync.
-
-    Note: config and memory parameters removed - not needed for avatar query.
-    """
-    from zylch.storage.supabase_client import SupabaseStorage
-    from datetime import datetime, timedelta, timezone
-
-    # Parse days argument
-    days_back = 7  # default
-    if args:
-        try:
-            days_back = int(args[0])
-        except ValueError:
-            return f"❌ **Error:** `{args[0]}` is not a valid number\n\n**Usage:** `/briefing [days]`"
-
-    logger.info(f"[/briefing] Querying avatars for owner_id={owner_id}, days_back={days_back}")
-
-    try:
-        supabase = SupabaseStorage()
-        from .task_formatter import filter_own_emails, format_task_list
-
-        # Query avatars with open status or waiting action (score >= 3 for all priorities)
-        result = supabase.client.table('avatars')\
-            .select('*')\
-            .eq('owner_id', owner_id)\
-            .or_('relationship_status.eq.open,relationship_status.eq.waiting')\
-            .gte('relationship_score', 3)\
-            .order('relationship_score', desc=True)\
-            .execute()
-
-        avatars = result.data if result.data else []
-        avatars = filter_own_emails(avatars)
-
-        return format_task_list(avatars, include_stale_warning=True)
-
-    except Exception as e:
-        logger.error(f"Briefing failed: {e}", exc_info=True)
-        return f"❌ **Briefing failed:** {str(e)}"
 
 
 async def handle_memory(args: List[str], config: ToolConfig, owner_id: str) -> str:
@@ -883,7 +836,7 @@ Registers a recipient to receive shared data from you.
 **Example:** `/share colleague@example.com`
 
 **What gets shared:**
-• Contact information (avatars)
+• Contact information
 • Email intelligence
 • Relationship context
 
@@ -937,7 +890,7 @@ The recipient needs to authorize this sharing from their Zylch account.
 Once authorized, they will receive:
 • Your contact intelligence
 • Relationship context
-• Avatar data
+• Task data
 
 **Manage:** `/sharing` | `/revoke {recipient_email}`"""
             else:
@@ -1606,27 +1559,6 @@ COMMAND_HELP = {
 2. `/sync reset` - Clear emails/calendar
 3. `/sync --days 30` - Re-sync and rebuild memory''',
     },
-    '/briefing': {
-        'summary': 'Daily briefing of tasks and unanswered conversations',
-        'usage': '/briefing [days]',
-        'description': '''Show your daily briefing of tasks and unanswered conversations.
-
-Analyzes email threads to detect tasks you need to act on.
-
-**Arguments:**
-- `days` - Number of days to analyze (default: 7)
-
-**Examples:**
-- `/briefing` - Show today's briefing (last 7 days)
-- `/briefing 1` - Yesterday only
-- `/briefing 30` - Full month briefing
-
-**Task types detected:**
-- **answer** - Someone asked you a question
-- **reminder** - You promised to do something
-
-Run `/sync` first to fetch latest emails.''',
-    },
     '/memory': {
         'summary': 'Entity memory system',
         'usage': '/memory [search|store|stats|list|reset] <args>',
@@ -1853,13 +1785,13 @@ Shows statistics about your synced emails:
         oldest_date = oldest.data[0]['date'][:10] if oldest.data else 'N/A'
         newest_date = newest.data[0]['date'][:10] if newest.data else 'N/A'
 
-        # Count open avatars (need response)
-        avatar_result = supabase.table('avatars')\
+        # Count open tasks
+        task_result = supabase.table('task_items')\
             .select('id', count='exact')\
             .eq('owner_id', owner_id)\
-            .eq('relationship_status', 'open')\
+            .eq('action_required', True)\
             .execute()
-        open_count = avatar_result.count if hasattr(avatar_result, 'count') else 0
+        open_count = task_result.count if hasattr(task_result, 'count') else 0
 
         return f"""**📊 Email Statistics**
 
@@ -1867,9 +1799,9 @@ Shows statistics about your synced emails:
 **Threads:** {unique_threads:,}
 **Date Range:** {oldest_date} → {newest_date}
 
-**Open Conversations:** {open_count} need response
+**Open Tasks:** {open_count} need action
 
-Run `/sync` to update or `/briefing` for task details."""
+Run `/sync` to update or `/tasks` for details."""
 
     except Exception as e:
         logger.error(f"Error in /stats: {e}", exc_info=True)
@@ -2669,7 +2601,7 @@ Train your task agent first:
 
 {chr(10).join(results)}
 
-Use `/briefing` to see your task summary."""
+Use `/tasks` to see your task summary."""
 
 
 # =====================
@@ -2723,7 +2655,6 @@ COMMAND_HANDLERS = {
     '/echo': handle_echo,
     '/help': handle_help,
     '/sync': handle_sync,
-    '/briefing': handle_briefing,
     '/memory': handle_memory,
     '/email': handle_email,
     '/trigger': handle_trigger,
@@ -2893,19 +2824,14 @@ COMMAND_TRIGGERS = {
         "stop sharing with {email:email}",
     ],
 
-    # --- Briefing/Tasks ---
-    '/briefing': [
-        "briefing",
-        "daily briefing",
-        "morning briefing",
+    # --- Tasks ---
+    '/tasks': [
+        "tasks",
+        "my tasks",
         "what's on my plate",
         "today's tasks",
-        "show me my briefing",
+        "show me my tasks",
         "daily update",
-        "morning update",
-        "daily",
-        "today",
-        "tasks",
         "what tasks do I have",
         "show me unanswered emails",
         "what needs my attention",

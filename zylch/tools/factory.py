@@ -62,7 +62,7 @@ from .pipedrive import PipedriveClient
 # VonageClient imported dynamically in SMS tools at execution time
 from .email_archive import EmailArchiveManager
 from .email_sync import EmailSyncManager
-# TaskManager removed - legacy file-based system replaced by Supabase avatars
+# TaskManager removed - tasks now served via task_items table
 from ..memory import EmbeddingEngine
 from ..assistant.models import ModelSelector
 # Triggered instruction tools disabled - pending migration to Supabase triggers table
@@ -262,9 +262,6 @@ class ToolFactory:
             )
             logger.info("Hybrid search engine initialized")
 
-            # TaskManager removed - legacy file-based system replaced by Supabase avatars
-            # Tasks are now served by get_tasks tool which queries pre-computed avatars
-
         except Exception as e:
             logger.error(f"Failed to initialize service clients: {e}")
             raise
@@ -280,9 +277,6 @@ class ToolFactory:
 
         # Email sync tools (4 tools)
         tools.extend(ToolFactory._create_email_sync_tools(email_sync))
-
-        # Task management tools removed - legacy file-based system
-        # Tasks now served by get_tasks tool (line ~380) which queries Supabase avatars
 
         # Memory search tools (search_local_memory with hybrid FTS + semantic search)
         tools.extend(ToolFactory._create_contact_tools(
@@ -358,10 +352,9 @@ class ToolFactory:
         tools.extend(ToolFactory._create_scheduler_tools(scheduler))
         logger.info("Scheduler tools initialized (Supabase)")
 
-        # Get Tasks tool - returns pre-formatted task list from avatars
-        # Much faster than having Claude format the list (~5s vs 27s)
+        # Get Tasks tool - returns task list from task_items table
         tools.append(_GetTasksTool(session_state=session_state))
-        logger.info("Get Tasks tool initialized (pre-computed avatars)")
+        logger.info("Get Tasks tool initialized")
 
         # Store service client references for CLI access
         ToolFactory._starchat_client = starchat
@@ -414,9 +407,6 @@ class ToolFactory:
             _CloseEmailThreadTool(email_sync_manager),
             _EmailStatsTool(email_sync_manager),
         ]
-
-    # _create_task_tools removed - legacy file-based system replaced by Supabase avatars
-    # Tasks are now served by get_tasks tool which queries pre-computed avatars
 
     @staticmethod
     def _create_contact_tools(
@@ -1452,56 +1442,74 @@ class _EmailStatsTool(Tool):
         }
 
 
-# Legacy task tools removed (_BuildTasksTool, _GetContactTaskTool, _SearchTasksTool, _TaskStatsTool)
-# These used the old file-based tasks.json system which has been replaced by Supabase avatars
-# The get_tasks tool below queries pre-computed avatars for instant task retrieval
-
-
 class _GetTasksTool(Tool):
-    """Get open tasks from pre-computed avatars.
+    """Get open tasks from task_items table.
 
-    Returns formatted task list instantly from Supabase avatars.
-    Much faster than having Claude format the list (~5s vs 27s).
+    Returns formatted task list from Supabase task_items.
     """
 
     def __init__(self, session_state: SessionState):
         super().__init__(
             name="get_tasks",
-            description="ALWAYS use this tool when user asks about tasks, to-dos, what they need to do, pending actions, what needs attention, or anything related to their task list. Returns pre-computed task data instantly. Do NOT answer from memory - ALWAYS call this tool for task queries."
+            description="ALWAYS use this tool when user asks about tasks, to-dos, what they need to do, pending actions, what needs attention, or anything related to their task list. Returns task data instantly. Do NOT answer from memory - ALWAYS call this tool for task queries."
         )
         self.session_state = session_state
 
     async def execute(self, days_back: int = 7):
         from zylch.storage.supabase_client import SupabaseStorage
-        from zylch.services.task_formatter import filter_own_emails, format_task_list
 
-        # Get owner_id from session state (runtime value)
         owner_id = self.session_state.get_owner_id()
         if not owner_id:
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data={},
-                message="❌ No owner_id available. Please log in first."
+                message="No owner_id available. Please log in first."
             )
 
         try:
             supabase = SupabaseStorage()
 
-            result = supabase.client.table('avatars')\
+            result = supabase.client.table('task_items')\
                 .select('*')\
                 .eq('owner_id', owner_id)\
-                .or_('relationship_status.eq.open,relationship_status.eq.waiting')\
-                .gte('relationship_score', 3)\
-                .order('relationship_score', desc=True)\
+                .eq('action_required', True)\
+                .order('analyzed_at', desc=True)\
                 .execute()
 
-            avatars = result.data or []
-            avatars = filter_own_emails(avatars)
+            tasks = result.data or []
+
+            # Sort by urgency: high -> medium -> low
+            urgency_order = {'high': 0, 'medium': 1, 'low': 2}
+            tasks = sorted(tasks, key=lambda t: urgency_order.get(t.get('urgency'), 9))
+
+            # Limit low-urgency tasks to 10
+            high_medium = [t for t in tasks if t.get('urgency') in ('high', 'medium')]
+            low = [t for t in tasks if t.get('urgency') == 'low'][:10]
+            tasks = high_medium + low
+
+            if not tasks:
+                return ToolResult(
+                    status=ToolStatus.SUCCESS,
+                    data={'count': 0},
+                    message="No pending tasks found."
+                )
+
+            # Format task list
+            lines = []
+            for i, task in enumerate(tasks, 1):
+                urgency = task.get('urgency', 'medium')
+                icon = {'high': '🔴', 'medium': '🟡', 'low': '🟢'}.get(urgency, '⚪')
+                contact = task.get('contact_email') or task.get('contact_name') or 'Unknown'
+                action = task.get('suggested_action', 'Review')
+                lines.append(f"{i}. {icon} **{contact}** - {action}")
+
+            message = f"**Tasks requiring action ({len(tasks)}):**\n\n" + "\n".join(lines)
+            message += "\n\nUse 'more on #N' to see details for a specific task."
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
-                data={'count': len(avatars)},
-                message=format_task_list(avatars, include_stale_warning=False)
+                data={'count': len(tasks)},
+                message=message
             )
         except Exception as e:
             return ToolResult(
@@ -1513,7 +1521,7 @@ class _GetTasksTool(Tool):
     def get_schema(self):
         return {
             "name": self.name,
-            "description": "ALWAYS use this tool when user asks about tasks, to-dos, what they need to do, pending actions, what needs attention, or anything related to their task list. Returns current pre-computed task data. Do NOT answer task queries from conversation history - ALWAYS call this tool.",
+            "description": "ALWAYS use this tool when user asks about tasks, to-dos, what they need to do, pending actions, what needs attention, or anything related to their task list. Do NOT answer task queries from conversation history - ALWAYS call this tool.",
             "input_schema": {
                 "type": "object",
                 "properties": {

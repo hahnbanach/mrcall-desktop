@@ -127,8 +127,6 @@ class SemanticCommandMatcher:
             return self._format_calendar(params, template)
         elif command == '/reminder':
             return self._format_reminder(params, template)
-        elif command == '/briefing':
-            return self._format_briefing(params)
         elif command == '/model':
             return self._format_model(params)
         elif command == '/archive':
@@ -302,13 +300,6 @@ class SemanticCommandMatcher:
         if task:
             parts.append(f"--task \"{task}\"")
         return " ".join(parts)
-
-    def _format_briefing(self, params: Dict[str, Any]) -> str:
-        """/briefing [limit]"""
-        limit = params.get('limit', '')
-        if limit:
-            return f"/briefing {limit}"
-        return "/briefing"
 
     def _format_model(self, params: Dict[str, Any]) -> str:
         """/model [haiku|sonnet|opus]"""

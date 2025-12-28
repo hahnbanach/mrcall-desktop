@@ -245,8 +245,8 @@ class ChatService:
                         # /sync needs config and owner_id
                         config = ToolConfig.from_settings()
                         response_text = await handler(args, config, owner_id)
-                    elif cmd in ['/briefing', '/tasks']:
-                        # /briefing and /tasks only need args and owner_id
+                    elif cmd == '/tasks':
+                        # /tasks only needs args and owner_id
                         response_text = await handler(args, owner_id)
                     elif cmd in ['/memory', '/email', '/train', '/agent']:
                         # /memory, /email, /train, /agent need config with BYOK credentials

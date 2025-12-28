@@ -272,7 +272,7 @@ async def test_tool_categories(
         assert "close_email_threads" in tool_names
         assert "email_stats" in tool_names
 
-        # Task tool (1) - uses pre-computed avatars from Supabase
+        # Task tool (1) - queries task_items from Supabase
         assert "get_tasks" in tool_names
 
         # Memory/contact tools (2) - search_local_memory, get_contact
