@@ -19,7 +19,8 @@
 | Data                                                | Storage | Table |
 |-----------------------------------------------------|---------|-------|
 | OAuth tokens (Google, Microsoft, Anthropic, MrCall) | Supabase | `oauth_tokens` (encrypted) |
-| Email analysis                                      | Supabase | `thread_analysis` |
+| Email data                                          | Supabase | `emails` (with vector/FTS search) |
+| Task items                                          | Supabase | `task_items` |
 | Calendar events                                     | Supabase | `calendar_events` |
 | Sync state                                          | Supabase | `sync_state` |
 | Triggers                                            | Supabase | `triggers`, `trigger_events` |
@@ -80,21 +81,21 @@ All email data is stored in Supabase, scoped by `owner_id` (Firebase UID).
 - **Sync**: Gmail/Outlook History API (incremental, <1s)
 - **Features**: Complete history, cross-device access
 
-**Tier 2: Intelligence Cache (Supabase `thread_analysis`)**
-- **Purpose**: AI-generated analysis and summaries
+**Tier 2: Task Intelligence (Supabase `task_items`)**
+- **Purpose**: Extracted tasks with source traceability
 - **Technology**: Supabase Postgres
-- **Content**: Analysis text, needs_action, priority, contact info
-- **Window**: 30-day rolling analysis
+- **Content**: Task action, urgency, contact info, sources JSONB
+- **Features**: Full traceability via `sources` column linking to emails/blobs
 
 **Data Flow**:
 ```
 Gmail/Outlook API
        ↓
-Supabase (email_archive) ← Email metadata/content stored here
+Supabase (emails) ← Email metadata/content stored here
        ↓
-Claude AI (on-demand analysis)
+Claude AI (task extraction)
        ↓
-Supabase (thread_analysis) ← AI summaries stored here
+Supabase (task_items) ← Tasks with sources stored here
 ```
 
 **Privacy Note**: Email content is stored encrypted at rest by Supabase. All data is scoped by `owner_id` with Row Level Security (RLS).
@@ -323,8 +324,7 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
 
 | Table | Purpose |
 |-------|---------|
-| `emails` | Email metadata and content |
-| `thread_analysis` | **DEPRECATED** - Was used for AI summaries. Now tasks come from `task_items`. |
+| `emails` | Email metadata and content with vector embeddings for semantic search |
 | `task_items` | Task items with `sources` JSONB for data traceability |
 | `calendar_events` | Calendar events |
 | `sync_state` | Gmail/Outlook history IDs, last sync timestamps |
@@ -475,7 +475,7 @@ Supported providers for reset: google, microsoft, mrcall, anthropic, pipedrive, 
 **How it works**:
 1. Emails fetched from Gmail/Outlook API by backend
 2. Stored in Supabase with `owner_id` scoping (Row Level Security)
-3. AI analysis performed on-demand, summaries stored in `thread_analysis`
+3. Task extraction performed on-demand, stored in `task_items` with source traceability
 4. All sensitive tokens (OAuth, API keys) encrypted with Fernet before storage
 
 **Privacy model**:

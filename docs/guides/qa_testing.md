@@ -59,10 +59,10 @@ Zylch answers questions like:
 | `sync_state` | Tracks last sync history_id for incremental sync |
 | `avatars` | Computed relationship views per contact |
 | `avatar_compute_queue` | Background processing queue for avatar computation |
-| `thread_analysis` | Per-thread intelligence cache |
+| `task_items` | Task items with sources JSONB for data traceability |
 | `email_triage` | Email priority classification (urgent/normal/low/noise) |
 | `scheduled_jobs` | Scheduled reminders and timed actions |
-| `memories` | Vector-based memory storage (pg_vector) |
+| `blobs` | Vector-based memory storage (pg_vector) |
 
 ## 3. Prerequisites
 
@@ -462,7 +462,7 @@ Zylch: 📋 Relationship Gaps Analysis
 **Behind the scenes:**
 1. `GapService.analyze_gaps()` called
 2. `RelationshipAnalyzer.analyze_all_gaps()`:
-   - Queries `thread_analysis` for threads where `last_email_direction = 'inbound'` and `needs_action = true`
+   - Queries `task_items` for tasks with action required
    - Queries `calendar_events` for external meetings without follow-up emails within 48 hours
    - Queries `emails` for contacts with high interaction count but no recent activity
 3. Results stored in `relationship_gaps` table
@@ -969,11 +969,11 @@ Zylch: 📋 No relationship gaps found.
 
 **Debug:**
 ```sql
--- Check thread analysis
-SELECT thread_id, contact_email, last_email_direction, needs_action
-FROM thread_analysis
+-- Check task items with action required
+SELECT id, contact_email, action_required, urgency, suggested_action
+FROM task_items
 WHERE owner_id = 'YOUR_OWNER_ID'
-AND needs_action = true;
+AND action_required = true;
 
 -- Check if gaps were stored
 SELECT * FROM relationship_gaps WHERE owner_id = 'YOUR_OWNER_ID';

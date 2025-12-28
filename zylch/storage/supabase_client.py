@@ -426,65 +426,6 @@ class SupabaseStorage:
         return result.data[0] if result.data else {}
 
     # ==========================================
-    # THREAD ANALYSIS (Intelligence Cache)
-    # ==========================================
-
-    def store_thread_analysis(
-        self,
-        owner_id: str,
-        analysis: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Store thread analysis."""
-        data = {
-            'owner_id': owner_id,
-            'thread_id': analysis['thread_id'],
-            'contact_email': analysis.get('contact_email'),
-            'contact_name': analysis.get('contact_name'),
-            'last_email_date': analysis.get('last_email_date'),
-            'last_email_direction': analysis.get('last_email_direction'),
-            'analysis': analysis.get('analysis'),
-            'needs_action': analysis.get('needs_action', False),
-            'task_description': analysis.get('task_description'),
-            'priority': analysis.get('priority'),
-            'manually_closed': analysis.get('manually_closed', False),
-            'updated_at': datetime.now(timezone.utc).isoformat()
-        }
-
-        result = self.client.table('thread_analysis').upsert(
-            data,
-            on_conflict='owner_id,thread_id'
-        ).execute()
-
-        return result.data[0] if result.data else {}
-
-    def get_thread_analyses(
-        self,
-        owner_id: str,
-        needs_action_only: bool = False
-    ) -> List[Dict[str, Any]]:
-        """Get thread analyses for user."""
-        query = self.client.table('thread_analysis')\
-            .select('*')\
-            .eq('owner_id', owner_id)
-
-        if needs_action_only:
-            query = query.eq('needs_action', True).eq('manually_closed', False)
-
-        result = query.order('last_email_date', desc=True).execute()
-
-        return result.data or []
-
-    def mark_thread_closed(self, owner_id: str, thread_id: str) -> bool:
-        """Mark a thread as manually closed."""
-        result = self.client.table('thread_analysis')\
-            .update({'manually_closed': True, 'updated_at': datetime.now(timezone.utc).isoformat()})\
-            .eq('owner_id', owner_id)\
-            .eq('thread_id', thread_id)\
-            .execute()
-
-        return len(result.data) > 0 if result.data else False
-
-    # ==========================================
     # CALENDAR EVENTS
     # ==========================================
 

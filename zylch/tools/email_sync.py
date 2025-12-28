@@ -104,21 +104,20 @@ class EmailSyncManager:
         return self.cache_dir / "threads.json"
 
     def _load_cache(self) -> Dict[str, Any]:
-        """Load existing email cache."""
+        """Load existing email cache.
+
+        NOTE: thread_analysis table has been deprecated. In Supabase mode,
+        this returns an empty cache. Use hybrid_search_emails() for email search.
+        """
         if self._use_supabase:
-            # Load from Supabase
-            analyses = self.supabase.get_thread_analyses(self.owner_id)
-            logger.info(f"Loaded {len(analyses)} existing analyses from Supabase")
-            threads = {}
-            for analysis in analyses:
-                thread_id = analysis['thread_id']
-                threads[thread_id] = self._convert_supabase_to_cache(analysis)
+            # thread_analysis table deprecated - return empty cache
+            # Email search now uses vector/FTS on emails table directly
             return {
-                "last_sync": None,  # Not tracked in Supabase
-                "threads": threads
+                "last_sync": None,
+                "threads": {}
             }
 
-        # Load from local JSON
+        # Load from local JSON (for backwards compatibility)
         cache_path = self._get_cache_path()
         if cache_path.exists():
             with open(cache_path, 'r') as f:
@@ -129,79 +128,33 @@ class EmailSyncManager:
         }
 
     def _save_cache(self, cache: Dict[str, Any]) -> None:
-        """Save email cache to disk or Supabase."""
+        """Save email cache to disk.
+
+        NOTE: thread_analysis table has been deprecated. In Supabase mode,
+        this is a no-op. Email data is stored directly in the emails table.
+        """
         if self._use_supabase:
-            # Save each thread to Supabase
-            for thread_id, thread_data in cache['threads'].items():
-                self._save_thread_to_supabase(thread_data)
-            logger.info(f"Saved {len(cache['threads'])} threads to Supabase")
+            # thread_analysis table deprecated - no-op in Supabase mode
             return
 
-        # Save to local JSON
+        # Save to local JSON (for backwards compatibility)
         cache_path = self._get_cache_path()
         with open(cache_path, 'w') as f:
             json.dump(cache, f, indent=2)
         logger.info(f"Saved {len(cache['threads'])} threads to cache")
 
     def _save_analyzed_threads(self, threads: Dict[str, Any]) -> None:
-        """Save only the threads that were analyzed (not all cached threads)."""
-        if self._use_supabase:
-            for thread_id, thread_data in threads.items():
-                self._save_thread_to_supabase(thread_data)
-        else:
-            # For local JSON, we still need to save the full cache
-            # This is a no-op here since local JSON saves the whole file
-            pass
+        """Save only the threads that were analyzed (not all cached threads).
 
-    def _save_thread_to_supabase(self, thread_data: Dict[str, Any]) -> None:
-        """Save a single thread analysis to Supabase."""
-        # Extract contact email and name from 'from' field (format: "Name <email@example.com>")
-        from_field = thread_data.get('last_email', {}).get('from', '')
-        contact_email = self._extract_email(from_field)
-        contact_name = self._extract_name_from_from(from_field)
+        NOTE: thread_analysis table has been deprecated. This is now a no-op
+        in Supabase mode.
+        """
+        # thread_analysis deprecated - no-op for both modes
+        # Local JSON mode saves full cache elsewhere
+        pass
 
-        analysis = {
-            'thread_id': thread_data['thread_id'],
-            'contact_email': contact_email,
-            'contact_name': contact_name,
-            'last_email_date': thread_data.get('last_message_date'),
-            'last_email_direction': thread_data.get('last_email', {}).get('direction'),
-            'analysis': {
-                'summary': thread_data.get('summary'),
-                'expected_action': thread_data.get('expected_action'),
-                'priority_score': thread_data.get('priority_score'),
-                'email_count': thread_data.get('email_count'),
-                'participants': thread_data.get('participants', []),
-                'last_email_id': thread_data.get('last_email', {}).get('id'),
-            },
-            'needs_action': thread_data.get('open', False),
-            'task_description': thread_data.get('expected_action'),
-            'priority': thread_data.get('priority_score'),
-            'manually_closed': thread_data.get('manually_closed', False),
-        }
-        self.supabase.store_thread_analysis(self.owner_id, analysis)
-
-    def _convert_supabase_to_cache(self, supabase_analysis: Dict[str, Any]) -> Dict[str, Any]:
-        """Convert Supabase thread_analysis format to cache format."""
-        analysis = supabase_analysis.get('analysis', {}) or {}
-        return {
-            'thread_id': supabase_analysis['thread_id'],
-            'subject': analysis.get('subject', ''),
-            'participants': analysis.get('participants', []),
-            'email_count': analysis.get('email_count', 0),
-            'last_updated': supabase_analysis.get('updated_at'),
-            'open': supabase_analysis.get('needs_action', False),
-            'expected_action': supabase_analysis.get('task_description'),
-            'summary': analysis.get('summary', ''),
-            'priority_score': supabase_analysis.get('priority', 5),
-            'manually_closed': supabase_analysis.get('manually_closed', False),
-            'last_message_date': supabase_analysis.get('last_email_date'),
-            'last_email': {
-                'id': analysis.get('last_email_id'),
-                'from_email': supabase_analysis.get('contact_email'),
-                'from_name': supabase_analysis.get('contact_name'),
-            }
-        }
+    # NOTE: _save_thread_to_supabase and _convert_supabase_to_cache removed
+    # thread_analysis table has been deprecated. Email search uses emails table directly.
 
     def sync_emails(self, force_full: bool = False, days_back: Optional[int] = None) -> Dict[str, Any]:
         """Build intelligence cache from email archive.
