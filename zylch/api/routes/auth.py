@@ -1443,19 +1443,33 @@ async def mrcall_oauth_callback(
 
     # Exchange code for tokens (POST /oauth/token)
     try:
+        token_url = f"{settings.mrcall_base_url.rstrip('/')}/oauth/token"
+        request_body = {
+            "grantType": "authorization_code",
+            "code": code,
+            "redirectUri": "http://localhost:8766/callback",
+            "clientId": settings.mrcall_client_id,
+            "clientSecret": settings.mrcall_client_secret,
+            "codeVerifier": code_verifier
+        }
+
+        # DEBUG: Log exactly what we're sending
+        import json as json_module
+        logger.info(f"=== DEBUG: OAuth Token Exchange ===")
+        logger.info(f"URL: {token_url}")
+        logger.info(f"Request body: {json_module.dumps(request_body, indent=2)}")
+
         async with httpx.AsyncClient() as client:
             token_response = await client.post(
-                f"{settings.mrcall_base_url.rstrip('/')}/oauth/token",
-                json={
-                    "grantType": "authorization_code",
-                    "code": code,
-                    "redirectUri": "http://localhost:8766/callback",
-                    "clientId": settings.mrcall_client_id,
-                    "clientSecret": settings.mrcall_client_secret,
-                    "codeVerifier": code_verifier
-                },
+                token_url,
+                json=request_body,
                 headers={"Content-Type": "application/json"}
             )
+
+            # DEBUG: Log full response
+            logger.info(f"Response status: {token_response.status_code}")
+            logger.info(f"Response headers: {dict(token_response.headers)}")
+            logger.info(f"Response body: {token_response.text}")
 
             if token_response.status_code != 200:
                 logger.error(f"Token exchange failed: {token_response.status_code} - {token_response.text}")
