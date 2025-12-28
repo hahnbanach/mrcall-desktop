@@ -231,7 +231,7 @@ class ToolFactory:
                 email_sync = EmailSyncManager(
                     email_archive=email_archive,
                     cache_dir=config.cache_dir + "/emails",
-                    anthropic_api_key=config.anthropic_api_key,
+                    api_key=config.anthropic_api_key,
                     days_back=30,
                 )
 

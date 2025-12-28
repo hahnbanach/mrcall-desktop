@@ -2554,7 +2554,7 @@ async def _handle_memory_process(storage, owner_id: str, channel: str, anthropic
 Connect your Anthropic account:
 `/connect anthropic`"""
 
-    worker = MemoryWorker(storage=storage, owner_id=owner_id, anthropic_api_key=anthropic_key)
+    worker = MemoryWorker(storage=storage, owner_id=owner_id, api_key=anthropic_key)
 
     channels_to_process = [channel] if channel != 'all' else ['email', 'calendar']
     results = []
