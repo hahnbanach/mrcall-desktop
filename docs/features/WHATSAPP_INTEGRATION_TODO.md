@@ -357,7 +357,7 @@ CREATE TABLE whatsapp_contacts (
 **Tasks**:
 1. Extend `GapService` to include WhatsApp
 2. Implement WhatsApp-specific gap detection
-3. Add WhatsApp gaps to `/gaps` briefing
+3. Add WhatsApp gaps to `/tasks` command
 4. Create WhatsApp-triggered automations
 
 ### Phase 5: Real-Time Sync (Week 4)

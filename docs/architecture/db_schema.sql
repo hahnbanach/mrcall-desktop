@@ -11,45 +11,6 @@ CREATE TABLE public.agent_prompts (
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT agent_prompts_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.avatar_compute_queue (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  owner_id text NOT NULL,
-  contact_id text NOT NULL,
-  trigger_type text NOT NULL,
-  priority integer DEFAULT 5,
-  retry_count integer DEFAULT 0,
-  scheduled_at timestamp with time zone DEFAULT now(),
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT avatar_compute_queue_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.avatars (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  owner_id text NOT NULL,
-  contact_id text NOT NULL,
-  display_name text,
-  identifiers jsonb,
-  preferred_channel text,
-  preferred_tone text,
-  preferred_language text,
-  response_latency jsonb,
-  aggregated_preferences jsonb,
-  relationship_strength real,
-  first_interaction timestamp with time zone,
-  last_interaction timestamp with time zone,
-  interaction_count integer DEFAULT 0,
-  profile_confidence real DEFAULT 0.5,
-  relationship_summary text,
-  relationship_status text DEFAULT 'unknown'::text,
-  relationship_score integer DEFAULT 5,
-  suggested_action text,
-  interaction_summary jsonb DEFAULT '{}'::jsonb,
-  profile_embedding USER-DEFINED,
-  last_computed timestamp with time zone,
-  compute_trigger text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT avatars_pkey PRIMARY KEY (id)
-);
 CREATE TABLE public.blob_sentences (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   blob_id uuid NOT NULL,
@@ -160,18 +121,6 @@ CREATE TABLE public.emails (
   tsv tsvector DEFAULT to_tsvector('simple'::regconfig, ((COALESCE(subject, ''::text) || ' '::text) || COALESCE(body_plain, ''::text))),
   task_processed_at timestamp with time zone,
   CONSTRAINT emails_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.identifier_map (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  owner_id text NOT NULL,
-  identifier text NOT NULL,
-  identifier_type text NOT NULL,
-  contact_id text NOT NULL,
-  confidence real DEFAULT 1.0,
-  source text,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT identifier_map_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.integration_providers (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -322,23 +271,6 @@ CREATE TABLE public.task_items (
   completed_at timestamp with time zone,
   sources jsonb DEFAULT '{}'::jsonb,
   CONSTRAINT task_items_pkey PRIMARY KEY (id)
-);
-CREATE TABLE public.thread_analysis (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  owner_id text NOT NULL,
-  thread_id text NOT NULL,
-  contact_email text,
-  contact_name text,
-  last_email_date timestamp with time zone,
-  last_email_direction text,
-  analysis jsonb,
-  needs_action boolean DEFAULT false,
-  task_description text,
-  priority integer,
-  manually_closed boolean DEFAULT false,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT thread_analysis_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.trigger_events (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

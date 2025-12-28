@@ -455,7 +455,7 @@ User: Accetta la richiesta da Mario
 **User asks**: "What do you know about Marco Ferrari?"
 
 **AI agent**:
-1. Searches own knowledge base (emails, calendar, avatars)
+1. Searches own knowledge base (emails, calendar, tasks)
 2. **Automatically** calls `get_shared_intel` to include shared insights
 3. Combines results
 
@@ -657,7 +657,6 @@ Revoke an accepted authorization.
 
 - **[Entity Memory System](entity-memory-system.md)** - Entity-centric memory with hybrid search
 - **[Relationship Intelligence](relationship-intelligence.md)** - Contact intelligence enriched by shared intel
-- **[Avatar Aggregation](avatar-aggregation.md)** - Person-centric contact profiles that include shared intel
 - **[Architecture](../../.claude/ARCHITECTURE.md#sharing-system)** - Sharing system design philosophy
 
 ## References

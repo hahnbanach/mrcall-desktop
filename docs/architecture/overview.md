@@ -1,15 +1,5 @@
 # Architecture Overview
 
-> **⚠️ PARTIALLY OUTDATED**
->
-> This document describes a planned "Von Neumann Memory Architecture" with an `avatars` table as a computed view. **The avatar system was never implemented** - the write pipeline was never built.
->
-> **Current Reality (December 2025):**
-> - Tasks come from `task_items` table, populated by `task_agent.py`
-> - Use `/tasks` command (not `/briefing`) to view tasks
-> - The `avatars`, `avatar_compute_queue`, and `identifier_map` tables have been dropped
-> - See `.claude/ARCHITECTURE.md` for the authoritative, up-to-date architecture
-
 ## Table of Contents
 
 - [System Overview](#system-overview)
@@ -50,8 +40,8 @@ Zylch is an AI-powered relationship intelligence platform that provides:
         │  │  • SyncService                   │  │
         │  │  • ChatService                   │  │
         │  │  • TriggerService (background)   │  │
+        │  │  • TaskAgent (task detection)    │  │
         │  │  • Memory Agent Pipeline         │  │
-        │  │  • CRM Agent Pipeline            │  │
         │  └──────────────────────────────────┘  │
         │  ┌──────────────────────────────────┐  │
         │  │       Tool System                │  │
@@ -93,7 +83,7 @@ Zylch follows a **three-tier architecture**:
 
 **CLI** (`zylch/cli/`)
 - Interactive command-line interface
-- Slash commands (`/sync`, `/gaps`, `/memory`)
+- Slash commands (`/sync`, `/tasks`, `/memory`)
 - Natural language conversation
 - Local auth server for OAuth flows
 
@@ -116,7 +106,7 @@ Zylch follows a **three-tier architecture**:
 - **ChatService**: Conversational AI orchestration
 - **TriggerService**: Event-driven automation (background worker)
 - **CommandHandlers**: Slash command processing
-- **AvatarAggregator**: Per-contact intelligence computation
+- **TaskAgent**: Task detection from emails
 
 **Why Services?**
 - Single source of truth (no duplication between CLI and API)
@@ -144,9 +134,9 @@ POST /api/sync/full {"days_back": 30}
 **Key Tables**:
 - `emails` - Email metadata and content
 - `calendar_events` - Calendar meetings
-- `avatars` - Pre-computed contact intelligence
+- `task_items` - Detected tasks and follow-ups
 - `triggers` - Event-driven instructions
-- `memories` - Vector-based memory store
+- `blobs` - Vector-based semantic memory (facts about contacts)
 - `oauth_tokens` - Encrypted tokens
 
 **See**: [Database Schema](#database-schema)
@@ -171,7 +161,7 @@ class Tool:
 - **Archive**: `email_archive.py` - Permanent email storage
 - **Contacts**: `starchat.py` - MrCall/StarChat CRM integration
 - **Memory**: Memory tools in `factory.py` - Save/search memories
-- **Tasks**: Task extraction and gap analysis
+- **Tasks**: Task extraction via `task_agent.py`
 
 **Tool Registration** (`factory.py`):
 ```python
@@ -204,11 +194,11 @@ def create_all_tools(config, memory, owner_id):
 - pg_vector for semantic search (150x faster than brute-force)
 - Encryption at rest
 
-### Two-Tier Email Storage
+### Email Archive and Task Detection
 
 **Problem**: Old system re-fetched 600+ emails every sync (15-30 min), lost history outside 30-day window
 
-**Solution**: Separate archive (permanent) and intelligence (30-day window)
+**Solution**: Permanent email archive + on-demand task detection
 
 ```
 ┌───────────────────────────────────────────────────────┐
@@ -225,46 +215,40 @@ Gmail/Outlook API
 │  Table: emails   │ • Enables full-text search
 └─────────┬────────┘ • Cross-device access
           │
-          │ (On-demand analysis)
+          │ (On-demand task detection)
           ▼
 ┌──────────────────┐
-│  Intelligence    │ ← AI-generated analysis (30-day window)
-│   (Supabase)     │ • Summaries, tasks, gaps
-│                  │ • Refreshed weekly
-│  Table: avatars  │ • Pre-computed for speed
+│   Task Items     │ ← AI-detected tasks
+│   (Supabase)     │ • Suggested actions
+│                  │ • Urgency levels
+│ Table: task_items│ • Contact attribution
 └──────────────────┘
 ```
 
 **Benefits**:
 - **100x faster sync**: <1s incremental vs 15-30min full fetch
 - **Complete history**: Never lose emails (archive is permanent)
-- **Efficient AI**: Only analyze recent 30 days (reduces cost)
-- **Fast queries**: Pre-computed avatars = instant gap detection
+- **Efficient AI**: Only analyze recent emails for tasks
+- **Fast queries**: Task items pre-computed for instant display
 
 **Performance**:
 - Initial archive: ~2 min (one-time for 500 emails)
 - Incremental sync: <1s (Gmail History API)
-- Gap analysis: <100ms (queries pre-computed avatars)
+- Task display: <100ms (queries task_items table)
 
 **See**: [Email Archive](../features/email-archive.md)
 
 ---
 
-### Von Neumann Memory Architecture
+### Memory System (Blobs)
 
-**Philosophy**: Memory as single source of truth, Avatar as computed view
-
-Zylch implements a **Von Neumann-inspired architecture** where the Memory system is the authoritative data store, and Avatar (contact intelligence) is a computed/cached view derived from Memory.
-
-**Core Principle**:
-- **Memory** = Source of Truth (I/O events, raw data, facts)
-- **Avatar** = Computed View (aggregated intelligence, formatted for display)
+Zylch uses a **blob-based memory system** where semantic knowledge is stored in the `blobs` table with vector embeddings for similarity search.
 
 **Data Flow**:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│         Von Neumann Memory Architecture                  │
+│              Memory System Architecture                  │
 └─────────────────────────────────────────────────────────┘
 
 I/O Events (Email, Calendar, StarChat)
@@ -273,72 +257,26 @@ I/O Events (Email, Calendar, StarChat)
 ┌──────────────────┐
 │  Memory Agent    │ ← Processes raw I/O events
 │   Pipeline       │ • Extracts facts and patterns
-│                  │ • Stores to Memory (source of truth)
+│                  │ • Stores to blobs (source of truth)
 │                  │ • Reconsolidates existing memories
 └─────────┬────────┘
           │
-          │ (Facts stored in Memory)
+          │ (Facts stored in blobs)
           ▼
 ┌──────────────────┐
-│     Memory       │ ← Single Source of Truth
+│      Blobs       │ ← Semantic Memory Store
 │   (Supabase)     │ • All raw facts and patterns
 │                  │ • Vector embeddings (semantic search)
-│  Table: memories │ • Never deleted
-└─────────┬────────┘
-          │
-          │ (On-demand or scheduled computation)
-          ▼
-┌──────────────────┐
-│   CRM Agent      │ ← Computes Avatar from Memory
-│    Pipeline      │ • Reads from Memory
-│                  │ • Aggregates by contact
-│                  │ • Formats for display
-└─────────┬────────┘
-          │
-          │ (Computed intelligence)
-          ▼
-┌──────────────────┐
-│     Avatar       │ ← Computed View (Cache)
-│   (Supabase)     │ • Pre-computed contact intelligence
-│                  │ • Relationship status & score
-│  Table: avatars  │ • Suggested actions (formatted)
-└──────────────────┘ • 30-day TTL (recomputed as needed)
+│   Table: blobs   │ • Person-centric organization
+└──────────────────┘
 ```
 
-**Key Differences from Old System**:
+**Key Features**:
+- **Reconsolidation**: Similar memories merged (no duplicates)
+- **Vector Search**: Semantic similarity via pg_vector
+- **Namespacing**: Memories scoped by owner and contact
 
-| Aspect | Old System (AvatarComputeWorker) | New System (Von Neumann) |
-|--------|----------------------------------|--------------------------|
-| **Source of Truth** | Avatars (mixed raw + computed) | Memory (only raw facts) |
-| **Data Flow** | I/O → Avatar (direct) | I/O → Memory → Avatar (computed) |
-| **Avatar Role** | Primary storage | Cached view |
-| **Recomputation** | Difficult (data mixed) | Easy (recompute from Memory) |
-| **Consistency** | Prone to drift | Always consistent with Memory |
-
-**Benefits**:
-- **Separation of Concerns**: Raw data (Memory) vs computed view (Avatar)
-- **Recomputable**: Avatar can always be regenerated from Memory
-- **Flexible**: Change Avatar format without losing data
-- **Auditable**: Memory contains complete history of facts
-- **Scalable**: Avatar computation can be parallelized or distributed
-
-**Pipeline Triggers**:
-1. **Memory Agent Pipeline** (after I/O events):
-   - Email sync → Extract facts → Store to Memory
-   - Calendar sync → Extract meetings → Store to Memory
-   - StarChat call → Extract contact info → Store to Memory
-
-2. **CRM Agent Pipeline** (scheduled or on-demand):
-   - Nightly: Recompute all Avatars from Memory
-   - On-demand: Recompute specific Avatar when requested
-   - After Memory update: Mark affected Avatars as stale
-
-**Performance**:
-- Memory storage: <100ms (with reconsolidation)
-- Avatar computation: ~5 min for 15 contacts (background)
-- Avatar retrieval: <100ms (cached, pre-computed)
-
-**See**: [Von Neumann Architecture](../features/von-neumann-architecture.md) (if exists)
+**See**: [Entity Memory System](../features/entity-memory-system.md)
 
 ---
 
@@ -366,21 +304,35 @@ CREATE TABLE emails (
 );
 CREATE INDEX idx_emails_owner ON emails(owner_id, date_timestamp DESC);
 
--- Avatar intelligence (pre-computed)
-CREATE TABLE avatars (
+-- Task items (detected tasks)
+CREATE TABLE task_items (
   id UUID PRIMARY KEY,
   owner_id TEXT NOT NULL,
-  contact_id TEXT NOT NULL,  -- 12-char MD5 hash
-  display_name TEXT,
-  relationship_status TEXT,  -- 'open', 'waiting', 'closed'
-  relationship_score INTEGER,  -- 0-10
-  suggested_actions JSONB,
-  last_interaction TIMESTAMPTZ,
-  aggregation_timestamp TIMESTAMPTZ,
-  -- pg_vector for semantic search
-  embedding vector(384)
+  email_id UUID REFERENCES emails(id),
+  contact_email TEXT,
+  contact_name TEXT,
+  suggested_action TEXT,
+  reason TEXT,
+  urgency TEXT,  -- 'high', 'medium', 'low'
+  sources JSONB,  -- { emails: [...], blobs: [...] }
+  analyzed_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_avatars_owner ON avatars(owner_id, relationship_score DESC);
+CREATE INDEX idx_task_items_owner ON task_items(owner_id, analyzed_at DESC);
+
+-- Blobs (semantic memory)
+CREATE TABLE blobs (
+  id UUID PRIMARY KEY,
+  owner_id TEXT NOT NULL,
+  namespace TEXT NOT NULL,
+  category TEXT,
+  context TEXT,
+  pattern TEXT,
+  confidence REAL DEFAULT 0.5,
+  embedding vector(384),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_blobs_namespace ON blobs(owner_id, namespace);
 
 -- Calendar events
 CREATE TABLE calendar_events (
@@ -392,40 +344,16 @@ CREATE TABLE calendar_events (
   end_time TIMESTAMPTZ,
   attendees JSONB,
   meeting_link TEXT,
-  memory_processed_at TIMESTAMPTZ DEFAULT NULL,  -- NULL = unprocessed
+  memory_processed_at TIMESTAMPTZ DEFAULT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX idx_calendar_owner ON calendar_events(owner_id, start_time);
-CREATE INDEX idx_calendar_memory_unprocessed ON calendar_events(owner_id, start_time DESC) WHERE memory_processed_at IS NULL;
-
--- Pipedrive deals
-CREATE TABLE pipedrive_deals (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_id TEXT NOT NULL,
-  deal_id TEXT NOT NULL,  -- Pipedrive deal ID
-  title TEXT,
-  person_name TEXT,
-  org_name TEXT,
-  value NUMERIC,
-  currency TEXT DEFAULT 'USD',
-  status TEXT,  -- 'open', 'won', 'lost'
-  stage_name TEXT,
-  pipeline_name TEXT,
-  expected_close_date DATE,
-  deal_data JSONB,  -- Full deal object from Pipedrive
-  memory_processed_at TIMESTAMPTZ DEFAULT NULL,  -- NULL = unprocessed
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(owner_id, deal_id)
-);
-CREATE INDEX idx_pipedrive_deals_owner ON pipedrive_deals(owner_id, updated_at DESC);
-CREATE INDEX idx_pipedrive_deals_memory_unprocessed ON pipedrive_deals(owner_id, updated_at DESC) WHERE memory_processed_at IS NULL;
 
 -- Triggers (event-driven automation)
 CREATE TABLE triggers (
   id TEXT PRIMARY KEY,
   owner_id TEXT NOT NULL,
-  event_type TEXT NOT NULL,  -- 'session_start', 'email_received', etc.
+  event_type TEXT NOT NULL,
   instruction TEXT NOT NULL,
   active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -437,61 +365,34 @@ CREATE TABLE trigger_events (
   owner_id TEXT NOT NULL,
   event_type TEXT NOT NULL,
   event_data JSONB,
-  status TEXT DEFAULT 'pending',  -- 'pending', 'processing', 'completed', 'failed'
+  status TEXT DEFAULT 'pending',
   processed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Memory system (vector storage)
-CREATE TABLE memories (
-  id UUID PRIMARY KEY,
-  owner_id TEXT NOT NULL,
-  namespace TEXT NOT NULL,  -- 'user:{owner_id}', 'global:skills', 'shared:{recipient}:{sender}'
-  category TEXT,  -- 'email', 'contacts', 'calendar', 'task', 'general'
-  context TEXT,
-  pattern TEXT,
-  confidence REAL DEFAULT 0.5,
-  embedding vector(384),  -- Sentence-transformers all-MiniLM-L6-v2
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX idx_memories_namespace ON memories(owner_id, namespace);
-
--- OAuth tokens (encrypted) - Unified JSONB credentials storage
+-- OAuth tokens (encrypted)
 CREATE TABLE oauth_tokens (
   id UUID PRIMARY KEY,
   owner_id TEXT NOT NULL,
-  provider TEXT NOT NULL,  -- 'google', 'microsoft', 'anthropic', 'vonage', etc.
+  provider TEXT NOT NULL,
   email TEXT,
-  credentials JSONB,  -- Unified encrypted credentials (Fernet)
+  credentials JSONB,  -- Fernet encrypted
   connection_status TEXT DEFAULT 'connected',
   scopes TEXT[],
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(owner_id, provider)
 );
--- NOTE: Legacy columns (google_token_data, graph_*, anthropic_api_key) removed
--- All credentials now stored in unified JSONB 'credentials' column
 
 -- Sharing authorizations
 CREATE TABLE share_authorizations (
   id UUID PRIMARY KEY,
   sender_email TEXT NOT NULL,
   recipient_email TEXT NOT NULL,
-  status TEXT DEFAULT 'pending',  -- 'pending', 'accepted', 'rejected', 'revoked'
+  status TEXT DEFAULT 'pending',
   accepted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(sender_email, recipient_email)
-);
-
--- User notifications (background worker alerts)
-CREATE TABLE user_notifications (
-  id UUID PRIMARY KEY,
-  owner_id TEXT NOT NULL,
-  message TEXT NOT NULL,
-  notification_type TEXT DEFAULT 'info',  -- 'info', 'warning', 'error'
-  read BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
@@ -586,7 +487,7 @@ mem.store_memory(
 
 ---
 
-### Two-Layer Memory Architecture
+### Memory Architecture
 
 **Semantic Memory** (vector-based)
 - **Purpose**: Vector-based semantic storage with reconsolidation
@@ -601,22 +502,22 @@ User: "info su Luigi"
        │
        ▼
 ┌──────────────────────────┐
-│ 1. Hybrid Search         │ ← FTS + Semantic
-│    (Supabase pg_vector)  │
+│ Hybrid Search            │ ← FTS + Semantic
+│ (Supabase pg_vector)     │
 └──────┬───────────────────┘
        │
        └─ Combines keyword (FTS) and semantic (cosine) scoring
        │
        ▼
 ┌──────────────────────────┐
-│ 2. Avatar Lookup         │ ← Pre-computed intelligence
-│    (if available)        │
+│ Results                  │ ← Matching blobs
+│ (with context)           │
 └──────────────────────────┘
 ```
 
 **Performance Benefits**:
 - **Memory search**: <100ms (hybrid scoring)
-- **Avatar retrieval**: <50ms (pre-computed)
+- **Task retrieval**: <50ms (pre-computed)
 
 **See**: [Entity Memory System](../features/entity-memory-system.md)
 
@@ -779,7 +680,7 @@ creds = storage.get_oauth_token(owner_id, "anthropic")
 - Initial archive sync: ~2 min (500 emails, one-time)
 - Incremental sync: <1s (Gmail History API)
 - Email search: <100ms (Postgres FTS)
-- Gap analysis: <100ms (pre-computed avatars)
+- Task display: <100ms (queries task_items)
 
 **Memory Operations**:
 - Memory retrieval: O(log n) with HNSW indexing
@@ -790,11 +691,10 @@ creds = storage.get_oauth_token(owner_id, "anthropic")
 **API Response Times**:
 - Chat message: 2-5s (depends on tool usage)
 - Archive search: 100-300ms
-- Gap analysis: 1-3s
+- Task list: <100ms
 - Natural language: 5-15s (full agent + Claude)
 
 **Background Workers**:
-- Avatar computation: ~5 min for 15 contacts after `/sync`
 - Trigger processing: <1s per trigger (Claude Haiku)
 - Event queue: Processed every 1 minute
 
@@ -804,7 +704,7 @@ creds = storage.get_oauth_token(owner_id, "anthropic")
 
 **Current Limits**:
 - **Emails**: Tested with 500 messages, scales to millions with Supabase
-- **Avatars**: 30-day window (~250-300 contacts typical)
+- **Tasks**: Detected from 30-day email window
 - **Concurrent API**: Railway auto-scaling (horizontal)
 - **Database**: Supabase connection pooling (up to 60 connections)
 
@@ -823,7 +723,7 @@ creds = storage.get_oauth_token(owner_id, "anthropic")
 **Phase 3: Scale** (10,000+ users)
 - Railway auto-scaling (multiple replicas)
 - Redis caching layer (Upstash)
-- Separate worker pool for triggers/avatars
+- Separate worker pool for triggers
 - Consider Elasticsearch for advanced search
 
 **Bottlenecks to Monitor**:
@@ -858,20 +758,20 @@ creds = storage.get_oauth_token(owner_id, "anthropic")
 
 ---
 
-### Decision 2: Two-Tier Email Storage
+### Decision 2: Email Archive + Task Detection
 
 **Problem**: Re-fetching 600+ emails every sync (15-30 min), losing history
 
-**Solution**: Separate permanent archive and 30-day intelligence cache
+**Solution**: Permanent email archive + AI-powered task detection
 
 **Benefits**:
 - 100x faster sync (<1s vs 15-30min)
 - Complete history preserved
 - Efficient AI analysis (only recent emails)
 
-**Implementation**: `emails` table (archive) + `avatars` table (intelligence)
+**Implementation**: `emails` table (archive) + `task_items` table (detected tasks)
 
-**See**: [Two-Tier Email Storage](#two-tier-email-storage)
+**See**: [Email Archive and Task Detection](#email-archive-and-task-detection)
 
 ---
 
@@ -886,7 +786,7 @@ creds = storage.get_oauth_token(owner_id, "anthropic")
 - Multi-thread task detection
 - Relationship strength scoring
 
-**Implementation**: Avatar aggregation service (`zylch/services/avatar_aggregator.py`)
+**Implementation**: Task Agent (`zylch/tools/task_agent.py`)
 
 **See**: [Relationship Intelligence](../features/relationship-intelligence.md)
 
@@ -958,32 +858,29 @@ def sync_full(request: SyncRequest):
 
 ---
 
-### Decision 7: Von Neumann Memory Architecture
+### Decision 7: Memory as Source of Truth
 
-**Problem**: Mixed raw data and computed intelligence in Avatars, making recomputation difficult
+**Problem**: Need persistent knowledge about contacts that survives across sessions
 
-**Solution**: Separate Memory (source of truth) and Avatar (computed view) with agent pipelines
+**Solution**: Blob-based memory system with vector embeddings
 
 **Benefits**:
 - Memory as single source of truth (never lose raw data)
-- Avatar can be recomputed from Memory at any time
-- Flexible Avatar format (change without data loss)
-- Clear separation: Memory Agent (I/O → Memory) and CRM Agent (Memory → Avatar)
+- Semantic search for relevant context
+- Reconsolidation prevents duplicates
 
 **Implementation**:
-- **Memory Agent Pipeline**: Processes I/O events → stores facts to Memory
-- **CRM Agent Pipeline**: Reads Memory → computes Avatar intelligence
-- **Data Flow**: I/O → Memory Agent → Memory → CRM Agent → Avatar
+- **Memory Agent Pipeline**: Processes I/O events → stores facts to blobs
+- **Data Flow**: I/O → Memory Agent → blobs table
 
 **Performance**:
 | Operation | Time |
 |-----------|------|
 | Memory storage | <100ms (with reconsolidation) |
-| Avatar computation | ~5 min for 15 contacts (background) |
-| Avatar retrieval | <100ms (cached) |
-| Avatar recomputation | On-demand or scheduled (nightly) |
+| Memory search | <100ms (vector similarity) |
+| Task display | <100ms (pre-computed) |
 
-**See**: [Von Neumann Architecture](#von-neumann-memory-architecture)
+**See**: [Memory System Design](#memory-system-design)
 
 ---
 
@@ -1011,7 +908,7 @@ def sync_full(request: SyncRequest):
                            │ (AI summaries, sync)
                            ▼
                     ┌─────────────┐
-                    │  Supabase   │ ← avatars, sharing
+                    │  Supabase   │ ← tasks, sharing
                     └─────────────┘
 ```
 
@@ -1053,7 +950,7 @@ Gmail Push API
 │   Backend    │ ← Process event
 └──────┬───────┘
        │
-       ├─ Queue avatar computation
+       ├─ Queue task detection
        ├─ Queue trigger events
        └─ Send WebSocket update
        │
@@ -1079,7 +976,7 @@ Gmail Push API
 **Use Cases**:
 - Session management (JWT → user data)
 - Rate limiting (per-user request counts)
-- Avatar cache (30-day TTL)
+- Task cache (frequently accessed tasks)
 - Email thread cache (Supabase → Redis)
 
 **Benefits**:
@@ -1094,11 +991,9 @@ Gmail Push API
 ## Related Documentation
 
 ### Core Features
-- **[Email Archive](../features/email-archive.md)** - Two-tier email storage
-- **[Email Archive](../features/email-archive.md)** - Two-tier email storage and AI-powered analysis
+- **[Email Archive](../features/email-archive.md)** - Email storage and AI-powered analysis
 - **[Calendar Integration](../features/calendar-integration.md)** - Google/Microsoft calendars
-- **[Relationship Intelligence](../features/relationship-intelligence.md)** - Gap detection
-- **[Avatar Aggregation](../features/avatar-aggregation.md)** - Person-centric intelligence
+- **[Relationship Intelligence](../features/relationship-intelligence.md)** - Task detection
 - **[Entity Memory System](../features/entity-memory-system.md)** - Entity-centric memory with hybrid search
 - **[Triggers & Automation](../features/triggers-automation.md)** - Event-driven automation
 - **[Sharing System](../features/sharing-system.md)** - Consent-based intelligence sharing
@@ -1107,7 +1002,7 @@ Gmail Push API
 ### Guides
 - **[CLI Commands](../guides/cli-commands.md)** - Complete CLI reference
 - **[Gmail OAuth Setup](../guides/gmail-oauth.md)** - Google authentication
-- **[Relationship Intelligence](../features/relationship-intelligence.md)** - Understanding gap detection
+- **[Relationship Intelligence](../features/relationship-intelligence.md)** - Understanding task detection
 
 ### Future Development
 - **[Billing System](../features/BILLING_SYSTEM_TODO.md)** - Stripe subscriptions (Phase H)

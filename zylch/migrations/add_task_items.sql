@@ -1,5 +1,5 @@
 -- Task items table for LLM-analyzed actionable items
--- Replaces the avatar-based task system with LLM reasoning
+-- Uses LLM reasoning to detect tasks from emails
 
 CREATE TABLE IF NOT EXISTS task_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
