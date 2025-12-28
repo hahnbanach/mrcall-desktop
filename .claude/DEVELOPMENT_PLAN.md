@@ -256,8 +256,8 @@ MY_EMAILS=mario@example.com,*@mrcall.ai
 
 | Table | Purpose |
 |-------|---------|
-| `email_archive` | Email metadata and content |
-| `thread_analysis` | AI-generated summaries and analysis |
+| `emails` | Email metadata and content with vector embeddings |
+| `task_items` | Tasks with sources JSONB for traceability |
 | `calendar_events` | Calendar events |
 | `sync_state` | Gmail/Outlook history IDs |
 | `oauth_tokens` | Encrypted tokens (Google, Microsoft, Anthropic) |
@@ -265,7 +265,7 @@ MY_EMAILS=mario@example.com,*@mrcall.ai
 | `triggers` | Triggered instructions |
 | `trigger_events` | Event queue |
 | `sharing_auth` | Sharing authorizations |
-| `memories` | Avatar/memory system (pg_vector) |
+| `blobs` | Memory storage (pg_vector) |
 | `agent_prompts` | Personalized agent prompts |
 | `task_items` | Detected tasks |
 | `email_read_events` | Email read tracking events |

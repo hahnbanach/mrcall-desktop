@@ -240,7 +240,7 @@ EmailSyncManager._analyze_thread()
        ↓
 Claude Haiku analysis (per-thread)
        ↓
-Supabase thread_analysis table
+Supabase task_items table (tasks with sources)
 ```
 
 **Key Method**: `sync_emails()` (lines 203-340)
@@ -255,8 +255,7 @@ def sync_emails(self, force_full: bool = False, days_back: Optional[int] = None)
         # Analyze thread with Sonnet
         thread_data = self._analyze_thread(thread_id, last_message, thread_messages)
 
-        # Save to Supabase thread_analysis
-        self._save_thread_to_supabase(thread_data)
+        # Tasks extracted via task_agent and stored in task_items
 ```
 
 ### 3.2 Integration Points for Avatars
@@ -320,14 +319,14 @@ thread_data = {
 
 | Method | Purpose | Lines |
 |--------|---------|-------|
-| `store_thread_analysis()` | Save thread AI analysis | 301-327 |
-| `get_thread_analyses()` | Retrieve analyses | 329-344 |
+| `store_task_item()` | Save task with sources | task_agent.py |
+| `get_task_items()` | Retrieve tasks | supabase_client.py |
 | `get_thread_emails()` | Get all emails in thread | 129-138 |
 
-**Analysis**: Thread analysis is stored but NOT connected to avatars. Need to add:
+**Analysis**: Tasks are stored with sources JSONB for traceability. Avatar updates can use task data:
 ```python
-def update_avatar_from_thread(owner_id, contact_id, thread_data):
-    """Extract avatar insights from thread analysis and update avatar"""
+def update_avatar_from_task(owner_id, contact_id, task_data):
+    """Extract avatar insights from task and update avatar"""
     # Extract contact patterns
     # Update avatar in Supabase avatars table
     # Trigger reconsolidation in ZylchMemory
@@ -678,14 +677,14 @@ Supabase (Cloud):
 ├── avatars                          # ✅ Schema ready
 ├── identifier_map                   # ✅ Schema ready
 ├── patterns                         # ✅ Schema ready
-├── memories                         # ✅ Schema ready
-├── thread_analysis                  # ✅ Exists, needs avatar hooks
-└── emails                           # ✅ Archive ready
+├── blobs                            # ✅ Memory storage with vectors
+├── task_items                       # ✅ Tasks with sources JSONB
+└── emails                           # ✅ Archive with vector/FTS search
 
 SQLite (Local):
 └── .swarm/zylch_memory.db
     ├── patterns                     # ✅ HNSW backend
-    ├── memories                     # ✅ HNSW backend
+    ├── blobs                        # ✅ HNSW backend
     └── embeddings                   # ✅ Vector cache
 ```
 

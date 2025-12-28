@@ -1154,7 +1154,6 @@ db.update('avatars', avatar.id, {
 
 ### Phase 6: Migration (Week 11-12)
 
-- [ ] Migrate existing `thread_analysis` data to new schema
 - [ ] Backfill embeddings for historical emails
 - [ ] Deprecate LLM-based ingestion (keep for on-demand analysis only)
 - [ ] User communication about speed improvements

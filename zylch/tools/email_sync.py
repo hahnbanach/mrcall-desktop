@@ -104,57 +104,30 @@ class EmailSyncManager:
         return self.cache_dir / "threads.json"
 
     def _load_cache(self) -> Dict[str, Any]:
-        """Load existing email cache.
-
-        NOTE: thread_analysis table has been deprecated. In Supabase mode,
-        this returns an empty cache. Use hybrid_search_emails() for email search.
-        """
+        """Load existing email cache from local JSON file."""
         if self._use_supabase:
-            # thread_analysis table deprecated - return empty cache
-            # Email search now uses vector/FTS on emails table directly
-            return {
-                "last_sync": None,
-                "threads": {}
-            }
+            # Supabase mode: return empty (use hybrid_search_emails instead)
+            return {"last_sync": None, "threads": {}}
 
-        # Load from local JSON (for backwards compatibility)
         cache_path = self._get_cache_path()
         if cache_path.exists():
             with open(cache_path, 'r') as f:
                 return json.load(f)
-        return {
-            "last_sync": None,
-            "threads": {}
-        }
+        return {"last_sync": None, "threads": {}}
 
     def _save_cache(self, cache: Dict[str, Any]) -> None:
-        """Save email cache to disk.
-
-        NOTE: thread_analysis table has been deprecated. In Supabase mode,
-        this is a no-op. Email data is stored directly in the emails table.
-        """
+        """Save email cache to local JSON file."""
         if self._use_supabase:
-            # thread_analysis table deprecated - no-op in Supabase mode
-            return
+            return  # No-op in Supabase mode
 
-        # Save to local JSON (for backwards compatibility)
         cache_path = self._get_cache_path()
         with open(cache_path, 'w') as f:
             json.dump(cache, f, indent=2)
         logger.info(f"Saved {len(cache['threads'])} threads to cache")
 
     def _save_analyzed_threads(self, threads: Dict[str, Any]) -> None:
-        """Save only the threads that were analyzed (not all cached threads).
-
-        NOTE: thread_analysis table has been deprecated. This is now a no-op
-        in Supabase mode.
-        """
-        # thread_analysis deprecated - no-op for both modes
-        # Local JSON mode saves full cache elsewhere
+        """Save analyzed threads. No-op - full cache is saved elsewhere."""
         pass
-
-    # NOTE: _save_thread_to_supabase and _convert_supabase_to_cache removed
-    # thread_analysis table has been deprecated. Email search uses emails table directly.
 
     def sync_emails(self, force_full: bool = False, days_back: Optional[int] = None) -> Dict[str, Any]:
         """Build intelligence cache from email archive.
@@ -492,7 +465,7 @@ class EmailSyncManager:
         subject = last_message.get('subject', '')
 
         # Load prompt template from file
-        prompt_path = Path(__file__).parent.parent / 'prompts' / 'thread_analysis.txt'
+        prompt_path = Path(__file__).parent.parent / 'prompts' / 'email_thread_classify.txt'
         with open(prompt_path, 'r') as f:
             prompt_template = f.read()
 
