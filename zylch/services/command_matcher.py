@@ -198,15 +198,15 @@ class SemanticCommandMatcher:
         if 'send draft' in template or 'send the email' in template or 'send it' in template:
             draft_id = params.get('draft_id', '')
             if draft_id:
-                return f"/email --send {draft_id}"
-            return "/email --send"
+                return f"/email send {draft_id}"
+            return "/email send"
 
         # Drafts - Delete
         if 'delete draft' in template or 'discard draft' in template:
             draft_id = params.get('draft_id', '')
             if draft_id:
-                return f"/email --delete {draft_id}"
-            return "/email --delete"
+                return f"/email delete {draft_id}"
+            return "/email delete"
 
         # Search
         if 'search' in template or 'find email' in template or 'emails from' in template or 'emails about' in template:

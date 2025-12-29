@@ -2148,7 +2148,7 @@ class _ComposeEmailTool(Tool):
             task_num: Optional 1-indexed task number from /tasks
 
         Returns:
-            ToolResult with composed email
+            ToolResult with composed email and auto-saved draft
         """
         try:
             agent = self._get_agent()
@@ -2162,10 +2162,34 @@ class _ComposeEmailTool(Tool):
             subject = result.get('subject', '(no subject)')
             body = result.get('body', '')
 
+            # Auto-save draft in Supabase
+            owner_id = self.session_state.get_owner_id()
+            from zylch.storage.supabase_client import SupabaseStorage
+            storage = SupabaseStorage.get_instance()
+
+            to_addresses = [recipient_email] if recipient_email else []
+            draft = storage.create_draft(
+                owner_id=owner_id,
+                to=to_addresses,
+                subject=subject,
+                body=body
+            )
+
+            draft_id = draft.get('id', '')[:8] if draft else ''
+            to_display = recipient_email or '(not specified)'
+
             return ToolResult(
                 status=ToolStatus.SUCCESS,
-                data=result,
-                message=f"**Draft Email**\n\n**Subject:** {subject}\n\n{body}\n\n---\nSay 'send it' or ask me to create a draft."
+                data={**result, "draft_id": draft_id},
+                message=f"""**📝 Draft Saved** (ID: `{draft_id}`)
+
+**To:** {to_display}
+**Subject:** {subject}
+
+{body}
+
+---
+Say "send it" or use `/email send {draft_id}` to send."""
             )
         except Exception as e:
             logger.error(f"Failed to compose email: {e}")
