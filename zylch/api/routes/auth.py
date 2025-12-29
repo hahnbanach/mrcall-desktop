@@ -1503,7 +1503,7 @@ async def mrcall_oauth_callback(
         logger.info(f"Successfully saved MrCall OAuth credentials for user {owner_id}")
 
         # Return success HTML page
-        return HTMLResponse(content=_oauth_success_page("MrCall"))
+        return HTMLResponse(content=_oauth_success_page())
 
     except Exception as e:
         logger.error(f"MrCall OAuth callback error: {e}", exc_info=True)
