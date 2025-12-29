@@ -26,9 +26,9 @@ class CalendarSyncManager:
     def __init__(
         self,
         calendar_client,
+        api_key: str,
+        provider: str,
         cache_dir: str = "cache/calendar",
-        api_key: Optional[str] = None,
-        provider: str = "anthropic",
         days_back: int = 30,
         days_forward: int = 30,
         my_emails: Optional[List[str]] = None,

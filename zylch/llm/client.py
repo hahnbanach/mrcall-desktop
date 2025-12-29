@@ -143,7 +143,7 @@ class LLMClient:
     def __init__(
         self,
         api_key: str,
-        provider: str = "anthropic",
+        provider: str,
         model: Optional[str] = None,
     ):
         """Initialize LLM client.
