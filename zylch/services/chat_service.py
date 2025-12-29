@@ -78,6 +78,7 @@ class ChatService:
         self.agent = ZylchAIAgent(
             api_key=config.anthropic_api_key,
             tools=tools,
+            provider=config.llm_provider,
             model_selector=model_selector,
             email_style_prompt=config.email_style_prompt,
         )
