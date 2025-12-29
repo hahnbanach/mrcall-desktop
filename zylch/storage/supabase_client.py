@@ -259,6 +259,34 @@ class SupabaseStorage:
             full_sync_completed=datetime.now(timezone.utc)
         )
 
+    def get_oldest_email_date(self, owner_id: str) -> Optional[datetime]:
+        """Get the date of the oldest email in the archive.
+
+        Args:
+            owner_id: User's Firebase UID
+
+        Returns:
+            datetime of oldest email, or None if no emails
+        """
+        try:
+            result = self.client.table('emails')\
+                .select('date')\
+                .eq('owner_id', owner_id)\
+                .order('date', desc=False)\
+                .limit(1)\
+                .execute()
+
+            if result.data and result.data[0].get('date'):
+                date_str = result.data[0]['date']
+                # Handle ISO format with Z suffix
+                if date_str.endswith('Z'):
+                    date_str = date_str[:-1] + '+00:00'
+                return datetime.fromisoformat(date_str)
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get oldest email date: {e}")
+            return None
+
     def search_emails(
         self,
         owner_id: str,

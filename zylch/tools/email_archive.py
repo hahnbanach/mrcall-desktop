@@ -213,13 +213,82 @@ class EmailArchiveManager:
                 'errors': errors
             }
 
+    def _extend_archive_backwards(self, days_back: int) -> Dict[str, Any]:
+        """Fetch older emails to extend the archive backwards.
+
+        When user requests more days than currently synced, this method
+        fetches the older emails to fill the gap.
+
+        Args:
+            days_back: Target number of days to have in archive
+
+        Returns:
+            Dict with 'added' count of new emails
+        """
+        if not self._use_supabase:
+            logger.warning("_extend_archive_backwards only supported in Supabase mode")
+            return {'added': 0}
+
+        # Get oldest email date in archive
+        oldest_email_date = self.supabase.get_oldest_email_date(self.owner_id)
+        if not oldest_email_date:
+            logger.info("No emails in archive, cannot extend backwards")
+            return {'added': 0}
+
+        # Calculate target date
+        now = datetime.now(timezone.utc)
+        target_date = now - timedelta(days=days_back)
+
+        # If archive already covers target date, nothing to do
+        if oldest_email_date <= target_date:
+            logger.info(f"Archive already covers {days_back} days (oldest: {oldest_email_date.date()})")
+            return {'added': 0}
+
+        # Fetch emails between target_date and oldest_email_date
+        logger.info(f"📥 Extending archive from {oldest_email_date.date()} back to {target_date.date()}")
+
+        # Ensure Gmail is authenticated
+        self._ensure_authenticated()
+
+        # Gmail search query for the gap period
+        after_str = target_date.strftime('%Y/%m/%d')
+        before_str = oldest_email_date.strftime('%Y/%m/%d')
+        query = f"after:{after_str} before:{before_str}"
+
+        logger.info(f"Searching Gmail: {query}")
+        messages = self.gmail.search_messages(query=query, max_results=5000)
+
+        if not messages:
+            logger.info("No additional messages found in date range")
+            return {'added': 0}
+
+        logger.info(f"Found {len(messages)} older messages to add")
+
+        # Convert and store messages
+        batch_size = settings.email_archive_batch_size
+        total_stored = 0
+
+        for i in range(0, len(messages), batch_size):
+            batch = messages[i:i + batch_size]
+            try:
+                archive_messages = [self._convert_message(msg) for msg in batch]
+                stored = self.supabase.store_emails_batch(self.owner_id, archive_messages)
+                total_stored += stored
+            except Exception as e:
+                logger.error(f"Error storing batch at offset {i}: {e}")
+
+        logger.info(f"✅ Extended archive backwards: +{total_stored} messages")
+        return {'added': total_stored}
+
     def incremental_sync(self, days_back: Optional[int] = None, force_full: bool = False) -> Dict[str, Any]:
         """Incremental sync using Gmail History API.
 
-        Fetches only changes since last sync.
+        Fetches only changes since last sync. If days_back is provided and
+        extends beyond the current archive, older emails are fetched first.
 
         Args:
-            days_back: Number of days for initial sync (default: 30). Ignored for subsequent syncs unless force_full=True.
+            days_back: Target number of days to have in archive. If archive has fewer
+                       days, older emails will be fetched to fill the gap.
             force_full: Force full sync ignoring history
 
         Returns:
@@ -258,6 +327,12 @@ class EmailArchiveManager:
         start_history_id = sync_state['history_id']
         first_sync_date = sync_state.get('last_sync', 'previous sync')
         logger.info(f"Syncing from history_id: {start_history_id}")
+
+        # If days_back is specified, extend archive backwards if needed
+        extended_count = 0
+        if days_back is not None and self._use_supabase:
+            extended = self._extend_archive_backwards(days_back)
+            extended_count = extended.get('added', 0)
 
         try:
             # Fetch history changes
@@ -332,8 +407,9 @@ class EmailArchiveManager:
 
             return {
                 'success': True,
-                'messages_added': len(messages_added),
+                'messages_added': len(messages_added) + extended_count,
                 'messages_deleted': len(messages_deleted),
+                'messages_extended': extended_count,
                 'new_history_id': new_history_id,
                 'incremental': True,
                 'first_sync_date': first_sync_date
