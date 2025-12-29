@@ -18,7 +18,7 @@
 
 | Data                                                | Storage | Table |
 |-----------------------------------------------------|---------|-------|
-| OAuth tokens (Google, Microsoft, Anthropic, MrCall) | Supabase | `oauth_tokens` (encrypted) |
+| OAuth tokens (Google, Microsoft, LLM providers, MrCall) | Supabase | `oauth_tokens` (encrypted) |
 | Email data                                          | Supabase | `emails` (with vector/FTS search) |
 | Task items                                          | Supabase | `task_items` |
 | Calendar events                                     | Supabase | `calendar_events` |
@@ -410,14 +410,25 @@ Backend decodes automatically on startup (`zylch/api/firebase_auth.py`).
 - **Calendar**: Events, Meet links (OAuth 2.0)
 - **Auth**: Shared credentials for Gmail + Calendar
 
-### Anthropic Claude (BYOK)
-- **Credential Storage**: User provides their own API key via `/connect anthropic`
-- **No system .env fallback**: `ANTHROPIC_API_KEY` removed from `.env.example`
-- **Models**:
-  - Haiku: Fast classification (~$0.92/1K emails)
-  - Sonnet: Default analysis (~$7/1K emails)
-  - Opus: Executive communications (high cost)
-- **Features**: Tool use, prompt caching
+### LLM Providers (BYOK via LiteLLM)
+
+Zylch supports multiple LLM providers through LiteLLM abstraction:
+
+| Provider | Model | Region | Features |
+|----------|-------|--------|----------|
+| **Anthropic** | `claude-sonnet-4-20250514` | US | Tool use, web search, prompt caching |
+| **OpenAI** | `gpt-4.1` | US | Tool use (1M context) |
+| **Mistral** | `mistral-large-3` | 🇪🇺 EU | Tool use, GDPR-friendly |
+
+**Credential Storage**: User provides API key via `/connect <provider>`
+**No system .env fallback**: Users must connect their own provider
+**Provider Selection**: `get_active_llm_provider(owner_id)` checks connected providers in order
+
+**Anthropic-Only Features**:
+- Web search (`web_search_20250305` tool type)
+- Prompt caching (`cache_control: {"type": "ephemeral"}`)
+
+Non-Anthropic providers see a clear message when attempting to use these features.
 
 ### Optional Integrations (All BYOK)
 - **Pipedrive**: CRM sync (user provides API token via `/connect pipedrive`)
@@ -458,7 +469,7 @@ The `/connect` command is split between CLI and backend:
 - `/connect reset <provider>` - Disconnect provider
 - `/connect status` - Show status
 
-Supported providers for reset: google, microsoft, mrcall, anthropic, pipedrive, vonage
+Supported providers for reset: google, microsoft, mrcall, anthropic, openai, mistral, pipedrive, vonage
 
 ## Security & Privacy
 
@@ -589,9 +600,9 @@ Supported providers for reset: google, microsoft, mrcall, anthropic, pipedrive, 
 ### Data Privacy
 - All user data scoped by Firebase UID (`owner_id`)
 - Email content stored in Supabase (encrypted at rest by Supabase)
-- Anthropic API keys encrypted with Fernet (application-level encryption)
+- LLM provider API keys encrypted with Fernet (application-level encryption)
 - No data shared between users (RLS enforced)
-- Data sent to Claude for analysis uses user's own API key (BYOK model)
+- Data sent to LLM providers for analysis uses user's own API key (BYOK model)
 
 ## Performance Characteristics
 
