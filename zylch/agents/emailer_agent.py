@@ -83,18 +83,18 @@ class EmailContextGatherer:
             from zylch.services.command_handlers import get_task_by_number
             task = await get_task_by_number(task_num, self.owner_id)
             if task:
-                sources = task.get('sources', {})
+                sources = task.get('sources') or {}
                 logger.debug(f"[EMAILER] Task sources: {sources}")
 
                 # Load source emails
                 email_ids = sources.get('emails', [])
                 if email_ids:
-                    context.source_emails = await self._get_emails_by_ids(email_ids)
+                    context.source_emails = self._get_emails_by_ids(email_ids)
 
                 # Load source blobs
                 blob_ids = sources.get('blobs', [])
                 if blob_ids:
-                    context.source_blobs = await self._get_blobs_by_ids(blob_ids)
+                    context.source_blobs = self._get_blobs_by_ids(blob_ids)
 
         # STEP 2: Hybrid search with full user request
         # If recipient_email provided and not already in request, add it for exact match
@@ -133,7 +133,7 @@ class EmailContextGatherer:
 
         return context
 
-    async def _get_emails_by_ids(self, email_ids: List[str]) -> List[dict]:
+    def _get_emails_by_ids(self, email_ids: List[str]) -> List[dict]:
         """Load emails by their Supabase UUIDs."""
         emails = []
         for email_id in email_ids:
@@ -142,7 +142,7 @@ class EmailContextGatherer:
                 emails.append(email)
         return emails
 
-    async def _get_blobs_by_ids(self, blob_ids: List[str]) -> List[dict]:
+    def _get_blobs_by_ids(self, blob_ids: List[str]) -> List[dict]:
         """Load blobs by their UUIDs."""
         blobs = []
         for blob_id in blob_ids:
@@ -321,8 +321,11 @@ Do not include any other text or markdown formatting."""
             max_tokens=2000
         )
 
+        # Extract text from LLMResponse object
+        text = response.content[0].text if response.content else ""
+
         # Parse response
-        return self._parse_response(response)
+        return self._parse_response(text)
 
     def _parse_response(self, response: str) -> Dict[str, str]:
         """Parse LLM response to extract subject and body."""
