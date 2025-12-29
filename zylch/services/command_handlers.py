@@ -329,13 +329,17 @@ Progress: {job.get('progress_pct', 0)}%
 Please wait for the current sync to complete."""
 
         if job["status"] == "pending":
+            # Get LLM credentials for calendar sync
+            from zylch.api.token_storage import get_active_llm_provider
+            llm_provider, api_key = get_active_llm_provider(owner_id)
+
             # Schedule execution in background
             executor = JobExecutor(storage)
             asyncio.create_task(executor.execute_job(
                 job["id"],
                 owner_id,
-                "",  # anthropic_key not needed for sync
-                ""   # user_email not needed for sync
+                api_key or "",
+                llm_provider or ""
             ))
 
             logger.info(f"[/sync] Scheduled background job {job['id']}")
