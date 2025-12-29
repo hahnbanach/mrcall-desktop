@@ -713,15 +713,27 @@ The Task Agent processes emails and calendar events to detect actionable tasks:
 
 ### Hybrid Search
 
-Combines PostgreSQL FTS (lexical) with pgvector (semantic) at sentence granularity:
+Combines 3 scoring components:
 
-```
-hybrid_score = alpha * FTS_score + (1-alpha) * semantic_score
-```
+1. **FTS (Full-Text Search)**: PostgreSQL `ts_rank` on `tsv` column (only #IDENTIFIERS section)
+2. **Semantic**: pgvector cosine similarity on sentence embeddings (full blob content)
+3. **Exact Pattern**: ILIKE match for detected email/phone/URL patterns on #IDENTIFIERS section
 
-- **Named entities** ("John Smith"): α = 0.7 (FTS-heavy)
-- **Conceptual queries** ("communication style"): α = 0.3 (semantic-heavy)
-- **Default**: α = 0.5 (balanced)
+**Scoring logic**:
+- If exact pattern detected: `0.8 * exact + 0.1 * FTS + 0.1 * semantic`
+- Otherwise: `alpha * FTS + (1-alpha) * semantic`
+
+**Alpha defaults**:
+- Named entities ("John Smith"): α = 0.7 (FTS-heavy)
+- Conceptual queries ("communication style"): α = 0.3 (semantic-heavy)
+- Default: α = 0.5 (balanced)
+
+**Pattern detection** (`zylch/memory/pattern_detection.py`): Extracts email, phone, URL from query using regex fullmatch. When detected, exact matching on #IDENTIFIERS takes priority.
+
+**Key files**:
+- `zylch/memory/hybrid_search.py` - HybridSearchEngine
+- `zylch/memory/pattern_detection.py` - detect_pattern()
+- `zylch/storage/migrations/009_hybrid_search_exact_match.sql` - SQL function
 
 ### Commands
 
