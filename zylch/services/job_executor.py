@@ -77,7 +77,7 @@ class JobExecutor:
                 )
             elif job_type == "sync":
                 await self._execute_sync(
-                    job_id, owner_id, channel
+                    job_id, owner_id, channel, api_key, llm_provider
                 )
             else:
                 raise ValueError(f"Unknown job type: {job_type}")
@@ -281,7 +281,9 @@ class JobExecutor:
         self,
         job_id: str,
         owner_id: str,
-        channel: str
+        channel: str,
+        api_key: str,
+        llm_provider: str
     ) -> None:
         """Execute email/calendar sync in thread pool.
 
@@ -291,6 +293,8 @@ class JobExecutor:
             job_id: Background job UUID
             owner_id: Firebase UID
             channel: 'email', 'calendar', or 'all'
+            api_key: User's LLM API key (BYOK) - required for calendar sync
+            llm_provider: LLM provider name (anthropic, openai, mistral)
         """
         storage = self.storage
 
@@ -338,12 +342,14 @@ class JobExecutor:
                 )
                 logger.info(f"[SYNC] Using Gmail for {user_email}")
 
-            # Create sync service
+            # Create sync service with LLM credentials for calendar sync
             sync_service = SyncService(
                 email_client=email_client,
                 calendar_client=calendar_client,
                 owner_id=owner_id,
-                supabase_storage=storage
+                supabase_storage=storage,
+                anthropic_api_key=api_key,
+                llm_provider=llm_provider
             )
 
             # Update progress
