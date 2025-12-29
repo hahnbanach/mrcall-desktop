@@ -21,11 +21,11 @@ class ZylchAIAgent:
         self,
         api_key: str,
         tools: List[Tool],
+        provider: str,
         model_selector: Optional[ModelSelector] = None,
         max_tokens: int = 4096,
         email_style_prompt: Optional[str] = None,
         triggered_instructions: Optional[List[str]] = None,
-        provider: str = "anthropic",
     ):
         """Initialize Zylch AI agent.
 

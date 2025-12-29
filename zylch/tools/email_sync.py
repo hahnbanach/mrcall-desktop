@@ -67,9 +67,9 @@ class EmailSyncManager:
     def __init__(
         self,
         email_archive,  # CHANGED: EmailArchiveManager instead of gmail_client
+        api_key: str,
+        provider: str,
         cache_dir: str = "cache/emails",
-        api_key: str = None,
-        provider: str = "anthropic",
         days_back: int = 30,
         owner_id: Optional[str] = None,
         supabase_storage: Optional['SupabaseStorage'] = None,

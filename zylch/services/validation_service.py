@@ -43,7 +43,7 @@ class CommandValidator:
     Detects semantic issues like using /trigger for always-on behavior.
     """
 
-    def __init__(self, api_key: str, provider: str = "anthropic"):
+    def __init__(self, api_key: str, provider: str):
         """Initialize validator.
 
         Args:

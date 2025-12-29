@@ -59,8 +59,8 @@ class TaskWorker:
         storage: SupabaseStorage,
         owner_id: str,
         api_key: str,
+        provider: str,
         user_email: str = "",
-        provider: str = "anthropic"
     ):
         """Initialize TaskWorker.
 
