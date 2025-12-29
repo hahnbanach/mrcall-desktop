@@ -106,14 +106,10 @@ async def handle_help() -> str:
 
 
 async def handle_sync(args: List[str], config, owner_id: str) -> str:
-    """Handle /sync command without calling Anthropic."""
-    from zylch.services.sync_service import SyncService
-    from zylch.tools.factory import ToolFactory
-    from zylch.api.token_storage import get_provider, get_email, get_graph_token
-    from zylch.tools.outlook import OutlookClient
-    from zylch.tools.gmail import GmailClient
-    from zylch.tools.gcalendar import GoogleCalendarClient
+    """Handle /sync command - now using background job system."""
+    from zylch.api.token_storage import get_provider
     from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.services.sync_service import SyncService  # Used for mrcall subcommand
 
     help_text = """**🔄 Sync**
 
@@ -287,7 +283,7 @@ Check the console/logs for conversation details."""
             logger.error(f"[/sync] MrCall test failed: {e}", exc_info=True)
             return f"❌ **MrCall test failed:** {str(e)}"
 
-    # Parse --days option
+    # Parse --days option (kept for future use, not currently used with background jobs)
     days_back = 30
     for i, arg in enumerate(args):
         if arg == '--days' and i + 1 < len(args):
@@ -298,11 +294,9 @@ Check the console/logs for conversation details."""
             break
 
     try:
-        # Get user's auth provider
-        logger.info(f"[/sync] Starting sync for owner_id={owner_id}, days_back={days_back}")
+        # Get user's auth provider to validate before creating job
+        logger.info(f"[/sync] Starting sync for owner_id={owner_id}")
         provider = get_provider(owner_id)
-        email = get_email(owner_id)
-        logger.debug(f"[/sync] provider={provider}, email={email}")
 
         if not provider:
             logger.warning(f"[/sync] No provider found for owner_id={owner_id}")
@@ -310,93 +304,52 @@ Check the console/logs for conversation details."""
   Run /connect to see available connections
   Run /connect {provider} to connect"""
 
-        # Create appropriate email client based on provider
-        if provider == "microsoft":
-            # Microsoft Outlook client
-            graph_token_data = get_graph_token(owner_id)
-            if not graph_token_data:
-                return f"❌ **Error:** Microsoft Graph token not found. Please login again."
+        # Use background job system for sync
+        from zylch.services.job_executor import JobExecutor
+        import asyncio
 
-            email_client = OutlookClient(
-                graph_token=graph_token_data["access_token"],
-                account=email
-            )
-            calendar_client = None  # TODO: Microsoft Calendar support
-            logger.info(f"[/sync] Using Microsoft Outlook for {email}")
+        storage = SupabaseStorage.get_instance()
 
-        else:
-            # Google Gmail client (tokens stored in Supabase)
-            # Note: credentials_path is not used when owner_id is provided (uses Supabase)
-            email_client = GmailClient(
-                credentials_path="credentials/gmail_oauth.json",  # Not used with owner_id
-                account=email,
-                owner_id=owner_id
-            )
-            calendar_client = GoogleCalendarClient(
-                credentials_path="credentials/gmail_oauth.json",  # Not used with owner_id
-                calendar_id="primary",
-                account=email,
-                owner_id=owner_id
-            )
-            logger.info(f"[/sync] Using Gmail for {email}")
-
-        from zylch.storage.supabase_client import SupabaseStorage
-        supabase_storage = SupabaseStorage()
-
-        sync_service = SyncService(
-            email_client=email_client,
-            calendar_client=calendar_client,
+        # Create job (returns existing if duplicate pending/running)
+        job = storage.create_background_job(
             owner_id=owner_id,
-            supabase_storage=supabase_storage
+            job_type="sync",
+            channel="all"  # sync always does all channels
         )
 
-        # Run sync (archive only, no AI analysis)
-        logger.info(f"[/sync] Running archive sync...")
-        results = await sync_service.run_full_sync(days_back=days_back)
-        logger.info(f"[/sync] Sync complete: email={results['email_sync']['success']}, calendar={results['calendar_sync']['success']}, pipedrive={results.get('pipedrive_sync', {}).get('success', 'N/A')}")
+        logger.info(f"[/sync] Job request: sync/all for user {owner_id} -> {job['status']}")
 
-        lines = ["**🔄 Sync Complete**\n"]
+        if job["status"] == "running":
+            return f"""⏳ **Sync already in progress**
 
-        has_failures = False
+Job ID: `{job['id']}`
+Progress: {job.get('progress_pct', 0)}%
+{job.get('status_message', '')}
 
-        if results['email_sync']['success']:
-            email_data = results['email_sync']
-            new_msgs = email_data.get('new_messages', 0)
-            del_msgs = email_data.get('deleted_messages', 0)
+Please wait for the current sync to complete."""
 
-            lines.append(f"✅ **Email:** +{new_msgs} new, -{del_msgs} deleted")
+        if job["status"] == "pending":
+            # Schedule execution in background
+            executor = JobExecutor(storage)
+            asyncio.create_task(executor.execute_job(
+                job["id"],
+                owner_id,
+                "",  # anthropic_key not needed for sync
+                ""   # user_email not needed for sync
+            ))
 
-            # Show warning if incremental sync
-            if email_data.get('incremental'):
-                first_sync = email_data.get('first_sync_date', 'previous sync')
-                lines.append(f"ℹ️  **Incremental sync** - fetching changes since {first_sync}")
-                lines.append(f"   If you want to go further in the past, run `/sync reset` first, then `/sync days <n>`")
-        else:
-            has_failures = True
-            lines.append(f"❌ **Email:** {results['email_sync'].get('error')}")
+            logger.info(f"[/sync] Scheduled background job {job['id']}")
 
-        if results['calendar_sync']['success']:
-            cal_data = results['calendar_sync']
-            lines.append(f"✅ **Calendar:** {cal_data['new_events']} new, {cal_data['updated_events']} updated")
-        else:
-            has_failures = True
-            lines.append(f"❌ **Calendar:** {results['calendar_sync'].get('error')}")
+            return f"""🚀 **Sync started in background**
 
-        # Pipedrive sync (only show if connected)
-        pipedrive_data = results.get('pipedrive_sync', {})
-        if pipedrive_data.get('success'):
-            if not pipedrive_data.get('skipped'):
-                deals_synced = pipedrive_data.get('deals_synced', 0)
-                lines.append(f"✅ **Pipedrive:** {deals_synced} deals synced")
-        elif pipedrive_data.get('error'):
-            has_failures = True
-            lines.append(f"❌ **Pipedrive:** {pipedrive_data.get('error')}")
+Job ID: `{job['id']}`
 
-        if has_failures:
-            lines.append("\n⚠️ **Sync completed with errors.** Check the issues above.")
-        else:
-            lines.append("\n✅ **Done!** Train the memory and task agents if necessary and process! See `/agent --help` for more.")
-        return "\n".join(lines)
+Your sync is running in the background. You'll be notified when complete.
+
+**Tip:** Continue using Zylch - the sync won't block you!"""
+
+        # Job exists but not pending/running (shouldn't happen due to unique index)
+        return f"Job status: {job['status']}"
 
     except Exception as e:
         logger.error(f"Sync failed: {e}")

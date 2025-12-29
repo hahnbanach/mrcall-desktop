@@ -285,6 +285,8 @@ class JobExecutor:
     ) -> None:
         """Execute email/calendar sync in thread pool.
 
+        Loads OAuth credentials autonomously using owner_id.
+
         Args:
             job_id: Background job UUID
             owner_id: Firebase UID
@@ -294,23 +296,93 @@ class JobExecutor:
 
         def _sync_process() -> Dict[str, Any]:
             """Sync code that runs in thread pool."""
-            # Note: SyncService needs email_client which requires OAuth tokens
-            # This is more complex - for now we'll raise an error
-            # The sync command handler needs to pass the necessary clients
-            raise NotImplementedError(
-                "Sync via background job requires OAuth client setup. "
-                "Use the existing sync route which handles authentication."
+            from zylch.api.token_storage import get_provider, get_email, get_graph_token
+            from zylch.tools.gmail import GmailClient
+            from zylch.tools.outlook import OutlookClient
+            from zylch.tools.gcalendar import GoogleCalendarClient
+            from zylch.services.sync_service import SyncService
+
+            # Load OAuth credentials using owner_id
+            provider = get_provider(owner_id)
+            user_email = get_email(owner_id)
+
+            logger.info(f"[SYNC] provider={provider}, email={user_email}")
+
+            if not provider:
+                raise ValueError("No OAuth provider configured. Run /connect first.")
+
+            # Create email client based on provider
+            if provider == "microsoft":
+                graph_token_data = get_graph_token(owner_id)
+                if not graph_token_data or not graph_token_data.get("access_token"):
+                    raise ValueError("Microsoft Graph token not found. Please login again.")
+
+                email_client = OutlookClient(
+                    graph_token=graph_token_data["access_token"],
+                    account=user_email
+                )
+                calendar_client = None  # Microsoft Calendar not yet supported
+                logger.info(f"[SYNC] Using Microsoft Outlook for {user_email}")
+            else:
+                # Google
+                email_client = GmailClient(
+                    credentials_path="credentials/gmail_oauth.json",
+                    account=user_email,
+                    owner_id=owner_id
+                )
+                calendar_client = GoogleCalendarClient(
+                    credentials_path="credentials/gmail_oauth.json",
+                    calendar_id="primary",
+                    account=user_email,
+                    owner_id=owner_id
+                )
+                logger.info(f"[SYNC] Using Gmail for {user_email}")
+
+            # Create sync service
+            sync_service = SyncService(
+                email_client=email_client,
+                calendar_client=calendar_client,
+                owner_id=owner_id,
+                supabase_storage=storage
             )
+
+            # Update progress
+            storage.update_background_job_progress(
+                job_id, 10, 0, 1, "Syncing emails..."
+            )
+
+            # Run sync - SyncService.run_full_sync is async, need to handle
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                results = loop.run_until_complete(sync_service.run_full_sync())
+            finally:
+                loop.close()
+
+            return results
 
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(_executor, _sync_process)
 
         self.storage.complete_background_job(job_id, result)
-        self.storage.create_notification(
-            owner_id,
-            "Sync complete",
-            "info"
-        )
+
+        # Create notification with summary
+        email_data = result.get('email_sync', {})
+        cal_data = result.get('calendar_sync', {})
+        pipedrive_data = result.get('pipedrive_sync', {})
+
+        msg_parts = []
+        if email_data.get('success'):
+            msg_parts.append(f"+{email_data.get('new_messages', 0)} emails")
+        if cal_data.get('success'):
+            msg_parts.append(f"{cal_data.get('new_events', 0)} calendar events")
+        if pipedrive_data.get('success') and not pipedrive_data.get('skipped'):
+            msg_parts.append(f"{pipedrive_data.get('deals_synced', 0)} deals")
+
+        msg = f"Sync complete: {', '.join(msg_parts)}" if msg_parts else "Sync complete"
+
+        self.storage.create_notification(owner_id, msg, "info")
 
 
 # =============================================================================
