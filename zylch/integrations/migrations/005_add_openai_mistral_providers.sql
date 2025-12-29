@@ -20,7 +20,7 @@ INSERT INTO integration_providers (
     null,
     true,
     'Use your own OpenAI API key for GPT-4 access',
-    '{"api_key": {"type": "string", "label": "OpenAI API Key", "required": true}}'::jsonb
+    '{"api_key": {"type": "string", "label": "OpenAI API Key", "required": true, "encrypted": true, "description": "Your OpenAI API key (starts with sk-)", "placeholder": "sk-proj-..."}}'::jsonb
 ) ON CONFLICT (provider_key) DO NOTHING;
 
 -- Add Mistral provider (EU-based for GDPR compliance)
@@ -41,7 +41,7 @@ INSERT INTO integration_providers (
     null,
     true,
     'Use your own Mistral API key - EU-based for GDPR compliance',
-    '{"api_key": {"type": "string", "label": "Mistral API Key", "required": true}}'::jsonb
+    '{"api_key": {"type": "string", "label": "Mistral API Key", "required": true, "encrypted": true, "description": "Your Mistral API key", "placeholder": "Enter your API key"}}'::jsonb
 ) ON CONFLICT (provider_key) DO NOTHING;
 
 -- Update Anthropic description to clarify feature advantages
