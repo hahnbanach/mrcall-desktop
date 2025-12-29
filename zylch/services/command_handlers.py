@@ -1419,21 +1419,34 @@ Or `/email list` to see all drafts."""
             # Get draft_id from first positional arg after 'send'
             draft_id = sub_args[0] if sub_args and not sub_args[0].startswith('--') else None
 
-            if not draft_id:
-                return "❌ Missing draft ID\n\nUsage: `/email send <draft_id>`"
+            if draft_id:
+                # Find the draft by ID (support partial ID)
+                result = supabase.table('drafts')\
+                    .select('*')\
+                    .eq('owner_id', owner_id)\
+                    .eq('status', 'draft')\
+                    .like('id', f'{draft_id}%')\
+                    .execute()
 
-            # Find the draft (support partial ID)
-            result = supabase.table('drafts')\
-                .select('*')\
-                .eq('owner_id', owner_id)\
-                .eq('status', 'draft')\
-                .like('id', f'{draft_id}%')\
-                .execute()
+                if not result.data:
+                    return f"❌ Draft not found: `{draft_id}`\n\nUse `/email list` to see your drafts."
 
-            if not result.data:
-                return f"❌ Draft not found: `{draft_id}`\n\nUse `/email list` to see your drafts."
+                draft = result.data[0]
+            else:
+                # No draft_id provided - use the most recent draft
+                result = supabase.table('drafts')\
+                    .select('*')\
+                    .eq('owner_id', owner_id)\
+                    .eq('status', 'draft')\
+                    .order('updated_at', desc=True)\
+                    .limit(1)\
+                    .execute()
 
-            draft = result.data[0]
+                if not result.data:
+                    return "❌ No drafts found.\n\nCreate a draft first with `/email create` or use the `compose_email` tool."
+
+                draft = result.data[0]
+                draft_id = draft['id'][:8]  # For display in error messages
 
             # Get user's email provider
             provider = get_provider(owner_id)
