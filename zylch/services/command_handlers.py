@@ -2627,8 +2627,13 @@ Then run this command again."""
 
 
 async def _handle_memory_process(storage, owner_id: str, channel: str, anthropic_key: str) -> str:
-    """Process data into memory blobs for specified channel."""
-    from zylch.agents.memory_agent import MemoryWorker
+    """Start memory processing as a background job.
+
+    Creates a background job that runs in a thread pool, returning immediately.
+    The user is notified via user_notifications when the job completes.
+    """
+    import asyncio
+    from zylch.services.job_executor import JobExecutor
 
     if not anthropic_key:
         return """❌ **Anthropic API key required**
@@ -2636,40 +2641,53 @@ async def _handle_memory_process(storage, owner_id: str, channel: str, anthropic
 Connect your Anthropic account:
 `/connect anthropic`"""
 
-    worker = MemoryWorker(storage=storage, owner_id=owner_id, api_key=anthropic_key)
-
-    channels_to_process = [channel] if channel != 'all' else ['email', 'calendar']
-    results = []
-
-    for ch in channels_to_process:
-        if ch == 'email':
-            # Check for custom agent
-            if not storage.get_agent_prompt(owner_id, 'memory_email'):
-                return """⚠️ **No memory agent found for email**
+    # Check for custom agent before starting job
+    if channel in ['email', 'all']:
+        if not storage.get_agent_prompt(owner_id, 'memory_email'):
+            return """⚠️ **No memory agent found for email**
 
 Train your memory agent first:
 `/agent memory train email`"""
 
-            unprocessed = storage.get_unprocessed_emails(owner_id, limit=100)
-            if unprocessed:
-                processed = await worker.process_batch(unprocessed)
-                results.append(f"📧 **Email:** {processed}/{len(unprocessed)} processed")
-            else:
-                results.append("📧 **Email:** No unprocessed emails")
+    # Create background job (returns existing if duplicate)
+    job = storage.create_background_job(
+        owner_id=owner_id,
+        job_type="memory_process",
+        channel=channel
+    )
 
-        elif ch == 'calendar':
-            unprocessed = storage.get_unprocessed_calendar_events(owner_id, limit=100)
-            if unprocessed:
-                processed = await worker.process_calendar_batch(unprocessed)
-                results.append(f"📅 **Calendar:** {processed}/{len(unprocessed)} processed")
-            else:
-                results.append("📅 **Calendar:** No unprocessed events")
+    if job["status"] == "running":
+        pct = job.get("progress_pct", 0)
+        msg = job.get("status_message", "Processing...")
+        return f"""⏳ **Memory processing already in progress**
 
-    return f"""**🧠 Memory Processing Complete**
+**Progress:** {pct}%
+**Status:** {msg}
 
-{chr(10).join(results)}
+Job ID: `{job['id']}`"""
 
-Use `/memory search <query>` to find stored information."""
+    if job["status"] == "pending":
+        # Schedule execution in background (fire-and-forget)
+        executor = JobExecutor(storage)
+        asyncio.create_task(executor.execute_job(
+            job["id"],
+            owner_id,
+            anthropic_key,
+            ""  # user_email not needed for memory processing
+        ))
+
+        return f"""🚀 **Memory processing started**
+
+Processing {channel} data in the background.
+You'll receive a notification when complete.
+
+Job ID: `{job['id']}`
+
+**Note:** You can continue working while this runs."""
+
+    # Job exists but is completed/failed/cancelled - should create new one
+    # The unique index allows new jobs if previous is not pending/running
+    return f"Previous job status: {job['status']}. Run the command again to start a new job."
 
 
 # =====================
@@ -2729,8 +2747,13 @@ Then run this command again."""
 
 
 async def _handle_task_process(storage, owner_id: str, channel: str, anthropic_key: str, user_email: str) -> str:
-    """Process data to detect actionable tasks for specified channel."""
-    from zylch.agents.task_agent import TaskWorker
+    """Start task detection as a background job.
+
+    Creates a background job that runs in a thread pool, returning immediately.
+    The user is notified via user_notifications when the job completes.
+    """
+    import asyncio
+    from zylch.services.job_executor import JobExecutor
 
     if not anthropic_key:
         return """❌ **Anthropic API key required**
@@ -2738,31 +2761,52 @@ async def _handle_task_process(storage, owner_id: str, channel: str, anthropic_k
 Connect your Anthropic account:
 `/connect anthropic`"""
 
-    channels_to_process = [channel] if channel != 'all' else ['email', 'calendar']
-    results = []
-
-    for ch in channels_to_process:
-        if ch == 'email':
-            # Check for custom agent
-            if not storage.get_agent_prompt(owner_id, 'task_email'):
-                return """⚠️ **No task agent found for email**
+    # Check for custom agent before starting job
+    if channel in ['email', 'all']:
+        if not storage.get_agent_prompt(owner_id, 'task_email'):
+            return """⚠️ **No task agent found for email**
 
 Train your task agent first:
 `/agent task train email`"""
 
-            worker = TaskWorker(storage, owner_id, anthropic_key, user_email or '')
-            tasks, stats = await worker.get_tasks(refresh=True)
-            results.append(f"📧 **Email:** {len(tasks)} actionable items found")
+    # Create background job (returns existing if duplicate)
+    job = storage.create_background_job(
+        owner_id=owner_id,
+        job_type="task_process",
+        channel=channel
+    )
 
-        elif ch == 'calendar':
-            # Calendar task processing - placeholder for future implementation
-            results.append(f"📅 **Calendar:** Not yet implemented")
+    if job["status"] == "running":
+        pct = job.get("progress_pct", 0)
+        msg = job.get("status_message", "Detecting tasks...")
+        return f"""⏳ **Task detection already in progress**
 
-    return f"""**✅ Task Processing Complete**
+**Progress:** {pct}%
+**Status:** {msg}
 
-{chr(10).join(results)}
+Job ID: `{job['id']}`"""
 
-Use `/tasks` to see your task summary."""
+    if job["status"] == "pending":
+        # Schedule execution in background (fire-and-forget)
+        executor = JobExecutor(storage)
+        asyncio.create_task(executor.execute_job(
+            job["id"],
+            owner_id,
+            anthropic_key,
+            user_email or ""
+        ))
+
+        return f"""🚀 **Task detection started**
+
+Analyzing {channel} data in the background.
+You'll receive a notification when complete.
+
+Job ID: `{job['id']}`
+
+**Note:** You can continue working while this runs."""
+
+    # Job exists but is completed/failed/cancelled - should create new one
+    return f"Previous job status: {job['status']}. Run the command again to start a new job."
 
 
 # =====================
