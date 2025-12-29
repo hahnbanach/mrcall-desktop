@@ -3306,6 +3306,281 @@ class SupabaseStorage:
             logger.error(f"Failed to delete completed jobs: {e}")
             return 0
 
+    # ==========================================
+    # BACKGROUND JOBS (Long-running operations)
+    # ==========================================
+
+    def create_background_job(
+        self,
+        owner_id: str,
+        job_type: str,
+        channel: str | None = None
+    ) -> Dict[str, Any]:
+        """Create a new background job. Returns existing job if duplicate (pending/running).
+
+        Args:
+            owner_id: Firebase UID
+            job_type: 'memory_process', 'task_process', 'sync'
+            channel: 'email', 'calendar', 'all', or None
+
+        Returns:
+            Created or existing job record
+        """
+        # Check for duplicate (same user, type, channel, pending/running)
+        query = self.client.table('background_jobs')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('job_type', job_type)\
+            .in_('status', ['pending', 'running'])
+
+        if channel is not None:
+            query = query.eq('channel', channel)
+        else:
+            query = query.is_('channel', 'null')
+
+        existing = query.execute()
+
+        if existing.data:
+            logger.info(f"Background job already exists: {existing.data[0]['id']} ({existing.data[0]['status']})")
+            return existing.data[0]
+
+        # Create new job
+        data = {
+            'owner_id': owner_id,
+            'job_type': job_type,
+            'channel': channel,
+            'status': 'pending',
+            'progress_pct': 0,
+            'items_processed': 0,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        result = self.client.table('background_jobs').insert(data).execute()
+        job = result.data[0] if result.data else {}
+        logger.info(f"Created background job {job.get('id')}: {job_type}/{channel}")
+        return job
+
+    def claim_background_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """Atomically claim a pending job (pending → running).
+
+        Args:
+            job_id: Job UUID
+
+        Returns:
+            Claimed job record, or None if already claimed/not found
+        """
+        result = self.client.table('background_jobs')\
+            .update({
+                'status': 'running',
+                'started_at': datetime.now(timezone.utc).isoformat()
+            })\
+            .eq('id', job_id)\
+            .eq('status', 'pending')\
+            .execute()
+
+        if result.data:
+            logger.info(f"Claimed background job {job_id}")
+            return result.data[0]
+        return None
+
+    def update_background_job_progress(
+        self,
+        job_id: str,
+        progress_pct: int,
+        items_processed: int,
+        total_items: int,
+        status_message: str | None = None
+    ) -> None:
+        """Update job progress (call every N items).
+
+        Args:
+            job_id: Job UUID
+            progress_pct: Progress percentage 0-100
+            items_processed: Number of items processed so far
+            total_items: Total items to process
+            status_message: Human-readable status message
+        """
+        data = {
+            'progress_pct': progress_pct,
+            'items_processed': items_processed,
+            'total_items': total_items
+        }
+        if status_message is not None:
+            data['status_message'] = status_message
+
+        self.client.table('background_jobs')\
+            .update(data)\
+            .eq('id', job_id)\
+            .execute()
+
+    def complete_background_job(self, job_id: str, result: Dict[str, Any]) -> None:
+        """Mark job as completed.
+
+        Args:
+            job_id: Job UUID
+            result: Result summary dict
+        """
+        self.client.table('background_jobs')\
+            .update({
+                'status': 'completed',
+                'progress_pct': 100,
+                'completed_at': datetime.now(timezone.utc).isoformat(),
+                'result': result
+            })\
+            .eq('id', job_id)\
+            .execute()
+        logger.info(f"Completed background job {job_id}")
+
+    def fail_background_job(self, job_id: str, error: str) -> None:
+        """Mark job as failed.
+
+        Args:
+            job_id: Job UUID
+            error: Error message
+        """
+        self.client.table('background_jobs')\
+            .update({
+                'status': 'failed',
+                'completed_at': datetime.now(timezone.utc).isoformat(),
+                'last_error': error
+            })\
+            .eq('id', job_id)\
+            .execute()
+        logger.error(f"Failed background job {job_id}: {error}")
+
+    def get_background_job(self, job_id: str, owner_id: str) -> Optional[Dict[str, Any]]:
+        """Get job by ID (with owner check for security).
+
+        Args:
+            job_id: Job UUID
+            owner_id: Firebase UID (for ownership validation)
+
+        Returns:
+            Job record or None if not found
+        """
+        result = self.client.table('background_jobs')\
+            .select('*')\
+            .eq('id', job_id)\
+            .eq('owner_id', owner_id)\
+            .execute()
+
+        return result.data[0] if result.data else None
+
+    def get_user_background_jobs(
+        self,
+        owner_id: str,
+        status: str | None = None,
+        limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """List user's background jobs, most recent first.
+
+        Args:
+            owner_id: Firebase UID
+            status: Optional status filter
+            limit: Max results
+
+        Returns:
+            List of job records
+        """
+        query = self.client.table('background_jobs')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .order('created_at', desc=True)\
+            .limit(limit)
+
+        if status:
+            query = query.eq('status', status)
+
+        return query.execute().data or []
+
+    def cancel_background_job(self, job_id: str, owner_id: str) -> bool:
+        """Cancel a pending background job.
+
+        Args:
+            job_id: Job UUID
+            owner_id: Firebase UID (for ownership validation)
+
+        Returns:
+            True if cancelled successfully
+        """
+        result = self.client.table('background_jobs')\
+            .update({
+                'status': 'cancelled',
+                'completed_at': datetime.now(timezone.utc).isoformat()
+            })\
+            .eq('id', job_id)\
+            .eq('owner_id', owner_id)\
+            .eq('status', 'pending')\
+            .execute()
+
+        if result.data:
+            logger.info(f"Cancelled background job {job_id}")
+            return True
+        return False
+
+    def reset_stale_background_jobs(self, timeout_hours: int = 2) -> int:
+        """Reset jobs stuck in 'running' for too long → pending.
+
+        Call periodically (e.g., on startup or hourly).
+
+        Args:
+            timeout_hours: Consider jobs stale after this many hours
+
+        Returns:
+            Number of jobs reset
+        """
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=timeout_hours)).isoformat()
+
+        # Get stale jobs first to increment retry_count
+        stale_jobs = self.client.table('background_jobs')\
+            .select('id, retry_count')\
+            .eq('status', 'running')\
+            .lt('started_at', cutoff)\
+            .execute()
+
+        if not stale_jobs.data:
+            return 0
+
+        reset_count = 0
+        for job in stale_jobs.data:
+            retry_count = (job.get('retry_count') or 0) + 1
+            self.client.table('background_jobs')\
+                .update({
+                    'status': 'pending',
+                    'started_at': None,
+                    'retry_count': retry_count
+                })\
+                .eq('id', job['id'])\
+                .execute()
+            reset_count += 1
+
+        if reset_count > 0:
+            logger.warning(f"Reset {reset_count} stale background jobs (running > {timeout_hours}h)")
+
+        return reset_count
+
+    def cleanup_old_background_jobs(self, retention_days: int = 7) -> int:
+        """Delete completed/failed/cancelled jobs older than retention period.
+
+        Args:
+            retention_days: Delete jobs older than this many days
+
+        Returns:
+            Number of jobs deleted
+        """
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
+
+        result = self.client.table('background_jobs')\
+            .delete()\
+            .in_('status', ['completed', 'failed', 'cancelled'])\
+            .lt('created_at', cutoff)\
+            .execute()
+
+        count = len(result.data) if result.data else 0
+        if count > 0:
+            logger.info(f"Cleaned up {count} old background jobs (>{retention_days} days)")
+        return count
+
 
 # DEPRECATED: Old FTS-only search function (kept for fallback)
 # Now using hybrid_search_emails from migrations/010_email_hybrid_search.sql

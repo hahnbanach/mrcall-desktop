@@ -6,7 +6,7 @@ import logging
 
 import colorlog
 
-from zylch.api.routes import sync, chat, admin, webhooks, data, auth, commands, connections, memory
+from zylch.api.routes import sync, chat, admin, webhooks, data, auth, commands, connections, memory, jobs
 from zylch.api.firebase_auth import initialize_firebase
 from zylch.config import settings
 
@@ -66,6 +66,7 @@ app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 app.include_router(commands.router, prefix="/api", tags=["commands"])
 app.include_router(connections.router, prefix="/api", tags=["connections"])
 app.include_router(memory.router, prefix="/api/memory", tags=["memory"])
+app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 
 
 @app.on_event("startup")
@@ -79,6 +80,24 @@ async def startup_event():
         logger.info("Firebase authentication enabled")
     else:
         logger.warning("Firebase not configured - chat authentication will fail")
+
+    # Background jobs cleanup
+    try:
+        from zylch.storage.supabase_client import SupabaseStorage
+        storage = SupabaseStorage.get_instance()
+
+        # Reset jobs stuck in "running" for >2 hours (server crashed?)
+        reset_count = storage.reset_stale_background_jobs(timeout_hours=2)
+        if reset_count:
+            logger.warning(f"Reset {reset_count} stale background jobs")
+
+        # Cleanup jobs older than 7 days
+        deleted_count = storage.cleanup_old_background_jobs(retention_days=7)
+        if deleted_count:
+            logger.info(f"Cleaned up {deleted_count} old background jobs")
+
+    except Exception as e:
+        logger.warning(f"Background jobs cleanup skipped: {e}")
 
     logger.info("Zylch API server started successfully")
 
