@@ -325,8 +325,12 @@ class EmailerAgent:
 
 USER REQUEST: {user_request}
 
-Write the email in the appropriate language (match the request language).
-If templates are provided, use them as reference for tone and structure.
+Write the email in the appropriate language:
+- as requested by the user (if)
+- in the same language used by the recipient in other exchanges (if any)
+- try to infer if not clue!
+
+If TEMPLATE entities are provided, use them as reference for tone and structure.
 If recipient info is available, personalize the email appropriately.
 
 Use the write_email tool to output your composed email."""
