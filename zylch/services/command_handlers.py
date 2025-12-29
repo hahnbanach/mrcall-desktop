@@ -2239,6 +2239,40 @@ async def handle_task_close(task_num: int, owner_id: str) -> str:
         return f"**❌ Failed to close task #{task_num}**"
 
 
+async def get_task_by_number(task_num: int, owner_id: str) -> dict | None:
+    """Get a task by its 1-indexed display number from /tasks output.
+
+    The task list is ordered by urgency (high, medium first, then low).
+    This function is shared by handle_task_detail and compose_email tool.
+
+    Args:
+        task_num: 1-indexed task number from /tasks output
+        owner_id: Firebase UID
+
+    Returns:
+        Task dict if found, None otherwise
+    """
+    from zylch.storage.supabase_client import SupabaseStorage
+
+    storage = SupabaseStorage.get_instance()
+
+    # Get all tasks (same order as displayed in /tasks)
+    tasks = storage.get_task_items(owner_id, action_required=True)
+
+    if not tasks:
+        return None
+
+    # Group by urgency: high -> medium -> low (no limits)
+    high_medium = [t for t in tasks if t.get('urgency') in ('high', 'medium')]
+    low = [t for t in tasks if t.get('urgency') == 'low']
+    tasks = high_medium + low
+
+    if task_num < 1 or task_num > len(tasks):
+        return None
+
+    return tasks[task_num - 1]  # 0-indexed
+
+
 async def handle_task_detail(task_num: int, owner_id: str) -> str:
     """Handle 'more on #N' - show full email/event for a task.
 
@@ -2254,25 +2288,11 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
     logger.debug(f"[TASK_DETAIL] Requested task #{task_num} for owner {owner_id}")
 
     try:
+        task = await get_task_by_number(task_num, owner_id)
+        if not task:
+            return f"Task #{task_num} not found. Run `/tasks refresh` first."
+
         storage = SupabaseStorage.get_instance()
-
-        # Get all tasks (same order as displayed in /tasks)
-        tasks = storage.get_task_items(owner_id, action_required=True)
-        logger.debug(f"[TASK_DETAIL] Found {len(tasks)} tasks with action_required=True")
-
-        if not tasks:
-            return "No tasks found. Run `/tasks refresh` first."
-
-        # Group by urgency: high -> medium -> low (no limits)
-        high_medium = [t for t in tasks if t.get('urgency') in ('high', 'medium')]
-        low = [t for t in tasks if t.get('urgency') == 'low']
-        tasks = high_medium + low
-        logger.debug(f"[TASK_DETAIL] Total tasks after grouping: {len(tasks)}")
-
-        if task_num < 1 or task_num > len(tasks):
-            return f"Task #{task_num} not found. Valid range: #1 - #{len(tasks)}"
-
-        task = tasks[task_num - 1]  # 0-indexed
         event_type = task.get('event_type')
         event_id = task.get('event_id')
         sources = task.get('sources', {})

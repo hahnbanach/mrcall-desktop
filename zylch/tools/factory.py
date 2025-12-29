@@ -362,6 +362,14 @@ class ToolFactory:
         tools.append(_GetTasksTool(session_state=session_state))
         logger.info("Get Tasks tool initialized")
 
+        # Compose Email tool - writes emails with full context from memory
+        tools.append(_ComposeEmailTool(
+            session_state=session_state,
+            api_key=config.anthropic_api_key,
+            provider=getattr(config, 'llm_provider', 'anthropic')
+        ))
+        logger.info("Compose Email tool initialized")
+
         # Store service client references for CLI access
         ToolFactory._starchat_client = starchat
         ToolFactory._email_archive = email_archive
@@ -2077,5 +2085,116 @@ class _GetPipedrivePersonDealsTool(Tool):
                     }
                 },
                 "required": ["person_id"]
+            }
+        }
+
+
+class _ComposeEmailTool(Tool):
+    """Write an email with full context from memory and hybrid search.
+
+    Gathers context using:
+    - PERSON, COMPANY, TEMPLATE blobs from hybrid search
+    - Task sources if task_num is provided
+    - Recipient info if provided
+
+    The emailer agent uses LLM to generate contextual emails.
+    """
+
+    def __init__(
+        self,
+        session_state: SessionState,
+        api_key: str,
+        provider: str = "anthropic"
+    ):
+        super().__init__(
+            name="compose_email",
+            description="Write an email with full context from memory and email history. Use this to compose emails about a person, company, or topic - the tool will gather relevant context automatically."
+        )
+        self.session_state = session_state
+        self.api_key = api_key
+        self.provider = provider
+        self._agent = None  # Lazy initialization
+
+    def _get_agent(self):
+        """Lazily initialize EmailerAgent."""
+        if self._agent is None:
+            from zylch.agents.emailer_agent import EmailerAgent
+            from zylch.storage.supabase_client import SupabaseStorage
+
+            owner_id = self.session_state.get_owner_id()
+            if not owner_id:
+                raise ValueError("No owner_id available. Please log in first.")
+
+            storage = SupabaseStorage.get_instance()
+            self._agent = EmailerAgent(
+                storage=storage,
+                owner_id=owner_id,
+                api_key=self.api_key,
+                provider=self.provider
+            )
+        return self._agent
+
+    async def execute(
+        self,
+        request: str,
+        recipient_email: Optional[str] = None,
+        task_num: Optional[int] = None,
+    ) -> ToolResult:
+        """Compose an email based on request and context.
+
+        Args:
+            request: What to write (e.g., "scrivi a Mario un'offerta")
+            recipient_email: Optional email extracted from conversation
+            task_num: Optional 1-indexed task number from /tasks
+
+        Returns:
+            ToolResult with composed email
+        """
+        try:
+            agent = self._get_agent()
+
+            result = await agent.compose(
+                user_request=request,
+                recipient_email=recipient_email,
+                task_num=task_num
+            )
+
+            subject = result.get('subject', '(no subject)')
+            body = result.get('body', '')
+
+            return ToolResult(
+                status=ToolStatus.SUCCESS,
+                data=result,
+                message=f"**Draft Email**\n\n**Subject:** {subject}\n\n{body}\n\n---\nSay 'send it' or ask me to create a draft."
+            )
+        except Exception as e:
+            logger.error(f"Failed to compose email: {e}")
+            return ToolResult(
+                status=ToolStatus.ERROR,
+                data=None,
+                error=f"Error composing email: {str(e)}"
+            )
+
+    def get_schema(self):
+        return {
+            "name": self.name,
+            "description": "Write an email with full context from memory and email history. Gathers PERSON, COMPANY, TEMPLATE blobs via hybrid search. If task_num is provided, includes task sources. Use for: replies, new emails to contacts, formal proposals, etc.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "request": {
+                        "type": "string",
+                        "description": "What to write (e.g., 'reply to Mario about the proposal', 'scrivi un'offerta per Acme Corp')"
+                    },
+                    "recipient_email": {
+                        "type": "string",
+                        "description": "Recipient email address (optional - extracted from conversation if replying)"
+                    },
+                    "task_num": {
+                        "type": "integer",
+                        "description": "Task number from /tasks output (optional - includes task context)"
+                    }
+                },
+                "required": ["request"]
             }
         }
