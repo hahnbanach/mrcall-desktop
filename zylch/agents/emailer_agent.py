@@ -23,6 +23,26 @@ logger = logging.getLogger(__name__)
 # Maximum characters for context to leave room for LLM generation
 MAX_CONTEXT_CHARS = 8000
 
+# Tool schema for structured email output via LLM tool_use
+WRITE_EMAIL_TOOL = {
+    "name": "write_email",
+    "description": "Output the composed email with subject and body",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "subject": {
+                "type": "string",
+                "description": "Email subject line"
+            },
+            "body": {
+                "type": "string",
+                "description": "Email body text"
+            }
+        },
+        "required": ["subject", "body"]
+    }
+}
+
 
 @dataclass
 class EmailContext:
@@ -296,7 +316,7 @@ class EmailerAgent:
         # Build prompt context
         context_text = build_prompt_context(context)
 
-        # Generate email
+        # Generate email using tool_use for structured output
         prompt = f"""You are writing an email for the user.
 
 {context_text}
@@ -309,46 +329,26 @@ Write the email in the appropriate language (match the request language).
 If templates are provided, use them as reference for tone and structure.
 If recipient info is available, personalize the email appropriately.
 
-Output ONLY valid JSON with this exact structure:
-{{"subject": "...", "body": "..."}}
-
-Do not include any other text or markdown formatting."""
+Use the write_email tool to output your composed email."""
 
         logger.debug(f"[EMAILER] Sending prompt ({len(prompt)} chars)")
 
         response = await self.llm.create_message(
             messages=[{"role": "user", "content": prompt}],
+            tools=[WRITE_EMAIL_TOOL],
+            tool_choice={"type": "tool", "name": "write_email"},
             max_tokens=2000
         )
 
-        # Extract text from LLMResponse object
-        text = response.content[0].text if response.content else ""
+        # Extract result from ToolUseBlock - no JSON parsing needed
+        if response.stop_reason == "tool_use":
+            for block in response.content:
+                if hasattr(block, 'input'):  # ToolUseBlock
+                    return {
+                        "subject": block.input.get("subject", ""),
+                        "body": block.input.get("body", "")
+                    }
 
-        # Parse response
-        return self._parse_response(text)
-
-    def _parse_response(self, response: str) -> Dict[str, str]:
-        """Parse LLM response to extract subject and body."""
-        import json
-
-        try:
-            # Clean response - remove markdown code blocks if present
-            text = response.strip()
-            if text.startswith("```"):
-                # Remove ```json and ``` markers
-                lines = text.split("\n")
-                text = "\n".join(lines[1:-1])
-
-            result = json.loads(text)
-            return {
-                "subject": result.get("subject", ""),
-                "body": result.get("body", "")
-            }
-        except json.JSONDecodeError as e:
-            logger.error(f"[EMAILER] Failed to parse response: {e}")
-            logger.debug(f"[EMAILER] Raw response: {response[:500]}")
-            # Fallback: treat entire response as body
-            return {
-                "subject": "(draft email)",
-                "body": response
-            }
+        # Fallback (shouldn't happen with tool_choice forcing)
+        logger.error(f"[EMAILER] Unexpected response: stop_reason={response.stop_reason}")
+        return {"subject": "(error)", "body": "Failed to generate email"}
