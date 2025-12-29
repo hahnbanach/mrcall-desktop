@@ -1281,14 +1281,22 @@ def generate_code_challenge(verifier: str) -> str:
 
 
 async def fetch_mrcall_business_id(access_token: str) -> str:
-    """Fetch business_id from StarChat using access token."""
+    """Fetch business_id from StarChat using access token.
+
+    Uses POST /mrcall/v1/delegated_{realm}/crm/business/search endpoint
+    as per StarChat Partner Integration Guide.
+    """
     import httpx
 
     async with httpx.AsyncClient() as client:
-        # Call StarChat API to get user's businesses
-        response = await client.get(
-            f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business",
-            headers={"Authorization": f"Bearer {access_token}"}
+        # Call StarChat API to search user's businesses
+        response = await client.post(
+            f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business/search",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            },
+            json={"from": 0, "size": 1}
         )
 
         if response.status_code != 200:
@@ -1296,11 +1304,18 @@ async def fetch_mrcall_business_id(access_token: str) -> str:
             raise HTTPException(status_code=400, detail="Failed to fetch business info")
 
         data = response.json()
-        # Extract business_id from response
-        if isinstance(data, dict):
-            return data.get("businessId") or data.get("id") or data.get("business_id")
-        elif isinstance(data, list) and len(data) > 0:
-            return data[0].get("businessId") or data[0].get("id") or data[0].get("business_id")
+        logger.info(f"Business search response: {data}")
+
+        # Extract business_id from search response (returns list of businesses)
+        if isinstance(data, list) and len(data) > 0:
+            return data[0].get("id") or data[0].get("businessId")
+        elif isinstance(data, dict):
+            # Handle case where response is wrapped in an object
+            businesses = data.get("businesses") or data.get("items") or data.get("results")
+            if businesses and len(businesses) > 0:
+                return businesses[0].get("id") or businesses[0].get("businessId")
+            # Direct business object
+            return data.get("id") or data.get("businessId")
 
         raise HTTPException(status_code=400, detail="No business found")
 
