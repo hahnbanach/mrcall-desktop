@@ -42,6 +42,7 @@ async def test_agent_initialization():
     agent = ZylchAIAgent(
         api_key="test_key",
         tools=tools,
+        provider="anthropic",
         model_selector=model_selector,
     )
 
