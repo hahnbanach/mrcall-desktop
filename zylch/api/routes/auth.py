@@ -1476,11 +1476,11 @@ async def mrcall_oauth_callback(
                 return HTMLResponse(content=_oauth_error_page(f"Token exchange failed: {token_response.text}"))
 
             tokens = token_response.json()
-            # tokens = {"access_token": "...", "refresh_token": "...", "expires_in": 3600, "target_owner": "firebase_uid"}
+            # StarChat returns camelCase: {"accessToken": "...", "refreshToken": "...", "expiresIn": 3600, "targetOwner": "firebase_uid"}
 
         # Fetch business_id from StarChat using access token
         try:
-            business_id = await fetch_mrcall_business_id(tokens["access_token"])
+            business_id = await fetch_mrcall_business_id(tokens["accessToken"])
         except Exception as e:
             logger.error(f"Failed to fetch business_id: {e}")
             # Continue anyway, business_id can be None
@@ -1491,12 +1491,12 @@ async def mrcall_oauth_callback(
 
         save_mrcall_credentials(
             owner_id=owner_id,
-            access_token=tokens["access_token"],
-            refresh_token=tokens.get("refresh_token"),
-            expires_in=tokens.get("expires_in", 3600),
-            token_type=tokens.get("token_type", "Bearer"),
+            access_token=tokens["accessToken"],
+            refresh_token=tokens.get("refreshToken"),
+            expires_in=tokens.get("expiresIn", 3600),
+            token_type=tokens.get("tokenType", "Bearer"),
             business_id=business_id,
-            target_owner=tokens.get("target_owner"),
+            target_owner=tokens.get("targetOwner"),
             realm=settings.mrcall_realm
         )
 
