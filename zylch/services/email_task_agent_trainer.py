@@ -38,7 +38,7 @@ Your goal: Generate a prompt that an AI agent will use to analyze individual eve
 
 Analyze the above material to understand:
 1. How quickly does this user typically respond to emails? (Look at time gaps between received and sent)
-2. Who are their VIP contacts? (Frequent correspondence, quick responses)
+2. Does the user send automatic responses? If so, do not consider them as actual answers. 
 3. What patterns indicate they ignore something? (Cold outreach, newsletters, certain domains)
 4. Do they use commitment phrases like "I'll call you", "let me check", "I'll send you"?
 5. What commitments did they make that they followed up on vs forgot?
@@ -56,7 +56,7 @@ The generated prompt must:
 
 2. **DECISION CRITERIA**
    The prompt should instruct the agent to consider:
-   - Is there an unanswered question directed at the user?
+   - Is there an unanswered question directed at the user? (Do not take automatic reply as answers!)
    - Did the user make a commitment that needs follow-up? If yes, it needs a task
    - Did the user answer without commitment to follow-up? DEFINITELY not an open task!
    - Is this from someone the user typically responds to quickly?
