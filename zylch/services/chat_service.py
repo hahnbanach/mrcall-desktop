@@ -279,6 +279,13 @@ class ChatService:
                     elif cmd in ['/trigger', '/mrcall', '/share', '/revoke', '/connect']:
                         # These need args, owner_id, and optionally email
                         response_text = await handler(args, owner_id, user_email)
+                    elif cmd in ['/stats', '/jobs']:
+                        # /stats and /jobs need args and owner_id
+                        response_text = await handler(args, owner_id)
+                    elif cmd == '/calendar':
+                        # /calendar needs args, config, and owner_id
+                        config = ToolConfig.from_settings_with_owner(owner_id)
+                        response_text = await handler(args, config, owner_id)
                     elif cmd in ['/model', '/help', '/clear', '/echo']:
                         # These only need args (or nothing)
                         response_text = await handler(args) if args else await handler()

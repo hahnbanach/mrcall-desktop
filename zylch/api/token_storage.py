@@ -598,7 +598,15 @@ def save_vonage_keys(owner_id: str, api_key: str, api_secret: str, from_number: 
         True if saved successfully
     """
     supabase = _get_supabase()
-    return supabase.save_vonage_keys(owner_id, api_key, api_secret, from_number)
+    return supabase.save_provider_credentials(
+        owner_id=owner_id,
+        provider_key='vonage',
+        credentials={
+            'api_key': api_key,
+            'api_secret': api_secret,
+            'from_number': from_number
+        }
+    )
 
 
 def get_vonage_keys(owner_id: str) -> Optional[Dict[str, str]]:
@@ -624,6 +632,6 @@ def delete_vonage_keys(owner_id: str) -> bool:
         True if deleted
     """
     supabase = _get_supabase()
-    supabase.delete_vonage_keys(owner_id)
+    result = supabase.delete_provider_credentials(owner_id, 'vonage')
     logger.info(f"Deleted Vonage API credentials for owner {owner_id}")
-    return True
+    return result

@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any
 from pathlib import Path
 import json
-import sqlite3
 import uuid
 
 from zylch.tools.config import ToolConfig
