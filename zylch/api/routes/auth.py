@@ -1293,7 +1293,11 @@ async def fetch_mrcall_business_id(access_token: str) -> str:
         response = await client.post(
             f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business/search",
             headers={
+<<<<<<< HEAD
                 "Authorization": f"Bearer {access_token}",
+=======
+                "auth": access_token,  # StarChat uses 'auth' header, not 'Authorization: Bearer'
+>>>>>>> vk/e674-mrcall-integrati
                 "Content-Type": "application/json"
             },
             json={"from": 0, "size": 1}
