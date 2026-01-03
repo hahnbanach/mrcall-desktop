@@ -1078,9 +1078,11 @@ class SupabaseStorage:
             try:
                 decrypted_json = decrypt(token_row['credentials'])
                 all_credentials = json.loads(decrypted_json)
+                logger.info(f"get_provider_credentials({provider_key}): all_credentials keys = {list(all_credentials.keys())}")
 
                 # Extract provider-specific credentials
                 provider_creds = all_credentials.get(provider_key, {})
+                logger.info(f"get_provider_credentials({provider_key}): provider_creds keys = {list(provider_creds.keys()) if provider_creds else 'EMPTY'}")
                 if not provider_creds:
                     # Fall through to legacy columns
                     pass

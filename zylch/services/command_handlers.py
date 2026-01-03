@@ -879,10 +879,13 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
         if subcommand == 'list':
             # Get OAuth credentials
             creds = get_mrcall_credentials(owner_id)
+            logger.info(f"handle_mrcall list: creds keys = {list(creds.keys()) if creds else None}")
             if not creds or not creds.get('access_token'):
+                logger.info(f"handle_mrcall list: access_token missing, creds = {creds}")
                 return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
 
             access_token = creds.get('access_token')
+            logger.info(f"handle_mrcall list: access_token exists = {bool(access_token)}, len = {len(access_token) if access_token else 0}")
             current_business_id = creds.get('business_id')
 
             # Fetch businesses from StarChat API
