@@ -1280,11 +1280,14 @@ def generate_code_challenge(verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).decode('utf-8').rstrip('=')
 
 
-async def fetch_mrcall_business_id(access_token: str) -> str:
-    """Fetch business_id from StarChat using access token.
+async def fetch_mrcall_business_info(access_token: str) -> dict:
+    """Fetch business info from StarChat using access token.
 
     Uses POST /mrcall/v1/delegated_{realm}/crm/business/search endpoint
     as per StarChat Partner Integration Guide.
+
+    Returns:
+        dict with 'business_id' and 'email' keys
     """
     import httpx
 
@@ -1304,18 +1307,28 @@ async def fetch_mrcall_business_id(access_token: str) -> str:
             raise HTTPException(status_code=400, detail="Failed to fetch business info")
 
         data = response.json()
-        logger.info(f"Business search response: {data}")
+        logger.debug(f"Business search response: {data}")  # DEBUG level only
 
-        # Extract business_id from search response (returns list of businesses)
+        # Extract business info from search response (returns list of businesses)
+        business = None
         if isinstance(data, list) and len(data) > 0:
-            return data[0].get("id") or data[0].get("businessId")
+            business = data[0]
         elif isinstance(data, dict):
             # Handle case where response is wrapped in an object
             businesses = data.get("businesses") or data.get("items") or data.get("results")
             if businesses and len(businesses) > 0:
-                return businesses[0].get("id") or businesses[0].get("businessId")
-            # Direct business object
-            return data.get("id") or data.get("businessId")
+                business = businesses[0]
+            else:
+                # Direct business object
+                business = data
+
+        if business:
+            return {
+                "business_id": business.get("businessId") or business.get("id"),
+                "email": business.get("emailAddress") or business.get("email"),
+                "nickname": business.get("nickname"),
+                "company_name": business.get("companyName")
+            }
 
         raise HTTPException(status_code=400, detail="No business found")
 
@@ -1493,13 +1506,13 @@ async def mrcall_oauth_callback(
             tokens = token_response.json()
             # StarChat returns camelCase: {"accessToken": "...", "refreshToken": "...", "expiresIn": 3600, "targetOwner": "firebase_uid"}
 
-        # Fetch business_id from StarChat using access token
+        # Fetch business info from StarChat using access token
+        business_info = {"business_id": None, "email": None, "nickname": None, "company_name": None}
         try:
-            business_id = await fetch_mrcall_business_id(tokens["accessToken"])
+            business_info = await fetch_mrcall_business_info(tokens["accessToken"])
         except Exception as e:
-            logger.error(f"Failed to fetch business_id: {e}")
+            logger.error(f"Failed to fetch business info: {e}")
             # Continue anyway, business_id can be None
-            business_id = None
 
         # Store credentials in Supabase (encrypted)
         from zylch.api.token_storage import save_mrcall_credentials
@@ -1510,9 +1523,10 @@ async def mrcall_oauth_callback(
             refresh_token=tokens.get("refreshToken"),
             expires_in=tokens.get("expiresIn", 3600),
             token_type=tokens.get("tokenType", "Bearer"),
-            business_id=business_id,
+            business_id=business_info.get("business_id"),
             target_owner=tokens.get("targetOwner"),
-            realm=settings.mrcall_realm
+            realm=settings.mrcall_realm,
+            email=business_info.get("email")  # Store email for display
         )
 
         logger.info(f"Successfully saved MrCall OAuth credentials for user {owner_id}")

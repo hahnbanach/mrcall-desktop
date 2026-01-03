@@ -312,7 +312,8 @@ def save_mrcall_credentials(
     token_type: str = "Bearer",
     business_id: Optional[str] = None,
     target_owner: Optional[str] = None,
-    realm: str = "mrcall0"
+    realm: str = "mrcall0",
+    email: Optional[str] = None
 ) -> bool:
     """Save MrCall OAuth credentials for a user.
 
@@ -325,6 +326,7 @@ def save_mrcall_credentials(
         business_id: MrCall business ID
         target_owner: StarChat Firebase UID for delegated access
         realm: StarChat realm
+        email: User's email from MrCall business
 
     Returns:
         True if saved successfully
@@ -350,7 +352,8 @@ def save_mrcall_credentials(
     metadata = {
         "expires_at": expires_at.isoformat(),
         "scopes": ["business:read", "contacts:read"],
-        "realm": realm
+        "realm": realm,
+        "email": email
     }
 
     # Save to Supabase using provider credentials system
@@ -358,7 +361,8 @@ def save_mrcall_credentials(
         owner_id=owner_id,
         provider_key="mrcall",
         credentials_dict=credentials,
-        metadata_dict=metadata
+        metadata_dict=metadata,
+        email=email  # Also store in email field for display
     )
 
 
