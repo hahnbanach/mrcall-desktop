@@ -1067,7 +1067,8 @@ class SupabaseStorage:
         owner_id: str,
         provider_key: str,
         credentials_dict: Dict[str, Any],
-        metadata_dict: Optional[Dict[str, Any]] = None
+        metadata_dict: Optional[Dict[str, Any]] = None,
+        email: Optional[str] = None
     ) -> bool:
         """Save credentials for any provider using unified JSONB storage.
 
@@ -1079,6 +1080,7 @@ class SupabaseStorage:
             provider_key: Provider identifier (google, microsoft, anthropic, pipedrive, vonage, etc.)
             credentials_dict: Dict of credential fields and values
             metadata_dict: Optional metadata (scopes, token_uri, etc.)
+            email: Optional email to store for display purposes
 
         Returns:
             True if saved successfully
@@ -1141,7 +1143,7 @@ class SupabaseStorage:
         data = {
             'owner_id': owner_id,
             'provider': provider_key,
-            'email': '',  # Required field, empty for non-email providers (Vonage, Pipedrive)
+            'email': email or '',  # Email for display, empty for non-email providers
             'credentials': credentials_json,
             'updated_at': datetime.now(timezone.utc).isoformat()
         }
