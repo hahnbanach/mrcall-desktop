@@ -840,23 +840,21 @@ This trigger will fire automatically when the event occurs."""
 async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) -> str:
     """Handle /mrcall command - MrCall integration."""
     from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
+    from zylch.api.token_storage import get_mrcall_credentials
+    import httpx
 
     help_text = """**📞 MrCall Integration**
 
-**Usage:**
-• `/mrcall` - Show current MrCall link
-• `/mrcall <business_id>` - Link to MrCall business
-• `/mrcall unlink` - Remove MrCall link
+**Commands:**
+• `/mrcall list` - List your MrCall assistants
+• `/mrcall link N` - Link to assistant #N from the list
+• `/mrcall unlink` - Remove current link
+• `/mrcall` - Show current link status
 
-**Example:**
-• `/mrcall 3002475397`
-
-**What it does:**
-Links your Zylch assistant to a MrCall/StarChat business for:
-• Phone call handling with AI
-• SMS automation
-• Call transcript sync
-• Trigger automation (sms_received, call_received)"""
+**Setup:**
+1. Run `/connect mrcall` to authenticate with MrCall
+2. Run `/mrcall list` to see your assistants
+3. Run `/mrcall link N` to connect to an assistant"""
 
     # --help option (check first)
     if '--help' in args:
@@ -877,66 +875,157 @@ Links your Zylch assistant to a MrCall/StarChat business for:
             else:
                 return "❌ **Error:** No MrCall link found to remove."
 
+        # Subcommand: list - List all businesses
+        if subcommand == 'list':
+            # Get OAuth credentials
+            creds = get_mrcall_credentials(owner_id)
+            if not creds or not creds.get('access_token'):
+                return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
+
+            access_token = creds.get('access_token')
+            current_business_id = creds.get('business_id')
+
+            # Fetch businesses from StarChat API
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as http_client:
+                    response = await http_client.post(
+                        "https://api.mrcall.ai/mrcall/v1/delegated_mrcall0/crm/business/search",
+                        headers={"auth": access_token, "Content-Type": "application/json"},
+                        json={"from": 0, "size": 50}
+                    )
+                    response.raise_for_status()
+                    businesses = response.json()
+            except Exception as e:
+                logger.error(f"Failed to fetch MrCall businesses: {e}")
+                return f"❌ **Error fetching businesses:** {str(e)}\n\nTry `/connect mrcall` to refresh your connection."
+
+            if not businesses:
+                return "**📞 Your MrCall Assistants**\n\nNo assistants found.\n\nCreate one at https://dashboard.mrcall.ai"
+
+            # Build list output
+            output = "**📞 Your MrCall Assistants**\n\n"
+            for i, biz in enumerate(businesses, 1):
+                biz_id = biz.get('businessId') or biz.get('id')
+                nickname = biz.get('nickname') or 'Unnamed'
+                company = biz.get('companyName') or ''
+                service_number = biz.get('serviceNumber') or ''
+
+                # Mark if this is the linked business
+                linked_marker = " ← LINKED" if biz_id == current_business_id else ""
+
+                # Format: "1. **Nickname** (Company) ← LINKED"
+                if company:
+                    output += f"{i}. **{nickname}** ({company}){linked_marker}\n"
+                else:
+                    output += f"{i}. **{nickname}**{linked_marker}\n"
+
+                if service_number:
+                    # Clean up service number display (remove duplicates like +39...#+39...)
+                    display_number = service_number.split('#')[0] if '#' in service_number else service_number
+                    output += f"   📱 {display_number}\n"
+
+                output += "\n"
+
+            output += "---\nUse `/mrcall link N` to connect an assistant."
+            return output
+
+        # Subcommand: link N - Link to business by number
+        if subcommand == 'link':
+            if len(positional) < 2:
+                return "❌ **Usage:** `/mrcall link N`\n\nWhere N is the assistant number from `/mrcall list`"
+
+            try:
+                index = int(positional[1]) - 1  # Convert to 0-based index
+                if index < 0:
+                    raise ValueError("Index must be positive")
+            except ValueError:
+                return f"❌ **Invalid number:** `{positional[1]}`\n\nUse a number from `/mrcall list`"
+
+            # Get OAuth credentials
+            creds = get_mrcall_credentials(owner_id)
+            if not creds or not creds.get('access_token'):
+                return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
+
+            access_token = creds.get('access_token')
+
+            # Fetch businesses to get the one at index
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as http_client:
+                    response = await http_client.post(
+                        "https://api.mrcall.ai/mrcall/v1/delegated_mrcall0/crm/business/search",
+                        headers={"auth": access_token, "Content-Type": "application/json"},
+                        json={"from": 0, "size": 50}
+                    )
+                    response.raise_for_status()
+                    businesses = response.json()
+            except Exception as e:
+                logger.error(f"Failed to fetch MrCall businesses: {e}")
+                return f"❌ **Error:** {str(e)}"
+
+            if index >= len(businesses):
+                return f"❌ **Invalid number:** {index + 1}\n\nYou have {len(businesses)} assistant(s). Use `/mrcall list` to see them."
+
+            business = businesses[index]
+            business_id = business.get('businessId') or business.get('id')
+            nickname = business.get('nickname') or 'Unnamed'
+
+            # Save the link
+            result = client.set_mrcall_link(owner_id, business_id)
+
+            if result:
+                return f"""✅ **MrCall Linked**
+
+**Assistant:** {nickname}
+**Business ID:** `{business_id}`
+
+Your Zylch is now connected to this MrCall assistant!
+
+**Next steps:**
+• `/trigger add call_received "Summarize the call"`
+• `/sync mrcall` - Test fetching conversations"""
+            else:
+                return "❌ **Error:** Failed to link MrCall business. Please try again."
+
         # No subcommand: show status
         if subcommand is None:
-            # Show current link
-            link = client.get_mrcall_link(owner_id)
+            # Get OAuth credentials to check connection
+            creds = get_mrcall_credentials(owner_id)
 
-            if link:
-                return f"""**📞 MrCall Status**
+            if creds and creds.get('access_token'):
+                business_id = creds.get('business_id')
+                email = creds.get('metadata', {}).get('email') if isinstance(creds.get('metadata'), dict) else None
 
-**Linked Business:** `{link.get('mrcall_business_id', 'N/A')}`
-**Connected Since:** {link.get('created_at', 'N/A')[:10] if link.get('created_at') else 'N/A'}
+                if business_id:
+                    return f"""**📞 MrCall Status**
 
-**Features enabled:**
-• Phone call handling
-• SMS automation
-• `call_received` triggers
-• `sms_received` triggers
+**Status:** Connected and linked
+**Business ID:** `{business_id}`
+**Email:** {email or 'N/A'}
 
 **Commands:**
-• `/mrcall unlink` - Disconnect
+• `/mrcall list` - See all your assistants
+• `/mrcall unlink` - Disconnect this assistant
+• `/sync mrcall` - Test API connection
 • `/trigger add call_received "..."` - Add call automation"""
+                else:
+                    return f"""**📞 MrCall Status**
+
+**Status:** Connected (not linked to an assistant)
+**Email:** {email or 'N/A'}
+
+Run `/mrcall list` to see your assistants, then `/mrcall link N` to connect one."""
             else:
                 return """**📞 MrCall Status**
 
-**Status:** Not linked
+**Status:** Not connected
 
-Connect your Zylch to a MrCall business to enable:
-• AI-powered phone call handling
-• SMS automation
-• Call/SMS triggers
+**To get started:**
+1. Run `/connect mrcall` to authenticate
+2. Run `/mrcall list` to see your assistants
+3. Run `/mrcall link N` to connect an assistant"""
 
-**Usage:** `/mrcall <business_id>`
-
-**Example:** `/mrcall 3002475397`
-
-Contact support@zylchai.com to get your MrCall business ID."""
-
-        # Subcommand is business_id (positional arg)
-        business_id = subcommand
-
-        # Validate business_id (should be numeric or alphanumeric)
-        if not business_id.replace('-', '').replace('_', '').isalnum():
-            return f"❌ **Error:** Invalid business ID format: `{business_id}`"
-
-        result = client.set_mrcall_link(owner_id, business_id)
-
-        if result:
-            return f"""✅ **MrCall Linked**
-
-**Business ID:** `{business_id}`
-
-Your Zylch is now connected to MrCall!
-
-**Next steps:**
-1. Configure your MrCall assistant to forward to Zylch
-2. Add triggers: `/trigger add call_received "Summarize the call"`
-3. Test with a phone call
-
-**Need help?** Contact support@zylchai.com"""
-        else:
-            return "❌ **Error:** Failed to link MrCall business. Please try again."
+        # Unknown subcommand
+        return f"❌ **Unknown subcommand:** `{subcommand}`\n\n{help_text}"
 
     except Exception as e:
         logger.error(f"Error in /mrcall command: {e}", exc_info=True)
