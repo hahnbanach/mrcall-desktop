@@ -53,8 +53,8 @@ def _get_fernet():
         try:
             from zylch.config import settings
             encryption_key = settings.encryption_key
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to load settings for encryption key: {e}")
 
     if not encryption_key:
         logger.warning("ENCRYPTION_KEY not set - sensitive data will be stored unencrypted")

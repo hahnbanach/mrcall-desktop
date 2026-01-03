@@ -340,8 +340,8 @@ class SupabaseStorage:
             pattern = detect_pattern(query)
             if pattern:
                 exact_pattern = pattern.value
-        except ImportError:
-            pass  # Pattern detection not available
+        except ImportError as e:
+            logger.warning(f"Pattern detection module not available: {e}")
 
         # Call hybrid search RPC
         result = self.client.rpc('hybrid_search_emails', {
@@ -437,16 +437,13 @@ class SupabaseStorage:
         Returns:
             Draft record or None
         """
-        try:
-            result = self.client.table('drafts')\
-                .select('*')\
-                .eq('owner_id', owner_id)\
-                .eq('id', draft_id)\
-                .single()\
-                .execute()
-            return result.data
-        except Exception:
-            return None
+        result = self.client.table('drafts')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('id', draft_id)\
+            .single()\
+            .execute()
+        return result.data
 
     def update_draft(
         self,

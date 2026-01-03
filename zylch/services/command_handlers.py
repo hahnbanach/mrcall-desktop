@@ -791,6 +791,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
     from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
     from zylch.api.token_storage import get_mrcall_credentials
     import httpx
+    from zylch.config import settings
 
     help_text = """**📞 MrCall Integration**
 
@@ -841,7 +842,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
             try:
                 async with httpx.AsyncClient(timeout=30.0) as http_client:
                     response = await http_client.post(
-                        "https://api.mrcall.ai/mrcall/v1/delegated_mrcall0/crm/business/search",
+                        f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business/search",
                         headers={"auth": access_token, "Content-Type": "application/json"},
                         json={"from": 0, "size": 50}
                     )
@@ -904,7 +905,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
             try:
                 async with httpx.AsyncClient(timeout=30.0) as http_client:
                     response = await http_client.post(
-                        "https://api.mrcall.ai/mrcall/v1/delegated_mrcall0/crm/business/search",
+                        f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business/search",
                         headers={"auth": access_token, "Content-Type": "application/json"},
                         json={"from": 0, "size": 50}
                     )
