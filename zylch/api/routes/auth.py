@@ -1421,6 +1421,7 @@ async def mrcall_oauth_authorize(
 
 @router.get("/mrcall/callback")
 async def mrcall_oauth_callback(
+    request: Request,
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None
@@ -1531,8 +1532,22 @@ async def mrcall_oauth_callback(
 
         logger.info(f"Successfully saved MrCall OAuth credentials for user {owner_id}")
 
-        # Return success HTML page
-        return HTMLResponse(content=_oauth_success_page())
+        # Check if request is from CLI (has Authorization header) vs browser
+        if request.headers.get("Authorization"):
+            # CLI request - return JSON with email and business info
+            from starlette.responses import JSONResponse
+            return JSONResponse({
+                "success": True,
+                "service": "mrcall",
+                "email": business_info.get("email"),
+                "business_id": business_info.get("business_id"),
+                "nickname": business_info.get("nickname"),
+                "company_name": business_info.get("company_name"),
+                "message": "MrCall connected successfully"
+            })
+        else:
+            # Browser request - return HTML page
+            return HTMLResponse(content=_oauth_success_page())
 
     except Exception as e:
         logger.error(f"MrCall OAuth callback error: {e}", exc_info=True)
