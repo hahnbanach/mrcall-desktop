@@ -348,7 +348,7 @@ class SyncService:
         try:
             # Call MrCall conversation search API (delegated realm for partner access)
             # Using delegated_mrcall0 as per StarChat Partner Integration Guide
-            url = "https://api.mrcall.ai/mrcall/v1/delegated_mrcall0/customer/conversation/search"
+            url = f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/customer/conversation/search"
             headers = {
                 "auth": firebase_token,
                 "Content-Type": "application/json"

@@ -180,8 +180,8 @@ async def create_importance_rule(
                 status_code=400,
                 detail=f"Invalid condition syntax: {str(e)}"
             )
-        except Exception:
-            pass  # Other errors are fine (e.g., None comparisons)
+        except Exception as e:
+            logger.warning(f"Unexpected error during condition validation (ignored): {e}")
 
         now = datetime.now(timezone.utc).isoformat()
         data = {
@@ -262,8 +262,8 @@ async def update_importance_rule(
                     status_code=400,
                     detail=f"Invalid condition syntax: {str(e)}"
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Unexpected error during condition validation (ignored): {e}")
             update_data['condition'] = updates.condition
         if updates.importance is not None:
             if updates.importance not in ('high', 'normal', 'low'):

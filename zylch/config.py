@@ -371,7 +371,11 @@ class Settings(BaseSettings):
                     if line and not line.startswith('#'):
                         emails.add(line.lower())
             return emails
-        except Exception:
+        except Exception as e:
+            # Log the error but return empty set to fail safe (allowlist enabled but empty = no one gets in)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to read alpha testers file: {e}")
             return set()
 
     def is_alpha_tester(self, email: str) -> bool:
