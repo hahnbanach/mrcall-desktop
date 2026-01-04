@@ -1,4 +1,4 @@
-# Email Read Notification Feature - Development Proposal
+# Email Read Notification Feature Documentation
 
 ## Executive Summary
 

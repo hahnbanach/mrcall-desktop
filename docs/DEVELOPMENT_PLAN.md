@@ -1,6 +1,6 @@
 # Zylch AI Development Plan
 
-**For Claude Code Implementation**
+**For Agent-driven Code Implementation**
 
 ---
 
@@ -11,8 +11,6 @@
 - OAuth tokens → Supabase `oauth_tokens` (encrypted with Fernet)
 - All user data → Supabase (scoped by `owner_id`)
 - Memory/Blobs → Supabase pg_vector
-
-**NEVER use `credentials/`, `cache/`, or local pickle files. These are LEGACY and UNUSED.**
 
 ---
 
@@ -45,7 +43,7 @@ Zylch AI is a multi-channel sales intelligence system that helps sales professio
 ### Implemented Features
 
 **Core Agent**
-- ZylchAIAgent with Claude API (Haiku/Sonnet/Opus tiering)
+- ZylchAIAgent with LLM API through LiteLLM (Anthropic, Google, OpenAI, Mistral)
 - Native function calling with 30+ tools
 - Conversational CLI interface
 
@@ -96,19 +94,19 @@ Zylch AI is a multi-channel sales intelligence system that helps sales professio
 | Component | Current | Future | Notes |
 |-----------|---------|--------|-------|
 | **Language** | Python 3.11+ | — | FastAPI, async throughout |
-| **LLM** | Anthropic Claude | — | Haiku/Sonnet/Opus tiering |
+| **LLM** | Uses LiteLLM | — | Defined in .env
 | **Data Storage** | Supabase (Postgres) | — | All data (emails, AI summaries, tokens) |
 | **User Auth** | Firebase Auth | — | Separate project per product |
 | **Backend Hosting** | Railway | — | ✅ Live at api.zylchai.com |
 | **Frontend Hosting** | Vercel | — | ✅ Live at app.zylchai.com |
 | **Payments** | — | Stripe | To be implemented |
-| **Queues** | — | Upstash Redis | For scaling |
+| **Jobs** | In Postgres | - | For scaling |
 | **Email Providers** | Gmail, Outlook | — | Provider-agnostic |
 | **Telephony** | StarChat/MrCall | — | Outbound calls |
 | **SMS** | Vonage | — | Campaigns + webhooks |
 | **Email Campaigns** | SendGrid | — | Bulk email |
-| **Desktop App** | — | Tauri / Electron | Future consideration |
-| **Mobile App** | — | Capacitor / Flutter | Future consideration |
+| **Desktop App** | Terminal | - | Future consideration |
+| **Mobile/Web App** | Just a test in ./frontend |  | Most probably no native |
 
 ---
 
@@ -117,7 +115,6 @@ Zylch AI is a multi-channel sales intelligence system that helps sales professio
 ```
 zylch/
 ├── .claude/
-│   ├── ARCHITECTURE.md
 │   ├── CONVENTIONS.md
 │   ├── DEVELOPMENT_PLAN.md      # This file
 │   ├── DOCUMENTATION.md
@@ -142,8 +139,13 @@ zylch/
 │   │   ├── local_storage.py     # Legacy (unused)
 │   │   └── modifier_queue.py    # Offline operations
 │   ├── memory/
-│   │   ├── pattern_store.py
-│   │   └── reasoning_bank.py
+│   │   ├── blob_storage.py      # Vector storage
+│   │   ├── hybrid_search.py     # Search engine
+│   │   └── llm_merge.py         # Reconsolidation
+│   ├── ml/
+│   │   └── anonymizer.py        # PII stripping
+│   ├── models/
+│   │   └── importance_rules.py  # Importance logic
 │   ├── services/
 │   │   ├── archive_service.py
 │   │   ├── assistant_manager.py
@@ -178,7 +180,7 @@ zylch/
 │   │   ├── tutorial_manager.py
 │   │   └── steps/
 │   └── config.py
-├── zylch_memory/                 # Semantic memory package
+├── zylch_memory/                 # Legacy/Standalone memory package
 ├── zylch-cli/                    # Thin client (separate)
 ├── zylch-website/                # Marketing site
 ├── tests/
@@ -231,7 +233,6 @@ PIPEDRIVE_API_TOKEN=xxx
 PIPEDRIVE_ENABLED=false
 
 # Email Style
-EMAIL_STYLE_PROMPT="Use professional tone, no emojis"
 MY_EMAILS=mario@example.com,*@mrcall.ai
 
 # Future: Stripe

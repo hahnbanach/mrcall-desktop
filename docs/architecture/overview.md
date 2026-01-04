@@ -644,7 +644,7 @@ creds = storage.get_oauth_token(owner_id, "anthropic")
 - **CLI** (Python): Automatic refresh in main loop
 - **Both**: Use Firebase token refresh API
 
-**See**: [Security & Authentication](#security--authentication) in `.claude/ARCHITECTURE.md`
+**See**: [Security & Authentication](../ARCHITECTURE.md#security--authentication) in `docs/ARCHITECTURE.md`
 
 ---
 
@@ -754,7 +754,7 @@ creds = storage.get_oauth_token(owner_id, "anthropic")
 
 **Future**: Local-first option for desktop/mobile (Tauri + SQLite)
 
-**See**: `.claude/ARCHITECTURE.md#future-local-first-options`
+**See**: `docs/ARCHITECTURE.md#future-local-first-options`
 
 ---
 
@@ -1014,7 +1014,7 @@ Gmail Push API
 - **[Redis Scaling](../features/REDIS_SCALING_TODO.md)** - Caching layer (Phase J)
 
 ### Technical Reference
-- **[.claude/ARCHITECTURE.md](../../.claude/ARCHITECTURE.md)** - Detailed technical architecture
+- **[docs/ARCHITECTURE.md](../ARCHITECTURE.md)** - Detailed technical architecture
 - **[.claude/DEVELOPMENT_PLAN.md](../../.claude/DEVELOPMENT_PLAN.md)** - Development phases and timeline
 
 ---

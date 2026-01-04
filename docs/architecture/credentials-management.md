@@ -1,6 +1,6 @@
 # Unified Credentials & Token Storage
 
-**See [ARCHITECTURE.md](/.claude/ARCHITECTURE.md) for system overview**
+**See [ARCHITECTURE.md](../ARCHITECTURE.md) for system overview**
 
 ## Critical: Credential Storage Policy
 

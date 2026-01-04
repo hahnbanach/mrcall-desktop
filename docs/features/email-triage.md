@@ -1,6 +1,6 @@
 # Email Triage System
 
-**See [ARCHITECTURE.md](/.claude/ARCHITECTURE.md) for system overview**
+**See [ARCHITECTURE.md](../ARCHITECTURE.md) for system overview**
 
 ## Overview
 
