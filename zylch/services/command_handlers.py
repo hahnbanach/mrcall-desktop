@@ -391,13 +391,13 @@ Use `/agent process` to extract facts from synced data:
         return help_text
 
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch.memory import BlobStorage, HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig, LLMMergeService
+    from zylch.memory import BlobStorage, HybridSearchEngine, EmbeddingEngine, MemoryConfig, LLMMergeService
 
     try:
         # Initialize services
         storage = SupabaseStorage.get_instance()
         supabase = storage.client
-        mem_config = ZylchMemoryConfig()
+        mem_config = MemoryConfig()
         embedding_engine = EmbeddingEngine(mem_config)
         blob_storage = BlobStorage(supabase, embedding_engine)
         search_engine = HybridSearchEngine(supabase, embedding_engine)
@@ -798,6 +798,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 **Commands:**
 • `/mrcall list` - List your MrCall assistants
 • `/mrcall link N` - Link to assistant #N from the list
+• `/mrcall variables` - List all variables with descriptions
 • `/mrcall unlink` - Remove current link
 • `/mrcall` - Show current link status
 
@@ -840,9 +841,11 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 
             # Fetch businesses from StarChat API
             try:
+                url = f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business/search"
+                logger.info(f"handle_mrcall list: Fetching from {url}")
                 async with httpx.AsyncClient(timeout=30.0) as http_client:
                     response = await http_client.post(
-                        f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business/search",
+                        url,
                         headers={"auth": access_token, "Content-Type": "application/json"},
                         json={"from": 0, "size": 50}
                     )
@@ -881,6 +884,52 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 
             output += "---\nUse `/mrcall link N` to connect an assistant."
             return output
+
+        # Subcommand: variables - List all variables
+        if subcommand == 'variables':
+            # Get credentials
+            creds = get_mrcall_credentials(owner_id)
+            if not creds or not creds.get('access_token'):
+                return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
+            
+            # Get linked business ID
+            business_id = creds.get('business_id')
+            if not business_id:
+                # Try simple link
+                business_id = client.get_mrcall_link(owner_id)
+                
+            if not business_id:
+                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link N` to select one."
+
+            # Use factory to get client
+            from zylch.tools.starchat import create_starchat_client
+            sc_client = await create_starchat_client(owner_id)
+            
+            try:
+                variables = await sc_client.get_all_variables(business_id)
+                await sc_client.close()
+                
+                if not variables:
+                    return f"**📋 MrCall Variables**\n\nNo variables found for business `{business_id}`."
+                
+                output = f"**📋 MrCall Variables** ({len(variables)} found)\n\n"
+                for var in variables:
+                    name = var['name']
+                    desc = var['description']
+                    val = var['value']
+                    
+                    # Truncate value if too long (e.g. prompt text)
+                    if len(str(val)) > 100:
+                        val = str(val)[:100] + "..."
+                        
+                    output += f"**{name}**: {desc}. Value: `{val}`\n\n"
+                    
+                return output
+
+            except Exception as e:
+                await sc_client.close()
+                logger.error(f"Failed to fetch variables: {e}")
+                return f"❌ **Error:** {str(e)}"
 
         # Subcommand: link N - Link to business by number
         if subcommand == 'link':
