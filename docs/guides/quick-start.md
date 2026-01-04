@@ -297,7 +297,7 @@ python -m zylch.cli.main
 
 ## Resources
 
-- **Architecture**: `.claude/ARCHITECTURE.md` - System design and key decisions
+- **Architecture**: `docs/ARCHITECTURE.md` - System design and key decisions
 - **Development Plan**: `.claude/DEVELOPMENT_PLAN.md` - Current roadmap
 - **API Reference**: `docs/api/API_REFERENCE.md` - Complete REST API documentation
 - **Multi-Tenant**: `docs/features/multi-tenant-architecture.md` - Multi-tenant guide
@@ -309,7 +309,7 @@ python -m zylch.cli.main
 For issues or questions:
 1. Check `.claude/DEVELOPMENT_PLAN.md` for current status
 2. Review logs for error messages
-3. Consult `.claude/ARCHITECTURE.md` for design decisions
+3. Consult `docs/ARCHITECTURE.md` for design decisions
 
 ---
 

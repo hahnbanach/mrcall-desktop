@@ -66,6 +66,10 @@ Modular tools for agent capabilities:
 - **SMS**: Vonage SMS sending (requires `/connect vonage` in CLI)
 - **Read Tracking**: Email open tracking via SendGrid webhooks and custom pixels
 
+### 2.5 Domain Models & ML (`zylch/models/`, `zylch/ml/`)
+- **Importance Rules** (`zylch/models/importance_rules.py`): User-configurable rules for contact prioritization
+- **Anonymizer** (`zylch/ml/anonymizer.py`): PII detection and replacement for training data extraction
+
 **Key Pattern**: Tools are identical for all users. Credentials are loaded per-user at execution time from Supabase. If a user hasn't connected a provider, the tool returns a helpful error (e.g., "Vonage not connected. Please use /connect vonage").
 
 ### 3. Two-Tier Email System (Cloud-Based)
@@ -693,9 +697,9 @@ During `/sync`, the Memory Agent processes unprocessed emails:
 
 **Key Files**:
 - `zylch/agents/memory_agent.py` - MemoryAgent class
-- `zylch_memory/blob_storage.py` - BlobStorage (store/update blobs)
-- `zylch_memory/hybrid_search.py` - HybridSearchEngine (FTS + semantic)
-- `zylch_memory/llm_merge.py` - LLMMergeService (reconsolidation)
+- `zylch/memory/blob_storage.py` - BlobStorage (store/update blobs)
+- `zylch/memory/hybrid_search.py` - HybridSearchEngine (FTS + semantic)
+- `zylch/memory/llm_merge.py` - LLMMergeService (reconsolidation)
 
 ### Task Agent (Task Processing)
 

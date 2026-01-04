@@ -657,7 +657,7 @@ Revoke an accepted authorization.
 
 - **[Entity Memory System](entity-memory-system.md)** - Entity-centric memory with hybrid search
 - **[Relationship Intelligence](relationship-intelligence.md)** - Contact intelligence enriched by shared intel
-- **[Architecture](../../.claude/ARCHITECTURE.md#sharing-system)** - Sharing system design philosophy
+- **[Architecture](../ARCHITECTURE.md#sharing-system)** - Sharing system design philosophy
 
 ## References
 

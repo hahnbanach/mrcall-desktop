@@ -35,7 +35,7 @@ This documentation is organized into the following sections:
 ### Architecture & Development
 - **[Architecture Overview](architecture/overview.md)** - System architecture and design patterns *(coming soon)*
 - **[Development Plan](../.claude/DEVELOPMENT_PLAN.md)** - Project roadmap and phases
-- **[Technical Architecture](../.claude/ARCHITECTURE.md)** - Detailed technical specifications
+- **[Technical Architecture](ARCHITECTURE.md)** - Detailed technical specifications
 - **[Conventions](../.claude/CONVENTIONS.md)** - Code style and development standards
 - **[Testing Strategy](../.claude/TESTING.md)** - Testing approach and guidelines
 - **[Documentation Guide](../.claude/DOCUMENTATION.md)** - How to write documentation
@@ -54,7 +54,7 @@ This documentation is organized into the following sections:
 3. Explore [Relationship Intelligence](features/relationship-intelligence.md) for gap detection
 
 ### For Developers
-1. Review [Architecture Overview](../.claude/ARCHITECTURE.md) for system design
+1. Review [Architecture Overview](ARCHITECTURE.md) for system design
 2. Check [Development Plan](../.claude/DEVELOPMENT_PLAN.md) for current phase and roadmap
 3. Follow [Conventions](../.claude/CONVENTIONS.md) for code style guidelines
 4. Reference [Testing Strategy](../.claude/TESTING.md) before writing tests
@@ -79,8 +79,8 @@ This documentation is organized into the following sections:
 - **Google Calendar API**: [Calendar Integration](features/calendar-integration.md)
 - **Microsoft Graph API**: [Microsoft Calendar TODO](features/MICROSOFT_CALENDAR_TODO.md)
 - **Anthropic Claude**: [Email Archive](features/email-archive.md), [Relationship Intelligence](features/relationship-intelligence.md)
-- **Supabase**: [Architecture](../.claude/ARCHITECTURE.md#data-storage)
-- **Firebase Auth**: [Architecture](../.claude/ARCHITECTURE.md#authentication)
+- **Supabase**: [Architecture](ARCHITECTURE.md#data-storage)
+- **Firebase Auth**: [Architecture](ARCHITECTURE.md#authentication)
 
 ### By User Type
 - **CLI Users**: [CLI Commands](guides/cli-commands.md) *(coming soon)*
