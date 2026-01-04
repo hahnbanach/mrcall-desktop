@@ -7,6 +7,25 @@
 3. **No emojis**: Unless explicitly requested by the user.
 4. **Keep it simple**: Avoid over-engineering. Only implement what's requested.
 
+## MrCall/StarChat Integration Rules
+
+### 1. Mandatory Realm Parameter
+Virtually ALL MrCall endpoints require a `realm` parameter in the path.
+- **WRONG**: `/mrcall/v1/crm/business`
+- **CORRECT**: `/mrcall/v1/{realm}/crm/business`
+
+**Exception**: Admin-only endpoints or generic health checks may not require it, but for any user-facing CRM operation, you MUST include the realm.
+
+### 2. Search Endpoints
+Prefer `POST /.../search` endpoints over `GET` for resource retrieval.
+- **Pattern**: `POST /mrcall/v1/{realm}/crm/{resource}/search`
+- These endpoints accept JSON bodies with filters (pagination, query, etc).
+
+### 3. StarChatClient Class
+When adding methods to `StarChatClient`:
+- Always use `self.realm` in the path construction.
+- Use `logger` to debug endpoint URLs if 401/404 errors occur.
+
 ## Python Code Style
 
 ### Type Hints
@@ -162,6 +181,7 @@ Always include success/error status:
 - **INFO**: General informational messages
 - **WARNING**: Warning messages for recoverable issues
 - **ERROR**: Error messages for failures
+- **CRITICAL**: Critical system failures
 
 ```python
 logger.debug(f"Searching emails: {query}")

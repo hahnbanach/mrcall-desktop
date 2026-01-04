@@ -14,6 +14,11 @@ class StarChatClient:
     """Client for StarChat CRM API (MrCall Firebase endpoints).
 
     Handles contact CRUD operations via StarChat's REST API.
+
+    CRITICAL NOTE:
+    Most endpoints MUST use the realm, e.g., `/mrcall/v1/{realm}/crm/business`.
+    Using generic paths like `/mrcall/v1/crm/business` will result in 401 Unauthorized.
+    Always construct paths using `self.realm`.
     """
 
     def __init__(
@@ -54,9 +59,6 @@ class StarChatClient:
         self.realm = realm
         self.timeout = timeout
         self.verify_ssl = verify_ssl
-        self.owner_id = owner_id
-        self.supabase = supabase_storage
-
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=timeout,
@@ -74,8 +76,9 @@ class StarChatClient:
         }
 
         # Priority: OAuth > JWT (Firebase) > Basic Auth
+        # CRITICAL: MrCall uses 'auth' header for both Firebase and OAuth tokens
         if self.auth_type == "oauth" and self.access_token:
-            headers["Authorization"] = f"Bearer {self.access_token}"
+            headers["auth"] = self.access_token
         elif self.auth_type == "firebase" and self.jwt_token:
             headers["auth"] = self.jwt_token
         elif self.auth_type == "basic" and self.username and self.password:
@@ -511,10 +514,16 @@ class StarChatClient:
         logger.info(f"Fetching business configuration: {business_id}")
 
         try:
-            # Note: This endpoint uses GET with JSON body
+            # Note: This endpoint uses POST with JSON body for search
+            # CRITICAL: For OAuth/Delegated access, we must use the delegated_{realm} prefix
+            # path: /mrcall/v1/delegated_{realm}/crm/business/search
+            endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/business/search"
+            
+            logger.info(f"Using business search endpoint: {endpoint}")
+            
             response = await self.client.request(
-                "GET",
-                "/mrcall/v1/crm/business",
+                "POST",
+                endpoint,
                 json={"businessId": business_id}
             )
 
@@ -563,10 +572,83 @@ class StarChatClient:
             "nested": str(nested).lower(),
         }
 
-        response = await self.client.get("/mrcall/v1/crm/variables", params=params)
+        # CRITICAL: For OAuth/Delegated access, we must use the delegated_{realm} prefix
+        endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/variables"
+        logger.info(f"Fetching variable schema from: {endpoint} with params={params}")
+
+        response = await self.client.get(endpoint, params=params)
         response.raise_for_status()
 
         return response.json()
+
+    async def get_all_variables(self, business_id: str) -> List[Dict[str, Any]]:
+        """Get all variables with descriptions and current values.
+
+        Downloads schema from StarChat to get descriptions, and fetches
+        business config to get current values.
+
+        Args:
+            business_id: Business ID
+
+        Returns:
+            List of dicts with name, description, and value
+        """
+        try:
+            # 1. Get business config for current values and template
+            business = await self.get_business_config(business_id)
+            if not business:
+                raise ValueError(f"Business not found: {business_id}")
+
+            current_values = business.get("variables", {})
+            template = business.get("template", "businesspro")
+            logger.info(f"Fetching variables for template: {template}")
+
+            # 2. Get schema for descriptions
+            # Note: The API returns a Map[String, CrmVariable] or List?
+            # Based on usage, likely a list or dict.
+            schema = await self.get_variable_schema(template_name=template, nested=False)
+            
+            # 3. Combine them
+            combined = []
+            
+            # Handle schema if it's a list or dict
+            # Schema is typically { "VAR_NAME": { "description": "...", ... } } or list
+            schema_items = []
+            if isinstance(schema, dict):
+                for k, v in schema.items():
+                    if isinstance(v, dict):
+                        v['name'] = k
+                        schema_items.append(v)
+            elif isinstance(schema, list):
+                schema_items = schema
+
+            for item in schema_items:
+                name = item.get("name")
+                if not name:
+                    continue
+                
+                # Get description (handle multiple languages if present, or just 'description')
+                desc = item.get("description", "")
+                if isinstance(desc, dict):
+                    # Try to get English or Italian
+                    desc = desc.get("en-US") or desc.get("en-GB") or desc.get("it-IT") or list(desc.values())[0]
+                
+                # Get current value
+                value = current_values.get(name, "Not set")
+                
+                combined.append({
+                    "name": name,
+                    "description": desc,
+                    "value": value
+                })
+                
+            # Sort by name
+            combined.sort(key=lambda x: x["name"])
+            return combined
+
+        except Exception as e:
+            logger.error(f"Error in get_all_variables: {e}")
+            raise
 
     async def update_business_variable(
         self,
