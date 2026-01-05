@@ -1,6 +1,6 @@
 """Test command handlers for slash commands.
 
-Tests the new /trigger, /mrcall, /share, /revoke, /sharing handlers.
+Tests the new /trigger, /mrcall, /share, /revoke handlers.
 """
 
 import pytest
@@ -13,7 +13,6 @@ from zylch.services.command_handlers import (
     handle_mrcall,
     handle_share,
     handle_revoke,
-    handle_sharing,
     handle_help,
 )
 
@@ -129,57 +128,194 @@ class TestMrCallHandler:
     async def test_mrcall_help(self):
         """Test /mrcall --help returns help text."""
         result = await handle_mrcall(['--help'], 'test_owner', 'test@example.com')
-        assert '**Usage:**' in result
-        assert 'business_id' in result
+        assert '📞 MrCall Integration' in result
+        assert 'list' in result
+        assert 'link' in result
 
     @pytest.mark.asyncio
-    async def test_mrcall_status_not_linked(self):
-        """Test /mrcall with no link."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
+    async def test_mrcall_status_not_connected(self):
+        """Test /mrcall with no OAuth credentials."""
+        with patch('zylch.services.command_handlers.SupabaseClient') as mock_client, \
+             patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds:
             mock_instance = Mock()
-            mock_instance.get_mrcall_link.return_value = None
             mock_client.return_value = mock_instance
+            mock_creds.return_value = None
 
             result = await handle_mrcall([], 'test_owner', 'test@example.com')
-            assert 'Not linked' in result
+            assert 'Not connected' in result
 
     @pytest.mark.asyncio
-    async def test_mrcall_status_linked(self):
-        """Test /mrcall with existing link."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
+    async def test_mrcall_status_connected_linked(self):
+        """Test /mrcall with OAuth credentials and linked business."""
+        with patch('zylch.services.command_handlers.SupabaseClient') as mock_client, \
+             patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds:
             mock_instance = Mock()
-            mock_instance.get_mrcall_link.return_value = {
-                'mrcall_business_id': '123456',
-                'created_at': '2024-01-01T00:00:00'
-            }
             mock_client.return_value = mock_instance
+            mock_creds.return_value = {
+                'access_token': 'test_token',
+                'business_id': '123456',
+                'metadata': {'email': 'test@mrcall.com'}
+            }
 
             result = await handle_mrcall([], 'test_owner', 'test@example.com')
             assert '123456' in result
-            assert 'Linked Business' in result
+            assert 'Connected and linked' in result
+
+    @pytest.mark.asyncio
+    async def test_mrcall_status_connected_not_linked(self):
+        """Test /mrcall with OAuth credentials but no linked business."""
+        with patch('zylch.services.command_handlers.SupabaseClient') as mock_client, \
+             patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds:
+            mock_instance = Mock()
+            mock_client.return_value = mock_instance
+            mock_creds.return_value = {
+                'access_token': 'test_token',
+                'business_id': None,
+                'metadata': {'email': 'test@mrcall.com'}
+            }
+
+            result = await handle_mrcall([], 'test_owner', 'test@example.com')
+            assert 'Connected' in result
+            assert 'not linked' in result
+
+    @pytest.mark.asyncio
+    async def test_mrcall_list_not_connected(self):
+        """Test /mrcall list without OAuth credentials."""
+        with patch('zylch.services.command_handlers.SupabaseClient'), \
+             patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds:
+            mock_creds.return_value = None
+
+            result = await handle_mrcall(['list'], 'test_owner', 'test@example.com')
+            assert 'Not connected to MrCall' in result
+            assert '/connect mrcall' in result
+
+    @pytest.mark.asyncio
+    async def test_mrcall_list_success(self):
+        """Test /mrcall list with OAuth credentials."""
+        with patch('zylch.services.command_handlers.SupabaseClient'), \
+             patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds, \
+             patch('httpx.AsyncClient') as mock_httpx:
+            mock_creds.return_value = {
+                'access_token': 'test_token',
+                'business_id': None
+            }
+
+            # Mock httpx response
+            mock_response = AsyncMock()
+            mock_response.json.return_value = [
+                {'businessId': 'biz_001', 'nickname': 'Test Assistant', 'companyName': 'Acme Corp'},
+                {'businessId': 'biz_002', 'nickname': 'Support Bot', 'serviceNumber': '+1234567890'}
+            ]
+            mock_response.raise_for_status = Mock()
+
+            mock_client_instance = AsyncMock()
+            mock_client_instance.__aenter__.return_value = mock_client_instance
+            mock_client_instance.__aexit__.return_value = None
+            mock_client_instance.post.return_value = mock_response
+            mock_httpx.return_value = mock_client_instance
+
+            result = await handle_mrcall(['list'], 'test_owner', 'test@example.com')
+            assert 'Your MrCall Assistants' in result
+            assert 'Test Assistant' in result
+            assert 'Support Bot' in result
 
     @pytest.mark.asyncio
     async def test_mrcall_link_success(self):
-        """Test /mrcall <business_id> linking."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
+        """Test /mrcall link N linking."""
+        with patch('zylch.services.command_handlers.SupabaseClient') as mock_client, \
+             patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds, \
+             patch('httpx.AsyncClient') as mock_httpx:
             mock_instance = Mock()
-            mock_instance.set_mrcall_link.return_value = {'id': 'link-id'}
+            mock_instance.set_mrcall_link.return_value = True
             mock_client.return_value = mock_instance
 
-            result = await handle_mrcall(['987654'], 'test_owner', 'test@example.com')
+            mock_creds.return_value = {
+                'access_token': 'test_token',
+                'business_id': None
+            }
+
+            # Mock httpx response for business list
+            mock_response = AsyncMock()
+            mock_response.json.return_value = [
+                {'businessId': 'biz_001', 'nickname': 'Test Assistant'},
+            ]
+            mock_response.raise_for_status = Mock()
+
+            mock_client_instance = AsyncMock()
+            mock_client_instance.__aenter__.return_value = mock_client_instance
+            mock_client_instance.__aexit__.return_value = None
+            mock_client_instance.post.return_value = mock_response
+            mock_httpx.return_value = mock_client_instance
+
+            result = await handle_mrcall(['link', '1'], 'test_owner', 'test@example.com')
             assert 'MrCall Linked' in result
-            assert '987654' in result
+            assert 'Test Assistant' in result
 
     @pytest.mark.asyncio
     async def test_mrcall_unlink(self):
-        """Test /mrcall --unlink."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
+        """Test /mrcall unlink."""
+        with patch('zylch.services.command_handlers.SupabaseClient') as mock_client:
             mock_instance = Mock()
             mock_instance.remove_mrcall_link.return_value = True
             mock_client.return_value = mock_instance
 
-            result = await handle_mrcall(['--unlink'], 'test_owner', 'test@example.com')
+            result = await handle_mrcall(['unlink'], 'test_owner', 'test@example.com')
             assert 'Unlinked' in result
+
+    @pytest.mark.asyncio
+    async def test_mrcall_variables_not_linked(self):
+        """Test /mrcall variables without linked business."""
+        with patch('zylch.services.command_handlers.SupabaseClient') as mock_client, \
+             patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds:
+            mock_instance = Mock()
+            mock_instance.get_mrcall_link.return_value = None
+            mock_client.return_value = mock_instance
+            mock_creds.return_value = {'access_token': 'token', 'business_id': None}
+
+            result = await handle_mrcall(['variables'], 'test_owner', 'test@example.com')
+            assert 'No assistant linked' in result
+
+    @pytest.mark.asyncio
+    async def test_mrcall_variables_get(self):
+        """Test /mrcall variables get with linked business."""
+        with patch('zylch.services.command_handlers.SupabaseClient'), \
+             patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds, \
+             patch('zylch.tools.starchat.create_starchat_client') as mock_create:
+            mock_creds.return_value = {
+                'access_token': 'test_token',
+                'business_id': 'biz_001'
+            }
+
+            mock_sc_client = AsyncMock()
+            mock_sc_client.get_all_variables.return_value = [
+                {'name': 'GREETING', 'description': 'Welcome message', 'value': 'Hello!'},
+                {'name': 'OBJECTIVE', 'description': 'Main goal', 'value': 'Schedule appointments'}
+            ]
+            mock_create.return_value = mock_sc_client
+
+            result = await handle_mrcall(['variables'], 'test_owner', 'test@example.com')
+            assert 'MrCall Variables' in result
+            assert 'GREETING' in result
+            assert 'Hello!' in result
+
+    @pytest.mark.asyncio
+    async def test_mrcall_variables_set(self):
+        """Test /mrcall variables set."""
+        with patch('zylch.services.command_handlers.SupabaseClient'), \
+             patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds, \
+             patch('zylch.tools.starchat.create_starchat_client') as mock_create:
+            mock_creds.return_value = {
+                'access_token': 'test_token',
+                'business_id': 'biz_001'
+            }
+
+            mock_sc_client = AsyncMock()
+            mock_sc_client.update_business_variable.return_value = None
+            mock_create.return_value = mock_sc_client
+
+            result = await handle_mrcall(['variables', 'set', 'GREETING', 'New greeting!'], 'test_owner', 'test@example.com')
+            assert 'Variable Updated' in result
+            assert 'GREETING' in result
 
 
 class TestShareHandler:
