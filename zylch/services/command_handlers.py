@@ -1106,7 +1106,11 @@ Zylch will use this analysis to understand the current behavior.
 Run `/mrcall show {feature_name}` to see the generated context."""
             except Exception as e:
                 logger.error(f"Failed to train feature: {e}", exc_info=True)
-                return f"❌ **Error generating context:** {str(e)}"
+                error_str = str(e)
+                # Check for auth errors (405/401/403) and suggest reconnection
+                if any(code in error_str for code in ["405", "401", "403", "Unauthorized", "Forbidden"]):
+                    return "❌ **MrCall connection expired**\n\nRun `/connect mrcall` to reconnect."
+                return f"❌ **Error generating context:** {error_str}"
 
         # Subcommand: show - Display current configuration context
         if subcommand == 'show':
@@ -1136,9 +1140,6 @@ Run `/mrcall show {feature_name}` to see the generated context."""
 
 Run `/mrcall train {feature_name}` to generate the configuration context."""
 
-            # Truncate if very long (show first 2000 chars)
-            display_prompt = sub_prompt if len(sub_prompt) <= 2000 else sub_prompt[:2000] + "\n\n... (truncated)"
-
             return f"""**📋 MrCall Configuration Context**
 
 **Feature:** {feature_name}
@@ -1147,7 +1148,7 @@ Run `/mrcall train {feature_name}` to generate the configuration context."""
 
 ---
 
-{display_prompt}"""
+{sub_prompt}"""
 
         # No subcommand: show status
         if subcommand is None:
