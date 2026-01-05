@@ -184,7 +184,14 @@ class ChatSessionManager:
             ChatSession (existing or newly created)
         """
         if session_id and session_id in self._sessions:
-            return self._sessions[session_id]
+            session = self._sessions[session_id]
+            # SECURITY: Verify session belongs to requesting user
+            if session.user_id == user_id:
+                return session
+            # Session belongs to different user - ignore session_id, create new
+            logger.warning(
+                f"Session {session_id} belongs to {session.user_id}, not {user_id}. Creating new session."
+            )
 
         # If no session_id provided, try to get user's latest session
         if not session_id:
