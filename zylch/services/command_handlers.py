@@ -796,9 +796,12 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 • `/mrcall link N` - Link to assistant #N from the list
 • `/mrcall variables [get] [--name NAME]` - List/filter variables
 • `/mrcall variables set <NAME> <VALUE>` - Set variable value
-• `/mrcall link N` - Link to assistant #N
+• `/mrcall train [feature]` - Generate/refresh configuration context
+• `/mrcall show [feature]` - Show current configuration context
 • `/mrcall unlink` - Unlink current assistant
 • `/mrcall` - Show current link status
+
+**Features:** welcome_message (how the assistant answers the phone)
 
 **Setup:**
 1. Run `/connect mrcall` to authenticate with MrCall
@@ -1027,6 +1030,124 @@ Your Zylch is now connected to this MrCall assistant!
 • `/sync mrcall` - Test fetching conversations"""
             else:
                 return "❌ **Error:** Failed to link MrCall business. Please try again."
+
+        # Subcommand: train - Generate/refresh configuration context
+        if subcommand == 'train':
+            import asyncio
+            from concurrent.futures import ThreadPoolExecutor
+            from zylch.api.token_storage import get_active_llm_provider
+
+            # Get linked business
+            creds = get_mrcall_credentials(owner_id)
+            if not creds or not creds.get('access_token'):
+                return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
+
+            business_id = creds.get('business_id')
+            if not business_id:
+                business_id = client.get_mrcall_link(owner_id)
+            if not business_id:
+                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link N` first."
+
+            # Get LLM credentials
+            llm_provider, api_key = get_active_llm_provider(owner_id)
+            if not api_key:
+                return "❌ **No LLM configured**\n\nRun `/connect anthropic` to configure an LLM provider."
+
+            # Parse feature argument
+            feature_name = positional[1] if len(positional) > 1 else "welcome_message"
+
+            # Create trainer and generate sub-prompt (uses run_in_executor for 3-5s LLM call)
+            def _train_feature():
+                import asyncio
+                from zylch.tools.starchat import create_starchat_client
+                from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+
+                # Create a new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    # Create StarChat client
+                    starchat = loop.run_until_complete(create_starchat_client(owner_id))
+
+                    trainer = MrCallConfiguratorTrainer(
+                        storage=client,
+                        starchat_client=starchat,
+                        owner_id=owner_id,
+                        api_key=api_key,
+                        provider=llm_provider,
+                    )
+
+                    # Generate sub-prompt
+                    sub_prompt, metadata = loop.run_until_complete(
+                        trainer.train_feature(feature_name, business_id)
+                    )
+
+                    # Close starchat client
+                    loop.run_until_complete(starchat.close())
+
+                    return sub_prompt, metadata
+                finally:
+                    loop.close()
+
+            executor = ThreadPoolExecutor(max_workers=1)
+            loop = asyncio.get_event_loop()
+
+            try:
+                sub_prompt, metadata = await loop.run_in_executor(executor, _train_feature)
+                return f"""✅ **Configuration Context Generated**
+
+**Feature:** {feature_name}
+**Business ID:** `{business_id}`
+**Length:** {len(sub_prompt)} characters
+
+The context is now ready. When you ask about configuring the assistant,
+Zylch will use this analysis to understand the current behavior.
+
+Run `/mrcall show {feature_name}` to see the generated context."""
+            except Exception as e:
+                logger.error(f"Failed to train feature: {e}", exc_info=True)
+                return f"❌ **Error generating context:** {str(e)}"
+
+        # Subcommand: show - Display current configuration context
+        if subcommand == 'show':
+            # Get linked business
+            creds = get_mrcall_credentials(owner_id)
+            if not creds or not creds.get('access_token'):
+                return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
+
+            business_id = creds.get('business_id')
+            if not business_id:
+                business_id = client.get_mrcall_link(owner_id)
+            if not business_id:
+                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link N` first."
+
+            # Parse feature argument
+            feature_name = positional[1] if len(positional) > 1 else "welcome_message"
+            agent_type = f"mrcall_{business_id}_{feature_name}"
+
+            # Get stored sub-prompt
+            sub_prompt = client.get_agent_prompt(owner_id, agent_type)
+
+            if not sub_prompt:
+                return f"""**📋 MrCall Configuration Context**
+
+**Feature:** {feature_name}
+**Status:** Not generated yet
+
+Run `/mrcall train {feature_name}` to generate the configuration context."""
+
+            # Truncate if very long (show first 2000 chars)
+            display_prompt = sub_prompt if len(sub_prompt) <= 2000 else sub_prompt[:2000] + "\n\n... (truncated)"
+
+            return f"""**📋 MrCall Configuration Context**
+
+**Feature:** {feature_name}
+**Business ID:** `{business_id}`
+**Length:** {len(sub_prompt)} characters
+
+---
+
+{display_prompt}"""
 
         # No subcommand: show status
         if subcommand is None:
@@ -1883,7 +2004,7 @@ Use `/agent process` to extract facts from synced data into memory.''',
     },
     '/mrcall': {
         'summary': 'MrCall integration',
-        'usage': '/mrcall [list|link N|unlink|variables]',
+        'usage': '/mrcall [list|link N|unlink|variables|train|show]',
         'description': '''Manage MrCall telephony integration.
 
 **Subcommands:**
@@ -1893,14 +2014,18 @@ Use `/agent process` to extract facts from synced data into memory.''',
 - `unlink` - Disconnect current assistant
 - `variables [get] [--name NAME]` - List/filter variables
 - `variables set <NAME> <VALUE>` - Set variable value
+- `train [feature]` - Generate configuration context for a feature
+- `show [feature]` - Display current configuration context
+
+**Features:** welcome_message (how the assistant answers the phone)
 
 **Examples:**
 - `/mrcall` - Show connection status
 - `/mrcall list` - See your assistants
 - `/mrcall link 1` - Connect to first assistant
-- `/mrcall unlink` - Disconnect
-- `/mrcall variables` - List all variables
-- `/mrcall variables set GREETING "Hello!"` - Set a variable''',
+- `/mrcall train` - Generate context for welcome_message
+- `/mrcall show welcome_message` - Show current context
+- `/mrcall variables` - List all variables''',
     },
     '/share': {
         'summary': 'Share access with others',
