@@ -3,27 +3,30 @@
 Provides tools for configuring MrCall AI phone assistants:
 - get_assistant_catalog: Get available configuration variables
 - configure_assistant: Modify variables with preview+confirm workflow
-- save_mrcall_admin_rule: Save admin-level rules (explicit command only)
 
-TODO: ConfigureAssistantTool and SaveMrCallAdminRuleTool are currently disabled in factory.py
-# because they depend on the removed legacy memory system. They need to be migrated to use
-# Supabase tables for admin rules and modification templates.
+The ConfigureAssistantTool now uses MrCallConfiguratorTrainer for sub-prompt
+regeneration after config changes, replacing the legacy memory system.
 """
 
 import logging
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from ..base import Tool, ToolResult, ToolStatus
 from ..factory import SessionState
 from .llm_helper import modify_prompt_with_llm, get_default_value
 from .variable_utils import format_variable_changes
 
+if TYPE_CHECKING:
+    from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+
 logger = logging.getLogger(__name__)
 
-# Namespace constants for memory
-MRCALL_ADMIN_NAMESPACE = "mrcall:admin"
-MRCALL_BUSINESS_PREFIX = "mrcall:"
+# Map variable names to feature names for sub-prompt regeneration
+VARIABLE_TO_FEATURE = {
+    "OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT": "welcome_message",
+    # Future mappings:
+    # "BOOKING_PROMPT": "booking",
+}
 
 
 class GetAssistantCatalogTool(Tool):
@@ -183,28 +186,34 @@ class GetAssistantCatalogTool(Tool):
 
 
 class ConfigureAssistantTool(Tool):
-    """Tool to configure MrCall assistant variables with preview+confirm workflow."""
+    """Tool to configure MrCall assistant variables with preview+confirm workflow.
+
+    After a successful configuration change, automatically regenerates the
+    sub-prompt for the affected feature using MrCallConfiguratorTrainer.
+    """
 
     def __init__(
         self,
         starchat_client,
         session_state: SessionState,
-        memory_system,
-        anthropic_api_key: str
+        trainer: "MrCallConfiguratorTrainer",
+        api_key: str,
+        provider: str,
     ):
         super().__init__(
             name="configure_assistant",
             description=(
                 "Configure MrCall assistant variables. ALWAYS does a dry-run first and shows "
                 "a preview of changes. User must confirm before applying. "
-                "Searches memory for similar past modifications to suggest as templates. "
+                "After applying changes, regenerates the feature context to reflect new behavior. "
                 "Use variable_name from get_assistant_catalog output."
             )
         )
         self.starchat = starchat_client
         self.session_state = session_state
-        self.memory = memory_system
-        self.anthropic_api_key = anthropic_api_key
+        self.trainer = trainer
+        self.api_key = api_key
+        self.provider = provider
 
     async def execute(
         self,
@@ -247,10 +256,6 @@ class ConfigureAssistantTool(Tool):
                     error=f"Variable not found: {variable_name}. Use get_assistant_catalog to see available variables."
                 )
 
-            # Search memory for admin rules and similar patterns
-            admin_rules = await self._get_admin_rules(variable_name)
-            similar_patterns = await self._get_similar_patterns(business_id, request)
-
             # Check if this is a reset request
             if any(word in request.lower() for word in ["reset", "default", "ripristina", "originale"]):
                 # Get default value
@@ -260,13 +265,14 @@ class ConfigureAssistantTool(Tool):
                     new_value = current_value
                 validation = {"all_preserved": True, "removed": [], "added": [], "preserved": [], "error": None}
             else:
-                # Use LLM to modify
+                # Use LLM to modify (no admin rules or patterns for now)
                 new_value, validation = await modify_prompt_with_llm(
                     current_prompt=current_value,
                     user_request=request,
-                    admin_rules=admin_rules,
-                    similar_patterns=similar_patterns,
-                    anthropic_api_key=self.anthropic_api_key,
+                    admin_rules=[],
+                    similar_patterns=[],
+                    api_key=self.api_key,
+                    provider=self.provider,
                 )
 
             # Check for critical errors
@@ -330,13 +336,42 @@ class ConfigureAssistantTool(Tool):
                 value=new_value
             )
 
-            # Store successful modification in memory
-            await self._store_modification(business_id, variable_name, request, new_value)
+            # Regenerate sub-prompt to reflect new configuration
+            feature_name = VARIABLE_TO_FEATURE.get(variable_name)
+            new_behavior_description = None
+
+            if feature_name and self.trainer:
+                try:
+                    logger.info(
+                        f"Regenerating sub-prompt for {feature_name} "
+                        f"after config change"
+                    )
+                    new_sub_prompt, _ = await self.trainer.train_feature(
+                        feature_name, business_id
+                    )
+                    # Extract the CURRENT BEHAVIOR section for the response
+                    # This gives the user immediate feedback on what changed
+                    if "### CURRENT BEHAVIOR" in new_sub_prompt:
+                        behavior_start = new_sub_prompt.find("### CURRENT BEHAVIOR")
+                        behavior_end = new_sub_prompt.find("###", behavior_start + 20)
+                        if behavior_end == -1:
+                            behavior_end = new_sub_prompt.find("### WHAT CAN BE CHANGED")
+                        if behavior_end > behavior_start:
+                            new_behavior_description = new_sub_prompt[
+                                behavior_start:behavior_end
+                            ].strip()
+                except Exception as e:
+                    logger.warning(f"Failed to regenerate sub-prompt: {e}")
+
+            # Build success message with new behavior description
+            success_message = f"Configurazione applicata con successo per {variable_name}"
+            if new_behavior_description:
+                success_message += f"\n\n{new_behavior_description}"
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
                 data=preview,
-                message=f"Configurazione applicata con successo per {variable_name}"
+                message=success_message
             )
 
         except Exception as e:
@@ -346,99 +381,6 @@ class ConfigureAssistantTool(Tool):
                 data=None,
                 error=str(e)
             )
-
-    async def _get_admin_rules(self, variable_name: str) -> List[str]:
-        """Get admin rules from memory that apply to this variable."""
-        if not self.memory:
-            return []
-
-        try:
-            # Search admin namespace for rules
-            memories = self.memory.retrieve_memories(
-                query=f"rules for {variable_name}",
-                namespace=MRCALL_ADMIN_NAMESPACE,
-                category="rules",
-                limit=5
-            )
-
-            rules = []
-            for mem in memories:
-                if mem.get("confidence", 0) >= 0.7:
-                    rules.append(mem.get("pattern") or mem.get("context", ""))
-
-            return rules
-        except Exception as e:
-            logger.warning(f"Could not retrieve admin rules: {e}")
-            return []
-
-    async def _get_similar_patterns(
-        self,
-        business_id: str,
-        request: str
-    ) -> List[Dict[str, Any]]:
-        """Get similar past modifications from memory."""
-        if not self.memory:
-            return []
-
-        try:
-            # Search business-specific namespace
-            namespace = f"{MRCALL_BUSINESS_PREFIX}{business_id}"
-            memories = self.memory.retrieve_memories(
-                query=request,
-                namespace=namespace,
-                category="modifications",
-                limit=5
-            )
-
-            patterns = []
-            for mem in memories:
-                if mem.get("confidence", 0) >= 0.6:
-                    patterns.append({
-                        "context": mem.get("context"),
-                        "pattern": mem.get("pattern"),
-                        "confidence": mem.get("confidence"),
-                        "variable_name": mem.get("metadata", {}).get("variable_name"),
-                    })
-
-            return patterns
-        except Exception as e:
-            logger.warning(f"Could not retrieve similar patterns: {e}")
-            return []
-
-    async def _store_modification(
-        self,
-        business_id: str,
-        variable_name: str,
-        request: str,
-        new_value: str
-    ) -> None:
-        """Store successful modification in memory for future reference."""
-        if not self.memory:
-            return
-
-        try:
-            namespace = f"{MRCALL_BUSINESS_PREFIX}{business_id}"
-
-            # Build context with metadata encoded in the string
-            context_with_meta = (
-                f"{request} | variable={variable_name} | "
-                f"applied_at={datetime.now().isoformat()}"
-            )
-
-            # Use reconsolidation (force_new=False) to merge similar modifications
-            self.memory.store_memory(
-                namespace=namespace,
-                category="modifications",
-                context=context_with_meta,
-                pattern=f"Modified {variable_name}: {request[:100]}",
-                examples=[variable_name, new_value[:100]],
-                confidence=0.8,
-                force_new=False  # Enable reconsolidation
-            )
-
-            logger.info(f"Stored modification in memory: {namespace}")
-        except Exception as e:
-            logger.warning(f"Could not store modification in memory: {e}")
 
     def get_schema(self) -> Dict[str, Any]:
         return {
@@ -466,137 +408,6 @@ class ConfigureAssistantTool(Tool):
         }
 
 
-class SaveMrCallAdminRuleTool(Tool):
-    """Tool to save admin-level rules for MrCall configuration.
-
-    This tool requires explicit command invocation (/mrcall-admin) and
-    admin role verification via StarChat.
-    """
-
-    def __init__(
-        self,
-        starchat_client,
-        session_state: SessionState,
-        memory_system
-    ):
-        super().__init__(
-            name="save_mrcall_admin_rule",
-            description=(
-                "Save an admin-level rule that will be applied to all MrCall assistant configurations. "
-                "Requires admin privileges (verified via StarChat). "
-                "Use this to define global standards like 'Always use formal tone in German greetings'. "
-                "This tool should ONLY be called when user explicitly uses /mrcall-admin command."
-            )
-        )
-        self.starchat = starchat_client
-        self.session_state = session_state
-        self.memory = memory_system
-
-    async def execute(
-        self,
-        rule: str,
-        applies_to: str = "all",
-    ) -> ToolResult:
-        """Save an admin rule.
-
-        Args:
-            rule: The rule to save (e.g., "Always maintain formal tone in French")
-            applies_to: Category this rule applies to ('welcome', 'conversation', 'all')
-        """
-        business_id = self.session_state.get_business_id()
-        if not business_id:
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error="No MrCall assistant selected. Use /mrcall <id> to select one first."
-            )
-
-        # Check admin role via StarChat
-        try:
-            user_role = await self.starchat.check_user_role(business_id)
-            if user_role not in ["admin", "owner"]:
-                return ToolResult(
-                    status=ToolStatus.ERROR,
-                    data=None,
-                    error=(
-                        f"Permesso negato. Ruolo attuale: {user_role or 'unknown'}. "
-                        "Solo gli admin possono salvare regole globali."
-                    )
-                )
-        except Exception as e:
-            logger.warning(f"Could not verify admin role: {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=f"Impossibile verificare i permessi admin: {e}"
-            )
-
-        # Store in admin namespace
-        if not self.memory:
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error="Memory system not available"
-            )
-
-        try:
-            # Build context with metadata encoded
-            context_with_meta = (
-                f"Admin rule for {applies_to} | "
-                f"created_by={business_id} | "
-                f"created_at={datetime.now().isoformat()}"
-            )
-
-            self.memory.store_memory(
-                namespace=MRCALL_ADMIN_NAMESPACE,
-                category="rules",
-                context=context_with_meta,
-                pattern=rule,
-                examples=[applies_to],
-                confidence=1.0,  # Admin rules have max confidence
-                force_new=True  # Admin rules are always new, no reconsolidation
-            )
-
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data={
-                    "rule": rule,
-                    "applies_to": applies_to,
-                    "namespace": MRCALL_ADMIN_NAMESPACE,
-                },
-                message=(
-                    f"Regola admin salvata: '{rule}'\n"
-                    f"Si applica a: {applies_to}\n"
-                    "Sara' applicata a tutte le future configurazioni di assistenti."
-                )
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to save admin rule: {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=str(e)
-            )
-
-    def get_schema(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "description": self.description,
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "rule": {
-                        "type": "string",
-                        "description": "The admin rule to save"
-                    },
-                    "applies_to": {
-                        "type": "string",
-                        "description": "Category this rule applies to",
-                        "enum": ["welcome", "conversation", "all"],
-                        "default": "all"
-                    }
-                },
-                "required": ["rule"]
-            }
-        }
+# NOTE: SaveMrCallAdminRuleTool has been removed as it depended on the legacy
+# memory system. Admin rules functionality may be re-implemented in the future
+# using Supabase tables if needed.

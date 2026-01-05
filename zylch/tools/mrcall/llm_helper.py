@@ -24,9 +24,9 @@ async def modify_prompt_with_llm(
     user_request: str,
     admin_rules: Optional[List[str]] = None,
     similar_patterns: Optional[List[Dict[str, Any]]] = None,
-    model: str = None,
-    api_key: str,
-    provider: str,
+    model: Optional[str] = None,
+    api_key: Optional[str] = None,
+    provider: str = "anthropic",
 ) -> Tuple[str, Dict[str, Any]]:
     """Modify a prompt using LLM while preserving variables.
 

@@ -4,10 +4,10 @@ This module enables natural language configuration of MrCall AI phone assistants
 It provides tools for modifying welcome messages and conversation handling.
 
 Features:
-- Two-level memory system: Admin (global) + Business (per-assistant)
+- Dynamic sub-prompt generation via MrCallConfiguratorTrainer
 - Preview + confirm workflow for all changes
 - Variable preservation (%%VAR%%, {{VAR}}) during modifications
-- Incremental updates from memory
+- Automatic sub-prompt regeneration after config changes
 """
 
 from .variable_utils import (
@@ -20,10 +20,9 @@ from .llm_helper import modify_prompt_with_llm
 from .config_tools import (
     GetAssistantCatalogTool,
     ConfigureAssistantTool,
-    SaveMrCallAdminRuleTool,
-    MRCALL_ADMIN_NAMESPACE,
-    MRCALL_BUSINESS_PREFIX,
+    VARIABLE_TO_FEATURE,
 )
+from .feature_context_tool import GetMrCallFeatureContextTool
 
 __all__ = [
     # Variable utilities
@@ -36,8 +35,7 @@ __all__ = [
     # Tools
     "GetAssistantCatalogTool",
     "ConfigureAssistantTool",
-    "SaveMrCallAdminRuleTool",
+    "GetMrCallFeatureContextTool",
     # Constants
-    "MRCALL_ADMIN_NAMESPACE",
-    "MRCALL_BUSINESS_PREFIX",
+    "VARIABLE_TO_FEATURE",
 ]

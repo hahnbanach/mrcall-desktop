@@ -302,6 +302,8 @@ class ToolFactory:
             tools.extend(ToolFactory._create_mrcall_tools(
                 starchat_client=starchat,
                 session_state=session_state,
+                storage=supabase_storage,
+                owner_id=config.owner_id,
                 api_key=config.anthropic_api_key,
                 provider=getattr(config, 'llm_provider', 'anthropic')
             ))
@@ -453,6 +455,8 @@ class ToolFactory:
     def _create_mrcall_tools(
         starchat_client,
         session_state: SessionState,
+        storage,
+        owner_id: str,
         api_key: str,
         provider: str
     ) -> List[Tool]:
@@ -462,20 +466,34 @@ class ToolFactory:
         Features:
         - Preview + confirm workflow for all changes
         - Variable preservation during prompt modifications
+        - Dynamic sub-prompt generation via MrCallConfiguratorTrainer
         """
         from .mrcall import (
             GetAssistantCatalogTool,
-            # TODO: ConfigureAssistantTool and SaveMrCallAdminRuleTool disabled - need migration to Supabase
-            # ConfigureAssistantTool,
-            # SaveMrCallAdminRuleTool,
+            ConfigureAssistantTool,
+        )
+        from .mrcall.feature_context_tool import GetMrCallFeatureContextTool
+        from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+
+        # Create trainer for sub-prompt generation
+        trainer = MrCallConfiguratorTrainer(
+            storage=storage,
+            starchat_client=starchat_client,
+            owner_id=owner_id,
+            api_key=api_key,
+            provider=provider,
         )
 
         return [
             GetAssistantCatalogTool(starchat_client, session_state),
-            # TODO: These tools need migration from legacy memory system to Supabase
-            # When re-enabled, pass api_key and provider:
-            # ConfigureAssistantTool(starchat_client, session_state, api_key, provider),
-            # SaveMrCallAdminRuleTool(starchat_client, session_state),
+            GetMrCallFeatureContextTool(trainer, session_state),
+            ConfigureAssistantTool(
+                starchat_client,
+                session_state,
+                trainer,
+                api_key,
+                provider,
+            ),
         ]
 
     @staticmethod
