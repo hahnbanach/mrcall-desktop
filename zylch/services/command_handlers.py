@@ -789,6 +789,14 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
     import httpx
     from zylch.config import settings
 
+    # Feature to variable mapping
+    FEATURE_TO_VARIABLE = {
+        "welcome_message": "OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT",
+        # Future mappings:
+        # "booking": "BOOKING_PROMPT",
+    }
+    SUPPORTED_FEATURES = list(FEATURE_TO_VARIABLE.keys())
+
     help_text = """**📞 MrCall Integration**
 
 **Commands:**
@@ -798,6 +806,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 • `/mrcall variables set <NAME> <VALUE>` - Set variable value
 • `/mrcall train [feature]` - Generate/refresh configuration context
 • `/mrcall show [feature]` - Show current configuration context
+• `/mrcall config <feature> "instructions"` - Configure assistant behavior
 • `/mrcall unlink` - Unlink current assistant
 • `/mrcall` - Show current link status
 
@@ -1149,6 +1158,176 @@ Run `/mrcall train {feature_name}` to generate the configuration context."""
 ---
 
 {sub_prompt}"""
+
+        # Subcommand: config - Configure assistant behavior
+        if subcommand == 'config':
+            import asyncio
+            from concurrent.futures import ThreadPoolExecutor
+            from zylch.api.token_storage import get_active_llm_provider
+            from zylch.tools.mrcall.llm_helper import modify_prompt_with_llm
+
+            # Validate args: config <feature> <instructions>
+            if len(positional) < 2:
+                return f"""❌ **Missing feature and instructions**
+
+**Usage:** `/mrcall config <feature> "instructions"`
+
+**Example:**
+```
+/mrcall config welcome_message "use formal tone (lei/Sie), don't ask for name"
+```
+
+**Supported features:** {', '.join(SUPPORTED_FEATURES)}"""
+
+            feature_name = positional[1]
+            if feature_name not in SUPPORTED_FEATURES:
+                return f"""❌ **Unknown feature:** `{feature_name}`
+
+**Supported features:** {', '.join(SUPPORTED_FEATURES)}"""
+
+            # Join remaining args as instructions (handles multi-line quoted strings)
+            instructions = ' '.join(positional[2:])
+            if not instructions:
+                return f"""❌ **Missing instructions**
+
+**Usage:** `/mrcall config {feature_name} "your instructions here"`
+
+**Example:**
+```
+/mrcall config welcome_message "use formal tone, don't ask for name"
+```"""
+
+            # Get MrCall credentials
+            creds = get_mrcall_credentials(owner_id)
+            if not creds or not creds.get('access_token'):
+                return "❌ **MrCall not connected**\n\nRun `/connect mrcall` first."
+
+            business_id = creds.get('business_id')
+            if not business_id:
+                business_id = client.get_mrcall_link(owner_id)
+            if not business_id:
+                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link N` first."
+
+            # Get LLM credentials
+            llm_provider, api_key = get_active_llm_provider(owner_id)
+            if not api_key:
+                return "❌ **No LLM configured**\n\nRun `/connect anthropic` to configure an LLM provider."
+
+            # Get variable name for this feature
+            variable_name = FEATURE_TO_VARIABLE[feature_name]
+
+            # Run the config update in executor (involves multiple async calls)
+            def _config_feature():
+                import asyncio
+                from zylch.tools.starchat import create_starchat_client
+                from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+
+                # Create a new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    # Create StarChat client
+                    starchat = loop.run_until_complete(create_starchat_client(owner_id))
+
+                    # 1. Load context (lazy generate if missing)
+                    agent_type = f"mrcall_{business_id}_{feature_name}"
+                    context = client.get_agent_prompt(owner_id, agent_type)
+
+                    trainer = MrCallConfiguratorTrainer(
+                        storage=client,
+                        starchat_client=starchat,
+                        owner_id=owner_id,
+                        api_key=api_key,
+                        provider=llm_provider,
+                    )
+
+                    if not context:
+                        # Generate it first
+                        logger.info(f"No context found for {feature_name}, generating...")
+                        context, _ = loop.run_until_complete(
+                            trainer.train_feature(feature_name, business_id)
+                        )
+
+                    # 2. Get current variable value
+                    business_data = loop.run_until_complete(
+                        starchat.get_business_config(business_id)
+                    )
+                    current_value = business_data.get("variables", {}).get(variable_name, "")
+
+                    if not current_value:
+                        loop.run_until_complete(starchat.close())
+                        return None, f"Variable `{variable_name}` not found in business config"
+
+                    # 3. Use LLM to modify the prompt based on context + instructions
+                    # Build a richer request that includes context
+                    enhanced_request = f"""Based on the configuration context below, apply these changes:
+
+{instructions}
+
+CONFIGURATION CONTEXT:
+{context}"""
+
+                    new_value, validation = loop.run_until_complete(
+                        modify_prompt_with_llm(
+                            current_prompt=current_value,
+                            user_request=enhanced_request,
+                            api_key=api_key,
+                            provider=llm_provider,
+                        )
+                    )
+
+                    # Check if modification was valid
+                    if validation.get("error"):
+                        loop.run_until_complete(starchat.close())
+                        return None, f"LLM modification error: {validation['error']}"
+
+                    # 4. Apply to StarChat
+                    loop.run_until_complete(
+                        starchat.update_business_variable(business_id, variable_name, new_value)
+                    )
+
+                    # 5. Retrain to update sub-prompt
+                    new_context, _ = loop.run_until_complete(
+                        trainer.train_feature(feature_name, business_id)
+                    )
+
+                    # Close starchat client
+                    loop.run_until_complete(starchat.close())
+
+                    return new_value, None
+                except Exception as e:
+                    logger.error(f"Config feature error: {e}", exc_info=True)
+                    return None, str(e)
+                finally:
+                    loop.close()
+
+            executor = ThreadPoolExecutor(max_workers=1)
+            loop = asyncio.get_event_loop()
+
+            try:
+                new_value, error = await loop.run_in_executor(executor, _config_feature)
+
+                if error:
+                    # Check for auth errors
+                    if any(code in error for code in ["405", "401", "403", "Unauthorized", "Forbidden"]):
+                        return "❌ **MrCall connection expired**\n\nRun `/connect mrcall` to reconnect."
+                    return f"❌ **Error configuring assistant:** {error}"
+
+                return f"""✅ **Configuration updated**
+
+**Feature:** {feature_name}
+**Instructions applied:**
+{instructions}
+
+The assistant behavior has been updated. Run `/mrcall show {feature_name}` to see the new configuration context."""
+
+            except Exception as e:
+                logger.error(f"Failed to config feature: {e}", exc_info=True)
+                error_str = str(e)
+                # Check for auth errors
+                if any(code in error_str for code in ["405", "401", "403", "Unauthorized", "Forbidden"]):
+                    return "❌ **MrCall connection expired**\n\nRun `/connect mrcall` to reconnect."
+                return f"❌ **Error configuring assistant:** {error_str}"
 
         # No subcommand: show status
         if subcommand is None:
@@ -2005,7 +2184,7 @@ Use `/agent process` to extract facts from synced data into memory.''',
     },
     '/mrcall': {
         'summary': 'MrCall integration',
-        'usage': '/mrcall [list|link N|unlink|variables|train|show]',
+        'usage': '/mrcall [list|link N|unlink|variables|train|show|config]',
         'description': '''Manage MrCall telephony integration.
 
 **Subcommands:**
@@ -2017,6 +2196,7 @@ Use `/agent process` to extract facts from synced data into memory.''',
 - `variables set <NAME> <VALUE>` - Set variable value
 - `train [feature]` - Generate configuration context for a feature
 - `show [feature]` - Display current configuration context
+- `config <feature> "instructions"` - Configure assistant behavior
 
 **Features:** welcome_message (how the assistant answers the phone)
 
@@ -2026,6 +2206,7 @@ Use `/agent process` to extract facts from synced data into memory.''',
 - `/mrcall link 1` - Connect to first assistant
 - `/mrcall train` - Generate context for welcome_message
 - `/mrcall show welcome_message` - Show current context
+- `/mrcall config welcome_message "use formal tone"` - Configure behavior
 - `/mrcall variables` - List all variables''',
     },
     '/share': {

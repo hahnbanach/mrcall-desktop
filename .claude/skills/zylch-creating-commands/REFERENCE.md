@@ -208,3 +208,221 @@ except Exception as e:
     logger.error(f"Command failed: {e}")
     return f"❌ **Error:** {str(e)}"
 ```
+
+---
+
+## Help Text Updates (CRITICAL)
+
+When creating/modifying a command, update help in **TWO places**:
+
+### 1. Inline help_text in handler
+
+```python
+async def handle_mycommand(args: List[str], config, owner_id: str) -> str:
+    """Handle /mycommand."""
+
+    help_text = """**📋 My Command**
+
+**Commands:**
+• `/mycommand action` - Do something
+• `/mycommand status` - Check status
+
+**Examples:**
+• `/mycommand action "some input"`"""
+
+    if '--help' in args:
+        return help_text
+
+    # ... rest of handler
+```
+
+### 2. COMMAND_REGISTRY dict (bottom of command_handlers.py, ~line 2100+)
+
+```python
+COMMAND_REGISTRY = {
+    # ... existing commands ...
+    '/mycommand': {
+        'summary': 'Short description for /help listing',
+        'usage': '/mycommand [action|status]',
+        'description': '''Detailed description shown by `/mycommand --help`.
+
+**Subcommands:**
+- `action` - Do something
+- `status` - Check status
+
+**Examples:**
+- `/mycommand action "input"` - Example usage''',
+    },
+}
+```
+
+---
+
+## Adding Subcommands to Existing Commands
+
+When adding a subcommand (like `config` to `/mrcall`):
+
+```python
+async def handle_existingcommand(args: List[str], owner_id: str, ...) -> str:
+    # Parse positional args (exclude --options)
+    positional = [a for a in args if not a.startswith('--')]
+    subcommand = positional[0].lower() if positional else None
+
+    # ... existing subcommands ...
+
+    # NEW: Add your subcommand
+    if subcommand == 'newaction':
+        # Get remaining args after subcommand
+        feature = positional[1] if len(positional) > 1 else None
+        content = ' '.join(positional[2:])  # Multi-line content from quotes
+
+        # Validate
+        if not feature:
+            return "❌ Missing feature\n\nUsage: `/command newaction <feature>`"
+
+        # ... implementation ...
+
+        return f"✅ Done: {feature}"
+```
+
+**Don't forget to update:**
+1. The `help_text` variable at the top of the handler
+2. The `COMMAND_REGISTRY` entry at the bottom of command_handlers.py
+
+---
+
+## Multi-Line Input Handling
+
+`shlex.split()` in `chat_service.py` (line ~228) preserves quoted content:
+
+```python
+# User input: /memory store "line 1
+# line 2
+# line 3"
+#
+# args = ['store', 'line 1\nline 2\nline 3']
+
+# Join args after subcommand for multi-line content:
+content = ' '.join(positional[2:])
+```
+
+Triple quotes (`"""..."""`) and regular quotes (`"..."`) both work.
+
+---
+
+## Template: run_in_executor with Async Calls
+
+When blocking work includes async calls, create a new event loop in the thread:
+
+```python
+async def handle_mycommand(args: List[str], config, owner_id: str) -> str:
+    """Handle /mycommand - uses async APIs in executor."""
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    from zylch.tools.starchat import create_starchat_client
+
+    def _blocking_work():
+        # Create new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            # Async calls inside sync function
+            client = loop.run_until_complete(create_starchat_client(owner_id))
+            result = loop.run_until_complete(client.get_something())
+            loop.run_until_complete(client.close())
+            return result, None
+        except Exception as e:
+            return None, str(e)
+        finally:
+            loop.close()
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    loop = asyncio.get_event_loop()
+
+    try:
+        result, error = await loop.run_in_executor(executor, _blocking_work)
+
+        if error:
+            # Check for auth errors
+            if any(code in error for code in ["405", "401", "403"]):
+                return "❌ **Connection expired**\n\nRun `/connect mrcall` to reconnect."
+            return f"❌ **Error:** {error}"
+
+        return f"✅ Result: {result}"
+    except Exception as e:
+        return f"❌ **Error:** {str(e)}"
+```
+
+---
+
+## LLM Helper Patterns
+
+For commands that need LLM:
+
+```python
+from zylch.api.token_storage import get_active_llm_provider
+from zylch.tools.mrcall.llm_helper import modify_prompt_with_llm
+
+# Get user's LLM credentials (BYOK - Bring Your Own Key)
+llm_provider, api_key = get_active_llm_provider(owner_id)
+if not api_key:
+    return "❌ **No LLM configured**\n\nRun `/connect anthropic` first."
+
+# Call LLM to modify a prompt (preserves %%...%% variables)
+new_value, validation = await modify_prompt_with_llm(
+    current_prompt=current_value,
+    user_request=instructions,
+    api_key=api_key,
+    provider=llm_provider,
+)
+
+# Check for validation errors
+if validation.get("error"):
+    return f"❌ **LLM error:** {validation['error']}"
+```
+
+---
+
+## External API Patterns (StarChat/MrCall)
+
+```python
+from zylch.api.token_storage import get_mrcall_credentials
+from zylch.tools.starchat import create_starchat_client
+
+# Get OAuth credentials
+creds = get_mrcall_credentials(owner_id)
+if not creds or not creds.get('access_token'):
+    return "❌ **MrCall not connected**\n\nRun `/connect mrcall` first."
+
+business_id = creds.get('business_id')
+if not business_id:
+    return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link N`."
+
+# Create client (async)
+starchat = await create_starchat_client(owner_id)
+
+try:
+    # Use client
+    business = await starchat.get_business_config(business_id)
+    await starchat.update_business_variable(business_id, var_name, new_value)
+finally:
+    # Always close
+    await starchat.close()
+```
+
+---
+
+## Auth Error Handling Pattern
+
+Always check for auth errors and suggest reconnection:
+
+```python
+try:
+    result = await starchat.do_something()
+except Exception as e:
+    error_str = str(e)
+    # Detect various auth error codes
+    if any(code in error_str for code in ["405", "401", "403", "Unauthorized", "Forbidden"]):
+        return "❌ **Connection expired**\n\nRun `/connect mrcall` to reconnect."
+    return f"❌ **Error:** {error_str}"
+```
