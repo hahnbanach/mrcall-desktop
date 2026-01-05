@@ -1889,18 +1889,24 @@ Use `/agent process` to extract facts from synced data into memory.''',
     },
     '/mrcall': {
         'summary': 'MrCall integration',
-        'usage': '/mrcall [unlink] [<business_id>]',
+        'usage': '/mrcall [list|link N|unlink|variables]',
         'description': '''Manage MrCall telephony integration.
 
 **Subcommands:**
-- (none) - Show current MrCall connection status
-- `unlink` - Disconnect MrCall integration
-- `<business_id>` - Link to specific business
+- (none) - Show current connection status
+- `list` - List your MrCall assistants
+- `link N` - Link to assistant #N from the list
+- `unlink` - Disconnect current assistant
+- `variables [get] [--name NAME]` - List/filter variables
+- `variables set <NAME> <VALUE>` - Set variable value
 
 **Examples:**
 - `/mrcall` - Show connection status
-- `/mrcall unlink` - Disconnect MrCall
-- `/mrcall 12345` - Link to business 12345''',
+- `/mrcall list` - See your assistants
+- `/mrcall link 1` - Connect to first assistant
+- `/mrcall unlink` - Disconnect
+- `/mrcall variables` - List all variables
+- `/mrcall variables set GREETING "Hello!"` - Set a variable''',
     },
     '/share': {
         'summary': 'Share access with others',
