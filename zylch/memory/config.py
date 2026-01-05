@@ -1,4 +1,4 @@
-"""Configuration for ZylchMemory."""
+"""Configuration for Memory system."""
 
 from pathlib import Path
 from typing import Optional
@@ -7,16 +7,16 @@ from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
-class ZylchMemoryConfig(BaseSettings):
-    """Configuration for ZylchMemory system.
+class MemoryConfig(BaseSettings):
+    """Configuration for Memory system.
 
-    All settings can be overridden via environment variables with prefix ZYLCH_MEMORY_
-    Example: ZYLCH_MEMORY_DB_PATH=/custom/path/memory.db
+    All settings can be overridden via environment variables with prefix MEMORY_
+    Example: MEMORY_DB_PATH=/custom/path/memory.db
     """
 
     # Storage paths
     db_path: Path = Field(
-        default=Path(".swarm/zylch_memory.db"),
+        default=Path(".swarm/memory.db"),
         description="SQLite database file path"
     )
     index_dir: Path = Field(
@@ -119,7 +119,7 @@ class ZylchMemoryConfig(BaseSettings):
     )
 
     class Config:
-        env_prefix = "ZYLCH_MEMORY_"
+        env_prefix = "MEMORY_"
         case_sensitive = False
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -127,4 +127,4 @@ class ZylchMemoryConfig(BaseSettings):
 
 
 # Global default config instance
-default_config = ZylchMemoryConfig()
+default_config = MemoryConfig()

@@ -41,7 +41,7 @@ class SessionState:
 
 from .config import ToolConfig
 from ..config import settings
-from zylch.memory import EmbeddingEngine, HybridSearchEngine, ZylchMemoryConfig
+from zylch.memory import EmbeddingEngine, HybridSearchEngine, MemoryConfig
 from .gcalendar import (
     ListCalendarEventsTool,
     CreateCalendarEventTool,
@@ -63,16 +63,11 @@ from .email_sync import EmailSyncManager
 # TaskManager removed - tasks now served via task_items table
 from ..memory import EmbeddingEngine
 from ..assistant.models import ModelSelector
-# Triggered instruction tools disabled - pending migration to Supabase triggers table
-# from .instruction_tools import (
-#     AddTriggeredInstructionTool,
-#     ListTriggeredInstructionsTool,
-#     RemoveTriggeredInstructionTool,
-# )
+
 from .sms_tools import (
     SendSMSTool,
     SendVerificationCodeTool,
-    # VerifyCodeTool disabled - needs migration to Supabase verification_codes table
+    VerifyCodeTool,
 )
 from .call_tools import InitiateCallTool
 from .scheduler_tools import (
@@ -252,7 +247,7 @@ class ToolFactory:
             # Initialize hybrid search engine for blob search
             from zylch.storage.supabase_client import SupabaseStorage
             supabase_storage = SupabaseStorage.get_instance()
-            mem_config = ZylchMemoryConfig()
+            mem_config = MemoryConfig()
             embedding_engine = EmbeddingEngine(mem_config)
             search_engine = HybridSearchEngine(
                 supabase_client=supabase_storage.client,
@@ -322,13 +317,7 @@ class ToolFactory:
             tools.extend(sharing_tools)
             logger.info(f"Sharing tools initialized ({len(sharing_tools)} tools)")
 
-        # Triggered instruction tools (3 tools) - for event-driven automation
-        # TODO: These tools currently disabled - need to be updated to use Supabase triggers table
-        # tools.extend(ToolFactory._create_trigger_tools(
-        #     owner_id=config.owner_id,
-        #     zylch_assistant_id=config.zylch_assistant_id
-        # ))
-        # logger.info("Triggered instruction tools initialized")
+
 
         # SMS tools (always available - credentials loaded per-user at execution time)
         tools.extend(ToolFactory._create_sms_tools(
@@ -483,7 +472,7 @@ class ToolFactory:
 
         return [
             GetAssistantCatalogTool(starchat_client, session_state),
-            # TODO: These tools need migration from zylch_memory to Supabase
+            # TODO: These tools need migration from legacy memory system to Supabase
             # When re-enabled, pass api_key and provider:
             # ConfigureAssistantTool(starchat_client, session_state, api_key, provider),
             # SaveMrCallAdminRuleTool(starchat_client, session_state),
@@ -498,7 +487,7 @@ class ToolFactory:
     ) -> List[Tool]:
         """Create intelligence sharing tools.
 
-        TODO: These tools currently disabled - need migration from zylch_memory to Supabase blobs.
+        TODO: These tools currently disabled - need migration from legacy memory system to Supabase blobs.
         """
         # TODO: Re-enable when IntelShareManager is migrated to use Supabase blobs
         # from .sharing_tools import (
@@ -510,8 +499,7 @@ class ToolFactory:
         # from ..sharing import SharingAuthorizationManager, IntelShareManager
         return []
 
-    # _create_trigger_tools removed - tools disabled pending migration to Supabase triggers table
-    # See instruction_tools.py for the tool implementations
+
 
     @staticmethod
     def _create_sms_tools(
@@ -526,7 +514,7 @@ class ToolFactory:
         Tools:
         - send_sms: Send a text message to a phone number
         - send_verification_code: Send a 6-digit code for phone verification
-        NOTE: verify_sms_code disabled - needs migration to Supabase verification_codes table
+        - verify_sms_code: Verify a code that was sent via SMS
         """
         return [
             SendSMSTool(session_state=session_state),
@@ -535,8 +523,7 @@ class ToolFactory:
                 owner_id=owner_id,
                 zylch_assistant_id=zylch_assistant_id
             ),
-            # TODO: VerifyCodeTool disabled - needs migration to Supabase verification_codes table
-            # VerifyCodeTool(owner_id=owner_id, zylch_assistant_id=zylch_assistant_id),
+            VerifyCodeTool(owner_id=owner_id, zylch_assistant_id=zylch_assistant_id),
         ]
 
     @staticmethod

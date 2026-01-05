@@ -6,8 +6,8 @@ Provides tools for configuring MrCall AI phone assistants:
 - save_mrcall_admin_rule: Save admin-level rules (explicit command only)
 
 TODO: ConfigureAssistantTool and SaveMrCallAdminRuleTool are currently disabled in factory.py
-because they depend on the removed zylch_memory system. They need to be migrated to use
-Supabase tables for admin rules and modification templates.
+# because they depend on the removed legacy memory system. They need to be migrated to use
+# Supabase tables for admin rules and modification templates.
 """
 
 import logging
@@ -189,7 +189,7 @@ class ConfigureAssistantTool(Tool):
         self,
         starchat_client,
         session_state: SessionState,
-        zylch_memory,
+        memory_system,
         anthropic_api_key: str
     ):
         super().__init__(
@@ -203,7 +203,7 @@ class ConfigureAssistantTool(Tool):
         )
         self.starchat = starchat_client
         self.session_state = session_state
-        self.memory = zylch_memory
+        self.memory = memory_system
         self.anthropic_api_key = anthropic_api_key
 
     async def execute(
@@ -477,7 +477,7 @@ class SaveMrCallAdminRuleTool(Tool):
         self,
         starchat_client,
         session_state: SessionState,
-        zylch_memory
+        memory_system
     ):
         super().__init__(
             name="save_mrcall_admin_rule",
@@ -490,7 +490,7 @@ class SaveMrCallAdminRuleTool(Tool):
         )
         self.starchat = starchat_client
         self.session_state = session_state
-        self.memory = zylch_memory
+        self.memory = memory_system
 
     async def execute(
         self,

@@ -798,8 +798,10 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 **Commands:**
 • `/mrcall list` - List your MrCall assistants
 • `/mrcall link N` - Link to assistant #N from the list
-• `/mrcall variables` - List all variables with descriptions
-• `/mrcall unlink` - Remove current link
+• `/mrcall variables [get] [--name NAME]` - List/filter variables
+• `/mrcall variables set <NAME> <VALUE>` - Set variable value
+• `/mrcall link N` - Link to assistant #N
+• `/mrcall unlink` - Unlink current assistant
 • `/mrcall` - Show current link status
 
 **Setup:**
@@ -901,6 +903,46 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
             if not business_id:
                 return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link N` to select one."
 
+            # Check for sub-subcommand (get/set)
+            # args[0] is 'variables'. Check args[1]
+            var_subcommand = args[1].lower() if len(args) > 1 else 'get'
+            
+            # Sub-subcommand: set VARIABLE value
+            if var_subcommand == 'set':
+                if len(args) < 4:
+                    return "❌ **Usage:** `/mrcall variables set <VARIABLE_NAME> <value>`"
+                
+                var_name = args[2]
+                # Join all remaining args to allow spaces without strict quoting if user prefers
+                # But since shlex split the input, quotes are already handled.
+                # If user typed: set VAR "my value", args=['variables', 'set', 'VAR', 'my value'] -> value='my value'
+                # If user typed: set VAR my value, args=['variables', 'set', 'VAR', 'my', 'value'] -> value='my value'
+                var_value = " ".join(args[3:])
+                
+                # Use factory to get client
+                from zylch.tools.starchat import create_starchat_client
+                sc_client = await create_starchat_client(owner_id)
+                
+                try:
+                    await sc_client.update_business_variable(business_id, var_name, var_value)
+                    await sc_client.close()
+                    return f"✅ **Variable Updated**\n\n**{var_name}** set to: `{var_value}`"
+                except Exception as e:
+                    await sc_client.close()
+                    logger.error(f"Failed to update variable: {e}")
+                    return f"❌ **Error updating variable:** {str(e)}"
+
+            # Sub-subcommand: get (default)
+            # Usage: /mrcall variables get [--name FILTER]
+            filter_name = None
+            if '--name' in args:
+                try:
+                    name_idx = args.index('--name')
+                    if name_idx + 1 < len(args):
+                        filter_name = args[name_idx + 1]
+                except ValueError:
+                    pass
+
             # Use factory to get client
             from zylch.tools.starchat import create_starchat_client
             sc_client = await create_starchat_client(owner_id)
@@ -912,16 +954,18 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
                 if not variables:
                     return f"**📋 MrCall Variables**\n\nNo variables found for business `{business_id}`."
                 
+                # Filter if requested
+                if filter_name:
+                    variables = [v for v in variables if filter_name.upper() in v['name'].upper()]
+                    if not variables:
+                        return f"**📋 MrCall Variables**\n\nNo variables matching `*{filter_name}*` found."
+
                 output = f"**📋 MrCall Variables** ({len(variables)} found)\n\n"
                 for var in variables:
                     name = var['name']
                     desc = var['description']
                     val = var['value']
                     
-                    # Truncate value if too long (e.g. prompt text)
-                    if len(str(val)) > 100:
-                        val = str(val)[:100] + "..."
-                        
                     output += f"**{name}**: {desc}. Value: `{val}`\n\n"
                     
                 return output
@@ -3032,7 +3076,7 @@ COMMAND_HANDLERS = {
 # 2. Finds best semantic match using embeddings
 # 3. Extracts typed values from the original user input
 #
-COMMAND_TRIGGERS = {
+COMMAND_PATTERNS = {
     # --- Sync & Data ---
     '/sync': [
         "sync",
@@ -3079,39 +3123,23 @@ COMMAND_TRIGGERS = {
     '/help': [
         "help",
         "commands",
-        "what can you do",
-        "show me commands",
-        "help me",
-        "what commands are available",
-        "how do I use this",
-        "list available features",
-        "?",
-        "how to use",
-        "aiuto",
-        "ayuda",
-        "aide",
+        "update everything",
+        "synchronize",
     ],
 
-    # --- Memory System ---
+    # --- Memory ---
     '/memory': [
-        # Search
-        "search memory",
+        "who is {name:text}",
+        "what do you know about {name:text}",
         "search memory for {query:text}",
-        "who is {query:text}",
-        "what do you know about {query:text}",
         "find in memory {query:text}",
-        # Store
-        "store memory",
         "remember that {content:text}",
-        "save to memory {content:text}",
-        # Stats & List
+        "save to memory that {content:text}",
+        "store in memory {content:text}",
         "memory stats",
         "memory statistics",
-        "list memories",
         "show memories",
-        "show the last {limit:int} memories",
-        "list {limit:int} memories",
-        # Reset
+        "list memories",
         "reset memory",
         "clear memory",
         "delete all memories",
@@ -3194,6 +3222,15 @@ COMMAND_TRIGGERS = {
         "mrcall status",
         "telephone integration",
         "starchat integration",
+        # Variables
+        "show mrcall variables",
+        "list mrcall variables",
+        "what are the mrcall variables",
+        "show mrcall variable {name:text}",
+        "get mrcall variable {name:text}",
+        "what is the value of mrcall variable {name:text}",
+        "value of mrcall variable {name:text}",
+        "search mrcall variable {name:text}",
     ],
 
     # --- Email (NEW - replaces Gmail tools) ---

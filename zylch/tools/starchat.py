@@ -685,8 +685,12 @@ class StarChatClient:
         business_data["variables"][variable_name] = value
 
         # PUT the updated business back
+        # CRITICAL: For OAuth/Delegated access, we must use the delegated_{realm} prefix
+        endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/business"
+        logger.info(f"Putting updated business to: {endpoint}")
+        
         response = await self.client.put(
-            "/mrcall/v1/crm/business",
+            endpoint,
             json=business_data,
         )
         response.raise_for_status()

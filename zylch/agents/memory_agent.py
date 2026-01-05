@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 from zylch.config import settings
 from zylch.llm import LLMClient
 from zylch.storage.supabase_client import SupabaseStorage
-from zylch.memory import BlobStorage, HybridSearchEngine, LLMMergeService, EmbeddingEngine, ZylchMemoryConfig
+from zylch.memory import BlobStorage, HybridSearchEngine, LLMMergeService, EmbeddingEngine, MemoryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class MemoryWorker:
             )
 
         # Initialize components
-        config = ZylchMemoryConfig()
+        config = MemoryConfig()
         self.embedding_engine = EmbeddingEngine(config)
         self.blob_storage = BlobStorage(
             storage.client,

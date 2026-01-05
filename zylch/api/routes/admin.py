@@ -38,7 +38,7 @@ async def clear_memory(confirm: bool = False):
     try:
         # Path to memory database
         cache_path = Path(settings.cache_dir)
-        memory_db = cache_path / "zylch_memory.db"
+        memory_db = cache_path / "memory.db"
         indices_dir = cache_path / "indices"
 
         deleted_files = []

@@ -133,7 +133,7 @@ class SendVerificationCodeTool(Tool):
     This is useful for verifying phone ownership before making outbound calls.
 
     TODO: This tool needs migration to use Supabase `verification_codes` table
-    instead of the removed zylch_memory system.
+    instead of the removed legacy memory system.
     """
 
     def __init__(self, session_state, owner_id: str, zylch_assistant_id: str):
@@ -163,12 +163,53 @@ class SendVerificationCodeTool(Tool):
         Returns:
             ToolResult with verification details (code is NOT included for security)
         """
-        # TODO: This tool is temporarily disabled pending migration to Supabase
-        # Need to create `verification_codes` table and update this code
+        if not self.owner_id:
+            return ToolResult(
+                status=ToolStatus.ERROR,
+                data=None,
+                error="User not authenticated"
+            )
+
+        # Generate code
+        code = self._generate_code()
+        
+        # Store in Supabase
+        try:
+            from zylch.storage.supabase_client import SupabaseStorage
+            storage = SupabaseStorage.get_instance()
+            storage.create_verification_code(
+                owner_id=self.owner_id,
+                phone_number=phone_number,
+                code=code,
+                context=context
+            )
+        except Exception as e:
+            return ToolResult(
+                status=ToolStatus.ERROR,
+                data=None,
+                error=f"Failed to store verification code: {e}"
+            )
+
+        # Send via SMS
+        # We reuse SendSMSTool logic or call it directly? 
+        # Better to use the session's SendSMSTool if available, or duplicate logic.
+        # Since this is a separate tool, we duplicate the Vonage logic or instantiate SendSMSTool.
+        # Let's instantiate SendSMSTool.
+        
+        sms_tool = SendSMSTool(session_state=self.session_state)
+        result = await sms_tool.execute(
+            phone_number=phone_number,
+            message=f"Your Zylch verification code is: {code}",
+            sender_name="Zylch"
+        )
+        
+        if result.status == ToolStatus.ERROR:
+            return result
+            
         return ToolResult(
-            status=ToolStatus.ERROR,
-            data=None,
-            error="Phone verification temporarily unavailable. Feature pending migration."
+            status=ToolStatus.SUCCESS,
+            data={"status": "sent", "recipient": phone_number},
+            message=f"Verification code sent to {phone_number}"
         )
 
     def get_schema(self) -> Dict[str, Any]:
@@ -196,7 +237,7 @@ class VerifyCodeTool(Tool):
     """Verify a code that was sent via SMS.
 
     TODO: This tool needs migration to use Supabase `verification_codes` table
-    instead of the removed zylch_memory system.
+    instead of the removed legacy memory system.
     """
 
     def __init__(self, owner_id: str, zylch_assistant_id: str):
@@ -221,13 +262,34 @@ class VerifyCodeTool(Tool):
         Returns:
             ToolResult indicating if verification was successful
         """
-        # TODO: This tool is temporarily disabled pending migration to Supabase
-        # Need to create `verification_codes` table and update this code
-        return ToolResult(
-            status=ToolStatus.ERROR,
-            data=None,
-            error="Phone verification temporarily unavailable. Feature pending migration."
-        )
+        try:
+            from zylch.storage.supabase_client import SupabaseStorage
+            storage = SupabaseStorage.get_instance()
+            is_valid = storage.verify_code(
+                owner_id=self.owner_id,
+                phone_number=phone_number,
+                code=code
+            )
+            
+            if is_valid:
+                return ToolResult(
+                    status=ToolStatus.SUCCESS,
+                    data={"verified": True},
+                    message=f"Phone number {phone_number} verified successfully!"
+                )
+            else:
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data={"verified": False},
+                    error="Invalid or expired verification code."
+                )
+                
+        except Exception as e:
+            return ToolResult(
+                status=ToolStatus.ERROR,
+                data=None,
+                error=f"Verification failed: {e}"
+            )
 
     def get_schema(self) -> Dict[str, Any]:
         return {

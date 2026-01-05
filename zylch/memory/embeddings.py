@@ -6,7 +6,7 @@ from typing import List, Union
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from .config import ZylchMemoryConfig
+from .config import MemoryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +18,11 @@ class EmbeddingEngine:
     Supports batch processing for efficiency.
     """
 
-    def __init__(self, config: ZylchMemoryConfig):
+    def __init__(self, config: MemoryConfig):
         """Initialize embedding engine.
 
         Args:
-            config: ZylchMemory configuration
+            config: Memory configuration
         """
         self.config = config
         self.model_name = config.embedding_model

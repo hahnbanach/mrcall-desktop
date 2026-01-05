@@ -19,12 +19,12 @@ def _get_embedding_engine():
     global _embedding_engine
     if _embedding_engine is None:
         try:
-            from zylch.memory import EmbeddingEngine, ZylchMemoryConfig
-            config = ZylchMemoryConfig()
+            from zylch.memory import EmbeddingEngine, MemoryConfig
+            config = MemoryConfig()
             _embedding_engine = EmbeddingEngine(config)
             logger.info("EmbeddingEngine initialized for email semantic search")
         except ImportError:
-            logger.warning("zylch_memory not available, embeddings disabled")
+            logger.warning("Memory system not available, embeddings disabled")
             return None
     return _embedding_engine
 
@@ -2297,6 +2297,106 @@ class SupabaseStorage:
         self,
         sample: dict
     ) -> Dict[str, Any]:
+        """Store a training sample for future ML improvements.
+
+        Args:
+            sample: Dictionary containing original thread data and user correction
+
+        Returns:
+            Stored sample record
+        """
+        result = self.client.table('triage_training_samples').insert({
+            'original_data': sample['original_data'],
+            'user_correction': sample['user_correction'],
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }).execute()
+
+        logger.info("Stored training sample for email triage")
+        return result.data[0] if result.data else {}
+
+    # ==========================================
+    # VERIFICATION CODES
+    # ==========================================
+
+    def create_verification_code(
+        self,
+        owner_id: str,
+        phone_number: str,
+        code: str,
+        context: Optional[str] = None,
+        expires_in_minutes: int = 15
+    ) -> Dict[str, Any]:
+        """Create a verification code.
+
+        Args:
+            owner_id: Firebase UID
+            phone_number: Phone number to verify
+            code: The 6-digit code
+            context: Optional context (e.g. 'callback request')
+            expires_in_minutes: Expiration time (default 15)
+
+        Returns:
+            Created verification record
+        """
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_in_minutes)
+
+        data = {
+            'owner_id': owner_id,
+            'phone_number': phone_number,
+            'code': code,
+            'context': context,
+            'expires_at': expires_at.isoformat(),
+            'verified': False,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        result = self.client.table('verification_codes').insert(data).execute()
+        return result.data[0] if result.data else {}
+
+    def verify_code(
+        self,
+        owner_id: str,
+        phone_number: str,
+        code: str
+    ) -> bool:
+        """Verify a code.
+
+        Args:
+            owner_id: Firebase UID
+            phone_number: Phone number
+            code: The 6-digit code
+
+        Returns:
+            True if valid and verified
+        """
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Check for valid, unexpired, unverified code
+        result = self.client.table('verification_codes')\
+            .select('id')\
+            .eq('owner_id', owner_id)\
+            .eq('phone_number', phone_number)\
+            .eq('code', code)\
+            .eq('verified', False)\
+            .gt('expires_at', now)\
+            .order('created_at', desc=True)\
+            .limit(1)\
+            .execute()
+
+        if not result.data:
+            return False
+
+        # Mark as verified
+        record_id = result.data[0]['id']
+        self.client.table('verification_codes')\
+            .update({'verified': True, 'verified_at': now})\
+            .eq('id', record_id)\
+            .execute()
+
+        return True
+
+
+
         """Store a training sample for triage model improvement.
 
         Args:

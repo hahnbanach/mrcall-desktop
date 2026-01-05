@@ -68,16 +68,16 @@ class IntelShareManager:
 
     def __init__(
         self,
-        zylch_memory: ZylchMemory,
+        memory_system: ZylchMemory,
         auth_manager: SharingAuthorizationManager
     ):
         """Initialize intel share manager.
 
         Args:
-            zylch_memory: ZylchMemory instance for storing shared intel
+            memory_system: ZylchMemory instance for storing shared intel
             auth_manager: Authorization manager for checking permissions
         """
-        self.memory = zylch_memory
+        self.memory = memory_system
         self.auth_manager = auth_manager
 
     def _make_namespace(self, recipient_owner_id: str, sender_owner_id: str) -> str:

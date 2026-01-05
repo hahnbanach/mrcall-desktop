@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 
 from zylch.llm import LLMClient
 from zylch.storage.supabase_client import SupabaseStorage
-from zylch.memory import HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig
+from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 from zylch.memory.hybrid_search import SearchResult
 
 logger = logging.getLogger(__name__)
@@ -278,7 +278,7 @@ class EmailerAgent:
         self.owner_id = owner_id
 
         # Initialize hybrid search
-        config = ZylchMemoryConfig()
+        config = MemoryConfig()
         embedding_engine = EmbeddingEngine(config)
         search_engine = HybridSearchEngine(
             supabase_client=storage.client,
