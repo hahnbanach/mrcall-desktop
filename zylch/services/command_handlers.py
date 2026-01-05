@@ -5,13 +5,9 @@ No Anthropic API calls in these handlers.
 """
 import logging
 from datetime import datetime, timezone
-from typing import List, Dict, Any
-from pathlib import Path
-import json
-import uuid
+from typing import List
 
 from zylch.tools.config import ToolConfig
-from zylch.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -1437,8 +1433,6 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch.api.token_storage import get_provider, get_email
     from datetime import datetime, timezone, timedelta
-    import uuid
-    import shlex
 
     help_text = """**📧 Email Command**
 
@@ -2015,7 +2009,6 @@ Use `/agent process` to extract facts from synced data into memory.''',
 async def handle_stats(args: List[str], owner_id: str) -> str:
     """Handle /stats command - email statistics."""
     from zylch.storage.supabase_client import SupabaseStorage
-    from datetime import datetime, timedelta, timezone
 
     help_text = """**📊 Email Statistics**
 
@@ -2091,7 +2084,6 @@ Run `/sync` to update or `/tasks` for details."""
 async def handle_calendar(args: List[str], config: ToolConfig, owner_id: str) -> str:
     """Handle /calendar command - list calendar events."""
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch.api.token_storage import get_provider, get_email
     from datetime import datetime, timedelta, timezone
 
     help_text = """**📅 Calendar**
@@ -2759,7 +2751,7 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 
 async def _handle_memory_train(storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str) -> str:
     """Train memory extraction agent for specified channel."""
-    from zylch.services.email_memory_agent_trainer import EmailMemoryAgentTrainer
+    from zylch.agents.email_memory_agent_trainer import EmailMemoryAgentTrainer
 
     if not api_key or not llm_provider:
         return """❌ **LLM API key required**
@@ -2880,7 +2872,7 @@ Job ID: `{job['id']}`
 
 async def _handle_task_train(storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str) -> str:
     """Train task detection agent for specified channel."""
-    from zylch.services.email_task_agent_trainer import EmailTaskAgentTrainer
+    from zylch.agents.email_task_agent_trainer import EmailTaskAgentTrainer
 
     if not api_key or not llm_provider:
         return """❌ **LLM API key required**
@@ -3239,7 +3231,7 @@ COMMAND_PATTERNS = {
         "search mrcall variable {name:text}",
     ],
 
-    # --- Email (NEW - replaces Gmail tools) ---
+    # --- Email ---
     '/email': [
         # Drafts - List
         "list drafts",
