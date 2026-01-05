@@ -9,7 +9,7 @@ from zylch.api.firebase_auth import get_current_user, get_user_id_from_token
 from zylch.storage.supabase_client import SupabaseStorage
 from zylch.config import settings
 
-from zylch.memory import EmbeddingEngine, ZylchMemoryConfig, BlobStorage, HybridSearchEngine, LLMMergeService
+from zylch.memory import EmbeddingEngine, MemoryConfig, BlobStorage, HybridSearchEngine, LLMMergeService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -27,7 +27,7 @@ def get_supabase():
 def get_embedding_engine() -> EmbeddingEngine:
     global _embedding_engine
     if _embedding_engine is None:
-        config = ZylchMemoryConfig()
+        config = MemoryConfig()
         _embedding_engine = EmbeddingEngine(config)
     return _embedding_engine
 

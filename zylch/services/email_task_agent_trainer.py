@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from zylch.config import settings
 from zylch.llm import LLMClient, PROVIDER_MODELS
 from zylch.storage.supabase_client import SupabaseStorage
-from zylch.memory import HybridSearchEngine, EmbeddingEngine, ZylchMemoryConfig
+from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ class EmailTaskAgentTrainer:
         self.user_domain = user_email.split('@')[1].lower() if user_email and '@' in user_email else ''
 
         # Initialize hybrid search for blob retrieval
-        config = ZylchMemoryConfig()
+        config = MemoryConfig()
         self.embedding_engine = EmbeddingEngine(config)
         self.hybrid_search = HybridSearchEngine(
             storage.client,

@@ -11,19 +11,30 @@ Example:
 """
 
 import logging
-from typing import Optional, Dict, Any
+import time
+from dataclasses import dataclass
+from typing import Optional, Dict, Any, List, Tuple
+import re
 
-from zylch.services.trigger_parser import TriggerParser, MatchResult
-from zylch.services.command_handlers import COMMAND_TRIGGERS
+from zylch.services.command_handlers import COMMAND_PATTERNS
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MatchResult:
+    """Result of a semantic match."""
+    command: str
+    confidence: float
+    matched_template: str
+    params: Dict[str, Any]
 
 
 class SemanticCommandMatcher:
     """
     Matches natural language input to slash commands.
 
-    Uses semantic embeddings to find the best matching command trigger,
+    Uses semantic embeddings to find the best matching command pattern,
     then extracts typed parameters and formats the final command string.
     """
 
@@ -32,26 +43,23 @@ class SemanticCommandMatcher:
 
     def __init__(self):
         """Initialize the matcher with lazy-loaded embedding engine."""
-        self._parser: Optional[TriggerParser] = None
+        self._embedding_engine = None
         self._initialized = False
 
     def _ensure_initialized(self):
-        """Lazy initialization of the trigger parser."""
+        """Lazy initialization of the embedding engine."""
         if self._initialized:
             return
 
         try:
             logger.info("[CommandMatcher] Initializing SemanticCommandMatcher...")
-            from zylch.memory import EmbeddingEngine, ZylchMemoryConfig
-            config = ZylchMemoryConfig()
-            embedding_engine = EmbeddingEngine(config)
+            from zylch.memory import EmbeddingEngine, MemoryConfig
+            config = MemoryConfig()
+            self._embedding_engine = EmbeddingEngine(config)
             logger.info("[CommandMatcher] EmbeddingEngine created")
-            self._parser = TriggerParser(embedding_engine, COMMAND_TRIGGERS)
-            self._parser.MIN_CONFIDENCE = self.MIN_CONFIDENCE
-            logger.info(f"[CommandMatcher] MIN_CONFIDENCE={self.MIN_CONFIDENCE}")
-            self._parser.initialize()
+            
             self._initialized = True
-            logger.info(f"[CommandMatcher] SemanticCommandMatcher initialized with {len(COMMAND_TRIGGERS)} commands")
+            logger.info(f"[CommandMatcher] SemanticCommandMatcher initialized with {len(COMMAND_PATTERNS)} patterns")
         except Exception as e:
             logger.error(f"[CommandMatcher] Failed to initialize: {e}", exc_info=True)
             self._initialized = False
@@ -68,23 +76,55 @@ class SemanticCommandMatcher:
         """
         self._ensure_initialized()
 
-        if not self._parser:
-            logger.warning("[CommandMatcher] Parser not initialized, returning None")
+        if not self._embedding_engine:
+            logger.warning("[CommandMatcher] Engine not initialized, returning None")
             return None
 
-        # Get match result with parameters
-        logger.info(f"[CommandMatcher] Matching: '{user_message}'")
-        result = self._parser.match(user_message)
-
-        if not result:
-            logger.info(f"[CommandMatcher] No match found for: '{user_message}'")
+        # 1. Embed user message
+        try:
+            user_embedding = self._embedding_engine.embed_text(user_message)
+        except Exception as e:
+            logger.error(f"[CommandMatcher] Embedding failed: {e}")
             return None
+
+        # 2. Find best match among all patterns
+        best_score = -1.0
+        best_command = None
+        best_template = None
+
+        # Iterate through all commands and their patterns
+        for command, templates in COMMAND_PATTERNS.items():
+            for template in templates:
+                # Remove parameter types for embedding comparison (e.g. "{limit:int}" -> "limit")
+                # This makes "show 5 drafts" match better with "show drafts" semantically
+                clean_template = re.sub(r'\{([^:}]+)(?::[^}]+)?\}', r'\1', template)
+                
+                try:
+                    template_embedding = self._embedding_engine.embed_text(clean_template)
+                    score = self._embedding_engine.cosine_similarity(user_embedding, template_embedding)
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_command = command
+                        best_template = template
+                except Exception:
+                    continue
+
+        if not best_command or best_score < self.MIN_CONFIDENCE:
+            logger.info(f"[CommandMatcher] No match or low confidence ({best_score:.2f}) for: '{user_message}'")
+            return None
+
+        # 3. Extract parameters
+        params = self._extract_params(user_message, best_template)
+
+        result = MatchResult(
+            command=best_command,
+            confidence=best_score,
+            matched_template=best_template,
+            params=params
+        )
 
         logger.info(f"[CommandMatcher] Raw match: command={result.command}, confidence={result.confidence:.2f}, template='{result.matched_template}'")
-
-        if result.confidence < self.MIN_CONFIDENCE:
-            logger.info(f"[CommandMatcher] Confidence too low: {result.confidence:.2f} < {self.MIN_CONFIDENCE} for '{user_message}'")
-            return None
 
         # Format the command with extracted parameters
         command = self._format_command(result, user_message)
@@ -95,6 +135,59 @@ class SemanticCommandMatcher:
         )
 
         return command
+
+    def _extract_params(self, user_message: str, template: str) -> Dict[str, Any]:
+        """
+        Extract parameters from user message based on template variables.
+        Simple heuristic extraction since we don't have a rigid parser.
+        
+        Supported types in template: {name:type}
+        - int: Extract numbers
+        - email: Extract emails
+        - date: Extract date-like strings (simplified)
+        - text: Catch-all
+        """
+        params = {}
+        
+        # Find all typed variables in template: {param:type}
+        var_matches = re.findall(r'\{([^:}]+):([^}]+)\}', template)
+        
+        for var_name, var_type in var_matches:
+            val = None
+            if var_type == 'int':
+                # Find first number
+                match = re.search(r'\b(\d+)\b', user_message)
+                if match:
+                    val = match.group(1)
+            elif var_type == 'email':
+                # Find email
+                match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', user_message)
+                if match:
+                    val = match.group(0)
+            elif var_type == 'date':
+                # Very basic date extraction - looking for common patterns
+                # In a real system this would use dateparser
+                match = re.search(r'\b(today|tomorrow|yesterday|\d{4}-\d{2}-\d{2})\b', user_message.lower())
+                if match:
+                    val = match.group(0)
+            elif var_type == 'time':
+                match = re.search(r'\b(\d{1,2}:\d{2}(?:\s?[ap]m)?)\b', user_message.lower())
+                if match:
+                    val = match.group(0)
+            elif var_type == 'duration':
+                match = re.search(r'\b(\d+\s*(?:minutes?|hours?|days?|mins?|hrs?))\b', user_message.lower())
+                if match:
+                    val = match.group(0)
+            elif var_type == 'text':
+                # Hard to extract "rest of text" without alignment
+                # For now, if it's a named entity like query/content, take the whole message 
+                # minus the known trigger words, or just specific logic in _format_command
+                pass
+                
+            if val:
+                params[var_name] = val
+                
+        return params
 
     def _format_command(self, result: MatchResult, original_input: str) -> str:
         """
@@ -141,6 +234,8 @@ class SemanticCommandMatcher:
             return self._format_tutorial(params)
         elif command == '/connect':
             return self._format_connect(params)
+        elif command == '/mrcall':
+            return self._format_mrcall(params, template)
         else:
             # Default: just return the command
             return command
@@ -370,3 +465,12 @@ class SemanticCommandMatcher:
         if provider:
             return f"/connect {provider}"
         return "/connect"
+
+    def _format_mrcall(self, params: Dict[str, Any], template: str) -> str:
+        """/mrcall variables get [--name <name>]"""
+        if 'variable' in template or 'value' in template:
+            name = params.get('name', '')
+            if name:
+                return f"/mrcall variables get --name {name}"
+            return "/mrcall variables get"
+        return "/mrcall"
