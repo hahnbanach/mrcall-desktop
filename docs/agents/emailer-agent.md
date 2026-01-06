@@ -120,13 +120,75 @@ response = await self.llm.create_message(
 )
 ```
 
+## Training: `/agent email train`
+
+Unlike a static prompt, the EmailerAgent can learn your personal writing style.
+
+### Training Command
+
+```
+/agent email train
+```
+
+This analyzes your **sent emails** to learn:
+- **Greeting patterns**: "Ciao", "Gentile", "Hi" etc.
+- **Sign-off style**: Signature, title, formality
+- **Tone**: Formal/informal, language preferences
+- **Structure**: Short/long emails, bullet points, paragraphs
+
+### How It Works
+
+1. **Collect sent emails**: Filter emails where `from_email` matches user's domain
+2. **Extract patterns**: Greetings, signatures, subjects, languages
+3. **Generate prompt**: LLM analyzes samples and creates personalized writing instructions
+4. **Store prompt**: Saved in `agent_prompts` table with `agent_type='emailer'`
+
+### Trainer Class
+
+```python
+class EmailerAgentTrainer:
+    """Builds personalized email writing agent by analyzing user's sent emails."""
+
+    async def build_emailer_prompt(self) -> Tuple[str, Dict[str, Any]]:
+        # 1. Get user's SENT emails
+        sent_emails = self._get_sent_emails(limit=50)
+
+        # 2. Analyze writing patterns
+        user_profile = self._analyze_writing_style(sent_emails)
+
+        # 3. Format samples for meta-prompt
+        sent_samples = self._format_sent_samples(sent_emails, max_samples=15)
+
+        # 4. Generate personalized prompt via LLM
+        prompt_content = self._generate_prompt(user_profile, sent_samples)
+
+        return prompt_content, metadata
+```
+
+### Trained vs Untrained
+
+| Aspect | Without Training | With Training |
+|--------|------------------|---------------|
+| Style | Generic | Matches your writing |
+| Language | Infers from context | Knows your preferences |
+| Signature | None | Your actual signature |
+| Tone | Neutral | Your natural tone |
+
+### Other Commands
+
+```
+/agent email show   # View your trained prompt
+/agent email reset  # Delete and retrain
+```
+
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `zylch/agents/emailer_agent.py` | Agent implementation |
+| `zylch/agents/emailer_agent_trainer.py` | Training meta-prompt and style analysis |
 | `zylch/tools/factory.py` | `_ComposeEmailTool` wrapper |
-| `zylch/services/command_handlers.py` | `get_task_by_number()` shared function |
+| `zylch/services/command_handlers.py` | `/agent email train` handler |
 
 ## Flow Diagram
 
