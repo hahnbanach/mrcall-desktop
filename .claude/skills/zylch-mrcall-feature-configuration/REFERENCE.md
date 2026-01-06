@@ -59,32 +59,38 @@ In `mrcall_configurator_trainer.py`:
 FEATURES = {
     "welcome_message": {
         "variables": ["OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT"],
-        "description": "How the assistant answers the phone",
+        "description": "How the assistant answers the phone",  # for devs
+        "display_name": "Come risponde al telefono l'assistente",  # for users
         "meta_prompt": WELCOME_MESSAGE_META_PROMPT,
     },
     # NEW FEATURE:
     "booking": {
-        "variables": ["BOOKING_PROMPT"],
-        "description": "Appointment booking behavior",
+        "variables": ["BOOKING_PROMPT", "BOOKING_CONFIRMATION_PROMPT"],
+        "description": "Appointment booking behavior",  # for devs
+        "display_name": "Gestione prenotazioni appuntamenti",  # for users (ask!)
         "meta_prompt": BOOKING_META_PROMPT,
     },
 }
 ```
 
+**Important:** Always ask the user for the `display_name` in their language. This is shown in user-facing messages.
+
 ---
 
-## Step 3: Add FEATURE_TO_VARIABLE Mapping
+## Step 3: Add FEATURE_TO_VARIABLES Mapping
 
 In `command_handlers.py` (inside `handle_mrcall`, ~line 792):
 
 ```python
-# Feature to variable mapping
-FEATURE_TO_VARIABLE = {
-    "welcome_message": "OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT",
-    "booking": "BOOKING_PROMPT",  # NEW
+# Feature to variables mapping (each feature can have multiple variables)
+FEATURE_TO_VARIABLES = {
+    "welcome_message": ["OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT"],
+    "booking": ["BOOKING_PROMPT", "BOOKING_CONFIRMATION_PROMPT"],  # NEW (multiple vars)
 }
-SUPPORTED_FEATURES = list(FEATURE_TO_VARIABLE.keys())
+SUPPORTED_FEATURES = list(FEATURE_TO_VARIABLES.keys())
 ```
+
+**Note:** Each feature maps to a **list** of variable names. This supports features like `booking` that require multiple coordinated variables.
 
 ---
 
@@ -95,9 +101,13 @@ In `config_tools.py` (~line 24):
 ```python
 VARIABLE_TO_FEATURE = {
     "OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT": "welcome_message",
-    "BOOKING_PROMPT": "booking",  # NEW
+    # For multi-variable features, add one entry per variable:
+    "BOOKING_PROMPT": "booking",              # NEW
+    "BOOKING_CONFIRMATION_PROMPT": "booking", # NEW (same feature)
 }
 ```
+
+**Note:** Multiple variables can map to the same feature name.
 
 ---
 
@@ -150,15 +160,17 @@ In `command_handlers.py`, update TWO places:
 ## Mapping Architecture
 
 ```
-Feature Name ←→ MrCall Variable Name
+Feature Name ←→ MrCall Variable Names (list)
 
-"welcome_message" ←→ "OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT"
-"booking"         ←→ "BOOKING_PROMPT"
+"welcome_message" ←→ ["OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT"]
+"booking"         ←→ ["BOOKING_PROMPT", "BOOKING_CONFIRMATION_PROMPT"]
 ```
 
 **Two mapping dictionaries must be kept in sync:**
-- `FEATURE_TO_VARIABLE` in `command_handlers.py` (feature → variable)
-- `VARIABLE_TO_FEATURE` in `config_tools.py` (variable → feature)
+- `FEATURE_TO_VARIABLES` in `command_handlers.py` (feature → list of variables)
+- `VARIABLE_TO_FEATURE` in `config_tools.py` (each variable → feature)
+
+**Function calling** is used to ensure LLM returns all variable values in structured JSON format.
 
 ---
 
