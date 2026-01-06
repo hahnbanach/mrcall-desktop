@@ -11,7 +11,7 @@ Each sub-prompt is stored per feature per business in the agent_prompts table.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from zylch.llm import LLMClient, PROVIDER_MODELS
 from zylch.storage.supabase_client import SupabaseStorage
@@ -97,6 +97,102 @@ Then include the complete prompt in a code block.
 OUTPUT ONLY THE SUB-PROMPT TEXT. No explanations, no additional markdown. Just the sub-prompt itself."""
 
 
+# Meta-prompt for generating booking sub-prompts
+# Uses {variables_context} placeholder for dynamically-fetched StarChat metadata
+BOOKING_META_PROMPT = """You are analyzing the booking configuration for a MrCall AI phone assistant.
+
+Your task: Generate a self-contained sub-prompt that teaches another LLM how to configure booking.
+
+## VARIABLE METADATA FROM STARCHAT
+
+{variables_context}
+
+## VARIABLE RELATIONSHIPS (CRITICAL!)
+
+The configurator LLM must understand these dependencies:
+
+### Master Switch
+- START_BOOKING_PROCESS is the master switch
+- When enabling booking (START_BOOKING_PROCESS="true"), MUST also configure:
+  - BOOKING_CALENDAR_ID (required, e.g., "primary")
+  - BOOKING_HOURS (JSON with available slots)
+  - BOOKING_EVENTS_MINUTES (appointment duration)
+  - ENABLE_GET_CALENDAR_EVENTS="true"
+
+### Slot Configuration
+- BOOKING_HOURS format: {{"monday": [{{"start": "09:00", "end": "17:00"}}], ...}}
+- BOOKING_EVENTS_MINUTES determines slot granularity (e.g., "30" for 30-min slots)
+- BOOKING_ONLY_WORKING_HOURS restricts to business hours
+
+### Availability Rules
+- BOOKING_DAYS_TO_GENERATE: how many days ahead to show (e.g., "14")
+- BOOKING_SHORTEST_NOTICE: minimum hours notice (e.g., "2")
+- BOOKING_MULTIPLE_ALLOWED: can same caller book multiple times
+
+### Appointment Content
+- BOOKING_TITLE: template for calendar event title
+- BOOKING_DESCRIPTION: template for event description
+- COMMUNICATE_BOOKING_MESSAGE: what assistant says to confirm
+
+### When Booking Disabled
+- NO_BOOKING_INSTRUCTIONS: what to say when booking not available
+- Only relevant when START_BOOKING_PROCESS="false"
+
+## COMMON USER INTENTS → VARIABLE MAPPINGS
+
+Teach the configurator these patterns:
+
+**"Enable booking"** →
+  START_BOOKING_PROCESS = "true"
+  BOOKING_CALENDAR_ID = "primary"
+  BOOKING_HOURS = {{"monday": [{{"start": "09:00", "end": "17:00"}}], "tuesday": [...], ...for weekdays}}
+  BOOKING_EVENTS_MINUTES = "30"
+  ENABLE_GET_CALENDAR_EVENTS = "true"
+
+**"Disable booking"** →
+  START_BOOKING_PROCESS = "false"
+
+**"30-minute appointments"** →
+  BOOKING_EVENTS_MINUTES = "30"
+
+**"1-hour appointments"** →
+  BOOKING_EVENTS_MINUTES = "60"
+
+**"Only mornings"** →
+  BOOKING_HOURS = {{...with end: "12:00" for each day}}
+
+**"No weekends"** →
+  BOOKING_HOURS = {{remove saturday/sunday}}
+
+**"Require 24 hours notice"** →
+  BOOKING_SHORTEST_NOTICE = "24"
+
+## YOUR OUTPUT FORMAT
+
+Generate a sub-prompt with these sections:
+
+### SECTION 1: CURRENT BOOKING STATUS
+Is booking enabled? What are the current hours/duration?
+
+### SECTION 2: VARIABLE RELATIONSHIPS
+Explain which variables must be set together.
+
+### SECTION 3: INTENT → CHANGES MAPPING
+List common requests and which variables to change.
+
+### SECTION 4: VARIABLE TYPES & VALIDATION
+- Booleans: "true"/"false" (string, not primitive)
+- Integers: "30" (string)
+- JSON: Valid JSON string for BOOKING_HOURS
+
+### SECTION 5: ALL CURRENT VALUES
+Include every variable's current value for the configurator.
+
+---
+
+OUTPUT ONLY THE SUB-PROMPT TEXT."""
+
+
 class MrCallConfiguratorTrainer:
     """Generates feature-specific sub-prompts from MrCall configuration.
 
@@ -117,13 +213,31 @@ class MrCallConfiguratorTrainer:
             "display_name": "Come risponde al telefono l'assistente",  # for users
             "meta_prompt": WELCOME_MESSAGE_META_PROMPT,
         },
-        # Future features:
-        # "booking": {
-        #     "variables": ["BOOKING_PROMPT", "BOOKING_CONFIRMATION_PROMPT"],
-        #     "description": "Appointment booking behavior",
-        #     "display_name": "Gestione prenotazioni appuntamenti",
-        #     "meta_prompt": BOOKING_META_PROMPT,
-        # },
+        "booking": {
+            "variables": [
+                "START_BOOKING_PROCESS",
+                "BOOKING_TRIGGER",
+                "NO_BOOKING_INSTRUCTIONS",
+                "ENABLE_GET_CALENDAR_EVENTS",
+                "ENABLE_CLEAR_CALENDAR_EVENTS",
+                "BOOKING_HOURS",
+                "BOOKING_EVENTS_MINUTES",
+                "BOOKING_DAYS_TO_GENERATE",
+                "BOOKING_SHORTEST_NOTICE",
+                "BOOKING_ONLY_WORKING_HOURS",
+                "BOOKING_MULTIPLE_ALLOWED",
+                "BOOKING_CALENDAR_ID",
+                "BOOKING_TITLE",
+                "BOOKING_DESCRIPTION",
+                "BOOKING_PRE_INSTRUCTION",
+                "BOOKING_LAST_INSTRUCTION",
+                "COMMUNICATE_BOOKING_MESSAGE",
+            ],
+            "description": "Appointment booking behavior",
+            "display_name": "How your MrCall assistant manages booking requests",
+            "meta_prompt": BOOKING_META_PROMPT,
+            "dynamic_context": True,  # Uses _build_variables_context for metadata
+        },
     }
 
     def __init__(
@@ -149,6 +263,77 @@ class MrCallConfiguratorTrainer:
         self.provider = provider
         self.model = PROVIDER_MODELS.get(provider, PROVIDER_MODELS["anthropic"])
         self.client = LLMClient(api_key=api_key, provider=provider)
+
+    async def _build_variables_context(
+        self,
+        business_id: str,
+        variable_names: List[str],
+    ) -> str:
+        """Build variables context from StarChat metadata.
+
+        Fetches variable schema (type, description, default) and current values,
+        then formats them for injection into the meta-prompt.
+
+        Args:
+            business_id: MrCall business ID
+            variable_names: List of variable names to include
+
+        Returns:
+            Formatted string with metadata for each variable
+        """
+        # Get business config for current values and template
+        business = await self.starchat.get_business_config(business_id)
+        if not business:
+            raise ValueError(f"Business not found: {business_id}")
+
+        current_values = business.get("variables", {})
+        template = business.get("template", "businesspro")
+
+        # Get schema for metadata (type, description, default)
+        schema = await self.starchat.get_variable_schema(
+            template_name=template,
+            nested=False
+        )
+
+        # Build context for each variable
+        lines = []
+        for var_name in variable_names:
+            var_schema = schema.get(var_name, {})
+
+            # Extract English from multilang dicts
+            human = var_schema.get("human_multilang", {})
+            if isinstance(human, dict):
+                desc = human.get("en-US") or human.get("en-GB") or next(iter(human.values()), "")
+            else:
+                desc = str(human) if human else ""
+
+            default_ml = var_schema.get("default_value_multilang", {})
+            if isinstance(default_ml, dict):
+                default = default_ml.get("en-US") or default_ml.get("en-GB") or next(iter(default_ml.values()), "")
+            else:
+                default = str(default_ml) if default_ml else ""
+
+            var_type = var_schema.get("type", "unknown")
+            current = current_values.get(var_name, "Not set")
+
+            # Truncate long values for readability
+            current_display = current
+            if isinstance(current, str) and len(current) > 500:
+                current_display = current[:500] + "..."
+
+            default_display = default
+            if isinstance(default, str) and len(default) > 500:
+                default_display = default[:500] + "..."
+
+            lines.append(f"""
+**{var_name}**
+- Type: {var_type}
+- Description: {desc}
+- Default: {default_display}
+- Current Value: {current_display}
+""")
+
+        return "\n".join(lines)
 
     async def train_feature(
         self,
@@ -182,26 +367,39 @@ class MrCallConfiguratorTrainer:
             f"variables: {variable_names}"
         )
 
-        # 1. Fetch current variable value(s) from StarChat
-        business = await self.starchat.get_business_config(business_id)
-        if not business:
-            raise ValueError(f"Business not found: {business_id}")
-
-        current_values = business.get("variables", {})
-
-        # For now, we only handle single-variable features
-        # Multi-variable features will need prompt adjustment
-        variable_name = variable_names[0]
-        current_value = current_values.get(variable_name)
-
-        if not current_value:
-            raise ValueError(
-                f"Variable {variable_name} not found in business {business_id}. "
-                f"Available: {list(current_values.keys())[:10]}..."
+        # Check if this feature uses dynamic context (multi-variable with metadata)
+        if feature.get("dynamic_context"):
+            # Build context from StarChat metadata for all variables
+            variables_context = await self._build_variables_context(
+                business_id, variable_names
             )
+            meta_prompt = meta_prompt_template.format(
+                variables_context=variables_context
+            )
+            # For metadata, use total length of all variables
+            business = await self.starchat.get_business_config(business_id)
+            current_values = business.get("variables", {})
+            total_length = sum(
+                len(str(current_values.get(v, ""))) for v in variable_names
+            )
+        else:
+            # Legacy single-variable behavior
+            business = await self.starchat.get_business_config(business_id)
+            if not business:
+                raise ValueError(f"Business not found: {business_id}")
 
-        # 2. Generate sub-prompt using LLM
-        meta_prompt = meta_prompt_template.format(current_value=current_value)
+            current_values = business.get("variables", {})
+            variable_name = variable_names[0]
+            current_value = current_values.get(variable_name)
+
+            if not current_value:
+                raise ValueError(
+                    f"Variable {variable_name} not found in business {business_id}. "
+                    f"Available: {list(current_values.keys())[:10]}..."
+                )
+
+            meta_prompt = meta_prompt_template.format(current_value=current_value)
+            total_length = len(current_value)
 
         logger.info(
             f"Generating sub-prompt for {feature_name} "
@@ -223,7 +421,7 @@ class MrCallConfiguratorTrainer:
             "feature": feature_name,
             "variables": variable_names,
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "prompt_length": len(current_value),
+            "prompt_length": total_length,
         }
 
         self.storage.store_agent_prompt(
