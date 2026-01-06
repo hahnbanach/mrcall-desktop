@@ -54,6 +54,7 @@ Run locally with `uvicorn zylch.api.main:app --reload --port 8000` - connects to
 - **Key Files**:
   - `memory_agent.py`: Extracts facts from emails/calendar into memory blobs
   - `task_agent.py`: Task detection and processing agent
+  - `mrcall_configurator_trainer.py`: Generates feature-specific sub-prompts for MrCall assistant configuration (see [docs/agents/mrcall-configurator.md](agents/mrcall-configurator.md))
 
 ### 2. Tools (`zylch/tools/`)
 Modular tools for agent capabilities:
