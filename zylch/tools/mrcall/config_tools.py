@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 VARIABLE_TO_FEATURE = {
     "OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT": "welcome_message",
     # Booking variables (all map to same feature)
+    # Note: BOOKING_CALENDAR_ID is auto-set via OAuth, not user-configurable
     "START_BOOKING_PROCESS": "booking",
     "BOOKING_TRIGGER": "booking",
     "NO_BOOKING_INSTRUCTIONS": "booking",
@@ -36,7 +37,6 @@ VARIABLE_TO_FEATURE = {
     "BOOKING_SHORTEST_NOTICE": "booking",
     "BOOKING_ONLY_WORKING_HOURS": "booking",
     "BOOKING_MULTIPLE_ALLOWED": "booking",
-    "BOOKING_CALENDAR_ID": "booking",
     "BOOKING_TITLE": "booking",
     "BOOKING_DESCRIPTION": "booking",
     "BOOKING_PRE_INSTRUCTION": "booking",

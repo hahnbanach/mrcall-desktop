@@ -804,7 +804,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
             "BOOKING_SHORTEST_NOTICE",
             "BOOKING_ONLY_WORKING_HOURS",
             "BOOKING_MULTIPLE_ALLOWED",
-            "BOOKING_CALENDAR_ID",
+            # BOOKING_CALENDAR_ID is auto-set via OAuth, not user-configurable
             "BOOKING_TITLE",
             "BOOKING_DESCRIPTION",
             "BOOKING_PRE_INSTRUCTION",

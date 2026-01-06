@@ -114,13 +114,14 @@ The configurator LLM must understand these dependencies:
 ### Master Switch
 - START_BOOKING_PROCESS is the master switch
 - When enabling booking (START_BOOKING_PROCESS="true"), MUST also configure:
-  - BOOKING_CALENDAR_ID (required, e.g., "primary")
-  - BOOKING_HOURS (JSON with available slots)
+  - BOOKING_HOURS (JSON string with available slots)
   - BOOKING_EVENTS_MINUTES (appointment duration)
   - ENABLE_GET_CALENDAR_EVENTS="true"
+  (Note: BOOKING_CALENDAR_ID is set automatically via OAuth, do not modify it)
 
 ### Slot Configuration
-- BOOKING_HOURS format: {{"monday": [{{"start": "09:00", "end": "17:00"}}], ...}}
+- BOOKING_HOURS format: "{{\\"monday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"tuesday\\": [...]}}"
+  (Valid JSON embedded in a string with escaped quotes)
 - BOOKING_EVENTS_MINUTES determines slot granularity (e.g., "30" for 30-min slots)
 - BOOKING_ONLY_WORKING_HOURS restricts to business hours
 
@@ -144,8 +145,7 @@ Teach the configurator these patterns:
 
 **"Enable booking"** →
   START_BOOKING_PROCESS = "true"
-  BOOKING_CALENDAR_ID = "primary"
-  BOOKING_HOURS = {{"monday": [{{"start": "09:00", "end": "17:00"}}], "tuesday": [...], ...for weekdays}}
+  BOOKING_HOURS = "{{\\"monday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"tuesday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"wednesday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"thursday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"friday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}]}}"
   BOOKING_EVENTS_MINUTES = "30"
   ENABLE_GET_CALENDAR_EVENTS = "true"
 
@@ -159,10 +159,11 @@ Teach the configurator these patterns:
   BOOKING_EVENTS_MINUTES = "60"
 
 **"Only mornings"** →
-  BOOKING_HOURS = {{...with end: "12:00" for each day}}
+  BOOKING_HOURS = "{{\\"monday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"12:00\\"}}], \\"tuesday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"12:00\\"}}], \\"wednesday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"12:00\\"}}], \\"thursday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"12:00\\"}}], \\"friday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"12:00\\"}}]}}"
 
 **"No weekends"** →
-  BOOKING_HOURS = {{remove saturday/sunday}}
+  BOOKING_HOURS = "{{\\"monday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"tuesday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"wednesday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"thursday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"friday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}]}}"
+  (JSON object with only weekday keys, no saturday/sunday)
 
 **"Require 24 hours notice"** →
   BOOKING_SHORTEST_NOTICE = "24"
@@ -226,7 +227,7 @@ class MrCallConfiguratorTrainer:
                 "BOOKING_SHORTEST_NOTICE",
                 "BOOKING_ONLY_WORKING_HOURS",
                 "BOOKING_MULTIPLE_ALLOWED",
-                "BOOKING_CALENDAR_ID",
+                # BOOKING_CALENDAR_ID is auto-set via OAuth, not user-configurable
                 "BOOKING_TITLE",
                 "BOOKING_DESCRIPTION",
                 "BOOKING_PRE_INSTRUCTION",
