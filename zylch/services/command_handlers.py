@@ -789,28 +789,11 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
     import httpx
     from zylch.config import settings
 
-    # Feature to variables mapping (each feature can have multiple variables)
+    # Derive from single source of truth (MrCallConfiguratorTrainer.FEATURES)
+    from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
     FEATURE_TO_VARIABLES = {
-        "welcome_message": ["OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT"],
-        "booking": [
-            "START_BOOKING_PROCESS",
-            "BOOKING_TRIGGER",
-            "NO_BOOKING_INSTRUCTIONS",
-            "ENABLE_GET_CALENDAR_EVENTS",
-            "ENABLE_CLEAR_CALENDAR_EVENTS",
-            "BOOKING_HOURS",
-            "BOOKING_EVENTS_MINUTES",
-            "BOOKING_DAYS_TO_GENERATE",
-            "BOOKING_SHORTEST_NOTICE",
-            "BOOKING_ONLY_WORKING_HOURS",
-            "BOOKING_MULTIPLE_ALLOWED",
-            # BOOKING_CALENDAR_ID is auto-set via OAuth, not user-configurable
-            "BOOKING_TITLE",
-            "BOOKING_DESCRIPTION",
-            "BOOKING_PRE_INSTRUCTION",
-            "BOOKING_LAST_INSTRUCTION",
-            "COMMUNICATE_BOOKING_MESSAGE",
-        ],
+        name: feature["variables"]
+        for name, feature in MrCallConfiguratorTrainer.FEATURES.items()
     }
     SUPPORTED_FEATURES = list(FEATURE_TO_VARIABLES.keys())
 

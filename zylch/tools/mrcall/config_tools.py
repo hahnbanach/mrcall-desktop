@@ -9,39 +9,23 @@ regeneration after config changes, replacing the legacy memory system.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional
 
 from ..base import Tool, ToolResult, ToolStatus
 from ..factory import SessionState
 from .llm_helper import modify_prompt_with_llm, get_default_value
 from .variable_utils import format_variable_changes
-
-if TYPE_CHECKING:
-    from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
 
 logger = logging.getLogger(__name__)
 
-# Map variable names to feature names for sub-prompt regeneration
+# Derive from single source of truth (MrCallConfiguratorTrainer.FEATURES)
+# This is the inverse mapping: variable_name -> feature_name
+
 VARIABLE_TO_FEATURE = {
-    "OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT": "welcome_message",
-    # Booking variables (all map to same feature)
-    # Note: BOOKING_CALENDAR_ID is auto-set via OAuth, not user-configurable
-    "START_BOOKING_PROCESS": "booking",
-    "BOOKING_TRIGGER": "booking",
-    "NO_BOOKING_INSTRUCTIONS": "booking",
-    "ENABLE_GET_CALENDAR_EVENTS": "booking",
-    "ENABLE_CLEAR_CALENDAR_EVENTS": "booking",
-    "BOOKING_HOURS": "booking",
-    "BOOKING_EVENTS_MINUTES": "booking",
-    "BOOKING_DAYS_TO_GENERATE": "booking",
-    "BOOKING_SHORTEST_NOTICE": "booking",
-    "BOOKING_ONLY_WORKING_HOURS": "booking",
-    "BOOKING_MULTIPLE_ALLOWED": "booking",
-    "BOOKING_TITLE": "booking",
-    "BOOKING_DESCRIPTION": "booking",
-    "BOOKING_PRE_INSTRUCTION": "booking",
-    "BOOKING_LAST_INSTRUCTION": "booking",
-    "COMMUNICATE_BOOKING_MESSAGE": "booking",
+    var: feature_name
+    for feature_name, feature in MrCallConfiguratorTrainer.FEATURES.items()
+    for var in feature["variables"]
 }
 
 

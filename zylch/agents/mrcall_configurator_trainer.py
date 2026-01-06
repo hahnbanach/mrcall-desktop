@@ -107,7 +107,14 @@ Your task: Generate a self-contained sub-prompt that teaches another LLM how to 
 
 {variables_context}
 
-## VARIABLE RELATIONSHIPS (CRITICAL!)
+## CRITICAL: ALL VALUES ARE STRINGS
+
+Every MrCall variable value is a string. There are NO native booleans, numbers, or objects.
+- Booleans: "true" or "false" (strings, not true/false primitives)
+- Numbers: "30", "60", "24" (strings, not integers)
+- JSON: "{{\\"monday\\": [{{\\"start\\": \\"09:00\\"}}]}}" (valid JSON serialized as string with escaped quotes)
+
+## VARIABLE RELATIONSHIPS
 
 The configurator LLM must understand these dependencies:
 
@@ -234,7 +241,6 @@ class MrCallConfiguratorTrainer:
                 "BOOKING_LAST_INSTRUCTION",
                 "COMMUNICATE_BOOKING_MESSAGE",
             ],
-            "description": "Appointment booking behavior",
             "display_name": "How your MrCall assistant manages booking requests",
             "meta_prompt": BOOKING_META_PROMPT,
             "dynamic_context": True,  # Uses _build_variables_context for metadata
@@ -317,21 +323,12 @@ class MrCallConfiguratorTrainer:
             var_type = var_schema.get("type", "unknown")
             current = current_values.get(var_name, "Not set")
 
-            # Truncate long values for readability
-            current_display = current
-            if isinstance(current, str) and len(current) > 500:
-                current_display = current[:500] + "..."
-
-            default_display = default
-            if isinstance(default, str) and len(default) > 500:
-                default_display = default[:500] + "..."
-
             lines.append(f"""
 **{var_name}**
 - Type: {var_type}
 - Description: {desc}
-- Default: {default_display}
-- Current Value: {current_display}
+- Default: {default}
+- Current Value: {current}
 """)
 
         return "\n".join(lines)
