@@ -5,6 +5,17 @@ description: Guide for adding new MrCall feature configurations. Use when adding
 
 # Adding MrCall Feature Configurations
 
+## Architecture: Single Source of Truth
+
+**CRITICAL**: All feature/variable mappings are defined ONCE in `MrCallConfiguratorTrainer.FEATURES`. Other files IMPORT and DERIVE from this source.
+
+```
+MrCallConfiguratorTrainer.FEATURES  (SINGLE SOURCE OF TRUTH)
+         │
+         ├──> command_handlers.py: FEATURE_TO_VARIABLES (derived via import)
+         └──> config_tools.py: VARIABLE_TO_FEATURE (derived via import)
+```
+
 ## Checklist
 
 When adding a new feature (e.g., "booking"):
@@ -13,19 +24,19 @@ When adding a new feature (e.g., "booking"):
    - Feature key (e.g., `booking`)
    - Display name in user's language (e.g., "Gestione prenotazioni appuntamenti")
    - Which MrCall variable(s) it controls
-2. [ ] Define meta-prompt in `mrcall_configurator_trainer.py`
-3. [ ] Add to `FEATURES` dict with `display_name` in `mrcall_configurator_trainer.py`
-4. [ ] Add to `FEATURE_TO_VARIABLES` in `command_handlers.py` (list of variable names)
-5. [ ] Add to `VARIABLE_TO_FEATURE` in `config_tools.py` (one entry per variable)
-6. [ ] Update help text in `command_handlers.py` (inline + registry)
+2. [ ] Define meta-prompt constant in `mrcall_configurator_trainer.py`
+3. [ ] Add to `FEATURES` dict in `MrCallConfiguratorTrainer` class
+4. [ ] Update help text in `command_handlers.py` (features list description)
+5. [ ] **VERIFY**: Run Python import test to ensure no circular imports
 
 ## Files to Modify
 
 | File | What to Add |
 |------|-------------|
-| `zylch/agents/mrcall_configurator_trainer.py` | Meta-prompt + FEATURES entry |
-| `zylch/services/command_handlers.py` | `FEATURE_TO_VARIABLES` mapping (list) + help text |
-| `zylch/tools/mrcall/config_tools.py` | `VARIABLE_TO_FEATURE` mapping (one per variable) |
+| `zylch/agents/mrcall_configurator_trainer.py` | Meta-prompt + FEATURES entry **(ONLY place to define variables)** |
+| `zylch/services/command_handlers.py` | Help text update only (mappings are auto-derived) |
+
+**DO NOT manually edit** `FEATURE_TO_VARIABLES` in command_handlers.py or `VARIABLE_TO_FEATURE` in config_tools.py - these are derived automatically via import.
 
 ## Storage Pattern
 

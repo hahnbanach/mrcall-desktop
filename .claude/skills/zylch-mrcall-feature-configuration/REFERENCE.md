@@ -1,30 +1,53 @@
 # MrCall Feature Configuration Reference
 
+## Architecture Overview
+
+**Single Source of Truth**: `MrCallConfiguratorTrainer.FEATURES`
+
+All feature/variable mappings live in ONE place. Other files derive automatically:
+
+```python
+# In command_handlers.py (DERIVED - do NOT edit manually):
+from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+FEATURE_TO_VARIABLES = {
+    name: feature["variables"]
+    for name, feature in MrCallConfiguratorTrainer.FEATURES.items()
+}
+
+# In config_tools.py (DERIVED - do NOT edit manually):
+VARIABLE_TO_FEATURE = {
+    var: feature_name
+    for feature_name, feature in MrCallConfiguratorTrainer.FEATURES.items()
+    for var in feature["variables"]
+}
+```
+
+---
+
 ## Step 1: Create Meta-Prompt
 
-Add to `zylch/agents/mrcall_configurator_trainer.py`:
+Add constant to `zylch/agents/mrcall_configurator_trainer.py`:
 
 ```python
 BOOKING_META_PROMPT = """You are analyzing the booking configuration for a MrCall AI phone assistant.
 
-Your task: Given the current value of BOOKING_PROMPT, generate a
+Your task: Given the current values of booking variables, generate a
 self-contained sub-prompt that another LLM can use to both UNDERSTAND and MODIFY the configuration.
 
-## UNDERSTANDING THE PROMPT STRUCTURE
+## UNDERSTANDING THE VARIABLES
 
-[Explain variable format specific to this feature]
-
-Common variable sources:
-- `%%crm.contact.variables.X%%` - Data from caller's contact record
-- `%%HB_FROM_NUMBER%%` - Caller's phone number
-- `%%public:X%%` - Public/shared values
+This feature uses MULTIPLE coordinated variables:
+- START_BOOKING_PROCESS (bool): Master switch to enable/disable booking
+- BOOKING_TRIGGER (str): When to offer booking (e.g., "first turn", "when requested")
+- BOOKING_HOURS (JSON str): Available hours per day
+- ... etc
 
 ## YOUR OUTPUT FORMAT
 
 Generate a sub-prompt with these exact sections:
 
 ### SECTION 1: AVAILABLE VARIABLES
-Create a markdown table with columns: Variable | Reference | Description | Default
+Create a markdown table with columns: Variable | Type | Description | Current Value
 
 ### SECTION 2: CURRENT BEHAVIOR
 Describe what the assistant DOES in plain language.
@@ -35,14 +58,14 @@ List modifications users can request with examples.
 ### SECTION 4: WHAT CANNOT BE CHANGED (via this feature)
 List system constraints.
 
-### SECTION 5: CURRENT PROMPT VALUE
-Include the FULL raw prompt. Add note about preserving %%...%% variables.
+### SECTION 5: CURRENT CONFIGURATION
+Include key variable values.
 
 ---
 
-## CURRENT CONFIGURATION TO ANALYZE:
+## VARIABLES CONTEXT:
 
-{current_value}
+{variables_context}
 
 ---
 
@@ -51,9 +74,9 @@ OUTPUT ONLY THE SUB-PROMPT TEXT. No explanations."""
 
 ---
 
-## Step 2: Add to FEATURES Dict
+## Step 2: Add to FEATURES Dict (ONLY PLACE TO DEFINE MAPPINGS)
 
-In `mrcall_configurator_trainer.py`:
+In `MrCallConfiguratorTrainer` class:
 
 ```python
 FEATURES = {
@@ -65,77 +88,58 @@ FEATURES = {
     },
     # NEW FEATURE:
     "booking": {
-        "variables": ["BOOKING_PROMPT", "BOOKING_CONFIRMATION_PROMPT"],
-        "description": "Appointment booking behavior",  # for devs
-        "display_name": "Gestione prenotazioni appuntamenti",  # for users (ask!)
+        "variables": [
+            "START_BOOKING_PROCESS",
+            "BOOKING_TRIGGER",
+            "NO_BOOKING_INSTRUCTIONS",
+            "ENABLE_GET_CALENDAR_EVENTS",
+            "ENABLE_CLEAR_CALENDAR_EVENTS",
+            "BOOKING_HOURS",
+            "BOOKING_EVENTS_MINUTES",
+            "BOOKING_DAYS_TO_GENERATE",
+            "BOOKING_SHORTEST_NOTICE",
+            "BOOKING_ONLY_WORKING_HOURS",
+            "BOOKING_MULTIPLE_ALLOWED",
+            # BOOKING_CALENDAR_ID is auto-set via OAuth, not user-configurable
+            "BOOKING_TITLE",
+            "BOOKING_DESCRIPTION",
+            "BOOKING_PRE_INSTRUCTION",
+            "BOOKING_LAST_INSTRUCTION",
+            "COMMUNICATE_BOOKING_MESSAGE",
+        ],
+        "description": "Appointment booking behavior",
+        "display_name": "How your MrCall assistant manages booking requests",
         "meta_prompt": BOOKING_META_PROMPT,
+        "dynamic_context": True,  # Uses _build_variables_context for metadata
     },
 }
 ```
 
-**Important:** Always ask the user for the `display_name` in their language. This is shown in user-facing messages.
+**Important:** Always ask the user for the `display_name` in their language.
 
 ---
 
-## Step 3: Add FEATURE_TO_VARIABLES Mapping
+## Step 3: Update Help Text
 
-In `command_handlers.py` (inside `handle_mrcall`, ~line 792):
-
-```python
-# Feature to variables mapping (each feature can have multiple variables)
-FEATURE_TO_VARIABLES = {
-    "welcome_message": ["OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT"],
-    "booking": ["BOOKING_PROMPT", "BOOKING_CONFIRMATION_PROMPT"],  # NEW (multiple vars)
-}
-SUPPORTED_FEATURES = list(FEATURE_TO_VARIABLES.keys())
-```
-
-**Note:** Each feature maps to a **list** of variable names. This supports features like `booking` that require multiple coordinated variables.
-
----
-
-## Step 4: Add VARIABLE_TO_FEATURE Mapping
-
-In `config_tools.py` (~line 24):
+In `command_handlers.py`, update the help text description of features:
 
 ```python
-VARIABLE_TO_FEATURE = {
-    "OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT": "welcome_message",
-    # For multi-variable features, add one entry per variable:
-    "BOOKING_PROMPT": "booking",              # NEW
-    "BOOKING_CONFIRMATION_PROMPT": "booking", # NEW (same feature)
-}
+**Features:** welcome_message (greeting), booking (appointment scheduling)
 ```
 
-**Note:** Multiple variables can map to the same feature name.
-
----
-
-## Step 5: Update Help Text
-
-In `command_handlers.py`, update TWO places:
-
-### A. Inline help_text (inside handle_mrcall)
-
-```python
-**Features:** welcome_message, booking
-```
-
-### B. COMMAND_REGISTRY (bottom of file, ~line 2200)
-
-```python
-**Features:** welcome_message (greeting), booking (appointments)
-```
+**DO NOT** manually edit `FEATURE_TO_VARIABLES` - it's auto-derived from trainer.
 
 ---
 
 ## Meta-Prompt Requirements
 
-1. Must use `{current_value}` placeholder (Python str.format)
-2. Must have exactly 5 sections (SECTION 1-5)
-3. SECTION 1 must be a markdown table with 4 columns
-4. SECTION 5 must include full raw prompt in code block
-5. End with "OUTPUT ONLY THE SUB-PROMPT TEXT"
+For single-variable features:
+1. Must use `{current_value}` placeholder
+
+For multi-variable features:
+1. Must use `{variables_context}` placeholder
+2. Set `"dynamic_context": True` in FEATURES entry
+3. Consider implementing `_build_variables_context()` in trainer for metadata fetching
 
 ---
 
@@ -149,7 +153,7 @@ In `command_handlers.py`, update TWO places:
 /mrcall show booking
 
 # 3. Test configuration
-/mrcall config booking "require email confirmation"
+/mrcall config booking "enable booking, available Monday-Friday 9am-5pm"
 
 # 4. Verify the change
 /mrcall show booking
@@ -157,39 +161,24 @@ In `command_handlers.py`, update TWO places:
 
 ---
 
-## Mapping Architecture
+## Why Single Source of Truth?
 
+**BAD (old pattern):**
 ```
-Feature Name ←→ MrCall Variable Names (list)
-
-"welcome_message" ←→ ["OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT"]
-"booking"         ←→ ["BOOKING_PROMPT", "BOOKING_CONFIRMATION_PROMPT"]
+trainer.py      → defines variables: [A, B, C]
+command_handlers.py → manually duplicates: [A, B, C]  # can get out of sync!
+config_tools.py    → manually duplicates: {A→f, B→f, C→f}  # can get out of sync!
 ```
 
-**Two mapping dictionaries must be kept in sync:**
-- `FEATURE_TO_VARIABLES` in `command_handlers.py` (feature → list of variables)
-- `VARIABLE_TO_FEATURE` in `config_tools.py` (each variable → feature)
+**GOOD (current pattern):**
+```
+trainer.py      → defines variables: [A, B, C]  (SINGLE SOURCE)
+command_handlers.py → imports and derives automatically
+config_tools.py    → imports and derives automatically
+```
 
-**Function calling** is used to ensure LLM returns all variable values in structured JSON format.
-
----
-
-## Example: Full Workflow for Adding "booking" Feature
-
-1. **Discover the variable:**
-   ```
-   /mrcall variables --name BOOKING
-   ```
-
-2. **Read current value to understand structure:**
-   ```
-   /mrcall variables get --name BOOKING_PROMPT
-   ```
-
-3. **Create meta-prompt** based on the variable structure
-
-4. **Add to all 3 files** (trainer, command_handlers, config_tools)
-
-5. **Update help text** in both locations
-
-6. **Test the feature** with train/show/config commands
+Benefits:
+- Add feature in ONE place, works everywhere
+- Remove feature in ONE place, removed everywhere
+- No risk of mappings getting out of sync
+- Easier to maintain and verify
