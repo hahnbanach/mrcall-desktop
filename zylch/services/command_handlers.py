@@ -792,8 +792,25 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
     # Feature to variables mapping (each feature can have multiple variables)
     FEATURE_TO_VARIABLES = {
         "welcome_message": ["OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT"],
-        # Future mappings:
-        # "booking": ["BOOKING_PROMPT", "BOOKING_CONFIRMATION_PROMPT"],
+        "booking": [
+            "START_BOOKING_PROCESS",
+            "BOOKING_TRIGGER",
+            "NO_BOOKING_INSTRUCTIONS",
+            "ENABLE_GET_CALENDAR_EVENTS",
+            "ENABLE_CLEAR_CALENDAR_EVENTS",
+            "BOOKING_HOURS",
+            "BOOKING_EVENTS_MINUTES",
+            "BOOKING_DAYS_TO_GENERATE",
+            "BOOKING_SHORTEST_NOTICE",
+            "BOOKING_ONLY_WORKING_HOURS",
+            "BOOKING_MULTIPLE_ALLOWED",
+            "BOOKING_CALENDAR_ID",
+            "BOOKING_TITLE",
+            "BOOKING_DESCRIPTION",
+            "BOOKING_PRE_INSTRUCTION",
+            "BOOKING_LAST_INSTRUCTION",
+            "COMMUNICATE_BOOKING_MESSAGE",
+        ],
     }
     SUPPORTED_FEATURES = list(FEATURE_TO_VARIABLES.keys())
 
@@ -810,7 +827,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 • `/mrcall unlink` - Unlink current assistant
 • `/mrcall` - Show current link status
 
-**Features:** welcome_message (how the assistant answers the phone)
+**Features:** welcome_message (greeting), booking (appointment scheduling)
 
 **Setup:**
 1. Run `/connect mrcall` to authenticate with MrCall
@@ -2205,7 +2222,7 @@ Use `/agent process` to extract facts from synced data into memory.''',
 - `show [feature]` - Display current configuration context
 - `config <feature> "instructions"` - Configure assistant behavior
 
-**Features:** welcome_message (how the assistant answers the phone)
+**Features:** welcome_message (greeting), booking (appointment scheduling)
 
 **Examples:**
 - `/mrcall` - Show connection status
