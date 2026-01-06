@@ -1855,52 +1855,17 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
             output += f"_Showing last {days} days. Use `--days N` or `--limit N` to adjust._"
             return output
 
-        # --- CREATE DRAFT ---
+        # --- CREATE DRAFT (DEPRECATED - use /agent email run) ---
         if subcommand == 'create':
-            to_addr = parse_flag('--to', '')
-            subject = parse_flag('--subject', '')
+            return """⚠️ **`/email create` is deprecated**
 
-            # Parse body from remaining args (everything after known flags)
-            body = ''
-            skip_next = False
-            for i, arg in enumerate(sub_args):
-                if skip_next:
-                    skip_next = False
-                    continue
-                if arg in ('--to', '--subject'):
-                    skip_next = True
-                    continue
-                body += arg + ' '
-            body = body.strip()
+Use the email agent instead:
+• `/agent email run "scrivi a mario@example.com un'offerta"`
+• `/agent email run "write to John about the meeting"`
 
-            if not to_addr:
-                return "❌ Missing recipient\n\nUsage: `/email create --to <email> [--subject <text>]`"
+The email agent composes contextual emails using your writing style and memory.
 
-            # Parse multiple recipients
-            to_addresses = [addr.strip() for addr in to_addr.split(',')]
-
-            # Insert into Supabase
-            draft_data = {
-                'owner_id': owner_id,
-                'to_addresses': to_addresses,
-                'subject': subject or None,
-                'body': body or None,
-                'status': 'draft',
-            }
-
-            result = supabase.table('drafts').insert(draft_data).execute()
-
-            if not result.data:
-                return "❌ Failed to create draft"
-
-            draft = result.data[0]
-            return f"""✅ **Draft created** (ID: `{draft['id'][:8]}`)
-
-**To:** {', '.join(to_addresses)}
-**Subject:** {subject or '(none)'}
-
-Use `/email send {draft['id'][:8]}` to send it.
-Or `/email list` to see all drafts."""
+For simple drafts without context, use the `compose_email` tool in chat."""
 
         # --- SEND DRAFT ---
         if subcommand == 'send':
@@ -2044,57 +2009,17 @@ Message ID: `{sent_id[:12] if sent_id else 'N/A'}`"""
             else:
                 return f"❌ Draft not found: `{draft_id}`"
 
-        # --- SEARCH EMAILS ---
+        # --- SEARCH EMAILS (DEPRECATED - use /agent email run) ---
         if subcommand == 'search':
-            # Get query from first positional arg after 'search'
-            query = sub_args[0] if sub_args and not sub_args[0].startswith('--') else None
+            return """⚠️ **`/email search` is deprecated**
 
-            if not query:
-                return "❌ Missing search query\n\nUsage: `/email search <query>`"
+Use the email agent instead:
+• `/agent email run "cerca info su Mario"`
+• `/agent email run "what do we know about Acme Corp?"`
 
-            sender = parse_flag('--from', '')
-            days = int(parse_flag('--days', '30'))
-            limit = int(parse_flag('--limit', '10'))
-            limit = min(limit, 50)
+The email agent searches your memory blobs and can also fetch original emails.
 
-            # Search in emails table (synced via /sync)
-            from datetime import timedelta
-
-            since_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-
-            # Build query
-            q = supabase.table('emails')\
-                .select('gmail_id, thread_id, subject, from_email, from_name, snippet, date')\
-                .eq('owner_id', owner_id)\
-                .gte('date', since_date)\
-                .order('date', desc=True)\
-                .limit(limit)
-
-            # Text search in subject/snippet
-            q = q.or_(f'subject.ilike.%{query}%,snippet.ilike.%{query}%')
-
-            if sender:
-                q = q.ilike('from_email', f'%{sender}%')
-
-            result = q.execute()
-
-            if not result.data:
-                return f"**📭 No emails found** matching `{query}`\n\nTry `/sync` first to fetch recent emails."
-
-            output = f"**🔍 Search Results** ({len(result.data)} found)\n\n"
-            for email in result.data:
-                subject = email.get('subject', '(no subject)')[:40]
-                from_name = email.get('from_name') or email.get('from_email', '?')
-                date = email.get('date', '')[:10]
-                snippet = (email.get('snippet', '')[:60] + '...') if email.get('snippet') else ''
-
-                output += f"**{subject}**\n"
-                output += f"   From: {from_name} | {date}\n"
-                if snippet:
-                    output += f"   _{snippet}_\n"
-                output += "\n"
-
-            return output
+Alternatively, just ask in chat: "cerca le email di Mario" and the assistant will help you."""
 
         # Unknown subcommand - show error + help
         return f"❌ Unknown subcommand: `{subcommand}`\n\n{help_text}"
@@ -2967,22 +2892,30 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 
 **Memory Agents** (extract facts into memory blobs):
 • `/agent memory train [email|calendar]` - Create extraction agent
-• `/agent memory process [email|calendar]` - Process data into memory
+• `/agent memory run [email|calendar]` - Process data into memory
 • `/agent memory show [email|calendar]` - Show current agent
 • `/agent memory reset [email|calendar]` - Delete agent
 
 **Task Agents** (detect actionable items):
 • `/agent task train [email|calendar]` - Create task detection agent
-• `/agent task process [email|calendar]` - Analyze and create tasks
+• `/agent task run [email|calendar]` - Analyze and create tasks
 • `/agent task show [email|calendar]` - Show current agent
 • `/agent task reset [email|calendar]` - Delete agent
+
+**Email Agent** (multi-tool email assistant):
+• `/agent email train` - Learn your writing style from sent emails
+• `/agent email run "instructions"` - Execute email agent (compose, search, answer)
+• `/agent email show` - Show current agent prompt
+• `/agent email reset` - Delete agent prompt
 
 **Workflow:**
 1. `/sync` - Fetch emails/calendar
 2. `/agent memory train email` - Create memory agent
-3. `/agent memory process email` - Extract facts
+3. `/agent memory run email` - Extract facts
 4. `/agent task train email` - Create task agent
-5. `/agent task process email` - Detect tasks"""
+5. `/agent task run email` - Detect tasks
+6. `/agent email train` - Learn your writing style
+7. `/agent email run "write to Mario about the offer"` - Use email agent"""
 
     # --help option (check first)
     if '--help' in args:
@@ -2998,15 +2931,19 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
         action = args[1].lower()  # 'train', 'process', 'show', 'reset'
         channel = args[2].lower() if len(args) > 2 else 'email'  # 'email', 'calendar', 'all'
 
-        valid_domains = ['memory', 'task']
-        valid_actions = ['train', 'process', 'show', 'reset']
+        valid_domains = ['memory', 'task', 'email']
+        valid_actions = ['train', 'run', 'process', 'show', 'reset']  # 'process' kept for backwards compat
         valid_channels = ['email', 'calendar', 'all']
 
         if domain not in valid_domains:
-            return f"❌ Unknown domain: `{domain}`\n\nValid domains: `memory`, `task`\n\n{help_text}"
+            return f"❌ Unknown domain: `{domain}`\n\nValid domains: `memory`, `task`, `email`\n\n{help_text}"
+
+        # Normalize 'process' to 'run' for backwards compatibility
+        if action == 'process':
+            action = 'run'
 
         if action not in valid_actions:
-            return f"❌ Unknown action: `{action}`\n\nValid actions: `train`, `process`, `show`, `reset`"
+            return f"❌ Unknown action: `{action}`\n\nValid actions: `train`, `run`, `show`, `reset`"
 
         if channel not in valid_channels:
             return f"❌ Unknown channel: `{channel}`\n\nValid channels: `email`, `calendar`, `all`"
@@ -3027,8 +2964,8 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
             if action == 'train':
                 return await _handle_memory_train(storage, owner_id, channel, api_key, llm_provider, user_email)
 
-            elif action == 'process':
-                return await _handle_memory_process(storage, owner_id, channel, api_key, llm_provider)
+            elif action == 'run':
+                return await _handle_memory_run(storage, owner_id, channel, api_key, llm_provider)
 
             elif action == 'show':
                 return await _handle_agent_show(storage, owner_id, domain, channel)
@@ -3043,14 +2980,32 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
             if action == 'train':
                 return await _handle_task_train(storage, owner_id, channel, api_key, llm_provider, user_email)
 
-            elif action == 'process':
-                return await _handle_task_process(storage, owner_id, channel, api_key, llm_provider, user_email)
+            elif action == 'run':
+                return await _handle_task_run(storage, owner_id, channel, api_key, llm_provider, user_email)
 
             elif action == 'show':
                 return await _handle_agent_show(storage, owner_id, domain, channel)
 
             elif action == 'reset':
                 return await _handle_agent_reset(storage, owner_id, domain, channel)
+
+        # =====================
+        # EMAIL DOMAIN (Multi-tool Agent)
+        # =====================
+        elif domain == 'email':
+            if action == 'train':
+                return await _handle_emailer_train(storage, owner_id, api_key, llm_provider, user_email)
+
+            elif action == 'run':
+                # Extract instructions from args (everything after 'email run')
+                instructions = ' '.join(args[2:]) if len(args) > 2 else ''
+                return await _handle_emailer_run(storage, owner_id, api_key, llm_provider, instructions)
+
+            elif action == 'show':
+                return await _handle_emailer_show(storage, owner_id)
+
+            elif action == 'reset':
+                return await _handle_emailer_reset(storage, owner_id)
 
         return help_text
 
@@ -3115,7 +3070,7 @@ Then run this command again."""
 - `/agent memory process {channel}` to extract facts"""
 
 
-async def _handle_memory_process(storage, owner_id: str, channel: str, api_key: str, llm_provider: str) -> str:
+async def _handle_memory_run(storage, owner_id: str, channel: str, api_key: str, llm_provider: str) -> str:
     """Start memory processing as a background job.
 
     Creates a background job that runs in a thread pool, returning immediately.
@@ -3236,7 +3191,7 @@ Then run this command again."""
 - `/agent task process {channel}` to detect tasks"""
 
 
-async def _handle_task_process(storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str) -> str:
+async def _handle_task_run(storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str) -> str:
     """Start task detection as a background job.
 
     Creates a background job that runs in a thread pool, returning immediately.
@@ -3298,6 +3253,224 @@ Job ID: `{job['id']}`
 
     # Job exists but is completed/failed/cancelled - should create new one
     return f"Previous job status: {job['status']}. Run the command again to start a new job."
+
+
+# =====================
+# EMAILER AGENT HELPERS
+# =====================
+
+async def _handle_emailer_train(storage, owner_id: str, api_key: str, llm_provider: str, user_email: str) -> str:
+    """Train emailer agent to learn user's writing style."""
+    from zylch.agents.emailer_agent_trainer import EmailerAgentTrainer
+
+    if not api_key or not llm_provider:
+        return """❌ **LLM API key required**
+
+Connect your LLM provider:
+`/connect anthropic` or `/connect openai` or `/connect mistral`"""
+
+    if not user_email:
+        return """❌ **User email not found**
+
+Your email address is required to identify your sent emails.
+Please ensure your account is properly connected via `/connect`."""
+
+    # Check sync status
+    sync_state = storage.get_sync_state(owner_id)
+    if not sync_state or not sync_state.get('full_sync_completed'):
+        return """❌ **Please sync first**
+
+Run `/sync` to synchronize your emails.
+Then run this command again."""
+
+    try:
+        trainer = EmailerAgentTrainer(storage, owner_id, api_key, user_email, llm_provider)
+        agent_prompt, metadata = await trainer.build_emailer_prompt()
+        storage.store_agent_prompt(owner_id, 'emailer', agent_prompt, metadata)
+
+        return f"""✅ **Emailer Agent Trained**
+
+Analyzed **{metadata.get('sent_emails_analyzed', 0)}** sent emails
+Domain: `{metadata.get('user_domain', 'unknown')}`
+
+Your emailer agent now writes emails in your personal style.
+
+**Usage:**
+- Ask me to write emails (e.g., "scrivi a Mario un'offerta")
+- Use the `compose_email` tool
+- Reply to tasks with `/tasks` → select task → "rispondi"
+
+**Tip:** Re-run `/agent email train` periodically to update your style."""
+
+    except ValueError as e:
+        return f"❌ **Training failed:** {str(e)}"
+    except Exception as e:
+        logger.error(f"Emailer training error: {e}", exc_info=True)
+        return f"❌ **Training failed:** {str(e)}"
+
+
+async def _handle_emailer_show(storage, owner_id: str) -> str:
+    """Show emailer agent prompt."""
+    agent_prompt = storage.get_agent_prompt(owner_id, 'emailer')
+    if not agent_prompt:
+        return """❌ **No emailer agent found**
+
+Train your emailer agent to learn your writing style:
+`/agent email train`"""
+
+    meta = storage.get_agent_prompt_metadata(owner_id, 'emailer')
+    meta_info = ""
+    if meta:
+        metadata = meta.get('metadata', {})
+        created = meta.get('created_at', '')[:10] if meta.get('created_at') else 'unknown'
+        sent_analyzed = metadata.get('sent_emails_analyzed', 'unknown')
+        user_domain = metadata.get('user_domain', 'unknown')
+        meta_info = f"""
+_Created: {created}_
+_Emails analyzed: {sent_analyzed}_
+_Domain: {user_domain}_
+"""
+
+    # Truncate prompt for display (can be long)
+    display_prompt = agent_prompt[:2000]
+    if len(agent_prompt) > 2000:
+        display_prompt += f"\n\n... ({len(agent_prompt) - 2000} more chars)"
+
+    return f"""**✍️ Your Emailer Agent**
+{meta_info}
+---
+{display_prompt}
+---
+
+_Use `/agent email reset` to delete and retrain._"""
+
+
+async def _handle_emailer_reset(storage, owner_id: str) -> str:
+    """Delete emailer agent prompt."""
+    deleted = storage.delete_agent_prompt(owner_id, 'emailer')
+    if deleted:
+        return """✅ **Emailer agent deleted**
+
+Your emailer agent has been deleted.
+Emails will be composed with generic style.
+
+Retrain with: `/agent email train`"""
+    else:
+        return "❌ No emailer agent found"
+
+
+async def _handle_emailer_run(storage, owner_id: str, api_key: str, llm_provider: str, instructions: str) -> str:
+    """Execute the email agent with given instructions.
+
+    This is the multi-tool email agent that can:
+    - Compose emails (write_email)
+    - Search memory (search_memory)
+    - Fetch emails (get_email)
+    - Answer questions (respond_text)
+
+    The agent decides which tool to use based on the instructions.
+    """
+    from zylch.agents.emailer_agent import EmailerAgent
+
+    if not instructions.strip():
+        return """❌ **Missing instructions**
+
+Usage: `/agent email run "your instructions"`
+
+Examples:
+• `/agent email run "scrivi a Mario un'offerta"`
+• `/agent email run "What can I answer to this guy?"`
+• `/agent email run "cerca info su Acme Corp"`"""
+
+    if not api_key or not llm_provider:
+        return """❌ **LLM API key required**
+
+Connect your LLM provider:
+`/connect anthropic` or `/connect openai` or `/connect mistral`"""
+
+    try:
+        # Initialize the email agent
+        agent = EmailerAgent(
+            storage=storage,
+            owner_id=owner_id,
+            api_key=api_key,
+            provider=llm_provider
+        )
+
+        # Run the agent
+        result = await agent.run(instructions=instructions)
+
+        tool_used = result.get('tool_used')
+        tool_result = result.get('result', {})
+
+        # Format response based on tool used
+        if tool_used == 'write_email':
+            subject = tool_result.get('subject', '(no subject)')
+            body = tool_result.get('body', '')
+            recipient = tool_result.get('recipient_email', '(not specified)')
+
+            # Auto-save draft
+            to_addresses = [recipient] if recipient and recipient != '(not specified)' else []
+            draft = storage.create_draft(
+                owner_id=owner_id,
+                to=to_addresses,
+                subject=subject,
+                body=body,
+                in_reply_to=tool_result.get('in_reply_to'),
+                references=tool_result.get('references'),
+                thread_id=tool_result.get('thread_id'),
+            )
+            draft_id = draft.get('id', '')[:8] if draft else ''
+
+            return f"""**📝 Draft Created** (ID: `{draft_id}`)
+
+**To:** {recipient}
+**Subject:** {subject}
+
+{body}
+
+---
+Say "send it" or use `/email send {draft_id}` to send."""
+
+        elif tool_used == 'search_memory':
+            results = tool_result.get('results', [])
+            message = tool_result.get('message', '')
+            if not results:
+                return f"🔍 {message}\n\nNo results found."
+
+            formatted = []
+            for r in results[:3]:
+                content = r.get('content', '')[:500]
+                formatted.append(f"```\n{content}\n```")
+
+            return f"""🔍 **{message}**
+
+{chr(10).join(formatted)}"""
+
+        elif tool_used == 'get_email':
+            if 'error' in tool_result:
+                return f"❌ {tool_result['error']}"
+
+            return f"""📧 **Email Retrieved**
+
+**From:** {tool_result.get('from_email', 'unknown')}
+**Subject:** {tool_result.get('subject', '(no subject)')}
+**Date:** {tool_result.get('date', 'unknown')}
+
+{tool_result.get('body', '')[:1500]}"""
+
+        elif tool_used == 'respond_text':
+            response = tool_result.get('response', '')
+            return f"""💬 **Response**
+
+{response}"""
+
+        else:
+            return f"⚠️ Agent returned unexpected result: {result}"
+
+    except Exception as e:
+        logger.error(f"Emailer run error: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}"
 
 
 # =====================

@@ -1,8 +1,13 @@
-"""Emailer Agent - Write emails with full context from memory.
+"""Emailer Agent - Multi-tool agent for email-related tasks.
 
-Gathers context (emails, blobs, templates) using hybrid search and generates
-contextual email drafts. No complex conditional logic - uses a single unified
-context gathering strategy.
+This is a TRUE AGENT with multiple tools that can:
+- Compose emails (write_email)
+- Search memory for context (search_memory)
+- Fetch original emails (get_email)
+- Provide analysis/suggestions (respond_text)
+
+The trained prompt instructs the agent when to use each tool based on
+the user's request.
 
 Key principle: "Find a balance between putting a bit more than necessary
 in memory and not overloading the assistant."
@@ -10,7 +15,7 @@ in memory and not overloading the assistant."
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from zylch.llm import LLMClient
 from zylch.storage.supabase_client import SupabaseStorage
@@ -23,25 +28,77 @@ logger = logging.getLogger(__name__)
 # Maximum characters for context to leave room for LLM generation
 MAX_CONTEXT_CHARS = 8000
 
-# Tool schema for structured email output via LLM tool_use
-WRITE_EMAIL_TOOL = {
-    "name": "write_email",
-    "description": "Output the composed email with subject and body",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "subject": {
-                "type": "string",
-                "description": "Email subject line"
+# Multi-tool schema for the email agent
+# The agent chooses which tool to use based on the request
+EMAIL_AGENT_TOOLS = [
+    {
+        "name": "write_email",
+        "description": "Compose and save an email as draft. Use when the user wants to write, compose, reply, or send an email.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "subject": {
+                    "type": "string",
+                    "description": "Email subject line"
+                },
+                "body": {
+                    "type": "string",
+                    "description": "Email body text"
+                },
+                "to": {
+                    "type": "string",
+                    "description": "Recipient email address (optional if already known from context)"
+                }
             },
-            "body": {
-                "type": "string",
-                "description": "Email body text"
-            }
-        },
-        "required": ["subject", "body"]
+            "required": ["subject", "body"]
+        }
+    },
+    {
+        "name": "search_memory",
+        "description": "Search memory blobs for context about a person, company, or template. Use when you need more information before answering or composing.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query (name, topic, company, etc.)"
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "get_email",
+        "description": "Fetch the full content of an original email by ID. Use when blob context references an email ID and you need more details.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "email_id": {
+                    "type": "string",
+                    "description": "The email UUID to fetch"
+                }
+            },
+            "required": ["email_id"]
+        }
+    },
+    {
+        "name": "respond_text",
+        "description": "Return a text response with analysis, suggestions, or answers. Use when the user asks a question, wants advice, or needs information - NOT when they want to compose an email.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "response": {
+                    "type": "string",
+                    "description": "Your response text"
+                }
+            },
+            "required": ["response"]
+        }
     }
-}
+]
+
+# Legacy single-tool for backwards compatibility (compose-only mode)
+WRITE_EMAIL_TOOL = EMAIL_AGENT_TOOLS[0]
 
 
 @dataclass
@@ -253,11 +310,25 @@ def build_prompt_context(context: EmailContext) -> str:
 
 
 class EmailerAgent:
-    """Specialized agent for writing emails with full context.
+    """Multi-tool agent for email-related tasks.
 
-    Gathers context using hybrid search (PERSON, COMPANY, TEMPLATE blobs)
-    and task sources, then uses LLM to generate contextual emails.
+    This is a TRUE AGENT that:
+    1. Has a trained prompt that learns the user's writing style
+    2. Has multiple tools it can choose from based on the request
+    3. Can autonomously seek more information when context is insufficient
+
+    Tools available:
+    - write_email: Compose and save as draft
+    - search_memory: Search blobs for context
+    - get_email: Fetch original email by ID
+    - respond_text: Return analysis/suggestions
+
+    If trained via `/agent email train`, uses personalized writing style.
+    Otherwise falls back to generic behavior.
     """
+
+    PROMPT_KEY = 'emailer'  # Key in agent_prompts table
+    TOOLS = EMAIL_AGENT_TOOLS
 
     def __init__(
         self,
@@ -280,15 +351,49 @@ class EmailerAgent:
         # Initialize hybrid search
         config = MemoryConfig()
         embedding_engine = EmbeddingEngine(config)
-        search_engine = HybridSearchEngine(
+        self.search_engine = HybridSearchEngine(
             supabase_client=storage.client,
             embedding_engine=embedding_engine
         )
 
-        self.gatherer = EmailContextGatherer(storage, search_engine, owner_id)
+        self.gatherer = EmailContextGatherer(storage, self.search_engine, owner_id)
         self.llm = LLMClient(api_key=api_key, provider=provider)
 
+        # Cache for trained prompt (lazy loaded)
+        self._trained_prompt: Optional[str] = None
+        self._prompt_loaded: bool = False
+
         logger.info(f"EmailerAgent initialized for owner={owner_id}")
+
+    def _get_trained_prompt(self) -> Optional[str]:
+        """Get trained email writing prompt from storage.
+
+        Loads user's trained prompt from DB on first call, caches for subsequent calls.
+        Returns None if no trained prompt exists (user hasn't run /agent email train).
+
+        Returns:
+            The trained prompt, or None if not configured
+        """
+        if not self._prompt_loaded:
+            self._trained_prompt = self.storage.get_agent_prompt(self.owner_id, 'emailer')
+            self._prompt_loaded = True
+
+            if self._trained_prompt:
+                logger.info("Using user's trained emailer prompt")
+            else:
+                logger.debug("No trained emailer prompt - using generic")
+
+        return self._trained_prompt
+
+    def has_trained_prompt(self) -> bool:
+        """Check if user has a trained emailer prompt.
+
+        Returns:
+            True if user has trained the emailer agent
+        """
+        if not self._prompt_loaded:
+            self._get_trained_prompt()  # Trigger load
+        return self._trained_prompt is not None
 
     async def compose(
         self,
@@ -320,8 +425,26 @@ class EmailerAgent:
         # Build prompt context
         context_text = build_prompt_context(context)
 
-        # Generate email using tool_use for structured output
-        prompt = f"""You are writing an email for the user.
+        # Check for trained prompt (personalized style)
+        trained_prompt = self._get_trained_prompt()
+
+        if trained_prompt:
+            # Use trained prompt - already contains style instructions
+            prompt = f"""{trained_prompt}
+
+---
+
+CONTEXT:
+{context_text}
+
+---
+
+USER REQUEST: {user_request}
+
+Use the write_email tool to output your composed email."""
+        else:
+            # Fallback to generic prompt (no personalized style)
+            prompt = f"""You are writing an email for the user.
 
 {context_text}
 
@@ -330,9 +453,9 @@ class EmailerAgent:
 USER REQUEST: {user_request}
 
 Write the email in the appropriate language:
-- as requested by the user (if)
+- as requested by the user (if specified)
 - in the same language used by the recipient in other exchanges (if any)
-- try to infer if not clue!
+- try to infer if no clue!
 
 If TEMPLATE entities are provided, use them as reference for tone and structure.
 If recipient info is available, personalize the email appropriately.
@@ -391,3 +514,256 @@ Use the write_email tool to output your composed email."""
             )
 
         return result
+
+    async def run(
+        self,
+        instructions: str,
+        recipient_email: Optional[str] = None,
+        task_num: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Execute the email agent with given instructions.
+
+        This is the main entry point for the multi-tool agent. The agent
+        decides which tool to use based on the instructions:
+
+        - "scrivi a Mario un'offerta" → write_email
+        - "What can I answer to this guy?" → respond_text
+        - "cerca info su Acme Corp" → search_memory → respond_text
+        - "reply to task 3" → gather context → write_email
+
+        Args:
+            instructions: What the user wants to do
+            recipient_email: Optional recipient email (for email composition)
+            task_num: Optional 1-indexed task number from /tasks
+
+        Returns:
+            Dict with:
+            - tool_used: Name of the tool the agent chose
+            - tool_input: Input the agent provided to the tool
+            - result: Processed result (email dict for write_email, text for respond_text)
+        """
+        # Gather context
+        context = await self.gatherer.gather(
+            user_request=instructions,
+            recipient_email=recipient_email,
+            task_num=task_num
+        )
+
+        # Build prompt context
+        context_text = build_prompt_context(context)
+
+        # Check for trained prompt (personalized style)
+        trained_prompt = self._get_trained_prompt()
+
+        if trained_prompt:
+            # Use trained prompt - already contains style and tool selection instructions
+            prompt = f"""{trained_prompt}
+
+---
+
+CONTEXT:
+{context_text}
+
+---
+
+INSTRUCTIONS: {instructions}
+
+Choose the appropriate tool based on what the user wants:
+- Use write_email if they want to compose/write/reply/send an email
+- Use search_memory if you need more information before answering
+- Use get_email if context references an email ID you need to read
+- Use respond_text for questions, analysis, suggestions, or anything else"""
+        else:
+            # Fallback to generic prompt (no personalized style)
+            prompt = f"""You are an AI email assistant helping the user.
+
+CONTEXT:
+{context_text}
+
+---
+
+INSTRUCTIONS: {instructions}
+
+Choose the appropriate tool based on what the user wants:
+- Use write_email if they want to compose/write/reply/send an email
+- Use search_memory if you need more information before answering
+- Use get_email if context references an email ID you need to read
+- Use respond_text for questions, analysis, suggestions, or anything else
+
+If writing an email:
+- Use appropriate language (match recipient's language if known)
+- If TEMPLATE entities are provided, use them as reference for tone and structure
+- If recipient info is available, personalize appropriately"""
+
+        logger.debug(f"[EMAILER] run() sending prompt ({len(prompt)} chars)")
+
+        # Call LLM with all tools - let it choose
+        response = await self.llm.create_message(
+            messages=[{"role": "user", "content": prompt}],
+            tools=self.TOOLS,
+            max_tokens=2000
+        )
+
+        # Handle tool response
+        result = self._handle_tool_response(response, context, recipient_email)
+
+        return result
+
+    def _handle_tool_response(
+        self,
+        response,
+        context: EmailContext,
+        recipient_email: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Handle the LLM's tool response.
+
+        Args:
+            response: LLMResponse from create_message
+            context: EmailContext with gathered data
+            recipient_email: Optional recipient for emails
+
+        Returns:
+            Dict with tool_used, tool_input, and processed result
+        """
+        result = {
+            'tool_used': None,
+            'tool_input': {},
+            'result': None
+        }
+
+        if response.stop_reason == "tool_use":
+            for block in response.content:
+                if hasattr(block, 'input'):  # ToolUseBlock
+                    result['tool_used'] = block.name
+                    result['tool_input'] = block.input
+
+                    # Process based on tool
+                    if block.name == 'write_email':
+                        result['result'] = self._process_write_email(
+                            block.input, context, recipient_email
+                        )
+                    elif block.name == 'search_memory':
+                        result['result'] = self._process_search_memory(block.input)
+                    elif block.name == 'get_email':
+                        result['result'] = self._process_get_email(block.input)
+                    elif block.name == 'respond_text':
+                        result['result'] = {
+                            'response': block.input.get('response', '')
+                        }
+                    break
+        else:
+            # No tool called - extract text response as fallback
+            for block in response.content:
+                if hasattr(block, 'text'):
+                    result['tool_used'] = 'respond_text'
+                    result['result'] = {'response': block.text}
+                    break
+
+        return result
+
+    def _process_write_email(
+        self,
+        tool_input: Dict[str, Any],
+        context: EmailContext,
+        recipient_email: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Process write_email tool output.
+
+        Adds threading headers if replying to a task with source emails.
+
+        Args:
+            tool_input: The write_email tool's input (subject, body, to)
+            context: EmailContext with source emails for threading
+            recipient_email: Optional recipient override
+
+        Returns:
+            Email dict with subject, body, and optional threading headers
+        """
+        result = {
+            'subject': tool_input.get('subject', ''),
+            'body': tool_input.get('body', ''),
+        }
+
+        # Use recipient from tool input or parameter
+        to_email = tool_input.get('to') or recipient_email
+        if to_email:
+            result['recipient_email'] = to_email
+
+        # Add threading headers if replying to task with source emails
+        if context.source_emails:
+            latest_email = context.source_emails[-1]
+
+            result['in_reply_to'] = latest_email.get('message_id_header')
+
+            existing_refs = latest_email.get('references') or []
+            msg_id = latest_email.get('message_id_header')
+            if msg_id:
+                result['references'] = existing_refs + [msg_id]
+            else:
+                result['references'] = existing_refs
+
+            result['thread_id'] = latest_email.get('thread_id')
+
+            # Extract recipient from original email if not provided
+            if not to_email:
+                result['recipient_email'] = latest_email.get('from_email')
+
+        return result
+
+    def _process_search_memory(self, tool_input: Dict[str, Any]) -> Dict[str, Any]:
+        """Process search_memory tool by executing the search.
+
+        Args:
+            tool_input: The search_memory tool's input (query)
+
+        Returns:
+            Dict with search results
+        """
+        query = tool_input.get('query', '')
+        if not query:
+            return {'results': [], 'message': 'No search query provided'}
+
+        namespace = f"user:{self.owner_id}"
+        results = self.search_engine.search(
+            owner_id=self.owner_id,
+            query=query,
+            namespace=namespace,
+            limit=5
+        )
+
+        formatted = []
+        for r in results:
+            formatted.append({
+                'content': r.content,
+                'score': r.score if hasattr(r, 'score') else None
+            })
+
+        return {
+            'results': formatted,
+            'message': f"Found {len(results)} results for '{query}'"
+        }
+
+    def _process_get_email(self, tool_input: Dict[str, Any]) -> Dict[str, Any]:
+        """Process get_email tool by fetching the email.
+
+        Args:
+            tool_input: The get_email tool's input (email_id)
+
+        Returns:
+            Dict with email content or error
+        """
+        email_id = tool_input.get('email_id', '')
+        if not email_id:
+            return {'error': 'No email ID provided'}
+
+        email = self.storage.get_email_by_supabase_id(self.owner_id, email_id)
+        if not email:
+            return {'error': f'Email not found: {email_id}'}
+
+        return {
+            'from_email': email.get('from_email'),
+            'to_email': email.get('to_email'),
+            'subject': email.get('subject'),
+            'date': email.get('date'),
+            'body': email.get('body_plain', '')[:2000]
+        }
