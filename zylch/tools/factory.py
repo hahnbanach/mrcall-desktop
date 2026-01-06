@@ -2172,16 +2172,23 @@ class _ComposeEmailTool(Tool):
             from zylch.storage.supabase_client import SupabaseStorage
             storage = SupabaseStorage.get_instance()
 
-            to_addresses = [recipient_email] if recipient_email else []
+            # Use recipient from result if not provided (extracted from thread)
+            to_email = recipient_email or result.get('recipient_email')
+            to_addresses = [to_email] if to_email else []
+
+            # Create draft with threading headers (for replies to stay in thread)
             draft = storage.create_draft(
                 owner_id=owner_id,
                 to=to_addresses,
                 subject=subject,
-                body=body
+                body=body,
+                in_reply_to=result.get('in_reply_to'),
+                references=result.get('references'),
+                thread_id=result.get('thread_id'),
             )
 
             draft_id = draft.get('id', '')[:8] if draft else ''
-            to_display = recipient_email or '(not specified)'
+            to_display = to_email or '(not specified)'
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
