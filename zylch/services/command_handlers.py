@@ -789,13 +789,13 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
     import httpx
     from zylch.config import settings
 
-    # Feature to variable mapping
-    FEATURE_TO_VARIABLE = {
-        "welcome_message": "OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT",
+    # Feature to variables mapping (each feature can have multiple variables)
+    FEATURE_TO_VARIABLES = {
+        "welcome_message": ["OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT"],
         # Future mappings:
-        # "booking": "BOOKING_PROMPT",
+        # "booking": ["BOOKING_PROMPT", "BOOKING_CONFIRMATION_PROMPT"],
     }
-    SUPPORTED_FEATURES = list(FEATURE_TO_VARIABLE.keys())
+    SUPPORTED_FEATURES = list(FEATURE_TO_VARIABLES.keys())
 
     help_text = """**📞 MrCall Integration**
 
@@ -1164,7 +1164,6 @@ Run `/mrcall train {feature_name}` to generate the configuration context."""
             import asyncio
             from concurrent.futures import ThreadPoolExecutor
             from zylch.api.token_storage import get_active_llm_provider
-            from zylch.tools.mrcall.llm_helper import modify_prompt_with_llm
 
             # Validate args: config <feature> <instructions>
             if len(positional) < 2:
@@ -1213,14 +1212,15 @@ Run `/mrcall train {feature_name}` to generate the configuration context."""
             if not api_key:
                 return "❌ **No LLM configured**\n\nRun `/connect anthropic` to configure an LLM provider."
 
-            # Get variable name for this feature
-            variable_name = FEATURE_TO_VARIABLE[feature_name]
+            # Get variable names for this feature (can be multiple)
+            variable_names = FEATURE_TO_VARIABLES[feature_name]
 
             # Run the config update in executor (involves multiple async calls)
             def _config_feature():
                 import asyncio
                 from zylch.tools.starchat import create_starchat_client
                 from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+                from zylch.tools.mrcall.llm_helper import modify_variables_with_llm
 
                 # Create a new event loop for this thread
                 loop = asyncio.new_event_loop()
@@ -1248,56 +1248,54 @@ Run `/mrcall train {feature_name}` to generate the configuration context."""
                             trainer.train_feature(feature_name, business_id)
                         )
 
-                    # 2. Get current variable value
+                    # 2. Get current values for ALL variables in this feature
                     business_data = loop.run_until_complete(
                         starchat.get_business_config(business_id)
                     )
-                    current_value = business_data.get("variables", {}).get(variable_name, "")
+                    business_variables = business_data.get("variables", {})
 
-                    if not current_value:
+                    current_values = {}
+                    missing_vars = []
+                    for var_name in variable_names:
+                        value = business_variables.get(var_name, "")
+                        if value:
+                            current_values[var_name] = value
+                        else:
+                            missing_vars.append(var_name)
+
+                    if missing_vars:
                         loop.run_until_complete(starchat.close())
-                        return None, f"Variable `{variable_name}` not found in business config"
+                        return None, None, f"Variable(s) not found: {', '.join(missing_vars)}"
 
-                    # 3. Use LLM to modify the prompt based on context + instructions
-                    # Build a richer request that includes context
-                    enhanced_request = f"""Based on the configuration context below, apply these changes:
-
-{instructions}
-
-CONFIGURATION CONTEXT:
-{context}"""
-
-                    new_value, validation = loop.run_until_complete(
-                        modify_prompt_with_llm(
-                            current_prompt=current_value,
-                            user_request=enhanced_request,
+                    # 3. Use LLM with function calling to modify ALL variables
+                    update_result = loop.run_until_complete(
+                        modify_variables_with_llm(
+                            current_values=current_values,
+                            context=context,
+                            instructions=instructions,
                             api_key=api_key,
                             provider=llm_provider,
                         )
                     )
 
-                    # Check if modification was valid
-                    if validation.get("error"):
-                        loop.run_until_complete(starchat.close())
-                        return None, f"LLM modification error: {validation['error']}"
-
-                    # 4. Apply to StarChat
-                    loop.run_until_complete(
-                        starchat.update_business_variable(business_id, variable_name, new_value)
-                    )
+                    # 4. Apply ALL new values to StarChat
+                    for var_name, new_value in update_result.new_values.items():
+                        loop.run_until_complete(
+                            starchat.update_business_variable(business_id, var_name, new_value)
+                        )
 
                     # 5. Retrain to update sub-prompt
-                    new_context, _ = loop.run_until_complete(
+                    loop.run_until_complete(
                         trainer.train_feature(feature_name, business_id)
                     )
 
                     # Close starchat client
                     loop.run_until_complete(starchat.close())
 
-                    return new_value, None
+                    return update_result.new_values, update_result.behavior_summary, None
                 except Exception as e:
                     logger.error(f"Config feature error: {e}", exc_info=True)
-                    return None, str(e)
+                    return None, None, str(e)
                 finally:
                     loop.close()
 
@@ -1305,7 +1303,7 @@ CONFIGURATION CONTEXT:
             loop = asyncio.get_event_loop()
 
             try:
-                new_value, error = await loop.run_in_executor(executor, _config_feature)
+                new_values, behavior_summary, error = await loop.run_in_executor(executor, _config_feature)
 
                 if error:
                     # Check for auth errors
@@ -1313,13 +1311,22 @@ CONFIGURATION CONTEXT:
                         return "❌ **MrCall connection expired**\n\nRun `/connect mrcall` to reconnect."
                     return f"❌ **Error configuring assistant:** {error}"
 
+                # Log variables for debugging (internal only)
+                logger.debug(f"Variables updated for {feature_name}: {list(new_values.keys())}")
+
+                # Get display name for user-friendly message
+                from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+                display_name = MrCallConfiguratorTrainer.FEATURES.get(feature_name, {}).get(
+                    "display_name", feature_name
+                )
+
                 return f"""✅ **Configuration updated**
 
-**Feature:** {feature_name}
-**Instructions applied:**
-{instructions}
+**{display_name}**
 
-The assistant behavior has been updated. Run `/mrcall show {feature_name}` to see the new configuration context."""
+{behavior_summary}
+
+Run `/mrcall show {feature_name}` to see the full configuration."""
 
             except Exception as e:
                 logger.error(f"Failed to config feature: {e}", exc_info=True)
