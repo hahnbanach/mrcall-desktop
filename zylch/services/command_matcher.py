@@ -247,42 +247,41 @@ class SemanticCommandMatcher:
         return "/sync"
 
     def _format_memory(self, params: Dict[str, Any], template: str, original_input: str) -> str:
-        """/memory [--search query | --store content | --stats | --list | --reset]"""
+        """/memory [search query | store content | stats | list | reset]"""
         # Determine subcommand from template
         if 'search' in template or 'who is' in template or 'what do you know' in template or 'find in memory' in template:
             # Pass the FULL original message as the search query
-            # This way "who is Mario Rossi" becomes "--search who is Mario Rossi"
-            return f"/memory --search {original_input}"
+            return f"/memory search {original_input}"
         elif 'store' in template or 'remember' in template or 'save to memory' in template:
             content = params.get('content', '')
-            return f"/memory --store {content}"
+            return f"/memory store {content}"
         elif 'stats' in template or 'statistics' in template:
-            return "/memory --stats"
+            return "/memory stats"
         elif 'list' in template or 'show memories' in template:
             limit = params.get('limit', '')
             if limit:
-                return f"/memory --list {limit}"
-            return "/memory --list"
+                return f"/memory list {limit}"
+            return "/memory list"
         elif 'reset' in template or 'clear memory' in template or 'delete all' in template:
-            return "/memory --reset"
+            return "/memory reset"
 
         # Default to search with original input
-        return f"/memory --search {original_input}"
+        return f"/memory search {original_input}"
 
     def _format_email(self, params: Dict[str, Any], template: str) -> str:
-        """/email [--list --draft | --create | --send | --delete | --search]"""
+        """/email [list --draft | create | send | delete | search]"""
         # Drafts - List
         if 'list draft' in template or 'show draft' in template or 'my draft' in template:
             limit = params.get('limit', '')
             if limit:
-                return f"/email --list --draft --limit {limit}"
-            return "/email --list --draft"
+                return f"/email list --draft --limit {limit}"
+            return "/email list --draft"
 
         # Drafts - Create
         if 'create draft' in template or 'draft email' in template or 'compose' in template or 'write email' in template:
             to = params.get('to', '')
             subject = params.get('subject', '')
-            parts = ["/email --create"]
+            parts = ["/email create"]
             if to:
                 parts.append(f"--to {to}")
             if subject:
@@ -310,7 +309,7 @@ class SemanticCommandMatcher:
             days = params.get('days', '')
             limit = params.get('limit', '')
 
-            parts = ["/email --search"]
+            parts = ["/email search"]
             if query:
                 parts.append(f"\"{query}\"")
             if sender:
@@ -322,15 +321,15 @@ class SemanticCommandMatcher:
             return " ".join(parts)
 
         # Default to list drafts
-        return "/email --list --draft"
+        return "/email list --draft"
 
     def _format_calendar(self, params: Dict[str, Any], template: str) -> str:
-        """/calendar [--list | --create | --search]"""
+        """/calendar [list | create | search]"""
         # List
         if 'show calendar' in template or 'my calendar' in template or 'calendar for' in template or 'meetings' in template or 'events' in template or 'what\'s on' in template:
             date = params.get('date', '')
             limit = params.get('limit', '')
-            parts = ["/calendar --list"]
+            parts = ["/calendar list"]
             if date:
                 parts.append(f"--date {date}")
             if limit:
@@ -343,7 +342,7 @@ class SemanticCommandMatcher:
             date = params.get('date', '')
             time = params.get('time', '')
             title = params.get('title', '')
-            parts = ["/calendar --create"]
+            parts = ["/calendar create"]
             if title:
                 parts.append(f"--title \"{title}\"")
             if attendee:
@@ -359,25 +358,25 @@ class SemanticCommandMatcher:
             query = params.get('query', '')
             attendee = params.get('attendee', '')
             if query:
-                return f"/calendar --search \"{query}\""
+                return f"/calendar search \"{query}\""
             if attendee:
-                return f"/calendar --search {attendee}"
-            return "/calendar --search"
+                return f"/calendar search {attendee}"
+            return "/calendar search"
 
-        return "/calendar --list"
+        return "/calendar list"
 
     def _format_reminder(self, params: Dict[str, Any], template: str) -> str:
-        """/reminder [--set | --list | --cancel]"""
+        """/reminder [set | list | cancel]"""
         # List
         if 'list reminder' in template or 'show reminder' in template:
-            return "/reminder --list"
+            return "/reminder list"
 
         # Cancel
         if 'cancel reminder' in template:
             reminder_id = params.get('reminder_id', '')
             if reminder_id:
-                return f"/reminder --cancel {reminder_id}"
-            return "/reminder --cancel"
+                return f"/reminder cancel {reminder_id}"
+            return "/reminder cancel"
 
         # Set (default)
         duration = params.get('duration', '')
@@ -385,7 +384,7 @@ class SemanticCommandMatcher:
         date = params.get('date', '')
         task = params.get('task', '')
 
-        parts = ["/reminder --set"]
+        parts = ["/reminder set"]
         if duration:
             parts.append(f"--in \"{duration}\"")
         if time:
@@ -404,11 +403,11 @@ class SemanticCommandMatcher:
         return "/model"
 
     def _format_archive(self, params: Dict[str, Any], template: str) -> str:
-        """/archive [--stats | --search query]"""
+        """/archive [stats | search query | list]"""
         if 'search' in template or 'find' in template:
             query = params.get('query', '')
             limit = params.get('limit', '')
-            parts = ["/archive --search"]
+            parts = ["/archive search"]
             if query:
                 parts.append(f"\"{query}\"")
             if limit:
@@ -416,24 +415,24 @@ class SemanticCommandMatcher:
             return " ".join(parts)
 
         if 'stats' in template or 'statistics' in template:
-            return "/archive --stats"
+            return "/archive stats"
 
         limit = params.get('limit', '')
         if limit:
-            return f"/archive --list --limit {limit}"
+            return f"/archive list --limit {limit}"
 
-        return "/archive --stats"
+        return "/archive stats"
 
     def _format_trigger(self, params: Dict[str, Any], template: str) -> str:
-        """/trigger [--list | --add | --remove id]"""
+        """/trigger [list | add | remove id]"""
         if 'list' in template or 'show' in template:
-            return "/trigger --list"
+            return "/trigger list"
         if 'remove' in template or 'delete' in template:
             trigger_id = params.get('trigger_id', '')
             if trigger_id:
-                return f"/trigger --remove {trigger_id}"
-            return "/trigger --remove"
-        return "/trigger --list"
+                return f"/trigger remove {trigger_id}"
+            return "/trigger remove"
+        return "/trigger list"
 
     def _format_share(self, params: Dict[str, Any]) -> str:
         """/share [email]"""

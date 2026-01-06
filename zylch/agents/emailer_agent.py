@@ -304,7 +304,11 @@ class EmailerAgent:
             task_num: Optional 1-indexed task number from /tasks
 
         Returns:
-            Dict with 'subject' and 'body' keys
+            Dict with 'subject', 'body', and optionally threading headers:
+            - in_reply_to: Message-ID for threading
+            - references: List of message IDs for threading
+            - thread_id: Gmail thread ID
+            - recipient_email: Extracted from source email if not provided
         """
         # Gather context
         context = await self.gatherer.gather(
@@ -345,14 +349,45 @@ Use the write_email tool to output your composed email."""
         )
 
         # Extract result from ToolUseBlock - no JSON parsing needed
+        result = {"subject": "(error)", "body": "Failed to generate email"}
+
         if response.stop_reason == "tool_use":
             for block in response.content:
                 if hasattr(block, 'input'):  # ToolUseBlock
-                    return {
+                    result = {
                         "subject": block.input.get("subject", ""),
                         "body": block.input.get("body", "")
                     }
+                    break
+        else:
+            logger.error(f"[EMAILER] Unexpected response: stop_reason={response.stop_reason}")
 
-        # Fallback (shouldn't happen with tool_choice forcing)
-        logger.error(f"[EMAILER] Unexpected response: stop_reason={response.stop_reason}")
-        return {"subject": "(error)", "body": "Failed to generate email"}
+        # Add threading headers if replying to task with source emails
+        if context.source_emails:
+            # Get the most recent email to reply to (ordered by date_timestamp ASC)
+            latest_email = context.source_emails[-1]
+
+            # For reply: in_reply_to = message_id of the email we're replying to
+            result["in_reply_to"] = latest_email.get("message_id_header")
+
+            # Build references: existing references + message_id we're replying to
+            existing_refs = latest_email.get("references") or []
+            msg_id = latest_email.get("message_id_header")
+            if msg_id:
+                result["references"] = existing_refs + [msg_id]
+            else:
+                result["references"] = existing_refs
+
+            # Gmail thread ID
+            result["thread_id"] = latest_email.get("thread_id")
+
+            # Extract recipient from original email if not provided
+            if not recipient_email:
+                result["recipient_email"] = latest_email.get("from_email")
+
+            logger.info(
+                f"[EMAILER] Threading info: in_reply_to={result.get('in_reply_to')}, "
+                f"thread_id={result.get('thread_id')}, recipient={result.get('recipient_email')}"
+            )
+
+        return result
