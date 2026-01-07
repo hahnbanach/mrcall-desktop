@@ -60,7 +60,7 @@ class ModelSelector:
             "what priority", "rate this", "score this"
         ]
         if any(keyword in message_lower for keyword in classification_keywords):
-            logger.info(f"Using classification model for: {message[:50]}...")
+            logger.info(f"Using classification model for: {message}")
             return self.classification_model
 
         # Heuristics for quality model (drafting, analysis)
@@ -69,7 +69,7 @@ class ModelSelector:
             "summarize", "research", "find information"
         ]
         if any(keyword in message_lower for keyword in quality_keywords):
-            logger.info(f"Using default quality model for: {message[:50]}...")
+            logger.info(f"Using default quality model for: {message}")
             return self.default_model
 
         # Heuristics for executive/premium model
@@ -78,11 +78,11 @@ class ModelSelector:
             "urgent", "important", "strategic"
         ]
         if any(keyword in message_lower for keyword in executive_keywords):
-            logger.info(f"Using executive model for: {message[:50]}...")
+            logger.info(f"Using executive model for: {message}")
             return self.executive_model
 
         # Default to Sonnet for general tasks
-        logger.debug(f"Using default model for: {message[:50]}...")
+        logger.debug(f"Using default model for: {message}")
         return self.default_model
 
     def get_model_info(self, model: str) -> dict:

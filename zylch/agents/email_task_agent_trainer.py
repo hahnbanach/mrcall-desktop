@@ -250,7 +250,7 @@ class EmailTaskAgentTrainer:
                 from_email = email.get('from_email', 'unknown')
                 date = email.get('date', 'unknown')
                 body = email.get('body_plain', '') or email.get('snippet', '')
-                body = body[:300] if body else ''  # Truncate
+                body = body if body else ''
 
                 # Mark if this is from the user
                 is_user = self.user_domain and self.user_domain in from_email.lower()
@@ -275,7 +275,7 @@ Body: {body}
         for blob in blobs:
             formatted.append(f"""
 --- Blob for {blob['contact_email']} ---
-{blob['content'][:500]}
+{blob['content']}
 """)
 
         return '\n'.join(formatted)

@@ -76,7 +76,7 @@ ADMIN RULES (MUST be followed):
         patterns_section = """
 SIMILAR PAST MODIFICATIONS (for reference, not mandatory):
 """
-        for p in similar_patterns[:3]:  # Max 3 patterns
+        for p in similar_patterns:
             patterns_section += f"- {p.get('context', 'N/A')}: {p.get('pattern', 'N/A')}\n"
 
     # Build modification prompt

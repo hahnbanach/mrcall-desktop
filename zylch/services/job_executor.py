@@ -616,7 +616,7 @@ def _analyze_item_sync(worker: 'TaskWorker', event_type: str, item: Dict) -> Opt
             event_data = {
                 'id': item_id,
                 'summary': item.get('summary'),
-                'description': item.get('description', '')[:500],
+                'description': item.get('description', ''),
                 'start_time': item.get('start_time'),
                 'end_time': item.get('end_time'),
                 'attendees': attendee_emails,

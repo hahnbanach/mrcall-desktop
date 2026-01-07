@@ -232,7 +232,7 @@ class TaskWorker:
             event_data = {
                 'id': event_id,
                 'summary': event.get('summary'),
-                'description': event.get('description', '')[:500],
+                'description': event.get('description', ''),
                 'start_time': event.get('start_time'),
                 'end_time': event.get('end_time'),
                 'attendees': attendee_emails,
@@ -306,7 +306,7 @@ class TaskWorker:
         logger.debug(f"[TASK] Analyzing {event_type}")
         logger.debug(f"[TASK] Event data: {event_data_json}")
         logger.debug(f"[TASK] Blob context length: {len(blob_context)}")
-        logger.debug(f"[TASK] Formatted prompt:\n{formatted_prompt[:500]}...")
+        logger.debug(f"[TASK] Formatted prompt:\n{formatted_prompt}")
 
         # Call classification model with tool use for structured output
         try:
@@ -359,7 +359,7 @@ class TaskWorker:
             )
 
             if results:
-                return results[0].content[:500], results[0].blob_id  # Truncate for prompt size
+                return results[0].content, results[0].blob_id
 
         except Exception as e:
             logger.warning(f"Failed to get blob for {contact_email}: {e}")

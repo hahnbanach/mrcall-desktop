@@ -388,7 +388,7 @@ class SyncService:
                     print(f"Contact: {conv.get('contactName', 'Unknown')} ({conv.get('contactNumber', 'N/A')})")
                     print(f"Duration: {conv.get('duration', 0) / 1000:.1f}s")
                     print(f"Subject: {conv.get('subject', 'N/A')}")
-                    print(f"Body: {conv.get('body', 'N/A')[:200]}...")
+                    print(f"Body: {conv.get('body', 'N/A')}")
                     if conv.get('values'):
                         print(f"Values: {json.dumps(conv.get('values'), indent=2, default=str)}")
                 print(f"\n{'='*60}\n")

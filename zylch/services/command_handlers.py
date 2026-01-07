@@ -540,7 +540,7 @@ Memory will be searchable via hybrid search."""
                         .eq('blob_id', blob_id)\
                         .execute()
 
-                    return f"✅ **Memory deleted** (ID: `{blob_id[:8]}...`)"
+                    return f"✅ **Memory deleted** (ID: `{blob_id}`)"
                 else:
                     return f"❌ Blob not found: `{blob_id}`\n\nMake sure you're using the full blob ID from `/memory search`."
 
@@ -560,7 +560,7 @@ Memory will be searchable via hybrid search."""
 
             if stats['namespaces']:
                 output += "\n**Namespaces:**\n"
-                for ns in stats['namespaces'][:10]:
+                for ns in stats['namespaces']:
                     output += f"• `{ns}`\n"
 
             return output
@@ -588,10 +588,10 @@ Memory will be searchable via hybrid search."""
 
             output = f"**🧠 Recent Memories** ({len(result.data)} shown)\n\n"
             for blob in result.data:
-                content_preview = blob['content'][:100] + "..." if len(blob['content']) > 100 else blob['content']
-                blob_id_short = blob['id'][:8]
-                output += f"**{blob_id_short}...** {content_preview}\n"
-                output += f"   _Updated: {blob['updated_at'][:10]}_\n\n"
+                content_preview = blob['content']
+                blob_id_short = blob['id']
+                output += f"**{blob_id_short}** {content_preview}\n"
+                output += f"   _Updated: {blob['updated_at']}_\n\n"
 
             return output
 
@@ -1589,12 +1589,10 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
 
                 output = f"**📝 Drafts** ({len(result.data)} found)\n\n"
                 for i, draft in enumerate(result.data, 1):
-                    to_str = ', '.join(draft.get('to_addresses', [])[:2])
-                    if len(draft.get('to_addresses', [])) > 2:
-                        to_str += f" (+{len(draft['to_addresses']) - 2})"
-                    subject = draft.get('subject', '(no subject)')[:50]
-                    draft_id = draft['id'][:8]
-                    updated = draft['updated_at'][:10] if draft.get('updated_at') else ''
+                    to_str = ', '.join(draft.get('to_addresses', []))
+                    subject = draft.get('subject', '(no subject)')
+                    draft_id = draft['id']
+                    updated = draft.get('updated_at', '')
 
                     output += f"**{i}. {subject}**\n"
                     output += f"   To: {to_str}\n"
@@ -1620,9 +1618,9 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
 
             output = f"**📧 Recent Emails** ({len(result.data)} found)\n\n"
             for email in result.data:
-                subject = email.get('subject', '(no subject)')[:45]
+                subject = email.get('subject', '(no subject)')
                 from_name = email.get('from_name') or email.get('from_email', '?')
-                date = email.get('date', '')[:10]
+                date = email.get('date', '')
 
                 output += f"**{subject}**\n"
                 output += f"   From: {from_name} | {date}\n\n"
@@ -1674,7 +1672,7 @@ For simple drafts without context, use the `compose_email` tool in chat."""
                     return "❌ No drafts found.\n\nCreate a draft first with `/email create` or use the `compose_email` tool."
 
                 draft = result.data[0]
-                draft_id = draft['id'][:8]  # For display in error messages
+                draft_id = draft['id']
 
             # Get user's email provider
             provider = get_provider(owner_id)
@@ -1746,14 +1744,14 @@ For simple drafts without context, use the `compose_email` tool in chat."""
                     'sent_message_id': sent_id,
                 }).eq('id', draft['id']).execute()
 
-                to_str = ', '.join(draft['to_addresses'][:2])
+                to_str = ', '.join(draft['to_addresses'])
                 return f"""✅ **Email sent!**
 
 **To:** {to_str}
 **Subject:** {draft.get('subject', '(no subject)')}
 **Via:** {provider.title()}
 
-Message ID: `{sent_id[:12] if sent_id else 'N/A'}`"""
+Message ID: `{sent_id if sent_id else 'N/A'}`"""
 
             except Exception as e:
                 # Mark as failed
@@ -2049,8 +2047,8 @@ Shows statistics about your synced emails:
             .limit(1)\
             .execute()
 
-        oldest_date = oldest.data[0]['date'][:10] if oldest.data else 'N/A'
-        newest_date = newest.data[0]['date'][:10] if newest.data else 'N/A'
+        oldest_date = oldest.data[0]['date'] if oldest.data else 'N/A'
+        newest_date = newest.data[0]['date'] if newest.data else 'N/A'
 
         # Count open tasks
         task_result = supabase.table('task_items')\
@@ -2150,12 +2148,12 @@ Run `/sync` to fetch calendar events."""
                 current_date = event_date
                 output += f"\n**{event_date}**\n"
 
-            title = event.get('summary', '(no title)')[:50]
+            title = event.get('summary', '(no title)')
             location = event.get('location', '')
 
             output += f"• {event_time} - {title}"
             if location:
-                output += f" 📍 {location[:30]}"
+                output += f" 📍 {location}"
             output += "\n"
 
         return output
@@ -2330,7 +2328,7 @@ def _load_blob_context(storage, owner_id: str, blob_ids: list) -> str:
 
     try:
         contents = []
-        for blob_id in blob_ids[:3]:  # Limit to 3 blobs
+        for blob_id in blob_ids:
             result = storage.client.table('blobs')\
                 .select('content')\
                 .eq('owner_id', owner_id)\
@@ -2338,7 +2336,7 @@ def _load_blob_context(storage, owner_id: str, blob_ids: list) -> str:
                 .limit(1)\
                 .execute()
             if result.data:
-                contents.append(result.data[0].get('content', '')[:500])  # Truncate
+                contents.append(result.data[0].get('content', ''))
 
         return "\n\n".join(contents)
     except Exception as e:
@@ -2458,11 +2456,11 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
                     # get_thread_emails returns ASC order, so last is latest
                     latest = thread_emails[-1]
                     if latest.get('id') != email.get('id'):
-                        logger.debug(f"[TASK_DETAIL] Using latest email in thread: {latest.get('subject', '(none)')[:50]}")
+                        logger.debug(f"[TASK_DETAIL] Using latest email in thread: {latest.get('subject', '(none)')}")
                         email = latest
 
             if email:
-                logger.debug(f"[TASK_DETAIL] Email subject: {email.get('subject', '(none)')[:50]}")
+                logger.debug(f"[TASK_DETAIL] Email subject: {email.get('subject', '(none)')}")
             if not email:
                 return f"Email not found for task #{task_num}. It may have been deleted."
 
@@ -2519,9 +2517,7 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
             attendees = event.get('attendees', [])
 
             # Format attendees
-            attendee_str = ', '.join(attendees[:5]) if attendees else 'None listed'
-            if len(attendees) > 5:
-                attendee_str += f" (+{len(attendees) - 5} more)"
+            attendee_str = ', '.join(attendees) if attendees else 'None listed'
 
             output = f"""**📅 Task #{task_num} - Calendar Event**
 
@@ -2621,7 +2617,7 @@ Background jobs are created when you run:
         output = f"**📋 Background Jobs** ({len(jobs)} found)\n\n"
 
         for job in jobs:
-            job_id = job['id'][:8]
+            job_id = job['id']  # Full UUID - never truncate!
             job_type = job['job_type']
             status = job['status']
             progress = job.get('progress_pct', 0)
@@ -3138,7 +3134,7 @@ Train your emailer agent to learn your writing style:
     meta_info = ""
     if meta:
         metadata = meta.get('metadata', {})
-        created = meta.get('created_at', '')[:10] if meta.get('created_at') else 'unknown'
+        created = meta.get('created_at', '') if meta.get('created_at') else 'unknown'
         sent_analyzed = metadata.get('sent_emails_analyzed', 'unknown')
         user_domain = metadata.get('user_domain', 'unknown')
         meta_info = f"""
@@ -3147,10 +3143,7 @@ _Emails analyzed: {sent_analyzed}_
 _Domain: {user_domain}_
 """
 
-    # Truncate prompt for display (can be long)
-    display_prompt = agent_prompt[:2000]
-    if len(agent_prompt) > 2000:
-        display_prompt += f"\n\n... ({len(agent_prompt) - 2000} more chars)"
+    display_prompt = agent_prompt
 
     return f"""**✍️ Your Emailer Agent**
 {meta_info}
@@ -3236,7 +3229,7 @@ Connect your LLM provider:
                 references=tool_result.get('references'),
                 thread_id=tool_result.get('thread_id'),
             )
-            draft_id = draft.get('id', '')[:8] if draft else ''
+            draft_id = draft.get('id', '') if draft else ''
 
             return f"""**📝 Draft Created** (ID: `{draft_id}`)
 
@@ -3255,8 +3248,8 @@ Say "send it" or use `/email send {draft_id}` to send."""
                 return f"🔍 {message}\n\nNo results found."
 
             formatted = []
-            for r in results[:3]:
-                content = r.get('content', '')[:500]
+            for r in results:
+                content = r.get('content', '')
                 formatted.append(f"```\n{content}\n```")
 
             return f"""🔍 **{message}**
@@ -3273,7 +3266,7 @@ Say "send it" or use `/email send {draft_id}` to send."""
 **Subject:** {tool_result.get('subject', '(no subject)')}
 **Date:** {tool_result.get('date', 'unknown')}
 
-{tool_result.get('body', '')[:1500]}"""
+{tool_result.get('body', '')}"""
 
         elif tool_used == 'respond_text':
             response = tool_result.get('response', '')
@@ -3583,7 +3576,7 @@ Create one with:
     meta_info = ""
     if meta:
         metadata = meta.get('metadata', {})
-        created = meta.get('created_at', '')[:10] if meta.get('created_at') else 'unknown'
+        created = meta.get('created_at', '') if meta.get('created_at') else 'unknown'
         meta_info = f"\n_Created: {created}_\n"
 
     return f"""**🤖 Your {domain.title()} Agent ({channel})**

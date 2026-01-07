@@ -280,7 +280,7 @@ class MemoryWorker:
                 cc_email=cc_email,
                 subject=email.get("subject", "(no subject)"),
                 date=email.get("date", "unknown"),
-                body=body[:4000],  # Limit body size
+                body=body,
                 contact_email=contact_email
             )
 
@@ -429,7 +429,7 @@ TITLE: {event.get('summary', '(no title)')}
 DATE/TIME: {event.get('start_time', '')} - {event.get('end_time', '')}
 LOCATION: {event.get('location', '(no location)')}
 ATTENDEES: {attendees_str}
-DESCRIPTION: {event.get('description', '(no description)')[:2000]}
+DESCRIPTION: {event.get('description', '(no description)')}
 
 ---
 
@@ -548,7 +548,7 @@ VALUE: {deal.get('value', 0)} {deal.get('currency', 'USD')}
 STATUS: {deal.get('status', 'unknown')}
 STAGE: {deal.get('stage_name', '(unknown)')}
 EXPECTED CLOSE: {deal_data.get('expected_close_date', '(not set)')}
-NOTES: {str(deal_data.get('notes', ''))[:1000]}
+NOTES: {str(deal_data.get('notes', ''))}
 
 ---
 

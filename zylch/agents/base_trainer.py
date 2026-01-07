@@ -147,17 +147,17 @@ class BaseAgentTrainer:
         """
         samples = []
 
-        for i, email in enumerate(emails[:max_samples], 1):
+        for i, email in enumerate(emails, 1):
             from_email = email.get('from_email', 'unknown')
             to_emails = email.get('to_email', [])
             if isinstance(to_emails, list):
-                to_str = ', '.join(to_emails[:3])
+                to_str = ', '.join(to_emails)
             else:
                 to_str = str(to_emails)
 
             subject = email.get('subject', '(no subject)')
             body = email.get('body_plain', '') or email.get('snippet', '')
-            body = body[:body_limit]
+            body = body
 
             samples.append(f"""
 --- Email {i} ---
@@ -189,7 +189,7 @@ Body:
             'languages': set()
         }
 
-        for email in sent_emails[:30]:
+        for email in sent_emails:
             body = email.get('body_plain', '') or ''
             subject = email.get('subject', '')
 
@@ -228,14 +228,14 @@ Body:
         ]
 
         if patterns['greetings']:
-            unique_greetings = list(set(patterns['greetings'][:10]))
-            profile_parts.append(f"Greeting patterns: {', '.join(unique_greetings[:5])}")
+            unique_greetings = list(set(patterns['greetings']))
+            profile_parts.append(f"Greeting patterns: {', '.join(unique_greetings)}")
 
         if patterns['signoffs']:
-            profile_parts.append(f"Signature sample:\n{patterns['signoffs'][0][:200]}")
+            profile_parts.append(f"Signature sample:\n{patterns['signoffs'][0]}")
 
         if patterns['subjects']:
-            profile_parts.append(f"Subject patterns: {', '.join(patterns['subjects'][:10])}")
+            profile_parts.append(f"Subject patterns: {', '.join(patterns['subjects'])}")
 
         return '\n'.join(profile_parts)
 

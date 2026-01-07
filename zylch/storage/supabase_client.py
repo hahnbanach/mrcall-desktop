@@ -37,7 +37,7 @@ def _generate_email_embedding(email: Dict[str, Any]) -> Optional[List[float]]:
     # Combine subject and body (truncate body to avoid huge embeddings)
     subject = email.get('subject', '') or ''
     body = email.get('body_plain', '') or email.get('snippet', '') or ''
-    text = f"{subject} {body[:2000]}".strip()
+    text = f"{subject} {body}".strip()
 
     if not text:
         return None
@@ -1463,7 +1463,7 @@ class SupabaseStorage:
         }
 
         try:
-            logger.info(f"Storing OAuth state: {state[:20]}... for owner {owner_id}")
+            logger.info(f"Storing OAuth state: {state} for owner {owner_id}")
             result = self.client.table('oauth_states').upsert(
                 data,
                 on_conflict='state'
@@ -1485,7 +1485,7 @@ class SupabaseStorage:
             State data dict or None if not found/expired
         """
         try:
-            logger.info(f"Looking up OAuth state: {state[:20]}...")
+            logger.info(f"Looking up OAuth state: {state}")
             result = self.client.table('oauth_states')\
                 .select('*')\
                 .eq('state', state)\
@@ -1495,7 +1495,7 @@ class SupabaseStorage:
             logger.info(f"OAuth state query result: {len(result.data) if result.data else 0} rows")
 
             if not result.data:
-                logger.warning(f"OAuth state not found in database: {state[:20]}...")
+                logger.warning(f"OAuth state not found in database: {state}")
                 return None
 
             state_data = result.data[0]
@@ -1519,7 +1519,7 @@ class SupabaseStorage:
                 try:
                     metadata = json.loads(state_data['metadata']) if isinstance(state_data['metadata'], str) else state_data['metadata']
                 except (json.JSONDecodeError, TypeError):
-                    logger.warning(f"Failed to parse metadata for state: {state[:20]}...")
+                    logger.warning(f"Failed to parse metadata for state: {state}")
 
             return {
                 'owner_id': state_data['owner_id'],
@@ -3078,7 +3078,7 @@ class SupabaseStorage:
 
             # Find most recent analyzed_at
             analyzed_dates = [i.get('analyzed_at') for i in items if i.get('analyzed_at')]
-            last_analyzed = max(analyzed_dates)[:10] if analyzed_dates else 'Never'
+            last_analyzed = max(analyzed_dates) if analyzed_dates else 'Never'
 
             return {
                 'total': total,

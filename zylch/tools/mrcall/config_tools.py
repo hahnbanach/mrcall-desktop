@@ -295,7 +295,7 @@ class ConfigureAssistantTool(Tool):
                 "admin_rules_applied": admin_rules,
                 "similar_patterns_found": [
                     {"context": p.get("context"), "confidence": p.get("confidence")}
-                    for p in (similar_patterns or [])[:3]
+                    for p in (similar_patterns or [])
                 ],
             }
 
@@ -310,8 +310,8 @@ class ConfigureAssistantTool(Tool):
                     message=(
                         f"PREVIEW (non ancora applicato):\n\n"
                         f"VARIABILE: {variable_name}\n\n"
-                        f"ATTUALE:\n{current_value[:500]}{'...' if len(current_value) > 500 else ''}\n\n"
-                        f"NUOVO:\n{new_value[:500]}{'...' if len(new_value) > 500 else ''}\n\n"
+                        f"ATTUALE:\n{current_value}\n\n"
+                        f"NUOVO:\n{new_value}\n\n"
                         f"VALIDAZIONE VARIABILI:\n{validation_text}\n\n"
                         f"Per applicare, chiama di nuovo con confirm_apply=true"
                     )

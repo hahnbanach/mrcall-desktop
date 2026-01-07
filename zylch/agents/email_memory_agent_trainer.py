@@ -301,7 +301,7 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
         signatures = []
         subjects = []
 
-        for email in user_sent_emails[:20]:  # Sample last 20 sent emails
+        for email in user_sent_emails:
             body = email.get('body_plain', '') or ''
 
             # Look for signature (last 200 chars often contain signature)
@@ -317,11 +317,11 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
         profile_parts = [f"Domain: {user_domain if user_domain else 'unknown'}"]
 
         if subjects:
-            profile_parts.append(f"Recent email subjects: {', '.join(subjects[:10])}")
+            profile_parts.append(f"Recent email subjects: {', '.join(subjects)}")
 
         if signatures:
             # Just include one signature sample for role detection
-            profile_parts.append(f"Signature sample: {signatures[0][:200]}")
+            profile_parts.append(f"Signature sample: {signatures[0]}")
 
         return '\n'.join(profile_parts)
 
@@ -333,11 +333,11 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
         """Format emails as text samples for the meta-prompt."""
         samples = []
 
-        for i, email in enumerate(emails[:max_samples], 1):
+        for i, email in enumerate(emails, 1):
             from_email = email.get('from_email', 'unknown')
             subject = email.get('subject', '(no subject)')
             body = email.get('body_plain', '') or email.get('snippet', '')
-            body = body[:500]  # Truncate body
+            body = body
 
             samples.append(f"""
 --- Email {i} ---

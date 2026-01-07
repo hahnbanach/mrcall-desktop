@@ -126,7 +126,7 @@ class BaseAgent:
             return "(No relevant context found)"
 
         sections = []
-        for result in results[:5]:
+        for result in results:
             sections.append(result.content)
 
         return "\n\n---\n\n".join(sections)
