@@ -3361,8 +3361,7 @@ Usage:
 
     try:
         # Create StarChat client
-        loop = asyncio.get_event_loop()
-        starchat = loop.run_until_complete(create_starchat_client(owner_id))
+        starchat = await create_starchat_client(owner_id)
 
         # Train feature(s) using MrCallConfiguratorTrainer
         configurator = MrCallConfiguratorTrainer(
@@ -3460,8 +3459,7 @@ Connect your LLM provider:
 
     try:
         # Create StarChat client
-        loop = asyncio.get_event_loop()
-        starchat = loop.run_until_complete(create_starchat_client(owner_id))
+        starchat = await create_starchat_client(owner_id)
 
         # Initialize the MrCall agent
         agent = MrCallAgent(
