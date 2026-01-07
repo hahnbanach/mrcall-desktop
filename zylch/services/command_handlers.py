@@ -1601,29 +1601,65 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
                 output += "_Use `/email send <id>` to send a draft._"
                 return output
 
-            # Default: list recent emails
+            # Default: list recent emails - grouped by thread, only RECEIVED
             days = int(parse_flag('--days', '7'))
             since_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
+            # Get user's email domain to filter out sent emails
+            user_email = get_email(owner_id) or ''
+            user_domain = user_email.split('@')[1].lower() if user_email and '@' in user_email else ''
+
+            # Fetch more emails to allow filtering, then group by thread
             result = supabase.table('emails')\
-                .select('gmail_id, thread_id, subject, from_email, from_name, snippet, date')\
+                .select('gmail_id, thread_id, subject, from_email, from_name, snippet, body_plain, date')\
                 .eq('owner_id', owner_id)\
                 .gte('date', since_date)\
                 .order('date', desc=True)\
-                .limit(limit)\
+                .limit(limit * 3)\
                 .execute()
 
             if not result.data:
                 return f"**📭 No emails** in the last {days} days\n\nTry `/sync` to fetch recent emails."
 
-            output = f"**📧 Recent Emails** ({len(result.data)} found)\n\n"
-            for email in result.data:
-                subject = email.get('subject', '(no subject)')
-                from_name = email.get('from_name') or email.get('from_email', '?')
-                date = email.get('date', '')
+            emails = result.data
+
+            # Filter: only RECEIVED emails (from_email NOT matching user's domain)
+            received_emails = []
+            for email in emails:
+                from_email_addr = (email.get('from_email') or '').lower()
+                if user_domain and user_domain in from_email_addr:
+                    continue  # Skip emails sent by user
+                received_emails.append(email)
+
+            # Group by thread_id, keep only most recent per thread
+            seen_threads = set()
+            thread_emails = []
+            for email in received_emails:  # Already sorted by date desc
+                thread_id = email.get('thread_id') or email.get('gmail_id')
+                if thread_id not in seen_threads:
+                    seen_threads.add(thread_id)
+                    thread_emails.append(email)
+                if len(thread_emails) >= limit:
+                    break
+
+            if not thread_emails:
+                return f"**📭 No received emails** in the last {days} days\n\nTry `/sync` to fetch recent emails."
+
+            output = f"**📧 Recent Conversations** ({len(thread_emails)} threads)\n\n"
+            for email in thread_emails:
+                subject = email.get('subject') or '(no subject)'
+                from_name = email.get('from_name') or email.get('from_email', 'Unknown')
+                date_str = (email.get('date') or '')[:10]  # YYYY-MM-DD
+
+                # Body preview: body_plain or snippet, ~200 chars
+                body = email.get('body_plain') or email.get('snippet') or ''
+                body_preview = body[:200].replace('\n', ' ').strip()
+                if len(body) > 200:
+                    body_preview += '...'
 
                 output += f"**{subject}**\n"
-                output += f"   From: {from_name} | {date}\n\n"
+                output += f"   From: {from_name} | {date_str}\n"
+                output += f"   {body_preview}\n\n"
 
             output += f"_Showing last {days} days. Use `--days N` or `--limit N` to adjust._"
             return output
