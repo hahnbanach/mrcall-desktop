@@ -5,7 +5,19 @@ description: Guide for adding new MrCall feature configurations. Use when adding
 
 # Adding MrCall Feature Configurations
 
-## Architecture: Single Source of Truth
+## Architecture Overview
+
+### Single Command Training
+
+```
+/agent mrcall train              → Trains ALL features + builds unified agent
+/agent mrcall train <feature>    → Trains specific feature + rebuilds agent
+/agent mrcall run "..."          → Agent chooses tool based on user intent
+```
+
+**One command does everything.** No separate training steps.
+
+### Single Source of Truth
 
 **CRITICAL**: All feature/variable mappings are defined ONCE in `MrCallConfiguratorTrainer.FEATURES`. Other files IMPORT and DERIVE from this source.
 
@@ -13,8 +25,17 @@ description: Guide for adding new MrCall feature configurations. Use when adding
 MrCallConfiguratorTrainer.FEATURES  (SINGLE SOURCE OF TRUTH)
          │
          ├──> command_handlers.py: FEATURE_TO_VARIABLES (derived via import)
-         └──> config_tools.py: VARIABLE_TO_FEATURE (derived via import)
+         ├──> config_tools.py: VARIABLE_TO_FEATURE (derived via import)
+         ├──> MrCallAgentTrainer: Combines feature sub-prompts
+         └──> MrCallAgent: Multi-tool runner (auto-detects feature)
 ```
+
+### Tools Available
+
+- `configure_welcome_message` - Modify greeting settings
+- `configure_booking` - Modify appointment booking settings
+- `get_current_config` - Show current configuration
+- `respond_text` - Answer questions about settings
 
 ## Checklist
 

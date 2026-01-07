@@ -657,11 +657,14 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 • `/mrcall link N` - Link to assistant #N from the list
 • `/mrcall variables [get] [--name NAME]` - List/filter variables
 • `/mrcall variables set <NAME> <VALUE>` - Set variable value
-• `/mrcall train [feature]` - Generate/refresh configuration context
 • `/mrcall show [feature]` - Show current configuration context
 • `/mrcall config <feature> "instructions"` - Configure assistant behavior
 • `/mrcall unlink` - Unlink current assistant
 • `/mrcall` - Show current link status
+
+**Agent commands (preferred):**
+• `/agent mrcall train` - Train all features and build unified agent
+• `/agent mrcall run "..."` - Configure assistant (auto-detects feature)
 
 **Features:** welcome_message (greeting), booking (appointment scheduling)
 
@@ -893,87 +896,6 @@ Your Zylch is now connected to this MrCall assistant!
             else:
                 return "❌ **Error:** Failed to link MrCall business. Please try again."
 
-        # Subcommand: train - Generate/refresh configuration context
-        if subcommand == 'train':
-            import asyncio
-            from concurrent.futures import ThreadPoolExecutor
-            from zylch.api.token_storage import get_active_llm_provider
-
-            # Get linked business
-            creds = get_mrcall_credentials(owner_id)
-            if not creds or not creds.get('access_token'):
-                return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
-
-            business_id = creds.get('business_id')
-            if not business_id:
-                business_id = client.get_mrcall_link(owner_id)
-            if not business_id:
-                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link N` first."
-
-            # Get LLM credentials
-            llm_provider, api_key = get_active_llm_provider(owner_id)
-            if not api_key:
-                return "❌ **No LLM configured**\n\nRun `/connect anthropic` to configure an LLM provider."
-
-            # Parse feature argument
-            feature_name = positional[1] if len(positional) > 1 else "welcome_message"
-
-            # Create trainer and generate sub-prompt (uses run_in_executor for 3-5s LLM call)
-            def _train_feature():
-                import asyncio
-                from zylch.tools.starchat import create_starchat_client
-                from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
-
-                # Create a new event loop for this thread
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    # Create StarChat client
-                    starchat = loop.run_until_complete(create_starchat_client(owner_id))
-
-                    trainer = MrCallConfiguratorTrainer(
-                        storage=client,
-                        starchat_client=starchat,
-                        owner_id=owner_id,
-                        api_key=api_key,
-                        provider=llm_provider,
-                    )
-
-                    # Generate sub-prompt
-                    sub_prompt, metadata = loop.run_until_complete(
-                        trainer.train_feature(feature_name, business_id)
-                    )
-
-                    # Close starchat client
-                    loop.run_until_complete(starchat.close())
-
-                    return sub_prompt, metadata
-                finally:
-                    loop.close()
-
-            executor = ThreadPoolExecutor(max_workers=1)
-            loop = asyncio.get_event_loop()
-
-            try:
-                sub_prompt, metadata = await loop.run_in_executor(executor, _train_feature)
-                return f"""✅ **Configuration Context Generated**
-
-**Feature:** {feature_name}
-**Business ID:** `{business_id}`
-**Length:** {len(sub_prompt)} characters
-
-The context is now ready. When you ask about configuring the assistant,
-Zylch will use this analysis to understand the current behavior.
-
-Run `/mrcall show {feature_name}` to see the generated context."""
-            except Exception as e:
-                logger.error(f"Failed to train feature: {e}", exc_info=True)
-                error_str = str(e)
-                # Check for auth errors (405/401/403) and suggest reconnection
-                if any(code in error_str for code in ["405", "401", "403", "Unauthorized", "Forbidden"]):
-                    return "❌ **MrCall connection expired**\n\nRun `/connect mrcall` to reconnect."
-                return f"❌ **Error generating context:** {error_str}"
-
         # Subcommand: show - Display current configuration context
         if subcommand == 'show':
             # Get linked business
@@ -1000,7 +922,7 @@ Run `/mrcall show {feature_name}` to see the generated context."""
 **Feature:** {feature_name}
 **Status:** Not generated yet
 
-Run `/mrcall train {feature_name}` to generate the configuration context."""
+Run `/agent mrcall train` to generate configuration context for all features."""
 
             return f"""**📋 MrCall Configuration Context**
 
@@ -1970,9 +1892,8 @@ Use `/agent process` to extract facts from synced data into memory.''',
 - `/mrcall` - Show connection status
 - `/mrcall list` - See your assistants
 - `/mrcall link 1` - Connect to first assistant
-- `/mrcall train` - Generate context for welcome_message
-- `/mrcall show welcome_message` - Show current context
-- `/mrcall config welcome_message "use formal tone"` - Configure behavior
+- `/agent mrcall train` - Train all features
+- `/agent mrcall run "use formal tone"` - Configure behavior
 - `/mrcall variables` - List all variables''',
     },
     '/share': {
@@ -2776,6 +2697,13 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 • `/agent email show` - Show current agent prompt
 • `/agent email reset` - Delete agent prompt
 
+**MrCall Agent** (multi-tool MrCall configuration):
+• `/agent mrcall train` - Train all features and build unified agent
+• `/agent mrcall train <feature>` - Train specific feature (e.g., booking)
+• `/agent mrcall run "instructions"` - Configure MrCall (auto-detects feature)
+• `/agent mrcall show` - Show current agent prompt
+• `/agent mrcall reset` - Delete agent prompt
+
 **Workflow:**
 1. `/sync` - Fetch emails/calendar
 2. `/agent memory train email` - Create memory agent
@@ -2799,12 +2727,12 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
         action = args[1].lower()  # 'train', 'process', 'show', 'reset'
         channel = args[2].lower() if len(args) > 2 else 'email'  # 'email', 'calendar', 'all'
 
-        valid_domains = ['memory', 'task', 'email']
+        valid_domains = ['memory', 'task', 'email', 'mrcall']
         valid_actions = ['train', 'run', 'process', 'show', 'reset']  # 'process' kept for backwards compat
         valid_channels = ['email', 'calendar', 'all']
 
         if domain not in valid_domains:
-            return f"❌ Unknown domain: `{domain}`\n\nValid domains: `memory`, `task`, `email`\n\n{help_text}"
+            return f"❌ Unknown domain: `{domain}`\n\nValid domains: `memory`, `task`, `email`, `mrcall`\n\n{help_text}"
 
         # Normalize 'process' to 'run' for backwards compatibility
         if action == 'process':
@@ -2874,6 +2802,26 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 
             elif action == 'reset':
                 return await _handle_emailer_reset(storage, owner_id)
+
+        # =====================
+        # MRCALL DOMAIN (Unified MrCall Agent)
+        # =====================
+        elif domain == 'mrcall':
+            if action == 'train':
+                # Optional feature argument: /agent mrcall train [feature]
+                feature = args[2] if len(args) > 2 else None
+                return await _handle_mrcall_agent_train(storage, owner_id, api_key, llm_provider, user_email, feature=feature)
+
+            elif action == 'run':
+                # Extract instructions from args (everything after 'mrcall run')
+                instructions = ' '.join(args[2:]) if len(args) > 2 else ''
+                return await _handle_mrcall_agent_run(storage, owner_id, api_key, llm_provider, instructions)
+
+            elif action == 'show':
+                return await _handle_mrcall_agent_show(storage, owner_id)
+
+            elif action == 'reset':
+                return await _handle_mrcall_agent_reset(storage, owner_id)
 
         return help_text
 
@@ -3339,6 +3287,281 @@ Say "send it" or use `/email send {draft_id}` to send."""
     except Exception as e:
         logger.error(f"Emailer run error: {e}", exc_info=True)
         return f"❌ **Error:** {str(e)}"
+
+
+# =====================
+# MRCALL AGENT HELPERS
+# =====================
+
+async def _handle_mrcall_agent_train(storage, owner_id: str, api_key: str, llm_provider: str, user_email: str, feature: str = None) -> str:
+    """Train MrCall features and build unified agent.
+
+    Args:
+        feature: Optional specific feature to train. If None, trains all features.
+    """
+    import asyncio
+    from zylch.agents.mrcall_agent_trainer import MrCallAgentTrainer
+    from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+    from zylch.tools.starchat import create_starchat_client
+
+    if not api_key or not llm_provider:
+        return """❌ **LLM API key required**
+
+Connect your LLM provider:
+`/connect anthropic` or `/connect openai` or `/connect mistral`"""
+
+    # Check MrCall is linked
+    business_id = storage.get_mrcall_link(owner_id)
+    if not business_id:
+        return """❌ **No MrCall assistant linked**
+
+Link your assistant first:
+1. `/mrcall list` - See your assistants
+2. `/mrcall link N` - Link to assistant #N"""
+
+    # Validate feature if specified
+    if feature and feature not in MrCallConfiguratorTrainer.FEATURES:
+        available = list(MrCallConfiguratorTrainer.FEATURES.keys())
+        return f"""❌ **Unknown feature:** `{feature}`
+
+Available features: {', '.join(available)}
+
+Usage:
+• `/agent mrcall train` - Train all features
+• `/agent mrcall train {available[0]}` - Train specific feature"""
+
+    try:
+        # Create StarChat client
+        loop = asyncio.get_event_loop()
+        starchat = loop.run_until_complete(create_starchat_client(owner_id))
+
+        # Train feature(s) using MrCallConfiguratorTrainer
+        configurator = MrCallConfiguratorTrainer(
+            storage=storage,
+            owner_id=owner_id,
+            api_key=api_key,
+            user_email=user_email or '',
+            provider=llm_provider,
+            starchat_client=starchat,
+        )
+
+        trained_features = []
+        if feature:
+            # Train specific feature
+            await configurator.train_feature(feature, business_id)
+            trained_features.append(feature)
+        else:
+            # Train all features
+            for feat_name in MrCallConfiguratorTrainer.FEATURES.keys():
+                await configurator.train_feature(feat_name, business_id)
+                trained_features.append(feat_name)
+
+        # Build unified agent prompt (combines all feature sub-prompts)
+        agent_trainer = MrCallAgentTrainer(
+            storage=storage,
+            owner_id=owner_id,
+            api_key=api_key,
+            user_email=user_email or '',
+            provider=llm_provider,
+            starchat_client=starchat,
+        )
+
+        prompt, metadata = await agent_trainer.build_prompt(business_id)
+
+        # Store unified agent prompt
+        storage.store_agent_prompt(
+            owner_id,
+            f"mrcall_{business_id}",
+            prompt,
+            metadata
+        )
+
+        features_included = metadata.get('features_included', trained_features)
+
+        if feature:
+            return f"""✅ **Feature '{feature}' Trained**
+
+Agent updated with new '{feature}' configuration knowledge.
+
+**All features:** {', '.join(features_included)}
+
+**Usage:**
+`/agent mrcall run "your instructions here"`"""
+        else:
+            return f"""✅ **MrCall Agent Trained**
+
+Your unified MrCall configuration agent is ready!
+
+**Features trained:** {', '.join(features_included)}
+
+**Usage:**
+`/agent mrcall run "enable booking with 30-min appointments"`
+`/agent mrcall run "change the welcome message"`
+`/agent mrcall run "what are my current settings?"`"""
+
+    except ValueError as e:
+        return f"❌ **Error:** {str(e)}"
+    except Exception as e:
+        logger.error(f"MrCall agent train error: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}"
+
+
+async def _handle_mrcall_agent_run(storage, owner_id: str, api_key: str, llm_provider: str, instructions: str) -> str:
+    """Execute the MrCall agent with given instructions."""
+    import asyncio
+    from zylch.agents.mrcall_agent import MrCallAgent
+    from zylch.tools.starchat import create_starchat_client
+
+    if not instructions.strip():
+        return """❌ **Missing instructions**
+
+Usage: `/agent mrcall run "your instructions"`
+
+Examples:
+• `/agent mrcall run "enable booking"`
+• `/agent mrcall run "set 30-minute appointments"`
+• `/agent mrcall run "change the welcome message"`
+• `/agent mrcall run "what are my current settings?"`"""
+
+    if not api_key or not llm_provider:
+        return """❌ **LLM API key required**
+
+Connect your LLM provider:
+`/connect anthropic` or `/connect openai` or `/connect mistral`"""
+
+    try:
+        # Create StarChat client
+        loop = asyncio.get_event_loop()
+        starchat = loop.run_until_complete(create_starchat_client(owner_id))
+
+        # Initialize the MrCall agent
+        agent = MrCallAgent(
+            storage=storage,
+            owner_id=owner_id,
+            api_key=api_key,
+            provider=llm_provider,
+            starchat_client=starchat,
+        )
+
+        # Run the agent
+        result = await agent.run(instructions=instructions)
+
+        # Check for errors
+        if result.get('error'):
+            return f"❌ {result['error']}"
+
+        tool_used = result.get('tool_used')
+        tool_result = result.get('result', {})
+
+        # Format response based on tool used
+        if tool_used in ('configure_welcome_message', 'configure_booking'):
+            if tool_result.get('success'):
+                updated = tool_result.get('updated', [])
+                feature = tool_result.get('feature', 'unknown')
+                return f"""✅ **{feature.replace('_', ' ').title()} Updated**
+
+**Changes applied:**
+{chr(10).join(f'• {u}' for u in updated)}"""
+            else:
+                errors = tool_result.get('errors', ['Unknown error'])
+                return f"""❌ **Configuration Failed**
+
+{chr(10).join(f'• {e}' for e in errors)}"""
+
+        elif tool_used == 'get_current_config':
+            if 'error' in tool_result:
+                return f"❌ {tool_result['error']}"
+
+            config = tool_result.get('config', {})
+            feature = tool_result.get('feature')
+
+            if feature:
+                # Single feature
+                lines = [f"**{feature.replace('_', ' ').title()} Configuration:**", ""]
+                for var, val in config.items():
+                    # Truncate long values
+                    display_val = str(val)[:100] + '...' if len(str(val)) > 100 else str(val)
+                    lines.append(f"• `{var}` = `{display_val}`")
+                return chr(10).join(lines)
+            else:
+                # All features
+                lines = ["**Current Configuration:**", ""]
+                for feat_name, feat_config in config.items():
+                    lines.append(f"### {feat_name.replace('_', ' ').title()}")
+                    for var, val in feat_config.items():
+                        display_val = str(val)[:100] + '...' if len(str(val)) > 100 else str(val)
+                        lines.append(f"• `{var}` = `{display_val}`")
+                    lines.append("")
+                return chr(10).join(lines)
+
+        elif tool_used == 'respond_text':
+            response = tool_result.get('response', '')
+            return f"""💬 **Response**
+
+{response}"""
+
+        else:
+            return f"⚠️ Agent returned unexpected result: {result}"
+
+    except Exception as e:
+        logger.error(f"MrCall agent run error: {e}", exc_info=True)
+        return f"❌ **Error:** {str(e)}"
+
+
+async def _handle_mrcall_agent_show(storage, owner_id: str) -> str:
+    """Show MrCall agent prompt."""
+    business_id = storage.get_mrcall_link(owner_id)
+    if not business_id:
+        return """❌ **No MrCall assistant linked**
+
+Link your assistant first:
+1. `/mrcall list` - See your assistants
+2. `/mrcall link N` - Link to assistant #N"""
+
+    agent_prompt = storage.get_agent_prompt(owner_id, f"mrcall_{business_id}")
+    if not agent_prompt:
+        return """❌ **No MrCall agent found**
+
+Train the agent first:
+`/agent mrcall train`"""
+
+    meta = storage.get_agent_prompt_metadata(owner_id, f"mrcall_{business_id}")
+    meta_info = ""
+    if meta:
+        metadata = meta.get('metadata', {})
+        created = meta.get('created_at', '')[:10] if meta.get('created_at') else 'unknown'
+        features = metadata.get('features_included', [])
+        meta_info = f"\n_Created: {created} | Features: {', '.join(features)}_\n"
+
+    # Truncate if too long
+    display_prompt = agent_prompt[:3000] + '...' if len(agent_prompt) > 3000 else agent_prompt
+
+    return f"""**🤖 Your MrCall Agent**
+{meta_info}
+---
+{display_prompt}
+---
+
+_Use `/agent mrcall reset` to delete._"""
+
+
+async def _handle_mrcall_agent_reset(storage, owner_id: str) -> str:
+    """Delete MrCall agent prompt."""
+    business_id = storage.get_mrcall_link(owner_id)
+    if not business_id:
+        return """❌ **No MrCall assistant linked**
+
+Nothing to reset."""
+
+    deleted = storage.delete_agent_prompt(owner_id, f"mrcall_{business_id}")
+    if deleted:
+        return """✅ **MrCall agent deleted**
+
+Your MrCall agent has been deleted.
+
+Retrain with: `/agent mrcall train`"""
+    else:
+        return "❌ No MrCall agent found"
 
 
 # =====================

@@ -7,6 +7,14 @@ description: Create new trainable agents for Zylch. Use when adding a new agent 
 
 Create trainable agents that learn from user data and can perform multiple actions.
 
+## MANDATORY: Inherit from Base Classes
+
+All agents MUST inherit from:
+- `BaseAgent` for runners (`zylch/agents/base_agent.py`)
+- `BaseAgentTrainer` for trainers (`zylch/agents/base_trainer.py`)
+
+**DO NOT** create standalone classes that duplicate base class functionality.
+
 ## What Makes an Agent (vs a Prompt)
 
 An **agent** has:
@@ -307,6 +315,31 @@ Based on [DeepLearning.AI Agentic Design Patterns](https://www.deeplearning.ai/t
 3. **Set iteration limits** - Guard against infinite loops (built into BaseAgent)
 4. **Handle errors gracefully** - Retry mechanisms, fallbacks
 
+## Training Does Everything
+
+**CRITICAL**: When a user runs `/agent <domain> train`, the trainer should do ALL the work:
+1. Gather all necessary data (fetch from APIs, analyze patterns)
+2. Generate the trained prompt
+3. Store the prompt
+
+The user should NOT need to run multiple preparatory commands.
+
+**WRONG pattern:**
+```
+/prepare-data          ← Step 1: prepare data
+/agent myagent train   ← Step 2: train agent
+```
+
+**CORRECT pattern:**
+```
+/agent myagent train   ← Does everything in one step
+```
+
+**Example - MrCall Agent:**
+- `/agent mrcall train` trains all features AND builds the unified agent
+- No separate `/mrcall train` command needed
+- The trainer internally calls feature trainers, then combines results
+
 ## Files to Create
 
 | File | Purpose |
@@ -324,3 +357,74 @@ See `zylch/agents/emailer_agent.py` and `zylch/agents/emailer_agent_trainer.py` 
 - Command handler integration
 
 The meta-prompt includes tool selection guidance so the trained agent knows when to compose emails vs. answer questions.
+
+## What NOT to Do
+
+### WRONG: Standalone class that duplicates BaseAgent
+
+```python
+# ❌ WRONG - Missing inheritance, duplicates base class code
+class MyAgent:
+    def __init__(self, storage, owner_id, api_key, provider):
+        self.storage = storage  # Duplicates BaseAgent
+        self.owner_id = owner_id  # Duplicates BaseAgent
+        self.llm = LLMClient(api_key=api_key, provider=provider)  # Duplicates BaseAgent
+        self.search_engine = HybridSearchEngine(...)  # Duplicates BaseAgent
+
+    def _get_trained_prompt(self):
+        # Duplicates BaseAgent._get_trained_prompt()
+        return self.storage.get_agent_prompt(self.owner_id, 'my_agent')
+```
+
+### CORRECT: Inherit from BaseAgent
+
+```python
+# ✅ CORRECT - Uses inheritance, no duplication
+from zylch.agents.base_agent import BaseAgent
+
+class MyAgent(BaseAgent):
+    PROMPT_KEY = 'my_agent'
+    TOOLS = MY_AGENT_TOOLS
+
+    def __init__(self, storage, owner_id, api_key, provider):
+        super().__init__(storage, owner_id, api_key, provider)
+        # Only add what's unique to this agent
+        self.custom_client = CustomClient()
+```
+
+### WRONG: Standalone trainer that duplicates BaseAgentTrainer
+
+```python
+# ❌ WRONG - Missing inheritance, duplicates base class code
+class MyAgentTrainer:
+    def __init__(self, storage, owner_id, api_key, user_email, provider):
+        self.storage = storage  # Duplicates BaseAgentTrainer
+        self.owner_id = owner_id  # Duplicates BaseAgentTrainer
+        self.client = LLMClient(...)  # Duplicates BaseAgentTrainer
+        self.user_email = user_email  # Duplicates BaseAgentTrainer
+```
+
+### CORRECT: Inherit from BaseAgentTrainer
+
+```python
+# ✅ CORRECT - Uses inheritance, no duplication
+from zylch.agents.base_trainer import BaseAgentTrainer
+
+class MyAgentTrainer(BaseAgentTrainer):
+    def __init__(self, storage, owner_id, api_key, user_email, provider):
+        super().__init__(storage, owner_id, api_key, user_email, provider)
+        # Only add what's unique to this trainer
+
+    async def build_prompt(self) -> Tuple[str, Dict[str, Any]]:
+        # Use inherited methods: _get_emails, _generate_prompt, etc.
+        ...
+```
+
+## Summary: DRY Principle
+
+| What | WRONG | CORRECT |
+|------|-------|---------|
+| Agent runner | `class MyAgent:` | `class MyAgent(BaseAgent):` |
+| Agent trainer | `class MyTrainer:` | `class MyTrainer(BaseAgentTrainer):` |
+| Init | Duplicate all fields | `super().__init__(...)` + only unique fields |
+| Methods | Rewrite `_get_trained_prompt`, etc. | Use inherited methods |
