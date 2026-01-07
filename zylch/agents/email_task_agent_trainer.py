@@ -119,7 +119,7 @@ class EmailTaskAgentTrainer:
             storage.client,
             self.embedding_engine
         )
-        self.search_limit = 100
+        self.search_limit = 20  # Reduced from 100 to avoid context window overflow
 
     async def build_task_prompt(self) -> Tuple[str, Dict[str, Any]]:
         """Analyze user's history and generate task detection prompt.
@@ -233,7 +233,11 @@ class EmailTaskAgentTrainer:
         return blobs
 
     def _format_threads(self, threads: List[Dict[str, Any]]) -> str:
-        """Format threads as text for the meta-prompt."""
+        """Format threads as text for the meta-prompt.
+
+        Only includes the last email per thread since it typically contains
+        the quoted conversation history.
+        """
         formatted = []
 
         for i, thread in enumerate(threads, 1):
@@ -241,28 +245,24 @@ class EmailTaskAgentTrainer:
             if not emails:
                 continue
 
-            # Get thread subject from first email
+            # Get subject from first email, but use LAST email for content
             subject = emails[0].get('subject', '(no subject)')
+            last_email = emails[-1]  # Last email has the full thread context
 
-            thread_text = [f"\n--- Thread {i}: {subject} ---"]
+            from_email = last_email.get('from_email', 'unknown')
+            date = last_email.get('date', 'unknown')
+            body = last_email.get('body_plain', '') or last_email.get('snippet', '')
 
-            for email in emails:
-                from_email = email.get('from_email', 'unknown')
-                date = email.get('date', 'unknown')
-                body = email.get('body_plain', '') or email.get('snippet', '')
-                body = body if body else ''
+            is_user = self.user_domain and self.user_domain in from_email.lower()
+            sender_label = f"{from_email} [USER]" if is_user else from_email
 
-                # Mark if this is from the user
-                is_user = self.user_domain and self.user_domain in from_email.lower()
-                sender_label = f"{from_email} [USER]" if is_user else from_email
-
-                thread_text.append(f"""
+            thread_text = f"""
+--- Thread {i}: {subject} ({len(emails)} emails) ---
 From: {sender_label}
 Date: {date}
 Body: {body}
-""")
-
-            formatted.append('\n'.join(thread_text))
+"""
+            formatted.append(thread_text)
 
         return '\n'.join(formatted) if formatted else "No threads available."
 
@@ -289,6 +289,7 @@ Body: {body}
         )
 
         logger.info(f"Training task detection agent (provider: {self.provider})...")
+        logger.debug(f"Prompt size: {len(meta_prompt)} chars (~{len(meta_prompt)//4} tokens)")
 
         response = self.client.create_message_sync(
             model=self.model,
@@ -297,6 +298,5 @@ Body: {body}
         )
 
         prompt_content = response.content[0].text.strip()
-
         logger.info(f"Generated task prompt ({len(prompt_content)} chars)")
         return prompt_content
