@@ -98,7 +98,7 @@ async def track_pixel(
         # Log pixel request for debugging
         logger.debug(
             f"Tracking pixel request - tracking_id={tracking_id}, "
-            f"user_agent={user_agent[:50]}..."  # Truncate for logging
+            f"user_agent={user_agent}"
         )
 
         # Record read event in background (don't block pixel response)

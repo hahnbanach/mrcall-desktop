@@ -684,8 +684,8 @@ class _GmailSearchTool(Tool):
                     "to": msg["to"],
                     "subject": msg["subject"],
                     "date": msg["date"],
-                    "snippet": msg["snippet"][:200]
-                } for msg in unique_messages[:10]]
+                    "snippet": msg["snippet"]
+                } for msg in unique_messages]
             }
 
             date_to = datetime.now().strftime("%Y-%m-%d")
@@ -851,7 +851,7 @@ class _ListDraftsTool(Tool):
 
             # Format draft details
             draft_details = []
-            for draft in drafts[:20]:  # Limit to 20 most recent
+            for draft in drafts:
                 to_addresses = draft.get('to_addresses', [])
                 to_str = ', '.join(to_addresses) if to_addresses else 'Unknown'
                 body = draft.get('body', '')
@@ -859,7 +859,7 @@ class _ListDraftsTool(Tool):
                     'id': draft['id'],
                     'to': to_str,
                     'subject': draft.get('subject', '(no subject)'),
-                    'body_preview': body[:100] + '...' if len(body) > 100 else body,
+                    'body_preview': body,
                     'created_at': draft.get('created_at')
                 })
 
@@ -868,7 +868,7 @@ class _ListDraftsTool(Tool):
                 data={"drafts": draft_details},
                 message=f"📧 Found {len(draft_details)} drafts:\n\n" +
                        "\n".join([
-                           f"**Draft {i+1}** (ID: {d['id'][:8]}...)\n"
+                           f"**Draft {i+1}** (ID: {d['id']})\n"
                            f"📧 To: {d['to']}\n"
                            f"📝 Subject: {d['subject']}\n"
                            f"Preview: {d['body_preview']}\n"
@@ -1307,7 +1307,7 @@ class _SearchEmailsTool(Tool):
                         "to": email.get("recipient"),
                         "cc": email.get("cc"),
                         "date": email.get("date"),
-                        "body": email.get("body_text", "")[:2000],  # Limit body size
+                        "body": email.get("body_text", ""),
                         # CRITICAL: Threading headers for replies
                         "message_id": email.get("message_id"),
                         "in_reply_to": email.get("in_reply_to"),
@@ -1385,7 +1385,7 @@ class _CloseEmailThreadTool(Tool):
             # Format message
             threads_list = '\n'.join([
                 f"  - {t['subject']}"
-                for t in results['threads'][:5]
+                for t in results['threads']
             ])
 
             message = f"✅ Chiuse {results['closed_count']} conversazioni:\n{threads_list}"
@@ -1629,7 +1629,7 @@ class _SearchLocalMemoryTool(Tool):
                     # Extract person data from result
                     person_data = {
                         "namespace": r.namespace,
-                        "content": r.content[:200] + "..." if len(r.content) > 200 else r.content,
+                        "content": r.content,
                         "hybrid_score": round(r.hybrid_score, 2),
                         "fts_score": round(r.fts_score, 2) if r.fts_score else None,
                         "semantic_score": round(r.semantic_score, 2) if r.semantic_score else None,
@@ -2147,7 +2147,7 @@ class _ComposeEmailTool(Tool):
                 thread_id=result.get('thread_id'),
             )
 
-            draft_id = draft.get('id', '')[:8] if draft else ''
+            draft_id = draft.get('id', '') if draft else ''
             to_display = to_email or '(not specified)'
 
             return ToolResult(

@@ -241,7 +241,7 @@ def _format_person_blobs(blobs: List[SearchResult]) -> str:
         return ""
 
     sections = []
-    for blob in blobs[:3]:  # Limit to top 3
+    for blob in blobs:
         sections.append(blob.content)
 
     return "\n\n".join(sections)
@@ -253,7 +253,7 @@ def _format_template_blobs(blobs: List[SearchResult]) -> str:
         return ""
 
     sections = []
-    for blob in blobs[:2]:  # Limit to top 2 templates
+    for blob in blobs:
         sections.append(blob.content)
 
     return "\n\n".join(sections)
@@ -265,7 +265,7 @@ def _format_company_blobs(blobs: List[SearchResult]) -> str:
         return ""
 
     sections = []
-    for blob in blobs[:2]:  # Limit to top 2
+    for blob in blobs:
         sections.append(blob.content)
 
     return "\n\n".join(sections)
@@ -277,10 +277,10 @@ def _format_source_emails(emails: List[dict]) -> str:
         return ""
 
     sections = []
-    for email in emails[:3]:  # Limit to 3 most relevant
+    for email in emails:
         from_display = email.get('from_name') or email.get('from_email', 'Unknown')
         subject = email.get('subject', '(no subject)')
-        body = email.get('body_plain') or email.get('snippet', '')[:500]
+        body = email.get('body_plain') or email.get('snippet', '')
         sections.append(f"From: {from_display}\nSubject: {subject}\n\n{body}")
 
     return "\n\n---\n\n".join(sections)
@@ -726,5 +726,5 @@ If writing an email:
             'to_email': email.get('to_email'),
             'subject': email.get('subject'),
             'date': email.get('date'),
-            'body': email.get('body_plain', '')[:2000]
+            'body': email.get('body_plain', '')
         }

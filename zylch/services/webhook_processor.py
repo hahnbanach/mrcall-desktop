@@ -519,7 +519,7 @@ class WebhookProcessor:
                 engagement_type="sms_reply",
                 contact_phone=from_number,
                 data={
-                    "text": text[:500],  # Truncate for storage
+                    "text": text,
                     "keyword": payload.get("keyword")
                 }
             )

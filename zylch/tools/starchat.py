@@ -304,7 +304,7 @@ class StarChatClient:
 
         # Debug: log raw response
         response_text = response.text
-        logger.info(f"Raw response text: {response_text[:500]}")  # First 500 chars
+        logger.info(f"Raw response text: {response_text}")
 
         data = response.json()
         logger.info(f"Parsed JSON type: {type(data)}, value: {data}")
@@ -404,7 +404,7 @@ class StarChatClient:
             return response.json()
         except json.JSONDecodeError as e:
             logger.warning(f"Response is not valid JSON: {e}")
-            logger.warning(f"Response text: {response_text[:200]}")
+            logger.warning(f"Response text: {response_text}")
             # Return success anyway since we got 200 OK
             return {"status": "created", "contact": contact_data, "raw_response": response_text}
 

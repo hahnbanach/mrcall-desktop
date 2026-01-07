@@ -340,7 +340,7 @@ class ChatService:
                 self.agent.clear_history()
 
             # Process message through agent
-            logger.info(f"Processing message for user {user_id}: {user_message[:100]}...")
+            logger.info(f"Processing message for user {user_id}: {user_message}")
             response = await self.agent.process_message(
                 user_message=user_message,
                 context=agent_context

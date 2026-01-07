@@ -375,7 +375,7 @@ class EmailSyncManager:
             priority = 7  # high priority if requires answer
 
         subject_lower = last_message.get('subject', '').lower()
-        body_lower = last_message.get('body', '')[:500].lower()
+        body_lower = last_message.get('body', '').lower()
 
         # Boost priority for urgent keywords
         urgent_keywords = ['urgent', 'asap', 'importante', 'subito', 'immediately', 'critico']
@@ -461,7 +461,7 @@ class EmailSyncManager:
         # Include full body with quoted replies for conversation context
         # Clean HTML to reduce tokens and improve analysis
         raw_body = last_message.get('body', '')
-        body = clean_html(raw_body)[:8000]
+        body = clean_html(raw_body)
 
         from_addr = last_message.get('from', '')
         subject = last_message.get('subject', '')
@@ -527,7 +527,7 @@ class EmailSyncManager:
         except Exception as e:
             logger.warning(f"Thread analysis failed: {e}, using fallback")
             return {
-                "summary": last_message.get('snippet', '')[:200],
+                "summary": last_message.get('snippet', ''),
                 "open": True,
                 "expected_action": None
             }

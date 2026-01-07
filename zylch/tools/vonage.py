@@ -80,7 +80,7 @@ class VonageClient:
         if self.webhook_url:
             message.callback = self.webhook_url
 
-        logger.debug(f"Sending SMS to {recipient}: {text[:50]}...")
+        logger.debug(f"Sending SMS to {recipient}: {text}")
 
         response = self.client.sms.send(message)
         logger.debug(f"Vonage response: {response.model_dump(exclude_unset=True)}")

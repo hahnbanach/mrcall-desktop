@@ -393,7 +393,7 @@ class MrCallConfiguratorTrainer:
             if not current_value:
                 raise ValueError(
                     f"Variable {variable_name} not found in business {business_id}. "
-                    f"Available: {list(current_values.keys())[:10]}..."
+                    f"Available: {list(current_values.keys())}"
                 )
 
             meta_prompt = meta_prompt_template.format(current_value=current_value)

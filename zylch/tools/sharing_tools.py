@@ -357,7 +357,7 @@ class AcceptShareRequestTool(Tool):
                             {
                                 "sender_email": p["sender_email"],
                                 "sender_name": p.get("sender_display_name"),
-                                "intel_preview": p["intel_context"][:100]
+                                "intel_preview": p["intel_context"]
                             }
                             for p in pending
                         ]
