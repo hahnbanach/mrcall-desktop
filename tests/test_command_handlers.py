@@ -1,6 +1,6 @@
 """Test command handlers for slash commands.
 
-Tests the new /trigger, /mrcall, /share, /revoke handlers.
+Tests the /mrcall, /share, /revoke handlers.
 """
 
 import pytest
@@ -9,116 +9,11 @@ from unittest.mock import Mock, AsyncMock, patch, MagicMock
 
 # Test the command handlers
 from zylch.services.command_handlers import (
-    handle_trigger,
     handle_mrcall,
     handle_share,
     handle_revoke,
     handle_help,
 )
-
-
-class TestTriggerHandler:
-    """Tests for /trigger command handler."""
-
-    @pytest.mark.asyncio
-    async def test_trigger_help(self):
-        """Test /trigger --help returns help text."""
-        result = await handle_trigger(['--help'], 'test_owner', 'test@example.com')
-        assert '**Usage:**' in result
-        assert 'session_start' in result
-        assert 'email_received' in result
-
-    @pytest.mark.asyncio
-    async def test_trigger_types(self):
-        """Test /trigger --types returns available types."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage'):
-            result = await handle_trigger(['--types'], 'test_owner', 'test@example.com')
-            assert 'session_start' in result
-            assert 'email_received' in result
-            assert 'sms_received' in result
-            assert 'call_received' in result
-
-    @pytest.mark.asyncio
-    async def test_trigger_list_empty(self):
-        """Test /trigger --list with no triggers."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
-            mock_instance = Mock()
-            mock_instance.list_triggers.return_value = []
-            mock_client.return_value = mock_instance
-
-            result = await handle_trigger(['--list'], 'test_owner', 'test@example.com')
-            assert 'No Triggers' in result
-
-    @pytest.mark.asyncio
-    async def test_trigger_list_with_triggers(self):
-        """Test /trigger --list with existing triggers."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
-            mock_instance = Mock()
-            mock_instance.list_triggers.return_value = [
-                {
-                    'id': 'abc12345-1234-1234-1234-123456789012',
-                    'trigger_type': 'session_start',
-                    'instruction': 'Say good morning',
-                    'active': True
-                }
-            ]
-            mock_client.return_value = mock_instance
-
-            result = await handle_trigger(['--list'], 'test_owner', 'test@example.com')
-            assert 'Your Triggers' in result
-            assert 'session_start' in result
-            assert 'abc12345' in result
-
-    @pytest.mark.asyncio
-    async def test_trigger_add_missing_args(self):
-        """Test /trigger --add with missing arguments."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage'):
-            result = await handle_trigger(['--add'], 'test_owner', 'test@example.com')
-            assert 'Error' in result
-            assert 'Missing arguments' in result
-
-    @pytest.mark.asyncio
-    async def test_trigger_add_invalid_type(self):
-        """Test /trigger --add with invalid trigger type."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage'):
-            result = await handle_trigger(['--add', 'invalid_type', 'instruction'], 'test_owner', 'test@example.com')
-            assert 'Error' in result
-            assert 'Invalid trigger type' in result
-
-    @pytest.mark.asyncio
-    async def test_trigger_add_success(self):
-        """Test /trigger --add with valid arguments."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
-            mock_instance = Mock()
-            mock_instance.add_trigger.return_value = {'id': 'new-trigger-id'}
-            mock_client.return_value = mock_instance
-
-            result = await handle_trigger(
-                ['--add', 'session_start', 'Say', 'good', 'morning'],
-                'test_owner',
-                'test@example.com'
-            )
-            assert 'Trigger Created' in result
-            assert 'session_start' in result
-
-    @pytest.mark.asyncio
-    async def test_trigger_remove_missing_id(self):
-        """Test /trigger --remove without ID."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage'):
-            result = await handle_trigger(['--remove'], 'test_owner', 'test@example.com')
-            assert 'Error' in result
-            assert 'Missing trigger ID' in result
-
-    @pytest.mark.asyncio
-    async def test_trigger_remove_success(self):
-        """Test /trigger --remove with valid ID."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
-            mock_instance = Mock()
-            mock_instance.remove_trigger.return_value = True
-            mock_client.return_value = mock_instance
-
-            result = await handle_trigger(['--remove', 'abc123'], 'test_owner', 'test@example.com')
-            assert 'Trigger Removed' in result
 
 
 class TestMrCallHandler:

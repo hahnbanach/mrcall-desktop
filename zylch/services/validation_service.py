@@ -40,7 +40,7 @@ class CommandValidator:
     """AI-powered semantic command validator.
 
     Uses LLM for fast, cost-effective validation of user commands.
-    Detects semantic issues like using /trigger for always-on behavior.
+    Detects semantic issues and provides helpful feedback.
     """
 
     def __init__(self, api_key: str, provider: str):
@@ -63,7 +63,7 @@ class CommandValidator:
         """Validate command semantically using AI.
 
         Args:
-            command: Command name (e.g., "/trigger", "/memory")
+            command: Command name (e.g., "/sync", "/memory", "/jobs")
             parameters: Command parameters (e.g., {"action": "add", "instruction": "..."})
             context: Optional context (user_id, etc.)
 
@@ -72,13 +72,13 @@ class CommandValidator:
 
         Example:
             result = await validator.validate_command(
-                command="/trigger",
+                command="/memory",
                 parameters={
                     "action": "add",
                     "instruction": "always use formal tone"
                 }
             )
-            # Returns ValidationResult with semantic issue detected
+            # Returns ValidationResult with semantic analysis
         """
         try:
             # Build validation prompt with Zylch context
@@ -127,31 +127,19 @@ CONTEXT: {json.dumps(context or {}, indent=2)}
 
 ZYLCH COMMAND SEMANTICS:
 
-/trigger - Event-driven automation
-  • Executes when specific events occur
-  • Event types: session_start, email_received, sms_received, call_received
-  • Use for: "Do X when Y happens"
-  • Examples: "Greet me when session starts", "Alert when VIP emails"
-
 /memory - Always-on behavioral rules
-  • Applies to ALL interactions (no event trigger)
+  • Applies to ALL interactions
   • Stored as behavioral corrections
   • Use for: "Always do X" (unconditional)
   • Examples: "Always use formal tone", "Never mention competitors"
 
-SEMANTIC ISSUE PATTERNS:
+/sync - Email/calendar synchronization
+  • Fetches new emails and calendar events
+  • Runs as background job
 
-❌ WRONG: /trigger --add "always use formal tone"
-   → No event trigger! Should be /memory
-
-❌ WRONG: /memory --add "when email arrives, alert me"
-   → Event-driven! Should be /trigger
-
-✅ CORRECT: /trigger --add "greet me when session starts"
-   → Has event (session_start)
-
-✅ CORRECT: /memory --add "never mention price" email
-   → Always-on rule (no event)
+/agent - AI processing
+  • memory process: Extract semantic information from emails/calendar
+  • task process: Detect and create tasks from communications
 
 ANALYZE THIS COMMAND:
 1. Is it semantically correct for the user's intent?

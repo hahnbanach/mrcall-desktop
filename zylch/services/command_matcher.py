@@ -218,14 +218,10 @@ class SemanticCommandMatcher:
             return self._format_email(params, template)
         elif command == '/calendar':
             return self._format_calendar(params, template)
-        elif command == '/reminder':
-            return self._format_reminder(params, template)
         elif command == '/model':
             return self._format_model(params)
         elif command == '/archive':
             return self._format_archive(params, template)
-        elif command == '/trigger':
-            return self._format_trigger(params, template)
         elif command == '/share':
             return self._format_share(params)
         elif command == '/revoke':
@@ -365,36 +361,6 @@ class SemanticCommandMatcher:
 
         return "/calendar list"
 
-    def _format_reminder(self, params: Dict[str, Any], template: str) -> str:
-        """/reminder [set | list | cancel]"""
-        # List
-        if 'list reminder' in template or 'show reminder' in template:
-            return "/reminder list"
-
-        # Cancel
-        if 'cancel reminder' in template:
-            reminder_id = params.get('reminder_id', '')
-            if reminder_id:
-                return f"/reminder cancel {reminder_id}"
-            return "/reminder cancel"
-
-        # Set (default)
-        duration = params.get('duration', '')
-        time = params.get('time', '')
-        date = params.get('date', '')
-        task = params.get('task', '')
-
-        parts = ["/reminder set"]
-        if duration:
-            parts.append(f"--in \"{duration}\"")
-        if time:
-            parts.append(f"--at {time}")
-        if date:
-            parts.append(f"--on {date}")
-        if task:
-            parts.append(f"--task \"{task}\"")
-        return " ".join(parts)
-
     def _format_model(self, params: Dict[str, Any]) -> str:
         """/model [haiku|sonnet|opus]"""
         model = params.get('model', '')
@@ -422,17 +388,6 @@ class SemanticCommandMatcher:
             return f"/archive list --limit {limit}"
 
         return "/archive stats"
-
-    def _format_trigger(self, params: Dict[str, Any], template: str) -> str:
-        """/trigger [list | add | remove id]"""
-        if 'list' in template or 'show' in template:
-            return "/trigger list"
-        if 'remove' in template or 'delete' in template:
-            trigger_id = params.get('trigger_id', '')
-            if trigger_id:
-                return f"/trigger remove {trigger_id}"
-            return "/trigger remove"
-        return "/trigger list"
 
     def _format_share(self, params: Dict[str, Any]) -> str:
         """/share [email]"""

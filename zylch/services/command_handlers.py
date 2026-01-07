@@ -81,7 +81,7 @@ async def handle_help() -> str:
 **🧠 Memory & Agents:**
 • `/agent [train|process|show|reset]` - Train agents and process data into memory
 • `/memory [search|store|stats|list]` - Search and manage entity memories
-• `/trigger` - Event-driven automation
+• `/jobs [status|<id>|cancel]` - View background jobs
 
 **📡 Integrations:**
 • `/connect` - View and manage external connections
@@ -635,153 +635,6 @@ Run `/agent process` to rebuild memory from your synced data."""
         return f"**❌ Error:** {str(e)}\n\n{help_text}"
 
 
-async def handle_trigger(args: List[str], owner_id: str, user_email: str = None) -> str:
-    """Handle /trigger command - triggered instructions."""
-    from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
-
-    TRIGGER_TYPES = ['session_start', 'email_received', 'sms_received', 'call_received']
-
-    help_text = """**⚡ Triggered Instructions**
-
-**Usage:**
-• `/trigger` or `/trigger list` - List all triggers
-• `/trigger types` - Show trigger types
-• `/trigger add <type> <instruction>` - Add trigger
-• `/trigger remove <id>` - Remove trigger
-• `/trigger toggle <id>` - Enable/disable trigger
-
-**Trigger types:**
-• `session_start` - When starting conversation
-• `email_received` - When email arrives
-• `sms_received` - When SMS arrives
-• `call_received` - When call comes in
-
-**Examples:**
-```
-/trigger add session_start "Say good morning and list my meetings for today"
-/trigger add email_received "Summarize important emails from unknown senders"
-/trigger remove abc123
-```"""
-
-    # --help option (check first)
-    if '--help' in args:
-        return help_text
-
-    # Separate positional args from options
-    positional = [a for a in args if not a.startswith('--')]
-    subcommand = positional[0].lower() if positional else None
-
-    try:
-        client = SupabaseClient()
-
-        # Subcommand: types
-        if subcommand == 'types':
-            return """**⚡ Available Trigger Types**
-
-• `session_start` - Fires when you start a new conversation
-• `email_received` - Fires when new email arrives (via /sync)
-• `sms_received` - Fires when SMS arrives (via MrCall)
-• `call_received` - Fires when phone call comes in (via MrCall)
-
-**Usage:** `/trigger add <type> <instruction>`"""
-
-        # Subcommand: list (or no subcommand)
-        if subcommand == 'list' or subcommand is None:
-            triggers = client.list_triggers(owner_id)
-
-            if not triggers:
-                return """**⚡ No Triggers**
-
-You haven't created any triggers yet.
-
-**Get started:**
-`/trigger add session_start "Summarize my unread emails"`
-
-Use `/trigger --help` for more options."""
-
-            output = f"**⚡ Your Triggers** ({len(triggers)} total)\n\n"
-            for t in triggers:
-                status = "✅" if t.get('active', True) else "❌"
-                trigger_type = t.get('trigger_type', 'unknown')
-                instruction = t.get('instruction', '')[:50]
-                if len(t.get('instruction', '')) > 50:
-                    instruction += "..."
-                trigger_id = t.get('id', '')[:8]
-
-                output += f"{status} **{trigger_type}** (ID: `{trigger_id}`)\n"
-                output += f"   {instruction}\n\n"
-
-            output += "**Commands:** `/trigger remove <id>` | `/trigger toggle <id>`"
-            return output
-
-        # Subcommand: add
-        if subcommand == 'add':
-            if len(positional) < 3:
-                return "❌ **Error:** Missing arguments\n\n**Usage:** `/trigger add <type> <instruction>`\n\nExample: `/trigger add session_start \"Say good morning\"`"
-
-            trigger_type = positional[1]
-            instruction = ' '.join(positional[2:])
-
-            if trigger_type not in TRIGGER_TYPES:
-                return f"❌ **Error:** Invalid trigger type: `{trigger_type}`\n\n**Valid types:** {', '.join(TRIGGER_TYPES)}"
-
-            result = client.add_trigger(owner_id, trigger_type, instruction)
-
-            if result:
-                return f"""✅ **Trigger Created**
-
-**Type:** {trigger_type}
-**Instruction:** {instruction}
-**ID:** `{result.get('id', 'N/A')[:8]}`
-
-This trigger will fire automatically when the event occurs."""
-            else:
-                return "❌ **Error:** Failed to create trigger. Please try again."
-
-        # Subcommand: remove
-        if subcommand == 'remove':
-            trigger_id = positional[1] if len(positional) > 1 else None
-
-            if not trigger_id:
-                return "❌ **Error:** Missing trigger ID\n\n**Usage:** `/trigger remove <id>`"
-
-            success = client.remove_trigger(owner_id, trigger_id)
-
-            if success:
-                return f"✅ **Trigger Removed** (ID: `{trigger_id[:8]}`)"
-            else:
-                return f"❌ **Error:** Could not find trigger with ID `{trigger_id[:8]}`"
-
-        # Subcommand: toggle
-        if subcommand == 'toggle':
-            trigger_id = positional[1] if len(positional) > 1 else None
-
-            if not trigger_id:
-                return "❌ **Error:** Missing trigger ID\n\n**Usage:** `/trigger toggle <id>`"
-
-            triggers = client.list_triggers(owner_id)
-            current_trigger = next((t for t in triggers if t['id'].startswith(trigger_id)), None)
-
-            if not current_trigger:
-                return f"❌ **Error:** Could not find trigger with ID `{trigger_id[:8]}`"
-
-            new_status = not current_trigger.get('active', True)
-            success = client.update_trigger_active(owner_id, current_trigger['id'], new_status)
-
-            if success:
-                status_text = "enabled" if new_status else "disabled"
-                return f"✅ **Trigger {status_text}** (ID: `{trigger_id[:8]}`)"
-            else:
-                return f"❌ **Error:** Could not update trigger"
-
-        # Unknown subcommand
-        return f"❌ Unknown subcommand: `{subcommand}`\n\n{help_text}"
-
-    except Exception as e:
-        logger.error(f"Error in /trigger command: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}\n\n{help_text}"
-
-
 async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) -> str:
     """Handle /mrcall command - MrCall integration."""
     from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
@@ -1035,8 +888,8 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 Your Zylch is now connected to this MrCall assistant!
 
 **Next steps:**
-• `/trigger add call_received "Summarize the call"`
-• `/sync mrcall` - Test fetching conversations"""
+• `/sync mrcall` - Test fetching conversations
+• `/mrcall train` - Train AI on your assistant"""
             else:
                 return "❌ **Error:** Failed to link MrCall business. Please try again."
 
@@ -1356,7 +1209,7 @@ Run `/mrcall show {feature_name}` to see the full configuration."""
 • `/mrcall list` - See all your assistants
 • `/mrcall unlink` - Disconnect this assistant
 • `/sync mrcall` - Test API connection
-• `/trigger add call_received "..."` - Add call automation"""
+• `/mrcall train` - Train AI on your assistant"""
                 else:
                     return f"""**📞 MrCall Status**
 
@@ -2095,25 +1948,6 @@ Use `/agent process` to extract facts from synced data into memory.''',
 - `/email search <query>` - Search emails
 - `/email search <query> --from <sender> --days N --limit N`''',
     },
-    '/trigger': {
-        'summary': 'Manage event triggers',
-        'usage': '/trigger [types|list|add|remove|enable|disable] [args]',
-        'description': '''Configure automated triggers for events like new emails.
-
-**Subcommands:**
-- `types` - Show available trigger types
-- `list` - List configured triggers (default)
-- `add <type> <instruction>` - Add a new trigger
-- `remove <id>` - Remove a trigger by ID
-- `enable <id>` - Enable a trigger
-- `disable <id>` - Disable a trigger
-
-**Examples:**
-- `/trigger` - List all triggers
-- `/trigger types` - Show trigger types
-- `/trigger add email_received "Summarize new emails"` - Add trigger
-- `/trigger remove 123` - Remove trigger''',
-    },
     '/mrcall': {
         'summary': 'MrCall integration',
         'usage': '/mrcall [list|link N|unlink|variables|train|show|config]',
@@ -2802,21 +2636,24 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
 
 
 async def handle_jobs(args: List[str], owner_id: str) -> str:
-    """Handle /jobs command - list scheduled jobs."""
-    from zylch.services.scheduler import ZylchScheduler
+    """Handle /jobs command - list background jobs."""
+    from zylch.storage.supabase_client import SupabaseStorage
 
-    help_text = """**⏰ Scheduled Jobs**
+    help_text = """**📋 Background Jobs**
 
-**Usage:** `/jobs [cancel <id>]`
+**Usage:** `/jobs [status|<job_id>|cancel <job_id>]`
 
-Shows your scheduled reminders and jobs.
+Shows your background jobs (sync, memory processing, etc.)
 
 **Subcommands:**
-- `cancel <id>` - Cancel a job by ID
+- `status` - Show running/pending jobs only
+- `<job_id>` - Show details for specific job
+- `cancel <job_id>` - Cancel a pending job
 
-**Related:**
-- "remind me in 2 hours" - Schedule via Claude
-- `/trigger` - Event-driven automation"""
+**Examples:**
+- `/jobs` - List recent jobs
+- `/jobs status` - Show active jobs only
+- `/jobs cancel abc123` - Cancel job"""
 
     # --help option (check first)
     if '--help' in args:
@@ -2827,52 +2664,83 @@ Shows your scheduled reminders and jobs.
     subcommand = positional[0].lower() if positional else None
 
     try:
-        scheduler = ZylchScheduler(owner_id=owner_id)
+        storage = SupabaseStorage.get_instance()
 
         # Subcommand: cancel
         if subcommand == 'cancel':
             job_id = positional[1] if len(positional) > 1 else None
-            if job_id:
-                success = scheduler.cancel_job(job_id)
-                if success:
-                    return f"✅ **Job cancelled:** `{job_id[:8]}`"
-                else:
-                    return f"❌ **Job not found:** `{job_id[:8]}`"
-            else:
+            if not job_id:
                 return "❌ Missing job ID. Usage: `/jobs cancel <id>`"
+            success = storage.cancel_background_job(job_id, owner_id)
+            if success:
+                return f"✅ **Job cancelled:** `{job_id}`"
+            return "❌ **Cannot cancel:** Job not found or not pending"
+
+        # Subcommand: specific job by ID
+        if subcommand and subcommand != 'status':
+            job = storage.get_background_job(subcommand, owner_id)
+            if not job:
+                return f"❌ Job `{subcommand}` not found"
+            return _format_job_detail(job)
 
         # List jobs
-        jobs = scheduler.list_jobs()
+        status_filter = "running" if subcommand == "status" else None
+        jobs = storage.get_user_background_jobs(owner_id, status=status_filter, limit=10)
 
         if not jobs:
-            return """**⏰ Scheduled Jobs**
+            return """**📋 Background Jobs**
 
-📭 No scheduled jobs.
+📭 No background jobs found.
 
-**Create one:**
-- "remind me in 2 hours to call Mario"
-- `/trigger add session_start "Check my emails"`"""
+Background jobs are created when you run:
+- `/sync` - Email/calendar sync
+- `/agent memory process` - Memory processing
+- `/agent task process` - Task detection"""
 
-        output = f"**⏰ Scheduled Jobs** ({len(jobs)} found)\n\n"
+        output = f"**📋 Background Jobs** ({len(jobs)} found)\n\n"
 
         for job in jobs:
-            job_id = job.get('id', '')[:8]
-            job_type = job.get('type', 'reminder')
-            next_run = job.get('next_run', 'N/A')
-            description = job.get('description', '')[:50]
+            job_id = job['id'][:8]
+            job_type = job['job_type']
+            status = job['status']
+            progress = job.get('progress_pct', 0)
 
-            type_emoji = {'reminder': '🔔', 'conditional': '⚡'}.get(job_type, '📋')
+            emoji = {'pending': '⏳', 'running': '🔄', 'completed': '✅', 'failed': '❌', 'cancelled': '🚫'}.get(status, '📋')
 
-            output += f"{type_emoji} **{job_type}** (ID: `{job_id}`)\n"
-            output += f"   {description}\n"
-            output += f"   Next: {next_run}\n\n"
+            output += f"{emoji} **{job_type}** (`{job_id}`)\n"
+            output += f"   Status: {status}"
+            if status == 'running':
+                output += f" ({progress}%)"
+            output += "\n"
+            if job.get('status_message'):
+                output += f"   {job['status_message']}\n"
+            output += "\n"
 
-        output += "_Use `/jobs cancel <id>` to cancel._"
+        output += "_Use `/jobs <id>` for details, `/jobs cancel <id>` to cancel._"
         return output
 
     except Exception as e:
         logger.error(f"Error in /jobs: {e}", exc_info=True)
         return f"❌ **Error:** {str(e)}\n\n{help_text}"
+
+
+def _format_job_detail(job: dict) -> str:
+    """Format detailed job info."""
+    return f"""**📋 Job Details**
+
+**ID:** `{job['id']}`
+**Type:** {job['job_type']}
+**Channel:** {job.get('channel', 'all')}
+**Status:** {job['status']}
+**Progress:** {job.get('progress_pct', 0)}%
+
+**Timing:**
+- Created: {job['created_at']}
+- Started: {job.get('started_at', 'N/A')}
+- Completed: {job.get('completed_at', 'N/A')}
+
+**Message:** {job.get('status_message', 'N/A')}
+**Error:** {job.get('last_error', 'None')}"""
 
 
 async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> str:
@@ -3526,7 +3394,6 @@ COMMAND_HANDLERS = {
     '/sync': handle_sync,
     '/memory': handle_memory,
     '/email': handle_email,
-    '/trigger': handle_trigger,
     '/mrcall': handle_mrcall,
     # NOTE: /connect is partially handled client-side by CLI for OAuth. Only --help, reset, status reach backend.
     '/connect': handle_connect,
@@ -3629,19 +3496,6 @@ COMMAND_PATTERNS = {
         "clear memory",
         "delete all memories",
         "wipe memory and reprocess",
-    ],
-
-    # --- Triggers/Automation ---
-    '/trigger': [
-        "set up automation",
-        "create trigger",
-        "automate",
-        "when email arrives",
-        "create rule",
-        "list triggers",
-        "show triggers",
-        "remove trigger {trigger_id:text}",
-        "delete trigger {trigger_id:text}",
     ],
 
     # --- Connections ---
