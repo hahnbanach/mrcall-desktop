@@ -11,13 +11,15 @@ the user's request.
 
 Key principle: "Find a balance between putting a bit more than necessary
 in memory and not overloading the assistant."
+
+Inherits from BaseAgent for common functionality (init, prompt loading, etc.)
 """
 
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from zylch.llm import LLMClient
+from zylch.agents.base_agent import BaseAgent
 from zylch.storage.supabase_client import SupabaseStorage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 from zylch.memory.hybrid_search import SearchResult
@@ -309,8 +311,10 @@ def build_prompt_context(context: EmailContext) -> str:
     return "\n\n".join(sections)
 
 
-class EmailerAgent:
+class EmailerAgent(BaseAgent):
     """Multi-tool agent for email-related tasks.
+
+    Inherits from BaseAgent for common functionality.
 
     This is a TRUE AGENT that:
     1. Has a trained prompt that learns the user's writing style
@@ -345,55 +349,12 @@ class EmailerAgent:
             api_key: API key for LLM
             provider: LLM provider (anthropic, openai, mistral)
         """
-        self.storage = storage
-        self.owner_id = owner_id
+        super().__init__(storage, owner_id, api_key, provider)
 
-        # Initialize hybrid search
-        config = MemoryConfig()
-        embedding_engine = EmbeddingEngine(config)
-        self.search_engine = HybridSearchEngine(
-            supabase_client=storage.client,
-            embedding_engine=embedding_engine
-        )
-
+        # Email-specific: context gatherer for email composition
         self.gatherer = EmailContextGatherer(storage, self.search_engine, owner_id)
-        self.llm = LLMClient(api_key=api_key, provider=provider)
-
-        # Cache for trained prompt (lazy loaded)
-        self._trained_prompt: Optional[str] = None
-        self._prompt_loaded: bool = False
 
         logger.info(f"EmailerAgent initialized for owner={owner_id}")
-
-    def _get_trained_prompt(self) -> Optional[str]:
-        """Get trained email writing prompt from storage.
-
-        Loads user's trained prompt from DB on first call, caches for subsequent calls.
-        Returns None if no trained prompt exists (user hasn't run /agent email train).
-
-        Returns:
-            The trained prompt, or None if not configured
-        """
-        if not self._prompt_loaded:
-            self._trained_prompt = self.storage.get_agent_prompt(self.owner_id, 'emailer')
-            self._prompt_loaded = True
-
-            if self._trained_prompt:
-                logger.info("Using user's trained emailer prompt")
-            else:
-                logger.debug("No trained emailer prompt - using generic")
-
-        return self._trained_prompt
-
-    def has_trained_prompt(self) -> bool:
-        """Check if user has a trained emailer prompt.
-
-        Returns:
-            True if user has trained the emailer agent
-        """
-        if not self._prompt_loaded:
-            self._get_trained_prompt()  # Trigger load
-        return self._trained_prompt is not None
 
     async def compose(
         self,

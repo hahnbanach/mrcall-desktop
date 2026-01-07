@@ -47,7 +47,7 @@ This feature uses MULTIPLE coordinated variables:
 Generate a sub-prompt with these exact sections:
 
 ### SECTION 1: AVAILABLE VARIABLES
-Create a markdown table with columns: Variable | Type | Description | Current Value
+Create a markdown table with columns: Variable | Type | Description | Default | Current Value
 
 ### SECTION 2: CURRENT BEHAVIOR
 Describe what the assistant DOES in plain language.
@@ -146,18 +146,27 @@ For multi-variable features:
 ## Testing New Feature
 
 ```bash
-# 1. Train the feature (generates sub-prompt)
-/mrcall train booking
+# 1. Train all features + build unified agent (ONE COMMAND)
+/agent mrcall train
+# → "✅ Agent trained (features: welcome_message, booking)"
 
-# 2. Show the generated context
-/mrcall show booking
+# 2. Or train just the new feature
+/agent mrcall train booking
+# → "✅ Feature 'booking' trained, agent updated"
 
-# 3. Test configuration
-/mrcall config booking "enable booking, available Monday-Friday 9am-5pm"
+# 3. Run the agent (auto-detects feature from intent)
+/agent mrcall run "enable booking with 30-min appointments"
+/agent mrcall run "change the welcome message to say Good morning"
+/agent mrcall run "what are my current settings?"
 
-# 4. Verify the change
+# 4. Show unified agent prompt
+/agent mrcall show
+
+# 5. Show feature-specific sub-prompt
 /mrcall show booking
 ```
+
+The agent automatically detects which feature to configure based on user intent.
 
 ---
 
@@ -182,3 +191,56 @@ Benefits:
 - Remove feature in ONE place, removed everywhere
 - No risk of mappings getting out of sync
 - Easier to maintain and verify
+
+---
+
+## Unified Agent Files
+
+When you add a new feature, the unified agent automatically picks it up:
+
+| File | Purpose |
+|------|---------|
+| `zylch/agents/mrcall_configurator_trainer.py` | Feature sub-prompt training (FEATURES dict is the source of truth) |
+| `zylch/agents/mrcall_agent_trainer.py` | Unified agent trainer - combines all feature sub-prompts |
+| `zylch/agents/mrcall_agent.py` | Unified agent runner with multi-tool support |
+
+### Storage Keys
+
+| Key Pattern | Content |
+|-------------|---------|
+| `mrcall_{business_id}_{feature}` | Feature sub-prompt (e.g., `mrcall_abc123_booking`) |
+| `mrcall_{business_id}` | Unified agent prompt combining all features |
+
+### Adding a Tool to Unified Agent
+
+When adding a new feature, add a corresponding tool in `mrcall_agent.py`:
+
+```python
+MRCALL_AGENT_TOOLS = [
+    # ... existing tools ...
+    {
+        "name": "configure_new_feature",
+        "description": "Modify new_feature settings. Description of behavior.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "changes": {
+                    "type": "object",
+                    "description": "Map of variable_name -> new_value. ALL VALUES ARE STRINGS.",
+                    "additionalProperties": {"type": "string"}
+                }
+            },
+            "required": ["changes"]
+        }
+    },
+]
+```
+
+Then add the handler in `MrCallAgent._handle_tool_response()`:
+
+```python
+elif block.name == 'configure_new_feature':
+    result['result'] = await self._process_configure(
+        block.input, 'new_feature'
+    )
+```
