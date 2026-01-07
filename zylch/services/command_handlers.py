@@ -3366,11 +3366,10 @@ Usage:
         # Train feature(s) using MrCallConfiguratorTrainer
         configurator = MrCallConfiguratorTrainer(
             storage=storage,
+            starchat_client=starchat,
             owner_id=owner_id,
             api_key=api_key,
-            user_email=user_email or '',
             provider=llm_provider,
-            starchat_client=starchat,
         )
 
         trained_features = []
