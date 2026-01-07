@@ -70,14 +70,6 @@ from .sms_tools import (
     VerifyCodeTool,
 )
 from .call_tools import InitiateCallTool
-from .scheduler_tools import (
-    ScheduleReminderTool,
-    ScheduleConditionalTool,
-    CancelConditionalTool,
-    ListScheduledJobsTool,
-    CancelJobTool,
-)
-from ..services.scheduler import ZylchScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -337,18 +329,6 @@ class ToolFactory:
             ))
             logger.info("Call tool initialized (StarChat/MrCall)")
 
-        # Scheduler tools (5 tools) - for reminders and timed actions
-        # Use Supabase for persistence (multi-tenant, multi-instance)
-        from zylch.storage.supabase_client import SupabaseStorage
-        scheduler_supabase = SupabaseStorage.get_instance()
-        scheduler = ZylchScheduler(
-            owner_id=config.owner_id,
-            supabase_storage=scheduler_supabase,
-        )
-        scheduler.start()
-        tools.extend(ToolFactory._create_scheduler_tools(scheduler))
-        logger.info("Scheduler tools initialized (Supabase)")
-
         # Get Tasks tool - returns task list from task_items table
         tools.append(_GetTasksTool(session_state=session_state))
         logger.info("Get Tasks tool initialized")
@@ -543,26 +523,6 @@ class ToolFactory:
             ),
             VerifyCodeTool(owner_id=owner_id, zylch_assistant_id=zylch_assistant_id),
         ]
-
-    @staticmethod
-    def _create_scheduler_tools(scheduler) -> List[Tool]:
-        """Create scheduler tools for reminders and timed actions.
-
-        Tools:
-        - schedule_reminder: Schedule a one-time reminder
-        - schedule_conditional: Schedule action if condition not met in time
-        - cancel_conditional: Cancel a conditional timeout
-        - list_scheduled_jobs: List all pending jobs
-        - cancel_scheduled_job: Cancel a job by ID
-        """
-        return [
-            ScheduleReminderTool(scheduler=scheduler),
-            ScheduleConditionalTool(scheduler=scheduler),
-            CancelConditionalTool(scheduler=scheduler),
-            ListScheduledJobsTool(scheduler=scheduler),
-            CancelJobTool(scheduler=scheduler),
-        ]
-
 
 # ============================================================================
 # INLINE TOOL DEFINITIONS

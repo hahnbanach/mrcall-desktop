@@ -12,7 +12,7 @@ EXPECTED_TABLES = [
     'emails', 'sync_state', 'task_items',
     'calendar_events', 'patterns', 'blobs',
     'oauth_tokens', 'triggers', 'trigger_events',
-    'sharing_auth', 'scheduled_jobs'
+    'sharing_auth', 'background_jobs'
 ]
 
 def verify_schema():
