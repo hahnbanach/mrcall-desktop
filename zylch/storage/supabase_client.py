@@ -3023,6 +3023,86 @@ class SupabaseStorage:
             logger.error(f"Failed to merge task sources for {task_id}: {e}")
             return False
 
+    def complete_task_item(self, owner_id: str, task_id: str) -> bool:
+        """Mark a task as completed.
+
+        Args:
+            owner_id: Firebase UID
+            task_id: Task ID to complete
+
+        Returns:
+            True if completed successfully
+        """
+        try:
+            from datetime import datetime, timezone
+            self.client.table('task_items')\
+                .update({'completed_at': datetime.now(timezone.utc).isoformat()})\
+                .eq('id', task_id)\
+                .eq('owner_id', owner_id)\
+                .execute()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to complete task {task_id}: {e}")
+            return False
+
+    def update_task_item(
+        self,
+        owner_id: str,
+        task_id: str,
+        urgency: str = None,
+        suggested_action: str = None,
+        reason: str = None,
+        add_source_email: str = None
+    ) -> bool:
+        """Update an existing task with new information.
+
+        Args:
+            owner_id: Firebase UID
+            task_id: Task ID to update
+            urgency: New urgency level (optional)
+            suggested_action: New suggested action (optional)
+            reason: New reason (optional)
+            add_source_email: Email ID to add to sources (optional)
+
+        Returns:
+            True if updated successfully
+        """
+        try:
+            # Get current sources
+            task = self.client.table('task_items')\
+                .select('sources')\
+                .eq('id', task_id)\
+                .single()\
+                .execute()
+
+            sources = task.data.get('sources', {}) if task.data else {}
+
+            # Add new email to sources
+            if add_source_email:
+                emails = sources.get('emails', [])
+                if add_source_email not in emails:
+                    emails.append(add_source_email)
+                sources['emails'] = emails
+
+            update = {'sources': sources}
+            if urgency:
+                update['urgency'] = urgency
+            if suggested_action:
+                update['suggested_action'] = suggested_action
+            if reason:
+                update['reason'] = reason
+
+            self.client.table('task_items')\
+                .update(update)\
+                .eq('id', task_id)\
+                .eq('owner_id', owner_id)\
+                .execute()
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to update task {task_id}: {e}")
+            return False
+
     def store_task_items_batch(self, owner_id: str, items: List[Dict[str, Any]]) -> int:
         """Store multiple task items.
 
