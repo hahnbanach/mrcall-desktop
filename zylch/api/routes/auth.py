@@ -1401,7 +1401,7 @@ async def mrcall_oauth_authorize(
         "response_type": "code",
         "client_id": settings.mrcall_client_id,
         "redirect_uri": "http://localhost:8766/callback",  # Local callback for CLI
-        "scope": "business:read contacts:read",
+        "scope": "business:read business:write contacts:read contacts:write sessions:read sessions:write templates:read",
         "state": state,
         "code_challenge": code_challenge,
         "code_challenge_method": "S256"
@@ -1595,7 +1595,7 @@ async def mrcall_oauth_status(user: dict = Depends(get_current_user)):
             "has_credentials": True,
             "business_id": credentials.get("business_id"),
             "realm": credentials.get("realm", settings.mrcall_realm),
-            "scopes": credentials.get("scopes", ["business:read", "contacts:read"]),
+            "scopes": credentials.get("scopes", ["business:read", "business:write", "contacts:read", "contacts:write", "sessions:read", "sessions:write", "templates:read"]),
             "expired": is_expired
         }
 
