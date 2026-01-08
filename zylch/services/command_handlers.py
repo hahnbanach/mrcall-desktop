@@ -2755,9 +2755,8 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
     try:
         storage = SupabaseStorage.get_instance()
 
-        domain = args[0].lower()  # 'memory' or 'task'
-        action = args[1].lower()  # 'train', 'process', 'show', 'reset'
-        channel = args[2].lower() if len(args) > 2 else 'email'  # 'email', 'calendar', 'all'
+        domain = args[0].lower()  # 'memory', 'task', 'email', 'mrcall'
+        action = args[1].lower()  # 'train', 'run', 'show', 'reset'
 
         valid_domains = ['memory', 'task', 'email', 'mrcall']
         valid_actions = ['train', 'run', 'process', 'show', 'reset']  # 'process' kept for backwards compat
@@ -2773,8 +2772,14 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
         if action not in valid_actions:
             return f"❌ Unknown action: `{action}`\n\nValid actions: `train`, `run`, `show`, `reset`"
 
-        if channel not in valid_channels:
-            return f"❌ Unknown channel: `{channel}`\n\nValid channels: `email`, `calendar`, `all`"
+        # For email/mrcall: args[2:] are instructions (for run) or feature (for train), not channel
+        # For memory/task: args[2] is channel
+        if domain in ['email', 'mrcall']:
+            channel = None  # Not used for email/mrcall
+        else:
+            channel = args[2].lower() if len(args) > 2 else 'email'
+            if channel not in valid_channels:
+                return f"❌ Unknown channel: `{channel}`\n\nValid channels: `email`, `calendar`, `all`"
 
         # Get common requirements
         from zylch.api.token_storage import get_active_llm_provider
@@ -2825,7 +2830,6 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
                 return await _handle_emailer_train(storage, owner_id, api_key, llm_provider, user_email)
 
             elif action == 'run':
-                # Extract instructions from args (everything after 'email run')
                 instructions = ' '.join(args[2:]) if len(args) > 2 else ''
                 return await _handle_emailer_run(storage, owner_id, api_key, llm_provider, instructions)
 
@@ -2845,7 +2849,6 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
                 return await _handle_mrcall_agent_train(storage, owner_id, api_key, llm_provider, user_email, feature=feature)
 
             elif action == 'run':
-                # Extract instructions from args (everything after 'mrcall run')
                 instructions = ' '.join(args[2:]) if len(args) > 2 else ''
                 return await _handle_mrcall_agent_run(storage, owner_id, api_key, llm_provider, instructions)
 
