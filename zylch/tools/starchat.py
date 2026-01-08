@@ -688,11 +688,15 @@ class StarChatClient:
         # CRITICAL: For OAuth/Delegated access, we must use the delegated_{realm} prefix
         endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/business"
         logger.info(f"Putting updated business to: {endpoint}")
-        
+        logger.debug(f"PUT request body keys: {list(business_data.keys())}")
+
         response = await self.client.put(
             endpoint,
             json=business_data,
         )
+
+        if response.status_code >= 400:
+            logger.error(f"PUT failed: {response.status_code} - {response.text}")
         response.raise_for_status()
 
         return response.json()
