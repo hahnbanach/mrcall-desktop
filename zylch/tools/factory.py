@@ -1069,7 +1069,7 @@ class _SendDraftTool(Tool):
     def __init__(self, gmail_client, storage, owner_id: str):
         super().__init__(
             name="send_draft",
-            description="Send a draft email"
+            description="Send a draft email. When user says 'send it', 'inviala', 'spedisci', call this tool. If no draft_id provided, sends the most recent draft."
         )
         self.gmail = gmail_client
         self.storage = storage
@@ -2161,7 +2161,7 @@ class _ComposeEmailTool(Tool):
 {body}
 
 ---
-Say "send it" or use `/email send {draft_id}` to send."""
+Say "send it" when ready - I'll send it for you."""
             )
         except Exception as e:
             logger.error(f"Failed to compose email: {e}")
