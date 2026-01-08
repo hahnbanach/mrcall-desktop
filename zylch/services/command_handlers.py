@@ -731,6 +731,10 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
                 nickname = biz.get('nickname') or 'Unnamed'
                 company = biz.get('companyName') or ''
                 service_number = biz.get('serviceNumber') or ''
+                email_address = biz.get('emailAddress') or ''
+                user_phone = biz.get('userPhoneNumber') or ''
+                template = biz.get('template') or ''
+                subscription_status = biz.get('subscriptionStatus') or ''
 
                 # Mark if this is the linked business
                 linked_marker = " ← LINKED" if biz_id == current_business_id else ""
@@ -741,10 +745,27 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
                 else:
                     output += f"{i}. **{nickname}**{linked_marker}\n"
 
+                # Email
+                if email_address:
+                    output += f"   📧 {email_address}\n"
+
+                # User phone number
+                if user_phone:
+                    output += f"   📱 User: {user_phone}\n"
+
+                # Assistant (service) number - formatted as clickable link
                 if service_number:
                     # Clean up service number display (remove duplicates like +39...#+39...)
                     display_number = service_number.split('#')[0] if '#' in service_number else service_number
-                    output += f"   📱 {display_number}\n"
+                    output += f"   ☎️ Assistant: [{display_number}](tel:{display_number})\n"
+
+                # Template (assistant type)
+                if template:
+                    output += f"   🤖 {template}\n"
+
+                # Subscription status
+                if subscription_status:
+                    output += f"   📋 {subscription_status}\n"
 
                 output += "\n"
 
