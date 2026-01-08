@@ -1833,6 +1833,11 @@ For simple drafts without context, use the `compose_email` tool in chat."""
             }).eq('id', draft['id']).execute()
 
             try:
+                # Convert list fields to comma-separated strings for email APIs
+                to_str = ', '.join(draft['to_addresses']) if isinstance(draft['to_addresses'], list) else draft['to_addresses']
+                cc_str = ', '.join(draft['cc_addresses']) if draft.get('cc_addresses') and isinstance(draft['cc_addresses'], list) else draft.get('cc_addresses')
+                bcc_str = ', '.join(draft['bcc_addresses']) if draft.get('bcc_addresses') and isinstance(draft['bcc_addresses'], list) else draft.get('bcc_addresses')
+
                 if provider == 'google':
                     from zylch.tools.gmail import GmailClient
 
@@ -1844,11 +1849,11 @@ For simple drafts without context, use the `compose_email` tool in chat."""
 
                     # Build and send message
                     sent_message = gmail.send_message(
-                        to=draft['to_addresses'],
+                        to=to_str,
                         subject=draft.get('subject', ''),
                         body=draft.get('body', ''),
-                        cc=draft.get('cc_addresses'),
-                        bcc=draft.get('bcc_addresses'),
+                        cc=cc_str,
+                        bcc=bcc_str,
                         in_reply_to=draft.get('in_reply_to'),
                         references=draft.get('references'),
                         thread_id=draft.get('thread_id'),
@@ -1870,11 +1875,11 @@ For simple drafts without context, use the `compose_email` tool in chat."""
                     )
 
                     sent_message = outlook.send_message(
-                        to=draft['to_addresses'],
+                        to=to_str,
                         subject=draft.get('subject', ''),
                         body=draft.get('body', ''),
-                        cc=draft.get('cc_addresses'),
-                        bcc=draft.get('bcc_addresses'),
+                        cc=cc_str,
+                        bcc=bcc_str,
                     )
 
                     sent_id = sent_message.get('id', '')
