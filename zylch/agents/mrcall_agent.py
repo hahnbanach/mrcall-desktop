@@ -86,7 +86,7 @@ MRCALL_AGENT_TOOLS = [
     },
     {
         "name": "respond_text",
-        "description": "Answer questions or explain settings without making changes. Use for informational requests.",
+        "description": "Answer questions, explain settings, or interpret current configuration. Use for: YES/NO questions ('is booking enabled?', 'does it answer formally?'), behavioral questions ('how does it greet callers?'), and any request to INTERPRET or EXPLAIN settings rather than just show raw values.",
         "input_schema": {
             "type": "object",
             "properties": {
