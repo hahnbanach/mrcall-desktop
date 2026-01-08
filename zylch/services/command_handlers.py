@@ -1882,12 +1882,8 @@ For simple drafts without context, use the `compose_email` tool in chat."""
                 else:
                     raise Exception(f"Unknown provider: {provider}")
 
-                # Mark as sent
-                supabase.table('drafts').update({
-                    'status': 'sent',
-                    'sent_at': datetime.now(timezone.utc).isoformat(),
-                    'sent_message_id': sent_id,
-                }).eq('id', draft['id']).execute()
+                # Delete draft after successful send
+                supabase.table('drafts').delete().eq('id', draft['id']).execute()
 
                 to_str = ', '.join(draft['to_addresses'])
                 return f"""✅ **Email sent!**
@@ -1899,9 +1895,9 @@ For simple drafts without context, use the `compose_email` tool in chat."""
 Message ID: `{sent_id if sent_id else 'N/A'}`"""
 
             except Exception as e:
-                # Mark as failed
+                # Restore draft status on failure (so it appears in /email list --draft)
                 supabase.table('drafts').update({
-                    'status': 'failed',
+                    'status': 'draft',
                     'error_message': str(e),
                 }).eq('id', draft['id']).execute()
 
