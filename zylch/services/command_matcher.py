@@ -82,7 +82,7 @@ class SemanticCommandMatcher:
 
         # 1. Embed user message
         try:
-            user_embedding = self._embedding_engine.embed_text(user_message)
+            user_embedding = self._embedding_engine.encode(user_message)
         except Exception as e:
             logger.error(f"[CommandMatcher] Embedding failed: {e}")
             return None
@@ -98,10 +98,10 @@ class SemanticCommandMatcher:
                 # Remove parameter types for embedding comparison (e.g. "{limit:int}" -> "limit")
                 # This makes "show 5 drafts" match better with "show drafts" semantically
                 clean_template = re.sub(r'\{([^:}]+)(?::[^}]+)?\}', r'\1', template)
-                
+
                 try:
-                    template_embedding = self._embedding_engine.embed_text(clean_template)
-                    score = self._embedding_engine.cosine_similarity(user_embedding, template_embedding)
+                    template_embedding = self._embedding_engine.encode(clean_template)
+                    score = self._embedding_engine.similarity(user_embedding, template_embedding)
                     
                     if score > best_score:
                         best_score = score

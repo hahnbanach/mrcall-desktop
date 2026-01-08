@@ -133,16 +133,16 @@ When drafting emails or reminders:
   4. Include relevant context from the email thread
   5. Present the draft for approval
 - **CRITICAL: Draft vs Send distinction:**
-  1. **Writing a draft** (text) ≠ **Saving to Gmail** (tool call) ≠ **Sending email** (tool call)
-  2. When user says "save it" or "salvala", you MUST call `create_gmail_draft` tool
-  3. When user says "send it" or "inviala", you MUST call `send_gmail_draft` tool
+  1. **Writing a draft** (text) ≠ **Saving to Supabase** (tool call) ≠ **Sending email** (tool call)
+  2. When user says "save it" or "salvala", you MUST call `create_draft` tool
+  3. When user says "send it" or "inviala", you MUST call `send_draft` tool
   4. NEVER say you saved/sent an email unless you actually called the tool
-  5. After calling `create_gmail_draft`, confirm the draft ID returned
-  6. After calling `send_gmail_draft`, confirm the email was sent
+  5. After calling `create_draft`, confirm the draft ID returned
+  6. After calling `send_draft`, confirm the email was sent
 - **CRITICAL: Threading for Replies:**
   1. When creating a draft that is a REPLY to an existing email, you MUST preserve threading
   2. After calling `search_emails`, the result includes `message_id`, `in_reply_to`, and `references` fields
-  3. To keep the draft IN the thread, pass these to `create_gmail_draft`:
+  3. To keep the draft IN the thread, pass these to `create_draft`:
      - `in_reply_to` = the original email's `message_id`
      - `references` = the original email's `references` + the original email's `message_id`
   4. Example workflow:
@@ -153,7 +153,7 @@ When drafting emails or reminders:
         - message_id="<abc@domain.com>"
         - references="<xyz@domain.com>"
         - thread_id="1a2b3c4d5e6f7g8h"
-     3. Call create_gmail_draft with:
+     3. Call create_draft with:
         - to, subject, body
         - in_reply_to="<abc@domain.com>"
         - references="<xyz@domain.com> <abc@domain.com>"
@@ -162,7 +162,7 @@ When drafting emails or reminders:
   5. If you DON'T pass thread_id, the draft will appear OUTSIDE the conversation thread
 - **After user approves a draft:**
   1. Ask: "Would you like me to save this as a draft in Gmail?"
-  2. If yes → IMMEDIATELY call `create_gmail_draft` tool
+  2. If yes → IMMEDIATELY call `create_draft` tool
   3. Confirm the draft was created with the draft ID
   4. Remind: "The draft is saved in Gmail. You can send it manually whenever you're ready."
 - **Editing drafts:**
