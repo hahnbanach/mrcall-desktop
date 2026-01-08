@@ -210,13 +210,28 @@ Choose the appropriate tool based on what the user wants. Remember:
 """
 
         logger.debug(f"[MrCallAgent] Sending prompt ({len(prompt)} chars)")
+        logger.info(f"[MrCallAgent] Calling LLM with {len(self.TOOLS)} tools")
 
         # Call LLM with tools (uses inherited self.llm from BaseAgent)
-        response = await self.llm.create_message(
-            messages=[{"role": "user", "content": prompt}],
-            tools=self.TOOLS,
-            max_tokens=2000
-        )
+        try:
+            response = await self.llm.create_message(
+                messages=[{"role": "user", "content": prompt}],
+                tools=self.TOOLS,
+                max_tokens=2000
+            )
+            logger.info(f"[MrCallAgent] LLM response received: stop_reason={response.stop_reason}")
+            logger.debug(f"[MrCallAgent] LLM response content blocks: {len(response.content)}")
+            for i, block in enumerate(response.content):
+                if hasattr(block, 'name'):
+                    logger.info(f"[MrCallAgent] Content block {i}: tool_use name={block.name}")
+                    logger.debug(f"[MrCallAgent] Content block {i}: tool_input={block.input}")
+                elif hasattr(block, 'text'):
+                    logger.debug(f"[MrCallAgent] Content block {i}: text={block.text[:200]}...")
+                else:
+                    logger.debug(f"[MrCallAgent] Content block {i}: type={type(block)}")
+        except Exception as e:
+            logger.error(f"[MrCallAgent] LLM call failed: {e}", exc_info=True)
+            return {'error': f'LLM call failed: {str(e)}'}
 
         # Handle tool response (MrCall-specific processing)
         return await self._handle_tool_response(response)
@@ -230,6 +245,8 @@ Choose the appropriate tool based on what the user wants. Remember:
         Returns:
             Dict with tool_used, tool_input, and processed result
         """
+        logger.info(f"[MrCallAgent] _handle_tool_response: stop_reason={response.stop_reason}")
+
         result = {
             'tool_used': None,
             'tool_input': {},
@@ -242,31 +259,42 @@ Choose the appropriate tool based on what the user wants. Remember:
                 if hasattr(block, 'input'):  # ToolUseBlock
                     result['tool_used'] = block.name
                     result['tool_input'] = block.input
+                    logger.info(f"[MrCallAgent] Processing tool: {block.name}")
+                    logger.debug(f"[MrCallAgent] Tool input: {block.input}")
 
                     # Process based on tool
                     if block.name == 'configure_welcome_message':
+                        logger.info("[MrCallAgent] Calling _process_configure for welcome_message")
                         result['result'] = await self._process_configure(
                             block.input, 'welcome_message'
                         )
                     elif block.name == 'configure_booking':
+                        logger.info("[MrCallAgent] Calling _process_configure for booking")
                         result['result'] = await self._process_configure(
                             block.input, 'booking'
                         )
                     elif block.name == 'get_current_config':
+                        logger.info("[MrCallAgent] Calling _process_get_config")
                         result['result'] = await self._process_get_config(block.input)
                     elif block.name == 'respond_text':
+                        logger.info("[MrCallAgent] respond_text tool used")
                         result['result'] = {
                             'response': block.input.get('response', '')
                         }
+                    else:
+                        logger.warning(f"[MrCallAgent] Unknown tool: {block.name}")
                     break
         else:
             # No tool called - extract text response as fallback
+            logger.info("[MrCallAgent] No tool_use, extracting text response")
             for block in response.content:
                 if hasattr(block, 'text'):
                     result['tool_used'] = 'respond_text'
                     result['result'] = {'response': block.text}
+                    logger.debug(f"[MrCallAgent] Text fallback: {block.text[:200]}...")
                     break
 
+        logger.info(f"[MrCallAgent] _handle_tool_response result: tool_used={result['tool_used']}, has_result={result['result'] is not None}, error={result.get('error')}")
         return result
 
     async def _process_configure(
@@ -283,19 +311,26 @@ Choose the appropriate tool based on what the user wants. Remember:
         Returns:
             Dict with success status and updated variables
         """
+        logger.info(f"[MrCallAgent] _process_configure: feature={feature}, tool_input={tool_input}")
+
         changes = tool_input.get('changes', {})
+        logger.info(f"[MrCallAgent] Changes to apply: {list(changes.keys())}")
 
         if not changes:
+            logger.warning("[MrCallAgent] No changes specified in tool_input")
             return {'success': False, 'error': 'No changes specified'}
 
         if not self.starchat:
+            logger.error("[MrCallAgent] StarChat client not available")
             return {'success': False, 'error': 'StarChat client not available'}
 
         # Validate variables belong to this feature
         valid_vars = set(MrCallConfiguratorTrainer.FEATURES.get(feature, {}).get('variables', []))
+        logger.debug(f"[MrCallAgent] Valid variables for {feature}: {valid_vars}")
 
         invalid_vars = [v for v in changes.keys() if v not in valid_vars]
         if invalid_vars:
+            logger.warning(f"[MrCallAgent] Invalid variables: {invalid_vars}")
             return {
                 'success': False,
                 'error': f'Invalid variables for {feature}: {invalid_vars}'
@@ -306,26 +341,32 @@ Choose the appropriate tool based on what the user wants. Remember:
         errors = []
 
         for var_name, new_value in changes.items():
+            logger.info(f"[MrCallAgent] Updating {var_name} to: {new_value[:100]}{'...' if len(new_value) > 100 else ''}")
             try:
                 result = await self.starchat.update_business_variable(
                     self.business_id,
                     var_name,
                     new_value
                 )
+                logger.info(f"[MrCallAgent] update_business_variable result for {var_name}: {result}")
                 if result is not None:
-                    updated.append(f"{var_name}={new_value[:50]}..." if len(new_value) > 50 else f"{var_name}={new_value}")
+                    updated.append(f"{var_name}={new_value}")
+                    logger.info(f"[MrCallAgent] Successfully updated {var_name}")
                 else:
                     errors.append(f"Failed to update {var_name}")
+                    logger.warning(f"[MrCallAgent] update_business_variable returned None for {var_name}")
             except Exception as e:
                 errors.append(f"{var_name}: {str(e)}")
-                logger.error(f"Error updating {var_name}: {e}", exc_info=True)
+                logger.error(f"[MrCallAgent] Error updating {var_name}: {e}", exc_info=True)
 
-        return {
+        final_result = {
             'success': len(errors) == 0,
             'updated': updated,
             'errors': errors if errors else None,
             'feature': feature
         }
+        logger.info(f"[MrCallAgent] _process_configure final result: {final_result}")
+        return final_result
 
     async def _process_get_config(self, tool_input: Dict[str, Any]) -> Dict[str, Any]:
         """Process get_current_config tool by fetching current values.
