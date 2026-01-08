@@ -913,7 +913,7 @@ Your Zylch is now connected to this MrCall assistant!
 
 **Next steps:**
 • `/sync mrcall` - Test fetching conversations
-• `/mrcall train` - Train AI on your assistant"""
+• `/agent mrcall train` - Train AI on your assistant"""
             else:
                 return "❌ **Error:** Failed to link MrCall business. Please try again."
 
@@ -1152,7 +1152,7 @@ Run `/mrcall show {feature_name}` to see the full configuration."""
 • `/mrcall list` - See all your assistants
 • `/mrcall unlink` - Disconnect this assistant
 • `/sync mrcall` - Test API connection
-• `/mrcall train` - Train AI on your assistant"""
+• `/agent mrcall train` - Train AI on your assistant"""
                 else:
                     return f"""**📞 MrCall Status**
 

@@ -307,18 +307,18 @@ Choose the appropriate tool based on what the user wants. Remember:
 
         for var_name, new_value in changes.items():
             try:
-                success = await self.starchat.set_variable(
+                result = await self.starchat.update_business_variable(
                     self.business_id,
                     var_name,
                     new_value
                 )
-                if success:
-                    updated.append(f"{var_name}={new_value}")
+                if result is not None:
+                    updated.append(f"{var_name}={new_value[:50]}..." if len(new_value) > 50 else f"{var_name}={new_value}")
                 else:
                     errors.append(f"Failed to update {var_name}")
             except Exception as e:
                 errors.append(f"{var_name}: {str(e)}")
-                logger.error(f"Error updating {var_name}: {e}")
+                logger.error(f"Error updating {var_name}: {e}", exc_info=True)
 
         return {
             'success': len(errors) == 0,
