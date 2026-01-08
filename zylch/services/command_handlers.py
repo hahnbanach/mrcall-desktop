@@ -12,6 +12,67 @@ from zylch.tools.config import ToolConfig
 logger = logging.getLogger(__name__)
 
 
+def format_relative_date(date_str: str) -> str:
+    """Format a date string as relative time (e.g., '3 days ago', 'today').
+
+    Args:
+        date_str: ISO format date string or RFC 2822 email date
+
+    Returns:
+        Human-readable relative date string, or empty string if parsing fails
+    """
+    if not date_str:
+        return ""
+
+    try:
+        # Try ISO format first
+        if 'T' in date_str:
+            dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        else:
+            # Try parsing common email date formats
+            from email.utils import parsedate_to_datetime
+            try:
+                dt = parsedate_to_datetime(date_str)
+            except (ValueError, TypeError):
+                # Fallback: just return the date portion
+                return date_str.split('T')[0] if 'T' in date_str else date_str[:10]
+
+        # Make timezone-aware if not already
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
+        now = datetime.now(timezone.utc)
+        diff = now - dt
+
+        days = diff.days
+        if days == 0:
+            hours = diff.seconds // 3600
+            if hours == 0:
+                return "just now"
+            elif hours == 1:
+                return "1 hour ago"
+            else:
+                return f"{hours} hours ago"
+        elif days == 1:
+            return "yesterday"
+        elif days < 7:
+            return f"{days} days ago"
+        elif days < 14:
+            return "1 week ago"
+        elif days < 30:
+            weeks = days // 7
+            return f"{weeks} weeks ago"
+        elif days < 60:
+            return "1 month ago"
+        else:
+            months = days // 30
+            return f"{months} months ago"
+
+    except Exception:
+        # If all parsing fails, return empty
+        return ""
+
+
 def format_task_items(tasks: list) -> str:
     """Format task items as numbered list grouped by urgency."""
     if not tasks:
@@ -31,13 +92,19 @@ def format_task_items(tasks: list) -> str:
         name = task.get('contact_name') or task.get('contact_email', 'Unknown')
         action = task.get('suggested_action', '').strip()
         reason = task.get('reason', '').strip()
+        email_date = task.get('email_date', '')
 
         # Skip tasks with no action
         if not action:
             return None
 
-        # Format: Name: Action (with reason on next line if substantial)
+        # Format relative date for temporal context
+        date_str = format_relative_date(email_date) if email_date else ""
+
+        # Format: Name: Action (date) with reason on next line if substantial
         task_line = f"{idx}. **{name}**: {action}"
+        if date_str:
+            task_line += f" ({date_str})"
         if reason and len(reason) > 10:
             task_line += f"\n   _{reason}_"
 

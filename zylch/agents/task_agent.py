@@ -19,13 +19,18 @@ logger = logging.getLogger(__name__)
 # Tool definition for structured task decision output
 TASK_DECISION_TOOL = {
     "name": "task_decision",
-    "description": "Report whether the user needs to take action on this event",
+    "description": "Decide what action the user needs to take and how to manage the task",
     "input_schema": {
         "type": "object",
         "properties": {
             "action_required": {
                 "type": "boolean",
                 "description": "True if user needs to take action, False otherwise"
+            },
+            "task_action": {
+                "type": "string",
+                "enum": ["create", "update", "close", "none"],
+                "description": "create=new task, update=modify existing task, close=mark existing task resolved, none=no task needed"
             },
             "urgency": {
                 "type": "string",
@@ -43,7 +48,7 @@ TASK_DECISION_TOOL = {
                 "description": "Why this needs attention - provide enough context for the executive to understand without reading the email"
             }
         },
-        "required": ["action_required", "urgency", "suggested_action", "reason"]
+        "required": ["action_required", "task_action"]
     }
 }
 
@@ -90,6 +95,31 @@ class TaskWorker:
         # Cache for task prompt
         self._task_prompt: Optional[str] = None
         self._task_prompt_loaded: bool = False
+
+    def _is_user_email(self, email: str) -> bool:
+        """Check if email belongs to the user (hard symbolic check).
+
+        This is a hard rule - LLM decisions cannot override this.
+        """
+        if not email:
+            return False
+
+        email_lower = email.lower()
+
+        # Check 1: Exact match with self.user_email
+        if self.user_email and email_lower == self.user_email:
+            return True
+
+        # Check 2: In settings.my_emails
+        user_emails = get_my_emails()
+        if email_lower in user_emails:
+            return True
+
+        # Check 3: Same domain as user
+        if self.user_domain and self.user_domain in email_lower:
+            return True
+
+        return False
 
     def _get_task_prompt(self) -> Optional[str]:
         """Get task detection prompt from storage."""
@@ -181,6 +211,20 @@ class TaskWorker:
             # Get blob context for this contact
             blob_context, blob_id = self._get_blob_for_contact(from_email)
 
+            # Get existing open task for this contact (if any)
+            existing_task = self.storage.get_task_by_contact(self.owner_id, from_email)
+            existing_task_context = ""
+            if existing_task:
+                existing_task_context = f"""
+EXISTING OPEN TASK FOR THIS CONTACT:
+- Action: {existing_task.get('suggested_action', 'N/A')}
+- Urgency: {existing_task.get('urgency', 'N/A')}
+- Reason: {existing_task.get('reason', 'N/A')}
+- Source emails: {len(existing_task.get('sources', {}).get('emails', []))}
+
+You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE it (no longer needed)? Or keep as-is (none)?
+"""
+
             # Prepare event data
             event_data = {
                 'id': email.get('id'),
@@ -192,48 +236,57 @@ class TaskWorker:
                 'thread_id': email.get('thread_id')
             }
 
-            # Apply trained prompt
-            result = await self._analyze_event('email', event_data, blob_context)
+            # Apply trained prompt with existing task context
+            result = await self._analyze_event('email', event_data, blob_context, existing_task_context)
             analyzed_count += 1
 
             # Mark as processed regardless of result
             self.storage.mark_email_task_processed(self.owner_id, email_id)
 
             if result:
-                # Validate task quality
-                suggested = result.get('suggested_action', '').strip()
-                reason = result.get('reason', '').strip()
-
-                # Skip empty or garbage tasks
-                if not suggested or len(suggested) < 5:
-                    logger.warning(f"Skipping task with empty/short suggested_action: {suggested}")
+                # HARD RULE: Never create task for user's own email
+                if self._is_user_email(from_email):
+                    logger.warning(f"Blocking task for user's own email: {from_email}")
                     continue
 
-                # Skip if contact_email would be user's own email (belt and suspenders)
-                if from_email.lower() == self.user_email.lower():
-                    logger.warning(f"Skipping task for user's own email: {from_email}")
-                    continue
+                task_action = result.get('task_action', 'none')
 
-                # Check if task already exists for this contact
-                existing_task = self.storage.get_task_by_contact(self.owner_id, from_email)
+                # Validate task quality for create/update
+                if task_action in ('create', 'update'):
+                    suggested = result.get('suggested_action', '').strip()
+                    if not suggested or len(suggested) < 5:
+                        logger.warning(f"Skipping task with empty/short suggested_action: {suggested}")
+                        continue
 
-                if existing_task:
-                    # Merge sources and update if new info is more urgent
-                    self.storage.merge_task_sources(
+                # Handle task_action
+                if task_action == 'close' and existing_task:
+                    # Mark existing task as completed
+                    self.storage.complete_task_item(self.owner_id, existing_task['id'])
+                    logger.info(f"Closed task for {from_email}: no longer needed")
+
+                elif task_action == 'update' and existing_task:
+                    # Update existing task with new info
+                    self.storage.update_task_item(
                         self.owner_id,
                         existing_task['id'],
-                        new_sources={'emails': [email_id], 'blobs': [blob_id] if blob_id else []},
-                        new_urgency=result.get('urgency'),
-                        new_action=result.get('suggested_action'),
-                        new_reason=result.get('reason')
+                        urgency=result.get('urgency'),
+                        suggested_action=result.get('suggested_action'),
+                        reason=result.get('reason'),
+                        add_source_email=email_id
                     )
                     action_count += 1
-                else:
-                    # Create new task
+
+                elif task_action == 'create' and result.get('action_required'):
+                    # Create new task (close existing if any)
+                    if existing_task:
+                        self.storage.complete_task_item(self.owner_id, existing_task['id'])
+
+                    # Store new task with email date
                     result['event_id'] = email_id
                     result['event_type'] = 'email'
                     result['contact_email'] = from_email
                     result['contact_name'] = email.get('from_name', '')
+                    result['email_date'] = email.get('date', '')
                     result['sources'] = {
                         'emails': [email_id],
                         'blobs': [blob_id] if blob_id else [],
@@ -241,6 +294,8 @@ class TaskWorker:
                     }
                     self.storage.store_task_item(self.owner_id, result)
                     action_count += 1
+
+                # task_action == 'none' - do nothing
 
         # Process calendar events - only unprocessed ones
         # Use task_processed_at to track which events have been analyzed
@@ -298,9 +353,16 @@ class TaskWorker:
         self,
         event_type: str,
         event_data: Dict[str, Any],
-        blob_context: str
+        blob_context: str,
+        existing_task_context: str = ""
     ) -> Optional[Dict[str, Any]]:
         """Analyze a single event using the trained prompt.
+
+        Args:
+            event_type: Type of event (email, calendar, mrcall)
+            event_data: Event data dict
+            blob_context: Memory blob content for this contact
+            existing_task_context: Info about existing open task for this contact (if any)
 
         Returns:
             Dict with action details if action needed, None otherwise
@@ -329,7 +391,16 @@ class TaskWorker:
                 "{{user_email}}", self.user_email
             ).replace(
                 "{user_email}", self.user_email
+            ).replace(
+                "{{existing_task}}", existing_task_context
+            ).replace(
+                "{existing_task}", existing_task_context
             )
+
+            # Append existing task context if provided (in case trained prompt doesn't have placeholder)
+            if existing_task_context and "{{existing_task}}" not in prompt and "{existing_task}" not in prompt:
+                formatted_prompt += f"\n\n{existing_task_context}"
+
         except Exception as e:
             logger.error(f"Failed to format prompt: {e}")
             return None
@@ -338,7 +409,7 @@ class TaskWorker:
         logger.debug(f"[TASK] Analyzing {event_type}")
         logger.debug(f"[TASK] Event data: {event_data_json}")
         logger.debug(f"[TASK] Blob context length: {len(blob_context)}")
-        logger.debug(f"[TASK] Formatted prompt:\n{formatted_prompt}")
+        logger.debug(f"[TASK] Existing task context: {existing_task_context[:200] if existing_task_context else 'None'}")
 
         # Call classification model with tool use for structured output
         try:
@@ -355,15 +426,17 @@ class TaskWorker:
                     result = block.input
                     logger.debug(f"[TASK] Tool response: {result}")
 
-                    if result.get("action_required"):
-                        return {
-                            'action_required': True,
-                            'urgency': result.get('urgency', 'medium'),
-                            'suggested_action': result.get('suggested_action', ''),
-                            'reason': result.get('reason', ''),
-                            'analyzed_at': datetime.now(timezone.utc).isoformat()
-                        }
-                    return None
+                    task_action = result.get('task_action', 'none')
+
+                    # Return full result for caller to handle task_action
+                    return {
+                        'action_required': result.get('action_required', False),
+                        'task_action': task_action,
+                        'urgency': result.get('urgency', 'medium'),
+                        'suggested_action': result.get('suggested_action', ''),
+                        'reason': result.get('reason', ''),
+                        'analyzed_at': datetime.now(timezone.utc).isoformat()
+                    }
 
             logger.warning(f"[TASK] No tool_use block in response for {event_type}")
             return None
