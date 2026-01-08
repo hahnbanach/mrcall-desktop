@@ -41,6 +41,9 @@ multiple configuration tools, each for a different feature.
 - "show booking config" → get_current_config
 - "how does booking work?" → respond_text
 - "explain the variables" → respond_text
+- "is booking enabled?" → respond_text
+- "does the assistant answer formally?" → respond_text
+- "is the greeting professional?" → respond_text
 
 ## CRITICAL RULES
 
