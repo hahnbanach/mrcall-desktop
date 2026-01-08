@@ -320,6 +320,8 @@ class GmailClient:
         subject: str,
         body: str,
         from_email: Optional[str] = None,
+        cc: Optional[str] = None,
+        bcc: Optional[str] = None,
         in_reply_to: Optional[str] = None,
         references: Optional[str] = None,
         thread_id: Optional[str] = None,
@@ -331,6 +333,8 @@ class GmailClient:
             subject: Email subject
             body: Email body (plain text or HTML)
             from_email: Sender email (optional)
+            cc: CC recipients (optional)
+            bcc: BCC recipients (optional)
             in_reply_to: Message-ID of email being replied to (for threading)
             references: References header for conversation threading
             thread_id: Gmail thread ID to place message in (for replies)
@@ -352,6 +356,10 @@ class GmailClient:
         message['subject'] = subject
         if from_email:
             message['from'] = from_email
+        if cc:
+            message['cc'] = cc
+        if bcc:
+            message['bcc'] = bcc
 
         # Add threading headers if this is a reply
         if in_reply_to:
