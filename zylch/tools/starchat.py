@@ -672,40 +672,38 @@ class StarChatClient:
         """
         logger.info(f"Updating variable {variable_name} for business: {business_id}")
 
-        # First, get the current business to preserve other fields
+        # First, get current business to extract required fields
         business_data = await self.get_business_config(business_id)
 
         if not business_data:
             raise ValueError(f"No business found with ID: {business_id}")
 
-        # Update the specific variable
-        if "variables" not in business_data:
-            business_data["variables"] = {}
-
-        business_data["variables"][variable_name] = value
-
-        # Fields to exclude from PUT request (read-only or search metadata)
-        # Based on CrmBusiness.scala - these are server-managed fields
-        readonly_fields = {
-            'totalHits',           # Search pagination metadata
-            'creationDateTime',    # Read-only timestamp
-            'lastUpdateDateTime',  # Server-set timestamp
-            'protected',           # System-managed flag
-            'recurrentResources',  # System-managed JSON
+        # Build MINIMAL payload with only required fields
+        # Based on FirebaseBusinessService.update():
+        # - businessId: identifies the business
+        # - languageCountry: REQUIRED (line 208 throws if missing)
+        # - template: needed for variable schema lookup (line 228)
+        # - variables: only the single variable being updated
+        #
+        # IMPORTANT: Sending full business data fails because sanitizeVariablesForUpdate()
+        # validates EVERY variable against the schema. If any historical variable doesn't
+        # match current schema rules (modifiable, admin, mandatory), the request fails.
+        minimal_payload = {
+            "businessId": business_data.get("businessId"),
+            "languageCountry": business_data.get("languageCountry"),
+            "template": business_data.get("template"),
+            "variables": {variable_name: value}
         }
-
-        # Filter out read-only fields before PUT
-        filtered_data = {k: v for k, v in business_data.items() if k not in readonly_fields}
 
         # PUT the updated business back
         # CRITICAL: For OAuth/Delegated access, we must use the delegated_{realm} prefix
         endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/business"
         logger.info(f"Putting updated business to: {endpoint}")
-        logger.debug(f"PUT request body keys: {list(filtered_data.keys())}")
+        logger.debug(f"PUT request body: {minimal_payload}")
 
         response = await self.client.put(
             endpoint,
-            json=filtered_data,
+            json=minimal_payload,
         )
 
         if response.status_code >= 400:
