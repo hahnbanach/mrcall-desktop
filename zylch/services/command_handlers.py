@@ -3100,8 +3100,13 @@ Job ID: `{job['id']}`
 # =====================
 
 async def _handle_task_train(storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str) -> str:
-    """Train task detection agent for specified channel."""
-    from zylch.agents.email_task_agent_trainer import EmailTaskAgentTrainer
+    """Train task detection agent for specified channel (background job).
+
+    Creates a background job that runs in a thread pool, returning immediately.
+    The user is notified via user_notifications when the job completes.
+    """
+    import asyncio
+    from zylch.services.job_executor import JobExecutor
 
     if not api_key or not llm_provider:
         return """❌ **LLM API key required**
@@ -3123,32 +3128,45 @@ Please ensure your account is properly connected via `/connect`."""
 Run `/sync` to synchronize your data.
 Then run this command again."""
 
-    channels_to_train = [channel] if channel != 'all' else ['email', 'calendar']
-    results = []
+    # Create background job (returns existing if duplicate pending/running)
+    job = storage.create_background_job(
+        owner_id=owner_id,
+        job_type="task_train",
+        channel=channel
+    )
 
-    for ch in channels_to_train:
-        if ch == 'email':
-            emails = storage.get_emails(owner_id, limit=1)
-            if not emails:
-                results.append(f"📧 **Email:** No emails found - skipped")
-                continue
+    if job["status"] == "running":
+        pct = job.get("progress_pct", 0)
+        msg = job.get("status_message", "Training in progress...")
+        return f"""⏳ **Task agent training already in progress**
 
-            builder = EmailTaskAgentTrainer(storage, owner_id, api_key, user_email, llm_provider)
-            agent_prompt, metadata = await builder.build_task_prompt()
-            storage.store_agent_prompt(owner_id, 'task_email', agent_prompt, metadata)
-            results.append(f"📧 **Email:** Agent created ({metadata.get('threads_analyzed', 0)} threads analyzed)")
+**Progress:** {pct}%
+**Status:** {msg}
 
-        elif ch == 'calendar':
-            # Calendar task training - placeholder for future implementation
-            results.append(f"📅 **Calendar:** Not yet implemented")
+Job ID: `{job['id']}`"""
 
-    return f"""✅ **Task Agent Training Complete**
+    if job["status"] == "pending":
+        # Schedule execution in background (fire-and-forget)
+        executor = JobExecutor(storage)
+        asyncio.create_task(executor.execute_job(
+            job["id"],
+            owner_id,
+            api_key,
+            llm_provider,
+            user_email or ""
+        ))
 
-{chr(10).join(results)}
+        return f"""🚀 **Task agent training started**
 
-**Next steps:**
-- `/agent task show {channel}` to review
-- `/agent task process {channel}` to detect tasks"""
+Training on {channel} data in the background.
+You'll receive a notification when complete.
+
+Job ID: `{job['id']}`
+
+**Note:** You can continue working while this runs."""
+
+    # Job exists but completed/failed - should create new one
+    return f"Previous job status: {job['status']}. Run the command again to start a new job."
 
 
 async def _handle_task_run(storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str) -> str:

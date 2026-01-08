@@ -79,6 +79,10 @@ class JobExecutor:
                 await self._execute_sync(
                     job_id, owner_id, channel, api_key, llm_provider
                 )
+            elif job_type == "task_train":
+                await self._execute_task_train(
+                    job_id, owner_id, channel, api_key, llm_provider, user_email
+                )
             else:
                 raise ValueError(f"Unknown job type: {job_type}")
 
@@ -274,6 +278,95 @@ class JobExecutor:
         self.storage.create_notification(
             owner_id,
             f"Task detection complete: {result['actions_found']} tasks found from {result['processed']} items",
+            "info"
+        )
+
+    async def _execute_task_train(
+        self,
+        job_id: str,
+        owner_id: str,
+        channel: str,
+        api_key: str,
+        llm_provider: str,
+        user_email: str
+    ) -> None:
+        """Execute task agent training in thread pool.
+
+        Args:
+            job_id: Background job UUID
+            owner_id: Firebase UID
+            channel: 'email', 'calendar', or 'all'
+            api_key: User's LLM API key
+            llm_provider: LLM provider name (anthropic, openai, mistral)
+            user_email: User's email address
+        """
+        from zylch.agents.email_task_agent_trainer import EmailTaskAgentTrainer
+
+        storage = self.storage
+
+        def _sync_train() -> Dict[str, Any]:
+            """Sync training code that runs in thread pool."""
+            channels_to_train = [channel] if channel != 'all' else ['email', 'calendar']
+            results = []
+            total_threads = 0
+
+            for ch in channels_to_train:
+                if ch == 'email':
+                    emails = storage.get_emails(owner_id, limit=1)
+                    if not emails:
+                        results.append("📧 Email: No emails found - skipped")
+                        continue
+
+                    # Update progress
+                    storage.update_background_job_progress(
+                        job_id, 10, 0, 1, "Analyzing email patterns..."
+                    )
+
+                    builder = EmailTaskAgentTrainer(
+                        storage, owner_id, api_key, user_email, llm_provider
+                    )
+
+                    # Run async build_task_prompt in this thread's event loop
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        agent_prompt, metadata = loop.run_until_complete(
+                            builder.build_task_prompt()
+                        )
+                    finally:
+                        loop.close()
+
+                    storage.store_agent_prompt(owner_id, 'task_email', agent_prompt, metadata)
+                    threads = metadata.get('threads_analyzed', 0)
+                    total_threads += threads
+                    results.append(f"📧 Email: Agent created ({threads} threads analyzed)")
+
+                    storage.update_background_job_progress(
+                        job_id, 90, 1, 1, "Saving agent prompt..."
+                    )
+
+                elif ch == 'calendar':
+                    results.append("📅 Calendar: Not yet implemented")
+
+            return {
+                "results": results,
+                "threads_analyzed": total_threads,
+                "channel": channel
+            }
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(_executor, _sync_train)
+
+        self.storage.complete_background_job(job_id, result)
+
+        # Create notification for user
+        results_text = "\n".join(result.get("results", []))
+        channel_display = result.get("channel", "email")
+        self.storage.create_notification(
+            owner_id,
+            f"**Task Agent Training Complete**\n\n{results_text}\n\n"
+            f"Run `/agent task show {channel_display}` to review or "
+            f"`/agent task process {channel_display}` to detect tasks.",
             "info"
         )
 
