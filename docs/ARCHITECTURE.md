@@ -704,17 +704,26 @@ During `/sync`, the Memory Agent processes unprocessed emails:
 
 ### Task Agent (Task Processing)
 
-The Task Agent processes emails and calendar events to detect actionable tasks:
+The Task Agent processes emails and calendar events to detect actionable tasks with intelligent lifecycle management:
 
 1. **Fetch unprocessed items** using `task_processed_at IS NULL`
 2. **Group emails by thread** - only analyze latest per thread
-3. **Apply trained prompt** for task detection (from `/agent task train`)
-4. **Store task items** in `task_items` table
-5. **Mark as processed** via `task_processed_at` column
+3. **Hard symbolic check** - `_is_user_email()` blocks user's own email (never trust LLM)
+4. **Fetch existing task** for same contact via `get_task_by_contact()`
+5. **Apply trained prompt** with existing task context
+6. **LLM returns `task_action`**: create, update, close, or none
+7. **Handle action**:
+   - `close`: Mark existing task completed
+   - `update`: Update existing task with new info
+   - `create`: Create new task (close existing first if any)
+   - `none`: Skip, no task needed
+8. **Mark as processed** via `task_processed_at` column
 
 **Key Files**:
-- `zylch/agents/task_agent.py` - TaskAgent class
-- `zylch/services/email_task_agent_trainer.py` - EmailTaskAgentTrainer for prompt generation
+- `zylch/agents/task_agent.py` - TaskWorker class with `_is_user_email()` hard check
+- `zylch/agents/email_task_agent_trainer.py` - EmailTaskAgentTrainer for prompt generation
+
+**Training**: `/agent task train` runs as background job (5-30+ seconds), notifies on completion.
 
 ### Hybrid Search
 
@@ -835,7 +844,7 @@ Stored in agent_prompts table
 | `/agent memory process [email\|calendar\|all]` | Process data into memory blobs |
 | `/agent memory show [email\|calendar]` | Display current memory agent |
 | `/agent memory reset [email\|calendar]` | Delete memory agent |
-| `/agent task train [email\|calendar\|all]` | Generate personalized task detection agent |
+| `/agent task train [email\|calendar\|all]` | Generate personalized task detection agent (background job) |
 | `/agent task process [email\|calendar\|all]` | Detect tasks from data |
 | `/agent task show [email\|calendar]` | Display current task agent |
 | `/agent task reset [email\|calendar]` | Delete task agent |
