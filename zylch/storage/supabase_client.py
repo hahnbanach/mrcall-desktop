@@ -1586,17 +1586,28 @@ class SupabaseStorage:
     def get_mrcall_link(self, owner_id: str) -> Optional[str]:
         """Get MrCall business ID for user.
 
+        Checks credentials.business_id first (OAuth flow),
+        falls back to email field (legacy /mrcall link flow).
+
         Args:
             owner_id: Firebase UID
 
         Returns:
             MrCall business ID or None
         """
+        # Try to get business_id from credentials first (OAuth flow)
+        creds = self.get_provider_credentials(owner_id, 'mrcall')
+        if creds and creds.get('business_id'):
+            logger.debug(f"get_mrcall_link: found business_id in credentials: {creds['business_id']}")
+            return creds['business_id']
+
+        # Fall back to email field (legacy /mrcall link flow)
         result = self.client.table('oauth_tokens').select('email').eq(
             'owner_id', owner_id
         ).eq('provider', 'mrcall').execute()
 
         if result.data and result.data[0].get('email'):
+            logger.debug(f"get_mrcall_link: using email field: {result.data[0]['email']}")
             return result.data[0]['email']
         return None
 

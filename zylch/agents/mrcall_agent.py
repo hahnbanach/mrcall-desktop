@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 MRCALL_AGENT_TOOLS = [
     {
         "name": "configure_welcome_message",
-        "description": "Modify the welcome message / greeting settings. Use when the user wants to change how the assistant answers the phone.",
+        "description": "Modify the welcome message / greeting settings. Use this when user wants to CHANGE, UPDATE, or MODIFY how the assistant answers - including making it more formal, informal, adding/removing greetings, etc. You must provide the COMPLETE new prompt text with your modifications.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -60,7 +60,7 @@ MRCALL_AGENT_TOOLS = [
     },
     {
         "name": "configure_booking",
-        "description": "Modify booking/appointment settings. When enabling booking, you MUST set START_BOOKING_PROCESS, BOOKING_HOURS, BOOKING_EVENTS_MINUTES, and ENABLE_GET_CALENDAR_EVENTS together.",
+        "description": "Modify booking/appointment settings. Use this when user wants to CHANGE, UPDATE, or MODIFY booking behavior. When enabling booking, you MUST set START_BOOKING_PROCESS, BOOKING_HOURS, BOOKING_EVENTS_MINUTES, and ENABLE_GET_CALENDAR_EVENTS together.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -71,7 +71,7 @@ MRCALL_AGENT_TOOLS = [
     },
     {
         "name": "get_current_config",
-        "description": "Show current configuration for a feature. Use when the user wants to see their settings.",
+        "description": "Show current configuration for a feature. ONLY use when the user explicitly asks to SEE, VIEW, or DISPLAY their current settings WITHOUT making changes. Do NOT use this for modification requests.",
         "input_schema": {
             "type": "object",
             "properties": {
