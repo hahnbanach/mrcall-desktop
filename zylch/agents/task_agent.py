@@ -406,10 +406,15 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
             return None
 
         # Debug logging
+        prompt_lines = formatted_prompt.count('\n') + 1
+        logger.info(f"[TASK] Sending prompt to LLM ({len(formatted_prompt)} chars, {prompt_lines} lines)")
+        logger.debug(f"[TASK] ===== FULL PROMPT START =====")
+        logger.debug(f"[TASK] {formatted_prompt}")
+        logger.debug(f"[TASK] ===== FULL PROMPT END =====")
         logger.debug(f"[TASK] Analyzing {event_type}")
         logger.debug(f"[TASK] Event data: {event_data_json}")
         logger.debug(f"[TASK] Blob context length: {len(blob_context)}")
-        logger.debug(f"[TASK] Existing task context: {existing_task_context[:200] if existing_task_context else 'None'}")
+        logger.debug(f"[TASK] Existing task context: {existing_task_context if existing_task_context else 'None'}")
 
         # Call classification model with tool use for structured output
         try:
