@@ -3430,6 +3430,12 @@ Your unified MrCall configuration agent is ready!
         return f"❌ **Error:** {str(e)}"
     except Exception as e:
         logger.error(f"MrCall agent train error: {e}", exc_info=True)
+        error_str = str(e).lower()
+        if '405' in error_str or '401' in error_str or '403' in error_str or 'unauthorized' in error_str:
+            return """❌ **MrCall authentication error**
+
+Please connect your MrCall account:
+`/connect mrcall`"""
         return f"❌ **Error:** {str(e)}"
 
 
@@ -3531,6 +3537,12 @@ Connect your LLM provider:
 
     except Exception as e:
         logger.error(f"MrCall agent run error: {e}", exc_info=True)
+        error_str = str(e).lower()
+        if '405' in error_str or '401' in error_str or '403' in error_str or 'unauthorized' in error_str:
+            return """❌ **MrCall authentication error**
+
+Please connect your MrCall account:
+`/connect mrcall`"""
         return f"❌ **Error:** {str(e)}"
 
 
