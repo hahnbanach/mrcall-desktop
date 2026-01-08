@@ -19,10 +19,33 @@ from zylch.agents.base_agent import BaseAgent
 from zylch.storage.supabase_client import SupabaseStorage
 from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
 
+
+def _build_changes_schema(feature_name: str) -> dict:
+    """Build schema for 'changes' property with only valid variable names.
+
+    Uses MrCallConfiguratorTrainer.FEATURES as the single source of truth.
+
+    Args:
+        feature_name: Feature key (e.g., 'welcome_message', 'booking')
+
+    Returns:
+        JSON schema dict with properties for each valid variable
+    """
+    variables = MrCallConfiguratorTrainer.FEATURES[feature_name]["variables"]
+    return {
+        "type": "object",
+        "properties": {
+            var: {"type": "string", "description": f"New value for {var}"}
+            for var in variables
+        },
+        "additionalProperties": False  # Reject unknown variable names
+    }
+
 logger = logging.getLogger(__name__)
 
 
 # Multi-tool schema for the MrCall agent
+# Uses _build_changes_schema to constrain variable names to valid options
 MRCALL_AGENT_TOOLS = [
     {
         "name": "configure_welcome_message",
@@ -30,11 +53,7 @@ MRCALL_AGENT_TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "changes": {
-                    "type": "object",
-                    "description": "Map of variable_name -> new_value. All values must be strings.",
-                    "additionalProperties": {"type": "string"}
-                }
+                "changes": _build_changes_schema("welcome_message")
             },
             "required": ["changes"]
         }
@@ -45,11 +64,7 @@ MRCALL_AGENT_TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "changes": {
-                    "type": "object",
-                    "description": "Map of variable_name -> new_value. All values must be strings. JSON values must be escaped strings.",
-                    "additionalProperties": {"type": "string"}
-                }
+                "changes": _build_changes_schema("booking")
             },
             "required": ["changes"]
         }
