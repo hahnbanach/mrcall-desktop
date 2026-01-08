@@ -965,18 +965,3 @@ Each TODO file contains:
 3. **Stateless API**: Client manages conversation history
 4. **Single account**: Gmail OAuth for one account per deployment
 5. **Training data requires scale**: Need ~1000+ samples before fine-tuning makes sense
-
-## Recent Bug Fixes (January 2026)
-
-### Email Send: List-to-String Conversion
-
-**Issue:** `/email send <id>` failed with `AttributeError: 'list' object has no attribute 'encode'`
-
-**Root Cause:** The `drafts` table stores `to_addresses`, `cc_addresses`, and `bcc_addresses` as JSON arrays (lists), but `GmailClient.send_message()` and `OutlookClient.send_message()` expect string parameters.
-
-**Fix:** `zylch/services/command_handlers.py` now converts list fields to comma-separated strings before calling email APIs:
-```python
-to_str = ', '.join(draft['to_addresses']) if isinstance(draft['to_addresses'], list) else draft['to_addresses']
-```
-
-**Affected:** Both Gmail and Outlook email sending paths.
