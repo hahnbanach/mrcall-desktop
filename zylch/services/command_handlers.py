@@ -1791,12 +1791,12 @@ For simple drafts without context, use the `compose_email` tool in chat."""
             draft_id = sub_args[0] if sub_args and not sub_args[0].startswith('--') else None
 
             if draft_id:
-                # Find the draft by ID (support partial ID)
+                # Find the draft by ID
                 result = supabase.table('drafts')\
                     .select('*')\
                     .eq('owner_id', owner_id)\
                     .eq('status', 'draft')\
-                    .like('id', f'{draft_id}%')\
+                    .eq('id', draft_id)\
                     .execute()
 
                 if not result.data:
@@ -1920,7 +1920,7 @@ Message ID: `{sent_id if sent_id else 'N/A'}`"""
             result = supabase.table('drafts')\
                 .delete()\
                 .eq('owner_id', owner_id)\
-                .like('id', f'{draft_id}%')\
+                .eq('id', draft_id)\
                 .execute()
 
             if result.data:
