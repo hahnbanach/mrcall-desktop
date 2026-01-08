@@ -2938,6 +2938,91 @@ class SupabaseStorage:
             logger.error(f"Failed to store task item: {e}")
             return False
 
+    def get_task_by_contact(self, owner_id: str, contact_email: str) -> Optional[Dict[str, Any]]:
+        """Get existing open task for a contact.
+
+        Args:
+            owner_id: Firebase UID
+            contact_email: Contact's email address
+
+        Returns:
+            Task item dict if found, None otherwise
+        """
+        try:
+            result = self.client.table('task_items')\
+                .select('*')\
+                .eq('owner_id', owner_id)\
+                .eq('contact_email', contact_email.lower())\
+                .is_('completed_at', 'null')\
+                .limit(1)\
+                .execute()
+            return result.data[0] if result.data else None
+        except Exception as e:
+            logger.error(f"Failed to get task by contact {contact_email}: {e}")
+            return None
+
+    def merge_task_sources(
+        self,
+        owner_id: str,
+        task_id: str,
+        new_sources: Dict[str, Any],
+        new_urgency: str,
+        new_action: str,
+        new_reason: str
+    ) -> bool:
+        """Merge new sources into existing task, update if more urgent.
+
+        Args:
+            owner_id: Firebase UID
+            task_id: Existing task ID
+            new_sources: Dict with emails, blobs, calendar_events lists
+            new_urgency: Urgency of new event (high/medium/low)
+            new_action: Suggested action from new event
+            new_reason: Reason from new event
+
+        Returns:
+            True if merged successfully
+        """
+        try:
+            task = self.client.table('task_items')\
+                .select('sources, urgency')\
+                .eq('id', task_id)\
+                .single()\
+                .execute()
+
+            if not task.data:
+                return False
+
+            existing_sources = task.data.get('sources', {})
+            existing_urgency = task.data.get('urgency', 'low')
+
+            # Merge sources (append new email/blob IDs)
+            merged_sources = {
+                'emails': list(set(existing_sources.get('emails', []) + new_sources.get('emails', []))),
+                'blobs': list(set(existing_sources.get('blobs', []) + new_sources.get('blobs', []))),
+                'calendar_events': list(set(existing_sources.get('calendar_events', []) + new_sources.get('calendar_events', [])))
+            }
+
+            # Update if new urgency is higher
+            urgency_order = {'high': 3, 'medium': 2, 'low': 1}
+            update_data = {'sources': merged_sources}
+
+            if urgency_order.get(new_urgency, 0) > urgency_order.get(existing_urgency, 0):
+                update_data['urgency'] = new_urgency
+                update_data['suggested_action'] = new_action
+                update_data['reason'] = new_reason
+
+            self.client.table('task_items')\
+                .update(update_data)\
+                .eq('id', task_id)\
+                .execute()
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to merge task sources for {task_id}: {e}")
+            return False
+
     def store_task_items_batch(self, owner_id: str, items: List[Dict[str, Any]]) -> int:
         """Store multiple task items.
 

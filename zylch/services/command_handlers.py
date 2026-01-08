@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 def format_task_items(tasks: list) -> str:
     """Format task items as numbered list grouped by urgency."""
     if not tasks:
-        return "🎉 No action needed! You're all caught up."
+        return "No action needed! You're all caught up."
 
-    lines = ["**📋 Tasks Needing Action**\n"]
+    lines = ["**Tasks Needing Action**\n"]
 
     # Group by urgency
     high = [t for t in tasks if t.get('urgency') == 'high']
@@ -25,33 +25,54 @@ def format_task_items(tasks: list) -> str:
     low = [t for t in tasks if t.get('urgency') == 'low']
 
     idx = 1
+
+    def format_task(task):
+        nonlocal idx
+        name = task.get('contact_name') or task.get('contact_email', 'Unknown')
+        action = task.get('suggested_action', '').strip()
+        reason = task.get('reason', '').strip()
+
+        # Skip tasks with no action
+        if not action:
+            return None
+
+        # Format: Name: Action (with reason on next line if substantial)
+        task_line = f"{idx}. **{name}**: {action}"
+        if reason and len(reason) > 10:
+            task_line += f"\n   _{reason}_"
+
+        idx += 1
+        return task_line
+
     if high:
-        lines.append("🔴 **HIGH PRIORITY:**")
+        lines.append("**HIGH PRIORITY:**")
         for task in high:
-            name = task.get('contact_name') or task.get('contact_email', 'Unknown')
-            action = task.get('suggested_action', 'Review')
-            lines.append(f"{idx}. **{name}**: {action}")
-            idx += 1
+            formatted = format_task(task)
+            if formatted:
+                lines.append(formatted)
         lines.append("")
 
     if medium:
-        lines.append("⚡ **MEDIUM PRIORITY:**")
+        lines.append("**MEDIUM PRIORITY:**")
         for task in medium:
-            name = task.get('contact_name') or task.get('contact_email', 'Unknown')
-            action = task.get('suggested_action', 'Review')
-            lines.append(f"{idx}. **{name}**: {action}")
-            idx += 1
+            formatted = format_task(task)
+            if formatted:
+                lines.append(formatted)
         lines.append("")
 
     if low:
-        lines.append("💤 **LOW PRIORITY:**")
+        lines.append("**LOW PRIORITY:**")
         for task in low:
-            name = task.get('contact_name') or task.get('contact_email', 'Unknown')
-            action = task.get('suggested_action', 'Review')
-            lines.append(f"{idx}. **{name}**: {action}")
-            idx += 1
+            formatted = format_task(task)
+            if formatted:
+                lines.append(formatted)
 
-    lines.append(f"\n**Total: {idx - 1} items** | `more on #N` for details")
+    total = idx - 1
+    if total > 0:
+        lines.append(f"\n**Total: {total} items** | `more on #N` for details")
+    else:
+        return "No action needed! You're all caught up."
+
     return "\n".join(lines)
 
 

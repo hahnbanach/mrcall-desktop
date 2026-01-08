@@ -81,6 +81,23 @@ The generated prompt will receive these template variables:
 - {{blob_context}} - Memory blob for this contact (if exists), or "(no prior context)"
 - {{user_email}} - User's email address (to identify their own messages)
 
+**CRITICAL RULES FOR THE GENERATED PROMPT:**
+1. NEVER suggest action for emails FROM {{user_email}} - these are the user's own sent messages
+2. NEVER list {{user_email}} as a contact to follow up with - the user doesn't follow up with themselves
+3. When {{event_data}} shows from_email matches {{user_email}}, output NO_ACTION
+
+**EXECUTIVE ASSISTANT MINDSET:**
+The agent acts as a real human assistant to an executive:
+- The executive's time is valuable - don't create noise
+- Provide enough context to understand AND act, not just a one-liner
+- The suggested_action should be specific enough that the executive knows exactly what to do
+- The reason should explain WHY this matters now
+
+**OUTPUT QUALITY:**
+- suggested_action must be non-empty and actionable
+- reason must provide sufficient context (2-3 sentences if needed)
+- If you can't determine a clear action, output NO_ACTION
+
 OUTPUT ONLY THE PROMPT TEXT. No explanations, no markdown code blocks. Just the prompt itself."""
 
 
