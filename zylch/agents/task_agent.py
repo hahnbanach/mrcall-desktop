@@ -30,18 +30,20 @@ TASK_DECISION_TOOL = {
             "urgency": {
                 "type": "string",
                 "enum": ["high", "medium", "low"],
-                "description": "high=service outage/billing, medium=technical questions, low=general"
+                "description": "high=urgent/blocking, medium=needs attention this week, low=when time permits"
             },
             "suggested_action": {
                 "type": "string",
-                "description": "Brief description of what user should do"
+                "minLength": 10,
+                "description": "Specific action the user should take (e.g., 'Reply to John with project timeline' not just 'Reply')"
             },
             "reason": {
                 "type": "string",
-                "description": "Why this needs attention"
+                "minLength": 20,
+                "description": "Why this needs attention - provide enough context for the executive to understand without reading the email"
             }
         },
-        "required": ["action_required"]
+        "required": ["action_required", "urgency", "suggested_action", "reason"]
     }
 }
 
@@ -198,17 +200,47 @@ class TaskWorker:
             self.storage.mark_email_task_processed(self.owner_id, email_id)
 
             if result:
-                result['event_id'] = email_id
-                result['event_type'] = 'email'
-                result['contact_email'] = from_email
-                result['contact_name'] = email.get('from_name', '')
-                # Track all data sources used to create this task
-                result['sources'] = {
-                    'emails': [email_id],
-                    'blobs': [blob_id] if blob_id else []
-                }
-                self.storage.store_task_item(self.owner_id, result)
-                action_count += 1
+                # Validate task quality
+                suggested = result.get('suggested_action', '').strip()
+                reason = result.get('reason', '').strip()
+
+                # Skip empty or garbage tasks
+                if not suggested or len(suggested) < 5:
+                    logger.warning(f"Skipping task with empty/short suggested_action: {suggested}")
+                    continue
+
+                # Skip if contact_email would be user's own email (belt and suspenders)
+                if from_email.lower() == self.user_email.lower():
+                    logger.warning(f"Skipping task for user's own email: {from_email}")
+                    continue
+
+                # Check if task already exists for this contact
+                existing_task = self.storage.get_task_by_contact(self.owner_id, from_email)
+
+                if existing_task:
+                    # Merge sources and update if new info is more urgent
+                    self.storage.merge_task_sources(
+                        self.owner_id,
+                        existing_task['id'],
+                        new_sources={'emails': [email_id], 'blobs': [blob_id] if blob_id else []},
+                        new_urgency=result.get('urgency'),
+                        new_action=result.get('suggested_action'),
+                        new_reason=result.get('reason')
+                    )
+                    action_count += 1
+                else:
+                    # Create new task
+                    result['event_id'] = email_id
+                    result['event_type'] = 'email'
+                    result['contact_email'] = from_email
+                    result['contact_name'] = email.get('from_name', '')
+                    result['sources'] = {
+                        'emails': [email_id],
+                        'blobs': [blob_id] if blob_id else [],
+                        'calendar_events': []
+                    }
+                    self.storage.store_task_item(self.owner_id, result)
+                    action_count += 1
 
         # Process calendar events - only unprocessed ones
         # Use task_processed_at to track which events have been analyzed
