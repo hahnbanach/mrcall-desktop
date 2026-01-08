@@ -684,15 +684,28 @@ class StarChatClient:
 
         business_data["variables"][variable_name] = value
 
+        # Fields to exclude from PUT request (read-only or search metadata)
+        # Based on CrmBusiness.scala - these are server-managed fields
+        readonly_fields = {
+            'totalHits',           # Search pagination metadata
+            'creationDateTime',    # Read-only timestamp
+            'lastUpdateDateTime',  # Server-set timestamp
+            'protected',           # System-managed flag
+            'recurrentResources',  # System-managed JSON
+        }
+
+        # Filter out read-only fields before PUT
+        filtered_data = {k: v for k, v in business_data.items() if k not in readonly_fields}
+
         # PUT the updated business back
         # CRITICAL: For OAuth/Delegated access, we must use the delegated_{realm} prefix
         endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/business"
         logger.info(f"Putting updated business to: {endpoint}")
-        logger.debug(f"PUT request body keys: {list(business_data.keys())}")
+        logger.debug(f"PUT request body keys: {list(filtered_data.keys())}")
 
         response = await self.client.put(
             endpoint,
-            json=business_data,
+            json=filtered_data,
         )
 
         if response.status_code >= 400:
