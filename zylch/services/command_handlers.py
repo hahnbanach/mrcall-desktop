@@ -2101,17 +2101,20 @@ Use `/agent process` to extract facts from synced data into memory.''',
         'description': 'Lists open tasks (emails needing response). Shows priority and context.',
     },
     '/jobs': {
-        'summary': 'Scheduled jobs and reminders',
-        'usage': '/jobs [cancel <id>]',
-        'description': '''Lists scheduled reminders and jobs.
+        'summary': 'Background jobs',
+        'usage': '/jobs [<job_id>|cancel <job_id>|reset|--all]',
+        'description': '''Shows your running/pending background jobs.
 
-**Subcommands:**
-- (none) - List all scheduled jobs
-- `cancel <id>` - Cancel a specific job by ID
+**Options:**
+- `--all` - Show all jobs (including completed/failed)
+- `<job_id>` - Show details for specific job
+- `cancel <job_id>` - Cancel a pending job
+- `reset` - Reset stuck "running" jobs to pending
 
 **Examples:**
-- `/jobs` - Show all scheduled jobs
-- `/jobs cancel abc123` - Cancel job abc123''',
+- `/jobs` - Show active jobs only
+- `/jobs --all` - List all recent jobs
+- `/jobs reset` - Unstick jobs after restart''',
     },
     '/agent': {
         'summary': 'Train agents and process data into memory or tasks',
