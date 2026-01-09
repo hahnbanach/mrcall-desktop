@@ -3565,6 +3565,25 @@ class SupabaseStorage:
             logger.info(f"Cleaned up {count} old background jobs (>{retention_days} days)")
         return count
 
+    def reset_all_running_jobs(self) -> int:
+        """Reset ALL running jobs to pending. Use in dev/restart scenarios.
+
+        Returns:
+            Number of jobs reset
+        """
+        result = self.client.table('background_jobs')\
+            .update({
+                'status': 'pending',
+                'started_at': None
+            })\
+            .eq('status', 'running')\
+            .execute()
+
+        count = len(result.data) if result.data else 0
+        if count > 0:
+            logger.info(f"Reset {count} running jobs to pending")
+        return count
+
 
 # DEPRECATED: Old FTS-only search function (kept for fallback)
 # Now using hybrid_search_emails from migrations/010_email_hybrid_search.sql
