@@ -4,7 +4,7 @@ import json
 import logging
 import sqlite3
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -58,16 +58,6 @@ class EmailArchiveBackend(ABC):
         limit: int = 100
     ) -> List[Dict[str, Any]]:
         """Full-text search messages."""
-        pass
-
-    @abstractmethod
-    def get_sync_state(self) -> Optional[Dict[str, Any]]:
-        """Get current sync state (history_id, last_sync, etc.)."""
-        pass
-
-    @abstractmethod
-    def update_sync_state(self, history_id: str, last_sync: datetime) -> None:
-        """Update sync state."""
         pass
 
     @abstractmethod
@@ -147,16 +137,6 @@ class SQLiteArchiveBackend(EmailArchiveBackend):
         """)
 
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_last_message_date ON threads(last_message_date)")
-
-        # Sync state table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS sync_state (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                history_id TEXT NOT NULL,
-                last_sync TEXT NOT NULL,
-                full_sync_completed TEXT
-            )
-        """)
 
         # Full-text search
         if self.enable_fts:
@@ -338,42 +318,17 @@ class SQLiteArchiveBackend(EmailArchiveBackend):
 
         return [dict(row) for row in rows]
 
-    def get_sync_state(self) -> Optional[Dict[str, Any]]:
-        """Get current sync state."""
+    def get_oldest_email_date(self) -> Optional[datetime]:
+        """Get oldest email date from messages table."""
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT * FROM sync_state WHERE id = 1")
+        cursor.execute("SELECT MIN(date_timestamp) as oldest FROM messages")
         row = cursor.fetchone()
 
-        if row:
-            return dict(row)
+        if row and row['oldest']:
+            return datetime.fromtimestamp(row['oldest'], tz=timezone.utc)
         return None
-
-    def update_sync_state(self, history_id: str, last_sync: datetime) -> None:
-        """Update sync state."""
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            INSERT OR REPLACE INTO sync_state (id, history_id, last_sync)
-            VALUES (1, ?, ?)
-        """, (history_id, last_sync.isoformat()))
-
-        conn.commit()
-
-    def mark_full_sync_completed(self) -> None:
-        """Mark initial full sync as completed."""
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            UPDATE sync_state
-            SET full_sync_completed = ?
-            WHERE id = 1
-        """, (datetime.now().isoformat(),))
-
-        conn.commit()
 
     def get_stats(self) -> Dict[str, Any]:
         """Get archive statistics."""
@@ -402,9 +357,6 @@ class SQLiteArchiveBackend(EmailArchiveBackend):
         if date_range['latest']:
             latest = datetime.fromtimestamp(date_range['latest']).isoformat()
 
-        # Sync state
-        sync_state = self.get_sync_state()
-
         # Database size
         db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
         db_size_mb = db_size / (1024 * 1024)
@@ -416,8 +368,6 @@ class SQLiteArchiveBackend(EmailArchiveBackend):
             'total_threads': total_threads,
             'earliest_message': earliest,
             'latest_message': latest,
-            'last_sync': sync_state['last_sync'] if sync_state else None,
-            'full_sync_completed': sync_state.get('full_sync_completed') if sync_state else None,
             'db_size_mb': round(db_size_mb, 2)
         }
 
