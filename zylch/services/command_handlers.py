@@ -2707,25 +2707,27 @@ async def handle_jobs(args: List[str], owner_id: str) -> str:
 
     help_text = """**📋 Background Jobs**
 
-**Usage:** `/jobs [status|<job_id>|cancel <job_id>]`
+**Usage:** `/jobs [<job_id>|cancel <job_id>|reset|--all]`
 
-Shows your background jobs (sync, memory processing, etc.)
+Shows your running/pending background jobs.
 
-**Subcommands:**
-- `status` - Show running/pending jobs only
+**Options:**
+- `--all` - Show all jobs (including completed/failed)
 - `<job_id>` - Show details for specific job
 - `cancel <job_id>` - Cancel a pending job
+- `reset` - Reset stuck "running" jobs to pending
 
 **Examples:**
-- `/jobs` - List recent jobs
-- `/jobs status` - Show active jobs only
-- `/jobs cancel abc123` - Cancel job"""
+- `/jobs` - Show active jobs only
+- `/jobs --all` - List all recent jobs
+- `/jobs reset` - Unstick jobs after restart"""
 
     # --help option (check first)
     if '--help' in args:
         return help_text
 
     # Separate positional args from options
+    show_all = '--all' in args
     positional = [a for a in args if not a.startswith('--')]
     subcommand = positional[0].lower() if positional else None
 
@@ -2742,19 +2744,27 @@ Shows your background jobs (sync, memory processing, etc.)
                 return f"✅ **Job cancelled:** `{job_id}`"
             return "❌ **Cannot cancel:** Job not found or not pending"
 
+        # Subcommand: reset (force reset running jobs to pending)
+        if subcommand == 'reset':
+            reset_count = storage.reset_all_running_jobs()
+            if reset_count:
+                return f"✅ **Reset {reset_count} running jobs** to pending status.\n\nThey will be re-executed on next trigger."
+            return "📭 No running jobs to reset."
+
         # Subcommand: specific job by ID
-        if subcommand and subcommand != 'status':
+        if subcommand:
             job = storage.get_background_job(subcommand, owner_id)
             if not job:
                 return f"❌ Job `{subcommand}` not found"
             return _format_job_detail(job)
 
-        # List jobs
-        status_filter = "running" if subcommand == "status" else None
+        # List jobs - default shows only active (pending/running), --all shows everything
+        status_filter = None if show_all else ["pending", "running"]
         jobs = storage.get_user_background_jobs(owner_id, status=status_filter, limit=10)
 
         if not jobs:
-            return """**📋 Background Jobs**
+            if show_all:
+                return """**📋 Background Jobs**
 
 📭 No background jobs found.
 
@@ -2762,8 +2772,15 @@ Background jobs are created when you run:
 - `/sync` - Email/calendar sync
 - `/agent memory process` - Memory processing
 - `/agent task process` - Task detection"""
+            else:
+                return """**📋 Background Jobs**
 
-        output = f"**📋 Background Jobs** ({len(jobs)} found)\n\n"
+📭 No active jobs running.
+
+Use `/jobs --all` to see completed jobs."""
+
+        label = "all" if show_all else "active"
+        output = f"**📋 Background Jobs** ({len(jobs)} {label})\n\n"
 
         for job in jobs:
             job_id = job['id']  # Full UUID - never truncate!

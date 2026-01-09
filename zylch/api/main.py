@@ -1,5 +1,7 @@
 """FastAPI main application - HTTP API for Zylch services."""
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
@@ -86,10 +88,18 @@ async def startup_event():
         from zylch.storage.supabase_client import SupabaseStorage
         storage = SupabaseStorage.get_instance()
 
-        # Reset jobs stuck in "running" for >2 hours (server crashed?)
-        reset_count = storage.reset_stale_background_jobs(timeout_hours=2)
-        if reset_count:
-            logger.warning(f"Reset {reset_count} stale background jobs")
+        # In DEV_MODE, reset ALL running jobs immediately (for quick restarts)
+        # In production, only reset jobs stuck >2 hours
+        dev_mode = os.environ.get("DEV_MODE", "false").lower() == "true"
+
+        if dev_mode:
+            reset_count = storage.reset_all_running_jobs()
+            if reset_count:
+                logger.info(f"[DEV] Reset {reset_count} running jobs to pending")
+        else:
+            reset_count = storage.reset_stale_background_jobs(timeout_hours=2)
+            if reset_count:
+                logger.warning(f"Reset {reset_count} stale background jobs (>2h)")
 
         # Cleanup jobs older than 7 days
         deleted_count = storage.cleanup_old_background_jobs(retention_days=7)
