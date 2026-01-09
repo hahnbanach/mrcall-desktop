@@ -2950,7 +2950,7 @@ class SupabaseStorage:
             return False
 
     def get_task_by_contact(self, owner_id: str, contact_email: str) -> Optional[Dict[str, Any]]:
-        """Get existing open task for a contact.
+        """Get existing open task for a contact (returns first one).
 
         Args:
             owner_id: Firebase UID
@@ -2971,6 +2971,29 @@ class SupabaseStorage:
         except Exception as e:
             logger.error(f"Failed to get task by contact {contact_email}: {e}")
             return None
+
+    def get_tasks_by_contact(self, owner_id: str, contact_email: str) -> List[Dict[str, Any]]:
+        """Get ALL open tasks for a contact.
+
+        Args:
+            owner_id: Firebase UID
+            contact_email: Contact's email address
+
+        Returns:
+            List of task item dicts (empty list if none found)
+        """
+        try:
+            result = self.client.table('task_items')\
+                .select('*')\
+                .eq('owner_id', owner_id)\
+                .ilike('contact_email', contact_email.lower())\
+                .is_('completed_at', 'null')\
+                .order('created_at', desc=True)\
+                .execute()
+            return result.data if result.data else []
+        except Exception as e:
+            logger.error(f"Failed to get tasks by contact {contact_email}: {e}")
+            return []
 
     def merge_task_sources(
         self,
