@@ -32,6 +32,10 @@ TASK_DECISION_TOOL = {
                 "enum": ["create", "update", "close", "none"],
                 "description": "create=new task, update=modify existing task, close=mark existing task resolved, none=no task needed"
             },
+            "target_task_id": {
+                "type": "string",
+                "description": "For update/close: the ID of the existing task to modify. Required if task_action is 'update' or 'close'."
+            },
             "urgency": {
                 "type": "string",
                 "enum": ["high", "medium", "low"],
@@ -507,18 +511,36 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
             self._mark_processed(event_type, item_id)
             return None
 
-        # Get existing task for contact (for context)
-        existing_task = self.storage.get_task_by_contact(self.owner_id, contact_email) if contact_email else None
+        # Get ALL existing open tasks for this contact (for context)
+        existing_tasks = self.storage.get_tasks_by_contact(self.owner_id, contact_email) if contact_email else []
         existing_task_context = ""
-        if existing_task:
+        if existing_tasks:
             existing_task_context = f"""
-EXISTING OPEN TASK FOR THIS CONTACT:
-- Action: {existing_task.get('suggested_action', 'N/A')}
-- Urgency: {existing_task.get('urgency', 'N/A')}
-- Reason: {existing_task.get('reason', 'N/A')}
-- Source emails: {len(existing_task.get('sources', {}).get('emails', []))}
+EXISTING OPEN TASKS FOR THIS CONTACT ({len(existing_tasks)} tasks):
+"""
+            for i, task in enumerate(existing_tasks, 1):
+                task_id = task.get('id', 'unknown')
+                sources = task.get('sources', {})
+                email_ids = sources.get('emails', [])
+                created = task.get('created_at', '')[:10] if task.get('created_at') else 'unknown'
 
-You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE it (no longer needed)? Or keep as-is (none)?
+                existing_task_context += f"""
+Task #{i} (ID: {task_id}):
+- Action: {task.get('suggested_action', 'N/A')}
+- Urgency: {task.get('urgency', 'N/A')}
+- Reason: {task.get('reason', 'N/A')}
+- Source emails: {len(email_ids)}
+- Created: {created}
+"""
+
+            existing_task_context += """
+DECISION OPTIONS:
+- UPDATE: Add this email to an existing task (same issue, new info) - specify target_task_id
+- CLOSE: Mark a task as resolved (issue is done) - specify target_task_id
+- CREATE: This is a NEW issue not covered by existing tasks
+- NONE: No action needed (already handled or irrelevant)
+
+If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the task ID.
 """
 
         # Get blob context
@@ -564,6 +586,14 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
 
         # Handle task_action
         task_action = result.get('task_action', 'create')
+        target_task_id = result.get('target_task_id')
+
+        # Find target task from existing_tasks list using ID from LLM
+        target_task = None
+        if target_task_id and existing_tasks:
+            target_task = next((t for t in existing_tasks if t.get('id') == target_task_id), None)
+            if not target_task:
+                logger.warning(f"[TASK] LLM specified target_task_id={target_task_id} but not found in existing tasks")
 
         # Validate task quality for create/update
         if task_action in ('create', 'update'):
@@ -572,27 +602,24 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
                 logger.warning(f"[TASK] Skipping task with empty/short suggested_action: {suggested}")
                 return None
 
-        if task_action == 'close' and existing_task:
-            self.storage.complete_task_item(self.owner_id, existing_task['id'])
-            logger.info(f"[TASK] Closed task for {contact_email}")
+        if task_action == 'close' and target_task:
+            self.storage.complete_task_item(self.owner_id, target_task['id'])
+            logger.info(f"[TASK] Closed task {target_task['id']} for {contact_email}")
             return None
 
-        elif task_action == 'update' and existing_task:
+        elif task_action == 'update' and target_task:
             self.storage.update_task_item(
                 self.owner_id,
-                existing_task['id'],
+                target_task['id'],
                 urgency=result.get('urgency'),
                 suggested_action=result.get('suggested_action'),
                 reason=result.get('reason'),
                 add_source_email=item_id if event_type == 'email' else None
             )
-            logger.info(f"[TASK] Updated task for {contact_email}")
+            logger.info(f"[TASK] Updated task {target_task['id']} for {contact_email}")
             return result
 
         elif task_action == 'create' and result.get('action_required'):
-            # Close existing task if any
-            if existing_task:
-                self.storage.complete_task_item(self.owner_id, existing_task['id'])
 
             # Build task result
             task_result = {
