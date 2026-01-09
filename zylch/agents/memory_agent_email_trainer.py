@@ -87,7 +87,7 @@ The prompt must include:
 4. **OUTPUT FORMAT**
    Each entity separated by ---ENTITY---, with 3 sections each (#IDENTIFIERS, #ABOUT, #HISTORY):
 
-   ```
+```
    #IDENTIFIERS
    Entity type: PERSON
    Name: Name Familyname 
@@ -141,7 +141,7 @@ The goal is to capture HOW the user responds so the assistant can draft similar 
 Record each instance where this response pattern was used:
 - 2025-01-08: Sent to customer A regarding complaints about...
 - 2025-01-07: Sent to customer B regarding same issue   
-   ```
+```
 
 5. **IMPORTANCE ASSESSMENT**
    - SKIP automated emails, newsletters, marketing
