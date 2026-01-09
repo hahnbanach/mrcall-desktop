@@ -315,7 +315,7 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
 
         Returns a text description of who the user is.
         """
-        emails = self.storage.get_emails(self.owner_id, limit=100)
+        emails = self.storage.get_emails(self.owner_id, limit=30)
 
         # Find emails sent BY the user
         user_sent_emails = []
@@ -347,7 +347,7 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
         profile_parts = [f"Domain: {user_domain if user_domain else 'unknown'}"]
 
         if subjects:
-            profile_parts.append(f"Recent email subjects: {', '.join(subjects)}")
+            profile_parts.append(f"Recent email subjects: {', '.join(subjects[:20])}")
 
         if signatures:
             # Just include one signature sample for role detection
