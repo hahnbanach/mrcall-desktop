@@ -1931,6 +1931,12 @@ Message ID: `{sent_id if sent_id else 'N/A'}`"""
             else:
                 return f"❌ Draft not found: `{draft_id}`"
 
+        # --- RESET (delete all emails) ---
+        if subcommand == 'reset':
+            supabase = SupabaseStorage()
+            supabase.client.table('emails').delete().eq('owner_id', owner_id).execute()
+            return "✅ All emails deleted."
+
         # --- SEARCH EMAILS (DEPRECATED - use /agent email run) ---
         if subcommand == 'search':
             return """⚠️ **`/email search` is deprecated**
@@ -2000,8 +2006,8 @@ COMMAND_HELP = {
 Use `/agent process` to extract facts from synced data into memory.''',
     },
     '/email': {
-        'summary': 'List emails, manage drafts, search',
-        'usage': '/email <list|create|send|delete|search> [args]',
+        'summary': 'List emails, manage drafts, search, reset',
+        'usage': '/email <list|create|send|delete|reset|search> [args]',
         'description': '''List emails, manage drafts, and search.
 
 **List:**
@@ -2012,6 +2018,9 @@ Use `/agent process` to extract facts from synced data into memory.''',
 - `/email create --to <email> --subject <text>` - Create draft
 - `/email send <draft_id>` - Send via Gmail/Outlook
 - `/email delete <draft_id>` - Delete draft
+
+**Reset:**
+- `/email reset` - Delete ALL emails
 
 **Search:**
 - `/email search <query>` - Search emails
