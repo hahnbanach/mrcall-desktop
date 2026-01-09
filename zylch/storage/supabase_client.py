@@ -3429,14 +3429,14 @@ class SupabaseStorage:
     def get_user_background_jobs(
         self,
         owner_id: str,
-        status: str | None = None,
+        status: str | List[str] | None = None,
         limit: int = 20
     ) -> List[Dict[str, Any]]:
         """List user's background jobs, most recent first.
 
         Args:
             owner_id: Firebase UID
-            status: Optional status filter
+            status: Optional status filter (single status or list of statuses)
             limit: Max results
 
         Returns:
@@ -3449,7 +3449,10 @@ class SupabaseStorage:
             .limit(limit)
 
         if status:
-            query = query.eq('status', status)
+            if isinstance(status, list):
+                query = query.in_('status', status)
+            else:
+                query = query.eq('status', status)
 
         return query.execute().data or []
 
