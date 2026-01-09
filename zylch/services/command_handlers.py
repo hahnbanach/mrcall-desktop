@@ -3003,7 +3003,7 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 
 async def _handle_memory_train(storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str) -> str:
     """Train memory extraction agent for specified channel."""
-    from zylch.agents.email_memory_agent_trainer import EmailMemoryAgentTrainer
+    from zylch.agents.memory_agent_email_trainer import EmailMemoryAgentTrainer
 
     if not api_key or not llm_provider:
         return """❌ **LLM API key required**

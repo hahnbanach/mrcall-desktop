@@ -301,7 +301,7 @@ class JobExecutor:
             llm_provider: LLM provider name (anthropic, openai, mistral)
             user_email: User's email address
         """
-        from zylch.agents.email_task_agent_trainer import EmailTaskAgentTrainer
+        from zylch.agents.task_agent_email_trainer import EmailTaskAgentTrainer
 
         storage = self.storage
 
