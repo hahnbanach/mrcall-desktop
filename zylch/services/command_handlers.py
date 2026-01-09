@@ -2851,9 +2851,9 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 
 **Task Agents** (detect actionable items):
 • `/agent task train [email|calendar]` - Create task detection agent
-• `/agent task run [email|calendar]` - Analyze and create tasks
-• `/agent task show [email|calendar]` - Show current agent
-• `/agent task reset [email|calendar]` - Delete agent
+• `/agent task process [email|calendar]` - Analyze emails and create tasks
+• `/agent task show [email|calendar]` - Show current agent prompt
+• `/agent task reset [email|calendar]` - Delete agent prompt (keeps task items)
 
 **Email Agent** (multi-tool email assistant):
 • `/agent email train` - Learn your writing style from sent emails
