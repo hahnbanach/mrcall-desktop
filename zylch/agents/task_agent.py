@@ -475,3 +475,157 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
             logger.warning(f"Failed to get blob for {contact_email}: {e}")
 
         return "(no prior context)", None
+
+    def analyze_item_sync(self, event_type: str, item: Dict) -> Optional[Dict]:
+        """Sync version of item analysis for background job execution.
+
+        This is the SINGLE implementation - called by job_executor.py.
+        Contains all the fixes: _is_user_email, existing_task_context, task_action handling.
+
+        Args:
+            event_type: 'email' or 'calendar'
+            item: Item dict from storage
+
+        Returns:
+            Task result dict if action required, None otherwise
+        """
+        import asyncio
+
+        item_id = item.get("id", "unknown")
+
+        # Get contact email
+        if event_type == "email":
+            contact_email = item.get("from_email", "").lower()
+        else:
+            attendees = item.get('attendees', [])
+            attendee_emails = [a.get('email', '') for a in attendees if a.get('email')]
+            contact_email = attendee_emails[0].lower() if attendee_emails else ""
+
+        # Hard symbolic check - user's email can NEVER be a task contact
+        if contact_email and self._is_user_email(contact_email):
+            logger.info(f"[TASK] Skipping user's own email: {contact_email}")
+            self._mark_processed(event_type, item_id)
+            return None
+
+        # Get existing task for contact (for context)
+        existing_task = self.storage.get_task_by_contact(self.owner_id, contact_email) if contact_email else None
+        existing_task_context = ""
+        if existing_task:
+            existing_task_context = f"""
+EXISTING OPEN TASK FOR THIS CONTACT:
+- Action: {existing_task.get('suggested_action', 'N/A')}
+- Urgency: {existing_task.get('urgency', 'N/A')}
+- Reason: {existing_task.get('reason', 'N/A')}
+- Source emails: {len(existing_task.get('sources', {}).get('emails', []))}
+
+You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE it (no longer needed)? Or keep as-is (none)?
+"""
+
+        # Get blob context
+        blob_context, blob_id = self._get_blob_for_contact(contact_email) if contact_email else ("(no prior context)", None)
+
+        # Build event data
+        if event_type == "email":
+            event_data = {
+                'id': item.get('id'),
+                'from_email': item.get('from_email'),
+                'to_email': item.get('to_email'),
+                'subject': item.get('subject'),
+                'date': item.get('date'),
+                'body': item.get('body_plain') or item.get('snippet', ''),
+                'thread_id': item.get('thread_id')
+            }
+        else:
+            event_data = {
+                'id': item_id,
+                'summary': item.get('summary'),
+                'description': item.get('description', ''),
+                'start_time': item.get('start_time'),
+                'end_time': item.get('end_time'),
+                'attendees': [a.get('email', '') for a in item.get('attendees', [])],
+                'location': item.get('location')
+            }
+
+        # Run async _analyze_event in sync context
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(
+                self._analyze_event(event_type, event_data, blob_context, existing_task_context)
+            )
+        finally:
+            loop.close()
+
+        # Mark as processed
+        self._mark_processed(event_type, item_id)
+
+        if not result:
+            return None
+
+        # Handle task_action
+        task_action = result.get('task_action', 'create')
+
+        # Validate task quality for create/update
+        if task_action in ('create', 'update'):
+            suggested = result.get('suggested_action', '').strip()
+            if not suggested or len(suggested) < 5:
+                logger.warning(f"[TASK] Skipping task with empty/short suggested_action: {suggested}")
+                return None
+
+        if task_action == 'close' and existing_task:
+            self.storage.complete_task_item(self.owner_id, existing_task['id'])
+            logger.info(f"[TASK] Closed task for {contact_email}")
+            return None
+
+        elif task_action == 'update' and existing_task:
+            self.storage.update_task_item(
+                self.owner_id,
+                existing_task['id'],
+                urgency=result.get('urgency'),
+                suggested_action=result.get('suggested_action'),
+                reason=result.get('reason'),
+                add_source_email=item_id if event_type == 'email' else None
+            )
+            logger.info(f"[TASK] Updated task for {contact_email}")
+            return result
+
+        elif task_action == 'create' and result.get('action_required'):
+            # Close existing task if any
+            if existing_task:
+                self.storage.complete_task_item(self.owner_id, existing_task['id'])
+
+            # Build task result
+            task_result = {
+                'action_required': True,
+                'urgency': result.get('urgency', 'medium'),
+                'suggested_action': result.get('suggested_action', ''),
+                'reason': result.get('reason', ''),
+                'analyzed_at': datetime.now(timezone.utc).isoformat(),
+                'event_id': item_id,
+                'event_type': event_type,
+                'contact_email': contact_email,
+                'contact_name': item.get('from_name', '') if event_type == 'email' else item.get('summary', ''),
+                'email_date': item.get('date', ''),
+                'sources': {
+                    'emails': [item_id] if event_type == 'email' else [],
+                    'calendar_events': [item_id] if event_type == 'calendar' else [],
+                    'blobs': [blob_id] if blob_id else []
+                }
+            }
+            self.storage.store_task_item(self.owner_id, task_result)
+            logger.info(f"[TASK] Created task for {contact_email}")
+            return task_result
+
+        return None
+
+    def _mark_processed(self, event_type: str, item_id: str) -> None:
+        """Mark item as task-processed.
+
+        Args:
+            event_type: 'email' or 'calendar'
+            item_id: Item ID to mark
+        """
+        if event_type == "email":
+            self.storage.mark_email_task_processed(self.owner_id, item_id)
+        else:
+            self.storage.mark_calendar_event_task_processed(self.owner_id, item_id)
