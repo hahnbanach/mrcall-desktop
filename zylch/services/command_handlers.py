@@ -2102,7 +2102,7 @@ Use `/agent process` to extract facts from synced data into memory.''',
     },
     '/jobs': {
         'summary': 'Background jobs',
-        'usage': '/jobs [<job_id>|cancel <job_id>|reset|--all]',
+        'usage': '/jobs [<job_id>|cancel <job_id>|reset|resume|--all]',
         'description': '''Shows your running/pending background jobs.
 
 **Options:**
@@ -2110,11 +2110,13 @@ Use `/agent process` to extract facts from synced data into memory.''',
 - `<job_id>` - Show details for specific job
 - `cancel <job_id>` - Cancel a pending job
 - `reset` - Reset stuck "running" jobs to pending
+- `resume` - Execute all pending jobs
 
 **Examples:**
 - `/jobs` - Show active jobs only
 - `/jobs --all` - List all recent jobs
-- `/jobs reset` - Unstick jobs after restart''',
+- `/jobs reset` - Unstick jobs after restart
+- `/jobs resume` - Re-run pending jobs''',
     },
     '/agent': {
         'summary': 'Train agents and process data into memory or tasks',
@@ -2719,7 +2721,7 @@ async def handle_jobs(args: List[str], owner_id: str) -> str:
 
     help_text = """**📋 Background Jobs**
 
-**Usage:** `/jobs [<job_id>|cancel <job_id>|reset|--all]`
+**Usage:** `/jobs [<job_id>|cancel <job_id>|reset|resume|--all]`
 
 Shows your running/pending background jobs.
 
@@ -2728,11 +2730,13 @@ Shows your running/pending background jobs.
 - `<job_id>` - Show details for specific job
 - `cancel <job_id>` - Cancel a pending job
 - `reset` - Reset stuck "running" jobs to pending
+- `resume` - Execute all pending jobs
 
 **Examples:**
 - `/jobs` - Show active jobs only
 - `/jobs --all` - List all recent jobs
-- `/jobs reset` - Unstick jobs after restart"""
+- `/jobs reset` - Unstick jobs after restart
+- `/jobs resume` - Re-run pending jobs"""
 
     # --help option (check first)
     if '--help' in args:
@@ -2760,8 +2764,43 @@ Shows your running/pending background jobs.
         if subcommand == 'reset':
             reset_count = storage.reset_all_running_jobs()
             if reset_count:
-                return f"✅ **Reset {reset_count} running jobs** to pending status.\n\nThey will be re-executed on next trigger."
+                return f"✅ **Reset {reset_count} running jobs** to pending status.\n\nUse `/jobs resume` to re-execute them."
             return "📭 No running jobs to reset."
+
+        # Subcommand: resume (execute pending jobs)
+        if subcommand == 'resume':
+            import asyncio
+            from zylch.services.job_executor import JobExecutor
+            from zylch.api.token_storage import get_active_llm_provider, get_email
+
+            # Get pending jobs for this user
+            pending_jobs = storage.get_user_background_jobs(owner_id, status='pending', limit=10)
+
+            if not pending_jobs:
+                return "📭 No pending jobs to resume."
+
+            # Get LLM credentials
+            llm_provider, api_key = get_active_llm_provider(owner_id)
+            user_email = get_email(owner_id) or ""
+
+            if not api_key:
+                return "❌ No LLM provider configured. Run `/connect anthropic` first."
+
+            # Execute each pending job
+            executor = JobExecutor(storage)
+            resumed_count = 0
+
+            for job in pending_jobs:
+                asyncio.create_task(executor.execute_job(
+                    job['id'],
+                    owner_id,
+                    api_key,
+                    llm_provider,
+                    user_email
+                ))
+                resumed_count += 1
+
+            return f"🚀 **Resumed {resumed_count} pending jobs**\n\nUse `/jobs` to monitor progress."
 
         # Subcommand: specific job by ID
         if subcommand:
