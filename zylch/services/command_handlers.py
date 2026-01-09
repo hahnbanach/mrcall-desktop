@@ -137,8 +137,9 @@ def format_task_items(tasks: list) -> str:
     total = idx - 1
     if total > 0:
         lines.append(f"\n**Total: {total} items** | `more on #N` for details")
+        lines.append("\n_Run `/agent task process` to detect new tasks_")
     else:
-        return "No action needed! You're all caught up."
+        return "No action needed! You're all caught up.\n\n_Run `/agent task process` to detect new tasks_"
 
     return "\n".join(lines)
 
@@ -2374,7 +2375,7 @@ Run `/tasks` to see items needing action."""
 - {ts_counts.get('emails', 0)} emails reset
 - {ts_counts.get('calendar_events', 0)} calendar events reset
 
-Run `/agent task process` to re-analyze."""
+Run `/agent task process` to recreate all tasks."""
 
         # Check if task agent is trained
         task_prompt = storage.get_agent_prompt(owner_id, 'tasks')
@@ -2437,13 +2438,15 @@ Run `/sync` first to get fresh emails, then `/tasks refresh`."""
 
 🎉 No action needed! You're all caught up.
 
-Analyzed recent emails and calendar - nothing requires your attention."""
+Analyzed recent emails and calendar - nothing requires your attention.
+
+_Run `/agent task process` to detect new tasks from recent emails._"""
             else:
                 return """**✅ Tasks**
 
 🎉 No action needed! You're all caught up.
 
-Run `/tasks refresh` to re-analyze with fresh AI check."""
+_Run `/agent task process` to detect new tasks._"""
 
         result = format_task_items(tasks)
         if refresh:
@@ -2930,7 +2933,7 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
                 return await _handle_agent_show(storage, owner_id, domain, channel)
 
             elif action == 'reset':
-                return await _handle_agent_reset(storage, owner_id, domain, channel)
+                return await _handle_task_reset(storage, owner_id, channel)
 
         # =====================
         # EMAIL DOMAIN (Multi-tool Agent)
@@ -3232,6 +3235,23 @@ Job ID: `{job['id']}`
 
     # Job exists but is completed/failed/cancelled - should create new one
     return f"Previous job status: {job['status']}. Run the command again to start a new job."
+
+
+async def _handle_task_reset(storage, owner_id: str, channel: str) -> str:
+    """Delete task agent prompt for specified channel."""
+    agent_type = f"task_{channel}"
+
+    deleted = storage.delete_agent_prompt(owner_id, agent_type)
+    if deleted:
+        return f"""✅ **Task agent deleted**
+
+Your `task {channel}` agent has been deleted.
+
+Recreate with: `/agent task train {channel}`
+
+💡 To reset the actual task items, run `/tasks reset`"""
+    else:
+        return f"❌ No agent found for `task {channel}`"
 
 
 # =====================
