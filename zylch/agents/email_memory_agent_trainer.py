@@ -178,6 +178,7 @@ class EmailMemoryAgentTrainer:
         self.client = LLMClient(api_key=api_key, provider=provider)
         self.user_email = user_email.lower() if user_email else ''
         self.user_domain = user_email.split('@')[1].lower() if user_email and '@' in user_email else ''
+        self.search_limit = 20  # Reduced to avoid context window overflow
 
     def _get_entity_format_suffix(self) -> str:
         """Return the entity format suffix with user_email interpolated."""
@@ -242,15 +243,15 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
         user_domain = self.user_domain
         logger.info(f"User email: {self.user_email}, domain: {user_domain}")
 
-        # Step 1: Get recent emails (100 max, regardless of reply status)
-        recent_emails = self._get_recent_emails(limit=100)
-        logger.info(f"Found {len(recent_emails)} recent emails")
+        # Step 1: Get recent threads (last email per thread only)
+        threads = self._get_recent_threads(limit=self.search_limit)
+        logger.info(f"Found {len(threads)} threads for analysis")
 
         # Step 2: Analyze user profile from their sent emails
         user_profile = self._analyze_user_profile(user_domain)
         logger.debug(f"user_profile: {user_profile}")
         # Step 4: Format samples for the meta-prompt (show variety)
-        email_samples = self._format_email_samples(recent_emails, max_samples=15)
+        email_samples = self._format_email_samples(threads)
 
         # Step 5: Generate the prompt using Claude
         prompt_content = self._generate_prompt(
@@ -261,24 +262,53 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
         metadata = {
             'generated_at': datetime.now(timezone.utc).isoformat(),
             'user_domain': user_domain,
-            'emails_analyzed': len(recent_emails)
+            'threads_analyzed': len(threads)
         }
 
         return prompt_content, metadata
 
-    def _get_recent_emails(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """Get recent emails regardless of reply status.
+    def _get_recent_threads(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get recent email threads, returning only the last email per thread.
+
+        The last email in a thread typically contains quoted conversation history,
+        so we only need to include that one to get full context.
 
         Args:
-            limit: Max number of emails to fetch
+            limit: Max number of threads to return
 
         Returns:
-            List of email dicts, sorted by date (newest first)
+            List of thread dicts with 'emails' key containing only the last email
         """
-        emails = self.storage.get_emails(self.owner_id, limit=limit)
-        # Sort by date (newest first)
-        emails.sort(key=lambda e: e.get('date_timestamp', 0), reverse=True)
-        return emails
+        # Fetch 3x limit emails to ensure we get enough threads
+        emails = self.storage.get_emails(self.owner_id, limit=limit * 3)
+
+        # Group by thread_id
+        threads: Dict[str, List[Dict]] = {}
+        for email in emails:
+            tid = email.get('thread_id', email.get('id', ''))  # Fallback to id if no thread
+            if tid:
+                if tid not in threads:
+                    threads[tid] = []
+                threads[tid].append(email)
+
+        # Sort emails within each thread by date
+        for tid in threads:
+            threads[tid].sort(key=lambda e: e.get('date_timestamp', 0))
+
+        # Sort threads by most recent email
+        thread_list = []
+        for tid, thread_emails in threads.items():
+            if thread_emails:
+                most_recent = max(e.get('date_timestamp', 0) for e in thread_emails)
+                thread_list.append({
+                    'thread_id': tid,
+                    'emails': thread_emails,
+                    'most_recent': most_recent
+                })
+
+        thread_list.sort(key=lambda t: t['most_recent'], reverse=True)
+
+        return thread_list[:limit]
 
     def _analyze_user_profile(self, user_domain: str) -> str:
         """Extract user context from their sent emails.
@@ -325,25 +355,32 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
 
         return '\n'.join(profile_parts)
 
-    def _format_email_samples(
-        self,
-        emails: List[Dict[str, Any]],
-        max_samples: int = 10
-    ) -> str:
-        """Format emails as text samples for the meta-prompt."""
+    def _format_email_samples(self, threads: List[Dict[str, Any]]) -> str:
+        """Format threads as text samples for the meta-prompt.
+
+        Only includes the last email per thread since it typically contains
+        the quoted conversation history.
+        """
         samples = []
 
-        for i, email in enumerate(emails, 1):
-            from_email = email.get('from_email', 'unknown')
-            subject = email.get('subject', '(no subject)')
-            body = email.get('body_plain', '') or email.get('snippet', '')
-            body = body
+        for i, thread in enumerate(threads, 1):
+            emails = thread.get('emails', [])
+            if not emails:
+                continue
+
+            # Get subject from first email, but use LAST email for content
+            subject = emails[0].get('subject', '(no subject)')
+            last_email = emails[-1]  # Last email has the full thread context
+
+            from_email = last_email.get('from_email', 'unknown')
+            date = last_email.get('date', 'unknown')
+            body = last_email.get('body_plain', '') or last_email.get('snippet', '')
 
             samples.append(f"""
---- Email {i} ---
+--- Thread {i}: {subject} ({len(emails)} emails) ---
 From: {from_email}
-Subject: {subject}
-Body preview: {body}
+Date: {date}
+Body: {body}
 """)
 
         return '\n'.join(samples) if samples else "No samples available."
@@ -360,6 +397,7 @@ Body preview: {body}
         )
 
         logger.info(f"Training email analyzer agent (provider: {self.provider})...")
+        logger.debug(f"Prompt size: {len(meta_prompt)} chars (~{len(meta_prompt)//4} tokens)")
 
         response = self.client.create_message_sync(
             model=self.model,
