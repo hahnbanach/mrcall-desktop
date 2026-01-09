@@ -43,7 +43,7 @@ Entity can only be of 3 types:
    #ABOUT: One sentence describing what the company does
    #HISTORY: What information we gathered about the company in this email exchange (e.g., "They signed up for a plan", "Started collaboration")
 
-3. **TEMPLATE** - Information about a single topic, extracted about collaborations, products, services, offers etc which are NOT bound to a single PERSON, but can be reproduced for others. E.g. an offer for a certain service can be made for multiple customers, a product sold to different people, a sales agreement with various companies, information about prices etc.
+3. **TEMPLATE** - A TEMPLATE is a reusable response pattern - how the user typically responds to a category of inquiries. Extract the user's response style and content for recurring question types so the assistant can draft similar responses.
    #IDENTIFIERS: Name (short descriptive title, e.g., "Product Price", "IT Consulting offer" etc )
    #ABOUT: A paragraph describing what this TEMPLATE is about.
    #HISTORY: Very short description of what happened in this email regarding the template. Eg. 2025-12-22 "The user sent a revised offer for..."
@@ -116,22 +116,31 @@ NB DO NOT CREATE PERSON entity about USER_PERSON!!
    
    NB DO NOT CREATE COMPANY entity about USER_COMPANY
 
-   ---ENTITY---
-   #IDENTIFIERS
-   Entity type: TEMPLATE
-   Name: Name of the TEMPLATE
+---ENTITY---
+#IDENTIFIERS
+Entity type: TEMPLATE
+Name: Name of the TEMPLATE (e.g., "Unhandled Call Complaints Response", "Pricing Inquiry Response", "Subscription Cancellation Response")
 
-   #ABOUT
-   What is it? A collaboration? An offer? A request for work? A candidacy? Anything we should trace over time, eg NOT calls, booking. NO COMPANY EXEPT USER_COMPANY should be quoted here! This section must be very informative: it might be for example
-   . a recurrent technical problem -> which kind of email does the user normally send? 
-   . an offer -> data about the offer like features, prices, timeline
-   . a type of collaboration/sales -> what are the terms of the deals?
-   . a product -> features and prices
-   All the information above will be used to answer other people asking information about the same TEMPLATE
+#ABOUT
+A TEMPLATE is a **reusable response pattern** - how the user typically responds to a recurring category of inquiries or situations.
 
-   #HISTORY
-   On this date the user started talking about this TEMPLATE with a `person` or a `company`
-   
+This section should contain:
+- **Trigger**: What kind of incoming message triggers this response? (e.g., "Customer asks why they received a certain email from the administration")
+- **Response content**: The actual response the user sends, including tone, language, and key points covered
+- **Response style**: Formal/informal, language used, signature style
+
+Examples:
+- Customer complaint about service issue → User's standard apology + explanation + reassurance template
+- Pricing inquiry → User's standard pricing response with features and terms
+- Partnership request → User's standard collaboration proposal format
+- Technical support question → User's standard troubleshooting response
+
+The goal is to capture HOW the user responds so the assistant can draft similar messages for future inquiries of the same type.
+
+#HISTORY
+Record each instance where this response pattern was used:
+- 2025-01-08: Sent to customer A regarding complaints about...
+- 2025-01-07: Sent to customer B regarding same issue   
    ```
 
 5. **IMPORTANCE ASSESSMENT**
