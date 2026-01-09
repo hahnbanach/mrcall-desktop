@@ -5,6 +5,19 @@ a single unified agent prompt with tool selection guidance.
 
 The unified agent can then handle any MrCall configuration request by
 choosing the appropriate tool based on user intent.
+
+Flusso:
+
+/agent mrcall train
+    ↓
+MrCallAgentTrainer.build_prompt()
+    ↓
+Per ogni feature: MrCallConfiguratorTrainer.build_subprompt()
+    ↓
+Combina tutto → UNIFIED_META_PROMPT + feature_subprompts
+    ↓
+Salva come "mrcall_{business_id}"
+
 """
 
 import logging

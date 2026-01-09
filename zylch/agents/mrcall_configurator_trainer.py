@@ -7,6 +7,19 @@ Analyzes MrCall assistant configuration to generate self-contained sub-prompts t
 4. Include raw prompt value for modification
 
 Each sub-prompt is stored per feature per business in the agent_prompts table.
+
+Flusso:
+
+/agent mrcall train
+    ↓
+MrCallAgentTrainer.build_prompt()
+    ↓
+Per ogni feature: MrCallConfiguratorTrainer.build_subprompt()
+    ↓
+Combina tutto → UNIFIED_META_PROMPT + feature_subprompts
+    ↓
+Salva come "mrcall_{business_id}"
+
 """
 
 import logging
