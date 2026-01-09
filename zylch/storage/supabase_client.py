@@ -252,13 +252,6 @@ class SupabaseStorage:
         thread_ids = list(set(row['thread_id'] for row in result.data)) if result.data else []
         return thread_ids
 
-    def mark_full_sync_completed(self, owner_id: str) -> Dict[str, Any]:
-        """Mark initial full sync as completed."""
-        return self.update_sync_state(
-            owner_id=owner_id,
-            full_sync_completed=datetime.now(timezone.utc)
-        )
-
     def get_oldest_email_date(self, owner_id: str) -> Optional[datetime]:
         """Get the date of the oldest email in the archive.
 
@@ -555,46 +548,6 @@ class SupabaseStorage:
             'earliest_date': None,
             'latest_date': None
         }
-
-    # ==========================================
-    # SYNC STATE
-    # ==========================================
-
-    def get_sync_state(self, owner_id: str) -> Optional[Dict[str, Any]]:
-        """Get sync state for user."""
-        result = self.client.table('sync_state')\
-            .select('*')\
-            .eq('owner_id', owner_id)\
-            .execute()
-
-        return result.data[0] if result.data else None
-
-    def update_sync_state(
-        self,
-        owner_id: str,
-        history_id: Optional[str] = None,
-        last_sync: Optional[datetime] = None,
-        full_sync_completed: Optional[datetime] = None
-    ) -> Dict[str, Any]:
-        """Update sync state."""
-        data = {
-            'owner_id': owner_id,
-            'updated_at': datetime.now(timezone.utc).isoformat()
-        }
-
-        if history_id is not None:
-            data['history_id'] = history_id
-        if last_sync is not None:
-            data['last_sync'] = last_sync.isoformat()
-        if full_sync_completed is not None:
-            data['full_sync_completed'] = full_sync_completed.isoformat()
-
-        result = self.client.table('sync_state').upsert(
-            data,
-            on_conflict='owner_id'
-        ).execute()
-
-        return result.data[0] if result.data else {}
 
     # ==========================================
     # CALENDAR EVENTS

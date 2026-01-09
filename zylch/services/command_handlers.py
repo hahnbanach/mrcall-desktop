@@ -223,30 +223,32 @@ async def handle_sync(args: List[str], config, owner_id: str) -> str:
     if subcommand == 'status':
         logger.info(f"[/sync] Status check for owner_id={owner_id}")
         try:
+            from datetime import datetime
             supabase = SupabaseStorage()
-            result = supabase.client.table('sync_state').select('*').eq('owner_id', owner_id).execute()
-
-            if not result.data:
-                return "📊 **Sync Status**\n\n❌ No sync state found - never synced.\n\nRun `/sync` or `/sync days <n>` to start."
-
-            sync_state = result.data[0]
-            last_sync = sync_state.get('last_sync')
-
-            # Format last sync time or show "Never" if missing
-            if last_sync:
-                # Parse and format the timestamp nicely
-                from datetime import datetime
-                if isinstance(last_sync, str):
-                    dt = datetime.fromisoformat(last_sync.replace('Z', '+00:00'))
-                    last_sync_display = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
-                else:
-                    last_sync_display = last_sync.strftime('%Y-%m-%d %H:%M:%S UTC')
-            else:
-                last_sync_display = "Never"
 
             # Count emails
             email_count_result = supabase.client.table('emails').select('id', count='exact').eq('owner_id', owner_id).execute()
             email_count = email_count_result.count if hasattr(email_count_result, 'count') else 0
+
+            # Get newest and oldest email dates
+            newest_email = supabase.client.table('emails').select('date').eq('owner_id', owner_id).order('date', desc=True).limit(1).execute()
+            oldest_email = supabase.client.table('emails').select('date').eq('owner_id', owner_id).order('date', desc=False).limit(1).execute()
+
+            if not email_count or email_count == 0:
+                newest_display = "Never synced"
+                oldest_display = "-"
+            else:
+                if newest_email.data:
+                    dt = datetime.fromisoformat(newest_email.data[0]['date'].replace('Z', '+00:00'))
+                    newest_display = dt.strftime('%Y-%m-%d %H:%M UTC')
+                else:
+                    newest_display = "Unknown"
+
+                if oldest_email.data:
+                    dt = datetime.fromisoformat(oldest_email.data[0]['date'].replace('Z', '+00:00'))
+                    oldest_display = dt.strftime('%Y-%m-%d')
+                else:
+                    oldest_display = "Unknown"
 
             # Count calendar events
             event_count_result = supabase.client.table('calendar_events').select('id', count='exact').eq('owner_id', owner_id).execute()
@@ -254,8 +256,9 @@ async def handle_sync(args: List[str], config, owner_id: str) -> str:
 
             return f"""📊 **Sync Status**
 
-✅ **Last synced:** {last_sync_display}
-📧 **Emails archived:** {email_count:,}
+📧 **Emails:** {email_count:,}
+   Newest: {newest_display}
+   Oldest: {oldest_display}
 📅 **Calendar events:** {event_count:,}
 
 Run `/sync` or `/sync --days N` to sync more data."""
@@ -268,21 +271,16 @@ Run `/sync` or `/sync --days N` to sync more data."""
         logger.info(f"[/sync] Reset flag detected, clearing all sync data for owner_id={owner_id}")
         try:
             supabase = SupabaseStorage()
-            cleared_tables = []
-
-            # Clear sync state
-            supabase.client.table('sync_state').delete().eq('owner_id', owner_id).execute()
-            logger.info(f"[/sync] Cleared sync_state")
 
             # Clear emails
-            email_result = supabase.client.table('emails').delete().eq('owner_id', owner_id).execute()
+            supabase.client.table('emails').delete().eq('owner_id', owner_id).execute()
             logger.info(f"[/sync] Cleared emails")
 
             # Clear calendar events
-            cal_result = supabase.client.table('calendar_events').delete().eq('owner_id', owner_id).execute()
+            supabase.client.table('calendar_events').delete().eq('owner_id', owner_id).execute()
             logger.info(f"[/sync] Cleared calendar_events")
 
-            return """✅ **Sync state reset!**
+            return """✅ **Sync reset!**
 
 All emails and calendar events cleared.
 Next `/sync` will perform a full re-sync from scratch.
@@ -293,8 +291,8 @@ Next `/sync` will perform a full re-sync from scratch.
 ```
 Then run `/sync --days N` to rebuild memory from re-synced emails."""
         except Exception as e:
-            logger.error(f"[/sync] Failed to reset sync state: {e}")
-            return f"❌ **Error resetting sync state:** {str(e)}"
+            logger.error(f"[/sync] Failed to reset sync data: {e}")
+            return f"❌ **Error resetting sync data:** {str(e)}"
 
     # Subcommand: mrcall - Test MrCall API integration
     if subcommand == 'mrcall':
@@ -2421,23 +2419,23 @@ Connect your LLM provider:
         # Check for refresh flag
         refresh = 'refresh' in args
 
-        # Check last sync time BEFORE starting analysis
+        # Check newest email date BEFORE starting analysis
         if refresh:
             try:
-                result = storage.client.table('sync_state').select('last_sync').eq('owner_id', owner_id).execute()
+                result = storage.client.table('emails').select('date').eq('owner_id', owner_id).order('date', desc=True).limit(1).execute()
                 if result.data:
-                    last_sync_str = result.data[0].get('last_sync')
-                    if last_sync_str:
-                        last_sync_dt = datetime.fromisoformat(last_sync_str.replace('Z', '+00:00'))
-                        hours_ago = (datetime.now(timezone.utc) - last_sync_dt).total_seconds() / 3600
+                    newest_email_str = result.data[0].get('date')
+                    if newest_email_str:
+                        newest_email_dt = datetime.fromisoformat(newest_email_str.replace('Z', '+00:00'))
+                        hours_ago = (datetime.now(timezone.utc) - newest_email_dt).total_seconds() / 3600
                         if hours_ago > 6:
                             return f"""⚠️ **Stale Data Warning**
 
-Last sync was **{hours_ago:.1f} hours ago**.
+Newest email is **{hours_ago:.1f} hours old**.
 
 Run `/sync` first to get fresh emails, then `/tasks refresh`."""
             except Exception as e:
-                logger.warning(f"Could not check last sync: {e}")
+                logger.warning(f"Could not check newest email date: {e}")
 
         # Create worker and get tasks
         worker = TaskWorker(storage, owner_id, api_key, llm_provider, user_email)
@@ -3026,14 +3024,6 @@ Connect your LLM provider:
 Your email address is required to identify sent vs received emails.
 Please ensure your account is properly connected via `/connect`."""
 
-    # Check sync status
-    sync_state = storage.get_sync_state(owner_id)
-    if not sync_state or not sync_state.get('full_sync_completed'):
-        return """❌ **Please sync first**
-
-Run `/sync` to synchronize your data.
-Then run this command again."""
-
     channels_to_train = [channel] if channel != 'all' else ['email', 'calendar']
     results = []
 
@@ -3152,12 +3142,12 @@ Connect your LLM provider:
 Your email address is required to identify sent vs received emails.
 Please ensure your account is properly connected via `/connect`."""
 
-    # Check sync status
-    sync_state = storage.get_sync_state(owner_id)
-    if not sync_state or not sync_state.get('full_sync_completed'):
-        return """❌ **Please sync first**
+    # Check if there's data to train on
+    emails = storage.get_emails(owner_id, limit=1)
+    if not emails:
+        return """❌ **No emails found**
 
-Run `/sync` to synchronize your data.
+Run `/sync` to synchronize your emails first.
 Then run this command again."""
 
     # Create background job (returns existing if duplicate pending/running)
@@ -3302,12 +3292,12 @@ Connect your LLM provider:
 Your email address is required to identify your sent emails.
 Please ensure your account is properly connected via `/connect`."""
 
-    # Check sync status
-    sync_state = storage.get_sync_state(owner_id)
-    if not sync_state or not sync_state.get('full_sync_completed'):
-        return """❌ **Please sync first**
+    # Check if there's data to train on
+    emails = storage.get_emails(owner_id, limit=1)
+    if not emails:
+        return """❌ **No emails found**
 
-Run `/sync` to synchronize your emails.
+Run `/sync` to synchronize your emails first.
 Then run this command again."""
 
     try:

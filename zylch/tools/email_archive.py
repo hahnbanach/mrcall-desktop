@@ -79,72 +79,72 @@ class EmailArchiveManager:
                 "Supported: sqlite"
             )
 
-    def initial_full_sync(self, days_back: Optional[int] = None) -> Dict[str, Any]:
-        """One-time initial sync to build archive.
+    def incremental_sync(self, days_back: Optional[int] = None, force_full: bool = False) -> Dict[str, Any]:
+        """Sync emails from Gmail based on actual data in DB.
 
-        Fetches emails from Gmail and stores in archive.
+        Derives sync state from emails table - no separate sync_state needed.
 
         Args:
-            days_back: How many days of history to fetch (default: 30)
+            days_back: Number of days to sync (default: 30)
+            force_full: Ignored (kept for API compatibility)
 
         Returns:
-            Sync results with stats
+            Sync results
         """
-        if days_back is None:
-            days_back = settings.email_archive_initial_months * 30  # Default from settings (in months)
+        logger.info(f"🔄 Starting email sync (days_back={days_back})...")
 
-        logger.info(f"🔄 Starting initial full sync ({days_back} days)...")
-
-        # Check if already completed
-        if self._use_supabase:
-            sync_state = self.supabase.get_sync_state(self.owner_id)
-        else:
-            sync_state = self.backend.get_sync_state()
-
-        if sync_state and sync_state.get('full_sync_completed'):
-            logger.warning("Initial sync already completed. Use incremental_sync() instead.")
-            return {
-                'success': False,
-                'error': 'Initial sync already completed',
-                'full_sync_completed_at': sync_state['full_sync_completed']
-            }
-
-        # Calculate date range
-        now = datetime.now(timezone.utc)
-        after_date = now - timedelta(days=days_back)
-        after_date_str = after_date.strftime('%Y/%m/%d')
-
-        logger.info(f"Fetching emails after {after_date_str}")
-
-        # Ensure Gmail is authenticated before fetching
+        # Ensure Gmail is authenticated (lazy)
         self._ensure_authenticated()
 
-        # Fetch emails in batches
-        batch_size = settings.email_archive_batch_size
-        total_fetched = 0
-        total_stored = 0
-        errors = 0
+        # Calculate target date
+        now = datetime.now(timezone.utc)
+        sync_days = days_back if days_back is not None else 30
+        target_date = now - timedelta(days=sync_days)
+
+        # Get oldest email date from DB to know current coverage
+        if self._use_supabase:
+            oldest_email_date = self.supabase.get_oldest_email_date(self.owner_id)
+        else:
+            oldest_email_date = self.backend.get_oldest_email_date()
+
+        # Determine sync_from date
+        if oldest_email_date is None:
+            # No emails in DB - sync from target_date
+            sync_from = target_date
+            logger.info(f"No emails in DB. Syncing from {sync_from.strftime('%Y-%m-%d')}")
+        elif target_date < oldest_email_date:
+            # Need older emails - sync from target_date
+            sync_from = target_date
+            logger.info(f"Extending coverage from {oldest_email_date.strftime('%Y-%m-%d')} back to {sync_from.strftime('%Y-%m-%d')}")
+        else:
+            # Already have coverage - sync from oldest to catch any gaps
+            sync_from = oldest_email_date
+            logger.info(f"Syncing from oldest email date: {sync_from.strftime('%Y-%m-%d')}")
 
         try:
-            # Gmail search query
-            query = f"after:{after_date_str}"
-
-            # Fetch all messages matching query
+            # Fetch emails from Gmail using date query
+            query = f"after:{sync_from.strftime('%Y/%m/%d')}"
             logger.info(f"Searching Gmail: {query}")
             messages = self.gmail.search_messages(query=query, max_results=5000)
 
-            total_fetched = len(messages)
-            logger.info(f"Fetched {total_fetched} messages from Gmail")
+            logger.info(f"Fetched {len(messages)} messages from Gmail")
 
-            # Process in batches
+            if not messages:
+                return {
+                    'success': True,
+                    'messages_added': 0,
+                    'messages_deleted': 0
+                }
+
+            # Convert and store messages in batches
+            batch_size = settings.email_archive_batch_size
+            total_stored = 0
+
             for i in range(0, len(messages), batch_size):
                 batch = messages[i:i + batch_size]
-
                 try:
-                    # Convert to archive format
                     archive_messages = [self._convert_message(msg) for msg in batch]
 
-                    # Store batch - use appropriate backend
                     if self._use_supabase:
                         stored = self.supabase.store_emails_batch(self.owner_id, archive_messages)
                         total_stored += stored
@@ -152,398 +152,27 @@ class EmailArchiveManager:
                         self.backend.store_messages_batch(archive_messages)
                         total_stored += len(archive_messages)
 
-                    # Log progress
-                    if (i + batch_size) % 1000 == 0 or (i + batch_size) >= len(messages):
-                        logger.info(f"Progress: {total_stored}/{total_fetched} messages stored")
+                    if (i + batch_size) % 500 == 0 or (i + batch_size) >= len(messages):
+                        logger.info(f"Progress: {min(i + batch_size, len(messages))}/{len(messages)} messages processed")
 
                 except Exception as e:
                     logger.error(f"Error storing batch at offset {i}: {e}")
-                    errors += 1
 
-            # Get history_id from Gmail for future incremental sync
-            # Note: This requires a recent API call to get the current history ID
-            # We'll use the last message's internal date as a reference
-            if messages:
-                # Make a simple API call to get current history_id
-                try:
-                    # Get user profile which includes historyId
-                    profile = self.gmail.service.users().getProfile(userId='me').execute()
-                    history_id = profile.get('historyId')
-
-                    if history_id:
-                        if self._use_supabase:
-                            self.supabase.update_sync_state(
-                                owner_id=self.owner_id,
-                                history_id=history_id,
-                                last_sync=now
-                            )
-                        else:
-                            self.backend.update_sync_state(
-                                history_id=history_id,
-                                last_sync=now
-                            )
-                        logger.info(f"Saved history_id: {history_id}")
-                except Exception as e:
-                    logger.warning(f"Could not get history_id: {e}")
-
-            # Mark full sync as completed
-            if self._use_supabase:
-                self.supabase.mark_full_sync_completed(self.owner_id)
-            else:
-                self.backend.mark_full_sync_completed()
-
-            logger.info(f"✅ Initial sync complete: {total_stored} messages stored")
+            logger.info(f"✅ Email sync complete: {total_stored} messages stored")
 
             return {
                 'success': True,
-                'total_fetched': total_fetched,
-                'total_stored': total_stored,
-                'errors': errors,
-                'days_back': days_back,
-                'date_range': f"{after_date_str} to {now.strftime('%Y/%m/%d')}"
-            }
-
-        except Exception as e:
-            logger.error(f"Initial sync failed: {e}", exc_info=True)
-            return {
-                'success': False,
-                'error': str(e),
-                'total_fetched': total_fetched,
-                'total_stored': total_stored,
-                'errors': errors
-            }
-
-    def _extend_archive_backwards(self, days_back: int) -> Dict[str, Any]:
-        """Fetch older emails to extend the archive backwards.
-
-        When user requests more days than currently synced, this method
-        fetches the older emails to fill the gap.
-
-        Args:
-            days_back: Target number of days to have in archive
-
-        Returns:
-            Dict with 'added' count of new emails
-        """
-        if not self._use_supabase:
-            logger.warning("_extend_archive_backwards only supported in Supabase mode")
-            return {'added': 0}
-
-        # Get oldest email date in archive
-        oldest_email_date = self.supabase.get_oldest_email_date(self.owner_id)
-        if not oldest_email_date:
-            logger.info("No emails in archive, cannot extend backwards")
-            return {'added': 0}
-
-        # Calculate target date
-        now = datetime.now(timezone.utc)
-        target_date = now - timedelta(days=days_back)
-
-        # If archive already covers target date, nothing to do
-        if oldest_email_date <= target_date:
-            logger.info(f"Archive already covers {days_back} days (oldest: {oldest_email_date.date()})")
-            return {'added': 0}
-
-        # Fetch emails between target_date and oldest_email_date
-        logger.info(f"📥 Extending archive from {oldest_email_date.date()} back to {target_date.date()}")
-
-        # Ensure Gmail is authenticated
-        self._ensure_authenticated()
-
-        # Gmail search query for the gap period
-        after_str = target_date.strftime('%Y/%m/%d')
-        before_str = oldest_email_date.strftime('%Y/%m/%d')
-        query = f"after:{after_str} before:{before_str}"
-
-        logger.info(f"Searching Gmail: {query}")
-        messages = self.gmail.search_messages(query=query, max_results=5000)
-
-        if not messages:
-            logger.info("No additional messages found in date range")
-            return {'added': 0}
-
-        logger.info(f"Found {len(messages)} older messages to add")
-
-        # Convert and store messages
-        batch_size = settings.email_archive_batch_size
-        total_stored = 0
-
-        for i in range(0, len(messages), batch_size):
-            batch = messages[i:i + batch_size]
-            try:
-                archive_messages = [self._convert_message(msg) for msg in batch]
-                stored = self.supabase.store_emails_batch(self.owner_id, archive_messages)
-                total_stored += stored
-            except Exception as e:
-                logger.error(f"Error storing batch at offset {i}: {e}")
-
-        logger.info(f"✅ Extended archive backwards: +{total_stored} messages")
-        return {'added': total_stored}
-
-    def incremental_sync(self, days_back: Optional[int] = None, force_full: bool = False) -> Dict[str, Any]:
-        """Incremental sync using Gmail History API.
-
-        Fetches only changes since last sync. If days_back is provided and
-        extends beyond the current archive, older emails are fetched first.
-
-        Args:
-            days_back: Target number of days to have in archive. If archive has fewer
-                       days, older emails will be fetched to fill the gap.
-            force_full: Force full sync ignoring history
-
-        Returns:
-            Sync results
-        """
-        logger.info(f"🔄 Starting incremental sync (days_back={days_back}, force_full={force_full})...")
-
-        # Ensure Gmail is authenticated (lazy)
-        self._ensure_authenticated()
-
-        # Get last sync state
-        if self._use_supabase:
-            sync_state = self.supabase.get_sync_state(self.owner_id)
-        else:
-            sync_state = self.backend.get_sync_state()
-
-        if not sync_state or not sync_state.get('history_id') or force_full:
-            # First sync or forced full sync
-            init_days = days_back if days_back is not None else 30
-            logger.info(f"No sync state found or force_full=True. Initializing archive with {init_days} days of history...")
-            init_result = self.initial_full_sync(days_back=init_days)
-            if not init_result.get('success'):
-                return {
-                    'success': False,
-                    'error': f"Auto-initialization failed: {init_result.get('error', 'Unknown error')}"
-                }
-            # Return the init result as the sync result
-            return {
-                'success': True,
-                'messages_added': init_result.get('total_stored', 0),
+                'messages_added': total_stored,
                 'messages_deleted': 0,
-                'auto_initialized': True,
-                'months_synced': 1
-            }
-
-        start_history_id = sync_state['history_id']
-        first_sync_date = sync_state.get('last_sync', 'previous sync')
-        logger.info(f"Syncing from history_id: {start_history_id}")
-
-        # If days_back is specified, extend archive backwards if needed
-        extended_count = 0
-        if days_back is not None and self._use_supabase:
-            extended = self._extend_archive_backwards(days_back)
-            extended_count = extended.get('added', 0)
-
-        try:
-            # Fetch history changes
-            changes = self._fetch_history_changes(start_history_id)
-
-            messages_added = changes['messages_added']
-            messages_deleted = changes['messages_deleted']
-            new_history_id = changes['new_history_id']
-
-            logger.info(f"Changes found: +{len(messages_added)} -{len(messages_deleted)}")
-
-            # Process added messages
-            if messages_added:
-                logger.info(f"Fetching {len(messages_added)} new/modified messages...")
-                new_messages = []
-
-                for msg_id in messages_added:
-                    try:
-                        # Fetch full message
-                        gmail_msg = self.gmail.service.users().messages().get(
-                            userId='me',
-                            id=msg_id,
-                            format='full'
-                        ).execute()
-
-                        # Parse and convert
-                        parsed = self.gmail._parse_message(gmail_msg)
-                        archive_msg = self._convert_message(parsed)
-                        new_messages.append(archive_msg)
-
-                    except Exception as e:
-                        # 404 errors are normal (deleted/archived messages) but still log at ERROR
-                        if "404" in str(e) or "not found" in str(e).lower():
-                            logger.error(f"Skipping message {msg_id}: not found (deleted or archived)")
-                        else:
-                            logger.error(f"Error fetching message {msg_id}: {e}")
-
-                # Store in archive
-                if new_messages:
-                    if self._use_supabase:
-                        self.supabase.store_emails_batch(self.owner_id, new_messages)
-                    else:
-                        self.backend.store_messages_batch(new_messages)
-                    logger.info(f"Stored {len(new_messages)} messages")
-
-            # Process deleted messages
-            if messages_deleted:
-                logger.info(f"Deleting {len(messages_deleted)} messages...")
-                for msg_id in messages_deleted:
-                    try:
-                        if self._use_supabase:
-                            self.supabase.delete_email(self.owner_id, msg_id)
-                        else:
-                            self.backend.delete_message(msg_id)
-                    except Exception as e:
-                        logger.error(f"Error deleting message {msg_id}: {e}")
-
-            # Update sync state
-            if self._use_supabase:
-                self.supabase.update_sync_state(
-                    owner_id=self.owner_id,
-                    history_id=new_history_id,
-                    last_sync=datetime.now(timezone.utc)
-                )
-            else:
-                self.backend.update_sync_state(
-                    history_id=new_history_id,
-                    last_sync=datetime.now(timezone.utc)
-                )
-
-            logger.info(f"✅ Incremental sync complete")
-
-            return {
-                'success': True,
-                'messages_added': len(messages_added) + extended_count,
-                'messages_deleted': len(messages_deleted),
-                'messages_extended': extended_count,
-                'new_history_id': new_history_id,
-                'incremental': True,
-                'first_sync_date': first_sync_date
+                'total_fetched': len(messages)
             }
 
         except Exception as e:
-            logger.error(f"Incremental sync failed: {e}", exc_info=True)
+            logger.error(f"Email sync failed: {e}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e)
             }
-
-    def _fetch_history_changes(self, start_history_id: str) -> Dict[str, Any]:
-        """Fetch changes from Gmail History API.
-
-        Args:
-            start_history_id: History ID from last sync
-
-        Returns:
-            Dict with messages_added, messages_deleted, new_history_id
-        """
-        messages_added = []
-        messages_deleted = []
-        page_token = None
-        new_history_id = start_history_id
-
-        try:
-            while True:
-                # Call History API
-                request = self.gmail.service.users().history().list(
-                    userId='me',
-                    startHistoryId=start_history_id,
-                    historyTypes=['messageAdded', 'messageDeleted'],
-                    pageToken=page_token
-                )
-                response = request.execute()
-
-                # Get new history ID
-                new_history_id = response.get('historyId', start_history_id)
-
-                # Process history records
-                history_records = response.get('history', [])
-
-                for record in history_records:
-                    # Messages added
-                    if 'messagesAdded' in record:
-                        for msg_added in record['messagesAdded']:
-                            msg_id = msg_added['message']['id']
-                            messages_added.append(msg_id)
-
-                    # Messages deleted
-                    if 'messagesDeleted' in record:
-                        for msg_deleted in record['messagesDeleted']:
-                            msg_id = msg_deleted['message']['id']
-                            messages_deleted.append(msg_id)
-
-                # Check for next page
-                page_token = response.get('nextPageToken')
-                if not page_token:
-                    break
-
-            return {
-                'messages_added': list(set(messages_added)),  # Dedupe
-                'messages_deleted': list(set(messages_deleted)),
-                'new_history_id': new_history_id
-            }
-
-        except Exception as e:
-            # Check if history ID expired (404 error)
-            if '404' in str(e) or 'historyId' in str(e).lower():
-                logger.warning(
-                    "History ID expired. This happens if no sync for >30 days. "
-                    "Falling back to date-based sync..."
-                )
-                # Fallback: use date-based sync for gap period
-                return self._fallback_date_sync(start_history_id)
-            else:
-                raise
-
-    def _fallback_date_sync(self, old_history_id: str) -> Dict[str, Any]:
-        """Fallback sync when history ID expired.
-
-        Uses date-based query to catch up.
-
-        Args:
-            old_history_id: Expired history ID
-
-        Returns:
-            Dict with changes
-        """
-        logger.info("Running fallback date-based sync...")
-
-        # Get last sync timestamp from sync state
-        if self._use_supabase:
-            sync_state = self.supabase.get_sync_state(self.owner_id)
-        else:
-            sync_state = self.backend.get_sync_state()
-
-        last_sync_str = sync_state.get('last_sync', '') if sync_state else ''
-
-        if last_sync_str:
-            try:
-                last_sync = datetime.fromisoformat(last_sync_str)
-                after_date = last_sync.strftime('%Y/%m/%d')
-
-                # Fetch messages since last sync
-                query = f"after:{after_date}"
-                logger.info(f"Fetching emails: {query}")
-
-                messages = self.gmail.search_messages(query=query, max_results=5000)
-
-                # Convert and store
-                archive_messages = [self._convert_message(msg) for msg in messages]
-                if archive_messages:
-                    if self._use_supabase:
-                        self.supabase.store_emails_batch(self.owner_id, archive_messages)
-                    else:
-                        self.backend.store_messages_batch(archive_messages)
-
-                # Get new history ID
-                profile = self.gmail.service.users().getProfile(userId='me').execute()
-                new_history_id = profile.get('historyId')
-
-                return {
-                    'messages_added': [msg['id'] for msg in archive_messages],
-                    'messages_deleted': [],
-                    'new_history_id': new_history_id
-                }
-
-            except Exception as e:
-                logger.error(f"Fallback sync failed: {e}")
-                raise
-
-        raise ValueError("Cannot perform fallback sync: no last_sync timestamp")
 
     def _extract_emails_from_header(self, header: str) -> str:
         """Extract email addresses from RFC 5322 format.
