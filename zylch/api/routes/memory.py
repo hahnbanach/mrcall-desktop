@@ -44,13 +44,13 @@ def get_search_engine() -> HybridSearchEngine:
     return _search_engine
 
 def get_llm_merge(user_id: str) -> Optional[LLMMergeService]:
-    """Get LLM merge service using user's Anthropic API key."""
+    """Get LLM merge service using user's active LLM provider."""
     global _llm_merge
     try:
-        storage = SupabaseStorage.get_instance()
-        api_key = storage.get_anthropic_key(user_id)
+        from zylch.api.token_storage import get_active_llm_provider
+        llm_provider, api_key = get_active_llm_provider(user_id)
         if api_key:
-            return LLMMergeService(api_key=api_key)
+            return LLMMergeService(api_key=api_key, provider=llm_provider)
     except Exception as e:
         logger.warning(f"Could not initialize LLM merge service: {e}")
     return None

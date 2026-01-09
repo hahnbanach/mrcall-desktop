@@ -488,9 +488,11 @@ Use `/agent process` to extract facts from synced data:
         search_engine = HybridSearchEngine(supabase, embedding_engine)
 
         # Initialize LLM merge service (for reconsolidation)
+        from zylch.api.token_storage import get_active_llm_provider
         llm_merge = None
-        if config.anthropic_api_key:
-            llm_merge = LLMMergeService(api_key=config.anthropic_api_key)
+        llm_provider, api_key = get_active_llm_provider(owner_id)
+        if api_key:
+            llm_merge = LLMMergeService(api_key=api_key, provider=llm_provider)
 
         namespace = f"user:{owner_id}"
 
