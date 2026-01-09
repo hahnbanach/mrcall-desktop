@@ -3016,7 +3016,7 @@ Then run this command again."""
             builder = EmailMemoryAgentTrainer(storage, owner_id, api_key, user_email, llm_provider)
             agent_prompt, metadata = await builder.build_memory_email_prompt()
             storage.store_agent_prompt(owner_id, 'memory_email', agent_prompt, metadata)
-            results.append(f"📧 **Email:** Agent created ({metadata.get('emails_analyzed', 0)} emails analyzed)")
+            results.append(f"📧 **Email:** Agent created ({metadata.get('threads_analyzed', 0)} threads analyzed)")
 
         elif ch == 'calendar':
             # Calendar memory training - placeholder for future implementation
@@ -3774,7 +3774,9 @@ async def _handle_agent_reset(storage, owner_id: str, domain: str, channel: str)
 
 Your `{domain} {channel}` agent has been deleted.
 
-Recreate with: `/agent {domain} train {channel}`"""
+Recreate with: `/agent {domain} train {channel}`
+
+💡 To reset the actual memory blobs, run `/memory reset`"""
     else:
         return f"❌ No agent found for `{domain} {channel}`"
 
