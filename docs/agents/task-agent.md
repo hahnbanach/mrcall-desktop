@@ -50,6 +50,10 @@ TASK_DECISION_TOOL = {
                 "type": "string",
                 "minLength": 20,
                 "description": "Why this needs attention - enough context for executive"
+            },
+            "target_task_id": {
+                "type": "string",
+                "description": "For update/close: the ID of the existing task to modify"
             }
         },
         "required": ["action_required", "task_action"]
@@ -89,19 +93,31 @@ def _is_user_email(self, email: str) -> bool:
 
 ### 3. Existing Task Context
 
-Before analyzing each email, the system fetches any existing open task for the same contact and passes it to the LLM:
+Before analyzing each email, the system fetches ALL existing open tasks for the same contact and passes them to the LLM with their IDs:
 
 ```python
-existing_task = self.storage.get_task_by_contact(self.owner_id, from_email)
-if existing_task:
+existing_tasks = self.storage.get_tasks_by_contact(self.owner_id, contact_email)
+if existing_tasks:
     existing_task_context = f"""
-EXISTING OPEN TASK FOR THIS CONTACT:
-- Action: {existing_task.get('suggested_action', 'N/A')}
-- Urgency: {existing_task.get('urgency', 'N/A')}
-- Reason: {existing_task.get('reason', 'N/A')}
-- Source emails: {len(existing_task.get('sources', {}).get('emails', []))}
+EXISTING OPEN TASKS FOR THIS CONTACT ({len(existing_tasks)} tasks):
+"""
+    for i, task in enumerate(existing_tasks, 1):
+        task_id = task.get('id', 'unknown')
+        existing_task_context += f"""
+Task #{i} (ID: {task_id}):
+- Action: {task.get('suggested_action', 'N/A')}
+- Urgency: {task.get('urgency', 'N/A')}
+- Reason: {task.get('reason', 'N/A')}
+- Source emails: {len(task.get('sources', {}).get('emails', []))}
+- Created: {task.get('created_at', '')[:10]}
+"""
 
-You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE it (no longer needed)? Or keep as-is (none)?
+    existing_task_context += """
+DECISION OPTIONS:
+- UPDATE: Add to existing task (specify target_task_id)
+- CLOSE: Mark resolved (specify target_task_id)
+- CREATE: New issue not covered by existing tasks
+- NONE: No action needed
 """
 ```
 
@@ -158,16 +174,22 @@ _analyze_recent_events()
 ```python
 if result:
     task_action = result.get('task_action', 'create')
+    target_task_id = result.get('target_task_id')
 
-    if task_action == 'close' and existing_task:
-        # Mark existing task as completed
-        self.storage.complete_task_item(self.owner_id, existing_task['id'])
+    # Find target task from existing_tasks list using ID from LLM
+    target_task = None
+    if target_task_id and existing_tasks:
+        target_task = next((t for t in existing_tasks if t.get('id') == target_task_id), None)
 
-    elif task_action == 'update' and existing_task:
-        # Update existing task with new info
+    if task_action == 'close' and target_task:
+        # Mark target task as completed
+        self.storage.complete_task_item(self.owner_id, target_task['id'])
+
+    elif task_action == 'update' and target_task:
+        # Update target task with new info
         self.storage.update_task_item(
             self.owner_id,
-            existing_task['id'],
+            target_task['id'],
             urgency=result.get('urgency'),
             suggested_action=result.get('suggested_action'),
             reason=result.get('reason'),
@@ -175,10 +197,7 @@ if result:
         )
 
     elif task_action == 'create' and result.get('action_required'):
-        # Create new task (close existing if any)
-        if existing_task:
-            self.storage.complete_task_item(self.owner_id, existing_task['id'])
-
+        # Create new task (LLM decides explicitly via close action, not auto-close)
         result['email_date'] = email.get('date', '')
         result['sources'] = {
             'emails': [email_id],
@@ -204,11 +223,12 @@ result['sources'] = {
 | Command | Purpose |
 |---------|---------|
 | `/agent task train [email\|calendar\|all]` | Generate personalized task detection agent (background job) |
-| `/agent task process [email\|calendar\|all]` | Detect tasks from data |
-| `/agent task show [email\|calendar]` | Display current task agent |
-| `/agent task reset [email\|calendar]` | Delete task agent |
+| `/agent task process [email\|calendar\|all]` | Detect tasks from data (background job) |
+| `/agent task show [email\|calendar]` | Display current task agent prompt |
+| `/agent task reset [email\|calendar]` | Delete task agent prompt (keeps task items) |
 | `/tasks` | Show tasks (cached) |
 | `/tasks refresh` | Re-analyze all events |
+| `/tasks reset` | Delete all task items + reset processing timestamps |
 
 ## Urgency Levels
 
@@ -234,7 +254,7 @@ Separate from memory processing:
 | `store_task_item()` | Create new task |
 | `update_task_item()` | Update existing task with new info/sources |
 | `complete_task_item()` | Mark task as completed |
-| `get_task_by_contact()` | Find existing open task for contact |
+| `get_tasks_by_contact()` | Get ALL open tasks for a contact (list) |
 
 ## Files
 

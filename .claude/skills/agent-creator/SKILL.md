@@ -49,18 +49,22 @@ All agents follow the standardized command pattern:
 
 ```
 /agent <domain> train [channel]      # Create personalized prompt
-/agent <domain> run "instructions"   # Execute agent
+/agent <domain> process [channel]    # Process data to extract results (background job)
+/agent <domain> run "instructions"   # Execute agent with user instructions
 /agent <domain> show [channel]       # View current prompt
-/agent <domain> reset [channel]      # Delete prompt
+/agent <domain> reset [channel]      # Delete prompt (keeps data items)
 ```
 
 **Current agents:**
 
-| Domain | Commands | Channel |
-|--------|----------|---------|
-| `memory` | train, run, show, reset | email, calendar, all |
-| `task` | train, run, show, reset | email, calendar, all |
-| `email` | train, run, show, reset | (none) |
+| Domain | Commands | Channel | Notes |
+|--------|----------|---------|-------|
+| `memory` | train, process, show, reset | email, calendar, all | Extract facts into blobs |
+| `task` | train, process, show, reset | email, calendar, all | Detect actionable items |
+| `email` | train, run, show, reset | (none) | Multi-tool email assistant |
+| `mrcall` | train, run, show, reset | (none) | MrCall configuration |
+
+**Note:** `process` is for batch processing of data (runs as background job). `run` is for interactive agent execution with user instructions.
 
 For command wiring details, see the `zylch-creating-commands` skill.
 
@@ -339,6 +343,61 @@ The user should NOT need to run multiple preparatory commands.
 - `/agent mrcall train` trains all features AND builds the unified agent
 - No separate `/mrcall train` command needed
 - The trainer internally calls feature trainers, then combines results
+
+## Background Jobs for Long Operations
+
+When training or processing takes >5 seconds (LLM calls, batch processing), use the **Background Job** pattern:
+
+```python
+async def _handle_myagent_train(storage, owner_id, channel, api_key, llm_provider, user_email):
+    from zylch.services.job_executor import JobExecutor
+
+    # Create background job (returns existing if already running)
+    job = storage.create_background_job(owner_id, "myagent_train", channel)
+
+    if job["status"] == "running":
+        return f"⏳ Already training... Progress: {job.get('progress_pct', 0)}%"
+
+    if job["status"] == "pending":
+        executor = JobExecutor(storage)
+        asyncio.create_task(executor.execute_job(job["id"], owner_id, api_key, llm_provider, user_email))
+        return "🚀 Training started in background. You'll be notified when complete."
+
+    return f"Previous job: {job['status']}. Run again to start new job."
+```
+
+**Key Files:**
+- `zylch/services/job_executor.py` - Add job type handler
+- Add to `execute_job()` dispatch: `elif job_type == "myagent_train": await self._execute_myagent_train(...)`
+
+For complete background job patterns, see `zylch-creating-commands` skill.
+
+## Single Source of Truth (Avoid Duplicate Implementations)
+
+When a worker class handles processing (like `TaskWorker`), the background job executor should call the worker's method - NOT reimplement the logic.
+
+**WRONG:**
+```python
+# job_executor.py - DON'T DO THIS
+def _analyze_item_sync(worker, event_type, item):
+    # Re-implements all the logic that exists in TaskWorker
+    contact_email = item.get("from_email")  # Duplicate
+    existing_task = storage.get_task_by_contact(...)  # Duplicate
+    result = ... # Duplicate
+```
+
+**CORRECT:**
+```python
+# job_executor.py - DO THIS
+result = worker.analyze_item_sync(event_type, item)  # Calls worker method
+```
+
+**Pattern:**
+1. Add `analyze_item_sync()` method to the worker class (e.g., `TaskWorker`)
+2. Delete duplicate implementation from `job_executor.py`
+3. Job executor calls worker method - single source of truth
+
+This ensures all fixes (hard symbolic checks, context injection, action handling) are in ONE place.
 
 ## Files to Create
 
