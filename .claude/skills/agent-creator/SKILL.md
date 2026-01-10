@@ -428,3 +428,90 @@ class MyAgentTrainer(BaseAgentTrainer):
 | Agent trainer | `class MyTrainer:` | `class MyTrainer(BaseAgentTrainer):` |
 | Init | Duplicate all fields | `super().__init__(...)` + only unique fields |
 | Methods | Rewrite `_get_trained_prompt`, etc. | Use inherited methods |
+
+## Thread-Based Email Fetching (Memory Agent Pattern)
+
+When training agents from email data, use thread-based fetching to avoid context window overflow:
+
+### Pattern
+
+```python
+class MyAgentTrainer(BaseAgentTrainer):
+    def __init__(self, ...):
+        super().__init__(...)
+        self.search_limit = 20  # Limit threads to control prompt size
+
+    def _get_recent_threads(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get recent threads, returning only the last email per thread.
+
+        The last email contains quoted conversation history, so we only
+        need that one to get full context.
+        """
+        # Fetch 3x limit to ensure enough threads
+        emails = self.storage.get_emails(self.owner_id, limit=limit * 3)
+
+        # Group by thread_id
+        threads: Dict[str, List[Dict]] = {}
+        for email in emails:
+            tid = email.get('thread_id', email.get('id', ''))
+            if tid:
+                threads.setdefault(tid, []).append(email)
+
+        # Sort threads by most recent
+        thread_list = []
+        for tid, thread_emails in threads.items():
+            thread_emails.sort(key=lambda e: e.get('date_timestamp', 0))
+            most_recent = max(e.get('date_timestamp', 0) for e in thread_emails)
+            thread_list.append({
+                'thread_id': tid,
+                'emails': thread_emails,
+                'most_recent': most_recent
+            })
+
+        thread_list.sort(key=lambda t: t['most_recent'], reverse=True)
+        return thread_list[:limit]
+
+    def _format_email_samples(self, threads: List[Dict]) -> str:
+        """Format threads - only last email per thread."""
+        samples = []
+        for i, thread in enumerate(threads, 1):
+            emails = thread.get('emails', [])
+            if not emails:
+                continue
+
+            subject = emails[0].get('subject', '(no subject)')
+            last_email = emails[-1]  # Last email has full thread context
+
+            samples.append(f"""
+--- Thread {i}: {subject} ({len(emails)} emails) ---
+From: {last_email.get('from_email', 'unknown')}
+Date: {last_email.get('date', 'unknown')}
+Body: {last_email.get('body_plain', '')}
+""")
+        return '\n'.join(samples)
+```
+
+### Why Thread-Based?
+
+1. **Avoids context overflow**: 100 emails = 200k+ tokens. 20 threads = manageable.
+2. **Last email has history**: The last email in a thread contains quoted replies.
+3. **Better signal**: One conversation = one training sample, not 10 duplicate samples.
+
+### Prompt Size Logging
+
+Always log prompt size before LLM call for debugging:
+
+```python
+logger.debug(f"Prompt size: {len(meta_prompt)} chars (~{len(meta_prompt)//4} tokens)")
+```
+
+### Metadata
+
+Use `threads_analyzed` (not `emails_analyzed`) in metadata:
+
+```python
+metadata = {
+    'generated_at': datetime.now(timezone.utc).isoformat(),
+    'threads_analyzed': len(threads)  # Not emails_analyzed
+}
+```

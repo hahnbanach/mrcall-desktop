@@ -6,6 +6,16 @@ Extracts facts from emails and stores them in entity-centric blobs with reconsol
 
 Process incoming data (emails, calendar events, Pipedrive deals) to extract relationship information about contacts, storing in blobs with automatic merging of existing knowledge.
 
+## Training: Thread-Based Email Fetching
+
+The memory agent trainer uses **thread-based fetching** to avoid context window overflow:
+
+- **20 threads** (not 100 individual emails)
+- **Last email per thread only** - contains quoted conversation history
+- Fetches 3x limit to ensure enough unique threads after grouping
+
+This pattern reduces prompt size from ~200k+ tokens to a manageable size while preserving full conversation context.
+
 ## Components
 
 ### MemoryWorker
@@ -201,6 +211,47 @@ Each data source has a `processed_at` timestamp:
 | `zylch/memory/llm_merge.py` | LLMMergeService for blob merging |
 | `zylch/memory/hybrid_search.py` | HybridSearchEngine for finding candidates |
 | `zylch/memory/blob_storage.py` | BlobStorage for persistence |
+
+## Entity Types
+
+The memory agent extracts three types of entities:
+
+### PERSON
+Information about a specific individual (contact, colleague, client).
+- **#IDENTIFIERS**: Name, email, phone
+- **#ABOUT**: Role, company, relationship context
+- **#HISTORY**: Timeline of interactions
+
+### COMPANY
+Information about an organization.
+- **#IDENTIFIERS**: Company name, domain
+- **#ABOUT**: Industry, services, relationship type
+- **#HISTORY**: Business interactions timeline
+
+### TEMPLATE
+A **reusable response pattern** - how the user typically responds to recurring categories of inquiries.
+- **#IDENTIFIERS**: Category name (e.g., "Unhandled Call Complaints Response")
+- **#ABOUT**: What triggers this response, the response content/tone/style
+- **#HISTORY**: Instances where this response pattern was used
+
+**TEMPLATE Purpose**: When a new inquiry of the same type comes in, the assistant can search memory, find the TEMPLATE, and draft a similar response.
+
+**Example TEMPLATE**:
+```
+#IDENTIFIERS
+Entity type: TEMPLATE
+Name: Unhandled Call Complaints Response
+
+#ABOUT
+Trigger: Customer asks why they received "unhandled call" notifications
+Response: Italian apology explaining temporary technical issue, reassuring no action needed
+Tone: Professional, reassuring
+Language: Italian
+
+#HISTORY
+- 2025-01-08: Sent to Fani Motors regarding unhandled call complaints
+- 2025-01-07: Sent to Studio Dotesio regarding same issue
+```
 
 ## Related
 

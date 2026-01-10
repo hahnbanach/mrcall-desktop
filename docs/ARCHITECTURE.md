@@ -799,9 +799,9 @@ The default memory extraction prompt uses generic rules for classifying emails (
 
 ### Solution: Learn from User's Email Patterns
 
-The `/agent memory train email` command analyzes the user's recent emails (up to 100) to understand their communication context:
+The `/agent memory train email` command analyzes the user's recent email threads (20 threads, last email per thread) to understand their communication context:
 
-1. **Recent emails** = Sample of communication patterns, contacts, topics
+1. **Recent threads** = Sample of communication patterns, contacts, topics (thread-based to avoid context overflow)
 2. **User's sent emails** = Role, business context, signature patterns
 3. **Frequent contacts** = People who appear multiple times
 
@@ -813,8 +813,8 @@ The LLM judges email importance based on **tone and content** (not reply history
 ### Architecture
 
 **Key Files**:
-- `zylch/services/email_memory_agent_trainer.py` - EmailMemoryAgentTrainer class that analyzes patterns
-- `zylch/services/email_task_agent_trainer.py` - EmailTaskAgentTrainer for task detection prompts
+- `zylch/agents/email_memory_agent_trainer.py` - EmailMemoryAgentTrainer class that analyzes patterns
+- `zylch/agents/email_task_agent_trainer.py` - EmailTaskAgentTrainer for task detection prompts
 - `zylch/agents/memory_agent.py` - Uses personalized agent for extraction
 - `zylch/agents/task_agent.py` - Uses personalized agent for task detection
 
@@ -825,7 +825,7 @@ The LLM judges email importance based on **tone and content** (not reply history
 /agent memory train email
     ↓
 EmailMemoryAgentTrainer analyzes:
-  - 100 recent emails (sample)
+  - 20 recent threads (last email per thread)
   - Sent emails (user profile)
   - Frequent contacts
     ↓
