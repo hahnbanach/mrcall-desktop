@@ -709,18 +709,18 @@ The Task Agent processes emails and calendar events to detect actionable tasks w
 1. **Fetch unprocessed items** using `task_processed_at IS NULL`
 2. **Group emails by thread** - only analyze latest per thread
 3. **Hard symbolic check** - `_is_user_email()` blocks user's own email (never trust LLM)
-4. **Fetch existing task** for same contact via `get_task_by_contact()`
-5. **Apply trained prompt** with existing task context
-6. **LLM returns `task_action`**: create, update, close, or none
+4. **Fetch ALL existing tasks** for same contact via `get_tasks_by_contact()` (list)
+5. **Apply trained prompt** with existing task context (all tasks with IDs)
+6. **LLM returns `task_action`** + `target_task_id`: create, update, close, or none
 7. **Handle action**:
-   - `close`: Mark existing task completed
-   - `update`: Update existing task with new info
-   - `create`: Create new task (close existing first if any)
+   - `close`: Mark target task completed (by ID)
+   - `update`: Update target task with new info (by ID)
+   - `create`: Create new task
    - `none`: Skip, no task needed
 8. **Mark as processed** via `task_processed_at` column
 
 **Key Files**:
-- `zylch/agents/task_agent.py` - TaskWorker class with `_is_user_email()` hard check
+- `zylch/agents/task_agent.py` - TaskWorker class with `_is_user_email()` hard check, `analyze_item_sync()` single source of truth
 - `zylch/agents/email_task_agent_trainer.py` - EmailTaskAgentTrainer for prompt generation
 
 **Training**: `/agent task train` runs as background job (5-30+ seconds), notifies on completion.
