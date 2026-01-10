@@ -2721,7 +2721,7 @@ async def handle_jobs(args: List[str], owner_id: str) -> str:
 
     help_text = """**📋 Background Jobs**
 
-**Usage:** `/jobs [<job_id>|cancel <job_id>|reset|resume|--all]`
+**Usage:** `/jobs [<job_id>|cancel <job_id>|stop <job_id>|reset|resume|--all]`
 
 Shows your running/pending background jobs.
 
@@ -2729,12 +2729,16 @@ Shows your running/pending background jobs.
 - `--all` - Show all jobs (including completed/failed)
 - `<job_id>` - Show details for specific job
 - `cancel <job_id>` - Cancel a pending job
+- `stop <job_id>` - Stop a running job (sets to pending)
+- `stop --all` - Stop all running jobs
 - `reset` - Reset stuck "running" jobs to pending
 - `resume` - Execute all pending jobs
 
 **Examples:**
 - `/jobs` - Show active jobs only
 - `/jobs --all` - List all recent jobs
+- `/jobs stop <id>` - Stop a running job
+- `/jobs cancel <id>` - Cancel a pending job
 - `/jobs reset` - Unstick jobs after restart
 - `/jobs resume` - Re-run pending jobs"""
 
@@ -2759,6 +2763,22 @@ Shows your running/pending background jobs.
             if success:
                 return f"✅ **Job cancelled:** `{job_id}`"
             return "❌ **Cannot cancel:** Job not found or not pending"
+
+        # Subcommand: stop (stop running job → pending)
+        if subcommand == 'stop':
+            arg = positional[1] if len(positional) > 1 else None
+            if arg == '--all' or '--all' in args:
+                count = storage.stop_all_running_jobs(owner_id)
+                if count > 0:
+                    return f"✅ **Stopped {count} running job(s)** (now pending)\n\nUse `/jobs cancel <id>` to remove."
+                return "📭 No running jobs to stop."
+            elif arg:
+                success = storage.stop_background_job(arg, owner_id)
+                if success:
+                    return f"✅ **Job stopped:** `{arg}` (now pending)\n\nUse `/jobs cancel {arg}` to remove."
+                return "❌ **Cannot stop:** Job not found or not running"
+            else:
+                return "❌ Missing job ID. Usage: `/jobs stop <id>` or `/jobs stop --all`"
 
         # Subcommand: reset (force reset running jobs to pending)
         if subcommand == 'reset':

@@ -22,6 +22,24 @@ _executor = ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="bg_j
 logger.info(f"Background job executor initialized with {MAX_WORKERS} workers")
 
 
+def _should_stop_job(storage: 'SupabaseStorage', job_id: str) -> bool:
+    """Check if job was stopped (status changed from running).
+
+    Call this periodically in worker loops to detect user-initiated stop.
+
+    Args:
+        storage: SupabaseStorage instance
+        job_id: Background job UUID
+
+    Returns:
+        True if job should stop (status != running or job not found)
+    """
+    job = storage.get_background_job(job_id)
+    if job is None:
+        return True
+    return job.get('status') != 'running'
+
+
 class JobExecutor:
     """Executes background jobs in thread pool."""
 
@@ -172,11 +190,21 @@ class JobExecutor:
                             f"Processing {ch}: {i + 1}/{total}"
                         )
 
+                        # Check if user stopped the job
+                        if _should_stop_job(storage, job_id):
+                            logger.info(f"Job {job_id} was stopped by user, exiting")
+                            return {"processed": processed, "channels": channels, "stopped": True}
+
             return {"processed": processed, "channels": channels}
 
         # Execute in thread pool
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(_executor, _sync_process)
+
+        # Don't complete if job was stopped (user will cancel it)
+        if result.get("stopped"):
+            logger.info(f"Job {job_id} stopped after processing {result['processed']} items")
+            return
 
         # Complete job
         self.storage.complete_background_job(job_id, result)
@@ -266,6 +294,16 @@ class JobExecutor:
                             f"Detecting tasks from {ch}: {i + 1}/{total}"
                         )
 
+                        # Check if user stopped the job
+                        if _should_stop_job(storage, job_id):
+                            logger.info(f"Job {job_id} was stopped by user, exiting")
+                            return {
+                                "processed": processed,
+                                "actions_found": action_count,
+                                "channels": channels,
+                                "stopped": True
+                            }
+
             return {
                 "processed": processed,
                 "actions_found": action_count,
@@ -274,6 +312,11 @@ class JobExecutor:
 
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(_executor, _sync_process)
+
+        # Don't complete if job was stopped (user will cancel it)
+        if result.get("stopped"):
+            logger.info(f"Job {job_id} stopped after processing {result['processed']} items")
+            return
 
         self.storage.complete_background_job(job_id, result)
         self.storage.create_notification(
@@ -307,6 +350,11 @@ class JobExecutor:
 
         def _sync_train() -> Dict[str, Any]:
             """Sync training code that runs in thread pool."""
+            # Check if already stopped before starting
+            if _should_stop_job(storage, job_id):
+                logger.info(f"Job {job_id} was stopped before starting")
+                return {"results": [], "threads_analyzed": 0, "channel": channel, "stopped": True}
+
             channels_to_train = [channel] if channel != 'all' else ['email', 'calendar']
             results = []
             total_threads = 0
@@ -358,6 +406,11 @@ class JobExecutor:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(_executor, _sync_train)
 
+        # Don't complete if job was stopped
+        if result.get("stopped"):
+            logger.info(f"Job {job_id} stopped before completion")
+            return
+
         self.storage.complete_background_job(job_id, result)
 
         # Create notification for user
@@ -394,6 +447,11 @@ class JobExecutor:
 
         def _sync_process() -> Dict[str, Any]:
             """Sync code that runs in thread pool."""
+            # Check if already stopped before starting
+            if _should_stop_job(storage, job_id):
+                logger.info(f"Job {job_id} was stopped before starting")
+                return {"stopped": True}
+
             from zylch.api.token_storage import get_provider, get_email, get_graph_token
             from zylch.tools.gmail import GmailClient
             from zylch.tools.outlook import OutlookClient
@@ -464,6 +522,11 @@ class JobExecutor:
 
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(_executor, _sync_process)
+
+        # Don't complete if job was stopped
+        if result.get("stopped"):
+            logger.info(f"Job {job_id} stopped before completion")
+            return
 
         self.storage.complete_background_job(job_id, result)
 

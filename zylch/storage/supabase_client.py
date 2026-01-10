@@ -3481,6 +3481,54 @@ class SupabaseStorage:
             return True
         return False
 
+    def stop_background_job(self, job_id: str, owner_id: str) -> bool:
+        """Stop a running job by setting status back to pending.
+
+        Args:
+            job_id: Job UUID
+            owner_id: Firebase UID (for ownership validation)
+
+        Returns:
+            True if stopped successfully
+        """
+        result = self.client.table('background_jobs')\
+            .update({
+                'status': 'pending',
+                'started_at': None
+            })\
+            .eq('id', job_id)\
+            .eq('owner_id', owner_id)\
+            .eq('status', 'running')\
+            .execute()
+
+        if result.data:
+            logger.info(f"Stopped background job {job_id} (now pending)")
+            return True
+        return False
+
+    def stop_all_running_jobs(self, owner_id: str) -> int:
+        """Stop all running jobs for user. Returns count stopped.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            Number of jobs stopped
+        """
+        result = self.client.table('background_jobs')\
+            .update({
+                'status': 'pending',
+                'started_at': None
+            })\
+            .eq('owner_id', owner_id)\
+            .eq('status', 'running')\
+            .execute()
+
+        count = len(result.data) if result.data else 0
+        if count > 0:
+            logger.info(f"Stopped {count} running jobs for {owner_id}")
+        return count
+
     def reset_stale_background_jobs(self, timeout_hours: int = 2) -> int:
         """Reset jobs stuck in 'running' for too long → pending.
 
