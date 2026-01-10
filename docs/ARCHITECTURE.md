@@ -54,7 +54,10 @@ Run locally with `uvicorn zylch.api.main:app --reload --port 8000` - connects to
 - **Key Files**:
   - `memory_agent.py`: Extracts facts from emails/calendar into memory blobs
   - `task_agent.py`: Task detection and processing agent
-  - `mrcall_configurator_trainer.py`: Generates feature-specific sub-prompts for MrCall assistant configuration (see [docs/agents/mrcall-configurator.md](agents/mrcall-configurator.md))
+  - `mrcall_configurator_trainer.py`: Layer 1 - Generates feature-specific sub-prompts for MrCall configuration
+  - `mrcall_agent_trainer.py`: Layer 2 - Combines sub-prompts into unified agent with tool selection
+  - `mrcall_agent.py`: Runs unified MrCall agent with 4 tools (configure_*, get_current_config, respond_text)
+  - See [docs/agents/mrcall-configurator.md](agents/mrcall-configurator.md) for full architecture
 
 ### 2. Tools (`zylch/tools/`)
 Modular tools for agent capabilities:
@@ -578,6 +581,12 @@ Supported providers for reset: google, microsoft, mrcall, anthropic, openai, mis
 - `MRCALL_CLIENT_SECRET`: OAuth client secret (encrypted)
 - `MRCALL_REALM`: MrCall realm (default: mrcall0)
 - `MRCALL_BASE_URL`: StarChat API base URL (test: https://test-env-0.scw.hbsrv.net/)
+
+**OAuth Scopes Requested**:
+```
+business:read business:write contacts:read contacts:write sessions:read sessions:write templates:read
+```
+- `business:write` is required for updating assistant variables via `/agent mrcall run`
 
 **Security Features**:
 - PKCE prevents authorization code interception
