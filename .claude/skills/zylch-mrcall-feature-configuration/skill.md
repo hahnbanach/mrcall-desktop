@@ -7,6 +7,26 @@ description: Guide for adding new MrCall feature configurations. Use when adding
 
 ## Architecture Overview
 
+### Two-Tier Training Architecture
+
+```
+MrCallConfiguratorTrainer (Layer 1)
+    │
+    │ Generates feature sub-prompts from current MrCall config
+    │ Each feature = one sub-prompt (welcome_message, booking, etc.)
+    ↓
+MrCallAgentTrainer (Layer 2)
+    │
+    │ Combines ALL sub-prompts into unified agent
+    │ Adds tool selection guidance (meta-prompt)
+    ↓
+MrCallAgent
+    │
+    │ Runs with 4 tools, auto-selects based on user intent
+    ↓
+StarChat API (updates variables)
+```
+
 ### Single Command Training
 
 ```
@@ -30,12 +50,38 @@ MrCallConfiguratorTrainer.FEATURES  (SINGLE SOURCE OF TRUTH)
          └──> MrCallAgent: Multi-tool runner (auto-detects feature)
 ```
 
-### Tools Available
+## Tools Available
 
-- `configure_welcome_message` - Modify greeting settings
-- `configure_booking` - Modify appointment booking settings
-- `get_current_config` - Show current configuration
-- `respond_text` - Answer questions about settings
+The unified agent has 4 tools:
+
+| Tool | When to Use |
+|------|-------------|
+| `configure_welcome_message` | User wants to CHANGE, UPDATE, MODIFY greeting |
+| `configure_booking` | User wants to CHANGE, UPDATE, MODIFY booking |
+| `get_current_config` | User asks to SEE, VIEW, DISPLAY raw settings |
+| `respond_text` | User asks YES/NO or interpretive questions |
+
+### Tool Selection Rules
+
+**Important:** The tool choice depends on user INTENT, not just keywords:
+
+- "change the greeting" → `configure_welcome_message`
+- "what are my current settings?" → `get_current_config` (shows raw values)
+- "is booking enabled?" → `respond_text` (interprets and answers)
+- "does the assistant answer formally?" → `respond_text` (interprets)
+- "how does it greet callers?" → `respond_text` (explains behavior)
+
+**Rule:** Questions like "is X enabled?" or "does it do Y?" should use `respond_text` (interprets settings), NOT `get_current_config` (shows raw values).
+
+## OAuth Requirements
+
+MrCall OAuth must include these scopes for full functionality:
+
+```
+business:read business:write contacts:read contacts:write sessions:read sessions:write templates:read
+```
+
+Without `business:write`, variable updates will fail with 400/403 errors.
 
 ## Checklist
 
@@ -47,14 +93,17 @@ When adding a new feature (e.g., "booking"):
    - Which MrCall variable(s) it controls
 2. [ ] Define meta-prompt constant in `mrcall_configurator_trainer.py`
 3. [ ] Add to `FEATURES` dict in `MrCallConfiguratorTrainer` class
-4. [ ] Update help text in `command_handlers.py` (features list description)
-5. [ ] **VERIFY**: Run Python import test to ensure no circular imports
+4. [ ] Add tool to `MRCALL_AGENT_TOOLS` in `mrcall_agent.py`
+5. [ ] Add tool handler in `MrCallAgent._handle_tool_response()`
+6. [ ] Update help text in `command_handlers.py` (features list description)
+7. [ ] **VERIFY**: Run Python import test to ensure no circular imports
 
 ## Files to Modify
 
 | File | What to Add |
 |------|-------------|
 | `zylch/agents/mrcall_configurator_trainer.py` | Meta-prompt + FEATURES entry **(ONLY place to define variables)** |
+| `zylch/agents/mrcall_agent.py` | Tool definition + handler |
 | `zylch/services/command_handlers.py` | Help text update only (mappings are auto-derived) |
 
 **DO NOT manually edit** `FEATURE_TO_VARIABLES` in command_handlers.py or `VARIABLE_TO_FEATURE` in config_tools.py - these are derived automatically via import.
@@ -62,8 +111,11 @@ When adding a new feature (e.g., "booking"):
 ## Storage Pattern
 
 Sub-prompts stored in `agent_prompts` table:
-- `agent_type`: `mrcall_{business_id}_{feature_name}`
-- Example: `mrcall_abc123_booking`
+
+| Key Pattern | Content |
+|-------------|---------|
+| `mrcall_{business_id}_{feature}` | Feature sub-prompt (e.g., `mrcall_abc123_booking`) |
+| `mrcall_{business_id}` | Unified agent prompt combining all features |
 
 ## Finding MrCall Variables
 
