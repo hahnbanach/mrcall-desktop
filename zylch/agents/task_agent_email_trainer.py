@@ -80,11 +80,20 @@ The generated prompt will receive these template variables:
 - {{event_data}} - The event to analyze (JSON with from_email, subject, body, date, etc.)
 - {{blob_context}} - Memory blob for this contact (if exists), or "(no prior context)"
 - {{user_email}} - User's email address (to identify their own messages)
+- {{calendar_context}} - Upcoming and recent meetings with this contact (if any)
 
 **CRITICAL RULES FOR THE GENERATED PROMPT:**
 1. NEVER suggest action for emails FROM {{user_email}} - these are the user's own sent messages
 2. NEVER list {{user_email}} as a contact to follow up with - the user doesn't follow up with themselves
 3. When {{event_data}} shows from_email matches {{user_email}}, output NO_ACTION
+
+**CALENDAR CONTEXT RULES:**
+When {{calendar_context}} is provided, consider:
+1. **Upcoming meeting exists** → Don't create "schedule call" or "set up meeting" tasks - a meeting is already planned
+2. **Recent meeting happened (past 7 days)** → Consider if follow-up is needed based on meeting type:
+   - "Proposal Review", "Sales Demo" → likely needs follow-up
+   - "Quick sync", "1:1", "Team standup" → likely no follow-up needed
+3. **Email + Meeting combination** → If someone emails "let's discuss" but you already have a meeting with them, output NO_ACTION for scheduling
 
 **EXECUTIVE ASSISTANT MINDSET:**
 The agent acts as a real human assistant to an executive:

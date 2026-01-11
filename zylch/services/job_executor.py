@@ -94,8 +94,12 @@ class JobExecutor:
                     job_id, owner_id, channel, api_key, llm_provider, user_email
                 )
             elif job_type == "sync":
+                job_params = job.get("params", {})
+                days_back_raw = job_params.get("days_back", 30)
+                days_back = int(days_back_raw) if days_back_raw is not None else 30
                 await self._execute_sync(
-                    job_id, owner_id, channel, api_key, llm_provider
+                    job_id, owner_id, channel, api_key, llm_provider,
+                    days_back=days_back
                 )
             elif job_type == "task_train":
                 await self._execute_task_train(
@@ -272,14 +276,26 @@ class JobExecutor:
                     logger.info(f"No unprocessed {ch} items for task detection")
                     continue
 
+                # Pre-compute calendar context cache for all unique contacts (N+1 fix)
+                calendar_cache: Dict[str, str] = {}
+                if ch == "email":
+                    contact_emails = list(set(
+                        item.get('from_email', '').lower()
+                        for item in items
+                        if item.get('from_email')
+                    ))
+                    logger.info(f"Pre-computing calendar context for {len(contact_emails)} unique contacts")
+                    for email in contact_emails:
+                        calendar_cache[email] = worker._get_calendar_context(email)
+
                 storage.update_background_job_progress(
                     job_id, 0, 0, total, f"Detecting tasks from {ch}: 0/{total}"
                 )
 
                 for i, item in enumerate(items):
                     try:
-                        # Use TaskWorker's single implementation (with all fixes)
-                        result = worker.analyze_item_sync(ch, item)
+                        # Use TaskWorker's single implementation with cached calendar context
+                        result = worker.analyze_item_sync(ch, item, calendar_cache=calendar_cache)
                         processed += 1
                         if result:
                             action_count += 1
@@ -321,7 +337,7 @@ class JobExecutor:
         self.storage.complete_background_job(job_id, result)
         self.storage.create_notification(
             owner_id,
-            f"Task detection complete: {result['actions_found']} tasks found from {result['processed']} items",
+            f"Task detection complete: {result['actions_found']} tasks found from {result['processed']} items (with calendar context)",
             "info"
         )
 
@@ -388,14 +404,15 @@ class JobExecutor:
                     storage.store_agent_prompt(owner_id, 'task_email', agent_prompt, metadata)
                     threads = metadata.get('threads_analyzed', 0)
                     total_threads += threads
-                    results.append(f"📧 Email: Agent created ({threads} threads analyzed)")
+                    results.append(f"📧 Agent created ({threads} threads analyzed, calendar-aware)")
 
                     storage.update_background_job_progress(
                         job_id, 90, 1, 1, "Saving agent prompt..."
                     )
 
                 elif ch == 'calendar':
-                    results.append("📅 Calendar: Not yet implemented")
+                    # Calendar uses the email-trained agent (with calendar context injection)
+                    results.append("📅 Calendar: Using email agent (calendar context auto-injected)")
 
             return {
                 "results": results,
@@ -430,7 +447,8 @@ class JobExecutor:
         owner_id: str,
         channel: str,
         api_key: str,
-        llm_provider: str
+        llm_provider: str,
+        days_back: int = 30
     ) -> None:
         """Execute email/calendar sync in thread pool.
 
@@ -442,6 +460,7 @@ class JobExecutor:
             channel: 'email', 'calendar', or 'all'
             api_key: User's LLM API key (BYOK) - required for calendar sync
             llm_provider: LLM provider name (anthropic, openai, mistral)
+            days_back: Number of days to sync (default: 30)
         """
         storage = self.storage
 
@@ -514,7 +533,7 @@ class JobExecutor:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                results = loop.run_until_complete(sync_service.run_full_sync())
+                results = loop.run_until_complete(sync_service.run_full_sync(days_back=days_back))
             finally:
                 loop.close()
 

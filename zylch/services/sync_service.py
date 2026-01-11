@@ -149,8 +149,12 @@ class SyncService:
             "first_sync_date": archive_result.get('first_sync_date')
         }
 
-    def sync_calendar(self) -> Dict[str, Any]:
+    def sync_calendar(self, days_back: int = 30) -> Dict[str, Any]:
         """Sync calendar events from Google Calendar.
+
+        Args:
+            days_back: Number of days in the past to sync (default: 30)
+            Note: Future events always sync 14 days ahead regardless of days_back
 
         Returns:
             Sync results with stats
@@ -184,6 +188,8 @@ class SyncService:
             calendar_client=calendar,
             api_key=self.anthropic_api_key,
             provider=self.llm_provider,
+            days_back=days_back,
+            days_forward=14,  # Always sync 2 weeks into future
             my_emails=my_emails_list,
             owner_id=self.owner_id,
             supabase_storage=self.supabase
@@ -454,9 +460,9 @@ class SyncService:
             results["errors"].append(f"Email sync: {str(e)}")
             results["success"] = False
 
-        # Sync calendar
+        # Sync calendar (always syncs 14 days forward, uses days_back for past)
         try:
-            calendar_result = self.sync_calendar()
+            calendar_result = self.sync_calendar(days_back=days_back if days_back is not None else 30)
             results["calendar_sync"] = {
                 "success": True,
                 **calendar_result

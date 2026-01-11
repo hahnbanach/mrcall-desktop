@@ -602,6 +602,90 @@ class SupabaseStorage:
 
         return result.data or []
 
+    def get_calendar_events_by_attendee(
+        self,
+        owner_id: str,
+        attendee_email: str,
+        days_back: int = 7,
+        days_forward: int = 14
+    ) -> List[Dict[str, Any]]:
+        """Get calendar events where a specific email is an attendee.
+
+        Used by task agent to inject calendar context when analyzing emails.
+        Returns both past and upcoming meetings with the contact.
+
+        Uses PostgreSQL RPC function for server-side filtering (much faster than
+        fetching all events and filtering in Python).
+
+        Args:
+            owner_id: Firebase UID
+            attendee_email: Email address to search for in attendees
+            days_back: Days in the past to include (default: 7)
+            days_forward: Days in the future to include (default: 14)
+
+        Returns:
+            List of calendar events, sorted by start_time
+        """
+        now = datetime.now(timezone.utc)
+        start_time = now - timedelta(days=days_back)
+        end_time = now + timedelta(days=days_forward)
+
+        try:
+            # Use RPC function for server-side filtering (022_calendar_attendee_search.sql)
+            result = self.client.rpc('get_events_by_attendee', {
+                'p_owner_id': owner_id,
+                'p_attendee_email': attendee_email.lower(),
+                'p_start_time': start_time.isoformat(),
+                'p_end_time': end_time.isoformat()
+            }).execute()
+
+            return result.data or []
+        except Exception as e:
+            # Fallback to Python-side filtering if RPC not available
+            # (e.g., migration not yet run)
+            logger.warning(f"RPC get_events_by_attendee failed, falling back to Python filter: {e}")
+            return self._get_calendar_events_by_attendee_fallback(
+                owner_id, attendee_email, start_time, end_time
+            )
+
+    def _get_calendar_events_by_attendee_fallback(
+        self,
+        owner_id: str,
+        attendee_email: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> List[Dict[str, Any]]:
+        """Fallback method using Python-side filtering.
+
+        Used when RPC function is not available (migration not yet run).
+        """
+        query = self.client.table('calendar_events')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .gte('start_time', start_time.isoformat())\
+            .lte('start_time', end_time.isoformat())\
+            .order('start_time', desc=False)
+
+        result = query.execute()
+        events = result.data or []
+
+        # Filter by attendee email (case-insensitive)
+        attendee_lower = attendee_email.lower()
+        matching_events = []
+        for event in events:
+            attendees = event.get('attendees') or []
+            for att in attendees:
+                if isinstance(att, str):
+                    if att.lower() == attendee_lower:
+                        matching_events.append(event)
+                        break
+                elif isinstance(att, dict):
+                    if att.get('email', '').lower() == attendee_lower:
+                        matching_events.append(event)
+                        break
+
+        return matching_events
+
     def store_calendar_events_batch(
         self,
         owner_id: str,
@@ -3274,7 +3358,8 @@ class SupabaseStorage:
         self,
         owner_id: str,
         job_type: str,
-        channel: str | None = None
+        channel: str | None = None,
+        params: Dict[str, Any] | None = None
     ) -> Dict[str, Any]:
         """Create a new background job. Returns existing job if duplicate (pending/running).
 
@@ -3282,6 +3367,7 @@ class SupabaseStorage:
             owner_id: Firebase UID
             job_type: 'memory_process', 'task_process', 'sync'
             channel: 'email', 'calendar', 'all', or None
+            params: Optional job parameters (e.g., {'days_back': 7} for sync)
 
         Returns:
             Created or existing job record
@@ -3312,6 +3398,7 @@ class SupabaseStorage:
             'status': 'pending',
             'progress_pct': 0,
             'items_processed': 0,
+            'params': params or {},
             'created_at': datetime.now(timezone.utc).isoformat()
         }
 

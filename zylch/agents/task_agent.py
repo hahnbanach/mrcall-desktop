@@ -358,7 +358,8 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
         event_type: str,
         event_data: Dict[str, Any],
         blob_context: str,
-        existing_task_context: str = ""
+        existing_task_context: str = "",
+        calendar_context: str = ""
     ) -> Optional[Dict[str, Any]]:
         """Analyze a single event using the trained prompt.
 
@@ -367,6 +368,7 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
             event_data: Event data dict
             blob_context: Memory blob content for this contact
             existing_task_context: Info about existing open task for this contact (if any)
+            calendar_context: Upcoming/recent meetings with this contact
 
         Returns:
             Dict with action details if action needed, None otherwise
@@ -399,11 +401,19 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
                 "{{existing_task}}", existing_task_context
             ).replace(
                 "{existing_task}", existing_task_context
+            ).replace(
+                "{{calendar_context}}", calendar_context
+            ).replace(
+                "{calendar_context}", calendar_context
             )
 
             # Append existing task context if provided (in case trained prompt doesn't have placeholder)
             if existing_task_context and "{{existing_task}}" not in prompt and "{existing_task}" not in prompt:
                 formatted_prompt += f"\n\n{existing_task_context}"
+
+            # Append calendar context if provided (in case trained prompt doesn't have placeholder)
+            if calendar_context and "{{calendar_context}}" not in prompt and "{calendar_context}" not in prompt:
+                formatted_prompt += f"\n\n{calendar_context}"
 
         except Exception as e:
             logger.error(f"Failed to format prompt: {e}")
@@ -480,7 +490,88 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
 
         return "(no prior context)", None
 
-    def analyze_item_sync(self, event_type: str, item: Dict) -> Optional[Dict]:
+    def _get_calendar_context(self, contact_email: str) -> str:
+        """Get calendar context for a contact (upcoming and recent meetings).
+
+        Used to provide meeting awareness when analyzing emails.
+        If there's an upcoming meeting, task agent should consider not creating
+        "schedule call" type tasks. If there was a recent meeting, it may suggest
+        follow-up.
+
+        Args:
+            contact_email: Email address of the contact
+
+        Returns:
+            Formatted calendar context string, or empty string if no events
+        """
+        if not contact_email:
+            return ""
+
+        try:
+            events = self.storage.get_calendar_events_by_attendee(
+                self.owner_id,
+                contact_email,
+                days_back=7,
+                days_forward=14
+            )
+
+            if not events:
+                return ""
+
+            now = datetime.now(timezone.utc)
+            past_events = []
+            upcoming_events = []
+
+            for event in events:
+                start_str = event.get('start_time', '')
+                if start_str:
+                    try:
+                        # Parse ISO format
+                        if isinstance(start_str, str):
+                            start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                        else:
+                            start_dt = start_str
+                        if start_dt < now:
+                            past_events.append(event)
+                        else:
+                            upcoming_events.append(event)
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Failed to parse event start_time '{start_str}': {e}")
+                        continue
+
+            if not past_events and not upcoming_events:
+                return ""
+
+            lines = ["CALENDAR CONTEXT WITH THIS CONTACT:"]
+
+            if upcoming_events:
+                lines.append(f"\n📅 UPCOMING MEETINGS ({len(upcoming_events)}):")
+                lines.append("(If there's already a meeting scheduled, you may not need to create a 'schedule call' task)")
+                for event in upcoming_events[:3]:  # Limit to 3
+                    summary = event.get('summary', 'No title')
+                    start = event.get('start_time', '')[:16] if event.get('start_time') else 'TBD'
+                    lines.append(f"  - {summary} ({start})")
+
+            if past_events:
+                lines.append(f"\n📋 RECENT MEETINGS ({len(past_events)}):")
+                lines.append("(If a meeting just happened, consider whether follow-up is needed based on meeting type)")
+                for event in past_events[:3]:  # Limit to 3
+                    summary = event.get('summary', 'No title')
+                    start = event.get('start_time', '')[:16] if event.get('start_time') else 'unknown'
+                    lines.append(f"  - {summary} ({start})")
+
+            return "\n".join(lines)
+
+        except Exception as e:
+            logger.warning(f"Failed to get calendar context for {contact_email}: {e}")
+            return ""
+
+    def analyze_item_sync(
+        self,
+        event_type: str,
+        item: Dict,
+        calendar_cache: Optional[Dict[str, str]] = None
+    ) -> Optional[Dict]:
         """Sync version of item analysis for background job execution.
 
         This is the SINGLE implementation - called by job_executor.py.
@@ -489,6 +580,8 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
         Args:
             event_type: 'email' or 'calendar'
             item: Item dict from storage
+            calendar_cache: Pre-computed calendar context per contact email (N+1 optimization).
+                           If provided, uses cached value instead of fetching per-item.
 
         Returns:
             Task result dict if action required, None otherwise
@@ -546,6 +639,15 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
         # Get blob context
         blob_context, blob_id = self._get_blob_for_contact(contact_email) if contact_email else ("(no prior context)", None)
 
+        # Get calendar context (meetings with this contact)
+        # Use cache if provided (N+1 optimization), otherwise fetch directly
+        calendar_context = ""
+        if contact_email and event_type == "email":
+            if calendar_cache is not None and contact_email in calendar_cache:
+                calendar_context = calendar_cache[contact_email]
+            else:
+                calendar_context = self._get_calendar_context(contact_email)
+
         # Build event data
         if event_type == "email":
             event_data = {
@@ -573,7 +675,7 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
         asyncio.set_event_loop(loop)
         try:
             result = loop.run_until_complete(
-                self._analyze_event(event_type, event_data, blob_context, existing_task_context)
+                self._analyze_event(event_type, event_data, blob_context, existing_task_context, calendar_context)
             )
         finally:
             loop.close()
