@@ -5,6 +5,30 @@ description: Guide for creating new Zylch slash commands (/sync, /agent, etc.) w
 
 # Creating Zylch Commands
 
+## 🚨 CRITICAL: Handler Signature
+
+**ALL command handlers MUST use this exact signature:**
+
+```python
+async def handle_commandname(args: List[str], config, owner_id: str) -> str:
+```
+
+**Parameters (in order):**
+1. `args: List[str]` - Arguments after command name
+2. `config` - ToolConfig (rarely used, but required)
+3. `owner_id: str` - Firebase UID
+
+**Returns:** Markdown string shown to user
+
+❌ **WRONG signatures that will cause runtime errors:**
+```python
+async def handle_cmd(args):                    # Missing config, owner_id
+async def handle_cmd(args: List[str]):         # Missing config, owner_id
+async def handle_cmd(args: List[str] = None):  # Missing config, owner_id
+```
+
+---
+
 ## Decision Tree
 
 ```
