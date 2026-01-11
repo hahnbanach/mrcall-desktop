@@ -3964,87 +3964,254 @@ This action **cannot be undone**."""
     return "\n".join(lines)
 
 
-async def handle_tutorial(args: List[str], owner_id: str) -> str:
-    """Handle /tutorial - Getting started guide."""
+# ─────────────────────────────────────────────────────────────────────────────
+# Tutorial Command
+# ─────────────────────────────────────────────────────────────────────────────
 
-    return """# 🚀 Getting Started with Zylch
 
-## Setup Flow
+async def handle_tutorial(args: List[str] = None) -> str:
+    """Handle /tutorial command with topic-specific tutorials."""
+
+    if not args:
+        return """**Tutorials**
+
+Available tutorials:
+- `/tutorial mrcall` - MrCall phone assistant setup
+- `/tutorial --dev mrcall` - Developer guide for adding MrCall features
+
+Usage: `/tutorial <topic>` or `/tutorial --dev <topic>`"""
+
+    # Check for --dev flag
+    dev_mode = '--dev' in args
+    args = [a for a in args if a != '--dev']
+
+    topic = args[0].lower() if args else None
+
+    if topic == 'mrcall':
+        if dev_mode:
+            return _tutorial_mrcall_dev()
+        return _tutorial_mrcall_user()
+
+    return f"Unknown tutorial topic: `{topic}`\n\nRun `/tutorial` to see available topics."
+
+
+def _tutorial_mrcall_user() -> str:
+    """Tutorial for new MrCall users."""
+    return """**MrCall Tutorial - User Guide**
+
+MrCall lets you configure your AI phone assistant through natural language.
+
+---
+
+## Step 1: Connect
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    ZYLCH SETUP                              │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1️⃣  CONNECT LLM (Required)                                │
-│      /connect anthropic YOUR_API_KEY                        │
-│      OR /connect openai YOUR_API_KEY                        │
-│                                                             │
-│  2️⃣  CONNECT EMAIL & CALENDAR                              │
-│      /connect google                                        │
-│      (Opens browser for OAuth)                              │
-│                                                             │
-│  3️⃣  SYNC YOUR DATA                                        │
-│      /sync --days 30                                        │
-│      (Fetches emails + calendar, calendar +14 days future)  │
-│                                                             │
-│  4️⃣  TRAIN YOUR AGENTS                                     │
-│      /agent memory train email    (learns your style)       │
-│      /agent task train email      (learns your priorities)  │
-│                                                             │
-│  5️⃣  PROCESS YOUR DATA                                     │
-│      /agent memory process email  (extracts facts)          │
-│      /agent task process email    (detects tasks)           │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+/connect mrcall
 ```
+Opens OAuth login to StarChat. Grant `business:write` permission.
 
-## Daily Workflow
+---
+
+## Step 2: List Your Assistants
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    DAILY ROUTINE                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Morning:                                                   │
-│    /sync                    → Get new emails & events       │
-│    /agent memory process    → Update contact memory         │
-│    /agent task process      → Detect new tasks              │
-│                                                             │
-│  Check:                                                     │
-│    /tasks                   → See what needs attention      │
-│    /calendar                → Today's meetings              │
-│    /memory search <name>    → Recall contact info           │
-│                                                             │
-│  Work:                                                      │
-│    "Draft reply to John"    → AI drafts email               │
-│    "Who is Maria?"          → Search memory                 │
-│    "Summarize today"        → AI summary                    │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+/mrcall list
+```
+Shows all MrCall assistants linked to your account.
+
+---
+
+## Step 3: Link an Assistant
+
+```
+/mrcall link 1
+```
+Links to assistant #1 from the list.
+
+---
+
+## Step 4: Train the Agent
+
+```
+/agent mrcall train
+```
+Trains the AI agent on your current configuration.
+The agent learns your settings and can help you modify them.
+
+---
+
+## Step 5: Use the Agent
+
+Ask natural language questions:
+
+```
+/agent mrcall run "enable booking with 30-min appointments"
+/agent mrcall run "is booking enabled?"
+/agent mrcall run "make the greeting more casual"
 ```
 
-## Optional Integrations
+---
 
-| Integration | Command | Purpose |
-|-------------|---------|---------|
-| MrCall | `/connect mrcall` | Phone call handling |
-| Pipedrive | `/connect pipedrive KEY` | CRM sync |
+## Other Useful Commands
 
-## Quick Tips
+| Command | Description |
+|---------|-------------|
+| `/mrcall status` | Check connection status |
+| `/mrcall variables` | List all configuration variables |
+| `/mrcall unlink` | Disconnect from assistant |
+| `/agent mrcall show` | Show agent's current prompt |
+| `/agent mrcall reset` | Delete agent (must retrain) |
 
-• **Natural language works!** Try "show my tasks" instead of `/tasks`
-• All commands support `--help` for details
-• Run `/stats` to see your data overview
-• Use `/reset --hard` to start completely fresh
+---
 
-**Next:** Run `/connect anthropic YOUR_KEY` to begin!"""
+**Tip:** The agent understands context! You can ask things like:
+- "how does the assistant greet callers?"
+- "what are my current settings?"
+- "disable all booking features"
+"""
+
+
+def _tutorial_mrcall_dev() -> str:
+    """Tutorial for developers adding MrCall features."""
+    return """**MrCall Developer Guide**
+
+How to add new configurable features to MrCall.
+
+---
+
+## Architecture Overview
+
+MrCall uses a **two-tier training architecture**:
+
+```
+Layer 1: MrCallConfiguratorTrainer
+    | Generates feature sub-prompts from current config
+    v
+Layer 2: MrCallAgentTrainer
+    | Combines sub-prompts into unified agent
+    v
+MrCallAgent
+    | Runs with 4 tools, auto-selects based on intent
+    v
+StarChat API (updates variables)
+```
+
+---
+
+## Single Source of Truth
+
+**CRITICAL:** All feature/variable mappings are defined in ONE place:
+
+```python
+# zylch/agents/mrcall_configurator_trainer.py
+MrCallConfiguratorTrainer.FEATURES
+```
+
+Other files DERIVE from this automatically. Never manually edit mappings elsewhere.
+
+---
+
+## Adding a New Feature
+
+### 1. Define Meta-Prompt
+
+In `zylch/agents/mrcall_configurator_trainer.py`:
+
+```python
+MY_FEATURE_META_PROMPT = '''You are analyzing the X configuration...
+
+## VARIABLES CONTEXT:
+{variables_context}
+
+OUTPUT ONLY THE SUB-PROMPT TEXT.'''
+```
+
+### 2. Add to FEATURES Dict
+
+```python
+FEATURES = {
+    # ... existing features ...
+    "my_feature": {
+        "variables": ["VAR1", "VAR2", "VAR3"],
+        "description": "What this feature controls",
+        "display_name": "User-facing name",
+        "meta_prompt": MY_FEATURE_META_PROMPT,
+        "dynamic_context": True,  # if multiple variables
+    },
+}
+```
+
+### 3. Add Tool to Agent
+
+In `zylch/agents/mrcall_agent.py`:
+
+```python
+MRCALL_AGENT_TOOLS = [
+    # ... existing tools ...
+    {
+        "name": "configure_my_feature",
+        "description": "Modify my_feature settings...",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "changes": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"}
+                }
+            },
+            "required": ["changes"]
+        }
+    },
+]
+```
+
+### 4. Add Handler
+
+In `MrCallAgent._handle_tool_response()`:
+
+```python
+elif block.name == 'configure_my_feature':
+    result['result'] = await self._process_configure(
+        block.input, 'my_feature'
+    )
+```
+
+### 5. Update Help Text
+
+In `command_handlers.py`, update the features list in help text.
+
+---
+
+## Testing
+
+```bash
+/agent mrcall train my_feature    # Train just the new feature
+/agent mrcall train               # Retrain all + rebuild unified agent
+/agent mrcall run "modify my_feature settings"
+```
+
+---
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `mrcall_configurator_trainer.py` | FEATURES dict (source of truth) + meta-prompts |
+| `mrcall_agent_trainer.py` | Combines sub-prompts into unified agent |
+| `mrcall_agent.py` | Tools + handlers for running agent |
+| `command_handlers.py` | CLI command routing |
+
+---
+
+**Full guide:** See skill `zylch-mrcall-feature-configuration`
+"""
 
 
 # Export all handlers
 COMMAND_HANDLERS = {
     '/echo': handle_echo,
     '/help': handle_help,
+    '/tutorial': handle_tutorial,
     '/sync': handle_sync,
     '/memory': handle_memory,
     '/email': handle_email,
@@ -4415,8 +4582,9 @@ COMMAND_PATTERNS = {
         "reset my account",
     ],
 
-    # --- Tutorial (Onboarding) ---
+    # --- Tutorial (Onboarding + MrCall) ---
     '/tutorial': [
+        # Generic onboarding
         "tutorial",
         "getting started",
         "how to use",
@@ -4427,5 +4595,16 @@ COMMAND_PATTERNS = {
         "new user guide",
         "quick start",
         "first steps",
+        # MrCall-specific
+        "show tutorial",
+        "how to use mrcall",
+        "mrcall tutorial",
+        "mrcall guide",
+        "how do I set up mrcall",
+        "tutorial mrcall",
+        "tutorial {topic:text}",
+        "guide",
+        "help with mrcall",
+        "mrcall help",
     ],
 }

@@ -1341,7 +1341,7 @@ Next steps:
 
 ---
 
-### `/tutorial`
+### `/tutorial [--dev] <topic>`
 
 **Summary**: Complete onboarding guide for new users
 
@@ -1475,7 +1475,72 @@ Next steps:
 💡 All commands support --help for details
 ```
 
-**Semantic Triggers**: "tutorial", "getting started", "how to use", "help me start", "onboarding", "setup guide", "how do I start", "new user guide", "quick start", "first steps"
+**Semantic Triggers**: "tutorial", "getting started", "how to use", "help me start", "onboarding", "setup guide", "how do I start", "new user guide", "quick start", "first steps", "how to use mrcall", "mrcall tutorial", "mrcall guide"
+
+**Description**: Learn how to use Zylch with interactive guides. Use `--dev` flag for developer-focused technical guides.
+
+**Topics**:
+| Topic | Description |
+|-------|-------------|
+| `mrcall` | MrCall phone assistant setup and usage |
+| `contact` | Contact management |
+| `email` | Email operations |
+| `calendar` | Calendar management |
+| `sync` | Morning sync workflow |
+| `memory` | Memory system |
+
+**Usage**:
+```bash
+# List available tutorials
+/tutorial
+
+# MrCall user guide (setup, connect, train, run)
+/tutorial mrcall
+
+# MrCall developer guide (adding new features)
+/tutorial --dev mrcall
+
+# Show sync workflow guide
+/tutorial sync
+```
+
+**Example Output** (`/tutorial mrcall`):
+```
+MrCall Tutorial - User Guide
+
+MrCall lets you configure your AI phone assistant through natural language.
+
+---
+
+## Step 1: Connect
+/connect mrcall
+Opens OAuth login to StarChat. Grant business:write permission.
+
+## Step 2: List Your Assistants
+/mrcall list
+Shows all MrCall assistants linked to your account.
+
+## Step 3: Link an Assistant
+/mrcall link 1
+Links to assistant #1 from the list.
+
+## Step 4: Train the Agent
+/agent mrcall train
+Trains the AI agent on your current configuration.
+
+## Step 5: Use the Agent
+/agent mrcall run "enable booking with 30-min appointments"
+/agent mrcall run "is booking enabled?"
+/agent mrcall run "make the greeting more casual"
+```
+
+**Developer Mode** (`/tutorial --dev mrcall`):
+
+Shows technical implementation guide for adding new MrCall features:
+- Two-tier architecture overview
+- Single source of truth (FEATURES dict)
+- Step-by-step: meta-prompt, FEATURES entry, tool, handler
+- Key files and their purposes
 
 ---
 
