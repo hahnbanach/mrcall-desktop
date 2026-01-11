@@ -44,6 +44,31 @@ async def handle_mycommand(args: List[str], config, owner_id: str) -> str:
     return f"✅ Result: {result}"
 ```
 
+⚠️ **CRITICAL: Executor Function Import Rule**
+
+When using `run_in_executor`, ALL external dependencies must be imported **INSIDE** the executor function, not in the outer scope. This is because:
+
+1. The function runs in a separate thread
+2. Closure captures variables (like `owner_id`) but NOT module-level class names
+3. Class references from outer scope cause `NameError`
+
+**Always do this:**
+```python
+def _blocking_work():
+    from zylch.storage.supabase_client import SupabaseStorage  # ✅ Inside
+    from zylch.api.token_storage import get_mrcall_credentials  # ✅ Inside
+    storage = SupabaseStorage.get_instance()
+```
+
+**Never do this:**
+```python
+async def handle_xxx(...):
+    from zylch.storage.supabase_client import SupabaseStorage  # ❌ Outside
+
+    def _blocking_work():
+        storage = SupabaseStorage.get_instance()  # NameError!
+```
+
 ## Template 3: Background Job (>5s)
 
 Use for long operations: LLM batch processing, sync, imports.
@@ -154,17 +179,40 @@ async def _execute_mycommand(
     )
 ```
 
-## Handler Signature
+## Handler Signatures
 
-All command handlers must follow this signature:
+Command handlers use different signatures based on their needs:
 
+### Standard Signature (most commands)
 ```python
 async def handle_commandname(
     args: List[str],     # Arguments after command name
-    config,              # ToolConfig (rarely needed)
     owner_id: str        # Firebase UID
 ) -> str:                # Markdown response to user
 ```
+
+### With Config (LLM/BYOK operations)
+```python
+async def handle_commandname(
+    args: List[str],     # Arguments after command name
+    config,              # ToolConfig with LLM credentials
+    owner_id: str        # Firebase UID
+) -> str:                # Markdown response to user
+```
+
+### With User Email (sharing/integration operations)
+```python
+async def handle_commandname(
+    args: List[str],     # Arguments after command name
+    owner_id: str,       # Firebase UID
+    user_email: str      # User's email address
+) -> str:                # Markdown response to user
+```
+
+**Choose signature based on what your command needs:**
+- Most commands → `(args, owner_id)`
+- LLM calls needed → `(args, config, owner_id)`
+- User email needed → `(args, owner_id, user_email)`
 
 ## Common Patterns
 
@@ -288,6 +336,72 @@ async def handle_existingcommand(args: List[str], owner_id: str, ...) -> str:
 **Don't forget to update:**
 1. The `help_text` variable at the top of the handler
 2. The `COMMAND_REGISTRY` entry at the bottom of command_handlers.py
+
+---
+
+## Complete Registration Checklist
+
+⚠️ **CRITICAL**: Missing any step will cause runtime errors!
+
+When adding a new command, complete ALL steps:
+
+### Step 1: Write the handler function
+```python
+async def handle_mycommand(args: List[str], owner_id: str) -> str:
+    """Handle /mycommand."""
+    # ... implementation
+```
+
+### Step 2: Add to COMMAND_HANDLERS dict
+```python
+# In command_handlers.py:
+COMMAND_HANDLERS = {
+    # ... existing ...
+    '/mycommand': handle_mycommand,
+}
+```
+
+### Step 3: Add to COMMAND_PATTERNS dict (for semantic matching)
+```python
+# In command_handlers.py:
+COMMAND_PATTERNS = {
+    # ... existing ...
+    '/mycommand': ["mycommand", "do my thing", "trigger phrases"],
+}
+```
+
+### Step 4: Add to chat_service.py dispatch (CRITICAL!)
+
+The command dispatch in `chat_service.py` (lines 268-295) has explicit branches for different handler signatures. **New commands MUST be added to the correct branch or they will fail at runtime!**
+
+```python
+# In chat_service.py, find the branch matching your signature:
+
+# For (args, owner_id) signature:
+elif cmd in ['/stats', '/jobs', '/reset', '/tutorial', '/mycommand']:  # ADD HERE
+    response_text = await handler(args, owner_id)
+
+# For (args, config, owner_id) signature:
+elif cmd in ['/memory', '/email', '/train', '/agent', '/mycommand']:  # ADD HERE
+    config = ToolConfig.from_settings_with_owner(owner_id)
+    response_text = await handler(args, config, owner_id)
+
+# For (args, owner_id, user_email) signature:
+elif cmd in ['/mrcall', '/share', '/revoke', '/connect', '/mycommand']:  # ADD HERE
+    response_text = await handler(args, owner_id, user_email)
+```
+
+⚠️ **If you forget this step**, the command falls through to the default case which calls `handler()` with NO arguments, causing:
+```
+TypeError: handle_xxx() missing N required positional arguments
+```
+
+### Step 5: Update help text
+1. Inline `help_text` variable in handler
+2. `COMMAND_REGISTRY` dict
+
+### Step 6: Update documentation
+- `docs/guides/cli-commands.md`
 
 ---
 

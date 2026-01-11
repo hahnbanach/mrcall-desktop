@@ -78,6 +78,42 @@ COMMAND_HANDLERS = {
 }
 ```
 
+## CRITICAL: Command Dispatch Registration
+
+⚠️ **You MUST also update `chat_service.py`!** When a command is added to `COMMAND_HANDLERS`, it must ALSO be added to the dispatch logic in `chat_service.py` (lines 268-295). Otherwise it falls through to the default case which calls `handler()` with NO arguments, causing:
+
+```
+TypeError: handle_xxx() missing N required positional arguments
+```
+
+### Dispatch Branches by Signature
+
+| Handler Signature | Add to Branch |
+|-------------------|---------------|
+| `(args, owner_id)` | `elif cmd in ['/stats', '/jobs', '/reset', '/tutorial']:` |
+| `(args, config, owner_id)` | `elif cmd in ['/memory', '/email', '/train', '/agent']:` |
+| `(args, owner_id, user_email)` | `elif cmd in ['/mrcall', '/share', '/revoke', '/connect']:` |
+| `(args)` or `()` | `elif cmd in ['/model', '/help', '/clear', '/echo']:` |
+
+### Example: Adding `/mycommand` with signature `(args, owner_id)`
+
+```python
+# In chat_service.py line 283-285:
+elif cmd in ['/stats', '/jobs', '/reset', '/tutorial', '/mycommand']:  # ADD HERE
+    # These need args and owner_id
+    response_text = await handler(args, owner_id)
+```
+
+### Checklist for New Commands
+
+1. [ ] Write handler function in `command_handlers.py`
+2. [ ] Add to `COMMAND_HANDLERS` dict
+3. [ ] Add to `COMMAND_PATTERNS` dict (for semantic matching)
+4. [ ] **Add to dispatch branch in `chat_service.py`** ← Don't forget!
+5. [ ] Update inline `help_text`
+6. [ ] Update `COMMAND_REGISTRY` dict
+7. [ ] Update `docs/guides/cli-commands.md`
+
 ## Background Jobs
 
 For commands >10 seconds, use the job system:
