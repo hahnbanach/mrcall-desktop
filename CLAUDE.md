@@ -1,5 +1,13 @@
 # Claude Code Configuration - SPARC Development Environment
 
+## 🚨 CRITICAL: NO OUTPUT TRUNCATION IN CODE
+
+**NEVER truncate output in code you write:**
+- NO `[:8]`, `[:50]`, `[:100]`, `[:200]` slicing for display
+- NO `...` or `[truncated]` in user-facing output or **WORSE** when debugging!!
+- ALWAYS show FULL IDs, FULL content, FULL values
+- Let the USER decide if output is too long
+
 ## 🚨 CRITICAL: CONCURRENT EXECUTION & FILE MANAGEMENT
 
 **ABSOLUTE RULES**:
