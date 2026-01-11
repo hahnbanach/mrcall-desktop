@@ -3811,13 +3811,10 @@ Train the agent first:
         features = metadata.get('features_included', [])
         meta_info = f"\n_Created: {created} | Features: {', '.join(features)}_\n"
 
-    # Truncate if too long
-    display_prompt = agent_prompt[:3000] + '...' if len(agent_prompt) > 3000 else agent_prompt
-
     return f"""**🤖 Your MrCall Agent**
 {meta_info}
 ---
-{display_prompt}
+{agent_prompt}
 ---
 
 _Use `/agent mrcall reset` to delete._"""
