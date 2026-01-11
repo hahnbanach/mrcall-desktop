@@ -8,6 +8,23 @@
 - ALWAYS show FULL IDs, FULL content, FULL values
 - Let the USER decide if output is too long
 
+## 🚨 CRITICAL: DEBUG LOGGING OBBLIGATORIO
+
+**Ogni comando/feature DEVE avere debug logging** per poter diagnosticare problemi:
+
+1. **Input**: Loggare args/parametri ricevuti
+2. **Chiamate**: Loggare ogni funzione chiamata con input E output
+3. **Risultati**: Loggare valori intermedi e finali
+
+**Pattern**:
+```python
+logger.debug(f"[/comando] funzione(param={param}) -> result={result}")
+```
+
+**MAI** loggare token/secrets. Solo "present"/"absent".
+
+Senza logging, diagnosticare problemi è **IMPOSSIBILE**.
+
 ## 🚨 CRITICAL: CONCURRENT EXECUTION & FILE MANAGEMENT
 
 **ABSOLUTE RULES**:

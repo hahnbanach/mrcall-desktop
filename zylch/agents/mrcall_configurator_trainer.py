@@ -302,18 +302,22 @@ class MrCallConfiguratorTrainer:
             Formatted string with metadata for each variable
         """
         # Get business config for current values and template
+        logger.debug(f"[MrCallConfiguratorTrainer] _build_variables_context(business_id={business_id}, vars={variable_names})")
         business = await self.starchat.get_business_config(business_id)
+        logger.debug(f"[MrCallConfiguratorTrainer] get_business_config -> found={business is not None}")
         if not business:
             raise ValueError(f"Business not found: {business_id}")
 
         current_values = business.get("variables", {})
         template = business.get("template", "businesspro")
+        logger.debug(f"[MrCallConfiguratorTrainer] template={template}, current_values_count={len(current_values)}")
 
         # Get schema for metadata (type, description, default)
         schema = await self.starchat.get_variable_schema(
             template_name=template,
             nested=False
         )
+        logger.debug(f"[MrCallConfiguratorTrainer] get_variable_schema(template={template}) -> {len(schema) if schema else 0} vars")
 
         # Build context for each variable
         lines = []
@@ -416,6 +420,7 @@ class MrCallConfiguratorTrainer:
             f"Generating sub-prompt for {feature_name} "
             f"(provider: {self.provider}, model: {self.model})"
         )
+        logger.debug(f"[MrCallConfiguratorTrainer] train_feature: calling LLM for {feature_name}, meta_prompt_len={len(meta_prompt)}")
 
         response = await self.client.create_message(
             model=self.model,
@@ -424,6 +429,7 @@ class MrCallConfiguratorTrainer:
         )
 
         sub_prompt = response.content[0].text.strip()
+        logger.debug(f"[MrCallConfiguratorTrainer] train_feature: sub-prompt generated, len={len(sub_prompt)}")
 
         # 3. Store in agent_prompts
         agent_type = f"mrcall_{business_id}_{feature_name}"
@@ -435,6 +441,7 @@ class MrCallConfiguratorTrainer:
             "prompt_length": total_length,
         }
 
+        logger.debug(f"[MrCallConfiguratorTrainer] train_feature: storing agent_prompt for {agent_type}")
         self.storage.store_agent_prompt(
             owner_id=self.owner_id,
             agent_type=agent_type,
