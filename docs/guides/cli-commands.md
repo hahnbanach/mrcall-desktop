@@ -484,27 +484,23 @@ Use /jobs --cancel <id> to cancel.
 
 ---
 
-**Process synced data** (`/memory process [service]`):
+**Process synced data** (`/agent memory run email`):
 ```bash
-# Process ALL unprocessed data (emails + calendar)
-/memory process
-
-# Process only unprocessed emails
-/memory process email
-
-# Process only unprocessed calendar events
-/memory process calendar
+# Process emails + calendar into memory (email always includes calendar)
+/agent memory run email
 ```
 
 Output:
 ```
 🧠 Memory Processing Complete
 
-📧 Emails: 42/42 processed
-📅 Calendar: 15/15 processed
+📧 Emails: 42 processed
+📅 Calendar: 15 processed
 
 Use /memory search <query> to find stored information.
 ```
+
+**Note**: The `email` channel automatically includes calendar events. There is no separate `calendar` channel.
 
 **How Processing Works**:
 1. Fetches unprocessed items (where `memory_processed_at IS NULL`)
