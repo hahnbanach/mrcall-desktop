@@ -397,7 +397,8 @@ Check the console/logs for conversation details."""
         job = storage.create_background_job(
             owner_id=owner_id,
             job_type="sync",
-            channel="all"  # sync always does all channels
+            channel="all",  # sync always does all channels
+            params={"days_back": days_back}
         )
 
         logger.info(f"[/sync] Job request: sync/all for user {owner_id} -> {job['status']}")
@@ -2919,8 +2920,8 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 • `/agent memory reset [email|calendar]` - Delete agent
 
 **Task Agents** (detect actionable items):
-• `/agent task train [email|calendar]` - Create task detection agent
-• `/agent task process [email|calendar]` - Analyze emails and create tasks
+• `/agent task train email` - Create task detection agent (calendar-aware)
+• `/agent task process [email|calendar]` - Analyze items with calendar context
 • `/agent task show [email|calendar]` - Show current agent prompt
 • `/agent task reset [email|calendar]` - Delete agent prompt (keeps task items)
 
@@ -2938,11 +2939,11 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 • `/agent mrcall reset` - Delete agent prompt
 
 **Workflow:**
-1. `/sync` - Fetch emails/calendar
+1. `/sync` - Fetch emails/calendar (calendar syncs 2 weeks ahead)
 2. `/agent memory train email` - Create memory agent
 3. `/agent memory run email` - Extract facts
-4. `/agent task train email` - Create task agent
-5. `/agent task run email` - Detect tasks
+4. `/agent task train email` - Create task agent (calendar-aware)
+5. `/agent task process email` - Detect tasks (considers scheduled meetings)
 6. `/agent email train` - Learn your writing style
 7. `/agent email run "write to Mario about the offer"` - Use email agent"""
 

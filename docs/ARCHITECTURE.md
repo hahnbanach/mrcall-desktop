@@ -115,6 +115,7 @@ Supabase (task_items) ← Tasks with sources stored here
 **Key Services**:
 - **SyncService**: Email/calendar synchronization
   - `sync_emails()`, `sync_calendar()`, `run_full_sync()`
+  - **Calendar always syncs 14 days forward** regardless of `--days` parameter (emails respect `--days` for past)
 - **ChatService**: Conversational AI (wraps CLI for tool access)
 - **ArchiveService**: Email archive operations
 - **CommandHandlers**: Slash command processing (v0.3.0+)
@@ -232,12 +233,12 @@ Hybrid: 0.85 → "/sync 2"
 
 ### 7. CLI (`zylch/cli/main.py`)
 Interactive command-line interface:
-- `/sync` - Sync emails, calendar, pipedrive (data only, no processing)
+- `/sync` - Sync emails, calendar, pipedrive (data only, no processing). Calendar always syncs 14 days forward.
 - `/email list|create|send|delete|search` - Email and draft management
 - `/agent memory train [email|calendar|all]` - Generate personalized memory extraction agent
 - `/agent memory process [email|calendar|all]` - Extract facts from synced data into memory blobs
-- `/agent task train [email|calendar|all]` - Generate personalized task detection agent
-- `/agent task process [email|calendar|all]` - Detect tasks from synced data
+- `/agent task train email` - Generate personalized task detection agent (calendar-aware, unified prompt)
+- `/agent task process [email|calendar|all]` - Detect tasks from synced data (emails include calendar context)
 - `/memory search` - Search entity memories
 - `/tasks` - Show detected tasks
 - Natural conversation with agent
@@ -719,20 +720,32 @@ The Task Agent processes emails and calendar events to detect actionable tasks w
 2. **Group emails by thread** - only analyze latest per thread
 3. **Hard symbolic check** - `_is_user_email()` blocks user's own email (never trust LLM)
 4. **Fetch ALL existing tasks** for same contact via `get_tasks_by_contact()` (list)
-5. **Apply trained prompt** with existing task context (all tasks with IDs)
-6. **LLM returns `task_action`** + `target_task_id`: create, update, close, or none
-7. **Handle action**:
+5. **Fetch calendar context** - upcoming/recent meetings with contact via `get_calendar_events_by_attendee()`
+6. **Apply trained prompt** with existing task context + calendar context
+7. **LLM returns `task_action`** + `target_task_id`: create, update, close, or none
+8. **Handle action**:
    - `close`: Mark target task completed (by ID)
    - `update`: Update target task with new info (by ID)
    - `create`: Create new task
    - `none`: Skip, no task needed
-8. **Mark as processed** via `task_processed_at` column
+9. **Mark as processed** via `task_processed_at` column
+
+**Calendar Context Awareness**:
+- Upcoming meeting with contact → LLM may suppress "schedule call" type tasks
+- Recent meeting with contact → LLM considers if follow-up is needed based on meeting type
+- Uses `{{calendar_context}}` placeholder in trained prompt
+
+**Performance Optimization**:
+- Calendar context is pre-computed at batch level (not per-email) to avoid N+1 queries
+- Uses PostgreSQL RPC function `get_events_by_attendee()` for server-side JSONB filtering
+- GIN index on `attendees` column for fast containment queries
 
 **Key Files**:
 - `zylch/agents/task_agent.py` - TaskWorker class with `_is_user_email()` hard check, `analyze_item_sync()` single source of truth
-- `zylch/agents/email_task_agent_trainer.py` - EmailTaskAgentTrainer for prompt generation
+- `zylch/agents/task_agent_email_trainer.py` - EmailTaskAgentTrainer for prompt generation (includes calendar awareness)
+- `zylch/storage/migrations/022_calendar_attendee_search.sql` - RPC function and GIN index
 
-**Training**: `/agent task train` runs as background job (5-30+ seconds), notifies on completion.
+**Training**: `/agent task train email` runs as background job (5-30+ seconds), generates calendar-aware prompt, notifies on completion.
 
 ### Hybrid Search
 

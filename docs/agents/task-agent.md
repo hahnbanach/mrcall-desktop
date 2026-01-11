@@ -131,31 +131,76 @@ Tasks store `email_date` for temporal context display (e.g., "3 days ago").
 
 ### 6. Background Job Training
 
-`/agent task train` runs as a background job (5-30+ seconds), notifying user on completion.
+`/agent task train email` runs as a background job (5-30+ seconds), notifying user on completion. The trained prompt includes calendar awareness rules.
+
+### 7. Calendar Context Awareness
+
+When analyzing emails, the task agent fetches calendar events with the contact to make smarter decisions:
+
+```python
+def _get_calendar_context(self, contact_email: str) -> str:
+    """Get calendar context for a contact (upcoming and recent meetings)."""
+    events = self.storage.get_calendar_events_by_attendee(
+        self.owner_id,
+        contact_email,
+        days_back=7,
+        days_forward=14
+    )
+    # Format into UPCOMING MEETINGS and RECENT MEETINGS sections
+```
+
+**Decision Logic**:
+- **Upcoming meeting exists** → Suppress "schedule call" type tasks (meeting already scheduled)
+- **Recent meeting exists** → Consider follow-up based on meeting type (LLM decides)
+  - "Proposal Review" → Likely needs follow-up
+  - "Quick sync" → Probably doesn't
+  - "Thanks for the call" email → Close task, no new follow-up
+
+**Prompt Injection**:
+The calendar context is injected via `{{calendar_context}}` placeholder:
+
+```
+CALENDAR CONTEXT WITH THIS CONTACT:
+
+📅 UPCOMING MEETINGS (1):
+(If there's already a meeting scheduled, you may not need to create a 'schedule call' task)
+  - Strategy Call (2025-01-15 14:00)
+
+📋 RECENT MEETINGS (1):
+(If a meeting just happened, consider whether follow-up is needed based on meeting type)
+  - Quarterly Review (2025-01-08 10:00)
+```
+
+**Performance Optimization**:
+- Calendar context is pre-computed at batch level to avoid N+1 queries
+- Uses `calendar_cache` parameter in `analyze_item_sync()`
+- PostgreSQL RPC function `get_events_by_attendee()` for server-side filtering
 
 ## Task Detection Flow
 
 ```
-/agent task process
+/agent task process email
      │
      ▼
-_analyze_recent_events()
+job_executor._execute_task_process()
      │
      ├─► get_unprocessed_emails_for_task()
      │         │
      │         ▼
-     │    Group by thread_id (latest only)
+     │    Pre-compute calendar_cache for all unique contacts (N+1 fix)
      │         │
      │         ▼
      │    For each email:
      │         │
      │         ├─► _is_user_email(from_email)? → Skip (hard symbolic)
      │         │
-     │         ├─► get_task_by_contact(from_email) → existing_task_context
+     │         ├─► get_tasks_by_contact(from_email) → existing_task_context
      │         │
      │         ├─► _get_blob_for_contact() → Memory context
      │         │
-     │         ├─► _analyze_event() with existing_task_context
+     │         ├─► calendar_cache[from_email] → Calendar context (from cache)
+     │         │
+     │         ├─► _analyze_event() with all context
      │         │         │
      │         │         ▼
      │         │    LLM returns task_action: create|update|close|none
@@ -163,10 +208,10 @@ _analyze_recent_events()
      │         └─► Handle task_action:
      │                 ├─► close: complete_task_item()
      │                 ├─► update: update_task_item()
-     │                 ├─► create: store_task_item() (close existing first)
+     │                 ├─► create: store_task_item()
      │                 └─► none: skip
      │
-     └─► Same for calendar events
+     └─► calendar events (no calendar_cache, processed directly)
 ```
 
 ## Task Action Handling
@@ -222,13 +267,15 @@ result['sources'] = {
 
 | Command | Purpose |
 |---------|---------|
-| `/agent task train [email\|calendar\|all]` | Generate personalized task detection agent (background job) |
-| `/agent task process [email\|calendar\|all]` | Detect tasks from data (background job) |
+| `/agent task train email` | Generate personalized task detection agent with calendar awareness (background job) |
+| `/agent task process [email\|calendar\|all]` | Detect tasks from data with calendar context (background job) |
 | `/agent task show [email\|calendar]` | Display current task agent prompt |
 | `/agent task reset [email\|calendar]` | Delete task agent prompt (keeps task items) |
 | `/tasks` | Show tasks (cached) |
 | `/tasks refresh` | Re-analyze all events |
 | `/tasks reset` | Delete all task items + reset processing timestamps |
+
+**Note**: `/agent task train email` creates a unified prompt that works for both email and calendar processing. No separate calendar trainer needed.
 
 ## Urgency Levels
 
@@ -255,16 +302,18 @@ Separate from memory processing:
 | `update_task_item()` | Update existing task with new info/sources |
 | `complete_task_item()` | Mark task as completed |
 | `get_tasks_by_contact()` | Get ALL open tasks for a contact (list) |
+| `get_calendar_events_by_attendee()` | Get calendar events for a contact (uses RPC for performance) |
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `zylch/agents/task_agent.py` | TaskWorker implementation |
-| `zylch/agents/email_task_agent_trainer.py` | Prompt generation from email patterns |
-| `zylch/storage/supabase_client.py` | Task item storage methods |
+| `zylch/agents/task_agent.py` | TaskWorker with `_get_calendar_context()` and `analyze_item_sync()` |
+| `zylch/agents/task_agent_email_trainer.py` | Prompt generation with calendar awareness |
+| `zylch/storage/supabase_client.py` | Task and calendar storage methods |
 | `zylch/services/command_handlers.py` | `/tasks` command handler, `format_task_items()` |
-| `zylch/services/job_executor.py` | Background job execution for training |
+| `zylch/services/job_executor.py` | Background job with calendar cache pre-computation |
+| `zylch/storage/migrations/022_calendar_attendee_search.sql` | RPC function + GIN index for attendee search |
 
 ## Related
 
