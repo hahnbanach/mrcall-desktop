@@ -2904,9 +2904,9 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
     Command structure:
         /agent <domain> <action> [channel]
 
-    Domains: memory, task
-    Actions: train, process, show, reset
-    Channels: email, calendar, all (default)
+    Domains: memory, task, email, mrcall
+    Actions: train, run, show, reset
+    Channels: email (includes calendar automatically), all
     """
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch.api.token_storage import get_email
@@ -2914,16 +2914,16 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
     help_text = """**🤖 Manage AI Agents**
 
 **Memory Agents** (extract facts into memory blobs):
-• `/agent memory train [email|calendar]` - Create extraction agent
-• `/agent memory run [email|calendar]` - Process data into memory
-• `/agent memory show [email|calendar]` - Show current agent
-• `/agent memory reset [email|calendar]` - Delete agent
+• `/agent memory train email` - Create extraction agent
+• `/agent memory run email` - Process emails + calendar into memory
+• `/agent memory show email` - Show current agent
+• `/agent memory reset email` - Delete agent
 
 **Task Agents** (detect actionable items):
 • `/agent task train email` - Create task detection agent (calendar-aware)
-• `/agent task process [email|calendar]` - Analyze items with calendar context
-• `/agent task show [email|calendar]` - Show current agent prompt
-• `/agent task reset [email|calendar]` - Delete agent prompt (keeps task items)
+• `/agent task process email` - Analyze emails + calendar with context
+• `/agent task show email` - Show current agent prompt
+• `/agent task reset email` - Delete agent prompt (keeps task items)
 
 **Email Agent** (multi-tool email assistant):
 • `/agent email train` - Learn your writing style from sent emails
@@ -2938,10 +2938,12 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 • `/agent mrcall show` - Show current agent prompt
 • `/agent mrcall reset` - Delete agent prompt
 
+**Note:** The `email` channel automatically includes calendar events.
+
 **Workflow:**
-1. `/sync` - Fetch emails/calendar (calendar syncs 2 weeks ahead)
+1. `/sync` - Fetch emails + calendar (calendar syncs 2 weeks ahead)
 2. `/agent memory train email` - Create memory agent
-3. `/agent memory run email` - Extract facts
+3. `/agent memory run email` - Extract facts from emails + calendar
 4. `/agent task train email` - Create task agent (calendar-aware)
 5. `/agent task process email` - Detect tasks (considers scheduled meetings)
 6. `/agent email train` - Learn your writing style
@@ -2962,7 +2964,7 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 
         valid_domains = ['memory', 'task', 'email', 'mrcall']
         valid_actions = ['train', 'run', 'process', 'show', 'reset']  # 'process' kept for backwards compat
-        valid_channels = ['email', 'calendar', 'all']
+        valid_channels = ['email', 'all']
 
         if domain not in valid_domains:
             return f"❌ Unknown domain: `{domain}`\n\nValid domains: `memory`, `task`, `email`, `mrcall`\n\n{help_text}"
@@ -2980,8 +2982,14 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
             channel = None  # Not used for email/mrcall
         else:
             channel = args[2].lower() if len(args) > 2 else 'email'
+            # Calendar channel is now included automatically with email
+            if channel == 'calendar':
+                return (
+                    "ℹ️ Calendar events are now processed automatically with emails.\n\n"
+                    f"Use `/agent {domain} {action} email` instead."
+                )
             if channel not in valid_channels:
-                return f"❌ Unknown channel: `{channel}`\n\nValid channels: `email`, `calendar`, `all`"
+                return f"❌ Unknown channel: `{channel}`\n\nValid channels: `email`, `all`"
 
         # Get common requirements
         from zylch.api.token_storage import get_active_llm_provider
@@ -3970,16 +3978,11 @@ This action **cannot be undone**."""
 
 
 async def handle_tutorial(args: List[str], owner_id: str) -> str:
-    """Handle /tutorial command with topic-specific tutorials."""
+    """Handle /tutorial command - Getting started guide with topic-specific tutorials."""
 
     if not args:
-        return """**Tutorials**
-
-Available tutorials:
-- `/tutorial mrcall` - MrCall phone assistant setup
-- `/tutorial --dev mrcall` - Developer guide for adding MrCall features
-
-Usage: `/tutorial <topic>` or `/tutorial --dev <topic>`"""
+        # Default: Show general getting started guide
+        return _tutorial_getting_started()
 
     # Check for --dev flag
     dev_mode = '--dev' in args
@@ -3993,6 +3996,84 @@ Usage: `/tutorial <topic>` or `/tutorial --dev <topic>`"""
         return _tutorial_mrcall_user()
 
     return f"Unknown tutorial topic: `{topic}`\n\nRun `/tutorial` to see available topics."
+
+
+def _tutorial_getting_started() -> str:
+    """General getting started guide for new Zylch users."""
+    return """# 🚀 Getting Started with Zylch
+
+## Setup Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    ZYLCH SETUP                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1️⃣  CONNECT LLM (Required)                                │
+│      /connect anthropic YOUR_API_KEY                        │
+│      OR /connect openai YOUR_API_KEY                        │
+│                                                             │
+│  2️⃣  CONNECT EMAIL & CALENDAR                              │
+│      /connect google                                        │
+│      (Opens browser for OAuth)                              │
+│                                                             │
+│  3️⃣  SYNC YOUR DATA                                        │
+│      /sync --days 30                                        │
+│      (Fetches emails + calendar, calendar +14 days future)  │
+│                                                             │
+│  4️⃣  TRAIN YOUR AGENTS                                     │
+│      /agent memory train email    (learns your style)       │
+│      /agent task train email      (learns your priorities)  │
+│                                                             │
+│  5️⃣  PROCESS YOUR DATA (email auto-includes calendar)      │
+│      /agent memory run email      (extracts facts)          │
+│      /agent task process email    (detects tasks)           │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Daily Workflow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    DAILY ROUTINE                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Morning:                                                   │
+│    /sync                    → Get new emails & events       │
+│    /agent memory run email  → Update memory (emails+cal)    │
+│    /agent task process email→ Detect tasks (emails+cal)     │
+│                                                             │
+│  Check:                                                     │
+│    /tasks                   → See what needs attention      │
+│    /calendar                → Today's meetings              │
+│    /memory search <name>    → Recall contact info           │
+│                                                             │
+│  Work:                                                      │
+│    "Draft reply to John"    → AI drafts email               │
+│    "Who is Maria?"          → Search memory                 │
+│    "Summarize today"        → AI summary                    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Optional Integrations
+
+| Integration | Command | Purpose |
+|-------------|---------|---------|
+| MrCall | `/connect mrcall` | Phone call handling |
+| Pipedrive | `/connect pipedrive KEY` | CRM sync |
+
+## Quick Tips
+
+• **Natural language works!** Try "show my tasks" instead of `/tasks`
+• All commands support `--help` for details
+• Run `/stats` to see your data overview
+• Use `/reset --hard` to start completely fresh
+
+**More tutorials:** `/tutorial mrcall` for phone assistant setup
+
+**Next:** Run `/connect anthropic YOUR_KEY` to begin!"""
 
 
 def _tutorial_mrcall_user() -> str:

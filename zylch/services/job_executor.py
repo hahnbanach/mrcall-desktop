@@ -154,8 +154,10 @@ class JobExecutor:
                     "Run `/agent memory train email` first."
                 )
 
-            processed = 0
-            channels = [channel] if channel != "all" else ["email", "calendar"]
+            email_count = 0
+            calendar_count = 0
+            # "email" always includes calendar (user sees separate counts)
+            channels = ["email", "calendar"] if channel in ["email", "all"] else [channel]
 
             for ch in channels:
                 # Get unprocessed items
@@ -180,9 +182,10 @@ class JobExecutor:
                     try:
                         if ch == "email":
                             _process_email_sync(worker, item)
+                            email_count += 1
                         else:
                             _process_calendar_event_sync(worker, item)
-                        processed += 1
+                            calendar_count += 1
                     except Exception as e:
                         logger.error(f"Failed to process {ch} item: {e}")
 
@@ -197,9 +200,9 @@ class JobExecutor:
                         # Check if user stopped the job
                         if _should_stop_job(storage, job_id):
                             logger.info(f"Job {job_id} was stopped by user, exiting")
-                            return {"processed": processed, "channels": channels, "stopped": True}
+                            return {"email_count": email_count, "calendar_count": calendar_count, "channels": channels, "stopped": True}
 
-            return {"processed": processed, "channels": channels}
+            return {"email_count": email_count, "calendar_count": calendar_count, "channels": channels}
 
         # Execute in thread pool
         loop = asyncio.get_event_loop()
@@ -207,16 +210,18 @@ class JobExecutor:
 
         # Don't complete if job was stopped (user will cancel it)
         if result.get("stopped"):
-            logger.info(f"Job {job_id} stopped after processing {result['processed']} items")
+            total = result.get('email_count', 0) + result.get('calendar_count', 0)
+            logger.info(f"Job {job_id} stopped after processing {total} items")
             return
 
         # Complete job
         self.storage.complete_background_job(job_id, result)
-        self.storage.create_notification(
-            owner_id,
-            f"Memory processing complete: {result['processed']} items processed",
-            "info"
-        )
+        email_count = result.get('email_count', 0)
+        calendar_count = result.get('calendar_count', 0)
+        msg = f"Memory processing complete: {email_count} emails"
+        if calendar_count > 0:
+            msg += f", {calendar_count} calendar events"
+        self.storage.create_notification(owner_id, msg, "info")
 
     async def _execute_task_process(
         self,
@@ -258,9 +263,11 @@ class JobExecutor:
                     "Run `/agent task train` first."
                 )
 
-            processed = 0
+            email_count = 0
+            calendar_count = 0
             action_count = 0
-            channels = [channel] if channel != "all" else ["email", "calendar"]
+            # "email" always includes calendar (user sees separate counts)
+            channels = ["email", "calendar"] if channel in ["email", "all"] else [channel]
 
             for ch in channels:
                 # Get unprocessed items
@@ -296,7 +303,10 @@ class JobExecutor:
                     try:
                         # Use TaskWorker's single implementation with cached calendar context
                         result = worker.analyze_item_sync(ch, item, calendar_cache=calendar_cache)
-                        processed += 1
+                        if ch == "email":
+                            email_count += 1
+                        else:
+                            calendar_count += 1
                         if result:
                             action_count += 1
                     except Exception as e:
@@ -314,14 +324,16 @@ class JobExecutor:
                         if _should_stop_job(storage, job_id):
                             logger.info(f"Job {job_id} was stopped by user, exiting")
                             return {
-                                "processed": processed,
+                                "email_count": email_count,
+                                "calendar_count": calendar_count,
                                 "actions_found": action_count,
                                 "channels": channels,
                                 "stopped": True
                             }
 
             return {
-                "processed": processed,
+                "email_count": email_count,
+                "calendar_count": calendar_count,
                 "actions_found": action_count,
                 "channels": channels
             }
@@ -331,15 +343,18 @@ class JobExecutor:
 
         # Don't complete if job was stopped (user will cancel it)
         if result.get("stopped"):
-            logger.info(f"Job {job_id} stopped after processing {result['processed']} items")
+            total = result.get('email_count', 0) + result.get('calendar_count', 0)
+            logger.info(f"Job {job_id} stopped after processing {total} items")
             return
 
         self.storage.complete_background_job(job_id, result)
-        self.storage.create_notification(
-            owner_id,
-            f"Task detection complete: {result['actions_found']} tasks found from {result['processed']} items (with calendar context)",
-            "info"
-        )
+        email_count = result.get('email_count', 0)
+        calendar_count = result.get('calendar_count', 0)
+        actions = result.get('actions_found', 0)
+        msg = f"Task detection complete: {actions} tasks found from {email_count} emails"
+        if calendar_count > 0:
+            msg += f", {calendar_count} calendar events"
+        self.storage.create_notification(owner_id, msg, "info")
 
     async def _execute_task_train(
         self,
@@ -371,7 +386,8 @@ class JobExecutor:
                 logger.info(f"Job {job_id} was stopped before starting")
                 return {"results": [], "threads_analyzed": 0, "channel": channel, "stopped": True}
 
-            channels_to_train = [channel] if channel != 'all' else ['email', 'calendar']
+            # "email" always includes calendar (user sees separate counts)
+            channels_to_train = ["email", "calendar"] if channel in ["email", "all"] else [channel]
             results = []
             total_threads = 0
 
