@@ -3927,6 +3927,7 @@ This action **cannot be undone**."""
     from concurrent.futures import ThreadPoolExecutor
 
     def _reset_all_data():
+        from zylch.storage.supabase_client import SupabaseStorage
         storage = SupabaseStorage.get_instance()
         counts = {}
         tables = [
