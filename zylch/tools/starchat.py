@@ -521,6 +521,7 @@ class StarChatClient:
             
             logger.info(f"Using business search endpoint: {endpoint}")
             
+            logger.debug(f"[StarChat] get_business_config: POST body={{'businessId': '{business_id}'}}")
             response = await self.client.request(
                 "POST",
                 endpoint,
@@ -528,17 +529,23 @@ class StarChatClient:
             )
 
             if response.status_code == 404:
+                logger.debug(f"[StarChat] get_business_config: 404 not found for business_id={business_id}")
                 return None
 
             response.raise_for_status()
             data = response.json()
+            logger.debug(f"[StarChat] get_business_config: response status={response.status_code}, size={len(str(data))} bytes")
 
             # API returns a list, extract first element
             if isinstance(data, list) and len(data) > 0:
-                return data[0]
+                result = data[0]
+                logger.debug(f"[StarChat] get_business_config: template={result.get('template')}, vars_count={len(result.get('variables', {}))}")
+                return result
             elif isinstance(data, dict):
+                logger.debug(f"[StarChat] get_business_config: template={data.get('template')}, vars_count={len(data.get('variables', {}))}")
                 return data
             else:
+                logger.debug(f"[StarChat] get_business_config: unexpected response type={type(data)}")
                 return None
 
         except Exception as e:
@@ -578,8 +585,11 @@ class StarChatClient:
 
         response = await self.client.get(endpoint, params=params)
         response.raise_for_status()
+        schema = response.json()
+        var_count = len(schema) if isinstance(schema, (dict, list)) else 0
+        logger.debug(f"[StarChat] get_variable_schema(template={params['templateName']}) -> {var_count} variables")
 
-        return response.json()
+        return schema
 
     async def get_all_variables(self, business_id: str) -> List[Dict[str, Any]]:
         """Get all variables with descriptions and current values.
@@ -595,22 +605,27 @@ class StarChatClient:
         """
         try:
             # 1. Get business config for current values and template
+            logger.debug(f"[StarChat] get_all_variables: get_business_config(business_id={business_id})")
             business = await self.get_business_config(business_id)
+            logger.debug(f"[StarChat] get_all_variables: business found={business is not None}")
             if not business:
                 raise ValueError(f"Business not found: {business_id}")
 
             current_values = business.get("variables", {})
             template = business.get("template", "businesspro")
+            logger.debug(f"[StarChat] get_all_variables: template={template}, current_values_count={len(current_values)}")
             logger.info(f"Fetching variables for template: {template}")
 
             # 2. Get schema for descriptions
             # Note: The API returns a Map[String, CrmVariable] or List?
             # Based on usage, likely a list or dict.
+            logger.debug(f"[StarChat] get_all_variables: get_variable_schema(template={template}, nested=False)")
             schema = await self.get_variable_schema(template_name=template, nested=False)
-            
+            logger.debug(f"[StarChat] get_all_variables: schema type={type(schema).__name__}, items={len(schema) if schema else 0}")
+
             # 3. Combine them
             combined = []
-            
+
             # Handle schema if it's a list or dict
             # Schema is typically { "VAR_NAME": { "description": "...", ... } } or list
             schema_items = []
@@ -644,6 +659,7 @@ class StarChatClient:
                 
             # Sort by name
             combined.sort(key=lambda x: x["name"])
+            logger.debug(f"[StarChat] get_all_variables: combined {len(combined)} variables: {[v['name'] for v in combined]}")
             return combined
 
         except Exception as e:
@@ -671,12 +687,17 @@ class StarChatClient:
             Exception: If request fails
         """
         logger.info(f"Updating variable {variable_name} for business: {business_id}")
+        logger.debug(f"[StarChat] update_business_variable: fetching current config for {business_id}")
 
         # First, get current business to extract required fields
         business_data = await self.get_business_config(business_id)
 
         if not business_data:
+            logger.debug(f"[StarChat] update_business_variable: business not found: {business_id}")
             raise ValueError(f"No business found with ID: {business_id}")
+
+        current_val = business_data.get('variables', {}).get(variable_name)
+        logger.debug(f"[StarChat] update_business_variable: {variable_name}: current='{current_val}' -> new='{value}'")
 
         # Build MINIMAL payload with only required fields
         # Based on FirebaseBusinessService.update():
@@ -706,6 +727,7 @@ class StarChatClient:
             json=minimal_payload,
         )
 
+        logger.debug(f"[StarChat] update_business_variable: PUT response status={response.status_code}")
         if response.status_code >= 400:
             logger.error(f"PUT failed: {response.status_code} - {response.text}")
         response.raise_for_status()

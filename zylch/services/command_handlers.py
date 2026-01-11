@@ -807,6 +807,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
                     )
                     response.raise_for_status()
                     businesses = response.json()
+                    logger.debug(f"[/mrcall list] POST {url} -> status={response.status_code}, businesses={len(businesses)}")
             except Exception as e:
                 logger.error(f"Failed to fetch MrCall businesses: {e}")
                 return f"❌ **Error fetching businesses:** {str(e)}\n\nTry `/connect mrcall` to refresh your connection."
@@ -819,6 +820,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
             for i, biz in enumerate(businesses, 1):
                 biz_id = biz.get('businessId') or biz.get('id')
                 nickname = biz.get('nickname') or 'Unnamed'
+                logger.debug(f"[/mrcall list] business {i}: id={biz_id}, nickname={nickname}")
                 company = biz.get('companyName') or ''
                 service_number = biz.get('serviceNumber') or ''
                 email_address = biz.get('emailAddress') or ''
@@ -867,8 +869,10 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 
         # Subcommand: variables - List all variables
         if subcommand == 'variables':
+            logger.debug(f"[/mrcall variables] args={args}")
             # Get credentials
             creds = get_mrcall_credentials(owner_id)
+            logger.debug(f"[/mrcall variables] get_mrcall_credentials(owner_id={owner_id}) -> keys={list(creds.keys()) if creds else None}, business_id={creds.get('business_id') if creds else None}")
             if not creds or not creds.get('access_token'):
                 return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
             
@@ -877,13 +881,15 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
             if not business_id:
                 # Try simple link
                 business_id = client.get_mrcall_link(owner_id)
-                
+                logger.debug(f"[/mrcall variables] get_mrcall_link(owner_id={owner_id}) -> business_id={business_id}")
+
             if not business_id:
                 return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <business_id>` to select one."
 
             # Check for sub-subcommand (get/set)
             # args[0] is 'variables'. Check args[1]
             var_subcommand = args[1].lower() if len(args) > 1 else 'get'
+            logger.debug(f"[/mrcall variables] var_subcommand={var_subcommand}")
             
             # Sub-subcommand: set VARIABLE value
             if var_subcommand == 'set':
@@ -920,21 +926,25 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
                         filter_name = args[name_idx + 1]
                 except ValueError:
                     pass
+            logger.debug(f"[/mrcall variables] filter: '--name' in args={('--name' in args)}, filter_name={filter_name}")
 
             # Use factory to get client
             from zylch.tools.starchat import create_starchat_client
             sc_client = await create_starchat_client(owner_id)
-            
+
             try:
                 variables = await sc_client.get_all_variables(business_id)
+                logger.debug(f"[/mrcall variables] get_all_variables(business_id={business_id}) -> {len(variables)} vars: {[v['name'] for v in variables]}")
                 await sc_client.close()
-                
+
                 if not variables:
                     return f"**📋 MrCall Variables**\n\nNo variables found for business `{business_id}`."
-                
+
                 # Filter if requested
                 if filter_name:
+                    vars_before = len(variables)
                     variables = [v for v in variables if filter_name.upper() in v['name'].upper()]
+                    logger.debug(f"[/mrcall variables] filter applied: before={vars_before}, filter={filter_name}, after={len(variables)}, matches={[v['name'] for v in variables]}")
                     if not variables:
                         return f"**📋 MrCall Variables**\n\nNo variables matching `*{filter_name}*` found."
 
@@ -955,10 +965,12 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 
         # Subcommand: link <business_id> - Link to business by ID
         if subcommand == 'link':
+            logger.debug(f"[/mrcall link] positional={positional}")
             if len(positional) < 2:
                 return "❌ **Usage:** `/mrcall link <business_id>`\n\nCopy the business ID from `/mrcall list`"
 
             target_business_id = positional[1]
+            logger.debug(f"[/mrcall link] target_business_id={target_business_id}")
 
             # Validate UUID format (basic check - UUIDs are 36 chars with dashes)
             if len(target_business_id) < 20:
@@ -986,6 +998,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
                 return f"❌ **Error:** {str(e)}"
 
             # Find business by ID
+            logger.debug(f"[/mrcall link] searching for business in {len(businesses)} results")
             business = None
             for biz in businesses:
                 biz_id = biz.get('businessId') or biz.get('id')
@@ -994,13 +1007,16 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
                     break
 
             if not business:
+                logger.debug(f"[/mrcall link] business not found: {target_business_id}")
                 return f"❌ **Business not found:** `{target_business_id}`\n\nRun `/mrcall list` to see your assistants."
 
             business_id = target_business_id
             nickname = business.get('nickname') or 'Unnamed'
+            logger.debug(f"[/mrcall link] found business: nickname={nickname}")
 
             # Save the link
             result = client.set_mrcall_link(owner_id, business_id)
+            logger.debug(f"[/mrcall link] set_mrcall_link(owner_id={owner_id}, business_id={business_id}) -> result={result}")
 
             if result:
                 return f"""✅ **MrCall Linked**
@@ -1056,6 +1072,7 @@ Run `/agent mrcall train` to generate configuration context for all features."""
 
         # Subcommand: config - Configure assistant behavior
         if subcommand == 'config':
+            logger.debug(f"[/mrcall config] positional={positional}")
             import asyncio
             from concurrent.futures import ThreadPoolExecutor
             from zylch.api.token_storage import get_active_llm_provider
@@ -1102,13 +1119,17 @@ Run `/agent mrcall train` to generate configuration context for all features."""
             if not business_id:
                 return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <business_id>` first."
 
+            logger.debug(f"[/mrcall config] feature={feature_name}, business_id={business_id}, instructions_len={len(instructions)}")
+
             # Get LLM credentials
             llm_provider, api_key = get_active_llm_provider(owner_id)
+            logger.debug(f"[/mrcall config] llm_provider={llm_provider}, api_key={'present' if api_key else 'absent'}")
             if not api_key:
                 return "❌ **No LLM configured**\n\nRun `/connect anthropic` to configure an LLM provider."
 
             # Get variable names for this feature (can be multiple)
             variable_names = FEATURE_TO_VARIABLES[feature_name]
+            logger.debug(f"[/mrcall config] variable_names={variable_names}")
 
             # Run the config update in executor (involves multiple async calls)
             def _config_feature():
@@ -1123,10 +1144,12 @@ Run `/agent mrcall train` to generate configuration context for all features."""
                 try:
                     # Create StarChat client
                     starchat = loop.run_until_complete(create_starchat_client(owner_id))
+                    logger.debug(f"[/mrcall config] StarChat client created")
 
                     # 1. Load context (lazy generate if missing)
                     agent_type = f"mrcall_{business_id}_{feature_name}"
                     context = client.get_agent_prompt(owner_id, agent_type)
+                    logger.debug(f"[/mrcall config] get_agent_prompt(agent_type={agent_type}) -> context_len={len(context) if context else 0}")
 
                     trainer = MrCallConfiguratorTrainer(
                         storage=client,
@@ -1142,12 +1165,14 @@ Run `/agent mrcall train` to generate configuration context for all features."""
                         context, _ = loop.run_until_complete(
                             trainer.train_feature(feature_name, business_id)
                         )
+                        logger.debug(f"[/mrcall config] train_feature() -> context_len={len(context) if context else 0}")
 
                     # 2. Get current values for ALL variables in this feature
                     business_data = loop.run_until_complete(
                         starchat.get_business_config(business_id)
                     )
                     business_variables = business_data.get("variables", {})
+                    logger.debug(f"[/mrcall config] get_business_config() -> vars_count={len(business_variables)}")
 
                     current_values = {}
                     missing_vars = []
@@ -1163,6 +1188,7 @@ Run `/agent mrcall train` to generate configuration context for all features."""
                         return None, None, f"Variable(s) not found: {', '.join(missing_vars)}"
 
                     # 3. Use LLM with function calling to modify ALL variables
+                    logger.debug(f"[/mrcall config] calling modify_variables_with_llm(current_values={list(current_values.keys())})")
                     update_result = loop.run_until_complete(
                         modify_variables_with_llm(
                             current_values=current_values,
@@ -1172,14 +1198,17 @@ Run `/agent mrcall train` to generate configuration context for all features."""
                             provider=llm_provider,
                         )
                     )
+                    logger.debug(f"[/mrcall config] modify_variables_with_llm() -> new_values={list(update_result.new_values.keys())}")
 
                     # 4. Apply ALL new values to StarChat
                     for var_name, new_value in update_result.new_values.items():
+                        logger.debug(f"[/mrcall config] update_business_variable({var_name}) -> new_value_len={len(new_value)}")
                         loop.run_until_complete(
                             starchat.update_business_variable(business_id, var_name, new_value)
                         )
 
                     # 5. Retrain to update sub-prompt
+                    logger.debug(f"[/mrcall config] retraining feature {feature_name}")
                     loop.run_until_complete(
                         trainer.train_feature(feature_name, business_id)
                     )

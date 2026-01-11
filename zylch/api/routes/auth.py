@@ -1307,7 +1307,8 @@ async def fetch_mrcall_business_info(access_token: str) -> dict:
             raise HTTPException(status_code=400, detail="Failed to fetch business info")
 
         data = response.json()
-        logger.debug(f"Business search response: {data}")  # DEBUG level only
+        businesses_count = len(data) if isinstance(data, list) else len(data.get('results', data.get('items', data.get('businesses', []))))
+        logger.debug(f"[MrCall OAuth] fetch_business_info: POST response businesses={businesses_count}")
 
         # Extract business info from search response (returns list of businesses)
         business = None
@@ -1382,6 +1383,7 @@ async def mrcall_oauth_authorize(
 
     # Generate state for CSRF protection
     state = secrets.token_urlsafe(32)
+    logger.debug(f"[MrCall OAuth] authorize: state={state}, code_challenge generated")
 
     # Store state + code_verifier in oauth_states table
     storage = _get_storage()

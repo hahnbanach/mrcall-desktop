@@ -393,14 +393,18 @@ Choose the appropriate tool based on what the user wants. Remember:
             Dict with current configuration values
         """
         feature = tool_input.get('feature', 'all')
+        logger.debug(f"[MrCallAgent] _process_get_config: feature={feature}, business_id={self.business_id}")
 
         if not self.starchat:
+            logger.debug(f"[MrCallAgent] _process_get_config: StarChat client not available")
             return {'error': 'StarChat client not available'}
 
         try:
             # Get business config
+            logger.debug(f"[MrCallAgent] _process_get_config: get_business_config(business_id={self.business_id})")
             business = await self.starchat.get_business_config(self.business_id)
             current_values = business.get('variables', {})
+            logger.debug(f"[MrCallAgent] _process_get_config: template={business.get('template')}, vars_count={len(current_values)}")
 
             if feature == 'all':
                 # Return all feature variables
