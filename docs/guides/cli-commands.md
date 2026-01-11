@@ -748,95 +748,349 @@ Output:
 
 ## 📞 Integration Commands
 
-### `/mrcall [business_id] [--unlink]`
+### MrCall/StarChat Integration
 
-**Summary**: MrCall/StarChat telephony integration
+MrCall integration enables AI-powered configuration of your phone assistant. The system uses a **two-tier architecture**:
+1. **ConfiguratorTrainer**: Generates feature-specific sub-prompts from current config
+2. **AgentTrainer**: Combines sub-prompts into unified agent with tool selection
 
-**Description**: Links your Zylch to a MrCall business for AI-powered phone calls, SMS automation, and call transcript sync.
+**OAuth Scopes Required**:
+```
+business:read business:write contacts:read contacts:write sessions:read sessions:write templates:read
+```
 
-**Options**:
+---
 
-**Show status** (`/mrcall`):
+### `/connect mrcall`
+
+**Summary**: Authenticate with MrCall via OAuth
+
+**Description**: Initiates OAuth 2.0 flow with PKCE to connect your Zylch account with MrCall/StarChat. Opens browser for consent.
+
+**Usage**:
+```bash
+/connect mrcall
+```
+
+**Flow**:
+1. CLI starts local HTTP server on `localhost:8766`
+2. Opens browser to StarChat consent page
+3. User logs in and approves permissions
+4. Tokens stored encrypted in Supabase
+5. Ready to use MrCall commands
+
+**Output**:
+```
+🔐 Starting MrCall OAuth...
+
+Opening browser for authentication...
+Waiting for callback on http://localhost:8766/callback
+
+✅ MrCall Connected!
+
+Next: Run /mrcall list to see your assistants
+```
+
+---
+
+### `/mrcall` or `/mrcall status`
+
+**Summary**: Show MrCall connection status
+
+**Usage**:
 ```bash
 /mrcall
 ```
 
-Output (if linked):
+**Output** (if connected and linked):
 ```
 📞 MrCall Status
 
-Linked Business: 3002475397
-Connected Since: 2025-12-01
-
-Features enabled:
-• Phone call handling
-• SMS automation
-• call_received triggers
-• sms_received triggers
+✅ Connected to MrCall
+🔗 Linked to: My Business (abc123...)
 
 Commands:
-• /mrcall --unlink - Disconnect
-• /trigger --add call_received "..." - Add call automation
+• /mrcall list - List all assistants
+• /mrcall unlink - Disconnect current assistant
+• /agent mrcall train - Train configuration agent
+• /agent mrcall run "..." - Configure via natural language
 ```
 
-Output (if not linked):
-```
-📞 MrCall Status
+---
 
-Status: Not linked
+### `/mrcall list`
 
-Connect your Zylch to a MrCall business to enable:
-• AI-powered phone call handling
-• SMS automation
-• Call/SMS triggers
+**Summary**: List all your MrCall assistants
 
-Usage: /mrcall <business_id>
+**Description**: Shows all assistants associated with your MrCall account. Use the number to link.
 
-Example: /mrcall 3002475397
-
-Contact support@zylchai.com to get your MrCall business ID.
-```
-
-**Link to business** (`/mrcall <business_id>`):
+**Usage**:
 ```bash
-/mrcall 3002475397
+/mrcall list
 ```
 
-Output:
+**Output**:
 ```
-✅ MrCall Linked
+📞 Your MrCall Assistants (3 found)
 
-Business ID: 3002475397
+1. Mario's Pizzeria
+   📧 mario@pizzeria.it | 📱 +39 02 1234567
+   🤖 +39 800 123456 | Template: restaurant
+   ← LINKED
 
-Your Zylch is now connected to MrCall!
+2. Acme Corp Reception
+   📧 info@acme.com | 📱 +39 06 9876543
+   🤖 +39 800 654321 | Template: business
+
+3. Dr. Rossi Clinic
+   📧 clinic@rossi.it | 📱 +39 011 5551234
+   🤖 +39 800 111222 | Template: medical
+
+Use /mrcall link <number> to switch assistant
+```
+
+---
+
+### `/mrcall link <number>`
+
+**Summary**: Link to a specific MrCall assistant
+
+**Description**: Connects Zylch to the assistant from `/mrcall list`. Required before using agent commands.
+
+**Usage**:
+```bash
+/mrcall link 1
+```
+
+**Output**:
+```
+✅ Linked to: Mario's Pizzeria
+
+Business ID: abc123-def456-...
 
 Next steps:
-1. Configure your MrCall assistant to forward to Zylch
-2. Add triggers: /trigger --add call_received "Summarize the call"
-3. Test with a phone call
-
-Need help? Contact support@zylchai.com
+1. /connect anthropic (if not done)
+2. /agent mrcall train
+3. /agent mrcall run "enable booking"
 ```
 
-**Unlink** (`/mrcall --unlink`):
+---
+
+### `/mrcall unlink`
+
+**Summary**: Disconnect from current assistant
+
+**Usage**:
 ```bash
-/mrcall --unlink
+/mrcall unlink
 ```
 
-Output:
+**Output**:
 ```
-✅ MrCall Unlinked
+✅ Unlinked from Mario's Pizzeria
 
-Your Zylch is no longer connected to a MrCall business.
+Use /mrcall list and /mrcall link <n> to connect to another assistant.
 ```
 
-**Use Cases**:
-- Auto-create contacts from phone calls
-- Send call summaries via email
-- Trigger actions when VIP calls
-- Update CRM after calls
+---
 
-**See Also**: [MrCall Integration](../features/mrcall-integration.md)
+### `/mrcall variables [get|set]`
+
+**Summary**: View or modify MrCall assistant variables
+
+**Description**: Direct access to assistant configuration variables. For AI-powered modification, use `/agent mrcall run` instead.
+
+**List all variables**:
+```bash
+/mrcall variables
+/mrcall variables get
+```
+
+**Filter by name**:
+```bash
+/mrcall variables get --name BOOKING
+```
+
+**Set a variable directly**:
+```bash
+/mrcall variables set OSCAR_OBJECTIVE "Answer calls professionally"
+```
+
+**Output** (list):
+```
+📋 MrCall Variables (42 found)
+
+1. OSCAR_OBJECTIVE
+   Description: Main objective for the assistant
+   Value: "Answer incoming calls and take messages"
+
+2. START_BOOKING_PROCESS
+   Description: Enable/disable appointment booking
+   Value: "true"
+
+3. BOOKING_EVENTS_MINUTES
+   Description: Default appointment duration
+   Value: "30"
+
+... (truncated)
+
+Use /mrcall variables get --name <filter> to filter
+```
+
+---
+
+### `/agent mrcall train [feature]`
+
+**Summary**: Train MrCall configuration agent
+
+**Description**: Analyzes current MrCall configuration and generates training prompts. Must be run before using `/agent mrcall run`.
+
+**Usage**:
+```bash
+# Train all features (recommended)
+/agent mrcall train
+
+# Train specific feature only
+/agent mrcall train welcome_message
+/agent mrcall train booking
+```
+
+**Output**:
+```
+🧠 Training MrCall Agent...
+
+✅ Feature: welcome_message (3.2s)
+✅ Feature: booking (4.1s)
+✅ Unified agent built (1.5s)
+
+Agent ready! Use:
+/agent mrcall run "your instruction"
+```
+
+**Duration**: 5-15 seconds depending on features
+
+---
+
+### `/agent mrcall run "instruction"`
+
+**Summary**: Configure assistant via natural language
+
+**Description**: The unified agent interprets your instruction and selects the appropriate tool:
+- **configure_welcome_message** - Change greeting behavior
+- **configure_booking** - Change booking settings
+- **get_current_config** - Show raw settings
+- **respond_text** - Answer questions about settings
+
+**Usage**:
+```bash
+# Configuration changes
+/agent mrcall run "enable booking with 30-min appointments"
+/agent mrcall run "make the greeting more formal, use Lei"
+/agent mrcall run "disable booking"
+
+# Questions (uses respond_text)
+/agent mrcall run "is booking enabled?"
+/agent mrcall run "does the assistant answer formally?"
+/agent mrcall run "how does it greet callers?"
+
+# View raw settings (uses get_current_config)
+/agent mrcall run "show my current settings"
+```
+
+**Output** (configuration):
+```
+✅ Configuration Updated
+
+Changed:
+• START_BOOKING_PROCESS: "false" → "true"
+• BOOKING_EVENTS_MINUTES: "60" → "30"
+• ENABLE_GET_CALENDAR_EVENTS: "false" → "true"
+
+Your assistant will now offer 30-minute appointments.
+```
+
+**Output** (question):
+```
+💬 Response
+
+Yes, booking is currently enabled. The assistant offers 30-minute
+appointments during business hours (Mon-Fri 9:00-17:00).
+
+Callers can book by saying "I'd like to schedule an appointment"
+and the assistant will check your calendar for availability.
+```
+
+**Duration**: 5-15 seconds
+
+---
+
+### `/agent mrcall show`
+
+**Summary**: Display current agent prompt
+
+**Usage**:
+```bash
+/agent mrcall show
+```
+
+**Output**:
+```
+🤖 MrCall Agent Prompt
+
+Created: 2025-01-10 14:30:00
+Features: welcome_message, booking
+
+---
+You are the MrCall configuration agent.
+
+You help users configure their MrCall AI phone assistant...
+(full prompt displayed)
+```
+
+---
+
+### `/agent mrcall reset`
+
+**Summary**: Delete agent prompt (must retrain)
+
+**Usage**:
+```bash
+/agent mrcall reset
+```
+
+**Output**:
+```
+🗑️ Agent Reset
+
+Deleted mrcall agent prompt.
+
+Run /agent mrcall train to recreate.
+```
+
+---
+
+### MrCall Workflow
+
+**First-time setup**:
+```bash
+/connect mrcall              # OAuth authentication
+/mrcall list                 # See your assistants
+/mrcall link 1               # Link to first assistant
+/connect anthropic           # Connect LLM (if not done)
+/agent mrcall train          # Train agent
+/agent mrcall run "..."      # Configure!
+```
+
+**Daily usage**:
+```bash
+/agent mrcall run "enable booking for tomorrow"
+/agent mrcall run "is the greeting professional?"
+/agent mrcall run "show current settings"
+```
+
+**See Also**:
+- [MrCall Integration](../features/mrcall-integration.md) - OAuth, API details
+- [MrCall Configurator Agent](../agents/mrcall-configurator.md) - Architecture
 
 ---
 
