@@ -3969,7 +3969,7 @@ This action **cannot be undone**."""
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-async def handle_tutorial(args: List[str], config, owner_id: str) -> str:
+async def handle_tutorial(args: List[str], owner_id: str) -> str:
     """Handle /tutorial command with topic-specific tutorials."""
 
     if not args:
