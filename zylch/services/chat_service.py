@@ -280,8 +280,8 @@ class ChatService:
                     elif cmd in ['/mrcall', '/share', '/revoke', '/connect']:
                         # These need args, owner_id, and optionally email
                         response_text = await handler(args, owner_id, user_email)
-                    elif cmd in ['/stats', '/jobs']:
-                        # /stats and /jobs need args and owner_id
+                    elif cmd in ['/stats', '/jobs', '/reset', '/tutorial']:
+                        # These need args and owner_id
                         response_text = await handler(args, owner_id)
                     elif cmd == '/calendar':
                         # /calendar needs args, config, and owner_id
