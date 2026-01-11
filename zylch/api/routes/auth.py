@@ -1464,6 +1464,7 @@ async def mrcall_oauth_callback(
         return HTMLResponse(content=_oauth_error_page("Invalid or expired state. Please try again."))
 
     owner_id = state_data['owner_id']
+    user_email = state_data.get('email', '')  # User's email from Firebase token
     code_verifier = state_data.get("metadata", {}).get("code_verifier")
 
     if not code_verifier:
@@ -1539,7 +1540,7 @@ async def mrcall_oauth_callback(
             return JSONResponse({
                 "success": True,
                 "service": "mrcall",
-                "email": business_info.get("email"),
+                "email": user_email,  # User's email (from Firebase), not assistant's email
                 "business_id": business_info.get("business_id"),
                 "nickname": business_info.get("nickname"),
                 "company_name": business_info.get("company_name"),
