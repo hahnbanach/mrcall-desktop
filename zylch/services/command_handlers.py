@@ -744,7 +744,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 
 **Commands:**
 • `/mrcall list` - List your MrCall assistants
-• `/mrcall link N` - Link to assistant #N from the list
+• `/mrcall link <business_id>` - Link to assistant by ID
 • `/mrcall variables [get] [--name NAME]` - List/filter variables
 • `/mrcall variables set <NAME> <VALUE>` - Set variable value
 • `/mrcall show [feature]` - Show current configuration context
@@ -761,7 +761,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 **Setup:**
 1. Run `/connect mrcall` to authenticate with MrCall
 2. Run `/mrcall list` to see your assistants
-3. Run `/mrcall link N` to connect to an assistant"""
+3. Run `/mrcall link <business_id>` to connect to an assistant"""
 
     # --help option (check first)
     if '--help' in args:
@@ -835,6 +835,9 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
                 else:
                     output += f"{i}. **{nickname}**{linked_marker}\n"
 
+                # Business ID (for /mrcall link)
+                output += f"   🆔 `{biz_id}`\n"
+
                 # Email
                 if email_address:
                     output += f"   📧 {email_address}\n"
@@ -859,7 +862,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 
                 output += "\n"
 
-            output += "---\nUse `/mrcall link N` to connect an assistant."
+            output += "---\nUse `/mrcall link <business_id>` to connect an assistant."
             return output
 
         # Subcommand: variables - List all variables
@@ -876,7 +879,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
                 business_id = client.get_mrcall_link(owner_id)
                 
             if not business_id:
-                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link N` to select one."
+                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <business_id>` to select one."
 
             # Check for sub-subcommand (get/set)
             # args[0] is 'variables'. Check args[1]
@@ -950,17 +953,16 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
                 logger.error(f"Failed to fetch variables: {e}")
                 return f"❌ **Error:** {str(e)}"
 
-        # Subcommand: link N - Link to business by number
+        # Subcommand: link <business_id> - Link to business by ID
         if subcommand == 'link':
             if len(positional) < 2:
-                return "❌ **Usage:** `/mrcall link N`\n\nWhere N is the assistant number from `/mrcall list`"
+                return "❌ **Usage:** `/mrcall link <business_id>`\n\nCopy the business ID from `/mrcall list`"
 
-            try:
-                index = int(positional[1]) - 1  # Convert to 0-based index
-                if index < 0:
-                    raise ValueError("Index must be positive")
-            except ValueError:
-                return f"❌ **Invalid number:** `{positional[1]}`\n\nUse a number from `/mrcall list`"
+            target_business_id = positional[1]
+
+            # Validate UUID format (basic check - UUIDs are 36 chars with dashes)
+            if len(target_business_id) < 20:
+                return f"❌ **Invalid business ID:** `{target_business_id}`\n\nCopy the full ID from `/mrcall list`"
 
             # Get OAuth credentials
             creds = get_mrcall_credentials(owner_id)
@@ -969,7 +971,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 
             access_token = creds.get('access_token')
 
-            # Fetch businesses to get the one at index
+            # Fetch businesses to validate the ID exists
             try:
                 async with httpx.AsyncClient(timeout=30.0) as http_client:
                     response = await http_client.post(
@@ -983,11 +985,18 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
                 logger.error(f"Failed to fetch MrCall businesses: {e}")
                 return f"❌ **Error:** {str(e)}"
 
-            if index >= len(businesses):
-                return f"❌ **Invalid number:** {index + 1}\n\nYou have {len(businesses)} assistant(s). Use `/mrcall list` to see them."
+            # Find business by ID
+            business = None
+            for biz in businesses:
+                biz_id = biz.get('businessId') or biz.get('id')
+                if biz_id == target_business_id:
+                    business = biz
+                    break
 
-            business = businesses[index]
-            business_id = business.get('businessId') or business.get('id')
+            if not business:
+                return f"❌ **Business not found:** `{target_business_id}`\n\nRun `/mrcall list` to see your assistants."
+
+            business_id = target_business_id
             nickname = business.get('nickname') or 'Unnamed'
 
             # Save the link
@@ -1018,7 +1027,7 @@ Your Zylch is now connected to this MrCall assistant!
             if not business_id:
                 business_id = client.get_mrcall_link(owner_id)
             if not business_id:
-                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link N` first."
+                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <business_id>` first."
 
             # Parse feature argument
             feature_name = positional[1] if len(positional) > 1 else "welcome_message"
@@ -1091,7 +1100,7 @@ Run `/agent mrcall train` to generate configuration context for all features."""
             if not business_id:
                 business_id = client.get_mrcall_link(owner_id)
             if not business_id:
-                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link N` first."
+                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <business_id>` first."
 
             # Get LLM credentials
             llm_provider, api_key = get_active_llm_provider(owner_id)
@@ -1249,7 +1258,7 @@ Run `/mrcall show {feature_name}` to see the full configuration."""
 **Status:** Connected (not linked to an assistant)
 **Email:** {email or 'N/A'}
 
-Run `/mrcall list` to see your assistants, then `/mrcall link N` to connect one."""
+Run `/mrcall list` to see your assistants, then `/mrcall link <business_id>` to connect one."""
             else:
                 return """**📞 MrCall Status**
 
@@ -1258,7 +1267,7 @@ Run `/mrcall list` to see your assistants, then `/mrcall link N` to connect one.
 **To get started:**
 1. Run `/connect mrcall` to authenticate
 2. Run `/mrcall list` to see your assistants
-3. Run `/mrcall link N` to connect an assistant"""
+3. Run `/mrcall link <business_id>` to connect an assistant"""
 
         # Unknown subcommand
         return f"❌ **Unknown subcommand:** `{subcommand}`\n\n{help_text}"
@@ -2033,7 +2042,7 @@ Use `/agent process` to extract facts from synced data into memory.''',
 **Subcommands:**
 - (none) - Show current connection status
 - `list` - List your MrCall assistants
-- `link N` - Link to assistant #N from the list
+- `link <business_id>` - Link to assistant by ID
 - `unlink` - Disconnect current assistant
 - `variables [get] [--name NAME]` - List/filter variables
 - `variables set <NAME> <VALUE>` - Set variable value
@@ -2046,7 +2055,7 @@ Use `/agent process` to extract facts from synced data into memory.''',
 **Examples:**
 - `/mrcall` - Show connection status
 - `/mrcall list` - See your assistants
-- `/mrcall link 1` - Connect to first assistant
+- `/mrcall link <business_id>` - Connect to assistant by ID
 - `/agent mrcall train` - Train all features
 - `/agent mrcall run "use formal tone"` - Configure behavior
 - `/mrcall variables` - List all variables''',
@@ -3586,7 +3595,7 @@ Connect your LLM provider:
 
 Link your assistant first:
 1. `/mrcall list` - See your assistants
-2. `/mrcall link N` - Link to assistant #N"""
+2. `/mrcall link <business_id>` - Link to assistant by ID"""
 
     # Validate feature if specified
     if feature and feature not in MrCallConfiguratorTrainer.FEATURES:
@@ -3794,7 +3803,7 @@ async def _handle_mrcall_agent_show(storage, owner_id: str) -> str:
 
 Link your assistant first:
 1. `/mrcall list` - See your assistants
-2. `/mrcall link N` - Link to assistant #N"""
+2. `/mrcall link <business_id>` - Link to assistant by ID"""
 
     agent_prompt = storage.get_agent_prompt(owner_id, f"mrcall_{business_id}")
     if not agent_prompt:
@@ -4102,9 +4111,9 @@ Shows all MrCall assistants linked to your account.
 ## Step 3: Link an Assistant
 
 ```
-/mrcall link 1
+/mrcall link <business_id>
 ```
-Links to assistant #1 from the list.
+Copy the business ID from `/mrcall list` and paste it here.
 
 ---
 

@@ -842,20 +842,20 @@ Commands:
    📧 clinic@rossi.it | 📱 +39 011 5551234
    🤖 +39 800 111222 | Template: medical
 
-Use /mrcall link <number> to switch assistant
+Use /mrcall link <business_id> to switch assistant
 ```
 
 ---
 
-### `/mrcall link <number>`
+### `/mrcall link <business_id>`
 
 **Summary**: Link to a specific MrCall assistant
 
-**Description**: Connects Zylch to the assistant from `/mrcall list`. Required before using agent commands.
+**Description**: Connects Zylch to the assistant by business ID from `/mrcall list`. Required before using agent commands.
 
 **Usage**:
 ```bash
-/mrcall link 1
+/mrcall link ac390829-4b89-3dc4-b628-95f84cb2ba7f
 ```
 
 **Output**:
@@ -885,7 +885,7 @@ Next steps:
 ```
 ✅ Unlinked from Mario's Pizzeria
 
-Use /mrcall list and /mrcall link <n> to connect to another assistant.
+Use /mrcall list and /mrcall link <business_id> to connect to another assistant.
 ```
 
 ---
@@ -1071,7 +1071,7 @@ Run /agent mrcall train to recreate.
 ```bash
 /connect mrcall              # OAuth authentication
 /mrcall list                 # See your assistants
-/mrcall link 1               # Link to first assistant
+/mrcall link <business_id>   # Link by ID from list
 /connect anthropic           # Connect LLM (if not done)
 /agent mrcall train          # Train agent
 /agent mrcall run "..."      # Configure!
@@ -1517,8 +1517,8 @@ Opens OAuth login to StarChat. Grant business:write permission.
 Shows all MrCall assistants linked to your account.
 
 ## Step 3: Link an Assistant
-/mrcall link 1
-Links to assistant #1 from the list.
+/mrcall link <business_id>
+Copy the business ID from list and paste here.
 
 ## Step 4: Train the Agent
 /agent mrcall train
