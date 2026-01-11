@@ -3882,7 +3882,7 @@ Recreate with: `/agent {domain} train {channel}`
         return f"❌ No agent found for `{domain} {channel}`"
 
 
-async def handle_reset(args: List[str], config, owner_id: str) -> str:
+async def handle_reset(args: List[str], owner_id: str) -> str:
     """Handle /reset - Reset all user data."""
 
     help_text = """**🔄 Reset Command**
@@ -3963,7 +3963,7 @@ This action **cannot be undone**."""
     return "\n".join(lines)
 
 
-async def handle_tutorial(args: List[str], config, owner_id: str) -> str:
+async def handle_tutorial(args: List[str], owner_id: str) -> str:
     """Handle /tutorial - Getting started guide."""
 
     return """# 🚀 Getting Started with Zylch
