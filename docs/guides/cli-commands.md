@@ -1254,45 +1254,228 @@ Clear your local conversation_history array.
 
 ---
 
-### `/tutorial [topic]`
+### `/reset [--hard]`
 
-**Summary**: Quick guides and tutorials
+**Summary**: Reset all user data (destructive operation)
 
-**Description**: Learn how to use Zylch with interactive guides.
+**Description**: Deletes ALL user data from the database. This is a destructive, irreversible operation intended for users who want to start completely fresh. OAuth tokens are preserved so you remain connected to your email/calendar providers.
 
-**Topics**:
-- `contact` - Contact management
-- `email` - Email operations
-- `calendar` - Calendar management
-- `sync` - Morning sync workflow
-- `memory` - Memory system
+**Safety**: Requires explicit `--hard` flag to execute. Running `/reset` without the flag shows a warning and asks for confirmation.
 
 **Usage**:
 ```bash
-# List available topics
+# Show warning (does not delete anything)
+/reset
+
+# Execute full data reset (irreversible!)
+/reset --hard
+```
+
+**Warning Output** (`/reset`):
+```
+⚠️ **Data Reset Warning**
+
+This will **permanently delete** ALL your data:
+
+📧 Emails & Calendar events
+🧠 Memory (blobs & sentences)
+✅ Tasks & Triggers
+✉️ Drafts & Notifications
+🤖 Agent prompts & Background jobs
+
+**What stays**: Your OAuth connections (Google, Microsoft)
+
+To proceed, run: `/reset --hard`
+```
+
+**Execution Output** (`/reset --hard`):
+```
+🗑️ **Data Reset Complete**
+
+Deleted:
+• 156 memory blobs
+• 892 memory sentences
+• 23 tasks
+• 5 triggers
+• 12 trigger events
+• 3 drafts
+• 1,234 emails
+• 89 calendar events
+• 2 background jobs
+• 8 notifications
+• 4 agent prompts
+
+✅ Your account is now fresh. OAuth connections preserved.
+
+Next steps:
+1. /sync --days 30  → Re-sync your data
+2. /memory process  → Rebuild memory
+3. /tutorial        → See onboarding guide
+```
+
+**Tables Deleted**:
+| Table | Content |
+|-------|---------|
+| `entity_memory_blobs` | Memory blobs |
+| `entity_memory_sentences` | Memory sentences (FTS) |
+| `task_items` | Tasks detected from emails |
+| `triggers` | Event-driven automation rules |
+| `trigger_events` | Queued trigger events |
+| `drafts` | Email drafts |
+| `emails` | Synced emails |
+| `calendar_events` | Synced calendar events |
+| `background_jobs` | Scheduled jobs |
+| `user_notifications` | Notifications |
+| `agent_prompts` | Trained agent prompts |
+
+**Preserved**:
+- OAuth tokens (remain connected to Google/Microsoft)
+- User account settings
+
+**Use Cases**:
+- Starting fresh with a clean account
+- Testing/development reset
+- Privacy: removing all stored data
+
+**Semantic Triggers**: "reset", "reset all data", "delete all my data", "start fresh", "clear everything", "wipe my account"
+
+---
+
+### `/tutorial`
+
+**Summary**: Complete onboarding guide for new users
+
+**Description**: Shows a comprehensive setup flow and daily workflow diagram for new Zylch users. Explains how to connect services, train AI agents, and use the system effectively.
+
+**Usage**:
+```bash
 /tutorial
-
-# Show contact management guide
-/tutorial contact
-
-# Show sync workflow guide
-/tutorial sync
 ```
 
-**Example Output** (`/tutorial sync`):
+**Output**:
 ```
-🔄 Morning Sync Workflow
+📚 Welcome to Zylch! Here's how to get started:
 
-Daily routine:
-1. Run /sync - Fetch emails + calendar
-2. Check /gaps - See unanswered emails
-3. Review: "Summarize today's emails"
-4. Respond: "Draft reply to Mario's email"
+═══════════════════════════════════════════════════════════════════
+                    🚀 SETUP FLOW (One-time)
+═══════════════════════════════════════════════════════════════════
 
-Quick workflow: /sync → /gaps → respond
+┌─────────────────────────────────────────────────────────────────┐
+│  1️⃣  CONNECT YOUR SERVICES                                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   📧 Email & Calendar:                                          │
+│   • Go to app.zylchai.com/settings                              │
+│   • Click "Connect Google" or "Connect Microsoft"               │
+│   • Authorize access to Gmail/Outlook + Calendar                │
+│                                                                 │
+│   📞 Phone (Optional):                                          │
+│   • /mrcall <business_id>  → Link MrCall/StarChat               │
+│                                                                 │
+│   ✅ Check status: /connect                                     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  2️⃣  INITIAL SYNC                                               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   /sync --days 30                                               │
+│   └── Fetches last 30 days of emails + 14 days calendar         │
+│                                                                 │
+│   ⏱️  Takes 30-60 seconds depending on email volume             │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  3️⃣  TRAIN YOUR AI AGENTS                                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   /agent memory train                                           │
+│   └── Learns what facts to extract about contacts               │
+│                                                                 │
+│   /agent task train email                                       │
+│   └── Learns what tasks need your attention                     │
+│                                                                 │
+│   ⏱️  Each takes 15-30 seconds (background job)                 │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  4️⃣  BUILD YOUR MEMORY                                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   /memory process                                               │
+│   └── Extracts facts from emails → searchable memory            │
+│                                                                 │
+│   ⏱️  Takes 1-2 min depending on email volume                   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  5️⃣  DETECT YOUR TASKS                                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   /agent task process email                                     │
+│   └── Finds emails that need your response                      │
+│                                                                 │
+│   ⏱️  Takes 1-2 min depending on email volume                   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 
-Pro tip: Use /cache to inspect cached data.
+═══════════════════════════════════════════════════════════════════
+                    🔄 DAILY WORKFLOW
+═══════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────┐
+│  ☀️  MORNING ROUTINE (~30 seconds)                               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   /sync              → Fetch new emails + calendar              │
+│        │                                                        │
+│        ▼                                                        │
+│   /tasks             → See what needs your attention            │
+│        │                                                        │
+│        ▼                                                        │
+│   /calendar          → Today's meetings                         │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  💬 CHAT NATURALLY                                               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   "Who is Mario Rossi?"                                         │
+│   └── Searches memory for everything about Mario                │
+│                                                                 │
+│   "Draft a reply to John's email about the proposal"            │
+│   └── Creates draft with context from memory                    │
+│                                                                 │
+│   "What did Sarah say about the budget?"                        │
+│   └── Searches emails + memory for relevant info                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+                    📋 COMMAND REFERENCE
+═══════════════════════════════════════════════════════════════════
+
+📧 Data:     /sync  /stats  /calendar  /tasks  /gaps
+🧠 Memory:   /memory search|process|store|stats|--reset
+🤖 Agents:   /agent memory|task train|process|show|reset
+⚡ Triggers: /trigger --add|--list|--remove|--toggle
+📞 Phone:    /mrcall  /connect
+🔧 Config:   /model haiku|sonnet|opus
+📚 Help:     /help  /tutorial  /reset
+
+💡 All commands support --help for details
 ```
+
+**Semantic Triggers**: "tutorial", "getting started", "how to use", "help me start", "onboarding", "setup guide", "how do I start", "new user guide", "quick start", "first steps"
 
 ---
 

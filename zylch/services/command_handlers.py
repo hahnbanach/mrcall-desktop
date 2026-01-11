@@ -3882,6 +3882,164 @@ Recreate with: `/agent {domain} train {channel}`
         return f"❌ No agent found for `{domain} {channel}`"
 
 
+async def handle_reset(args: List[str], config, owner_id: str) -> str:
+    """Handle /reset - Reset all user data."""
+
+    help_text = """**🔄 Reset Command**
+
+**Usage:**
+• `/reset` - Show warning
+• `/reset --hard` - Delete ALL your data (irreversible!)
+
+**What gets deleted:**
+- All synced emails and calendar events
+- All memory blobs and extracted facts
+- All detected tasks and triggers
+- All drafts and trained prompts
+
+**What stays:**
+- Your account connections (Google, MrCall, LLM keys)"""
+
+    if '--help' in args:
+        return help_text
+
+    if '--hard' not in args:
+        return """⚠️ **Data Reset Warning**
+
+For security reasons, please run:
+
+```
+/reset --hard
+```
+
+**This will permanently delete:**
+- All synced emails and calendar events
+- All memory blobs and facts
+- All tasks and triggers
+- All drafts and trained prompts
+
+Your account connections (Google, MrCall) will be preserved.
+
+This action **cannot be undone**."""
+
+    # User confirmed with --hard
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _reset_all_data():
+        storage = SupabaseStorage.get_instance()
+        counts = {}
+        tables = [
+            'entity_memory_sentences',
+            'entity_memory_blobs',
+            'task_items',
+            'triggers',
+            'trigger_events',
+            'drafts',
+            'emails',
+            'calendar_events',
+            'background_jobs',
+            'user_notifications',
+            'agent_prompts',
+        ]
+        for table in tables:
+            try:
+                result = storage.client.table(table).delete().eq('owner_id', owner_id).execute()
+                counts[table] = len(result.data) if result.data else 0
+            except Exception as e:
+                counts[table] = f"error: {e}"
+        return counts
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    loop = asyncio.get_event_loop()
+    counts = await loop.run_in_executor(executor, _reset_all_data)
+
+    lines = ["🗑️ **All Data Deleted**\n", "**Deleted:**"]
+    for table, count in counts.items():
+        if isinstance(count, int) and count > 0:
+            lines.append(f"• {table}: {count}")
+    lines.append("\n**Preserved:** Account connections (Google, MrCall, LLM keys)")
+    lines.append("\n✅ Start fresh with `/sync`")
+    return "\n".join(lines)
+
+
+async def handle_tutorial(args: List[str], config, owner_id: str) -> str:
+    """Handle /tutorial - Getting started guide."""
+
+    return """# 🚀 Getting Started with Zylch
+
+## Setup Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    ZYLCH SETUP                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1️⃣  CONNECT LLM (Required)                                │
+│      /connect anthropic YOUR_API_KEY                        │
+│      OR /connect openai YOUR_API_KEY                        │
+│                                                             │
+│  2️⃣  CONNECT EMAIL & CALENDAR                              │
+│      /connect google                                        │
+│      (Opens browser for OAuth)                              │
+│                                                             │
+│  3️⃣  SYNC YOUR DATA                                        │
+│      /sync --days 30                                        │
+│      (Fetches emails + calendar, calendar +14 days future)  │
+│                                                             │
+│  4️⃣  TRAIN YOUR AGENTS                                     │
+│      /agent memory train email    (learns your style)       │
+│      /agent task train email      (learns your priorities)  │
+│                                                             │
+│  5️⃣  PROCESS YOUR DATA                                     │
+│      /agent memory process email  (extracts facts)          │
+│      /agent task process email    (detects tasks)           │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Daily Workflow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    DAILY ROUTINE                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Morning:                                                   │
+│    /sync                    → Get new emails & events       │
+│    /agent memory process    → Update contact memory         │
+│    /agent task process      → Detect new tasks              │
+│                                                             │
+│  Check:                                                     │
+│    /tasks                   → See what needs attention      │
+│    /calendar                → Today's meetings              │
+│    /memory search <name>    → Recall contact info           │
+│                                                             │
+│  Work:                                                      │
+│    "Draft reply to John"    → AI drafts email               │
+│    "Who is Maria?"          → Search memory                 │
+│    "Summarize today"        → AI summary                    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Optional Integrations
+
+| Integration | Command | Purpose |
+|-------------|---------|---------|
+| MrCall | `/connect mrcall` | Phone call handling |
+| Pipedrive | `/connect pipedrive KEY` | CRM sync |
+
+## Quick Tips
+
+• **Natural language works!** Try "show my tasks" instead of `/tasks`
+• All commands support `--help` for details
+• Run `/stats` to see your data overview
+• Use `/reset --hard` to start completely fresh
+
+**Next:** Run `/connect anthropic YOUR_KEY` to begin!"""
+
+
 # Export all handlers
 COMMAND_HANDLERS = {
     '/echo': handle_echo,
@@ -3900,6 +4058,8 @@ COMMAND_HANDLERS = {
     '/tasks': handle_tasks,
     '/jobs': handle_jobs,
     '/agent': handle_agent,
+    '/reset': handle_reset,
+    '/tutorial': handle_tutorial,
 }
 
 
@@ -4240,5 +4400,31 @@ COMMAND_PATTERNS = {
         "reset task agent",
         "delete memory agent",
         "delete task agent",
+    ],
+
+    # --- Reset (Full data reset) ---
+    '/reset': [
+        "reset",
+        "reset all data",
+        "delete all my data",
+        "start fresh",
+        "clear everything",
+        "wipe my account",
+        "delete everything",
+        "reset my account",
+    ],
+
+    # --- Tutorial (Onboarding) ---
+    '/tutorial': [
+        "tutorial",
+        "getting started",
+        "how to use",
+        "help me start",
+        "onboarding",
+        "setup guide",
+        "how do I start",
+        "new user guide",
+        "quick start",
+        "first steps",
     ],
 }
