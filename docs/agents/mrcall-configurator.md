@@ -115,7 +115,7 @@ Examples:
 |---------|-------------|
 | `/connect mrcall` | OAuth authentication with StarChat |
 | `/mrcall list` | List all your MrCall assistants |
-| `/mrcall link N` | Link to assistant #N from list |
+| `/mrcall link <business_id>` | Link to assistant by ID |
 | `/mrcall unlink` | Disconnect from current assistant |
 
 ### Agent Commands
@@ -144,7 +144,7 @@ Examples:
 # Setup
 /connect mrcall
 /mrcall list
-/mrcall link 1
+/mrcall link <business_id>    # Copy ID from list
 /connect anthropic
 
 # Train and use agent
