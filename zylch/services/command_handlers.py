@@ -793,7 +793,9 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 
             access_token = creds.get('access_token')
             logger.info(f"handle_mrcall list: access_token exists = {bool(access_token)}, len = {len(access_token) if access_token else 0}")
-            current_business_id = creds.get('business_id')
+            # Use get_mrcall_link to get the correct linked business (handles both OAuth business_id and legacy email field)
+            current_business_id = creds.get('business_id') or client.get_mrcall_link(owner_id)
+            logger.debug(f"[/mrcall list] current_business_id={current_business_id}")
 
             # Fetch businesses from StarChat API
             try:
