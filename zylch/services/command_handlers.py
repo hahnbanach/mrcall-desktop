@@ -878,12 +878,9 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
             if not creds or not creds.get('access_token'):
                 return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
             
-            # Get linked business ID
-            business_id = creds.get('business_id')
-            if not business_id:
-                # Try simple link
-                business_id = client.get_mrcall_link(owner_id)
-                logger.debug(f"[/mrcall variables] get_mrcall_link(owner_id={owner_id}) -> business_id={business_id}")
+            # Get linked business ID (explicit /mrcall link takes priority over OAuth default)
+            business_id = client.get_mrcall_link(owner_id)
+            logger.debug(f"[/mrcall variables] get_mrcall_link(owner_id={owner_id}) -> business_id={business_id}")
 
             if not business_id:
                 return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <business_id>` to select one."
@@ -1041,9 +1038,9 @@ Your Zylch is now connected to this MrCall assistant!
             if not creds or not creds.get('access_token'):
                 return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
 
-            business_id = creds.get('business_id')
-            if not business_id:
-                business_id = client.get_mrcall_link(owner_id)
+            # Get linked business ID (explicit /mrcall link takes priority over OAuth default)
+            business_id = client.get_mrcall_link(owner_id)
+            logger.debug(f"[/mrcall show] get_mrcall_link(owner_id={owner_id}) -> business_id={business_id}")
             if not business_id:
                 return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <business_id>` first."
 
@@ -1115,9 +1112,8 @@ Run `/agent mrcall train` to generate configuration context for all features."""
             if not creds or not creds.get('access_token'):
                 return "❌ **MrCall not connected**\n\nRun `/connect mrcall` first."
 
-            business_id = creds.get('business_id')
-            if not business_id:
-                business_id = client.get_mrcall_link(owner_id)
+            # Get linked business ID (explicit /mrcall link takes priority over OAuth default)
+            business_id = client.get_mrcall_link(owner_id)
             if not business_id:
                 return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <business_id>` first."
 
@@ -1268,7 +1264,9 @@ Run `/mrcall show {feature_name}` to see the full configuration."""
             creds = get_mrcall_credentials(owner_id)
 
             if creds and creds.get('access_token'):
-                business_id = creds.get('business_id')
+                # Get linked business ID (explicit /mrcall link takes priority over OAuth default)
+                business_id = client.get_mrcall_link(owner_id)
+                logger.debug(f"[/mrcall status] get_mrcall_link(owner_id={owner_id}) -> business_id={business_id}")
                 email = creds.get('metadata', {}).get('email') if isinstance(creds.get('metadata'), dict) else None
 
                 if business_id:
