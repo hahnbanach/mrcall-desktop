@@ -385,6 +385,12 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
             date = last_email.get('date', 'unknown')
             body = last_email.get('body_plain', '') or last_email.get('snippet', '')
 
+            # Truncate body to avoid context window overflow
+            # 20 threads * 12000 chars = 240,000 chars ~= 60k tokens.
+            # Safe margin for 200k context.
+            if len(body) > 12000:
+                body = body[:12000] + "...(truncated)"
+
             samples.append(f"""
 --- Thread {i}: {subject} ({len(emails)} emails) ---
 From: {from_email}
