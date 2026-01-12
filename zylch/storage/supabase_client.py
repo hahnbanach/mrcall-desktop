@@ -1623,8 +1623,8 @@ class SupabaseStorage:
     def get_mrcall_link(self, owner_id: str) -> Optional[str]:
         """Get MrCall business ID for user.
 
-        Checks credentials.business_id first (OAuth flow),
-        falls back to email field (legacy /mrcall link flow).
+        PRIORITY: Explicit /mrcall link (email field) takes precedence over OAuth default.
+        Falls back to credentials.business_id if no explicit link set.
 
         Args:
             owner_id: Firebase UID
@@ -1632,20 +1632,22 @@ class SupabaseStorage:
         Returns:
             MrCall business ID or None
         """
-        # Try to get business_id from credentials first (OAuth flow)
-        creds = self.get_provider_credentials(owner_id, 'mrcall')
-        if creds and creds.get('business_id'):
-            logger.debug(f"get_mrcall_link: found business_id in credentials: {creds['business_id']}")
-            return creds['business_id']
-
-        # Fall back to email field (legacy /mrcall link flow)
+        # FIRST: Check explicit link via /mrcall link (stored in email field)
+        # This takes priority because it's an explicit user choice
         result = self.client.table('oauth_tokens').select('email').eq(
             'owner_id', owner_id
         ).eq('provider', 'mrcall').execute()
 
         if result.data and result.data[0].get('email'):
-            logger.debug(f"get_mrcall_link: using email field: {result.data[0]['email']}")
+            logger.debug(f"get_mrcall_link: explicit link found in email field: {result.data[0]['email']}")
             return result.data[0]['email']
+
+        # FALLBACK: Use OAuth business_id if no explicit link
+        creds = self.get_provider_credentials(owner_id, 'mrcall')
+        if creds and creds.get('business_id'):
+            logger.debug(f"get_mrcall_link: using OAuth business_id: {creds['business_id']}")
+            return creds['business_id']
+
         return None
 
     def remove_mrcall_link(self, owner_id: str) -> bool:
