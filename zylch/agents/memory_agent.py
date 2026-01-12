@@ -88,7 +88,7 @@ class MemoryWorker:
             The extraction prompt, or None if not configured
         """
         if not self._custom_prompt_loaded:
-            self._custom_prompt = self.storage.get_agent_prompt(self.owner_id, 'email')
+            self._custom_prompt = self.storage.get_agent_prompt(self.owner_id, 'memory_email')
             self._custom_prompt_loaded = True
 
             if self._custom_prompt:
