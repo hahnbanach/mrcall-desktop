@@ -268,14 +268,14 @@ result['sources'] = {
 | Command | Purpose |
 |---------|---------|
 | `/agent task train email` | Generate personalized task detection agent with calendar awareness (background job) |
-| `/agent task process [email\|calendar\|all]` | Detect tasks from data with calendar context (background job) |
-| `/agent task show [email\|calendar]` | Display current task agent prompt |
-| `/agent task reset [email\|calendar]` | Delete task agent prompt (keeps task items) |
+| `/agent task process email` | Detect tasks from emails + calendar (email includes calendar automatically) |
+| `/agent task show email` | Display current task agent prompt |
+| `/agent task reset email` | Delete task agent prompt (keeps task items) |
 | `/tasks` | Show tasks (cached) |
 | `/tasks refresh` | Re-analyze all events |
 | `/tasks reset` | Delete all task items + reset processing timestamps |
 
-**Note**: `/agent task train email` creates a unified prompt that works for both email and calendar processing. No separate calendar trainer needed.
+**Note**: The `email` channel automatically includes calendar events. There is no separate `calendar` channel - output shows separate counts for transparency (e.g., "42 emails, 15 calendar events"). The trained prompt works for both email and calendar processing.
 
 ## Urgency Levels
 

@@ -22,7 +22,7 @@ _executor = ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="bg_j
 logger.info(f"Background job executor initialized with {MAX_WORKERS} workers")
 
 
-def _should_stop_job(storage: 'SupabaseStorage', job_id: str) -> bool:
+def _should_stop_job(storage: 'SupabaseStorage', job_id: str, owner_id: str) -> bool:
     """Check if job was stopped (status changed from running).
 
     Call this periodically in worker loops to detect user-initiated stop.
@@ -30,11 +30,12 @@ def _should_stop_job(storage: 'SupabaseStorage', job_id: str) -> bool:
     Args:
         storage: SupabaseStorage instance
         job_id: Background job UUID
+        owner_id: Firebase UID (required for security check)
 
     Returns:
         True if job should stop (status != running or job not found)
     """
-    job = storage.get_background_job(job_id)
+    job = storage.get_background_job(job_id, owner_id)
     if job is None:
         return True
     return job.get('status') != 'running'
@@ -198,7 +199,7 @@ class JobExecutor:
                         )
 
                         # Check if user stopped the job
-                        if _should_stop_job(storage, job_id):
+                        if _should_stop_job(storage, job_id, owner_id):
                             logger.info(f"Job {job_id} was stopped by user, exiting")
                             return {"email_count": email_count, "calendar_count": calendar_count, "channels": channels, "stopped": True}
 
@@ -321,7 +322,7 @@ class JobExecutor:
                         )
 
                         # Check if user stopped the job
-                        if _should_stop_job(storage, job_id):
+                        if _should_stop_job(storage, job_id, owner_id):
                             logger.info(f"Job {job_id} was stopped by user, exiting")
                             return {
                                 "email_count": email_count,
@@ -382,7 +383,7 @@ class JobExecutor:
         def _sync_train() -> Dict[str, Any]:
             """Sync training code that runs in thread pool."""
             # Check if already stopped before starting
-            if _should_stop_job(storage, job_id):
+            if _should_stop_job(storage, job_id, owner_id):
                 logger.info(f"Job {job_id} was stopped before starting")
                 return {"results": [], "threads_analyzed": 0, "channel": channel, "stopped": True}
 
@@ -483,7 +484,7 @@ class JobExecutor:
         def _sync_process() -> Dict[str, Any]:
             """Sync code that runs in thread pool."""
             # Check if already stopped before starting
-            if _should_stop_job(storage, job_id):
+            if _should_stop_job(storage, job_id, owner_id):
                 logger.info(f"Job {job_id} was stopped before starting")
                 return {"stopped": True}
 

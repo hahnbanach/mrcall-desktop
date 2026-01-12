@@ -235,13 +235,17 @@ Hybrid: 0.85 → "/sync 2"
 Interactive command-line interface:
 - `/sync` - Sync emails, calendar, pipedrive (data only, no processing). Calendar always syncs 14 days forward.
 - `/email list|create|send|delete|search` - Email and draft management
-- `/agent memory train [email|calendar|all]` - Generate personalized memory extraction agent
-- `/agent memory process [email|calendar|all]` - Extract facts from synced data into memory blobs
+- `/agent memory train email` - Generate personalized memory extraction agent
+- `/agent memory run email` - Extract facts from emails + calendar into memory blobs (email channel includes calendar automatically)
 - `/agent task train email` - Generate personalized task detection agent (calendar-aware, unified prompt)
-- `/agent task process [email|calendar|all]` - Detect tasks from synced data (emails include calendar context)
+- `/agent task process email` - Detect tasks from emails + calendar (email channel includes calendar automatically)
 - `/memory search` - Search entity memories
 - `/tasks` - Show detected tasks
+- `/reset` - Reset all user data (requires `--hard` confirmation)
+- `/tutorial` - Getting started guide and daily workflow
 - Natural conversation with agent
+
+**Note**: The `email` channel automatically includes calendar events. There is no separate `calendar` channel - output shows separate counts for transparency (e.g., "42 emails, 15 calendar events").
 
 ### 8. Memory System (Entity-Centric Blobs)
 
@@ -269,9 +273,7 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
 
 **Commands**:
 - `/sync` - Fetches data to local DB (no processing)
-- `/agent process` - Process all unprocessed data into blobs
-- `/agent process email` - Process only emails
-- `/agent process calendar` - Process only calendar events
+- `/agent memory run email` - Process emails + calendar into blobs (email includes calendar automatically)
 - `/memory search <query>` - Hybrid FTS + semantic search
 - `/memory reset` - Delete blobs AND reset processing timestamps
 
@@ -862,14 +864,16 @@ Stored in agent_prompts table
 
 | Command | Purpose |
 |---------|---------|
-| `/agent memory train [email\|calendar\|all]` | Generate personalized memory extraction agent |
-| `/agent memory process [email\|calendar\|all]` | Process data into memory blobs |
-| `/agent memory show [email\|calendar]` | Display current memory agent |
-| `/agent memory reset [email\|calendar]` | Delete memory agent |
-| `/agent task train [email\|calendar\|all]` | Generate personalized task detection agent (background job) |
-| `/agent task process [email\|calendar\|all]` | Detect tasks from data |
-| `/agent task show [email\|calendar]` | Display current task agent |
-| `/agent task reset [email\|calendar]` | Delete task agent |
+| `/agent memory train email` | Generate personalized memory extraction agent |
+| `/agent memory run email` | Process emails + calendar into memory blobs |
+| `/agent memory show email` | Display current memory agent |
+| `/agent memory reset email` | Delete memory agent |
+| `/agent task train email` | Generate personalized task detection agent (background job) |
+| `/agent task process email` | Detect tasks from emails + calendar |
+| `/agent task show email` | Display current task agent |
+| `/agent task reset email` | Delete task agent |
+
+**Note**: The `email` channel automatically includes calendar events. Output shows separate counts for transparency.
 
 ### Gate on Processing
 
