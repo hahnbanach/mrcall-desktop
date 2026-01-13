@@ -122,19 +122,41 @@ class EmailArchiveManager:
             logger.info(f"Syncing from oldest email date: {sync_from.strftime('%Y-%m-%d')}")
 
         try:
-            # Fetch emails from Gmail using date query
+            # Fetch email IDs from Gmail using date query
             query = f"after:{sync_from.strftime('%Y/%m/%d')}"
-            logger.info(f"Searching Gmail: {query}")
-            messages = self.gmail.search_messages(query=query, max_results=5000)
+            logger.info(f"Searching Gmail for message IDs: {query}")
+            message_ids = self.gmail.search(query=query)
+            logger.info(f"Found {len(message_ids)} message IDs in Gmail")
 
-            logger.info(f"Fetched {len(messages)} messages from Gmail")
-
-            if not messages:
+            if not message_ids:
                 return {
                     'success': True,
                     'messages_added': 0,
                     'messages_deleted': 0
                 }
+
+            # Get existing email IDs from DB to filter out duplicates
+            if self._use_supabase:
+                existing_emails = self.supabase.get_emails(self.owner_id, limit=len(message_ids) + 1000)
+                existing_ids = {email['gmail_id'] for email in existing_emails}
+            else:
+                # Assuming local backend has a method to get all IDs
+                existing_ids = set(self.backend.get_all_message_ids())
+
+            new_message_ids = [msg_id for msg_id in message_ids if msg_id not in existing_ids]
+            logger.info(f"Found {len(new_message_ids)} new messages to sync")
+
+            if not new_message_ids:
+                return {
+                    'success': True,
+                    'messages_added': 0,
+                    'messages_deleted': 0,
+                    'total_fetched': 0
+                }
+
+            # Fetch full messages for the new IDs
+            messages = self.gmail.get_batch(new_message_ids, format='full')
+            logger.info(f"Fetched {len(messages)} full messages from Gmail")
 
             # Convert and store messages in batches
             batch_size = settings.email_archive_batch_size

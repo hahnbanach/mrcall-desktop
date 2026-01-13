@@ -330,6 +330,16 @@ class SQLiteArchiveBackend(EmailArchiveBackend):
             return datetime.fromtimestamp(row['oldest'], tz=timezone.utc)
         return None
 
+    def get_all_message_ids(self) -> List[str]:
+        """Get all message IDs from the archive."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id FROM messages")
+        rows = cursor.fetchall()
+
+        return [row['id'] for row in rows]
+
     def get_stats(self) -> Dict[str, Any]:
         """Get archive statistics."""
         conn = self._get_connection()
