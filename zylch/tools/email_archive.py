@@ -125,7 +125,7 @@ class EmailArchiveManager:
             # Fetch email IDs from Gmail using date query
             query = f"after:{sync_from.strftime('%Y/%m/%d')}"
             logger.info(f"Searching Gmail for message IDs: {query}")
-            message_ids = self.gmail.search(query=query)
+            message_ids = self.gmail.list_message_ids(query=query, max_results=5000)
             logger.info(f"Found {len(message_ids)} message IDs in Gmail")
 
             if not message_ids:

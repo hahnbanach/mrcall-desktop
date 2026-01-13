@@ -157,6 +157,42 @@ class GmailClient:
                 pickle.dump(creds, token)
             logger.info(f"Saved credentials to {token_path}")
 
+    def list_message_ids(
+        self,
+        query: str,
+        max_results: int = 5000,
+    ) -> List[str]:
+        """List Gmail message IDs matching a query.
+
+        Args:
+            query: Gmail search query (e.g., "after:2023/01/01")
+            max_results: Maximum results to return
+
+        Returns:
+            List of message IDs (strings)
+        """
+        if not self.service:
+            self.authenticate()
+
+        logger.debug(f"Searching Gmail for message IDs: {query}")
+
+        try:
+            results = self.service.users().messages().list(
+                userId='me',
+                q=query,
+                maxResults=max_results
+            ).execute()
+
+            messages = results.get('messages', [])
+            message_ids = [msg['id'] for msg in messages]
+
+            logger.info(f"Found {len(message_ids)} message IDs")
+            return message_ids
+
+        except Exception as e:
+            logger.error(f"Failed to list Gmail message IDs: {e}")
+            raise
+
     def search_messages(
         self,
         query: str,
