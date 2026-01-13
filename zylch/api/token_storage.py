@@ -362,6 +362,10 @@ def get_active_llm_provider(owner_id: str) -> tuple[Optional[str], Optional[str]
     # Also check legacy Anthropic key storage for backward compatibility
     anthropic_key = get_anthropic_key(owner_id)
     if anthropic_key:
+        # Basic validation for Anthropic keys (they should start with sk-ant-)
+        if not anthropic_key.startswith("sk-ant-"):
+            logger.warning(f"Malformed legacy Anthropic API key found for owner {owner_id}. Skipping.")
+            return None, None # Treat as if no key was found
         return "anthropic", anthropic_key
 
     return None, None
