@@ -350,6 +350,25 @@ class GmailClient:
 
         return self._parse_message(msg)
 
+    def get_batch(self, message_ids: List[str], format: str = 'full') -> List[Dict[str, Any]]:
+        """Get multiple messages by ID.
+
+        Args:
+            message_ids: List of Gmail message IDs
+            format: Message format (ignored, always uses 'full')
+
+        Returns:
+            List of parsed messages
+        """
+        messages = []
+        for msg_id in message_ids:
+            try:
+                msg = self.get_message(msg_id)
+                messages.append(msg)
+            except Exception as e:
+                logger.warning(f"Failed to fetch message {msg_id}: {e}")
+        return messages
+
     def send_message(
         self,
         to: str,
