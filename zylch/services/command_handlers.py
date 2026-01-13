@@ -2447,7 +2447,7 @@ Run `/tasks` to see items needing action."""
 Run `/agent task process` to recreate all tasks."""
 
         # Check if task agent is trained
-        task_prompt = storage.get_agent_prompt(owner_id, 'tasks')
+        task_prompt = storage.get_agent_prompt(owner_id, 'task_email')
         if not task_prompt:
             return """⚠️ **Task agent not trained yet**
 
