@@ -353,6 +353,10 @@ def get_active_llm_provider(owner_id: str) -> tuple[Optional[str], Optional[str]
     for provider in ["anthropic", "openai", "mistral"]:
         api_key = get_llm_provider_key(owner_id, provider)
         if api_key:
+            # Basic validation for Anthropic keys (they should start with sk-ant-)
+            if provider == "anthropic" and not api_key.startswith("sk-ant-"):
+                logger.warning(f"Malformed Anthropic API key found for owner {owner_id}. Skipping.")
+                continue # Try next provider, or fallback
             return provider, api_key
 
     # Also check legacy Anthropic key storage for backward compatibility
