@@ -607,6 +607,18 @@ class JobExecutor:
         if pipedrive_data.get('success') and not pipedrive_data.get('skipped'):
             msg_parts.append(f"{pipedrive_data.get('deals_synced', 0)} deals")
 
+        # MrCall status
+        mrcall_data = result.get('mrcall_sync', {})
+        if mrcall_data.get('success') and not mrcall_data.get('skipped'):
+            msg_parts.append(f"{mrcall_data.get('synced', 0)} calls")
+        elif not mrcall_data.get('success') and not mrcall_data.get('skipped'):
+            # Auth failed or API error - show warning
+            error = mrcall_data.get('error', 'Unknown error')
+            if '401' in str(error):
+                msg_parts.append("MrCall: auth expired (run /connect mrcall)")
+            else:
+                msg_parts.append(f"MrCall: {error}")
+
         msg = f"Sync complete: {', '.join(msg_parts)}" if msg_parts else "Sync complete"
 
         self.storage.create_notification(owner_id, msg, "info")
