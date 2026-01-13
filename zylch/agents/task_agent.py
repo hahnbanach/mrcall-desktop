@@ -128,7 +128,7 @@ class TaskWorker:
     def _get_task_prompt(self) -> Optional[str]:
         """Get task detection prompt from storage."""
         if not self._task_prompt_loaded:
-            self._task_prompt = self.storage.get_agent_prompt(self.owner_id, 'tasks')
+            self._task_prompt = self.storage.get_agent_prompt(self.owner_id, 'task_email')
             self._task_prompt_loaded = True
 
             if self._task_prompt:
