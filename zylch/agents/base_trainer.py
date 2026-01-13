@@ -148,6 +148,9 @@ class BaseAgentTrainer:
         samples = []
 
         for i, email in enumerate(emails, 1):
+            if len(samples) >= max_samples:
+                break
+
             from_email = email.get('from_email', 'unknown')
             to_emails = email.get('to_email', [])
             if isinstance(to_emails, list):
@@ -157,7 +160,8 @@ class BaseAgentTrainer:
 
             subject = email.get('subject', '(no subject)')
             body = email.get('body_plain', '') or email.get('snippet', '')
-            body = body
+            if len(body) > body_limit:
+                body = body[:body_limit] + '...[truncated]'
 
             samples.append(f"""
 --- Email {i} ---
