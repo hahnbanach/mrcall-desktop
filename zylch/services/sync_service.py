@@ -293,25 +293,34 @@ class SyncService:
                 "deals_synced": 0
             }
 
-    async def sync_mrcall(self, limit: int = 1, debug: bool = True, firebase_token: str = None, business_id: str = None) -> Dict[str, Any]:
-        """Fetch conversations from MrCall for debugging/testing.
+    async def sync_mrcall(
+        self,
+        days_back: int = 30,
+        limit: int = 100,
+        debug: bool = False,
+        firebase_token: str = None,
+        business_id: str = None
+    ) -> Dict[str, Any]:
+        """Sync MrCall phone call conversations to database.
 
-        This is a proof-of-concept to verify MrCall API integration works.
-        No actual sync to database - just fetches and prints in DEBUG mode.
+        Downloads phone call transcriptions from MrCall API and stores
+        them in mrcall_conversations table for memory agent processing.
 
         Args:
-            limit: Number of conversations to fetch (default: 1)
+            days_back: Number of days to sync (default: 30)
+            limit: Maximum conversations to fetch per request (default: 100)
             debug: If True, print conversation data to stdout
             firebase_token: MrCall OAuth access token for authentication
             business_id: Optional business ID override (otherwise fetched from storage)
 
         Returns:
-            Result dict with conversations fetched
+            Result dict with sync statistics
         """
         import json
         import httpx
+        from datetime import datetime, timezone, timedelta
 
-        logger.info(f"[mrcall_sync] Starting (limit={limit}, debug={debug})")
+        logger.info(f"[mrcall_sync] Starting (days_back={days_back}, limit={limit})")
 
         # Check if storage is configured
         if not self.supabase or not self.owner_id:
@@ -320,7 +329,7 @@ class SyncService:
                 "success": True,
                 "skipped": True,
                 "reason": "No storage configured",
-                "conversations_fetched": 0
+                "synced": 0
             }
 
         # Get MrCall business ID from credentials or simple link
@@ -338,8 +347,8 @@ class SyncService:
             return {
                 "success": True,
                 "skipped": True,
-                "reason": "MrCall not linked. Use /mrcall <business_id> to link.",
-                "conversations_fetched": 0
+                "reason": "MrCall not linked. Use /mrcall link first.",
+                "synced": 0
             }
 
         # Require access token for API auth
@@ -348,30 +357,35 @@ class SyncService:
             return {
                 "success": False,
                 "error": "MrCall access token required. Run /connect mrcall to authenticate.",
-                "conversations_fetched": 0
+                "synced": 0
             }
 
         try:
+            # Calculate date range for filtering
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=days_back)
+
             # Call MrCall conversation search API (delegated realm for partner access)
-            # Using delegated_mrcall0 as per StarChat Partner Integration Guide
             url = f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/customer/conversation/search"
             headers = {
                 "auth": firebase_token,
                 "Content-Type": "application/json"
             }
-            body = {
+            request_body = {
                 "businessId": business_id,
                 "from": 0,
                 "size": limit,
-                "lightweight": True,  # Don't include audio
-                "asc": False  # Most recent first
+                "lightweight": True,  # Don't include audio in response
+                "asc": False,  # Most recent first
+                "startDate": start_date.isoformat(),
+                "endDate": end_date.isoformat()
             }
 
             logger.info(f"[mrcall_sync] Calling API: {url}")
-            logger.debug(f"[mrcall_sync] Request body: {json.dumps(body)}")
+            logger.debug(f"[mrcall_sync] Request body: {json.dumps(request_body)}")
 
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(url, headers=headers, json=body)
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(url, headers=headers, json=request_body)
                 response.raise_for_status()
                 data = response.json()
 
@@ -379,7 +393,7 @@ class SyncService:
             conversations = data.get('items', []) if isinstance(data, dict) else data
             total = data.get('total', len(conversations)) if isinstance(data, dict) else len(conversations)
 
-            logger.info(f"[mrcall_sync] Fetched {len(conversations)} conversation(s) (total: {total})")
+            logger.info(f"[mrcall_sync] Fetched {len(conversations)} conversation(s) (total available: {total})")
 
             # DEBUG: Print the conversation data
             if debug and conversations:
@@ -394,17 +408,69 @@ class SyncService:
                     print(f"Contact: {conv.get('contactName', 'Unknown')} ({conv.get('contactNumber', 'N/A')})")
                     print(f"Duration: {conv.get('duration', 0) / 1000:.1f}s")
                     print(f"Subject: {conv.get('subject', 'N/A')}")
-                    print(f"Body: {conv.get('body', 'N/A')}")
+                    body_preview = str(conv.get('body', 'N/A'))[:500]
+                    print(f"Body: {body_preview}{'...' if len(str(conv.get('body', ''))) > 500 else ''}")
                     if conv.get('values'):
                         print(f"Values: {json.dumps(conv.get('values'), indent=2, default=str)}")
                 print(f"\n{'='*60}\n")
 
+            # Store conversations in database
+            synced_count = 0
+            skipped_count = 0
+
+            for conv in conversations:
+                try:
+                    conv_id = conv.get('id')
+                    if not conv_id:
+                        skipped_count += 1
+                        continue
+
+                    # Process body - strip base64 audio if present
+                    body_data = conv.get('body')
+                    if isinstance(body_data, str):
+                        try:
+                            body_data = json.loads(body_data)
+                        except json.JSONDecodeError:
+                            body_data = {"raw": body_data}
+
+                    # Strip audio from body if it's a dict
+                    if isinstance(body_data, dict):
+                        body_data = self._strip_audio_from_body(body_data)
+
+                    # Prepare raw_data without audio
+                    raw_data = {k: v for k, v in conv.items() if k != 'body'}
+                    raw_data['body'] = body_data  # Use stripped body
+
+                    # Store conversation
+                    self.supabase.store_mrcall_conversation(
+                        owner_id=self.owner_id,
+                        conversation_id=conv_id,
+                        business_id=business_id,
+                        contact_phone=conv.get('contactNumber'),
+                        contact_name=conv.get('contactName'),
+                        call_duration_ms=conv.get('duration'),
+                        call_started_at=conv.get('startTimestamp'),
+                        subject=conv.get('subject'),
+                        body=body_data,
+                        custom_values=conv.get('values'),
+                        raw_data=raw_data
+                    )
+                    synced_count += 1
+
+                except Exception as e:
+                    logger.warning(f"[mrcall_sync] Failed to store conversation {conv.get('id')}: {e}")
+                    skipped_count += 1
+                    continue
+
+            logger.info(f"[mrcall_sync] Synced {synced_count} conversations, skipped {skipped_count}")
+
             return {
                 "success": True,
-                "conversations_fetched": len(conversations),
+                "synced": synced_count,
+                "skipped": skipped_count,
                 "total_available": total,
-                "business_id": business_id,
-                "debug": debug
+                "days_back": days_back,
+                "business_id": business_id
             }
 
         except httpx.HTTPStatusError as e:
@@ -412,18 +478,57 @@ class SyncService:
             return {
                 "success": False,
                 "error": f"MrCall API error: {e.response.status_code}",
-                "conversations_fetched": 0
+                "synced": 0
             }
         except Exception as e:
             logger.error(f"[mrcall_sync] Failed: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
-                "conversations_fetched": 0
+                "synced": 0
             }
 
+    def _strip_audio_from_body(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Strip base64 audio data from conversation body to save space.
+
+        Args:
+            body: Conversation body dict that may contain audio
+
+        Returns:
+            Body dict with audio fields removed or truncated
+        """
+        if not isinstance(body, dict):
+            return body
+
+        # Create a copy to avoid modifying original
+        result = {}
+        for key, value in body.items():
+            # Skip known audio fields
+            if key in ('audio', 'audioData', 'audioBase64', 'recording'):
+                result[key] = '[AUDIO_STRIPPED]'
+            # Recursively process nested dicts
+            elif isinstance(value, dict):
+                result[key] = self._strip_audio_from_body(value)
+            # Recursively process lists
+            elif isinstance(value, list):
+                result[key] = [
+                    self._strip_audio_from_body(item) if isinstance(item, dict) else item
+                    for item in value
+                ]
+            # Check for base64 audio patterns in string values
+            elif isinstance(value, str) and len(value) > 10000:
+                # Large strings might be base64 audio - check pattern
+                if value.startswith(('data:audio/', 'UklGR', 'SUQz', 'T2dnUw')):
+                    result[key] = '[AUDIO_STRIPPED]'
+                else:
+                    result[key] = value
+            else:
+                result[key] = value
+
+        return result
+
     async def run_full_sync(self, days_back: Optional[int] = None) -> Dict[str, Any]:
-        """Run full sync workflow: emails + calendar + Pipedrive.
+        """Run full sync workflow: emails + calendar + Pipedrive + MrCall.
 
         Syncs data from connected services to local database.
         Does NOT process memory or run analysis - use /memory for that.
@@ -440,6 +545,7 @@ class SyncService:
             "email_sync": {"success": False, "error": "Not started"},
             "calendar_sync": {"success": False, "error": "Not started"},
             "pipedrive_sync": {"success": False, "error": "Not started"},
+            "mrcall_sync": {"success": False, "error": "Not started"},
             "success": True,
             "errors": []
         }
@@ -491,4 +597,66 @@ class SyncService:
             results["errors"].append(f"Pipedrive sync: {str(e)}")
             # Don't fail entire sync if Pipedrive fails
 
+        # Sync MrCall (if connected)
+        try:
+            mrcall_result = await self._sync_mrcall_if_connected(days_back=days_back if days_back is not None else 30)
+            results["mrcall_sync"] = mrcall_result
+            if not mrcall_result.get("success") and not mrcall_result.get("skipped"):
+                results["errors"].append(f"MrCall sync: {mrcall_result.get('error', 'Unknown error')}")
+        except Exception as e:
+            logger.error(f"MrCall sync failed: {e}")
+            results["mrcall_sync"] = {
+                "success": False,
+                "error": str(e)
+            }
+            results["errors"].append(f"MrCall sync: {str(e)}")
+            # Don't fail entire sync if MrCall fails
+
         return results
+
+    async def _sync_mrcall_if_connected(self, days_back: int = 30) -> Dict[str, Any]:
+        """Sync MrCall if credentials are available.
+
+        Args:
+            days_back: Number of days to sync
+
+        Returns:
+            Sync result dict
+        """
+        if not self.supabase or not self.owner_id:
+            return {
+                "success": True,
+                "skipped": True,
+                "reason": "No storage configured",
+                "synced": 0
+            }
+
+        # Get MrCall credentials
+        mrcall_creds = self.supabase.get_provider_credentials(self.owner_id, 'mrcall')
+        if not mrcall_creds or not mrcall_creds.get('access_token'):
+            return {
+                "success": True,
+                "skipped": True,
+                "reason": "MrCall not connected",
+                "synced": 0
+            }
+
+        business_id = mrcall_creds.get('business_id')
+        if not business_id:
+            # Try legacy link
+            business_id = self.supabase.get_mrcall_link(self.owner_id)
+
+        if not business_id:
+            return {
+                "success": True,
+                "skipped": True,
+                "reason": "MrCall not linked to a business",
+                "synced": 0
+            }
+
+        # Run the sync
+        return await self.sync_mrcall(
+            days_back=days_back,
+            firebase_token=mrcall_creds.get('access_token'),
+            business_id=business_id
+        )

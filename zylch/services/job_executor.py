@@ -131,7 +131,7 @@ class JobExecutor:
         Args:
             job_id: Background job UUID
             owner_id: Firebase UID
-            channel: 'email', 'calendar', or 'all'
+            channel: 'email', 'calendar', 'mrcall', or 'all'
             api_key: User's LLM API key
             llm_provider: LLM provider name (anthropic, openai, mistral)
         """
@@ -148,17 +148,26 @@ class JobExecutor:
                 provider=llm_provider
             )
 
-            # Check if user has custom prompt
-            if not worker.has_custom_prompt():
+            # Check if user has custom prompt for requested channel
+            if channel in ['email', 'all'] and not worker.has_custom_prompt():
                 raise ValueError(
-                    "No personalized extraction agent found. "
+                    "No personalized extraction agent found for email. "
                     "Run `/agent memory train email` first."
                 )
 
             email_count = 0
             calendar_count = 0
-            # "email" always includes calendar (user sees separate counts)
-            channels = ["email", "calendar"] if channel in ["email", "all"] else [channel]
+            mrcall_count = 0
+
+            # Determine channels to process
+            if channel == 'all':
+                channels = ["email", "calendar", "mrcall"]
+            elif channel == 'email':
+                channels = ["email", "calendar"]  # email includes calendar
+            elif channel == 'mrcall':
+                channels = ["mrcall"]
+            else:
+                channels = [channel]
 
             for ch in channels:
                 # Get unprocessed items
@@ -166,6 +175,8 @@ class JobExecutor:
                     items = storage.get_unprocessed_emails(owner_id, limit=500)
                 elif ch == "calendar":
                     items = storage.get_unprocessed_calendar_events(owner_id, limit=500)
+                elif ch == "mrcall":
+                    items = storage.get_unprocessed_mrcall_conversations(owner_id, limit=500)
                 else:
                     continue
 
@@ -184,9 +195,12 @@ class JobExecutor:
                         if ch == "email":
                             _process_email_sync(worker, item)
                             email_count += 1
-                        else:
+                        elif ch == "calendar":
                             _process_calendar_event_sync(worker, item)
                             calendar_count += 1
+                        elif ch == "mrcall":
+                            _process_mrcall_sync(worker, item)
+                            mrcall_count += 1
                     except Exception as e:
                         logger.error(f"Failed to process {ch} item: {e}")
 
@@ -201,9 +215,20 @@ class JobExecutor:
                         # Check if user stopped the job
                         if _should_stop_job(storage, job_id, owner_id):
                             logger.info(f"Job {job_id} was stopped by user, exiting")
-                            return {"email_count": email_count, "calendar_count": calendar_count, "channels": channels, "stopped": True}
+                            return {
+                                "email_count": email_count,
+                                "calendar_count": calendar_count,
+                                "mrcall_count": mrcall_count,
+                                "channels": channels,
+                                "stopped": True
+                            }
 
-            return {"email_count": email_count, "calendar_count": calendar_count, "channels": channels}
+            return {
+                "email_count": email_count,
+                "calendar_count": calendar_count,
+                "mrcall_count": mrcall_count,
+                "channels": channels
+            }
 
         # Execute in thread pool
         loop = asyncio.get_event_loop()
@@ -211,7 +236,7 @@ class JobExecutor:
 
         # Don't complete if job was stopped (user will cancel it)
         if result.get("stopped"):
-            total = result.get('email_count', 0) + result.get('calendar_count', 0)
+            total = result.get('email_count', 0) + result.get('calendar_count', 0) + result.get('mrcall_count', 0)
             logger.info(f"Job {job_id} stopped after processing {total} items")
             return
 
@@ -219,9 +244,12 @@ class JobExecutor:
         self.storage.complete_background_job(job_id, result)
         email_count = result.get('email_count', 0)
         calendar_count = result.get('calendar_count', 0)
+        mrcall_count = result.get('mrcall_count', 0)
         msg = f"Memory processing complete: {email_count} emails"
         if calendar_count > 0:
             msg += f", {calendar_count} calendar events"
+        if mrcall_count > 0:
+            msg += f", {mrcall_count} phone calls"
         self.storage.create_notification(owner_id, msg, "info")
 
     async def _execute_task_process(
@@ -756,4 +784,103 @@ def _process_calendar_event_sync(worker: 'MemoryWorker', event: Dict) -> bool:
         logger.error(f"Error processing event {event_id}: {e}", exc_info=True)
         return False
 
+
+def _process_mrcall_sync(worker: 'MemoryWorker', conversation: Dict) -> bool:
+    """Sync version of MemoryWorker.process_mrcall_conversation.
+
+    Args:
+        worker: MemoryWorker instance
+        conversation: MrCall conversation dict
+
+    Returns:
+        True if processed successfully
+    """
+    conv_id = conversation.get("id", "unknown")
+    try:
+        logger.debug(f"Processing MrCall conversation {conv_id}")
+
+        # Extract entities (sync LLM call inside)
+        entities = worker._extract_mrcall_entities(conversation)
+        if not entities:
+            logger.debug(f"No entities extracted from conversation {conv_id}")
+            worker.storage.mark_mrcall_memory_processed(worker.owner_id, conv_id)
+            return True
+
+        # Process each entity
+        contact_phone = conversation.get('contact_phone', 'unknown')
+        contact_name = conversation.get('contact_name', 'unknown')
+        call_date = conversation.get('call_started_at', 'unknown')
+        event_desc = f"Extracted from phone call with {contact_name} ({contact_phone}) on {call_date}"
+
+        for i, entity_content in enumerate(entities):
+            _upsert_mrcall_entity_sync(worker, entity_content, event_desc, conv_id, i + 1, len(entities))
+
+        # Mark as processed
+        worker.storage.mark_mrcall_memory_processed(worker.owner_id, conv_id)
+        return True
+
+    except Exception as e:
+        logger.error(f"Error processing conversation {conv_id}: {e}", exc_info=True)
+        return False
+
+
+def _upsert_mrcall_entity_sync(
+    worker: 'MemoryWorker',
+    entity_content: str,
+    event_desc: str,
+    conv_id: str,
+    entity_num: int,
+    total_entities: int
+) -> None:
+    """Sync version of MemoryWorker._upsert_mrcall_entity.
+
+    Args:
+        worker: MemoryWorker instance
+        entity_content: Entity blob content
+        event_desc: Event description
+        conv_id: Source conversation ID
+        entity_num: Entity number (1-indexed)
+        total_entities: Total entities from this conversation
+    """
+    logger.debug(f"Upserting MrCall entity {entity_num}/{total_entities}")
+
+    # Get top 3 candidates above threshold
+    existing_blobs = worker.hybrid_search.find_candidates_for_reconsolidation(
+        owner_id=worker.owner_id,
+        content=entity_content,
+        namespace=worker.namespace,
+        limit=3
+    )
+
+    upserted = False
+
+    for existing in existing_blobs:
+        # Try to merge with this candidate (sync LLM call)
+        merged_content = worker.llm_merge.merge(existing.content, entity_content)
+
+        # If LLM says INSERT (entities don't match), try next candidate
+        if 'INSERT' in merged_content.upper() and len(merged_content) < 10:
+            logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
+            continue
+
+        # Successful merge
+        worker.blob_storage.update_blob(
+            blob_id=existing.blob_id,
+            owner_id=worker.owner_id,
+            content=merged_content,
+            event_description=event_desc
+        )
+        logger.info(f"Reconsolidated blob {existing.blob_id} with conversation {conv_id}")
+        upserted = True
+        break
+
+    if not upserted:
+        # Create new blob
+        blob = worker.blob_storage.store_blob(
+            owner_id=worker.owner_id,
+            namespace=worker.namespace,
+            content=entity_content,
+            event_description=event_desc
+        )
+        logger.info(f"Created new blob {blob['id']} from conversation {conv_id}")
 

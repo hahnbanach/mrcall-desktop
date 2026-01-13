@@ -3700,6 +3700,172 @@ class SupabaseStorage:
             logger.info(f"Reset {count} running jobs to pending")
         return count
 
+    # ==========================================
+    # MRCALL CONVERSATIONS
+    # ==========================================
+
+    def store_mrcall_conversation(
+        self,
+        owner_id: str,
+        conversation_id: str,
+        business_id: str,
+        contact_phone: Optional[str],
+        contact_name: Optional[str],
+        call_duration_ms: Optional[int],
+        call_started_at: Optional[str],
+        subject: Optional[str],
+        body: Optional[Dict[str, Any]],
+        custom_values: Optional[Dict[str, Any]],
+        raw_data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Store or update a MrCall conversation.
+
+        Args:
+            owner_id: Firebase UID
+            conversation_id: MrCall conversation ID (primary key)
+            business_id: MrCall business ID
+            contact_phone: Caller phone number
+            contact_name: Caller name if known
+            call_duration_ms: Call duration in milliseconds
+            call_started_at: ISO timestamp of call start
+            subject: Call subject/topic
+            body: JSON with conversation transcript (audio stripped)
+            custom_values: The 'values' field from API
+            raw_data: Full API response (audio stripped)
+
+        Returns:
+            Stored conversation record
+        """
+        data = {
+            'id': conversation_id,
+            'owner_id': owner_id,
+            'business_id': business_id,
+            'contact_phone': contact_phone,
+            'contact_name': contact_name,
+            'call_duration_ms': call_duration_ms,
+            'call_started_at': call_started_at,
+            'subject': subject,
+            'body': body,
+            'custom_values': custom_values,
+            'raw_data': raw_data,
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        result = self.client.table('mrcall_conversations').upsert(
+            data,
+            on_conflict='id'
+        ).execute()
+
+        return result.data[0] if result.data else data
+
+    def get_unprocessed_mrcall_conversations(
+        self,
+        owner_id: str,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """Get MrCall conversations not yet processed by memory agent.
+
+        Args:
+            owner_id: Firebase UID
+            limit: Maximum number of conversations to return
+
+        Returns:
+            List of unprocessed conversations, most recent first
+        """
+        result = self.client.table('mrcall_conversations')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .is_('memory_processed_at', 'null')\
+            .order('call_started_at', desc=True)\
+            .limit(limit)\
+            .execute()
+
+        return result.data or []
+
+    def mark_mrcall_memory_processed(
+        self,
+        owner_id: str,
+        conversation_id: str
+    ) -> None:
+        """Mark a MrCall conversation as processed by memory agent.
+
+        Args:
+            owner_id: Firebase UID
+            conversation_id: MrCall conversation ID
+        """
+        self.client.table('mrcall_conversations')\
+            .update({
+                'memory_processed_at': datetime.now(timezone.utc).isoformat()
+            })\
+            .eq('id', conversation_id)\
+            .eq('owner_id', owner_id)\
+            .execute()
+
+    def get_mrcall_conversations(
+        self,
+        owner_id: str,
+        limit: int = 50,
+        days_back: int = 30
+    ) -> List[Dict[str, Any]]:
+        """Get recent MrCall conversations for training.
+
+        Args:
+            owner_id: Firebase UID
+            limit: Maximum number of conversations to return
+            days_back: How many days back to look
+
+        Returns:
+            List of conversations, most recent first
+        """
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days_back)).isoformat()
+
+        result = self.client.table('mrcall_conversations')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .gte('call_started_at', cutoff)\
+            .order('call_started_at', desc=True)\
+            .limit(limit)\
+            .execute()
+
+        return result.data or []
+
+    def reset_mrcall_processing(self, owner_id: str) -> int:
+        """Reset memory processing flags for all MrCall conversations.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            Number of conversations reset
+        """
+        result = self.client.table('mrcall_conversations')\
+            .update({
+                'memory_processed_at': None
+            })\
+            .eq('owner_id', owner_id)\
+            .execute()
+
+        count = len(result.data) if result.data else 0
+        if count > 0:
+            logger.info(f"Reset memory processing for {count} MrCall conversations")
+        return count
+
+    def get_mrcall_conversation_count(self, owner_id: str) -> int:
+        """Get total count of MrCall conversations for user.
+
+        Args:
+            owner_id: Firebase UID
+
+        Returns:
+            Total conversation count
+        """
+        result = self.client.table('mrcall_conversations')\
+            .select('id', count='exact')\
+            .eq('owner_id', owner_id)\
+            .execute()
+
+        return result.count or 0
+
 
 # DEPRECATED: Old FTS-only search function (kept for fallback)
 # Now using hybrid_search_emails from migrations/010_email_hybrid_search.sql

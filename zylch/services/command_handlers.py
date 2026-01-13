@@ -294,12 +294,24 @@ Then run `/sync --days N` to rebuild memory from re-synced emails."""
             logger.error(f"[/sync] Failed to reset sync data: {e}")
             return f"❌ **Error resetting sync data:** {str(e)}"
 
-    # Subcommand: mrcall - Test MrCall API integration
+    # Subcommand: mrcall - Sync MrCall phone call transcriptions
     if subcommand == 'mrcall':
-        logger.info(f"[/sync] MrCall test for owner_id={owner_id}")
+        logger.info(f"[/sync] MrCall sync for owner_id={owner_id}")
         try:
             from zylch.api.token_storage import get_mrcall_credentials
             supabase = SupabaseStorage()
+
+            # Parse --days option
+            days_back = 30
+            debug_mode = False
+            for i, arg in enumerate(args):
+                if arg == '--days' and i + 1 < len(args):
+                    try:
+                        days_back = int(args[i + 1])
+                    except ValueError:
+                        return f"❌ **Error:** `{args[i + 1]}` is not a valid number"
+                elif arg == '--debug':
+                    debug_mode = True
 
             # Get MrCall OAuth credentials (includes access_token and business_id)
             mrcall_creds = get_mrcall_credentials(owner_id)
@@ -307,7 +319,7 @@ Then run `/sync --days N` to rebuild memory from re-synced emails."""
                 # Check if there's a simple mrcall link (without OAuth)
                 business_id = supabase.get_mrcall_link(owner_id)
                 if business_id:
-                    return f"""📞 **MrCall Sync (Debug)**
+                    return f"""📞 **MrCall Sync**
 
 ⚠️ **MrCall linked but no OAuth token**
 
@@ -317,54 +329,58 @@ Your MrCall is linked to business `{business_id}` but OAuth credentials are miss
 1. Run `/connect mrcall` to authenticate with MrCall
 2. Then run `/sync mrcall` again"""
                 else:
-                    return """📞 **MrCall Sync (Debug)**
+                    return """📞 **MrCall Sync**
 
 ⚠️ **MrCall not connected**
 
 **To connect MrCall:**
-1. Run `/mrcall <business_id>` to link your business
-2. Or run `/connect mrcall` for full OAuth setup"""
+1. Run `/connect mrcall` to authenticate
+2. Run `/mrcall link` to link your assistant"""
 
-            # Create minimal SyncService for MrCall test
+            # Create SyncService for MrCall
             sync_service = SyncService(
                 owner_id=owner_id,
                 supabase_storage=supabase
             )
 
-            # Run MrCall sync (debug mode) - use access_token for API auth
+            # Run MrCall sync
             result = await sync_service.sync_mrcall(
-                limit=1,
-                debug=True,
+                days_back=days_back,
+                debug=debug_mode,
                 firebase_token=mrcall_creds.get('access_token'),
                 business_id=mrcall_creds.get('business_id')
             )
 
             if result.get('skipped'):
-                return f"""📞 **MrCall Sync (Debug)**
+                return f"""📞 **MrCall Sync**
 
 ⚠️ **Skipped:** {result.get('reason', 'Unknown reason')}
 
 **To link MrCall:**
-1. Get your MrCall business ID
-2. Run `/mrcall <business_id>`"""
+1. Run `/connect mrcall` to authenticate
+2. Run `/mrcall link` to link your assistant"""
 
             if result.get('success'):
-                return f"""📞 **MrCall Sync (Debug)**
+                return f"""📞 **MrCall Sync**
 
-✅ **Success!**
+✅ **Synced {result.get('synced', 0)} phone call(s)**
+
 • Business ID: `{result.get('business_id')}`
-• Conversations fetched: {result.get('conversations_fetched')}
+• Days back: {result.get('days_back')}
 • Total available: {result.get('total_available', 'N/A')}
+• Skipped: {result.get('skipped', 0)}
 
-Check the console/logs for conversation details."""
+**Next steps:**
+• `/agent memory train mrcall` - Train memory extraction
+• `/agent memory process mrcall` - Extract entities from calls"""
             else:
-                return f"""📞 **MrCall Sync (Debug)**
+                return f"""📞 **MrCall Sync**
 
 ❌ **Error:** {result.get('error', 'Unknown error')}"""
 
         except Exception as e:
-            logger.error(f"[/sync] MrCall test failed: {e}", exc_info=True)
-            return f"❌ **MrCall test failed:** {str(e)}"
+            logger.error(f"[/sync] MrCall sync failed: {e}", exc_info=True)
+            return f"❌ **MrCall sync failed:** {str(e)}"
 
     # Parse --days option (kept for future use, not currently used with background jobs)
     days_back = 30
@@ -2952,8 +2968,10 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
     help_text = """**🤖 Manage AI Agents**
 
 **Memory Agents** (extract facts into memory blobs):
-• `/agent memory train email` - Create extraction agent
+• `/agent memory train email` - Create email extraction agent
+• `/agent memory train mrcall` - Create phone call extraction agent
 • `/agent memory run email` - Process emails + calendar into memory
+• `/agent memory run mrcall` - Process phone calls into memory
 • `/agent memory show email` - Show current agent
 • `/agent memory reset email` - Delete agent
 
@@ -2976,16 +2994,17 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 • `/agent mrcall show` - Show current agent prompt
 • `/agent mrcall reset` - Delete agent prompt
 
-**Note:** The `email` channel automatically includes calendar events.
+**Channels:** `email` (includes calendar), `mrcall` (phone calls), `all`
 
 **Workflow:**
-1. `/sync` - Fetch emails + calendar (calendar syncs 2 weeks ahead)
-2. `/agent memory train email` - Create memory agent
+1. `/sync` - Fetch emails + calendar + MrCall (if connected)
+2. `/agent memory train email` - Create email memory agent
 3. `/agent memory run email` - Extract facts from emails + calendar
-4. `/agent task train email` - Create task agent (calendar-aware)
-5. `/agent task process email` - Detect tasks (considers scheduled meetings)
-6. `/agent email train` - Learn your writing style
-7. `/agent email run "write to Mario about the offer"` - Use email agent"""
+4. `/sync mrcall` - Sync phone call transcriptions
+5. `/agent memory train mrcall` - Create phone call memory agent
+6. `/agent memory run mrcall` - Extract facts from phone calls
+7. `/agent email train` - Learn your writing style
+8. `/agent email run "write to Mario about the offer"` - Use email agent"""
 
     # --help option (check first)
     if '--help' in args:
@@ -3002,7 +3021,7 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 
         valid_domains = ['memory', 'task', 'email', 'mrcall']
         valid_actions = ['train', 'run', 'process', 'show', 'reset']  # 'process' kept for backwards compat
-        valid_channels = ['email', 'all']
+        valid_channels = ['email', 'mrcall', 'all']
 
         if domain not in valid_domains:
             return f"❌ Unknown domain: `{domain}`\n\nValid domains: `memory`, `task`, `email`, `mrcall`\n\n{help_text}"
@@ -3133,7 +3152,7 @@ Connect your LLM provider:
 Your email address is required to identify sent vs received emails.
 Please ensure your account is properly connected via `/connect`."""
 
-    channels_to_train = [channel] if channel != 'all' else ['email', 'calendar']
+    channels_to_train = [channel] if channel != 'all' else ['email', 'calendar', 'mrcall']
     results = []
 
     for ch in channels_to_train:
@@ -3151,6 +3170,23 @@ Please ensure your account is properly connected via `/connect`."""
         elif ch == 'calendar':
             # Calendar memory training - placeholder for future implementation
             results.append(f"📅 **Calendar:** Not yet implemented")
+
+        elif ch == 'mrcall':
+            # MrCall memory training
+            from zylch.agents.mrcall_memory_trainer import MrCallMemoryTrainer
+
+            calls = storage.get_mrcall_conversations(owner_id, limit=1)
+            if not calls:
+                results.append(f"📞 **MrCall:** No phone calls found - skipped (run `/sync mrcall` first)")
+                continue
+
+            try:
+                trainer = MrCallMemoryTrainer(storage, owner_id, api_key, user_email, llm_provider)
+                agent_prompt, metadata = await trainer.build_prompt()
+                storage.store_agent_prompt(owner_id, 'memory_mrcall', agent_prompt, metadata)
+                results.append(f"📞 **MrCall:** Agent created ({metadata.get('calls_analyzed', 0)} calls analyzed)")
+            except ValueError as e:
+                results.append(f"📞 **MrCall:** {str(e)}")
 
     return f"""✅ **Memory Agent Training Complete**
 
@@ -3183,6 +3219,13 @@ Connect your LLM provider:
 
 Train your memory agent first:
 `/agent memory train email`"""
+
+    if channel in ['mrcall', 'all']:
+        if not storage.get_agent_prompt(owner_id, 'memory_mrcall'):
+            return """⚠️ **No memory agent found for MrCall**
+
+Train your memory agent first:
+`/agent memory train mrcall`"""
 
     # Create background job (returns existing if duplicate)
     job = storage.create_background_job(
@@ -4115,7 +4158,7 @@ def _tutorial_mrcall_user() -> str:
     """Tutorial for new MrCall users."""
     return """**MrCall Tutorial - User Guide**
 
-MrCall lets you configure your AI phone assistant through natural language.
+MrCall lets you configure your AI phone assistant and sync call transcriptions.
 
 ---
 
@@ -4146,7 +4189,31 @@ Copy the business ID from `/mrcall list` and paste it here.
 
 ---
 
-## Step 4: Train the Agent
+## Step 4: Sync Phone Transcriptions
+
+```
+/sync mrcall
+```
+Downloads phone call transcriptions from your MrCall assistant.
+Use `--days 60` to sync more history.
+
+---
+
+## Step 5: Train Memory Agent (Optional)
+
+Build a knowledge base from your phone calls:
+
+```
+/agent memory train mrcall
+```
+Then extract entities:
+```
+/agent memory process mrcall
+```
+
+---
+
+## Step 6: Train Configuration Agent
 
 ```
 /agent mrcall train
@@ -4156,7 +4223,7 @@ The agent learns your settings and can help you modify them.
 
 ---
 
-## Step 5: Use the Agent
+## Step 7: Use the Agent
 
 Ask natural language questions:
 
@@ -4175,15 +4242,15 @@ Ask natural language questions:
 | `/mrcall status` | Check connection status |
 | `/mrcall variables` | List all configuration variables |
 | `/mrcall unlink` | Disconnect from assistant |
-| `/agent mrcall show` | Show agent's current prompt |
-| `/agent mrcall reset` | Delete agent (must retrain) |
+| `/sync mrcall --days 30` | Sync call transcriptions |
+| `/agent memory train mrcall` | Train call memory extraction |
+| `/agent memory process mrcall` | Extract entities from calls |
+| `/agent mrcall show` | Show config agent's prompt |
+| `/agent mrcall reset` | Delete config agent |
 
 ---
 
-**Tip:** The agent understands context! You can ask things like:
-- "how does the assistant greet callers?"
-- "what are my current settings?"
-- "disable all booking features"
+**Tip:** Use `/memory search <query>` to search across all extracted information (emails, calendar, and phone calls).
 """
 
 
