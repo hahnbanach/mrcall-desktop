@@ -22,6 +22,10 @@ from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 
 logger = logging.getLogger(__name__)
 
+# Truncation limits to avoid context window overflow
+MAX_EMAIL_BODY_CHARS = 5000
+MAX_BLOB_CONTENT_CHARS = 2000
+
 
 # Meta-prompt used to generate the task detection agent
 TASK_AGENT_META_PROMPT = """You are analyzing a user's communication history to create a personalized prompt for identifying actionable items.
@@ -278,6 +282,8 @@ class EmailTaskAgentTrainer:
             from_email = last_email.get('from_email', 'unknown')
             date = last_email.get('date', 'unknown')
             body = last_email.get('body_plain', '') or last_email.get('snippet', '')
+            if len(body) > MAX_EMAIL_BODY_CHARS:
+                body = body[:MAX_EMAIL_BODY_CHARS] + '...[truncated]'
 
             is_user = self.user_domain and self.user_domain in from_email.lower()
             sender_label = f"{from_email} [USER]" if is_user else from_email
@@ -299,9 +305,12 @@ Body: {body}
 
         formatted = []
         for blob in blobs:
+            content = blob['content']
+            if len(content) > MAX_BLOB_CONTENT_CHARS:
+                content = content[:MAX_BLOB_CONTENT_CHARS] + '...[truncated]'
             formatted.append(f"""
 --- Blob for {blob['contact_email']} ---
-{blob['content']}
+{content}
 """)
 
         return '\n'.join(formatted)

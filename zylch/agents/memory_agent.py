@@ -571,3 +571,243 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
         except Exception as e:
             logger.error(f"Failed to extract pipedrive facts: {e}")
             return ""
+
+    # ==========================================
+    # MRCALL PHONE CALL PROCESSING
+    # ==========================================
+
+    def _get_mrcall_extraction_prompt(self) -> Optional[str]:
+        """Get MrCall extraction prompt - user-specific only.
+
+        Returns None if no custom prompt exists (user must run /agent memory train mrcall first).
+
+        Returns:
+            The extraction prompt, or None if not configured
+        """
+        prompt = self.storage.get_agent_prompt(self.owner_id, 'memory_mrcall')
+        if prompt:
+            logger.info("Using user's custom memory_mrcall prompt")
+        else:
+            logger.warning("No MrCall prompt found - user must run /agent memory train mrcall first")
+        return prompt
+
+    async def process_mrcall_conversation(self, conversation: Dict) -> bool:
+        """Process single MrCall conversation to extract and store entities.
+
+        Args:
+            conversation: Conversation dict from mrcall_conversations table
+
+        Returns:
+            True if processed successfully, False otherwise
+        """
+        conv_id = conversation.get("id", "unknown")
+        try:
+            logger.info(f"Processing MrCall conversation {conv_id}")
+
+            # Step 1: Extract entities from conversation
+            entities = self._extract_mrcall_entities(conversation)
+            if not entities:
+                logger.debug(f"No entities extracted from conversation {conv_id}")
+                self.storage.mark_mrcall_memory_processed(self.owner_id, conv_id)
+                return True
+
+            logger.debug(f"Extracted {len(entities)} entities from conversation {conv_id}")
+
+            # Step 2: Process each entity
+            contact_phone = conversation.get('contact_phone', 'unknown')
+            contact_name = conversation.get('contact_name', 'unknown')
+            call_date = conversation.get('call_started_at', 'unknown')
+            event_desc = f"Extracted from phone call with {contact_name} ({contact_phone}) on {call_date}"
+
+            for i, entity_content in enumerate(entities):
+                await self._upsert_mrcall_entity(
+                    entity_content, event_desc, conv_id, i + 1, len(entities)
+                )
+
+            # Step 3: Mark as processed
+            self.storage.mark_mrcall_memory_processed(self.owner_id, conv_id)
+            return True
+
+        except Exception as e:
+            logger.error(f"Error processing conversation {conv_id}: {e}", exc_info=True)
+            return False
+
+    async def _upsert_mrcall_entity(
+        self,
+        entity_content: str,
+        event_desc: str,
+        conv_id: str,
+        entity_num: int,
+        total_entities: int
+    ) -> None:
+        """Upsert a single entity blob from MrCall with reconsolidation.
+
+        Args:
+            entity_content: The entity blob content
+            event_desc: Event description for the blob
+            conv_id: Source conversation ID (for logging)
+            entity_num: Which entity this is (1-indexed)
+            total_entities: Total entities from this conversation
+        """
+        logger.debug(f"Upserting MrCall entity {entity_num}/{total_entities}")
+
+        # Get top 3 candidates above threshold
+        existing_blobs = self.hybrid_search.find_candidates_for_reconsolidation(
+            owner_id=self.owner_id,
+            content=entity_content,
+            namespace=self.namespace,
+            limit=3
+        )
+
+        upserted = False
+
+        for existing in existing_blobs:
+            logger.debug(f"Trying to merge with blob {existing.blob_id} (score={existing.hybrid_score:.2f})")
+            merged_content = self.llm_merge.merge(existing.content, entity_content)
+
+            if 'INSERT' in merged_content.upper() and len(merged_content) < 10:
+                logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
+                continue
+
+            self.blob_storage.update_blob(
+                blob_id=existing.blob_id,
+                owner_id=self.owner_id,
+                content=merged_content,
+                event_description=event_desc
+            )
+            logger.info(f"Reconsolidated blob {existing.blob_id} with conversation {conv_id} (entity {entity_num}/{total_entities})")
+            upserted = True
+            break
+
+        if not upserted:
+            blob = self.blob_storage.store_blob(
+                owner_id=self.owner_id,
+                namespace=self.namespace,
+                content=entity_content,
+                event_description=event_desc
+            )
+            logger.info(f"Created new blob {blob['id']} from conversation {conv_id} (entity {entity_num}/{total_entities})")
+
+    async def process_mrcall_batch(self, conversations: List[Dict]) -> int:
+        """Process batch of MrCall conversations.
+
+        Args:
+            conversations: List of conversation dicts
+
+        Returns:
+            Number of successfully processed conversations
+        """
+        logger.info(f"Processing batch of {len(conversations)} MrCall conversations")
+        processed = 0
+
+        for conversation in conversations:
+            success = await self.process_mrcall_conversation(conversation)
+            if success:
+                processed += 1
+
+        logger.info(f"MrCall batch complete: {processed}/{len(conversations)} processed")
+        return processed
+
+    def _extract_mrcall_entities(self, conversation: Dict) -> List[str]:
+        """Extract entities from MrCall conversation using LLM.
+
+        Requires user's custom prompt (from /agent memory train mrcall).
+        Returns a list of entity blobs (one per entity found).
+
+        Args:
+            conversation: Conversation dict from mrcall_conversations table
+
+        Returns:
+            List of extracted entity blobs, or empty list if no prompt configured or SKIP
+        """
+        try:
+            # Get the extraction prompt
+            prompt_template = self._get_mrcall_extraction_prompt()
+            if not prompt_template:
+                logger.warning("Skipping MrCall extraction - no custom prompt configured")
+                return []
+
+            # Extract conversation text from body
+            conversation_text = self._extract_conversation_text(conversation.get('body'))
+
+            # Calculate duration in readable format
+            duration_ms = conversation.get('call_duration_ms', 0)
+            duration_seconds = duration_ms / 1000 if duration_ms else 0
+            duration_str = f"{int(duration_seconds)} seconds"
+
+            # Format prompt with placeholders
+            # Try both {{placeholder}} and {placeholder} formats
+            prompt = prompt_template
+            replacements = {
+                '{{contact_phone}}': conversation.get('contact_phone', 'unknown'),
+                '{{contact_name}}': conversation.get('contact_name', 'unknown'),
+                '{{call_date}}': conversation.get('call_started_at', 'unknown'),
+                '{{call_duration}}': duration_str,
+                '{{conversation}}': conversation_text,
+                '{contact_phone}': conversation.get('contact_phone', 'unknown'),
+                '{contact_name}': conversation.get('contact_name', 'unknown'),
+                '{call_date}': conversation.get('call_started_at', 'unknown'),
+                '{call_duration}': duration_str,
+                '{conversation}': conversation_text,
+            }
+
+            for placeholder, value in replacements.items():
+                prompt = prompt.replace(placeholder, str(value))
+
+            response = self.client.create_message_sync(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1024
+            )
+            raw_output = response.content[0].text.strip()
+            logger.debug(f"MrCall RAW OUTPUT:\n{raw_output}")
+
+            if raw_output.upper() == "SKIP":
+                return []
+
+            entities = self._parse_entities(raw_output)
+            return entities
+
+        except Exception as e:
+            logger.error(f"Failed to extract MrCall entities: {e}")
+            return []
+
+    def _extract_conversation_text(self, body: any) -> str:
+        """Extract conversation text from MrCall body field.
+
+        Args:
+            body: The body field from mrcall_conversations (can be dict, str, or None)
+
+        Returns:
+            Extracted conversation text
+        """
+        if not body:
+            return "(No transcription available)"
+
+        if isinstance(body, str):
+            return body
+
+        if isinstance(body, dict):
+            # Try common field names
+            for field in ['conversation', 'transcript', 'transcription', 'messages', 'text']:
+                if field in body:
+                    value = body[field]
+                    if isinstance(value, str):
+                        return value
+                    if isinstance(value, list):
+                        lines = []
+                        for msg in value:
+                            if isinstance(msg, dict):
+                                speaker = msg.get('speaker', msg.get('role', 'Unknown'))
+                                text = msg.get('text', msg.get('content', ''))
+                                if text:
+                                    lines.append(f"{speaker}: {text}")
+                            elif isinstance(msg, str):
+                                lines.append(msg)
+                        return '\n'.join(lines)
+
+            # Stringify clean body (without audio markers)
+            clean_body = {k: v for k, v in body.items() if v != '[AUDIO_STRIPPED]'}
+            if clean_body:
+                return str(clean_body)
+
+        return "(Could not extract conversation)"
