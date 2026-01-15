@@ -352,9 +352,17 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                 task_context = self.session_state.get_task_context()
                 task_num = None  # Could extract from task_context if needed
 
+                # Get previous draft if this is a modification request
+                previous_draft = None
+                last_result = self.session_state.get_last_action_result()
+                if last_result and last_result.get('tool_used') == 'write_email':
+                    previous_draft = last_result.get('result', {})
+                    logger.debug(f"[TaskOrchestrator] Passing previous_draft to EmailerAgent: subject={previous_draft.get('subject', '?')}")
+
                 result = await agent.run(
                     instructions=instructions,
-                    task_num=task_num
+                    task_num=task_num,
+                    previous_draft=previous_draft,
                 )
 
                 # Store result for confirmation flow

@@ -505,6 +505,7 @@ Use the write_email tool to output your composed email."""
         instructions: str,
         recipient_email: Optional[str] = None,
         task_num: Optional[int] = None,
+        previous_draft: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Execute the email agent with given instructions.
 
@@ -518,11 +519,14 @@ Use the write_email tool to output your composed email."""
         - "What can I answer to this guy?" → respond_text
         - "cerca info su Acme Corp" → search_memory → respond_text
         - "cerca risposte simili e rispondi" → search_memory → write_email
+        - "aggiungi il numero..." + previous_draft → modified write_email
 
         Args:
             instructions: What the user wants to do
             recipient_email: Optional recipient email (for email composition)
             task_num: Optional 1-indexed task number from /tasks
+            previous_draft: Optional previous email draft to modify (from TaskOrchestratorAgent)
+                           Dict with keys: recipient_email, subject, body
 
         Returns:
             Dict with:
@@ -546,7 +550,7 @@ Use the write_email tool to output your composed email."""
             logger.debug(f"[EMAILER] run() iteration {iteration + 1}/{MAX_ITERATIONS}")
 
             # Build prompt with current context
-            prompt = self._build_run_prompt(instructions, context, accumulated_context)
+            prompt = self._build_run_prompt(instructions, context, accumulated_context, previous_draft)
             logger.debug(f"[EMAILER] run() sending prompt ({len(prompt)} chars)")
 
             # Call LLM with all tools
@@ -629,7 +633,8 @@ Use the write_email tool to output your composed email."""
         self,
         instructions: str,
         context: EmailContext,
-        accumulated_context: List[Dict[str, Any]]
+        accumulated_context: List[Dict[str, Any]],
+        previous_draft: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Build the prompt for run() with current context.
 
@@ -637,12 +642,34 @@ Use the write_email tool to output your composed email."""
             instructions: Original user instructions
             context: Initial EmailContext from gatherer
             accumulated_context: Results from intermediate tool calls
+            previous_draft: Optional previous email draft to modify
 
         Returns:
             Complete prompt string
         """
         # Build base context
         context_text = build_prompt_context(context)
+
+        # Add previous draft if modifying an existing email
+        if previous_draft:
+            draft_recipient = previous_draft.get('recipient_email', '(unknown)')
+            draft_subject = previous_draft.get('subject', '(no subject)')
+            draft_body = previous_draft.get('body', '')
+            context_text = f"""## ⚠️ PREVIOUS DRAFT (MODIFY THIS - DO NOT START FROM SCRATCH)
+
+**To:** {draft_recipient}
+**Subject:** {draft_subject}
+
+---
+{draft_body}
+---
+
+The user wants to MODIFY this draft. Apply the requested changes while preserving the rest of the email.
+Do NOT rewrite from scratch - edit the existing draft.
+
+---
+
+{context_text}"""
 
         # Add accumulated context from previous iterations
         if accumulated_context:
