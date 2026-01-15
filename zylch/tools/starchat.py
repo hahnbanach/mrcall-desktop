@@ -534,7 +534,7 @@ class StarChatClient:
 
             response.raise_for_status()
             data = response.json()
-            logger.debug(f"[StarChat] get_business_config: response status={response.status_code}, data={len(str(data))} bytes")
+            logger.debug(f"[StarChat] get_business_config: response status={response.status_code}, data={json.dumps(data, indent=4)[:300]} bytes")
 
             # API returns a list, extract first element
             if isinstance(data, list) and len(data) > 0:

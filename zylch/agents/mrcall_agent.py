@@ -363,7 +363,7 @@ Choose the appropriate tool based on what the user wants. Remember:
                     var_name,
                     new_value
                 )
-                logger.info(f"[MrCallAgent] update_business_variable result for {var_name}: {result}")
+                logger.info(f"[MrCallAgent] update_business_variable result for {var_name}: {result.get('result', {}).get('variables', {}).get(var_name, 'variable not found')}")
                 if result is not None:
                     updated.append(f"{var_name}={new_value}")
                     logger.info(f"[MrCallAgent] Successfully updated {var_name}")
