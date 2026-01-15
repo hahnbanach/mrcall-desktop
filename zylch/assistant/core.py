@@ -7,11 +7,12 @@ from ..llm import LLMClient
 from .models import ModelSelector
 from .prompts import get_system_prompt, get_system_prompt_base
 from ..tools.base import Tool, ToolResult, ToolStatus
+from ..agents.base import BaseConversationalAgent
 
 logger = logging.getLogger(__name__)
 
 
-class ZylchAIAgent:
+class ZylchAIAgent(BaseConversationalAgent):
     """Main conversational agent for Zylch AI.
 
     Single-agent architecture with native function calling via Anthropic SDK.
