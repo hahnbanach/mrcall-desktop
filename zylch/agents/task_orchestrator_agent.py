@@ -169,65 +169,94 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
         return self._mrcall_agent
 
     def _build_system_prompt(self) -> str:
-        """Build the system prompt with task context and agent capabilities."""
+        """Build the system prompt with task context and agent capabilities.
+
+        Uses Observation/Thought/Action cycle for structured reasoning.
+        Includes task creation date for temporal context ("quel giorno").
+        """
         task_context = self.session_state.get_task_context()
         if not task_context:
-            return "No task context available."
+            return "Error: No active task. Use `/tasks open <ID>` to start."
 
-        # Format task details
+        # 1. ENRICH CONTEXT WITH DATE
         contact = task_context.get('contact_email') or task_context.get('contact_name') or 'Unknown'
         action = task_context.get('suggested_action', 'No action suggested')
         urgency = task_context.get('urgency', 'medium')
         sources = task_context.get('sources', {})
 
-        task_details = f"""## Current Task
+        # Extract task creation date for temporal context
+        task_creation_date = task_context.get('created_at', 'unknown date')
+        if task_creation_date != 'unknown date':
+            task_creation_date = task_creation_date.split('T')[0]  # Get just the date part
 
+        task_details = f"""## 🎯 Current Task (ID: {task_context.get('id', 'unknown')})
+
+**Task Date:** {task_creation_date}
 **Contact:** {contact}
 **Suggested Action:** {action}
 **Urgency:** {urgency}
-**Task ID:** {task_context.get('id', 'unknown')}
 
 ### Sources
 - Emails: {len(sources.get('emails', []))} source emails
 - Blobs: {len(sources.get('blobs', []))} context blobs
 """
 
-        # Last action result (for confirmation flow)
+        # 2. IMPROVED PENDING ACTION HANDLING
+        pending_action_prompt = ""
         last_result = self.session_state.get_last_action_result()
         if last_result:
-            task_details += f"""
-### Pending Action
-Last action result awaiting confirmation:
-```
+            pending_action_prompt = f"""
+### ⚠️ Pending Action
+Previous action produced this result. User must confirm, modify, or cancel.
+
+**Previous Result:**
 {last_result}
-```
-If the user says "ok", "yes", "send it", "confirm" - proceed with the action.
-If they want changes, call the agent again with new instructions.
+
+**User Response Handling:**
+- "ok", "yes", "send it", "confirm", "va bene" → Proceed with the action
+- Changes requested → Call the agent again with modified instructions
+- "no", "cancel", "annulla" → Abandon the action and ask what to do next
+- NEW information provided (e.g., "there was an outage that day") → USE this info to improve the output
 """
 
         agent_capabilities = _build_agent_capabilities_prompt()
 
-        return f"""You are a Task Orchestrator helping the user resolve a specific task.
+        # 3. STRUCTURED REASONING CYCLE
+        return f"""You are a Task Orchestrator guiding the user to complete a specific task.
+You are NOT a generic chatbot - your only purpose is to complete the current task.
 
 {task_details}
-
 {agent_capabilities}
+{pending_action_prompt}
 
-## Your Role
+## ⚙️ Your Reasoning Process (REQUIRED at each turn)
 
-1. **Analyze** what the user wants to do with this task
-2. **Delegate** to the appropriate agent using call_agent tool
-3. **Present** results clearly and ask for confirmation before irreversible actions
-4. **Track** conversation state across turns
+1. **Observation:** Summarize the user's last request and current state.
 
-## Guidelines
+2. **Thought:** Based on observation and task goal, think step by step:
+   - Do I need more context? (search memory, search emails, get source emails)
+   - Should I delegate to a sub-agent? (EmailerAgent, MrCallAgent)
+   - Should I just respond to the user?
+   - If user provides NEW context (e.g., "there was an outage"), think how to USE it.
 
-- For email tasks → call EmailerAgent
-- For MrCall configuration → call MrCallAgent
-- For questions/clarifications → use respond tool
-- Always explain what you're about to do before calling an agent
-- After an agent returns a draft/preview, ask for confirmation
-- Keep responses concise but informative
+3. **Action:** Execute ONE tool to implement your thought.
+
+## ⚠️ Critical Rules
+
+- **One Step at a Time:** Execute one action per turn.
+- **Use Context:** If user says "that day" or "quel giorno", use Task Date ({task_creation_date}) as reference.
+- **Always Confirm:** No irreversible actions without explicit user confirmation.
+- **Delegate, Don't Do:** Your job is to orchestrate. Call EmailerAgent to write emails, don't write them yourself.
+- **Complete the Request:** Your goal is a usable output (email draft, config change, answer) - not just search results.
+
+## 🔧 How to Delegate
+
+When calling EmailerAgent or MrCallAgent, pass COMPLETE instructions:
+
+✅ GOOD: "Search memory for similar responses about outages on {task_creation_date}, then compose a reply to {contact} apologizing for the delay"
+❌ BAD: "Search memory for outages" (incomplete - doesn't say what to do with results)
+
+The sub-agents can handle multi-step workflows. Give them the full picture.
 """
 
     async def process_message(

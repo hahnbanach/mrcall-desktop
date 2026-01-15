@@ -96,6 +96,30 @@ EMAIL_AGENT_TOOLS = [
             },
             "required": ["response"]
         }
+    },
+    {
+        "name": "search_emails",
+        "description": "Search actual emails for specific content. Use when memory blobs don't have enough info, or when looking for emails around a specific date/event. More comprehensive than search_memory but slower.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query (keywords, names, topics)"
+                },
+                "days_back": {
+                    "type": "integer",
+                    "description": "How many days back to search (default: 30)",
+                    "default": 30
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max number of emails to return (default: 5)",
+                    "default": 5
+                }
+            },
+            "required": ["query"]
+        }
     }
 ]
 
@@ -484,13 +508,16 @@ Use the write_email tool to output your composed email."""
     ) -> Dict[str, Any]:
         """Execute the email agent with given instructions.
 
-        This is the main entry point for the multi-tool agent. The agent
-        decides which tool to use based on the instructions:
+        This is the main entry point for the multi-tool agent. The agent uses
+        an agentic loop - it can call intermediate tools (search_memory, get_email)
+        to gather information, then continue until it produces a final output
+        (write_email or respond_text).
 
+        Flow examples:
         - "scrivi a Mario un'offerta" → write_email
         - "What can I answer to this guy?" → respond_text
         - "cerca info su Acme Corp" → search_memory → respond_text
-        - "reply to task 3" → gather context → write_email
+        - "cerca risposte simili e rispondi" → search_memory → write_email
 
         Args:
             instructions: What the user wants to do
@@ -503,22 +530,162 @@ Use the write_email tool to output your composed email."""
             - tool_input: Input the agent provided to the tool
             - result: Processed result (email dict for write_email, text for respond_text)
         """
-        # Gather context
+        # Gather initial context
         context = await self.gatherer.gather(
             user_request=instructions,
             recipient_email=recipient_email,
             task_num=task_num
         )
 
-        # Build prompt context
+        # Accumulated context from intermediate tool calls
+        accumulated_context = []
+
+        # Agentic loop - continue until we get a final output
+        MAX_ITERATIONS = 5
+        for iteration in range(MAX_ITERATIONS):
+            logger.debug(f"[EMAILER] run() iteration {iteration + 1}/{MAX_ITERATIONS}")
+
+            # Build prompt with current context
+            prompt = self._build_run_prompt(instructions, context, accumulated_context)
+            logger.debug(f"[EMAILER] run() sending prompt ({len(prompt)} chars)")
+
+            # Call LLM with all tools
+            response = await self.llm.create_message(
+                messages=[{"role": "user", "content": prompt}],
+                tools=self.TOOLS,
+                max_tokens=2000
+            )
+
+            # Handle tool response
+            result = self._handle_tool_response(response, context, recipient_email)
+            tool_used = result.get('tool_used')
+
+            logger.debug(f"[EMAILER] run() iteration {iteration + 1}: tool_used={tool_used}")
+
+            # Final output tools - return immediately
+            if tool_used in ['write_email', 'respond_text']:
+                return result
+
+            # Intermediate tools - accumulate context and continue
+            if tool_used == 'search_memory':
+                search_results = result.get('result', {}).get('results', [])
+                if search_results:
+                    accumulated_context.append({
+                        'type': 'search_memory',
+                        'query': result.get('tool_input', {}).get('query', ''),
+                        'results': search_results
+                    })
+                    logger.debug(f"[EMAILER] Accumulated {len(search_results)} search results")
+                else:
+                    # No results found - add note so LLM knows
+                    accumulated_context.append({
+                        'type': 'search_memory',
+                        'query': result.get('tool_input', {}).get('query', ''),
+                        'results': [],
+                        'note': 'No results found in memory blobs'
+                    })
+
+            elif tool_used == 'search_emails':
+                email_results = result.get('result', {}).get('emails', [])
+                if email_results:
+                    accumulated_context.append({
+                        'type': 'search_emails',
+                        'query': result.get('tool_input', {}).get('query', ''),
+                        'emails': email_results
+                    })
+                    logger.debug(f"[EMAILER] Accumulated {len(email_results)} email search results")
+                else:
+                    accumulated_context.append({
+                        'type': 'search_emails',
+                        'query': result.get('tool_input', {}).get('query', ''),
+                        'emails': [],
+                        'note': 'No emails found matching the query'
+                    })
+
+            elif tool_used == 'get_email':
+                email_data = result.get('result', {})
+                if not email_data.get('error'):
+                    accumulated_context.append({
+                        'type': 'get_email',
+                        'email_id': result.get('tool_input', {}).get('email_id', ''),
+                        'email': email_data
+                    })
+                    logger.debug(f"[EMAILER] Accumulated email: {email_data.get('subject', 'no subject')}")
+
+            else:
+                # Unknown tool or no tool - return as-is
+                logger.warning(f"[EMAILER] Unknown tool: {tool_used}, returning result")
+                return result
+
+        # Max iterations reached - return last result with warning
+        logger.warning(f"[EMAILER] Max iterations ({MAX_ITERATIONS}) reached without final output")
+        return {
+            'tool_used': 'respond_text',
+            'tool_input': {},
+            'result': {'response': 'I gathered some information but could not complete the task. Please try being more specific about what you want me to do.'}
+        }
+
+    def _build_run_prompt(
+        self,
+        instructions: str,
+        context: EmailContext,
+        accumulated_context: List[Dict[str, Any]]
+    ) -> str:
+        """Build the prompt for run() with current context.
+
+        Args:
+            instructions: Original user instructions
+            context: Initial EmailContext from gatherer
+            accumulated_context: Results from intermediate tool calls
+
+        Returns:
+            Complete prompt string
+        """
+        # Build base context
         context_text = build_prompt_context(context)
+
+        # Add accumulated context from previous iterations
+        if accumulated_context:
+            context_text += "\n\n---\n\n## Additional Context (from previous searches)\n\n"
+            for item in accumulated_context:
+                if item['type'] == 'search_memory':
+                    query = item.get('query', '')
+                    results = item.get('results', [])
+                    note = item.get('note', '')
+                    if results:
+                        context_text += f"**Search for '{query}':** Found {len(results)} results:\n"
+                        for r in results[:3]:  # Limit to top 3
+                            content = r.get('content', '')[:500]  # Truncate long content
+                            context_text += f"- {content}\n"
+                    elif note:
+                        context_text += f"**Search for '{query}':** {note}\n"
+                elif item['type'] == 'get_email':
+                    email = item.get('email', {})
+                    context_text += f"**Email from {email.get('from_email', 'unknown')}:**\n"
+                    context_text += f"Subject: {email.get('subject', '(no subject)')}\n"
+                    context_text += f"Date: {email.get('date', 'unknown')}\n"
+                    body = email.get('body', '')[:1000]  # Truncate
+                    context_text += f"Body: {body}\n"
+                elif item['type'] == 'search_emails':
+                    query = item.get('query', '')
+                    emails = item.get('emails', [])
+                    note = item.get('note', '')
+                    if emails:
+                        context_text += f"**Email search for '{query}':** Found {len(emails)} emails:\n"
+                        for e in emails[:5]:  # Limit to top 5
+                            context_text += f"- From: {e.get('from_email', 'unknown')}\n"
+                            context_text += f"  Subject: {e.get('subject', '(no subject)')}\n"
+                            context_text += f"  Date: {e.get('date', 'unknown')}\n"
+                            body = e.get('body', '')[:300]  # Truncate
+                            context_text += f"  Body: {body}...\n"
+                    elif note:
+                        context_text += f"**Email search for '{query}':** {note}\n"
 
         # Check for trained prompt (personalized style)
         trained_prompt = self._get_trained_prompt()
 
         if trained_prompt:
-            # Use trained prompt - already contains style and tool selection instructions
-            prompt = f"""{trained_prompt}
+            return f"""{trained_prompt}
 
 ---
 
@@ -533,10 +700,12 @@ Choose the appropriate tool based on what the user wants:
 - Use write_email if they want to compose/write/reply/send an email
 - Use search_memory if you need more information before answering
 - Use get_email if context references an email ID you need to read
-- Use respond_text for questions, analysis, suggestions, or anything else"""
+- Use respond_text for questions, analysis, suggestions, or anything else
+
+IMPORTANT: Your goal is to COMPLETE the user's request. If you searched for information,
+use that information to write the email or provide the answer. Don't just report search results."""
         else:
-            # Fallback to generic prompt (no personalized style)
-            prompt = f"""You are an AI email assistant helping the user.
+            return f"""You are an AI email assistant helping the user.
 
 CONTEXT:
 {context_text}
@@ -554,21 +723,10 @@ Choose the appropriate tool based on what the user wants:
 If writing an email:
 - Use appropriate language (match recipient's language if known)
 - If TEMPLATE entities are provided, use them as reference for tone and structure
-- If recipient info is available, personalize appropriately"""
+- If recipient info is available, personalize appropriately
 
-        logger.debug(f"[EMAILER] run() sending prompt ({len(prompt)} chars)")
-
-        # Call LLM with all tools - let it choose
-        response = await self.llm.create_message(
-            messages=[{"role": "user", "content": prompt}],
-            tools=self.TOOLS,
-            max_tokens=2000
-        )
-
-        # Handle tool response
-        result = self._handle_tool_response(response, context, recipient_email)
-
-        return result
+IMPORTANT: Your goal is to COMPLETE the user's request. If you searched for information,
+use that information to write the email or provide the answer. Don't just report search results."""
 
     def _handle_tool_response(
         self,
@@ -611,6 +769,8 @@ If writing an email:
                         result['result'] = {
                             'response': block.input.get('response', '')
                         }
+                    elif block.name == 'search_emails':
+                        result['result'] = self._process_search_emails(block.input)
                     break
         else:
             # No tool called - extract text response as fallback
@@ -727,4 +887,50 @@ If writing an email:
             'subject': email.get('subject'),
             'date': email.get('date'),
             'body': email.get('body_plain', '')
+        }
+
+    def _process_search_emails(self, tool_input: Dict[str, Any]) -> Dict[str, Any]:
+        """Process search_emails tool by searching actual emails.
+
+        Args:
+            tool_input: The search_emails tool's input (query, days_back, limit)
+
+        Returns:
+            Dict with email results
+        """
+        query = tool_input.get('query', '')
+        limit = tool_input.get('limit', 5)
+
+        if not query:
+            return {'emails': [], 'message': 'No search query provided'}
+
+        logger.debug(f"[EMAILER] _process_search_emails: query='{query}', limit={limit}")
+
+        # Search emails using storage (hybrid FTS + semantic search)
+        try:
+            emails = self.storage.search_emails(
+                owner_id=self.owner_id,
+                query=query,
+                limit=limit
+            )
+        except Exception as e:
+            logger.error(f"[EMAILER] Email search failed: {e}")
+            emails = []
+
+        formatted = []
+        for email in emails:
+            formatted.append({
+                'from_email': email.get('from_email', ''),
+                'to_email': email.get('to_email', ''),
+                'subject': email.get('subject', ''),
+                'date': email.get('date', ''),
+                'body': email.get('body_plain', '')[:500],  # Truncate for context
+                'id': email.get('id', '')
+            })
+
+        logger.debug(f"[EMAILER] _process_search_emails found {len(formatted)} emails")
+
+        return {
+            'emails': formatted,
+            'message': f"Found {len(formatted)} emails for '{query}'"
         }
