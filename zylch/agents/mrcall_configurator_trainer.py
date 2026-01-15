@@ -340,6 +340,8 @@ class MrCallConfiguratorTrainer:
             var_type = var_schema.get("type", "unknown")
             current = current_values.get(var_name, "Not set")
 
+            logger.debug(f"[MrCallConfiguratorTrainer] _build_variables_context: var={var_name}, current='{current}'")
+
             lines.append(f"""
 **{var_name}**
 - Type: {var_type}
@@ -388,6 +390,7 @@ class MrCallConfiguratorTrainer:
             variables_context = await self._build_variables_context(
                 business_id, variable_names
             )
+            logger.debug(f"[MrCallConfiguratorTrainer] train_feature: variables_context prefix: {variables_context[:500]}...")
             meta_prompt = meta_prompt_template.format(
                 variables_context=variables_context
             )
@@ -406,6 +409,8 @@ class MrCallConfiguratorTrainer:
             current_values = business.get("variables", {})
             variable_name = variable_names[0]
             current_value = current_values.get(variable_name)
+
+            logger.debug(f"[MrCallConfiguratorTrainer] train_feature (legacy): var={variable_name}, value='{current_value}'")
 
             if not current_value:
                 raise ValueError(
