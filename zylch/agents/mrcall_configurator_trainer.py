@@ -207,7 +207,10 @@ List common requests and which variables to change.
 - JSON: Valid JSON string for BOOKING_HOURS
 
 ### SECTION 5: ALL CURRENT VALUES
-Include every variable's current value for the configurator.
+You MUST explicitly list the current value of EVERY variable provided in the VARIABLE METADATA.
+The configurator agent relies on this section to know the current state.
+Format:
+- VARIABLE_NAME: "exact_current_value"
 
 ---
 
@@ -435,6 +438,8 @@ class MrCallConfiguratorTrainer:
 
         sub_prompt = response.content[0].text.strip()
         logger.debug(f"[MrCallConfiguratorTrainer] train_feature: sub-prompt generated, len={len(sub_prompt)}")
+        logger.debug(f"[MrCallConfiguratorTrainer] train_feature: sub-prompt content start: {sub_prompt[:500]}...")
+        logger.debug(f"[MrCallConfiguratorTrainer] train_feature: sub-prompt content end: ...{sub_prompt[-500:]}")
 
         # 3. Store in agent_prompts
         agent_type = f"mrcall_{business_id}_{feature_name}"
