@@ -275,7 +275,7 @@ class JobExecutor:
 
         def _sync_process() -> Dict[str, Any]:
             """Sync code that runs in thread pool."""
-            from zylch.agents.task_agent import TaskWorker
+            from zylch.agents.task_creation_worker import TaskWorker
 
             worker = TaskWorker(
                 storage=storage,

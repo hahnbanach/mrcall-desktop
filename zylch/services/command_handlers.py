@@ -74,7 +74,12 @@ def format_relative_date(date_str: str) -> str:
 
 
 def format_task_items(tasks: list) -> str:
-    """Format task items as numbered list grouped by urgency."""
+    """Format task items as numbered list grouped by urgency.
+
+    Each task shows:
+    - Number, contact name, suggested action
+    - Full task ID for /tasks open <ID> command
+    """
     if not tasks:
         return "No action needed! You're all caught up."
 
@@ -93,6 +98,7 @@ def format_task_items(tasks: list) -> str:
         action = task.get('suggested_action', '').strip()
         reason = task.get('reason', '').strip()
         email_date = task.get('email_date', '')
+        task_id = task.get('id', '')  # Full UUID
 
         # Skip tasks with no action
         if not action:
@@ -101,12 +107,15 @@ def format_task_items(tasks: list) -> str:
         # Format relative date for temporal context
         date_str = format_relative_date(email_date) if email_date else ""
 
-        # Format: Name: Action (date) with reason on next line if substantial
+        # Format: Name: Action (date) with ID on next line
         task_line = f"{idx}. **{name}**: {action}"
         if date_str:
             task_line += f" ({date_str})"
         if reason and len(reason) > 10:
             task_line += f"\n   _{reason}_"
+        # Always show full ID for /tasks open <ID>
+        if task_id:
+            task_line += f"\n   `ID: {task_id}`"
 
         idx += 1
         return task_line
@@ -136,7 +145,8 @@ def format_task_items(tasks: list) -> str:
 
     total = idx - 1
     if total > 0:
-        lines.append(f"\n**Total: {total} items** | `more on #N` for details")
+        lines.append(f"\n**Total: {total} items**")
+        lines.append("Use `/tasks open <ID>` to work on a task")
         lines.append("\n_Run `/agent task process` to detect new tasks_")
     else:
         return "No action needed! You're all caught up.\n\n_Run `/agent task process` to detect new tasks_"
@@ -2382,7 +2392,7 @@ Run `/sync` to fetch calendar events."""
 async def handle_tasks(args: List[str], owner_id: str) -> str:
     """Handle /tasks command - list items needing action using LLM analysis."""
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch.agents.task_agent import TaskWorker
+    from zylch.agents.task_creation_worker import TaskWorker
     from zylch.api.token_storage import get_email
 
     help_text = """**✅ Tasks**
@@ -4073,7 +4083,10 @@ async def handle_tutorial(args: List[str], owner_id: str) -> str:
             return _tutorial_mrcall_dev()
         return _tutorial_mrcall_user()
 
-    return f"Unknown tutorial topic: `{topic}`\n\nRun `/tutorial` to see available topics."
+    if topic == 'tasks':
+        return _tutorial_tasks()
+
+    return f"Unknown tutorial topic: `{topic}`\n\nAvailable: `/tutorial mrcall` | `/tutorial tasks`"
 
 
 def _tutorial_getting_started() -> str:
@@ -4149,7 +4162,7 @@ def _tutorial_getting_started() -> str:
 • Run `/stats` to see your data overview
 • Use `/reset --hard` to start completely fresh
 
-**More tutorials:** `/tutorial mrcall` for phone assistant setup
+**More tutorials:** `/tutorial mrcall` | `/tutorial tasks`
 
 **Next:** Run `/connect anthropic YOUR_KEY` to begin!"""
 
@@ -4387,6 +4400,97 @@ In `command_handlers.py`, update the features list in help text.
 ---
 
 **Full guide:** See skill `zylch-mrcall-feature-configuration`
+"""
+
+
+def _tutorial_tasks() -> str:
+    """Tutorial for task management and task mode."""
+    return """# 📋 Task Management Tutorial
+
+## Overview
+
+Zylch's task system analyzes your emails and calendar to surface items
+needing your attention. When you're ready to work on a task, enter
+**Task Mode** for focused orchestration.
+
+---
+
+## Setup
+
+```
+1. /sync                      → Fetch emails and calendar
+2. /agent train tasks         → Train task detection on your patterns
+3. /agent task process email  → Detect tasks from your data
+4. /tasks                     → View your task list
+```
+
+---
+
+## Working with Tasks
+
+### View Tasks
+```
+/tasks              → List all tasks with IDs
+/tasks refresh      → Re-analyze with fresh LLM call
+/tasks status       → Task statistics
+```
+
+### Enter Task Mode
+```
+/tasks open <ID>    → Enter focused mode for a specific task
+```
+Copy the task ID from the `/tasks` output.
+
+### In Task Mode
+Once in task mode, I can help you:
+- **Draft emails**: "write a reply" → EmailerAgent drafts response
+- **Configure MrCall**: "update greeting" → MrCallAgent handles it
+- **Get context**: "what do I know about this person?"
+
+I'll show drafts before sending and ask for confirmation.
+
+### Exit Task Mode
+```
+/tasks exit         → Return to normal chat
+```
+
+---
+
+## Example Session
+
+```
+You: /tasks
+Bot: 1. **Mario Rossi**: Reply to proposal (2 days ago)
+     ID: abc123-def456-...
+
+You: /tasks open abc123
+Bot: 🎯 Entered Task Mode
+     🔴 Mario Rossi - Reply to proposal
+     What would you like to do?
+
+You: write a polite reply accepting the proposal
+Bot: 📧 Email Draft Ready
+     To: mario@example.com
+     Subject: Re: Proposal
+     ---
+     [draft content]
+     ---
+     Say "send it" to send, or tell me what to change.
+
+You: send it
+Bot: ✅ Email sent!
+
+You: /tasks exit
+Bot: ✅ Exited task mode.
+```
+
+---
+
+## Tips
+
+• Task IDs support prefix matching: `/tasks open abc1` works
+• Use `/tasks refresh` after `/sync` to catch new items
+• Train your task agent with `/agent train tasks` for better detection
 """
 
 

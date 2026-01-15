@@ -2,6 +2,7 @@
 
 from typing import Dict, Any, Optional, List
 import logging
+import re
 import shlex
 import time
 
@@ -24,6 +25,10 @@ class ChatService:
 
     Uses ToolFactory to initialize agent with all tools, removing
     dependency on CLI layer.
+
+    Also manages task mode routing - when a user enters task mode via
+    /tasks open <ID>, messages are routed to TaskOrchestratorAgent instead
+    of ZylchAIAgent.
     """
 
     def __init__(self):
@@ -36,6 +41,7 @@ class ChatService:
         self._initialized = False
         self.storage = SupabaseStorage.get_instance()
         self._command_matcher = None  # Lazy init for semantic command matching
+        self._task_orchestrator = None  # Lazy init for task mode
 
     async def _initialize_agent(self, owner_id: str = None):
         """Initialize the agent with all tools (lazy initialization).
@@ -214,6 +220,61 @@ class ChatService:
                         "command": "task_close",
                         "task_num": task_num,
                         "instant": True
+                    },
+                    "session_id": session_id
+                }
+
+            # TASK MODE COMMANDS - /tasks open <ID> and /tasks exit
+            task_open_match = re.match(r'^/tasks\s+open\s+(\S+)', user_message.strip(), re.IGNORECASE)
+            task_exit_match = re.match(r'^/tasks\s+exit\b', user_message.strip(), re.IGNORECASE)
+
+            if task_exit_match:
+                # Exit task mode
+                if ToolFactory._session_state and ToolFactory._session_state.is_task_mode():
+                    task_id = ToolFactory._session_state.get_task_id()
+                    ToolFactory._session_state.exit_task_mode()
+                    self._task_orchestrator = None  # Clear orchestrator
+                    response_text = f"✅ Exited task mode.\n\nReturning to normal chat. Use `/tasks` to see your task list."
+                else:
+                    response_text = "⚠️ Not currently in task mode. Use `/tasks open <ID>` to enter task mode."
+                return {
+                    "response": self._prepend_notification(response_text, notification_banner),
+                    "tool_calls": [],
+                    "metadata": {
+                        "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                        "command": "tasks_exit",
+                        "instant": True
+                    },
+                    "session_id": session_id
+                }
+
+            if task_open_match:
+                # Enter task mode
+                task_id_input = task_open_match.group(1)
+                owner_id = (context.get("user_id") if context else None) or user_id
+                response_text = await self._enter_task_mode(task_id_input, owner_id)
+                return {
+                    "response": self._prepend_notification(response_text, notification_banner),
+                    "tool_calls": [],
+                    "metadata": {
+                        "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                        "command": "tasks_open",
+                        "instant": True
+                    },
+                    "session_id": session_id
+                }
+
+            # TASK MODE ROUTING - If in task mode, route to TaskOrchestratorAgent
+            if ToolFactory._session_state and ToolFactory._session_state.is_task_mode():
+                owner_id = (context.get("user_id") if context else None) or user_id
+                response_text = await self._process_task_mode_message(user_message, owner_id, context)
+                return {
+                    "response": self._prepend_notification(response_text, notification_banner),
+                    "tool_calls": [],
+                    "metadata": {
+                        "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                        "task_mode": True,
+                        "task_id": ToolFactory._session_state.get_task_id()
                     },
                     "session_id": session_id
                 }
@@ -510,3 +571,146 @@ class ChatService:
         if notification_banner:
             return f"{notification_banner}\n\n---\n\n{response}"
         return response
+
+    async def _enter_task_mode(self, task_id_input: str, owner_id: str) -> str:
+        """Enter task mode for a specific task.
+
+        Args:
+            task_id_input: Task ID (full or prefix match)
+            owner_id: Firebase UID
+
+        Returns:
+            Response message indicating success or failure
+        """
+        try:
+            # Find task by ID (exact or prefix match)
+            task = await self._get_task_by_id(task_id_input, owner_id)
+
+            if not task:
+                return f"""❌ **Task not found:** `{task_id_input}`
+
+Use `/tasks` to see available tasks with their IDs."""
+
+            # Enter task mode in session state
+            if ToolFactory._session_state:
+                ToolFactory._session_state.enter_task_mode(task['id'], task)
+            else:
+                return "❌ Session not initialized. Please try again."
+
+            # Format task details for display
+            contact = task.get('contact_name') or task.get('contact_email', 'Unknown')
+            action = task.get('suggested_action', 'No action suggested')
+            urgency = task.get('urgency', 'medium')
+            urgency_icon = {'high': '🔴', 'medium': '🟡', 'low': '🟢'}.get(urgency, '⚪')
+
+            return f"""**🎯 Entered Task Mode**
+
+{urgency_icon} **{contact}**
+{action}
+
+**Task ID:** `{task['id']}`
+
+---
+
+You're now focused on this task. I can help you:
+- Draft an email reply
+- Configure MrCall settings
+- Get more context about this contact
+
+**Commands:**
+- `/tasks exit` - Return to normal chat
+
+What would you like to do?"""
+
+        except Exception as e:
+            logger.error(f"Error entering task mode: {e}", exc_info=True)
+            return f"❌ **Error:** {str(e)}"
+
+    async def _get_task_by_id(self, task_id_input: str, owner_id: str) -> Optional[Dict]:
+        """Find a task by ID (exact or prefix match).
+
+        Args:
+            task_id_input: Full task ID or prefix
+            owner_id: Firebase UID
+
+        Returns:
+            Task dict or None if not found
+        """
+        try:
+            # First try exact match
+            result = self.storage.client.table('task_items')\
+                .select('*')\
+                .eq('owner_id', owner_id)\
+                .eq('id', task_id_input)\
+                .limit(1)\
+                .execute()
+
+            if result.data:
+                return result.data[0]
+
+            # Try prefix match (ID starts with input)
+            result = self.storage.client.table('task_items')\
+                .select('*')\
+                .eq('owner_id', owner_id)\
+                .ilike('id', f'{task_id_input}%')\
+                .limit(1)\
+                .execute()
+
+            if result.data:
+                return result.data[0]
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error finding task by ID: {e}")
+            return None
+
+    async def _process_task_mode_message(
+        self,
+        user_message: str,
+        owner_id: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Process a message while in task mode.
+
+        Routes the message to TaskOrchestratorAgent.
+
+        Args:
+            user_message: User's message
+            owner_id: Firebase UID
+            context: Optional context dict
+
+        Returns:
+            Response from TaskOrchestratorAgent
+        """
+        try:
+            # Lazy-create TaskOrchestratorAgent if needed
+            if self._task_orchestrator is None:
+                from zylch.agents.task_orchestrator_agent import TaskOrchestratorAgent
+                from zylch.api.token_storage import get_active_llm_provider
+
+                # Get LLM credentials
+                llm_provider, api_key = get_active_llm_provider(owner_id)
+                if not api_key or not llm_provider:
+                    return "❌ LLM API key required. Run `/connect anthropic` to set up."
+
+                self._task_orchestrator = TaskOrchestratorAgent(
+                    session_state=ToolFactory._session_state,
+                    owner_id=owner_id,
+                    api_key=api_key,
+                    provider=llm_provider,
+                    storage=self.storage,
+                    starchat_client=ToolFactory._starchat_client
+                )
+
+            # Process message through orchestrator
+            response = await self._task_orchestrator.process_message(
+                user_message=user_message,
+                context=context
+            )
+
+            return response
+
+        except Exception as e:
+            logger.error(f"Error in task mode: {e}", exc_info=True)
+            return f"❌ **Error:** {str(e)}\n\nUse `/tasks exit` to return to normal chat."
