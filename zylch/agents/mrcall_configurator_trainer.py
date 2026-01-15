@@ -345,6 +345,13 @@ class MrCallConfiguratorTrainer:
 
             logger.debug(f"[MrCallConfiguratorTrainer] _build_variables_context: var={var_name}, current='{current}'")
 
+            if current == "Not set":
+                # Diagnostic logging for missing variable
+                matching_keys = [k for k in current_values.keys() if "BOOKING" in k]
+                logger.warning(f"[MrCallConfiguratorTrainer] Variable {var_name} not found in current_values. BusinessID={business_id}")
+                logger.warning(f"[MrCallConfiguratorTrainer] Available keys with 'BOOKING': {matching_keys}")
+                logger.debug(f"[MrCallConfiguratorTrainer] All available keys: {list(current_values.keys())[:50]}...")
+
             lines.append(f"""
 **{var_name}**
 - Type: {var_type}
