@@ -12,14 +12,14 @@ the user's request.
 Key principle: "Find a balance between putting a bit more than necessary
 in memory and not overloading the assistant."
 
-Inherits from BaseAgent for common functionality (init, prompt loading, etc.)
+Inherits from SpecializedAgent for common functionality (init, prompt loading, etc.)
 """
 
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from zylch.agents.base_agent import BaseAgent
+from zylch.agents.base_agent import SpecializedAgent
 from zylch.storage.supabase_client import SupabaseStorage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 from zylch.memory.hybrid_search import SearchResult
@@ -335,10 +335,10 @@ def build_prompt_context(context: EmailContext) -> str:
     return "\n\n".join(sections)
 
 
-class EmailerAgent(BaseAgent):
+class EmailerAgent(SpecializedAgent):
     """Multi-tool agent for email-related tasks.
 
-    Inherits from BaseAgent for common functionality.
+    Inherits from SpecializedAgent for common functionality.
 
     This is a TRUE AGENT that:
     1. Has a trained prompt that learns the user's writing style

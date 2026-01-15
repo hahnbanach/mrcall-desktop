@@ -1,97 +1,35 @@
 """Webhook processor for handling incoming notifications.
 
 Processes webhooks from external services and:
-1. Stores events in database for audit/replay
+1. Stores events in Supabase for audit/replay
 2. Extracts contact intelligence
 3. Triggers follow-up suggestions
 4. Updates contact engagement scores
+
+All storage uses Supabase (NO local filesystem per ARCHITECTURE.md).
 """
 
 import base64
 import json
 import logging
-import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional
-
-from ..config import settings
 
 logger = logging.getLogger(__name__)
 
 
 class WebhookEventStore:
-    """SQLite storage for webhook events."""
+    """Supabase storage for webhook events.
 
-    def __init__(self, db_path: Optional[Path] = None):
-        """Initialize event store.
+    Uses the trigger_events table which has:
+    - owner_id, event_type, event_data, status, attempts, processed_at, etc.
+    """
 
-        Args:
-            db_path: Path to SQLite database. Defaults to cache/webhooks.db
-        """
-        if db_path is None:
-            db_path = Path(settings.cache_dir) / "webhooks.db"
-        self.db_path = db_path
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._ensure_tables()
-
-    def _ensure_tables(self):
-        """Create database tables if they don't exist."""
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS webhook_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_id TEXT UNIQUE,
-                source TEXT NOT NULL,
-                event_type TEXT NOT NULL,
-                payload TEXT NOT NULL,
-                processed BOOLEAN DEFAULT FALSE,
-                processed_at TIMESTAMP,
-                error TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                owner_id TEXT
-            )
-        """)
-
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_source ON webhook_events(source)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_event_type ON webhook_events(event_type)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_created_at ON webhook_events(created_at)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_processed ON webhook_events(processed)
-        """)
-
-        # Contact engagement tracking
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS contact_engagement (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                contact_email TEXT,
-                contact_phone TEXT,
-                engagement_type TEXT NOT NULL,
-                engagement_data TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                owner_id TEXT,
-                UNIQUE(contact_email, contact_phone, engagement_type, timestamp)
-            )
-        """)
-
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_contact_email ON contact_engagement(contact_email)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_contact_phone ON contact_engagement(contact_phone)
-        """)
-
-        conn.commit()
-        conn.close()
-        logger.info(f"Webhook event store initialized at {self.db_path}")
+    def __init__(self):
+        """Initialize event store using Supabase."""
+        from ..storage.supabase_client import SupabaseStorage
+        self._storage = SupabaseStorage.get_instance()
+        logger.info("Webhook event store initialized with Supabase backend")
 
     def store_event(
         self,
@@ -100,8 +38,8 @@ class WebhookEventStore:
         event_type: str,
         payload: Dict[str, Any],
         owner_id: Optional[str] = None
-    ) -> int:
-        """Store webhook event.
+    ) -> str:
+        """Store webhook event in Supabase.
 
         Args:
             event_id: Unique event identifier
@@ -111,52 +49,45 @@ class WebhookEventStore:
             owner_id: Optional owner ID for multi-tenant
 
         Returns:
-            Database row ID
+            Event UUID from Supabase
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
-
         try:
-            cursor.execute("""
-                INSERT INTO webhook_events (event_id, source, event_type, payload, owner_id)
-                VALUES (?, ?, ?, ?, ?)
-            """, (
-                event_id,
-                source,
-                event_type,
-                json.dumps(payload),
-                owner_id
-            ))
-            row_id = cursor.lastrowid
-            conn.commit()
-            return row_id
+            # Use trigger_events table with event_data containing full payload
+            event_data = {
+                'event_id': event_id,
+                'source': source,
+                'payload': payload
+            }
 
-        except sqlite3.IntegrityError:
-            # Duplicate event, ignore
-            logger.debug(f"Duplicate event ignored: {event_id}")
-            return 0
+            result = self._storage.queue_trigger_event(
+                owner_id=owner_id or 'system',
+                event_type=f"webhook_{source}_{event_type}",
+                event_data=event_data
+            )
 
-        finally:
-            conn.close()
+            if result:
+                logger.debug(f"Stored webhook event {event_id} -> {result.get('id')}")
+                return result.get('id', '')
+            return ''
+
+        except Exception as e:
+            logger.warning(f"Failed to store webhook event {event_id}: {e}")
+            return ''
 
     def mark_processed(self, event_id: str, error: Optional[str] = None):
-        """Mark event as processed.
+        """Mark event as processed in Supabase.
 
         Args:
-            event_id: Event identifier
+            event_id: Event UUID from Supabase
             error: Optional error message if processing failed
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            UPDATE webhook_events
-            SET processed = TRUE, processed_at = CURRENT_TIMESTAMP, error = ?
-            WHERE event_id = ?
-        """, (error, event_id))
-
-        conn.commit()
-        conn.close()
+        try:
+            if error:
+                self._storage.mark_event_failed(event_id, error)
+            else:
+                self._storage.mark_event_completed(event_id, 'webhook', {'status': 'processed'})
+        except Exception as e:
+            logger.warning(f"Failed to mark event {event_id} as processed: {e}")
 
     def record_engagement(
         self,
@@ -166,7 +97,9 @@ class WebhookEventStore:
         data: Optional[Dict[str, Any]] = None,
         owner_id: Optional[str] = None
     ):
-        """Record contact engagement event.
+        """Record contact engagement event in Supabase.
+
+        Uses trigger_events table to store engagement data.
 
         Args:
             engagement_type: Type of engagement (email_open, call_completed, sms_replied)
@@ -179,73 +112,54 @@ class WebhookEventStore:
             logger.warning("No contact identifier for engagement")
             return
 
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
-
         try:
-            cursor.execute("""
-                INSERT OR IGNORE INTO contact_engagement
-                (contact_email, contact_phone, engagement_type, engagement_data, owner_id)
-                VALUES (?, ?, ?, ?, ?)
-            """, (
-                contact_email,
-                contact_phone,
-                engagement_type,
-                json.dumps(data) if data else None,
-                owner_id
-            ))
-            conn.commit()
-
-        finally:
-            conn.close()
+            event_data = {
+                'contact_email': contact_email,
+                'contact_phone': contact_phone,
+                'engagement_data': data or {}
+            }
+            self._storage.queue_trigger_event(
+                owner_id=owner_id or 'system',
+                event_type=f"engagement_{engagement_type}",
+                event_data=event_data
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record engagement: {e}")
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get event statistics.
+        """Get event statistics from Supabase.
 
         Returns:
-            Stats dict with counts by source and processing status
+            Stats dict with basic info
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
+        try:
+            # Get recent events count
+            result = self._storage.client.table('trigger_events')\
+                .select('id', count='exact')\
+                .like('event_type', 'webhook_%')\
+                .execute()
 
-        # Total by source
-        cursor.execute("""
-            SELECT source, COUNT(*) as count
-            FROM webhook_events
-            GROUP BY source
-        """)
-        by_source = {row[0]: row[1] for row in cursor.fetchall()}
+            total = result.count or 0
 
-        # Processed vs pending
-        cursor.execute("""
-            SELECT processed, COUNT(*) as count
-            FROM webhook_events
-            GROUP BY processed
-        """)
-        processing = {
-            "processed": 0,
-            "pending": 0
-        }
-        for row in cursor.fetchall():
-            if row[0]:
-                processing["processed"] = row[1]
-            else:
-                processing["pending"] = row[1]
+            # Get pending count
+            pending_result = self._storage.client.table('trigger_events')\
+                .select('id', count='exact')\
+                .like('event_type', 'webhook_%')\
+                .eq('status', 'pending')\
+                .execute()
 
-        # Last event time
-        cursor.execute("""
-            SELECT MAX(created_at) FROM webhook_events
-        """)
-        last_event = cursor.fetchone()[0]
+            pending = pending_result.count or 0
 
-        conn.close()
-
-        return {
-            "by_source": by_source,
-            "processing": processing,
-            "total": sum(by_source.values()),
-            "last_event": last_event
-        }
+            return {
+                "total": total,
+                "processing": {
+                    "processed": total - pending,
+                    "pending": pending
+                }
+            }
+        except Exception as e:
+            logger.warning(f"Failed to get webhook stats: {e}")
+            return {"total": 0, "processing": {"processed": 0, "pending": 0}}
 
     def list_events(
         self,
@@ -253,38 +167,32 @@ class WebhookEventStore:
         limit: int = 50,
         offset: int = 0
     ) -> List[Dict[str, Any]]:
-        """List webhook events.
+        """List webhook events from Supabase.
 
         Args:
-            source: Filter by source
+            source: Filter by source (e.g., 'starchat', 'sendgrid')
             limit: Max results
             offset: Pagination offset
 
         Returns:
             List of event dicts
         """
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+        try:
+            query = self._storage.client.table('trigger_events')\
+                .select('*')\
+                .like('event_type', 'webhook_%')
 
-        query = """
-            SELECT id, event_id, source, event_type, processed, error, created_at
-            FROM webhook_events
-        """
-        params = []
+            if source:
+                query = query.like('event_type', f'webhook_{source}%')
 
-        if source:
-            query += " WHERE source = ?"
-            params.append(source)
+            result = query.order('created_at', desc=True)\
+                .range(offset, offset + limit - 1)\
+                .execute()
 
-        query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
-
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        conn.close()
-
-        return [dict(row) for row in rows]
+            return result.data or []
+        except Exception as e:
+            logger.warning(f"Failed to list webhook events: {e}")
+            return []
 
 
 class WebhookProcessor:

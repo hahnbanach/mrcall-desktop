@@ -1,1 +1,4 @@
-"""Zylch Storage - SQLite and hybrid storage backends."""
+"""Zylch Storage - Supabase storage backend.
+
+All data stored in Supabase (NO local filesystem per ARCHITECTURE.md).
+"""

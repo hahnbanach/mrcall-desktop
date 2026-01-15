@@ -1,7 +1,7 @@
-"""Base Agent - Shared logic for all agent runners.
+"""Specialized Agent - Shared logic for multi-tool agent runners.
 
 Provides common initialization, prompt loading, context gathering, and
-multi-tool response handling for all agents.
+multi-tool response handling for specialized agents (EmailerAgent, MrCallAgent).
 
 Agents should inherit from this base class and define their own:
 - PROMPT_KEY: The key used to store/retrieve the trained prompt
@@ -20,8 +20,8 @@ from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 logger = logging.getLogger(__name__)
 
 
-class BaseAgent:
-    """Base class for all agent runners with shared initialization and methods."""
+class SpecializedAgent:
+    """Base class for multi-tool agent runners with shared initialization and methods."""
 
     # Subclasses must define these
     PROMPT_KEY: str = ''  # Key in agent_prompts table

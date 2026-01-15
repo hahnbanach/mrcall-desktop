@@ -8,7 +8,7 @@ All feature/variable mappings live in ONE place. Other files derive automaticall
 
 ```python
 # In command_handlers.py (DERIVED - do NOT edit manually):
-from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+from zylch.agents.trainers import MrCallConfiguratorTrainer
 FEATURE_TO_VARIABLES = {
     name: feature["variables"]
     for name, feature in MrCallConfiguratorTrainer.FEATURES.items()
@@ -26,7 +26,7 @@ VARIABLE_TO_FEATURE = {
 
 ## Step 1: Create Meta-Prompt
 
-Add constant to `zylch/agents/mrcall_configurator_trainer.py`:
+Add constant to `zylch/agents/trainers/mrcall_configurator.py`:
 
 ```python
 BOOKING_META_PROMPT = """You are analyzing the booking configuration for a MrCall AI phone assistant.
@@ -200,8 +200,8 @@ When you add a new feature, the unified agent automatically picks it up:
 
 | File | Purpose |
 |------|---------|
-| `zylch/agents/mrcall_configurator_trainer.py` | Feature sub-prompt training (FEATURES dict is the source of truth) |
-| `zylch/agents/mrcall_agent_trainer.py` | Unified agent trainer - combines all feature sub-prompts |
+| `zylch/agents/trainers/mrcall_configurator.py` | Feature sub-prompt training (FEATURES dict is the source of truth) |
+| `zylch/agents/trainers/mrcall.py` | Unified agent trainer - combines all feature sub-prompts |
 | `zylch/agents/mrcall_agent.py` | Unified agent runner with multi-tool support |
 
 ### Storage Keys

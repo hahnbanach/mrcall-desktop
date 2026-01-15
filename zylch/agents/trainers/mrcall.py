@@ -23,8 +23,8 @@ Salva come "mrcall_{business_id}"
 import logging
 from typing import Any, Dict, List, Tuple
 
-from zylch.agents.base_trainer import BaseAgentTrainer
-from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+from zylch.agents.trainers.base import BaseAgentTrainer
+from zylch.agents.trainers.mrcall_configurator import MrCallConfiguratorTrainer
 from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)

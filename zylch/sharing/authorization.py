@@ -5,13 +5,12 @@ Handles:
 - Authorization acceptance/rejection
 - Revocation
 - Pending share requests
+
+All storage uses Supabase (NO local filesystem per ARCHITECTURE.md).
 """
 
-import json
 import logging
-import sqlite3
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -20,134 +19,76 @@ logger = logging.getLogger(__name__)
 class SharingAuthorizationManager:
     """Manages authorization for sharing intelligence between Zylch users.
 
+    Uses Supabase `sharing_auth` table via SupabaseStorage.
+
     Authorization flow:
     1. Mario registers Luigi as recipient with /share luigi@email.com
     2. Mario shares intel: "Condividi con Luigi che Marco Ferrari ha firmato"
     3. Luigi sees pending request at next access
-    4. Luigi accepts -> authorization status = "accepted"
+    4. Luigi accepts -> authorization status = "authorized"
     5. Pending shares are moved to the shared namespace
     6. Future shares from Mario to Luigi are automatic (no acceptance needed)
     """
 
-    def __init__(self, db_path: Path):
-        """Initialize authorization manager.
+    def __init__(self, db_path=None):
+        """Initialize authorization manager using Supabase.
 
         Args:
-            db_path: Path to SQLite database file
+            db_path: IGNORED - kept for backwards compatibility only.
+                     All storage uses Supabase.
         """
-        self.db_path = db_path
-        self._ensure_tables()
-
-    def _ensure_tables(self) -> None:
-        """Create database tables if they don't exist."""
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
-
-        # Zylch users table - maps email to owner_id
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS zylch_users (
-                owner_id TEXT PRIMARY KEY,
-                email TEXT UNIQUE NOT NULL,
-                display_name TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Share authorizations table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS share_authorizations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sender_email TEXT NOT NULL,
-                recipient_email TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                accepted_at TIMESTAMP NULL,
-                revoked_at TIMESTAMP NULL,
-                UNIQUE(sender_email, recipient_email)
-            )
-        """)
-
-        # Pending shares table - intel waiting for acceptance
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS pending_shares (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                authorization_id INTEGER NOT NULL,
-                intel_context TEXT NOT NULL,
-                identifiers TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (authorization_id) REFERENCES share_authorizations(id)
-            )
-        """)
-
-        conn.commit()
-        conn.close()
-
-        logger.info(f"Sharing tables initialized at {self.db_path}")
+        from ..storage.supabase_client import SupabaseStorage
+        self._storage = SupabaseStorage.get_instance()
+        logger.info("Sharing authorization manager initialized with Supabase backend")
 
     # ==================== User Management ====================
 
     def register_user(self, owner_id: str, email: str, display_name: Optional[str] = None) -> bool:
         """Register a Zylch user for sharing.
 
+        Note: User registration is handled by Firebase auth. This method is kept
+        for backwards compatibility but simply returns True.
+
         Args:
-            owner_id: User's owner_id (from settings)
+            owner_id: User's owner_id (from Firebase)
             email: User's email address
             display_name: Optional display name
 
         Returns:
-            True if registered/updated, False on error
+            True (always succeeds as users are in Firebase)
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
-
-        try:
-            cursor.execute("""
-                INSERT INTO zylch_users (owner_id, email, display_name)
-                VALUES (?, ?, ?)
-                ON CONFLICT(owner_id) DO UPDATE SET
-                    email = excluded.email,
-                    display_name = excluded.display_name
-            """, (owner_id, email.lower(), display_name))
-
-            conn.commit()
-            logger.info(f"Registered Zylch user: {owner_id} ({email})")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to register user: {e}")
-            return False
-        finally:
-            conn.close()
+        logger.info(f"User registered via Firebase: {owner_id} ({email})")
+        return True
 
     def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Look up a Zylch user by email.
+
+        Uses oauth_tokens table to check if user exists in system.
 
         Args:
             email: Email address to look up
 
         Returns:
-            User dict with owner_id, email, display_name or None
+            User dict with owner_id, email or None
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
+        try:
+            # Check oauth_tokens for registered users
+            result = self._storage.client.table('oauth_tokens')\
+                .select('owner_id, email')\
+                .eq('email', email.lower())\
+                .limit(1)\
+                .execute()
 
-        cursor.execute("""
-            SELECT owner_id, email, display_name, created_at
-            FROM zylch_users
-            WHERE email = ?
-        """, (email.lower(),))
-
-        row = cursor.fetchone()
-        conn.close()
-
-        if row:
-            return {
-                "owner_id": row[0],
-                "email": row[1],
-                "display_name": row[2],
-                "created_at": row[3]
-            }
-        return None
+            if result.data:
+                return {
+                    "owner_id": result.data[0].get('owner_id'),
+                    "email": result.data[0].get('email'),
+                    "display_name": None  # Not stored separately
+                }
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to look up user by email: {e}")
+            return None
 
     def get_user_by_owner_id(self, owner_id: str) -> Optional[Dict[str, Any]]:
         """Look up a Zylch user by owner_id.
@@ -158,34 +99,30 @@ class SharingAuthorizationManager:
         Returns:
             User dict or None
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
+        try:
+            result = self._storage.client.table('oauth_tokens')\
+                .select('owner_id, email')\
+                .eq('owner_id', owner_id)\
+                .limit(1)\
+                .execute()
 
-        cursor.execute("""
-            SELECT owner_id, email, display_name, created_at
-            FROM zylch_users
-            WHERE owner_id = ?
-        """, (owner_id,))
-
-        row = cursor.fetchone()
-        conn.close()
-
-        if row:
-            return {
-                "owner_id": row[0],
-                "email": row[1],
-                "display_name": row[2],
-                "created_at": row[3]
-            }
-        return None
+            if result.data:
+                return {
+                    "owner_id": result.data[0].get('owner_id'),
+                    "email": result.data[0].get('email'),
+                    "display_name": None
+                }
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to look up user by owner_id: {e}")
+            return None
 
     # ==================== Authorization Management ====================
 
     def register_recipient(self, sender_email: str, recipient_email: str) -> Tuple[bool, str]:
         """Register a recipient for future sharing (called by /share command).
 
-        This creates a pending authorization. The recipient must accept before
-        shares actually go through.
+        Uses SupabaseStorage.register_share_recipient().
 
         Args:
             sender_email: Email of the user who wants to share
@@ -199,56 +136,42 @@ class SharingAuthorizationManager:
         if not recipient:
             return False, f"{recipient_email} non è un utente Zylch registrato."
 
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
-
         try:
-            # Check if authorization already exists
-            cursor.execute("""
-                SELECT id, status FROM share_authorizations
-                WHERE sender_email = ? AND recipient_email = ?
-            """, (sender_email.lower(), recipient_email.lower()))
+            # Check existing status via sharing_auth table
+            result = self._storage.client.table('sharing_auth')\
+                .select('status')\
+                .eq('sender_email', sender_email.lower())\
+                .eq('recipient_email', recipient_email.lower())\
+                .limit(1)\
+                .execute()
 
-            existing = cursor.fetchone()
+            if result.data:
+                status = result.data[0].get('status')
+                display = recipient.get('display_name') or recipient_email
 
-            if existing:
-                auth_id, status = existing
-                if status == "accepted":
-                    return True, f"Puoi già condividere con {recipient.get('display_name') or recipient_email}."
+                if status == "authorized":
+                    return True, f"Puoi già condividere con {display}."
                 elif status == "pending":
-                    return True, f"Richiesta già inviata a {recipient.get('display_name') or recipient_email} (in attesa di accettazione)."
-                elif status == "rejected":
-                    # Allow re-request after rejection
-                    cursor.execute("""
-                        UPDATE share_authorizations
-                        SET status = 'pending', created_at = CURRENT_TIMESTAMP,
-                            accepted_at = NULL, revoked_at = NULL
-                        WHERE id = ?
-                    """, (auth_id,))
-                elif status == "revoked":
-                    # Allow re-request after revocation
-                    cursor.execute("""
-                        UPDATE share_authorizations
-                        SET status = 'pending', created_at = CURRENT_TIMESTAMP,
-                            accepted_at = NULL, revoked_at = NULL
-                        WHERE id = ?
-                    """, (auth_id,))
-            else:
-                # Create new authorization
-                cursor.execute("""
-                    INSERT INTO share_authorizations (sender_email, recipient_email, status)
-                    VALUES (?, ?, 'pending')
-                """, (sender_email.lower(), recipient_email.lower()))
+                    return True, f"Richiesta già inviata a {display} (in attesa di accettazione)."
+                elif status in ["rejected", "revoked"]:
+                    # Re-activate as pending
+                    self._storage.client.table('sharing_auth').update({
+                        'status': 'pending'
+                    }).eq('sender_email', sender_email.lower())\
+                      .eq('recipient_email', recipient_email.lower()).execute()
 
-            conn.commit()
+            else:
+                # Create new authorization using SupabaseStorage
+                sender = self.get_user_by_email(sender_email)
+                sender_id = sender.get('owner_id') if sender else 'unknown'
+                self._storage.register_share_recipient(sender_id, sender_email.lower(), recipient_email.lower())
+
             display = recipient.get('display_name') or recipient_email
             return True, f"Registrato {display} come destinatario. Quando condividerai info, {display} dovrà accettare."
 
         except Exception as e:
             logger.error(f"Failed to register recipient: {e}")
             return False, f"Errore nella registrazione: {e}"
-        finally:
-            conn.close()
 
     def accept_authorization(self, recipient_email: str, sender_email: str) -> Tuple[bool, str]:
         """Accept sharing authorization from a sender.
@@ -260,27 +183,14 @@ class SharingAuthorizationManager:
         Returns:
             (success, message) tuple
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
-
         try:
-            cursor.execute("""
-                UPDATE share_authorizations
-                SET status = 'accepted', accepted_at = CURRENT_TIMESTAMP
-                WHERE sender_email = ? AND recipient_email = ? AND status = 'pending'
-            """, (sender_email.lower(), recipient_email.lower()))
-
-            if cursor.rowcount == 0:
-                return False, "Nessuna richiesta di condivisione trovata da questo mittente."
-
-            conn.commit()
-            return True, f"Accettato. {sender_email} può ora condividere informazioni con te."
-
+            result = self._storage.authorize_sender(recipient_email.lower(), sender_email.lower())
+            if result:
+                return True, f"Accettato. {sender_email} può ora condividere informazioni con te."
+            return False, "Nessuna richiesta di condivisione trovata da questo mittente."
         except Exception as e:
             logger.error(f"Failed to accept authorization: {e}")
             return False, f"Errore: {e}"
-        finally:
-            conn.close()
 
     def reject_authorization(self, recipient_email: str, sender_email: str) -> Tuple[bool, str]:
         """Reject sharing authorization from a sender.
@@ -292,32 +202,20 @@ class SharingAuthorizationManager:
         Returns:
             (success, message) tuple
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
-
         try:
-            cursor.execute("""
-                UPDATE share_authorizations
-                SET status = 'rejected'
-                WHERE sender_email = ? AND recipient_email = ? AND status = 'pending'
-            """, (sender_email.lower(), recipient_email.lower()))
+            self._storage.client.table('sharing_auth').update({
+                'status': 'rejected'
+            }).eq('sender_email', sender_email.lower())\
+              .eq('recipient_email', recipient_email.lower())\
+              .eq('status', 'pending').execute()
 
-            if cursor.rowcount == 0:
-                return False, "Nessuna richiesta di condivisione trovata da questo mittente."
-
-            conn.commit()
             return True, f"Rifiutato. {sender_email} non potrà condividere informazioni con te."
-
         except Exception as e:
             logger.error(f"Failed to reject authorization: {e}")
             return False, f"Errore: {e}"
-        finally:
-            conn.close()
 
     def revoke_authorization(self, recipient_email: str, sender_email: str) -> Tuple[bool, str]:
         """Revoke an accepted authorization.
-
-        This stops future shares but keeps existing shared intel visible.
 
         Args:
             recipient_email: Email of the recipient (who is revoking)
@@ -326,27 +224,22 @@ class SharingAuthorizationManager:
         Returns:
             (success, message) tuple
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
-
         try:
-            cursor.execute("""
-                UPDATE share_authorizations
-                SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP
-                WHERE sender_email = ? AND recipient_email = ? AND status = 'accepted'
-            """, (sender_email.lower(), recipient_email.lower()))
+            # Find sender_id to use revoke_sharing
+            sender = self.get_user_by_email(sender_email)
+            if sender:
+                self._storage.revoke_sharing(sender.get('owner_id'), recipient_email.lower())
+            else:
+                # Fallback: update directly
+                self._storage.client.table('sharing_auth').update({
+                    'status': 'revoked'
+                }).eq('sender_email', sender_email.lower())\
+                  .eq('recipient_email', recipient_email.lower()).execute()
 
-            if cursor.rowcount == 0:
-                return False, "Nessuna autorizzazione attiva trovata da questo mittente."
-
-            conn.commit()
             return True, f"Revocato. {sender_email} non può più condividere informazioni con te."
-
         except Exception as e:
             logger.error(f"Failed to revoke authorization: {e}")
             return False, f"Errore: {e}"
-        finally:
-            conn.close()
 
     def is_authorized(self, sender_email: str, recipient_email: str) -> bool:
         """Check if sender is authorized to share with recipient.
@@ -356,20 +249,21 @@ class SharingAuthorizationManager:
             recipient_email: Email of the recipient
 
         Returns:
-            True if authorization is accepted
+            True if authorization is accepted/authorized
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
+        try:
+            result = self._storage.client.table('sharing_auth')\
+                .select('status')\
+                .eq('sender_email', sender_email.lower())\
+                .eq('recipient_email', recipient_email.lower())\
+                .eq('status', 'authorized')\
+                .limit(1)\
+                .execute()
 
-        cursor.execute("""
-            SELECT status FROM share_authorizations
-            WHERE sender_email = ? AND recipient_email = ? AND status = 'accepted'
-        """, (sender_email.lower(), recipient_email.lower()))
-
-        result = cursor.fetchone()
-        conn.close()
-
-        return result is not None
+            return len(result.data) > 0 if result.data else False
+        except Exception as e:
+            logger.warning(f"Failed to check authorization: {e}")
+            return False
 
     def get_authorization_status(self, sender_email: str, recipient_email: str) -> Optional[str]:
         """Get authorization status between sender and recipient.
@@ -381,21 +275,21 @@ class SharingAuthorizationManager:
         Returns:
             Status string or None if no authorization exists
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
+        try:
+            result = self._storage.client.table('sharing_auth')\
+                .select('status')\
+                .eq('sender_email', sender_email.lower())\
+                .eq('recipient_email', recipient_email.lower())\
+                .limit(1)\
+                .execute()
 
-        cursor.execute("""
-            SELECT status FROM share_authorizations
-            WHERE sender_email = ? AND recipient_email = ?
-        """, (sender_email.lower(), recipient_email.lower()))
-
-        result = cursor.fetchone()
-        conn.close()
-
-        return result[0] if result else None
+            return result.data[0].get('status') if result.data else None
+        except Exception as e:
+            logger.warning(f"Failed to get authorization status: {e}")
+            return None
 
     def list_authorized_senders(self, recipient_email: str) -> List[Dict[str, Any]]:
-        """List all users who can share with this recipient (accepted).
+        """List all users who can share with this recipient (authorized).
 
         Args:
             recipient_email: Email of the recipient
@@ -403,31 +297,28 @@ class SharingAuthorizationManager:
         Returns:
             List of sender info dicts
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
+        try:
+            result = self._storage.client.table('sharing_auth')\
+                .select('sender_email, sender_id, authorized_at, created_at')\
+                .eq('recipient_email', recipient_email.lower())\
+                .eq('status', 'authorized')\
+                .order('authorized_at', desc=True)\
+                .execute()
 
-        cursor.execute("""
-            SELECT sa.sender_email, sa.accepted_at, zu.display_name, zu.owner_id
-            FROM share_authorizations sa
-            LEFT JOIN zylch_users zu ON zu.email = sa.sender_email
-            WHERE sa.recipient_email = ? AND sa.status = 'accepted'
-            ORDER BY sa.accepted_at DESC
-        """, (recipient_email.lower(),))
-
-        results = []
-        for row in cursor.fetchall():
-            results.append({
-                "sender_email": row[0],
-                "accepted_at": row[1],
-                "display_name": row[2],
-                "owner_id": row[3]
-            })
-
-        conn.close()
-        return results
+            return [
+                {
+                    "sender_email": row.get('sender_email'),
+                    "accepted_at": row.get('authorized_at') or row.get('created_at'),
+                    "owner_id": row.get('sender_id')
+                }
+                for row in (result.data or [])
+            ]
+        except Exception as e:
+            logger.warning(f"Failed to list authorized senders: {e}")
+            return []
 
     def list_authorized_recipients(self, sender_email: str) -> List[Dict[str, Any]]:
-        """List all users this sender can share with (accepted).
+        """List all users this sender can share with (authorized).
 
         Args:
             sender_email: Email of the sender
@@ -435,28 +326,24 @@ class SharingAuthorizationManager:
         Returns:
             List of recipient info dicts
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
+        try:
+            result = self._storage.client.table('sharing_auth')\
+                .select('recipient_email, authorized_at, created_at')\
+                .eq('sender_email', sender_email.lower())\
+                .eq('status', 'authorized')\
+                .order('authorized_at', desc=True)\
+                .execute()
 
-        cursor.execute("""
-            SELECT sa.recipient_email, sa.accepted_at, zu.display_name, zu.owner_id
-            FROM share_authorizations sa
-            LEFT JOIN zylch_users zu ON zu.email = sa.recipient_email
-            WHERE sa.sender_email = ? AND sa.status = 'accepted'
-            ORDER BY sa.accepted_at DESC
-        """, (sender_email.lower(),))
-
-        results = []
-        for row in cursor.fetchall():
-            results.append({
-                "recipient_email": row[0],
-                "accepted_at": row[1],
-                "display_name": row[2],
-                "owner_id": row[3]
-            })
-
-        conn.close()
-        return results
+            return [
+                {
+                    "recipient_email": row.get('recipient_email'),
+                    "accepted_at": row.get('authorized_at') or row.get('created_at')
+                }
+                for row in (result.data or [])
+            ]
+        except Exception as e:
+            logger.warning(f"Failed to list authorized recipients: {e}")
+            return []
 
     def list_pending_registrations(self, sender_email: str) -> List[Dict[str, Any]]:
         """List pending registrations waiting for recipient acceptance.
@@ -467,30 +354,29 @@ class SharingAuthorizationManager:
         Returns:
             List of pending registration dicts
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
+        try:
+            result = self._storage.client.table('sharing_auth')\
+                .select('recipient_email, created_at')\
+                .eq('sender_email', sender_email.lower())\
+                .eq('status', 'pending')\
+                .order('created_at', desc=True)\
+                .execute()
 
-        cursor.execute("""
-            SELECT sa.recipient_email, sa.created_at, zu.display_name, zu.owner_id
-            FROM share_authorizations sa
-            LEFT JOIN zylch_users zu ON zu.email = sa.recipient_email
-            WHERE sa.sender_email = ? AND sa.status = 'pending'
-            ORDER BY sa.created_at DESC
-        """, (sender_email.lower(),))
-
-        results = []
-        for row in cursor.fetchall():
-            results.append({
-                "recipient_email": row[0],
-                "created_at": row[1],
-                "display_name": row[2],
-                "owner_id": row[3]
-            })
-
-        conn.close()
-        return results
+            return [
+                {
+                    "recipient_email": row.get('recipient_email'),
+                    "created_at": row.get('created_at')
+                }
+                for row in (result.data or [])
+            ]
+        except Exception as e:
+            logger.warning(f"Failed to list pending registrations: {e}")
+            return []
 
     # ==================== Pending Shares ====================
+    #
+    # Note: Pending shares are stored as JSON array in sharing_auth.pending_intel column.
+    # This keeps all sharing data in a single Supabase table for simplicity.
 
     def add_pending_share(
         self,
@@ -501,6 +387,8 @@ class SharingAuthorizationManager:
     ) -> Tuple[bool, str]:
         """Add a share to pending queue (when authorization is not yet accepted).
 
+        Stores pending intel as JSON array in sharing_auth.pending_intel column.
+
         Args:
             sender_email: Email of sender
             recipient_email: Email of recipient
@@ -510,46 +398,67 @@ class SharingAuthorizationManager:
         Returns:
             (success, message) tuple
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
-
         try:
-            # Get or create authorization
-            cursor.execute("""
-                SELECT id, status FROM share_authorizations
-                WHERE sender_email = ? AND recipient_email = ?
-            """, (sender_email.lower(), recipient_email.lower()))
+            from datetime import timezone
+            import json
 
-            auth_row = cursor.fetchone()
+            # Get existing authorization
+            result = self._storage.client.table('sharing_auth')\
+                .select('id, status, pending_intel')\
+                .eq('sender_email', sender_email.lower())\
+                .eq('recipient_email', recipient_email.lower())\
+                .limit(1)\
+                .execute()
 
-            if not auth_row:
-                # Auto-create pending authorization
-                cursor.execute("""
-                    INSERT INTO share_authorizations (sender_email, recipient_email, status)
-                    VALUES (?, ?, 'pending')
-                """, (sender_email.lower(), recipient_email.lower()))
-                auth_id = cursor.lastrowid
-            else:
-                auth_id, status = auth_row
+            if result.data:
+                auth_record = result.data[0]
+                status = auth_record.get('status')
+
                 if status == "rejected":
                     return False, "Il destinatario ha rifiutato la tua richiesta di condivisione."
                 elif status == "revoked":
                     return False, "Il destinatario ha revocato la tua autorizzazione."
 
-            # Add pending share
-            cursor.execute("""
-                INSERT INTO pending_shares (authorization_id, intel_context, identifiers)
-                VALUES (?, ?, ?)
-            """, (auth_id, intel_context, json.dumps(identifiers)))
+                # Append to existing pending_intel
+                pending_intel = auth_record.get('pending_intel') or []
+                if isinstance(pending_intel, str):
+                    pending_intel = json.loads(pending_intel) if pending_intel else []
 
-            conn.commit()
+                pending_intel.append({
+                    'intel_context': intel_context,
+                    'identifiers': identifiers,
+                    'created_at': datetime.now(timezone.utc).isoformat()
+                })
+
+                self._storage.client.table('sharing_auth').update({
+                    'pending_intel': json.dumps(pending_intel)
+                }).eq('id', auth_record['id']).execute()
+
+            else:
+                # Create new pending authorization with intel
+                sender = self.get_user_by_email(sender_email)
+                sender_id = sender.get('owner_id') if sender else 'unknown'
+
+                pending_intel = [{
+                    'intel_context': intel_context,
+                    'identifiers': identifiers,
+                    'created_at': datetime.now(timezone.utc).isoformat()
+                }]
+
+                self._storage.client.table('sharing_auth').insert({
+                    'sender_id': sender_id,
+                    'sender_email': sender_email.lower(),
+                    'recipient_email': recipient_email.lower(),
+                    'status': 'pending',
+                    'pending_intel': json.dumps(pending_intel),
+                    'created_at': datetime.now(timezone.utc).isoformat()
+                }).execute()
+
             return True, "Info aggiunta alla coda. Sarà visibile quando il destinatario accetterà."
 
         except Exception as e:
             logger.error(f"Failed to add pending share: {e}")
             return False, f"Errore: {e}"
-        finally:
-            conn.close()
 
     def get_pending_requests(self, recipient_email: str) -> List[Dict[str, Any]]:
         """Get pending share requests for a recipient.
@@ -560,89 +469,121 @@ class SharingAuthorizationManager:
         Returns:
             List of pending share dicts with sender info and intel
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
+        import json
 
-        cursor.execute("""
-            SELECT
-                ps.id, ps.intel_context, ps.identifiers, ps.created_at,
-                sa.sender_email, zu.display_name, zu.owner_id
-            FROM pending_shares ps
-            JOIN share_authorizations sa ON sa.id = ps.authorization_id
-            LEFT JOIN zylch_users zu ON zu.email = sa.sender_email
-            WHERE sa.recipient_email = ? AND sa.status = 'pending'
-            ORDER BY ps.created_at ASC
-        """, (recipient_email.lower(),))
+        try:
+            result = self._storage.client.table('sharing_auth')\
+                .select('id, sender_id, sender_email, pending_intel, created_at')\
+                .eq('recipient_email', recipient_email.lower())\
+                .eq('status', 'pending')\
+                .order('created_at', desc=False)\
+                .execute()
 
-        results = []
-        for row in cursor.fetchall():
-            results.append({
-                "id": row[0],
-                "intel_context": row[1],
-                "identifiers": json.loads(row[2]),
-                "created_at": row[3],
-                "sender_email": row[4],
-                "sender_display_name": row[5],
-                "sender_owner_id": row[6]
-            })
+            results = []
+            for row in (result.data or []):
+                pending_intel = row.get('pending_intel') or []
+                if isinstance(pending_intel, str):
+                    pending_intel = json.loads(pending_intel) if pending_intel else []
 
-        conn.close()
-        return results
+                # Return one entry per pending intel item
+                for i, intel in enumerate(pending_intel):
+                    results.append({
+                        "id": f"{row['id']}_{i}",  # Composite ID
+                        "intel_context": intel.get('intel_context', ''),
+                        "identifiers": intel.get('identifiers', {}),
+                        "created_at": intel.get('created_at', row.get('created_at')),
+                        "sender_email": row.get('sender_email'),
+                        "sender_display_name": None,  # Could be fetched if needed
+                        "sender_owner_id": row.get('sender_id')
+                    })
 
-    def get_pending_shares_for_authorization(self, auth_id: int) -> List[Dict[str, Any]]:
+            return results
+
+        except Exception as e:
+            logger.warning(f"Failed to get pending requests: {e}")
+            return []
+
+    def get_pending_shares_for_authorization(self, auth_id: str) -> List[Dict[str, Any]]:
         """Get all pending shares for a specific authorization.
 
         Args:
-            auth_id: Authorization ID
+            auth_id: Authorization ID (Supabase UUID)
 
         Returns:
             List of pending share dicts
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
+        import json
 
-        cursor.execute("""
-            SELECT id, intel_context, identifiers, created_at
-            FROM pending_shares
-            WHERE authorization_id = ?
-            ORDER BY created_at ASC
-        """, (auth_id,))
+        try:
+            result = self._storage.client.table('sharing_auth')\
+                .select('pending_intel')\
+                .eq('id', auth_id)\
+                .limit(1)\
+                .execute()
 
-        results = []
-        for row in cursor.fetchall():
-            results.append({
-                "id": row[0],
-                "intel_context": row[1],
-                "identifiers": json.loads(row[2]),
-                "created_at": row[3]
-            })
+            if not result.data:
+                return []
 
-        conn.close()
-        return results
+            pending_intel = result.data[0].get('pending_intel') or []
+            if isinstance(pending_intel, str):
+                pending_intel = json.loads(pending_intel) if pending_intel else []
 
-    def delete_pending_shares(self, auth_id: int) -> int:
+            return [
+                {
+                    "id": i,
+                    "intel_context": intel.get('intel_context', ''),
+                    "identifiers": intel.get('identifiers', {}),
+                    "created_at": intel.get('created_at')
+                }
+                for i, intel in enumerate(pending_intel)
+            ]
+
+        except Exception as e:
+            logger.warning(f"Failed to get pending shares for auth {auth_id}: {e}")
+            return []
+
+    def delete_pending_shares(self, auth_id: str) -> int:
         """Delete all pending shares for an authorization (after acceptance).
 
+        Clears the pending_intel JSON array.
+
         Args:
-            auth_id: Authorization ID
+            auth_id: Authorization ID (Supabase UUID)
 
         Returns:
             Number of shares deleted
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
+        import json
 
-        cursor.execute("""
-            DELETE FROM pending_shares WHERE authorization_id = ?
-        """, (auth_id,))
+        try:
+            # Get current count first
+            result = self._storage.client.table('sharing_auth')\
+                .select('pending_intel')\
+                .eq('id', auth_id)\
+                .limit(1)\
+                .execute()
 
-        deleted = cursor.rowcount
-        conn.commit()
-        conn.close()
+            if not result.data:
+                return 0
 
-        return deleted
+            pending_intel = result.data[0].get('pending_intel') or []
+            if isinstance(pending_intel, str):
+                pending_intel = json.loads(pending_intel) if pending_intel else []
 
-    def get_authorization_id(self, sender_email: str, recipient_email: str) -> Optional[int]:
+            count = len(pending_intel)
+
+            # Clear pending_intel
+            self._storage.client.table('sharing_auth').update({
+                'pending_intel': json.dumps([])
+            }).eq('id', auth_id).execute()
+
+            return count
+
+        except Exception as e:
+            logger.warning(f"Failed to delete pending shares for auth {auth_id}: {e}")
+            return 0
+
+    def get_authorization_id(self, sender_email: str, recipient_email: str) -> Optional[str]:
         """Get authorization ID for a sender-recipient pair.
 
         Args:
@@ -650,17 +591,18 @@ class SharingAuthorizationManager:
             recipient_email: Email of recipient
 
         Returns:
-            Authorization ID or None
+            Authorization ID (Supabase UUID) or None
         """
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
+        try:
+            result = self._storage.client.table('sharing_auth')\
+                .select('id')\
+                .eq('sender_email', sender_email.lower())\
+                .eq('recipient_email', recipient_email.lower())\
+                .limit(1)\
+                .execute()
 
-        cursor.execute("""
-            SELECT id FROM share_authorizations
-            WHERE sender_email = ? AND recipient_email = ?
-        """, (sender_email.lower(), recipient_email.lower()))
+            return result.data[0]['id'] if result.data else None
 
-        result = cursor.fetchone()
-        conn.close()
-
-        return result[0] if result else None
+        except Exception as e:
+            logger.warning(f"Failed to get authorization ID: {e}")
+            return None

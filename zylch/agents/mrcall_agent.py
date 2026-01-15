@@ -9,15 +9,15 @@ This is a TRUE AGENT with multiple tools that can:
 The trained prompt instructs the agent when to use each tool based on
 the user's request.
 
-Inherits from BaseAgent for common functionality (init, prompt loading, etc.)
+Inherits from SpecializedAgent for common functionality (init, prompt loading, etc.)
 """
 
 import logging
 from typing import Any, Dict, Optional
 
-from zylch.agents.base_agent import BaseAgent
+from zylch.agents.base_agent import SpecializedAgent
 from zylch.storage.supabase_client import SupabaseStorage
-from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+from zylch.agents.trainers import MrCallConfiguratorTrainer
 
 
 def _build_changes_schema(feature_name: str) -> dict:
@@ -101,10 +101,10 @@ MRCALL_AGENT_TOOLS = [
 ]
 
 
-class MrCallAgent(BaseAgent):
+class MrCallAgent(SpecializedAgent):
     """Unified MrCall configuration agent with multiple tools.
 
-    Inherits from BaseAgent for common functionality.
+    Inherits from SpecializedAgent for common functionality.
 
     This agent:
     1. Has a trained prompt that combines all feature knowledge
@@ -186,7 +186,7 @@ class MrCallAgent(BaseAgent):
     async def run(self, instructions: str, **kwargs) -> Dict[str, Any]:
         """Execute agent with given instructions.
 
-        Overrides BaseAgent.run() to add MrCall-specific checks and prompt format.
+        Overrides SpecializedAgent.run() to add MrCall-specific checks and prompt format.
 
         Args:
             instructions: What the user wants to do
@@ -227,7 +227,7 @@ Choose the appropriate tool based on what the user wants. Remember:
         logger.debug(f"[MrCallAgent] Sending prompt ({len(prompt)} chars)")
         logger.info(f"[MrCallAgent] Calling LLM with {len(self.TOOLS)} tools")
 
-        # Call LLM with tools (uses inherited self.llm from BaseAgent)
+        # Call LLM with tools (uses inherited self.llm from SpecializedAgent)
         try:
             response = await self.llm.create_message(
                 messages=[{"role": "user", "content": prompt}],

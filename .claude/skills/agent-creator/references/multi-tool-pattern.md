@@ -54,7 +54,7 @@ Instruct the agent when to use each tool:
 
 ## Handling Tool Responses
 
-The `_handle_tool_response()` method in BaseAgent extracts tool calls:
+The `_handle_tool_response()` method in SpecializedAgent extracts tool calls:
 
 ```python
 def _handle_tool_response(self, response) -> Dict[str, Any]:

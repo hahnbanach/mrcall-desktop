@@ -1,83 +1,52 @@
-"""Email archive manager with Gmail API integration."""
+"""Email archive manager with Gmail API integration.
+
+All storage uses Supabase (NO local filesystem per ARCHITECTURE.md).
+"""
 
 import logging
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional
 
-from zylch.config import settings
-from zylch.tools.email_archive_backend import EmailArchiveBackend, SQLiteArchiveBackend
-
-if TYPE_CHECKING:
-    from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)
 
 
 class EmailArchiveManager:
-    """Manages complete email archive with configurable storage backend.
+    """Manages complete email archive using Supabase storage.
 
-    Supports both SQLite (local) and Supabase (multi-tenant) backends.
+    All data stored in Supabase emails table (NO local filesystem per ARCHITECTURE.md).
     """
 
     def __init__(
         self,
         gmail_client,
-        owner_id: Optional[str] = None,
-        supabase_storage: Optional['SupabaseStorage'] = None
+        owner_id: str,
+        supabase_storage: Optional[SupabaseStorage] = None
     ):
         """Initialize archive manager.
 
         Args:
             gmail_client: GmailClient instance for fetching emails
-            owner_id: User's Firebase UID (required for Supabase backend)
-            supabase_storage: Optional SupabaseStorage instance for multi-tenant
+            owner_id: User's Firebase UID (required)
+            supabase_storage: Optional SupabaseStorage instance (uses singleton if not provided)
         """
         self.gmail = gmail_client
         self.owner_id = owner_id
-        self.supabase = supabase_storage
+        self.supabase = supabase_storage or SupabaseStorage.get_instance()
         self._authenticated = False
 
         # NOTE: Gmail authentication is now LAZY - only when actually needed
         # This allows the agent to initialize without valid Gmail credentials
 
-        # Use Supabase if provided, otherwise fall back to SQLite
-        if self.supabase and self.owner_id:
-            self.backend = None  # No SQLite backend needed
-            self._use_supabase = True
-            logger.info(f"EmailArchiveManager using Supabase for owner {owner_id}")
-        else:
-            self.backend = self._create_backend()
-            self.backend.initialize()
-            self._use_supabase = False
-            logger.info("EmailArchiveManager using SQLite backend")
+        logger.info(f"EmailArchiveManager using Supabase for owner {owner_id}")
 
     def _ensure_authenticated(self) -> None:
         """Ensure Gmail client is authenticated (lazy authentication)."""
         if not self._authenticated and not self.gmail.service:
             self.gmail.authenticate()
             self._authenticated = True
-
-    def _create_backend(self) -> EmailArchiveBackend:
-        """Create storage backend based on configuration."""
-        backend_type = settings.email_archive_backend.lower()
-
-        if backend_type == "sqlite":
-            return SQLiteArchiveBackend(
-                db_path=str(settings.get_email_archive_path()),
-                enable_fts=settings.email_archive_enable_fts
-            )
-        elif backend_type == "postgres":
-            raise NotImplementedError(
-                "PostgreSQL backend not implemented yet. "
-                "Use EMAIL_ARCHIVE_BACKEND=sqlite for now."
-            )
-        else:
-            raise ValueError(
-                f"Unknown email archive backend: {backend_type}. "
-                "Supported: sqlite"
-            )
 
     def incremental_sync(self, days_back: Optional[int] = None, force_full: bool = False) -> Dict[str, Any]:
         """Sync emails from Gmail based on actual data in DB.
@@ -91,6 +60,8 @@ class EmailArchiveManager:
         Returns:
             Sync results
         """
+        from zylch.config import settings
+
         logger.info(f"🔄 Starting email sync (days_back={days_back})...")
 
         # Ensure Gmail is authenticated (lazy)
@@ -102,10 +73,7 @@ class EmailArchiveManager:
         target_date = now - timedelta(days=sync_days)
 
         # Get oldest email date from DB to know current coverage
-        if self._use_supabase:
-            oldest_email_date = self.supabase.get_oldest_email_date(self.owner_id)
-        else:
-            oldest_email_date = self.backend.get_oldest_email_date()
+        oldest_email_date = self.supabase.get_oldest_email_date(self.owner_id)
 
         # Determine sync_from date
         if oldest_email_date is None:
@@ -135,13 +103,9 @@ class EmailArchiveManager:
                     'messages_deleted': 0
                 }
 
-            # Get existing email IDs from DB to filter out duplicates
-            if self._use_supabase:
-                existing_emails = self.supabase.get_emails(self.owner_id, limit=len(message_ids) + 1000)
-                existing_ids = {email['gmail_id'] for email in existing_emails}
-            else:
-                # Assuming local backend has a method to get all IDs
-                existing_ids = set(self.backend.get_all_message_ids())
+            # Get existing email IDs from Supabase to filter out duplicates
+            existing_emails = self.supabase.get_emails(self.owner_id, limit=len(message_ids) + 1000)
+            existing_ids = {email['gmail_id'] for email in existing_emails}
 
             new_message_ids = [msg_id for msg_id in message_ids if msg_id not in existing_ids]
             logger.info(f"Found {len(new_message_ids)} new messages to sync")
@@ -166,13 +130,8 @@ class EmailArchiveManager:
                 batch = messages[i:i + batch_size]
                 try:
                     archive_messages = [self._convert_message(msg) for msg in batch]
-
-                    if self._use_supabase:
-                        stored = self.supabase.store_emails_batch(self.owner_id, archive_messages)
-                        total_stored += stored
-                    else:
-                        self.backend.store_messages_batch(archive_messages)
-                        total_stored += len(archive_messages)
+                    stored = self.supabase.store_emails_batch(self.owner_id, archive_messages)
+                    total_stored += stored
 
                     if (i + batch_size) % 500 == 0 or (i + batch_size) >= len(messages):
                         logger.info(f"Progress: {min(i + batch_size, len(messages))}/{len(messages)} messages processed")
@@ -299,12 +258,10 @@ class EmailArchiveManager:
         Returns:
             List of messages sorted by date
         """
-        if self._use_supabase:
-            messages = self.supabase.get_thread_emails(self.owner_id, thread_id)
-            if limit:
-                messages = messages[:limit]
-            return messages
-        return self.backend.get_thread_messages(thread_id, limit=limit)
+        messages = self.supabase.get_thread_emails(self.owner_id, thread_id)
+        if limit:
+            messages = messages[:limit]
+        return messages
 
     def get_threads_in_window(self, days_back: int = 30) -> List[str]:
         """Get all threads with activity in the last N days.
@@ -317,9 +274,7 @@ class EmailArchiveManager:
         Returns:
             List of thread IDs with recent activity
         """
-        if self._use_supabase:
-            return self.supabase.get_threads_in_window(self.owner_id, days_back)
-        return self.backend.get_threads_in_window(days_back=days_back)
+        return self.supabase.get_threads_in_window(self.owner_id, days_back)
 
     def search_messages(
         self,
@@ -332,22 +287,15 @@ class EmailArchiveManager:
 
         Args:
             query: Search query (searches subject, body, from)
-            from_date: Optional start date filter
-            to_date: Optional end date filter
+            from_date: Optional start date filter (not yet supported)
+            to_date: Optional end date filter (not yet supported)
             limit: Max results
 
         Returns:
             List of matching messages
         """
-        if self._use_supabase:
-            # Supabase search doesn't support date filters yet (uses search_emails RPC)
-            return self.supabase.search_emails(self.owner_id, query, limit)
-        return self.backend.search_messages(
-            query=query,
-            from_date=from_date,
-            to_date=to_date,
-            limit=limit
-        )
+        # Note: Date filters not yet supported in Supabase search_emails RPC
+        return self.supabase.search_emails(self.owner_id, query, limit)
 
     def get_stats(self) -> Dict[str, Any]:
         """Get archive statistics.
@@ -355,6 +303,4 @@ class EmailArchiveManager:
         Returns:
             Dict with total messages, threads, date range, last sync
         """
-        if self._use_supabase:
-            return self.supabase.get_email_stats(self.owner_id)
-        return self.backend.get_stats()
+        return self.supabase.get_email_stats(self.owner_id)

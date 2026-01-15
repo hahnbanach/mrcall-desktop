@@ -1,11 +1,12 @@
-"""Data API routes for local-first storage access with Firebase authentication.
+"""Data API routes for storage access with Firebase authentication.
 
-These endpoints provide access to server-side storage for:
+These endpoints provide access to Supabase storage for:
 - Email threads
 - Calendar events
 - Contacts
 
 Data is isolated by owner_id (Firebase UID) for multi-tenant security.
+All storage operations use Supabase (NO local filesystem per ARCHITECTURE.md).
 """
 
 import logging
@@ -15,45 +16,16 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token
-from zylch.storage.email_store import EmailStore
-from zylch.storage.calendar_store import CalendarStore
-from zylch.storage.contact_store import ContactStore
+from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Global storage instances (lazy initialization)
-_email_store: Optional[EmailStore] = None
-_calendar_store: Optional[CalendarStore] = None
-_contact_store: Optional[ContactStore] = None
 
-
-def get_email_store() -> EmailStore:
-    """Get or create global EmailStore instance."""
-    global _email_store
-    if _email_store is None:
-        _email_store = EmailStore()
-        logger.info("Created global EmailStore instance")
-    return _email_store
-
-
-def get_calendar_store() -> CalendarStore:
-    """Get or create global CalendarStore instance."""
-    global _calendar_store
-    if _calendar_store is None:
-        _calendar_store = CalendarStore()
-        logger.info("Created global CalendarStore instance")
-    return _calendar_store
-
-
-def get_contact_store() -> ContactStore:
-    """Get or create global ContactStore instance."""
-    global _contact_store
-    if _contact_store is None:
-        _contact_store = ContactStore()
-        logger.info("Created global ContactStore instance")
-    return _contact_store
+def get_storage() -> SupabaseStorage:
+    """Get SupabaseStorage singleton instance."""
+    return SupabaseStorage.get_instance()
 
 
 # Request/Response Models
@@ -104,23 +76,23 @@ class ApplyModifierResponse(BaseModel):
 @router.get("/emails")
 async def list_emails(
     days_back: Optional[int] = Query(30, description="Filter emails from last N days"),
-    limit: Optional[int] = Query(100, description="Maximum number of threads to return"),
+    limit: Optional[int] = Query(100, description="Maximum number of emails to return"),
     offset: Optional[int] = Query(0, description="Pagination offset"),
     user: dict = Depends(get_current_user)
 ):
-    """List email threads for authenticated user.
+    """List emails for authenticated user.
 
     **Authentication:**
     - Requires Firebase ID token in 'auth' header
 
     **Query Parameters:**
-    - days_back: Filter threads from last N days (default: 30, None for all)
+    - days_back: Filter emails from last N days (default: 30, None for all)
     - limit: Maximum results (default: 100)
     - offset: Pagination offset (default: 0)
 
     **Response:**
-    - threads: List of email thread data
-    - total: Total count of threads returned
+    - emails: List of email data
+    - total: Total count of emails returned
     - stats: Storage statistics
     """
     try:
@@ -128,24 +100,30 @@ async def list_emails(
         owner_id = get_user_id_from_token(user)
         logger.info(f"Listing emails for user {owner_id}")
 
-        # Get email store
-        store = get_email_store()
+        # Get Supabase storage
+        storage = get_storage()
 
-        # List threads
-        threads = store.list_threads(
+        # Get emails (Supabase already filters by days if needed via date_timestamp)
+        emails = storage.get_emails(
             owner_id=owner_id,
             limit=limit,
-            offset=offset,
-            days_back=days_back
+            offset=offset
         )
 
+        # Filter by days_back if specified
+        if days_back:
+            from datetime import timedelta
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
+            cutoff_ts = int(cutoff.timestamp())
+            emails = [e for e in emails if (e.get('date_timestamp') or 0) >= cutoff_ts]
+
         # Get stats
-        stats = store.get_stats(owner_id)
+        stats = storage.get_email_stats(owner_id)
 
         return {
             "success": True,
-            "threads": threads,
-            "total": len(threads),
+            "emails": emails,
+            "total": len(emails),
             "stats": stats
         }
 
@@ -162,7 +140,7 @@ async def get_email_thread(
     thread_id: str,
     user: dict = Depends(get_current_user)
 ):
-    """Get specific email thread by ID.
+    """Get all emails in a thread by thread ID.
 
     **Authentication:**
     - Requires Firebase ID token in 'auth' header
@@ -171,19 +149,19 @@ async def get_email_thread(
     - thread_id: Email thread identifier
 
     **Response:**
-    - thread: Email thread data or null if not found
+    - thread: List of emails in the thread, sorted by date ascending
     """
     try:
         # Extract owner_id from Firebase token
         owner_id = get_user_id_from_token(user)
 
-        # Get email store
-        store = get_email_store()
+        # Get Supabase storage
+        storage = get_storage()
 
-        # Get thread (with owner_id isolation)
-        thread = store.get_thread(thread_id, owner_id)
+        # Get all emails in the thread
+        emails = storage.get_thread_emails(owner_id, thread_id)
 
-        if not thread:
+        if not emails:
             raise HTTPException(
                 status_code=404,
                 detail=f"Thread {thread_id} not found"
@@ -191,7 +169,11 @@ async def get_email_thread(
 
         return {
             "success": True,
-            "thread": thread
+            "thread": {
+                "thread_id": thread_id,
+                "emails": emails,
+                "count": len(emails)
+            }
         }
 
     except HTTPException:
@@ -228,7 +210,6 @@ async def list_calendar_events(
     **Response:**
     - events: List of calendar event data
     - total: Total count of events returned
-    - stats: Storage statistics
     """
     try:
         # Extract owner_id from Firebase token
@@ -236,12 +217,12 @@ async def list_calendar_events(
         logger.info(f"Listing calendar events for user {owner_id}")
 
         # Parse date filters
-        start_date = None
-        end_date = None
+        start_time = None
+        end_time = None
 
         if start:
             try:
-                start_date = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                start_time = datetime.fromisoformat(start.replace('Z', '+00:00'))
             except ValueError as e:
                 raise HTTPException(
                     status_code=400,
@@ -250,33 +231,30 @@ async def list_calendar_events(
 
         if end:
             try:
-                end_date = datetime.fromisoformat(end.replace('Z', '+00:00'))
+                end_time = datetime.fromisoformat(end.replace('Z', '+00:00'))
             except ValueError as e:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Invalid end date format: {str(e)}"
                 )
 
-        # Get calendar store
-        store = get_calendar_store()
+        # Get Supabase storage
+        storage = get_storage()
 
-        # List events
-        events = store.list_events(
+        # Get events from Supabase
+        events = storage.get_calendar_events(
             owner_id=owner_id,
-            start_date=start_date,
-            end_date=end_date,
-            limit=limit,
-            offset=offset
+            start_time=start_time,
+            end_time=end_time
         )
 
-        # Get stats
-        stats = store.get_stats(owner_id)
+        # Apply limit/offset (Supabase method doesn't support them directly)
+        events = events[offset:offset + limit]
 
         return {
             "success": True,
             "events": events,
-            "total": len(events),
-            "stats": stats
+            "total": len(events)
         }
 
     except HTTPException:
@@ -300,7 +278,7 @@ async def get_calendar_event(
     - Requires Firebase ID token in 'auth' header
 
     **Path Parameters:**
-    - event_id: Calendar event identifier
+    - event_id: Calendar event identifier (google_event_id)
 
     **Response:**
     - event: Calendar event data or null if not found
@@ -309,11 +287,18 @@ async def get_calendar_event(
         # Extract owner_id from Firebase token
         owner_id = get_user_id_from_token(user)
 
-        # Get calendar store
-        store = get_calendar_store()
+        # Get Supabase storage
+        storage = get_storage()
 
-        # Get event (with owner_id isolation)
-        event = store.get_event(event_id, owner_id)
+        # Query event by google_event_id
+        result = storage.client.table('calendar_events')\
+            .select('*')\
+            .eq('owner_id', owner_id)\
+            .eq('google_event_id', event_id)\
+            .limit(1)\
+            .execute()
+
+        event = result.data[0] if result.data else None
 
         if not event:
             raise HTTPException(
@@ -351,45 +336,40 @@ async def list_contacts(
     - Requires Firebase ID token in 'auth' header
 
     **Query Parameters:**
-    - query: Optional search query (searches in contact data)
+    - query: Optional search query (searches in email or name)
     - limit: Maximum results (default: 100)
     - offset: Pagination offset (default: 0)
 
     **Response:**
     - contacts: List of contact data
     - total: Total count of contacts returned
-    - stats: Storage statistics
     """
     try:
         # Extract owner_id from Firebase token
         owner_id = get_user_id_from_token(user)
         logger.info(f"Listing contacts for user {owner_id}")
 
-        # Get contact store
-        store = get_contact_store()
+        # Get Supabase storage
+        storage = get_storage()
 
-        # List or search contacts
+        # Build query
+        q = storage.client.table('contacts')\
+            .select('*')\
+            .eq('owner_id', owner_id)
+
+        # Add search filter if query provided
         if query:
-            contacts = store.search_contacts(
-                owner_id=owner_id,
-                query=query,
-                limit=limit
-            )
-        else:
-            contacts = store.list_contacts(
-                owner_id=owner_id,
-                limit=limit,
-                offset=offset
-            )
+            # Search in email or name (case insensitive using ilike)
+            q = q.or_(f'email.ilike.%{query}%,name.ilike.%{query}%')
 
-        # Get stats
-        stats = store.get_stats(owner_id)
+        # Execute with pagination
+        result = q.range(offset, offset + limit - 1).execute()
+        contacts = result.data or []
 
         return {
             "success": True,
             "contacts": contacts,
-            "total": len(contacts),
-            "stats": stats
+            "total": len(contacts)
         }
 
     except Exception as e:
@@ -400,18 +380,18 @@ async def list_contacts(
         )
 
 
-@router.get("/contacts/{memory_id}")
+@router.get("/contacts/{contact_id}")
 async def get_contact(
-    memory_id: str,
+    contact_id: str,
     user: dict = Depends(get_current_user)
 ):
-    """Get specific contact by memory ID.
+    """Get specific contact by ID or email.
 
     **Authentication:**
     - Requires Firebase ID token in 'auth' header
 
     **Path Parameters:**
-    - memory_id: Contact memory identifier
+    - contact_id: Contact UUID or email address
 
     **Response:**
     - contact: Contact data or null if not found
@@ -420,16 +400,26 @@ async def get_contact(
         # Extract owner_id from Firebase token
         owner_id = get_user_id_from_token(user)
 
-        # Get contact store
-        store = get_contact_store()
+        # Get Supabase storage
+        storage = get_storage()
 
-        # Get contact (with owner_id isolation)
-        contact = store.get_contact(memory_id, owner_id)
+        # Try by email first (if it looks like an email), then by ID
+        if '@' in contact_id:
+            contact = storage.get_contact_by_email(owner_id, contact_id)
+        else:
+            # Query by Supabase UUID
+            result = storage.client.table('contacts')\
+                .select('*')\
+                .eq('owner_id', owner_id)\
+                .eq('id', contact_id)\
+                .limit(1)\
+                .execute()
+            contact = result.data[0] if result.data else None
 
         if not contact:
             raise HTTPException(
                 status_code=404,
-                detail=f"Contact {memory_id} not found"
+                detail=f"Contact {contact_id} not found"
             )
 
         return {
@@ -552,29 +542,39 @@ async def get_storage_stats(user: dict = Depends(get_current_user)):
 
     **Response:**
     - email: Email storage stats
-    - calendar: Calendar storage stats
-    - contacts: Contact storage stats
+    - calendar: Calendar event count
+    - contacts: Contact count
     """
     try:
         # Extract owner_id from Firebase token
         owner_id = get_user_id_from_token(user)
         logger.info(f"Getting storage stats for user {owner_id}")
 
-        # Get all stores
-        email_store = get_email_store()
-        calendar_store = get_calendar_store()
-        contact_store = get_contact_store()
+        # Get Supabase storage
+        storage = get_storage()
 
-        # Get stats
-        email_stats = email_store.get_stats(owner_id)
-        calendar_stats = calendar_store.get_stats(owner_id)
-        contact_stats = contact_store.get_stats(owner_id)
+        # Get email stats (already implemented in SupabaseStorage)
+        email_stats = storage.get_email_stats(owner_id)
+
+        # Get calendar count
+        calendar_result = storage.client.table('calendar_events')\
+            .select('id', count='exact')\
+            .eq('owner_id', owner_id)\
+            .execute()
+        calendar_count = calendar_result.count or 0
+
+        # Get contact count
+        contacts_result = storage.client.table('contacts')\
+            .select('id', count='exact')\
+            .eq('owner_id', owner_id)\
+            .execute()
+        contacts_count = contacts_result.count or 0
 
         return {
             "success": True,
             "email": email_stats,
-            "calendar": calendar_stats,
-            "contacts": contact_stats
+            "calendar": {"total_events": calendar_count},
+            "contacts": {"total_contacts": contacts_count}
         }
 
     except Exception as e:
