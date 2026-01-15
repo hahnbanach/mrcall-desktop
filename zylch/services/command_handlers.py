@@ -4222,6 +4222,60 @@ def _tutorial_tasks() -> str:
     """Tutorial for task management and task mode."""
     return """# 📋 Task Management Tutorial
 
+Zylch helps you track actionable items from your emails and calendar.
+
+## 1. Detecting Tasks
+
+Tasks are automatically detected when you process your data:
+
+```
+/agent task train email    (Train detection model)
+/agent task process email  (Analyze recent emails)
+```
+
+## 2. Viewing Tasks
+
+List your tasks to see what needs attention:
+
+```
+/tasks
+```
+
+Each task will show a **Task ID** (e.g., `123e4567-e89b...`).
+
+## 3. Task Mode (Virtualenv) 🎯
+
+To work on a specific task without distraction, enter **Task Mode**:
+
+```
+/tasks open <TASK_ID>
+```
+*Tip: You can also say "work on task <TASK_ID>"*
+
+**In Task Mode:**
+- You are focused ONLY on that task.
+- The AI has full context (emails, files, history) about that task.
+- You can give multi-step instructions (e.g., "Draft a reply, then check my calendar").
+
+**Example Workflow:**
+1. You: "work on task 9ea6..."
+2. AI: Shows task details.
+3. You: "Reply apologizing for the delay."
+4. AI: Drafts email.
+5. You: "Looks good, send it."
+6. AI: Sends email.
+
+## 4. Finishing Up
+
+When you are done with the task:
+
+```
+/tasks exit
+```
+*Tip: You can also say "exit", "done", or "close task".*
+
+This returns you to normal chat mode.
+"""
 ## Overview
 
 Zylch's task system analyzes your emails and calendar to surface items

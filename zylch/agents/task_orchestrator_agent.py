@@ -1,6 +1,6 @@
-"""Task Orchestrator Agent - Stateful multi-turn orchestrator for task resolution.
+"Task Orchestrator Agent - Stateful multi-turn orchestrator for task resolution.
 
-This agent manages the conversation flow when a user enters "task mode" to work
+This agent manages the conversation flow when a user enters \"task mode\" to work
 on a specific task. It:
 
 1. Understands the task context (from task_items)
@@ -12,7 +12,7 @@ Architecture:
 - Inherits from BaseConversationalAgent for user interaction
 - Orchestrates SpecializedAgents (EmailerAgent, MrCallAgent) via their run() method
 - Uses SessionState for task mode persistence
-"""
+"
 
 import logging
 from typing import Any, Dict, Optional
@@ -83,12 +83,12 @@ def _build_agent_capabilities_prompt() -> str:
 
     return f"""## Available Agents
 
-### EmailerAgent (agent_name: "emailer")
+### EmailerAgent (agent_name: \"emailer\")
 For all email-related tasks: composing, replying, drafting emails.
 Capabilities:
 {emailer_tools}
 
-### MrCallAgent (agent_name: "mrcall")
+### MrCallAgent (agent_name: \"mrcall\")
 For configuring MrCall voice assistants.
 Capabilities:
 {mrcall_tools}
@@ -115,7 +115,7 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
             provider=config.llm_provider,
             storage=storage
         )
-        response = await orchestrator.process_message("draft a reply email")
+        response = await orchestrator.process_message(\"draft a reply email\")
     """
 
     def __init__(
@@ -224,10 +224,10 @@ Previous action produced this result. User must confirm, modify, or cancel.
 {last_result}
 
 **User Response Handling:**
-- "ok", "yes", "send it", "confirm", "va bene" → Proceed with the action
+- \"ok\", \"yes\", \"send it\", \"confirm\", \"va bene\" → Proceed with the action
 - Changes requested → Call the agent again with modified instructions
-- "no", "cancel", "annulla" → Abandon the action and ask what to do next
-- NEW information provided (e.g., "there was an outage that day") → USE this info to improve the output
+- \"no\", \"cancel\", \"annulla\" → Abandon the action and ask what to do next
+- NEW information provided (e.g., \"there was an outage that day\") → USE this info to improve the output
 """
 
         agent_capabilities = _build_agent_capabilities_prompt()
@@ -248,14 +248,14 @@ You are NOT a generic chatbot - your only purpose is to complete the current tas
    - Do I need more context? (search memory, search emails, get source emails)
    - Should I delegate to a sub-agent? (EmailerAgent, MrCallAgent)
    - Should I just respond to the user?
-   - If user provides NEW context (e.g., "there was an outage"), think how to USE it.
+   - If user provides NEW context (e.g., \"there was an outage\"), think how to USE it.
 
 3. **Action:** Execute ONE tool to implement your thought.
 
 ## ⚠️ Critical Rules
 
 - **One Step at a Time:** Execute one action per turn.
-- **Use Context:** If user says "that day" or "quel giorno", use Task Date ({task_creation_date}) as reference.
+- **Use Context:** If user says \"that day\" or \"quel giorno\", use Task Date ({task_creation_date}) as reference.
 - **Always Confirm:** No irreversible actions without explicit user confirmation.
 - **Delegate, Don't Do:** Your job is to orchestrate. Call EmailerAgent to write emails, don't write them yourself.
 - **Complete the Request:** Your goal is a usable output (email draft, config change, answer) - not just search results.
@@ -264,8 +264,8 @@ You are NOT a generic chatbot - your only purpose is to complete the current tas
 
 When calling EmailerAgent or MrCallAgent, pass COMPLETE instructions:
 
-✅ GOOD: "Search memory for similar responses about outages on {task_creation_date}, then compose a reply to {contact} apologizing for the delay"
-❌ BAD: "Search memory for outages" (incomplete - doesn't say what to do with results)
+✅ GOOD: \"Search memory for similar responses about outages on {task_creation_date}, then compose a reply to {contact} apologizing for the delay\"
+❌ BAD: \"Search memory for outages\" (incomplete - doesn't say what to do with results)
 
 The sub-agents can handle multi-step workflows. Give them the full picture.
 """
@@ -442,7 +442,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                 .select('*')\
                 .eq('id', draft_id)\
                 .eq('owner_id', self.owner_id)\
-                .single()\
+                .single()
                 .execute()
 
             if not result.data:
@@ -585,7 +585,7 @@ The task may now be complete. Use `/tasks exit` to return to normal chat, or con
 {body}
 ---
 
-Say "send it" to send, or tell me what to change."""
+Say \"send it\" to send, or tell me what to change."""
 
         elif tool_used == 'respond_text':
             return agent_result.get('response', 'No response from agent.')
