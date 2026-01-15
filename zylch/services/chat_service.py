@@ -598,14 +598,15 @@ class ChatService:
 Use `/tasks` to see available tasks with their IDs."""
 
             # Enter task mode in session state
-            logger.debug(f"[/tasks open] Checking session_state: ToolFactory._session_state={ToolFactory._session_state}")
-            if ToolFactory._session_state:
-                logger.debug(f"[/tasks open] Entering task mode with task_id={task['id']}")
-                ToolFactory._session_state.enter_task_mode(task['id'], task)
-                logger.debug(f"[/tasks open] Task mode entered successfully")
-            else:
-                logger.error(f"[/tasks open] ToolFactory._session_state is None! Cannot enter task mode.")
-                return "❌ Session not initialized. Please try again."
+            # If session_state doesn't exist yet (agent not initialized), create a minimal one
+            if not ToolFactory._session_state:
+                logger.debug("[/tasks open] ToolFactory._session_state is None, creating minimal SessionState")
+                from zylch.tools.factory import SessionState
+                ToolFactory._session_state = SessionState()
+
+            logger.debug(f"[/tasks open] Entering task mode with task_id={task['id']}")
+            ToolFactory._session_state.enter_task_mode(task['id'], task)
+            logger.debug(f"[/tasks open] Task mode entered successfully")
 
             # Format task details for display
             contact = task.get('contact_name') or task.get('contact_email', 'Unknown')
