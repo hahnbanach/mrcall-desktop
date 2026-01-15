@@ -818,6 +818,7 @@ use that information to write the email or provide the answer. Don't just report
         """Process write_email tool output.
 
         Adds threading headers if replying to a task with source emails.
+        SAVES the draft to the database so it can be sent later via draft_id.
 
         Args:
             tool_input: The write_email tool's input (subject, body, to)
@@ -825,36 +826,72 @@ use that information to write the email or provide the answer. Don't just report
             recipient_email: Optional recipient override
 
         Returns:
-            Email dict with subject, body, and optional threading headers
+            Email dict with subject, body, draft_id, and optional threading headers
         """
-        result = {
-            'subject': tool_input.get('subject', ''),
-            'body': tool_input.get('body', ''),
-        }
+        subject = tool_input.get('subject', '')
+        body = tool_input.get('body', '')
 
         # Use recipient from tool input or parameter
         to_email = tool_input.get('to') or recipient_email
-        if to_email:
-            result['recipient_email'] = to_email
+
+        # Threading headers
+        in_reply_to = None
+        references = []
+        thread_id = None
 
         # Add threading headers if replying to task with source emails
         if context.source_emails:
             latest_email = context.source_emails[-1]
 
-            result['in_reply_to'] = latest_email.get('message_id_header')
+            in_reply_to = latest_email.get('message_id_header')
 
             existing_refs = latest_email.get('references') or []
             msg_id = latest_email.get('message_id_header')
             if msg_id:
-                result['references'] = existing_refs + [msg_id]
+                references = existing_refs + [msg_id]
             else:
-                result['references'] = existing_refs
+                references = existing_refs
 
-            result['thread_id'] = latest_email.get('thread_id')
+            thread_id = latest_email.get('thread_id')
 
             # Extract recipient from original email if not provided
             if not to_email:
-                result['recipient_email'] = latest_email.get('from_email')
+                to_email = latest_email.get('from_email')
+
+        # Get user's email provider
+        from zylch.api.token_storage import get_provider
+        provider = get_provider(self.owner_id) or 'google'
+
+        # SAVE DRAFT TO DATABASE
+        draft_id = None
+        if to_email:
+            try:
+                draft = self.storage.create_draft(
+                    owner_id=self.owner_id,
+                    to=to_email,
+                    subject=subject,
+                    body=body,
+                    in_reply_to=in_reply_to,
+                    references=references,
+                    thread_id=thread_id,
+                    provider=provider
+                )
+                if draft:
+                    draft_id = draft.get('id')
+                    logger.info(f"[EMAILER] Draft saved to DB with id={draft_id}")
+            except Exception as e:
+                logger.error(f"[EMAILER] Failed to save draft to DB: {e}")
+                # Continue without draft_id - the email can still be shown but not sent
+
+        result = {
+            'subject': subject,
+            'body': body,
+            'recipient_email': to_email,
+            'in_reply_to': in_reply_to,
+            'references': references,
+            'thread_id': thread_id,
+            'draft_id': draft_id,  # NEW: For sending later
+        }
 
         return result
 

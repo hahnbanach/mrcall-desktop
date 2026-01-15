@@ -400,52 +400,91 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             return f"Error calling {agent_name}: {str(e)}"
 
     async def _handle_send_email(self) -> str:
-        """Handle send_email tool - actually send the pending draft.
+        """Handle send_email tool - send the pending draft from database.
 
-        Retrieves the email draft from last_action_result and sends it
-        via the user's connected email provider (Gmail or Outlook).
+        Uses the draft_id from last_action_result to fetch and send the
+        email via the user's connected email provider (Gmail or Outlook).
 
         Returns:
             Success/error message for the user
         """
-        # 1. Get the pending draft from session state
-        last_result = self.session_state.get_last_action_result()
-        if not last_result:
-            logger.warning("[TaskOrchestrator] send_email called but no last_action_result")
-            return "⚠️ No pending email draft to send. Please compose an email first."
-
-        if last_result.get('tool_used') != 'write_email':
-            logger.warning(f"[TaskOrchestrator] send_email called but last action was: {last_result.get('tool_used')}")
-            return f"⚠️ Last action was not an email draft. Please compose an email first."
-
-        draft = last_result.get('result', {})
-        if not draft:
-            return "⚠️ Email draft is empty. Please compose an email first."
-
-        # 2. Get email provider for this user
+        from zylch.storage.supabase_client import SupabaseStorage
         from zylch.api.token_storage import get_provider, get_email, get_graph_token
 
+        # 1. Get draft_id from session state (or try to find latest draft)
+        draft_id = None
+        last_result = self.session_state.get_last_action_result()
+
+        if last_result and last_result.get('tool_used') == 'write_email':
+            draft_id = last_result.get('result', {}).get('draft_id')
+            logger.debug(f"[TaskOrchestrator] send_email: draft_id from last_action_result = {draft_id}")
+
+        # 2. If no draft_id in memory, try to get most recent draft from DB
+        if not draft_id:
+            logger.debug("[TaskOrchestrator] No draft_id in memory, checking DB for recent drafts")
+            try:
+                supabase = SupabaseStorage.get_instance()
+                drafts = supabase.list_drafts(self.owner_id, status='draft')
+                if drafts:
+                    # Get the most recent draft
+                    draft_id = drafts[0].get('id')
+                    logger.debug(f"[TaskOrchestrator] Found most recent draft in DB: {draft_id}")
+            except Exception as e:
+                logger.error(f"[TaskOrchestrator] Failed to query drafts: {e}")
+
+        if not draft_id:
+            return "⚠️ No pending email draft to send.\n\nPlease compose an email first, or check `/email list --draft` to see your drafts."
+
+        # 3. Fetch draft from database
+        try:
+            supabase = SupabaseStorage.get_instance()
+            result = supabase.client.table('drafts')\
+                .select('*')\
+                .eq('id', draft_id)\
+                .eq('owner_id', self.owner_id)\
+                .single()\
+                .execute()
+
+            if not result.data:
+                return f"⚠️ Draft not found (id: {draft_id}). It may have been deleted."
+
+            draft = result.data
+        except Exception as e:
+            logger.error(f"[TaskOrchestrator] Failed to fetch draft {draft_id}: {e}")
+            return f"❌ Failed to load draft: {str(e)}"
+
+        # 4. Get email provider for this user
         provider = get_provider(self.owner_id)
         user_email = get_email(self.owner_id)
 
         if not provider:
             return "❌ No email provider connected.\n\nUse `/connect google` or `/connect microsoft` first."
 
-        # 3. Extract draft fields
-        to_email = draft.get('recipient_email', '')
+        # 5. Extract draft fields
+        to_addresses = draft.get('to_addresses', [])
+        to_str = ', '.join(to_addresses) if isinstance(to_addresses, list) else to_addresses
         subject = draft.get('subject', '')
         body = draft.get('body', '')
         in_reply_to = draft.get('in_reply_to')
-        references = draft.get('references')
+        references = draft.get('references', [])
         thread_id = draft.get('thread_id')
 
-        if not to_email:
+        if not to_str:
             return "❌ No recipient specified in the email draft."
 
-        logger.info(f"[TaskOrchestrator] Sending email to {to_email} via {provider}")
+        logger.info(f"[TaskOrchestrator] Sending email to {to_str} via {provider} (draft_id={draft_id})")
+
+        # Mark draft as sending
+        try:
+            supabase.client.table('drafts').update({
+                'status': 'sending',
+                'provider': provider
+            }).eq('id', draft_id).execute()
+        except Exception as e:
+            logger.warning(f"[TaskOrchestrator] Failed to update draft status: {e}")
 
         try:
-            # 4. Send via appropriate provider
+            # 6. Send via appropriate provider
             if provider == 'google':
                 from zylch.tools.gmail import GmailClient
 
@@ -461,7 +500,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                     refs_str = ' '.join(references) if isinstance(references, list) else references
 
                 sent_message = gmail.send_message(
-                    to=to_email,
+                    to=to_str,
                     subject=subject,
                     body=body,
                     in_reply_to=in_reply_to,
@@ -484,7 +523,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                 )
 
                 sent_message = outlook.send_message(
-                    to=to_email,
+                    to=to_str,
                     subject=subject,
                     body=body,
                 )
@@ -494,22 +533,38 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             else:
                 return f"❌ Unknown email provider: {provider}"
 
-            # 5. Clear the pending draft from session state
+            # 7. Delete draft after successful send
+            try:
+                supabase.client.table('drafts').delete().eq('id', draft_id).execute()
+                logger.debug(f"[TaskOrchestrator] Deleted draft {draft_id} after sending")
+            except Exception as e:
+                logger.warning(f"[TaskOrchestrator] Failed to delete draft after send: {e}")
+
+            # 8. Clear the pending draft from session state
             self.session_state.set_last_action_result(None)
 
             logger.info(f"[TaskOrchestrator] Email sent successfully: {sent_id}")
 
             return f"""✅ **Email sent!**
 
-**To:** {to_email}
+**To:** {to_str}
 **Subject:** {subject}
 **Via:** {provider.title()}
 
 The task may now be complete. Use `/tasks exit` to return to normal chat, or continue working on this task."""
 
         except Exception as e:
+            # Restore draft status on failure
+            try:
+                supabase.client.table('drafts').update({
+                    'status': 'draft',
+                    'error_message': str(e),
+                }).eq('id', draft_id).execute()
+            except:
+                pass
+
             logger.error(f"[TaskOrchestrator] Failed to send email: {e}", exc_info=True)
-            return f"❌ **Failed to send email:** {str(e)}\n\nThe draft is still saved. Try again or modify the email."
+            return f"❌ **Failed to send email:** {str(e)}\n\nThe draft is still saved. Try again with `/email send {draft_id}` or modify the email."
 
     def _format_emailer_result(self, result: Dict[str, Any]) -> str:
         """Format EmailerAgent result for display."""
