@@ -822,6 +822,45 @@ To rebuild memory from scratch:
 **Column: `calendar_events.task_processed_at`**
 - NULL = not processed by task agent, timestamp = when processed
 
+### 9. Task Orchestration (Task Mode)
+
+**Architecture: Router + Specialized Agents**
+
+To handle complex, multi-step tasks statefully, we use a router pattern that switches the user's context between a general-purpose agent and a dedicated task orchestrator.
+
+**Core Components:**
+
+1.  **Router (`ChatService`)**:
+    -   Intercepts all user messages.
+    -   Checks `SessionState` for an active `task_id`.
+    -   **If active:** Routes message to `TaskOrchestratorAgent` (Stateful).
+    -   **If inactive:** Routes message to `MainAgent` (Stateless/General Purpose).
+    -   Handles `/tasks open <ID>` and `/tasks exit` commands to switch modes.
+
+2.  **`TaskOrchestratorAgent` (Stateful Orchestrator)**:
+    -   **Role:** Manages the lifecycle of a specific task.
+    -   **State:** Persists in memory via `SessionState` (knows current task, last action result).
+    -   **Prompt:** Uses a structured "Observation-Thought-Action" loop to reason about the task.
+    -   **Tools:** Has only ONE tool: `call_agent(agent_name, instructions)`.
+    -   **Behavior:** It delegates work to specialized agents but maintains control of the conversation.
+
+3.  **Specialized Agents (`EmailerAgent`, `MrCallAgent`)**:
+    -   **Role:** "Expert arms" that perform specific actions.
+    -   **Interface:** `run(instructions)`.
+    -   **Stateless:** They execute a request and return a result (e.g., a draft email, a config update).
+
+**State Management (`SessionState`)**:
+-   Currently in-memory (per `ChatService` instance).
+-   Stores: `task_id` (active task UUID), `last_action_result` (for confirmation flows).
+-   Enables the "Virtualenv" experience where the AI knows context across multiple turns without re-reading the whole history.
+
+**Workflow**:
+1.  User: `/tasks open 123` -> Router activates Task Mode.
+2.  User: "Draft a reply" -> `TaskOrchestratorAgent` calls `EmailerAgent`.
+3.  `EmailerAgent` returns draft -> `TaskOrchestratorAgent` shows draft + asks confirmation.
+4.  User: "Send it" -> `TaskOrchestratorAgent` (knowing context) calls `EmailerAgent` to send.
+5.  User: `/tasks exit` -> Router clears Task Mode.
+
 ## Personalized Prompts System (December 2025)
 
 ### Problem Solved
