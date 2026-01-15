@@ -534,18 +534,18 @@ class StarChatClient:
 
             response.raise_for_status()
             data = response.json()
-            logger.debug(f"[StarChat] get_business_config: response status={response.status_code}, size={len(str(data))} bytes")
+            logger.debug(f"[StarChat] get_business_config: response status={response.status_code}, data={len(str(data))} bytes")
 
             # API returns a list, extract first element
             if isinstance(data, list) and len(data) > 0:
                 result = data[0]
-                logger.debug(f"[StarChat] get_business_config: template={result.get('template')}, vars_count={len(result.get('variables', {}))}")
+                logger.debug(f"[StarChat] get_business_config: template={result.get('template')}, number of variables={len(result.get('variables', {}))}")
                 return result
-            elif isinstance(data, dict):
-                logger.debug(f"[StarChat] get_business_config: template={data.get('template')}, vars_count={len(data.get('variables', {}))}")
-                return data
+            # elif isinstance(data, dict):
+            #     logger.debug(f"[StarChat] get_business_config: template={data.get('template')}, vars_count={len(data.get('variables', {}))}")
+            #     return data
             else:
-                logger.debug(f"[StarChat] get_business_config: unexpected response type={type(data)}")
+                logger.debug(f"[StarChat] get_business_config: unexpected response. Type={type(data)} (list?) and value={json.dumps(data, indent=4)}")
                 return None
 
         except Exception as e:
