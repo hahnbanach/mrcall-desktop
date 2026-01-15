@@ -50,14 +50,24 @@ Run locally with `uvicorn zylch.api.main:app --reload --port 8000` - connects to
 ## Core Components
 
 ### 1. Agents (`zylch/agents/`)
-- **Purpose**: Specialized background agents for data processing
+- **Purpose**: User-facing conversational agents with multiple tools
 - **Key Files**:
-  - `memory_agent.py`: Extracts facts from emails/calendar into memory blobs
-  - `task_agent.py`: Task detection and processing agent
-  - `mrcall_configurator_trainer.py`: Layer 1 - Generates feature-specific sub-prompts for MrCall configuration
-  - `mrcall_agent_trainer.py`: Layer 2 - Combines sub-prompts into unified agent with tool selection
+  - `base_agent.py`: SpecializedAgent base class for multi-tool agents
+  - `emailer_agent.py`: Email composition and search agent
   - `mrcall_agent.py`: Runs unified MrCall agent with 4 tools (configure_*, get_current_config, respond_text)
+- **Sub-packages**:
+  - `trainers/`: Agent trainers (generate personalized prompts from user data)
+    - `mrcall_configurator.py`: Layer 1 - Generates feature-specific sub-prompts for MrCall
+    - `mrcall.py`: Layer 2 - Combines sub-prompts into unified agent with tool selection
+    - `memory_email.py`: EmailMemoryAgentTrainer for fact extraction
+    - `task_email.py`: EmailTaskAgentTrainer for task detection
   - See [docs/agents/mrcall-configurator.md](agents/mrcall-configurator.md) for full architecture
+
+### 1b. Workers (`zylch/workers/`)
+- **Purpose**: Background data processors (not user-facing)
+- **Key Files**:
+  - `memory.py`: MemoryWorker - Extracts facts from emails/calendar into memory blobs
+  - `task_creation.py`: TaskWorker - Task detection and processing
 
 ### 2. Tools (`zylch/tools/`)
 Modular tools for agent capabilities:
@@ -709,7 +719,7 @@ During `/sync`, the Memory Agent processes unprocessed emails:
 4. **Mark email as processed** via `memory_processed_at` column
 
 **Key Files**:
-- `zylch/agents/memory_agent.py` - MemoryAgent class
+- `zylch/workers/memory.py` - MemoryWorker class
 - `zylch/memory/blob_storage.py` - BlobStorage (store/update blobs)
 - `zylch/memory/hybrid_search.py` - HybridSearchEngine (FTS + semantic)
 - `zylch/memory/llm_merge.py` - LLMMergeService (reconsolidation)
@@ -743,8 +753,8 @@ The Task Agent processes emails and calendar events to detect actionable tasks w
 - GIN index on `attendees` column for fast containment queries
 
 **Key Files**:
-- `zylch/agents/task_agent.py` - TaskWorker class with `_is_user_email()` hard check, `analyze_item_sync()` single source of truth
-- `zylch/agents/task_agent_email_trainer.py` - EmailTaskAgentTrainer for prompt generation (includes calendar awareness)
+- `zylch/workers/task_creation.py` - TaskWorker class with `_is_user_email()` hard check, `analyze_item_sync()` single source of truth
+- `zylch/agents/trainers/task_email.py` - EmailTaskAgentTrainer for prompt generation (includes calendar awareness)
 - `zylch/storage/migrations/022_calendar_attendee_search.sql` - RPC function and GIN index
 
 **Training**: `/agent task train email` runs as background job (5-30+ seconds), generates calendar-aware prompt, notifies on completion.
@@ -837,10 +847,10 @@ The LLM judges email importance based on **tone and content** (not reply history
 ### Architecture
 
 **Key Files**:
-- `zylch/agents/email_memory_agent_trainer.py` - EmailMemoryAgentTrainer class that analyzes patterns
-- `zylch/agents/email_task_agent_trainer.py` - EmailTaskAgentTrainer for task detection prompts
-- `zylch/agents/memory_agent.py` - Uses personalized agent for extraction
-- `zylch/agents/task_agent.py` - Uses personalized agent for task detection
+- `zylch/agents/trainers/memory_email.py` - EmailMemoryAgentTrainer class that analyzes patterns
+- `zylch/agents/trainers/task_email.py` - EmailTaskAgentTrainer for task detection prompts
+- `zylch/workers/memory.py` - Uses personalized agent for extraction
+- `zylch/workers/task_creation.py` - Uses personalized agent for task detection
 
 **Data Flow**:
 ```

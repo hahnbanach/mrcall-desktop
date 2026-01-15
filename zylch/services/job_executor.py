@@ -139,7 +139,7 @@ class JobExecutor:
 
         def _sync_process() -> Dict[str, Any]:
             """Sync code that runs in thread pool."""
-            from zylch.agents.memory_agent import MemoryWorker
+            from zylch.workers import MemoryWorker
 
             worker = MemoryWorker(
                 storage=storage,
@@ -275,7 +275,7 @@ class JobExecutor:
 
         def _sync_process() -> Dict[str, Any]:
             """Sync code that runs in thread pool."""
-            from zylch.agents.task_creation_worker import TaskWorker
+            from zylch.workers import TaskWorker
 
             worker = TaskWorker(
                 storage=storage,
@@ -404,7 +404,7 @@ class JobExecutor:
             llm_provider: LLM provider name (anthropic, openai, mistral)
             user_email: User's email address
         """
-        from zylch.agents.task_agent_email_trainer import EmailTaskAgentTrainer
+        from zylch.agents.trainers import EmailTaskAgentTrainer
 
         storage = self.storage
 
@@ -641,7 +641,7 @@ def _process_email_sync(worker: 'MemoryWorker', email: Dict) -> bool:
     Returns:
         True if processed successfully
     """
-    from zylch.agents.memory_agent import MemoryWorker
+    from zylch.workers import MemoryWorker
 
     email_id = email.get("id", "unknown")
     try:

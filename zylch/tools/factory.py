@@ -498,7 +498,7 @@ class ToolFactory:
             ConfigureAssistantTool,
         )
         from .mrcall.feature_context_tool import GetMrCallFeatureContextTool
-        from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+        from zylch.agents.trainers import MrCallConfiguratorTrainer
 
         # Create trainer for sub-prompt generation
         trainer = MrCallConfiguratorTrainer(

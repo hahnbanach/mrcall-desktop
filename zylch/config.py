@@ -276,9 +276,8 @@ class Settings(BaseSettings):
     pattern_confidence_threshold: float = Field(default=0.5, description="Pattern confidence threshold")
     pattern_max_results: int = Field(default=3, description="Max pattern results")
 
-    # Storage Backend
-    storage_backend: str = Field(default="json", description="Storage backend: json, sqlite, hybrid")
-    sqlite_db_path: str = Field(default=".swarm/threads.db", description="SQLite database path")
+    # Storage Backend (legacy - all data now in Supabase per ARCHITECTURE.md)
+    storage_backend: str = Field(default="supabase", description="Storage backend (supabase only)")
 
     # Skill System Feature Flags
     skill_mode_enabled: bool = Field(default=False, description="Enable skill-based interface")
@@ -293,19 +292,7 @@ class Settings(BaseSettings):
         description="Enable alpha testers allowlist check"
     )
 
-    # Email Archive Configuration
-    email_archive_backend: str = Field(
-        default="sqlite",
-        description="Email archive backend: sqlite or postgres"
-    )
-    email_archive_sqlite_path: str = Field(
-        default="cache/emails/archive.db",
-        description="SQLite database path for email archive"
-    )
-    email_archive_postgres_url: str = Field(
-        default="",
-        description="PostgreSQL connection URL for email archive"
-    )
+    # Email Archive Configuration (all data stored in Supabase per ARCHITECTURE.md)
     email_archive_initial_months: int = Field(
         default=1,
         description="Months of email to fetch during initial sync"
@@ -313,10 +300,6 @@ class Settings(BaseSettings):
     email_archive_batch_size: int = Field(
         default=500,
         description="Messages per batch during archive sync"
-    )
-    email_archive_enable_fts: bool = Field(
-        default=True,
-        description="Enable full-text search in email archive"
     )
 
     def get_cache_path(self) -> Path:
@@ -334,12 +317,6 @@ class Settings(BaseSettings):
     def get_templates_path(self) -> Path:
         """Get templates file path."""
         path = Path(self.templates_file)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        return path
-
-    def get_email_archive_path(self) -> Path:
-        """Get email archive database path (for SQLite)."""
-        path = Path(self.email_archive_sqlite_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 

@@ -10,7 +10,7 @@ Create trainable agents that learn from user data and can perform multiple actio
 ## MANDATORY: Inherit from Base Classes
 
 All agents MUST inherit from:
-- `BaseAgent` for runners (`zylch/agents/base_agent.py`)
+- `SpecializedAgent` for runners (`zylch/agents/base_agent.py`)
 - `BaseAgentTrainer` for trainers (`zylch/agents/base_trainer.py`)
 
 **DO NOT** create standalone classes that duplicate base class functionality.
@@ -72,11 +72,11 @@ For command wiring details, see the `zylch-creating-commands` skill.
 
 ### Step 1: Create the Trainer
 
-Inherit from `BaseAgentTrainer` (`zylch/agents/base_trainer.py`):
+Inherit from `BaseAgentTrainer` (`zylch/agents/trainers/base.py`):
 
 ```python
-# zylch/agents/my_agent_trainer.py
-from zylch.agents.base_trainer import BaseAgentTrainer
+# zylch/agents/trainers/my_trainer.py
+from zylch.agents.trainers import BaseAgentTrainer
 
 class MyAgentTrainer(BaseAgentTrainer):
     """Builds personalized agent by analyzing user's data."""
@@ -129,11 +129,11 @@ class MyAgentTrainer(BaseAgentTrainer):
 
 ### Step 2: Create the Agent (Runner)
 
-Inherit from `BaseAgent` (`zylch/agents/base_agent.py`):
+Inherit from `SpecializedAgent` (`zylch/agents/base_agent.py`):
 
 ```python
 # zylch/agents/my_agent.py
-from zylch.agents.base_agent import BaseAgent
+from zylch.agents.base_agent import SpecializedAgent
 
 # Define tools the agent can use
 MY_AGENT_TOOLS = [
@@ -161,7 +161,7 @@ MY_AGENT_TOOLS = [
     }
 ]
 
-class MyAgent(BaseAgent):
+class MyAgent(SpecializedAgent):
     """Multi-tool agent for my domain."""
 
     PROMPT_KEY = 'my_agent'  # Key in agent_prompts table
@@ -284,10 +284,10 @@ class BaseAgentTrainer:
         # MUST override in subclass
 ```
 
-### BaseAgent Methods
+### SpecializedAgent Methods
 
 ```python
-class BaseAgent:
+class SpecializedAgent:
     PROMPT_KEY = ''  # Key in agent_prompts table
     TOOLS = []       # Tool schemas for LLM
 
@@ -316,7 +316,7 @@ Based on [DeepLearning.AI Agentic Design Patterns](https://www.deeplearning.ai/t
 
 1. **Let the LLM choose** - Don't hard-code which tool to use
 2. **Include tool selection guidance in the trained prompt** - "Use write_email when..., use respond_text when..."
-3. **Set iteration limits** - Guard against infinite loops (built into BaseAgent)
+3. **Set iteration limits** - Guard against infinite loops (built into SpecializedAgent)
 4. **Handle errors gracefully** - Retry mechanisms, fallbacks
 
 ## Training Does Everything
@@ -404,7 +404,7 @@ This ensures all fixes (hard symbolic checks, context injection, action handling
 | File | Purpose |
 |------|---------|
 | `zylch/agents/my_agent_trainer.py` | Your trainer (extends BaseAgentTrainer) |
-| `zylch/agents/my_agent.py` | Your agent (extends BaseAgent) |
+| `zylch/agents/my_agent.py` | Your agent (extends SpecializedAgent) |
 | Update `command_handlers.py` | Wire commands |
 | Update help text | Document new agent |
 
@@ -419,29 +419,29 @@ The meta-prompt includes tool selection guidance so the trained agent knows when
 
 ## What NOT to Do
 
-### WRONG: Standalone class that duplicates BaseAgent
+### WRONG: Standalone class that duplicates SpecializedAgent
 
 ```python
 # ❌ WRONG - Missing inheritance, duplicates base class code
 class MyAgent:
     def __init__(self, storage, owner_id, api_key, provider):
-        self.storage = storage  # Duplicates BaseAgent
-        self.owner_id = owner_id  # Duplicates BaseAgent
-        self.llm = LLMClient(api_key=api_key, provider=provider)  # Duplicates BaseAgent
-        self.search_engine = HybridSearchEngine(...)  # Duplicates BaseAgent
+        self.storage = storage  # Duplicates SpecializedAgent
+        self.owner_id = owner_id  # Duplicates SpecializedAgent
+        self.llm = LLMClient(api_key=api_key, provider=provider)  # Duplicates SpecializedAgent
+        self.search_engine = HybridSearchEngine(...)  # Duplicates SpecializedAgent
 
     def _get_trained_prompt(self):
-        # Duplicates BaseAgent._get_trained_prompt()
+        # Duplicates SpecializedAgent._get_trained_prompt()
         return self.storage.get_agent_prompt(self.owner_id, 'my_agent')
 ```
 
-### CORRECT: Inherit from BaseAgent
+### CORRECT: Inherit from SpecializedAgent
 
 ```python
 # ✅ CORRECT - Uses inheritance, no duplication
-from zylch.agents.base_agent import BaseAgent
+from zylch.agents.base_agent import SpecializedAgent
 
-class MyAgent(BaseAgent):
+class MyAgent(SpecializedAgent):
     PROMPT_KEY = 'my_agent'
     TOOLS = MY_AGENT_TOOLS
 
@@ -467,7 +467,7 @@ class MyAgentTrainer:
 
 ```python
 # ✅ CORRECT - Uses inheritance, no duplication
-from zylch.agents.base_trainer import BaseAgentTrainer
+from zylch.agents.trainers import BaseAgentTrainer
 
 class MyAgentTrainer(BaseAgentTrainer):
     def __init__(self, storage, owner_id, api_key, user_email, provider):
@@ -483,7 +483,7 @@ class MyAgentTrainer(BaseAgentTrainer):
 
 | What | WRONG | CORRECT |
 |------|-------|---------|
-| Agent runner | `class MyAgent:` | `class MyAgent(BaseAgent):` |
+| Agent runner | `class MyAgent:` | `class MyAgent(SpecializedAgent):` |
 | Agent trainer | `class MyTrainer:` | `class MyTrainer(BaseAgentTrainer):` |
 | Init | Duplicate all fields | `super().__init__(...)` + only unique fields |
 | Methods | Rewrite `_get_trained_prompt`, etc. | Use inherited methods |

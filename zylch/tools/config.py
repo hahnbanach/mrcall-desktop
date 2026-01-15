@@ -47,13 +47,9 @@ class ToolConfig:
     cache_dir: str
     cache_ttl_days: int
 
-    # Email Archive
-    email_archive_backend: str
-    email_archive_sqlite_path: str
-    email_archive_postgres_url: str
+    # Email Archive (all data in Supabase per ARCHITECTURE.md)
     email_archive_initial_months: int
     email_archive_batch_size: int
-    email_archive_enable_fts: bool
 
     # ============================================
     # Optional fields (with defaults) - must come after required
@@ -120,13 +116,9 @@ class ToolConfig:
             cache_dir=settings.cache_dir,
             cache_ttl_days=settings.cache_ttl_days,
 
-            # Email Archive
-            email_archive_backend=settings.email_archive_backend,
-            email_archive_sqlite_path=settings.email_archive_sqlite_path,
-            email_archive_postgres_url=settings.email_archive_postgres_url,
+            # Email Archive (all data in Supabase per ARCHITECTURE.md)
             email_archive_initial_months=settings.email_archive_initial_months,
             email_archive_batch_size=settings.email_archive_batch_size,
-            email_archive_enable_fts=settings.email_archive_enable_fts,
 
             # Email Style
             email_style_prompt=settings.email_style_prompt,
@@ -218,8 +210,3 @@ class ToolConfig:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
-    def get_email_archive_path(self) -> Path:
-        """Get email archive database path (for SQLite)."""
-        path = Path(self.email_archive_sqlite_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        return path

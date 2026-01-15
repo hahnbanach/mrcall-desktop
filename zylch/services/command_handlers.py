@@ -759,7 +759,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
     from zylch.config import settings
 
     # Derive from single source of truth (MrCallConfiguratorTrainer.FEATURES)
-    from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+    from zylch.agents.trainers import MrCallConfiguratorTrainer
     FEATURE_TO_VARIABLES = {
         name: feature["variables"]
         for name, feature in MrCallConfiguratorTrainer.FEATURES.items()
@@ -1159,7 +1159,7 @@ Run `/agent mrcall train` to generate configuration context for all features."""
             def _config_feature():
                 import asyncio
                 from zylch.tools.starchat import create_starchat_client
-                from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+                from zylch.agents.trainers import MrCallConfiguratorTrainer
                 from zylch.tools.mrcall.llm_helper import modify_variables_with_llm
 
                 # Create a new event loop for this thread
@@ -1263,7 +1263,7 @@ Run `/agent mrcall train` to generate configuration context for all features."""
                 logger.debug(f"Variables updated for {feature_name}: {list(new_values.keys())}")
 
                 # Get display name for user-friendly message
-                from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+                from zylch.agents.trainers import MrCallConfiguratorTrainer
                 display_name = MrCallConfiguratorTrainer.FEATURES.get(feature_name, {}).get(
                     "display_name", feature_name
                 )
@@ -2200,7 +2200,7 @@ Run `/sync` to fetch calendar events."""
 async def handle_tasks(args: List[str], owner_id: str) -> str:
     """Handle /tasks command - list items needing action using LLM analysis."""
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch.agents.task_creation_worker import TaskWorker
+    from zylch.workers import TaskWorker
     from zylch.api.token_storage import get_email
 
     help_text = """**✅ Tasks**
@@ -2956,7 +2956,7 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 
 async def _handle_memory_train(storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str) -> str:
     """Train memory extraction agent for specified channel."""
-    from zylch.agents.memory_agent_email_trainer import EmailMemoryAgentTrainer
+    from zylch.agents.trainers import EmailMemoryAgentTrainer
 
     if not api_key or not llm_provider:
         return """❌ **LLM API key required**
@@ -2991,7 +2991,7 @@ Please ensure your account is properly connected via `/connect`."""
 
         elif ch == 'mrcall':
             # MrCall memory training
-            from zylch.agents.mrcall_memory_trainer import MrCallMemoryTrainer
+            from zylch.agents.trainers import MrCallMemoryTrainer
 
             calls = storage.get_mrcall_conversations(owner_id, limit=1)
             if not calls:
@@ -3248,7 +3248,7 @@ Recreate with: `/agent task train {channel}`
 
 async def _handle_emailer_train(storage, owner_id: str, api_key: str, llm_provider: str, user_email: str) -> str:
     """Train emailer agent to learn user's writing style."""
-    from zylch.agents.emailer_agent_trainer import EmailerAgentTrainer
+    from zylch.agents.trainers import EmailerAgentTrainer
 
     if not api_key or not llm_provider:
         return """❌ **LLM API key required**
@@ -3468,8 +3468,7 @@ async def _handle_mrcall_agent_train(storage, owner_id: str, api_key: str, llm_p
         feature: Optional specific feature to train. If None, trains all features.
     """
     import asyncio
-    from zylch.agents.mrcall_agent_trainer import MrCallAgentTrainer
-    from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+    from zylch.agents.trainers import MrCallAgentTrainer, MrCallConfiguratorTrainer
     from zylch.tools.starchat import create_starchat_client
 
     if not api_key or not llm_provider:

@@ -14,7 +14,7 @@ This trainer extends BaseAgentTrainer for shared initialization and methods.
 import logging
 from typing import Any, Dict, List, Tuple
 
-from zylch.agents.base_trainer import BaseAgentTrainer
+from zylch.agents.trainers.base import BaseAgentTrainer
 from zylch.storage.supabase_client import SupabaseStorage
 
 logger = logging.getLogger(__name__)

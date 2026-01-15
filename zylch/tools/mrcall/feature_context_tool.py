@@ -10,7 +10,7 @@ from typing import Any, Dict
 
 from ..base import Tool, ToolResult, ToolStatus
 from ..factory import SessionState
-from zylch.agents.mrcall_configurator_trainer import MrCallConfiguratorTrainer
+from zylch.agents.trainers import MrCallConfiguratorTrainer
 
 logger = logging.getLogger(__name__)
 
