@@ -582,19 +582,29 @@ class ChatService:
         Returns:
             Response message indicating success or failure
         """
+        logger.debug(f"[/tasks open] _enter_task_mode called: task_id_input={task_id_input}, owner_id={owner_id}")
+        logger.debug(f"[/tasks open] ToolFactory._session_state={ToolFactory._session_state}")
+
         try:
             # Find task by ID (exact or prefix match)
+            logger.debug(f"[/tasks open] Calling _get_task_by_id...")
             task = await self._get_task_by_id(task_id_input, owner_id)
+            logger.debug(f"[/tasks open] _get_task_by_id returned: task={task}")
 
             if not task:
+                logger.debug(f"[/tasks open] Task not found for id={task_id_input}")
                 return f"""❌ **Task not found:** `{task_id_input}`
 
 Use `/tasks` to see available tasks with their IDs."""
 
             # Enter task mode in session state
+            logger.debug(f"[/tasks open] Checking session_state: ToolFactory._session_state={ToolFactory._session_state}")
             if ToolFactory._session_state:
+                logger.debug(f"[/tasks open] Entering task mode with task_id={task['id']}")
                 ToolFactory._session_state.enter_task_mode(task['id'], task)
+                logger.debug(f"[/tasks open] Task mode entered successfully")
             else:
+                logger.error(f"[/tasks open] ToolFactory._session_state is None! Cannot enter task mode.")
                 return "❌ Session not initialized. Please try again."
 
             # Format task details for display
