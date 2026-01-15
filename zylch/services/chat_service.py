@@ -177,11 +177,19 @@ class ChatService:
             logger.warning(f"Failed to check notifications: {e}")
 
         try:
-            # SEMANTIC COMMAND MATCHING - Check if natural language matches a command
-            matched_command = self._match_semantic_command(user_message)
-            if matched_command:
-                logger.info(f"Semantic match: '{user_message}' -> {matched_command}")
-                user_message = matched_command  # Rewrite as slash command
+            # Check if we're in task mode FIRST (before semantic matching)
+            is_in_task_mode = ToolFactory._session_state and ToolFactory._session_state.is_task_mode()
+
+            # SEMANTIC COMMAND MATCHING - Only when NOT in task mode
+            # In task mode, the TaskOrchestratorAgent handles natural language directly
+            # (e.g., "send it" should be understood as confirmation, not transformed to "/email send")
+            if not is_in_task_mode:
+                matched_command = self._match_semantic_command(user_message)
+                if matched_command:
+                    logger.info(f"Semantic match: '{user_message}' -> {matched_command}")
+                    user_message = matched_command  # Rewrite as slash command
+            else:
+                logger.debug(f"[TaskMode] Skipping semantic match for: '{user_message}'")
 
             # TASK DETAIL PATTERN - Match "more on #N", "details #N", "show #N", "task #N"
             import re
