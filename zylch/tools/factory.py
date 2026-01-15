@@ -20,6 +20,9 @@ class SessionState:
 
     Also manages task focus mode - when a user enters a task "virtualenv" to
     work on a specific task with dedicated orchestration.
+
+    Also manages MrCall config mode - when a user enters `/mrcall open` to
+    configure their MrCall assistant with dedicated orchestration.
     """
     def __init__(self, business_id: Optional[str] = None, owner_id: Optional[str] = None):
         self.business_id = business_id
@@ -28,6 +31,9 @@ class SessionState:
         self.task_id: Optional[str] = None
         self.task_context: Optional[Dict] = None
         self.last_action_result: Optional[Dict] = None
+        # MrCall config mode
+        self.mrcall_config_mode: bool = False
+        self.mrcall_config_business_id: Optional[str] = None
 
     def set_business_id(self, business_id: Optional[str]):
         """Update the current business ID."""
@@ -82,6 +88,31 @@ class SessionState:
     def get_last_action_result(self) -> Optional[Dict]:
         """Get the result of the last action."""
         return self.last_action_result
+
+    # MrCall config mode methods
+    def enter_mrcall_config_mode(self, business_id: str):
+        """Enter MrCall configuration mode for a specific assistant.
+
+        Args:
+            business_id: UUID of the MrCall assistant to configure
+        """
+        self.mrcall_config_mode = True
+        self.mrcall_config_business_id = business_id
+        # MrCall config mode and task mode are mutually exclusive
+        self.exit_task_mode()
+
+    def exit_mrcall_config_mode(self):
+        """Exit MrCall configuration mode and return to normal chat."""
+        self.mrcall_config_mode = False
+        self.mrcall_config_business_id = None
+
+    def is_mrcall_config_mode(self) -> bool:
+        """Check if currently in MrCall configuration mode."""
+        return self.mrcall_config_mode
+
+    def get_mrcall_config_business_id(self) -> Optional[str]:
+        """Get the business ID for the current MrCall config session."""
+        return self.mrcall_config_business_id
 
 
 from .config import ToolConfig

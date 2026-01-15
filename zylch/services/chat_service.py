@@ -29,6 +29,9 @@ class ChatService:
     Also manages task mode routing - when a user enters task mode via
     /tasks open <ID>, messages are routed to TaskOrchestratorAgent instead
     of ZylchAIAgent.
+
+    Also manages MrCall config mode routing - when a user enters MrCall config
+    mode via /mrcall open [ID], messages are routed to MrCallOrchestratorAgent.
     """
 
     def __init__(self):
@@ -42,6 +45,7 @@ class ChatService:
         self.storage = SupabaseStorage.get_instance()
         self._command_matcher = None  # Lazy init for semantic command matching
         self._task_orchestrator = None  # Lazy init for task mode
+        self._mrcall_orchestrator = None  # Lazy init for MrCall config mode
 
     async def _initialize_agent(self, owner_id: str = None):
         """Initialize the agent with all tools (lazy initialization).
@@ -177,13 +181,14 @@ class ChatService:
             logger.warning(f"Failed to check notifications: {e}")
 
         try:
-            # Check if we're in task mode FIRST (before semantic matching)
+            # Check if we're in task mode or MrCall config mode FIRST (before semantic matching)
             is_in_task_mode = ToolFactory._session_state and ToolFactory._session_state.is_task_mode()
+            is_in_mrcall_config_mode = ToolFactory._session_state and ToolFactory._session_state.is_mrcall_config_mode()
 
-            # SEMANTIC COMMAND MATCHING - Only when NOT in task mode
-            # In task mode, the TaskOrchestratorAgent handles natural language directly
+            # SEMANTIC COMMAND MATCHING - Only when NOT in task mode or MrCall config mode
+            # In these modes, agents handle natural language directly
             # (e.g., "send it" should be understood as confirmation, not transformed to "/email send")
-            if not is_in_task_mode:
+            if not is_in_task_mode and not is_in_mrcall_config_mode:
                 matched_command = self._match_semantic_command(user_message)
                 if matched_command:
                     logger.info(f"Semantic match: '{user_message}' -> {matched_command}")
@@ -283,6 +288,60 @@ class ChatService:
                         "execution_time_ms": round((time.time() - start_time) * 1000, 2),
                         "task_mode": True,
                         "task_id": ToolFactory._session_state.get_task_id()
+                    },
+                    "session_id": session_id
+                }
+
+            # MRCALL CONFIG MODE COMMANDS - /mrcall open [ID] and /mrcall exit
+            mrcall_open_match = re.match(r'^/mrcall\s+open(?:\s+(\S+))?\s*$', user_message.strip(), re.IGNORECASE)
+            mrcall_exit_match = re.match(r'^/mrcall\s+exit\b', user_message.strip(), re.IGNORECASE)
+
+            if mrcall_exit_match:
+                # Exit MrCall config mode
+                if ToolFactory._session_state and ToolFactory._session_state.is_mrcall_config_mode():
+                    ToolFactory._session_state.exit_mrcall_config_mode()
+                    self._mrcall_orchestrator = None  # Clear orchestrator
+                    response_text = "✅ Exited MrCall configuration mode.\n\nReturning to normal chat."
+                else:
+                    response_text = "⚠️ Not currently in MrCall config mode. Use `/mrcall open` to enter config mode."
+                return {
+                    "response": self._prepend_notification(response_text, notification_banner),
+                    "tool_calls": [],
+                    "metadata": {
+                        "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                        "command": "mrcall_exit",
+                        "instant": True
+                    },
+                    "session_id": session_id
+                }
+
+            if mrcall_open_match:
+                # Enter MrCall config mode
+                business_id_input = mrcall_open_match.group(1)  # Optional business ID
+                owner_id = (context.get("user_id") if context else None) or user_id
+                response_text = await self._enter_mrcall_config_mode(business_id_input, owner_id)
+                return {
+                    "response": self._prepend_notification(response_text, notification_banner),
+                    "tool_calls": [],
+                    "metadata": {
+                        "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                        "command": "mrcall_open",
+                        "instant": True
+                    },
+                    "session_id": session_id
+                }
+
+            # MRCALL CONFIG MODE ROUTING - If in MrCall config mode, route to MrCallOrchestratorAgent
+            if ToolFactory._session_state and ToolFactory._session_state.is_mrcall_config_mode():
+                owner_id = (context.get("user_id") if context else None) or user_id
+                response_text = await self._process_mrcall_config_message(user_message, owner_id, context)
+                return {
+                    "response": self._prepend_notification(response_text, notification_banner),
+                    "tool_calls": [],
+                    "metadata": {
+                        "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                        "mrcall_config_mode": True,
+                        "business_id": ToolFactory._session_state.get_mrcall_config_business_id()
                     },
                     "session_id": session_id
                 }
@@ -733,3 +792,121 @@ What would you like to do?"""
         except Exception as e:
             logger.error(f"Error in task mode: {e}", exc_info=True)
             return f"❌ **Error:** {str(e)}\n\nUse `/tasks exit` to return to normal chat."
+
+    async def _enter_mrcall_config_mode(self, business_id_input: Optional[str], owner_id: str) -> str:
+        """Enter MrCall configuration mode.
+
+        Args:
+            business_id_input: Optional business ID (if None, uses linked business)
+            owner_id: Firebase UID
+
+        Returns:
+            Response message indicating success or failure
+        """
+        logger.debug(f"[/mrcall open] _enter_mrcall_config_mode: business_id_input={business_id_input}, owner_id={owner_id}")
+
+        try:
+            # Resolve business_id - use provided or get linked
+            if business_id_input:
+                business_id = business_id_input
+            else:
+                business_id = self.storage.get_mrcall_link(owner_id)
+
+            if not business_id:
+                return """❌ **No MrCall assistant linked**
+
+Link your assistant first:
+1. `/mrcall list` - See your assistants
+2. `/mrcall link <business_id>` - Link to assistant"""
+
+            # Create session state if needed
+            if not ToolFactory._session_state:
+                from zylch.tools.factory import SessionState
+                ToolFactory._session_state = SessionState()
+
+            # Get LLM credentials
+            from zylch.api.token_storage import get_active_llm_provider
+            llm_provider, api_key = get_active_llm_provider(owner_id)
+            if not api_key or not llm_provider:
+                return "❌ LLM API key required. Run `/connect anthropic` to set up."
+
+            # Get or create StarChat client
+            if not ToolFactory._starchat_client:
+                from zylch.tools.starchat import create_starchat_client
+                ToolFactory._starchat_client = await create_starchat_client(owner_id)
+
+            # Create orchestrator
+            from zylch.agents.mrcall_orchestrator_agent import MrCallOrchestratorAgent
+            self._mrcall_orchestrator = MrCallOrchestratorAgent(
+                session_state=ToolFactory._session_state,
+                owner_id=owner_id,
+                api_key=api_key,
+                provider=llm_provider,
+                storage=self.storage,
+                starchat_client=ToolFactory._starchat_client
+            )
+
+            # Enter session (may auto-train)
+            response = await self._mrcall_orchestrator.enter_session()
+
+            # Only enter mode if session entry succeeded
+            if not response.startswith("**Error"):
+                ToolFactory._session_state.enter_mrcall_config_mode(business_id)
+                logger.info(f"[/mrcall open] Entered MrCall config mode for business={business_id}")
+
+            return response
+
+        except Exception as e:
+            logger.error(f"Error entering MrCall config mode: {e}", exc_info=True)
+            return f"❌ **Error:** {str(e)}"
+
+    async def _process_mrcall_config_message(
+        self,
+        user_message: str,
+        owner_id: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Process a message while in MrCall config mode.
+
+        Routes the message to MrCallOrchestratorAgent.
+
+        Args:
+            user_message: User's message
+            owner_id: Firebase UID
+            context: Optional context dict
+
+        Returns:
+            Response from MrCallOrchestratorAgent
+        """
+        try:
+            # If orchestrator doesn't exist, recreate it
+            if self._mrcall_orchestrator is None:
+                logger.warning("[MrCallConfigMode] Orchestrator was None, recreating...")
+                from zylch.agents.mrcall_orchestrator_agent import MrCallOrchestratorAgent
+                from zylch.api.token_storage import get_active_llm_provider
+
+                # Get LLM credentials
+                llm_provider, api_key = get_active_llm_provider(owner_id)
+                if not api_key or not llm_provider:
+                    return "❌ LLM API key required. Run `/connect anthropic` to set up."
+
+                self._mrcall_orchestrator = MrCallOrchestratorAgent(
+                    session_state=ToolFactory._session_state,
+                    owner_id=owner_id,
+                    api_key=api_key,
+                    provider=llm_provider,
+                    storage=self.storage,
+                    starchat_client=ToolFactory._starchat_client
+                )
+
+            # Process message through orchestrator
+            response = await self._mrcall_orchestrator.process_message(
+                user_message=user_message,
+                context=context
+            )
+
+            return response
+
+        except Exception as e:
+            logger.error(f"Error in MrCall config mode: {e}", exc_info=True)
+            return f"❌ **Error:** {str(e)}\n\nUse `/mrcall exit` to return to normal chat."

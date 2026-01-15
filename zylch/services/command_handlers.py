@@ -768,21 +768,29 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) 
 
     help_text = """**📞 MrCall Integration**
 
-**Commands:**
+**Interactive Mode (recommended):**
+• `/mrcall open [business_id]` - Enter configuration mode
+• `/mrcall exit` - Exit configuration mode
+
+In config mode, use natural language:
+- "Enable booking with 30-minute appointments"
+- "Change the greeting to be more formal"
+- "Show me the current settings"
+
+**Quick Commands:**
 • `/mrcall list` - List your MrCall assistants
 • `/mrcall link <business_id>` - Link to assistant by ID
-• `/mrcall variables [get] [--name NAME]` - List/filter variables
-• `/mrcall variables set <NAME> <VALUE>` - Set variable value
-• `/mrcall show [feature]` - Show current configuration context
-• `/mrcall config <feature> "instructions"` - Configure assistant behavior
+• `/mrcall show [feature]` - Show current configuration
 • `/mrcall unlink` - Unlink current assistant
 • `/mrcall` - Show current link status
 
-**Agent commands (preferred):**
-• `/agent mrcall train` - Train all features and build unified agent
-• `/agent mrcall run "..."` - Configure assistant (auto-detects feature)
+**Advanced:**
+• `/mrcall variables [get] [--name NAME]` - List/filter variables
+• `/mrcall variables set <NAME> <VALUE>` - Set variable directly
+• `/agent mrcall train` - Manually train agent
+• `/agent mrcall run "..."` - Single-turn configuration
 
-**Features:** welcome_message (greeting), booking (appointment scheduling)
+**Features:** welcome_message, booking (more coming)
 
 **Setup:**
 1. Run `/connect mrcall` to authenticate with MrCall
