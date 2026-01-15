@@ -64,6 +64,17 @@ RESPOND_TOOL = {
     }
 }
 
+# Tool to send the pending email draft
+SEND_EMAIL_TOOL = {
+    "name": "send_email",
+    "description": "Send the pending email draft. Use when user confirms with 'send it', 'ok', 'yes', 'invia', 'conferma', etc. Only works if there's a pending email draft from a previous call_agent to emailer.",
+    "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+    }
+}
+
 
 def _build_agent_capabilities_prompt() -> str:
     """Build a prompt section describing available agents and their capabilities."""
@@ -283,7 +294,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
         system_prompt = self._build_system_prompt()
 
         # Call LLM to decide what to do
-        tools = [CALL_AGENT_TOOL, RESPOND_TOOL]
+        tools = [CALL_AGENT_TOOL, RESPOND_TOOL, SEND_EMAIL_TOOL]
 
         try:
             response = await self.llm.create_message(
@@ -323,6 +334,8 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                         return await self._handle_call_agent(block.input)
                     elif block.name == "respond":
                         return block.input.get("message", "")
+                    elif block.name == "send_email":
+                        return await self._handle_send_email()
 
         # Text response fallback
         for block in response.content:
@@ -385,6 +398,118 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
         except Exception as e:
             logger.error(f"Agent {agent_name} failed: {e}", exc_info=True)
             return f"Error calling {agent_name}: {str(e)}"
+
+    async def _handle_send_email(self) -> str:
+        """Handle send_email tool - actually send the pending draft.
+
+        Retrieves the email draft from last_action_result and sends it
+        via the user's connected email provider (Gmail or Outlook).
+
+        Returns:
+            Success/error message for the user
+        """
+        # 1. Get the pending draft from session state
+        last_result = self.session_state.get_last_action_result()
+        if not last_result:
+            logger.warning("[TaskOrchestrator] send_email called but no last_action_result")
+            return "⚠️ No pending email draft to send. Please compose an email first."
+
+        if last_result.get('tool_used') != 'write_email':
+            logger.warning(f"[TaskOrchestrator] send_email called but last action was: {last_result.get('tool_used')}")
+            return f"⚠️ Last action was not an email draft. Please compose an email first."
+
+        draft = last_result.get('result', {})
+        if not draft:
+            return "⚠️ Email draft is empty. Please compose an email first."
+
+        # 2. Get email provider for this user
+        from zylch.api.token_storage import get_provider, get_email, get_graph_token
+
+        provider = get_provider(self.owner_id)
+        user_email = get_email(self.owner_id)
+
+        if not provider:
+            return "❌ No email provider connected.\n\nUse `/connect google` or `/connect microsoft` first."
+
+        # 3. Extract draft fields
+        to_email = draft.get('recipient_email', '')
+        subject = draft.get('subject', '')
+        body = draft.get('body', '')
+        in_reply_to = draft.get('in_reply_to')
+        references = draft.get('references')
+        thread_id = draft.get('thread_id')
+
+        if not to_email:
+            return "❌ No recipient specified in the email draft."
+
+        logger.info(f"[TaskOrchestrator] Sending email to {to_email} via {provider}")
+
+        try:
+            # 4. Send via appropriate provider
+            if provider == 'google':
+                from zylch.tools.gmail import GmailClient
+
+                gmail = GmailClient(
+                    credentials_path="credentials/gmail_oauth.json",
+                    account=user_email,
+                    owner_id=self.owner_id
+                )
+
+                # Convert references list to string if needed
+                refs_str = None
+                if references:
+                    refs_str = ' '.join(references) if isinstance(references, list) else references
+
+                sent_message = gmail.send_message(
+                    to=to_email,
+                    subject=subject,
+                    body=body,
+                    in_reply_to=in_reply_to,
+                    references=refs_str,
+                    thread_id=thread_id,
+                )
+
+                sent_id = sent_message.get('id', '')
+
+            elif provider == 'microsoft':
+                from zylch.tools.outlook import OutlookClient
+
+                graph_token = get_graph_token(self.owner_id)
+                if not graph_token:
+                    return "❌ Microsoft token expired. Please reconnect with `/connect microsoft`."
+
+                outlook = OutlookClient(
+                    graph_token=graph_token['access_token'],
+                    account=user_email
+                )
+
+                sent_message = outlook.send_message(
+                    to=to_email,
+                    subject=subject,
+                    body=body,
+                )
+
+                sent_id = sent_message.get('id', '')
+
+            else:
+                return f"❌ Unknown email provider: {provider}"
+
+            # 5. Clear the pending draft from session state
+            self.session_state.set_last_action_result(None)
+
+            logger.info(f"[TaskOrchestrator] Email sent successfully: {sent_id}")
+
+            return f"""✅ **Email sent!**
+
+**To:** {to_email}
+**Subject:** {subject}
+**Via:** {provider.title()}
+
+The task may now be complete. Use `/tasks exit` to return to normal chat, or continue working on this task."""
+
+        except Exception as e:
+            logger.error(f"[TaskOrchestrator] Failed to send email: {e}", exc_info=True)
+            return f"❌ **Failed to send email:** {str(e)}\n\nThe draft is still saved. Try again or modify the email."
 
     def _format_emailer_result(self, result: Dict[str, Any]) -> str:
         """Format EmailerAgent result for display."""
