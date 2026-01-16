@@ -125,7 +125,7 @@ Your task: Generate a self-contained sub-prompt that teaches another LLM how to 
 Every MrCall variable value is a string. There are NO native booleans, numbers, or objects.
 - Booleans: "true" or "false" (strings, not true/false primitives)
 - Numbers: "30", "60", "24" (strings, not integers)
-- JSON: "{{\\"monday\\": [{{\\"start\\": \\"09:00\\"}}]}}" (valid JSON serialized as string with escaped quotes)
+- JSON, e.g. BOOKING_HOURS=" {{\\""monday\\"":[\\""09:00-08:15\\""],\\""tuesday\\"":[\\""08:00-08:15\\""],\\""wednesday\\"":[\\""08:00-08:15\\""]}}" (valid JSON serialized as string with escaped quotes)
 
 ## VARIABLE RELATIONSHIPS
 
@@ -136,14 +136,23 @@ The configurator LLM must understand these dependencies:
 - When enabling booking (START_BOOKING_PROCESS="true"), MUST also configure:
   - BOOKING_HOURS (JSON string with available slots)
   - BOOKING_EVENTS_MINUTES (appointment duration)
-  - ENABLE_GET_CALENDAR_EVENTS="true"
-  (Note: BOOKING_CALENDAR_ID is set automatically via OAuth, do not modify it)
+  - ENABLE_GET_CALENDAR_EVENTS "true" / "false" (callers can ask about their appointment)
+  - ENABLE_CLEAR_CALENDAR_EVENT "true" / "false" (callers can cancel their appointment)
+   - BOOKING_DAYS_TO_GENERATE: How many days in advance can the caller book
+  - BOOKING_SHORTEST_NOTICE: Minimum notice in hours for appointments
+   - BOOKING_ONLY_WORKING_HOURS: 
+   - BOOKING_MULTIPLE_ALLOWED",
+    - BOOKING_TITLE",
+    - BOOKING_DESCRIPTION",
+    - BOOKING_PRE_INSTRUCTION",
+    - BOOKING_LAST_INSTRUCTION",
+    - COMMUNICATE_BOOKING_MESSAGE",
+
 
 ### Slot Configuration
-- BOOKING_HOURS format: "{{\\"monday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"tuesday\\": [...]}}"
+- BOOKING_HOURS format: "{{\\"monday\\": [{{\\"09:00:"17:00\\"}}], \\"tuesday\\": [...]}}"
   (Valid JSON embedded in a string with escaped quotes)
 - BOOKING_EVENTS_MINUTES determines slot granularity (e.g., "30" for 30-min slots)
-- BOOKING_ONLY_WORKING_HOURS restricts to business hours
 
 ### Availability Rules
 - BOOKING_DAYS_TO_GENERATE: how many days ahead to show (e.g., "14")
@@ -165,7 +174,7 @@ Teach the configurator these patterns:
 
 **"Enable booking"** →
   START_BOOKING_PROCESS = "true"
-  BOOKING_HOURS = "{{\\"monday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"tuesday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"wednesday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"thursday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"friday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}]}}"
+  BOOKING_HOURS = "{{\\"monday\\": [{{\\"09:00-17:00\\"}}], \\"tuesday\\": [{{\\"09:00-17:00\\"}}], \\"wednesday\\": [{{\\"09:00-17:00\\"}}], \\"thursday\\": [{{\\"09:00-17:00\\"}}], \\"friday\\": [{{\\"09:00-17:00\\"}}]}}"
   BOOKING_EVENTS_MINUTES = "30"
   ENABLE_GET_CALENDAR_EVENTS = "true"
 
@@ -179,11 +188,7 @@ Teach the configurator these patterns:
   BOOKING_EVENTS_MINUTES = "60"
 
 **"Only mornings"** →
-  BOOKING_HOURS = "{{\\"monday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"12:00\\"}}], \\"tuesday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"12:00\\"}}], \\"wednesday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"12:00\\"}}], \\"thursday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"12:00\\"}}], \\"friday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"12:00\\"}}]}}"
-
-**"No weekends"** →
-  BOOKING_HOURS = "{{\\"monday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"tuesday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"wednesday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"thursday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}], \\"friday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}]}}"
-  (JSON object with only weekday keys, no saturday/sunday)
+  BOOKING_HOURS = "{{\\"monday\\": [{{\\"09:00-12:00\\"}}], \\"tuesday\\": [{{\\"09:00-12:00\\"}}], \\"wednesday\\": [{{\\"09:00-12:00\\"}}], \\"thursday\\": [{{\\"09:00-12:00\\"}}], \\"friday\\": [{{\\"09:00-12:00\\"}}]}}"
 
 **"Require 24 hours notice"** →
   BOOKING_SHORTEST_NOTICE = "24"

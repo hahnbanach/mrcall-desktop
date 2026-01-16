@@ -68,7 +68,7 @@ multiple configuration tools, each for a different feature.
    - ENABLE_GET_CALENDAR_EVENTS = "true"
 3. BOOKING_CALENDAR_ID is auto-set via OAuth - never modify it
 4. JSON values must be valid JSON strings with escaped quotes, e.g.:
-   "{{\\"monday\\": [{{\\"start\\": \\"09:00\\", \\"end\\": \\"17:00\\"}}]}}"
+   "{{\\"monday\\": [{{\\"09:00-17:00\\"}}]}}"
 
 ## FEATURE-SPECIFIC KNOWLEDGE
 
