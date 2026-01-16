@@ -438,12 +438,14 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
         # 3. Fetch draft from database
         try:
             supabase = SupabaseStorage.get_instance()
-            result = supabase.client.table('drafts')\
-                .select('*')\
-                .eq('id', draft_id)\
-                .eq('owner_id', self.owner_id)\
+            result = (
+                supabase.client.table('drafts')
+                .select('*')
+                .eq('id', draft_id)
+                .eq('owner_id', self.owner_id)
                 .single()
                 .execute()
+            )
 
             if not result.data:
                 return f"⚠️ Draft not found (id: {draft_id}). It may have been deleted."
