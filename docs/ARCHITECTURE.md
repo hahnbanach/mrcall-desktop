@@ -479,18 +479,31 @@ Non-Anthropic providers see a clear message when attempting to use these feature
 
 ### /connect Command Architecture
 
-The `/connect` command is split between CLI and backend:
+Provider connections are managed through a unified backend system:
 
-**Client-side (CLI):**
-- `/connect` - Show status (OAuth requires local browser)
-- `/connect <provider>` - Start OAuth flow
+**Backend (single source of truth):**
+- `GET /api/connections/providers/{provider}` - Returns provider metadata (config_fields, labels, env_vars)
+- `POST /api/connections/provider/{provider}/credentials` - Saves user credentials
+- `DELETE /api/connections/provider/{provider}/credentials` - Disconnects provider
+- `GET /api/connections/status` - Shows all connection statuses
+- `/connect reset <provider>` - Disconnects specific provider (via chat command)
 
-**Backend:**
-- `/connect --help` - Show help
-- `/connect reset <provider>` - Disconnect provider
-- `/connect status` - Show status
+**Database:**
+- `integration_providers` table defines all providers with `config_fields` JSONB
+- Adding a new provider = SQL INSERT only (no code changes needed)
+- `config_fields` includes: type, label, required, encrypted, env_var
 
-Supported providers for reset: google, microsoft, mrcall, anthropic, openai, mistral, pipedrive, vonage
+**CLI (thin client):**
+- Calls backend API for provider info
+- Displays dynamic form based on `config_fields`
+- Checks environment variables using `env_var` from config_fields
+- Sends credentials to backend for storage
+
+**Provider Types:**
+- OAuth providers (google, microsoft, mrcall): CLI handles browser redirect
+- API-key providers (anthropic, openai, mistral, vonage, pipedrive, sendgrid, etc.): CLI shows form, backend stores
+
+Supported providers: google, microsoft, mrcall, anthropic, openai, mistral, pipedrive, vonage, sendgrid
 
 ## Security & Privacy
 
