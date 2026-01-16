@@ -4041,40 +4041,65 @@ Then extract entities:
 
 ---
 
-## Step 6: Train Configuration Agent
+## Step 6: Configure Your Assistant (Multi-turn)
+
+Enter configuration mode for interactive setup:
 
 ```
-/agent mrcall train
+/mrcall open
 ```
-Trains the AI agent on your current configuration.
-The agent learns your settings and can help you modify them.
+
+The assistant will guide you through configurations, asking clarifying questions when needed.
+
+**Example conversation:**
+```
+> /mrcall open
+MrCall Configuration Mode
+Configuring: Mario's Restaurant
+
+> enable booking
+I can enable booking. A few questions:
+1. Appointment duration? (15, 30, or 60 minutes)
+2. Available days and hours?
+
+> 30 minutes, weekdays 9 to 5
+Booking updated successfully.
+
+> /mrcall exit
+Exited MrCall configuration mode.
+```
 
 ---
 
-## Step 7: Use the Agent
+## Step 7: Quick Commands (Single-turn Alternative)
 
-Ask natural language questions:
+For quick changes without dialogue, use single-turn mode:
 
 ```
-/agent mrcall run "enable booking with 30-min appointments"
+/agent mrcall run "enable booking with 30-min appointments, Mon-Fri 9-17"
 /agent mrcall run "is booking enabled?"
 /agent mrcall run "make the greeting more casual"
 ```
 
+**Tip:** Use `/mrcall open` for complex configurations, `/agent mrcall run` for quick one-liners.
+
 ---
 
-## Other Useful Commands
+## Command Reference
 
 | Command | Description |
 |---------|-------------|
+| `/mrcall open` | **Enter config mode (multi-turn)** |
+| `/mrcall exit` | **Exit config mode** |
 | `/mrcall status` | Check connection status |
-| `/mrcall variables` | List all configuration variables |
+| `/mrcall list` | List your assistants |
+| `/mrcall link <id>` | Link to assistant |
 | `/mrcall unlink` | Disconnect from assistant |
+| `/mrcall variables` | List all configuration variables |
 | `/sync mrcall --days 30` | Sync call transcriptions |
+| `/agent mrcall run "..."` | Single-turn config (alternative) |
 | `/agent memory train mrcall` | Train call memory extraction |
 | `/agent memory process mrcall` | Extract entities from calls |
-| `/agent mrcall show` | Show config agent's prompt |
-| `/agent mrcall reset` | Delete config agent |
 
 ---
 
