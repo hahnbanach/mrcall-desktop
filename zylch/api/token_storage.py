@@ -647,3 +647,58 @@ def delete_vonage_keys(owner_id: str) -> bool:
     result = supabase.delete_provider_credentials(owner_id, 'vonage')
     logger.info(f"Deleted Vonage API credentials for owner {owner_id}")
     return result
+
+
+# =============================================================================
+# SendGrid (BYOK via /connect sendgrid)
+# =============================================================================
+
+def save_sendgrid_key(owner_id: str, api_key: str, from_email: str = "") -> bool:
+    """Save SendGrid API key for a user.
+
+    Args:
+        owner_id: Firebase UID
+        api_key: SendGrid API key
+        from_email: Optional sender email address
+
+    Returns:
+        True if saved successfully
+    """
+    supabase = _get_supabase()
+    credentials = {'api_key': api_key}
+    if from_email:
+        credentials['from_email'] = from_email
+    return supabase.save_provider_credentials(
+        owner_id=owner_id,
+        provider_key='sendgrid',
+        credentials=credentials
+    )
+
+
+def get_sendgrid_key(owner_id: str) -> Optional[str]:
+    """Get SendGrid API key for a user.
+
+    Args:
+        owner_id: Firebase UID
+
+    Returns:
+        API key string or None if not found
+    """
+    supabase = _get_supabase()
+    creds = supabase.get_provider_credentials(owner_id, 'sendgrid')
+    return creds.get('api_key') if creds else None
+
+
+def delete_sendgrid_key(owner_id: str) -> bool:
+    """Delete SendGrid API credentials for a user.
+
+    Args:
+        owner_id: Firebase UID
+
+    Returns:
+        True if deleted
+    """
+    supabase = _get_supabase()
+    result = supabase.delete_provider_credentials(owner_id, 'sendgrid')
+    logger.info(f"Deleted SendGrid API credentials for owner {owner_id}")
+    return result

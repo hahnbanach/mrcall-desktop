@@ -22,29 +22,6 @@ class Settings(BaseSettings):
         description="Log level: DEBUG, INFO, WARNING, ERROR"
     )
 
-    # LLM Provider Configuration
-    # Users set their API key via /connect anthropic, /connect openai, or /connect mistral
-    llm_provider: str = Field(
-        default="anthropic",
-        description="LLM provider: anthropic, openai, mistral"
-    )
-
-    # Note: The actual model used is determined by the provider.
-    # These legacy fields are kept for backward compatibility but are overridden by llm_provider.
-    # See zylch/llm/providers.py for PROVIDER_MODELS mapping.
-    default_model: str = Field(
-        default="claude-sonnet-4-20250514",
-        description="Default model (legacy - now determined by llm_provider)"
-    )
-    classification_model: str = Field(
-        default="claude-sonnet-4-20250514",
-        description="Classification model (legacy - now uses same model as default)"
-    )
-    executive_model: str = Field(
-        default="claude-opus-4-20250514",
-        description="Executive model (legacy - now uses same model as default)"
-    )
-
     # Google OAuth (shared by Gmail, Calendar, etc.)
     google_client_id: str = Field(
         default="",
@@ -57,15 +34,6 @@ class Settings(BaseSettings):
     google_oauth_redirect_uri: str = Field(
         default="",
         description="Google OAuth redirect URI (e.g., https://api.zylch.ai/api/auth/google/callback)"
-    )
-    calendar_id: str = Field(default="primary", description="Calendar ID to use")
-    google_token_path: str = Field(
-        default="~/.zylch/google_tokens",
-        description="Directory for Google OAuth token storage"
-    )
-    google_credentials_path: str = Field(
-        default="~/.zylch/google_credentials.json",
-        description="Path to Google OAuth credentials JSON file"
     )
 
     # Firebase Authentication (for dashboard integration)
@@ -128,20 +96,6 @@ class Settings(BaseSettings):
         description="Comma-separated list of allowed CORS origins"
     )
 
-    # SendGrid
-    sendgrid_api_key: str = Field(default="", description="SendGrid API key")
-    sendgrid_from_email: str = Field(
-        default="noreply@example.com",
-        description="Default sender email"
-    )
-    sendgrid_webhook_secret: str = Field(
-        default="",
-        description="Webhook signature verification secret"
-    )
-
-    # Vonage SMS: credentials are stored per-user in Supabase via /connect vonage
-    # No env vars needed - credentials loaded at tool execution time
-
     # API Server (for thin client)
     api_server_url: str = Field(
         default="http://localhost:8000",
@@ -203,35 +157,14 @@ class Settings(BaseSettings):
         description="Current user's display name (for sharing system)"
     )
 
-
-    # CRM (Optional) - API tokens via /connect commands (BYOK)
-    # No env vars needed - tokens stored per-user in Supabase
-
     # My Email Addresses (for contact identification)
     my_emails: str = Field(
         default="",
         description="Comma-separated list of my email addresses (supports wildcards like *@domain.com)"
     )
 
-    # Skill System Configuration
-    skill_router_model: str = Field(
-        default="claude-sonnet-4-20250514",
-        description="Model for intent classification (router)"
-    )
-    skill_execution_model: str = Field(
-        default="claude-sonnet-4-20250514",
-        description="Model for skill execution"
-    )
-    skill_pattern_model: str = Field(
-        default="claude-sonnet-4-20250514",
-        description="Model for pattern matching"
-    )
-
     # Performance Optimization
     enable_prompt_caching: bool = Field(default=True, description="Enable prompt caching")
-
-    # Skill System Feature Flags
-    skill_mode_enabled: bool = Field(default=False, description="Enable skill-based interface")
 
     # Alpha Testers Allowlist
     alpha_testers_file: str = Field(
