@@ -1512,6 +1512,7 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
 • `mistral` - Mistral AI (BYOK) - EU-based for GDPR
 • `pipedrive` - Pipedrive CRM
 • `vonage` - Vonage SMS
+• `sendgrid` - SendGrid Email
 
 **Examples:**
 • `/connect mrcall` - Connect MrCall
@@ -1572,6 +1573,7 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
                 delete_anthropic_key,
                 delete_pipedrive_key,
                 delete_vonage_keys,
+                delete_sendgrid_key,
                 delete_llm_provider_key,
             )
 
@@ -1586,6 +1588,7 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
                 'mistral': lambda oid: delete_llm_provider_key(oid, 'mistral'),
                 'pipedrive': delete_pipedrive_key,
                 'vonage': delete_vonage_keys,
+                'sendgrid': delete_sendgrid_key,
             }
 
             if provider_key not in delete_funcs:

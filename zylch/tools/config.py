@@ -12,8 +12,7 @@ These credentials are NOT read from env vars - they must be fetched from Supabas
 """
 
 from dataclasses import dataclass
-from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from ..config import settings
 
@@ -31,20 +30,7 @@ class ToolConfig:
     """
 
     # ============================================
-    # Required fields (no defaults) - must come first
-    # ============================================
-
-    # Model configuration (from settings - shared)
-    default_model: str
-    classification_model: str
-    executive_model: str
-
-    # Google Calendar
-    calendar_id: str
-    google_token_path: str
-
-    # ============================================
-    # Optional fields (with defaults) - must come after required
+    # Optional fields (with defaults)
     # ============================================
 
     # BYOK Credentials (fetched from Supabase, not env vars)
@@ -90,15 +76,6 @@ class ToolConfig:
             ToolConfig instance with values from global settings
         """
         return cls(
-            # Model configuration (shared)
-            default_model=settings.default_model,
-            classification_model=settings.classification_model,
-            executive_model=settings.executive_model,
-
-            # Google Calendar
-            calendar_id=settings.calendar_id,
-            google_token_path=settings.google_token_path,
-
             # My Emails
             my_emails=settings.my_emails,
 
@@ -111,11 +88,6 @@ class ToolConfig:
             user_display_name=settings.user_display_name,
 
             # BYOK credentials left empty - use from_settings_with_owner()
-            # anthropic_api_key=""  (default)
-            # pipedrive_api_token=""  (default)
-            # sendgrid_api_key=""  (default)
-            # graph_token=""  (default)
-            # graph_refresh_token=""  (default)
         )
 
     @classmethod
@@ -177,5 +149,3 @@ class ToolConfig:
             config.graph_refresh_token = ms_token.get('refresh_token', '')
 
         return config
-
-
