@@ -295,13 +295,14 @@ class ToolFactory:
                     email_archive=email_archive,
                     api_key=config.anthropic_api_key,
                     provider=config.llm_provider,
-                    cache_dir=config.cache_dir + "/emails",
                     days_back=30,
+                    owner_id=config.owner_id,
+                    supabase_storage=supabase_storage,
                 )
 
-            # Pipedrive CRM client (optional)
+            # Pipedrive CRM client (optional - enabled when token is set via /connect pipedrive)
             pipedrive = None
-            if config.pipedrive_enabled and config.pipedrive_api_token:
+            if config.pipedrive_api_token:
                 try:
                     pipedrive = PipedriveClient(api_token=config.pipedrive_api_token)
                     logger.info("Pipedrive CRM connected")
@@ -377,15 +378,15 @@ class ToolFactory:
             ))
 
         # Sharing tools (4 tools) - for intelligence sharing between users
-        if config.user_email:
-            sharing_tools = ToolFactory._create_sharing_tools(
-                cache_dir=config.cache_dir,
-                owner_id=config.owner_id,
-                user_email=config.user_email,
-                user_display_name=config.user_display_name if hasattr(config, 'user_display_name') else None
-            )
-            tools.extend(sharing_tools)
-            logger.info(f"Sharing tools initialized ({len(sharing_tools)} tools)")
+        # TODO: Re-enable when migrated to Supabase blobs
+        # if config.user_email:
+        #     sharing_tools = ToolFactory._create_sharing_tools(
+        #         owner_id=config.owner_id,
+        #         user_email=config.user_email,
+        #         user_display_name=config.user_display_name if hasattr(config, 'user_display_name') else None
+        #     )
+        #     tools.extend(sharing_tools)
+        #     logger.info(f"Sharing tools initialized ({len(sharing_tools)} tools)")
 
 
 
@@ -554,7 +555,6 @@ class ToolFactory:
 
     @staticmethod
     def _create_sharing_tools(
-        cache_dir: str,
         owner_id: str,
         user_email: str,
         user_display_name: Optional[str] = None
@@ -564,13 +564,6 @@ class ToolFactory:
         TODO: These tools currently disabled - need migration from legacy memory system to Supabase blobs.
         """
         # TODO: Re-enable when IntelShareManager is migrated to use Supabase blobs
-        # from .sharing_tools import (
-        #     ShareContactIntelTool,
-        #     GetSharedIntelTool,
-        #     AcceptShareRequestTool,
-        #     RejectShareRequestTool,
-        # )
-        # from ..sharing import SharingAuthorizationManager, IntelShareManager
         return []
 
 

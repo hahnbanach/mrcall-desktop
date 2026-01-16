@@ -1,9 +1,7 @@
-"""Calendar synchronization and intelligent caching system."""
+"""Calendar synchronization with Supabase storage."""
 
-import json
 import logging
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from zylch.llm import LLMClient, PROVIDER_MODELS
@@ -15,12 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 class CalendarSyncManager:
-    """Manages calendar event synchronization and intelligent caching.
+    """Manages calendar event synchronization with Supabase storage.
 
-    Fetches events, analyzes patterns, and caches with actionable metadata
+    Fetches events, analyzes patterns, and stores with actionable metadata
     for relationship intelligence.
-
-    Supports both local JSON cache and Supabase multi-tenant storage.
     """
 
     def __init__(
@@ -28,29 +24,28 @@ class CalendarSyncManager:
         calendar_client,
         api_key: str,
         provider: str,
-        cache_dir: str = "cache/calendar",
         days_back: int = 30,
         days_forward: int = 30,
         my_emails: Optional[List[str]] = None,
-        owner_id: Optional[str] = None,
+        owner_id: str = "",
         supabase_storage: Optional['SupabaseStorage'] = None,
     ):
         """Initialize calendar sync manager.
 
         Args:
             calendar_client: Calendar client (GoogleCalendarClient or OutlookCalendarClient)
-            cache_dir: Directory to store calendar cache
             api_key: LLM API key for event analysis
             provider: LLM provider (anthropic, openai, mistral)
             days_back: Days in past to sync (default: 30)
             days_forward: Days in future to sync (default: 30)
             my_emails: List of my email addresses (for identifying external attendees)
-            owner_id: User's Firebase UID (required for Supabase backend)
-            supabase_storage: Optional SupabaseStorage instance for multi-tenant
+            owner_id: User's Firebase UID (required)
+            supabase_storage: SupabaseStorage instance (required)
         """
+        if not owner_id or not supabase_storage:
+            raise ValueError("owner_id and supabase_storage are required")
+
         self.calendar = calendar_client
-        self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.provider = provider
         self.llm_client = LLMClient(api_key=api_key, provider=provider) if api_key else None
         self.days_back = days_back
@@ -59,69 +54,31 @@ class CalendarSyncManager:
         self.owner_id = owner_id
         self.supabase = supabase_storage
 
-        # Use Supabase if provided
-        self._use_supabase = bool(self.supabase and self.owner_id)
-
-        if self._use_supabase:
-            logger.info(f"CalendarSyncManager using Supabase for owner {owner_id}")
-        else:
-            logger.info(
-                f"CalendarSyncManager using local JSON cache (cache: {cache_dir}, "
-                f"window: -{days_back}/+{days_forward} days)"
-            )
-
-    def _get_cache_path(self) -> Path:
-        """Get path to calendar cache file."""
-        return self.cache_dir / "events.json"
+        logger.info(f"CalendarSyncManager initialized for owner {owner_id}")
 
     def _load_cache(self) -> Dict[str, Any]:
-        """Load existing calendar cache."""
-        if self._use_supabase:
-            # Load from Supabase
-            events = self.supabase.get_all_calendar_events(self.owner_id)
-            events_dict = {}
-            for event in events:
-                event_id = event['google_event_id']
-                events_dict[event_id] = self._convert_supabase_to_cache(event)
-            return {
-                "last_sync": None,
-                "sync_window": {
-                    "days_back": self.days_back,
-                    "days_forward": self.days_forward
-                },
-                "events": events_dict
-            }
-
-        # Load from local JSON
-        cache_path = self._get_cache_path()
-        if cache_path.exists():
-            with open(cache_path, 'r') as f:
-                return json.load(f)
+        """Load existing calendar events from Supabase."""
+        events = self.supabase.get_all_calendar_events(self.owner_id)
+        events_dict = {}
+        for event in events:
+            event_id = event['google_event_id']
+            events_dict[event_id] = self._convert_supabase_to_cache(event)
         return {
             "last_sync": None,
             "sync_window": {
                 "days_back": self.days_back,
                 "days_forward": self.days_forward
             },
-            "events": {}
+            "events": events_dict
         }
 
     def _save_cache(self, cache: Dict[str, Any]) -> None:
-        """Save calendar cache to disk or Supabase."""
-        if self._use_supabase:
-            # Convert and save to Supabase
-            events_for_supabase = []
-            for event_id, event_data in cache['events'].items():
-                events_for_supabase.append(self._convert_cache_to_supabase(event_data))
-            self.supabase.store_calendar_events_batch(self.owner_id, events_for_supabase)
-            logger.info(f"Saved {len(events_for_supabase)} events to Supabase")
-            return
-
-        # Save to local JSON
-        cache_path = self._get_cache_path()
-        with open(cache_path, 'w') as f:
-            json.dump(cache, f, indent=2, default=str)
-        logger.info(f"Saved {len(cache['events'])} events to cache")
+        """Save calendar events to Supabase."""
+        events_for_supabase = []
+        for event_id, event_data in cache['events'].items():
+            events_for_supabase.append(self._convert_cache_to_supabase(event_data))
+        self.supabase.store_calendar_events_batch(self.owner_id, events_for_supabase)
+        logger.info(f"Saved {len(events_for_supabase)} events to Supabase")
 
     def _convert_supabase_to_cache(self, supabase_event: Dict[str, Any]) -> Dict[str, Any]:
         """Convert Supabase calendar_event format to cache format."""

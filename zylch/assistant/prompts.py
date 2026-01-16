@@ -1,17 +1,13 @@
 """System prompts and templates for Zylch AI agent."""
 
 from datetime import datetime
-from typing import Optional
 
 
-def get_system_prompt(email_style_prompt: Optional[str] = None) -> str:
+def get_system_prompt() -> str:
     """Get system prompt with current date/time context.
 
-    Args:
-        email_style_prompt: Custom email style instructions from settings
-
     Returns:
-        System prompt with injected preferences
+        System prompt with date/time context
     """
     now = datetime.now()
     return f"""You are Zylch AI, an Email Intelligence Assistant helping a sales professional manage communications and follow-ups.
@@ -28,21 +24,13 @@ IMPORTANT: Use this date/time context to:
 """
 
 
-def get_system_prompt_base(email_style_prompt: Optional[str] = None) -> str:
-    """Get base system prompt with email style preferences injected.
-
-    Args:
-        email_style_prompt: Custom email style instructions from settings
+def get_system_prompt_base() -> str:
+    """Get base system prompt.
 
     Returns:
-        Base system prompt with style preferences
+        Base system prompt
     """
-    # Build email style instructions
-    email_style_instructions = ""
-    if email_style_prompt:
-        email_style_instructions = f"\n- **Email Style Preferences:** {email_style_prompt}"
-
-    return SYSTEM_PROMPT_BASE.format(email_style_instructions=email_style_instructions)
+    return SYSTEM_PROMPT_BASE
 
 
 SYSTEM_PROMPT_BASE = """You are Zylch AI, an Email Intelligence Assistant helping a sales professional manage communications and follow-ups.
@@ -125,7 +113,6 @@ When drafting emails or reminders:
 - Reference conversation history when relevant
 - Suggest which email account to send from based on EMAIL_EXCHANGE_HISTORY
 - Always show draft for approval before sending
-{email_style_instructions}
 - **If user references an email by number** (e.g., "for #5 write a reminder", "per la 5 scrivi un reminder"):
   1. Use search_emails tool to find that specific email thread
   2. Read the email context and understand the situation

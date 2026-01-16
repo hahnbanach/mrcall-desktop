@@ -25,7 +25,6 @@ class ZylchAIAgent(BaseConversationalAgent):
         provider: str,
         model_selector: Optional[ModelSelector] = None,
         max_tokens: int = 4096,
-        email_style_prompt: Optional[str] = None,
         triggered_instructions: Optional[List[str]] = None,
     ):
         """Initialize Zylch AI agent.
@@ -35,7 +34,6 @@ class ZylchAIAgent(BaseConversationalAgent):
             tools: List of available tools
             model_selector: Model selection logic (optional)
             max_tokens: Maximum tokens for response
-            email_style_prompt: Custom email style instructions
             triggered_instructions: List of triggered instructions (optional, for prompt injection)
             provider: LLM provider (anthropic, openai, mistral)
         """
@@ -45,7 +43,6 @@ class ZylchAIAgent(BaseConversationalAgent):
         self.tool_map = {tool.name: tool for tool in tools}
         self.model_selector = model_selector or ModelSelector()
         self.max_tokens = max_tokens
-        self.email_style_prompt = email_style_prompt
         self.triggered_instructions = triggered_instructions or []
         self.conversation_history: List[Dict[str, Any]] = []
         self.message_count = 0
@@ -88,8 +85,8 @@ class ZylchAIAgent(BaseConversationalAgent):
         model = self.model_selector.select_model(user_message, context, force_model=force_model)
         logger.info(f"Using model: {model}")
 
-        # Build system prompt with context and email style preferences
-        system_prompt = get_system_prompt() + get_system_prompt_base(self.email_style_prompt)
+        # Build system prompt with context
+        system_prompt = get_system_prompt() + get_system_prompt_base()
         if context and context.get("current_business_id"):
             system_prompt += f"\n\n**CURRENT SESSION:**\n✅ Selected MrCall Assistant: {context['current_business_id']}\nYou CAN save contacts directly to this assistant."
 

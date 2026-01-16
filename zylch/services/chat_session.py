@@ -357,7 +357,7 @@ _session_manager: Optional[ChatSessionManager] = None
 def get_session_manager() -> ChatSessionManager:
     """Get global chat session manager instance.
 
-    Creates and initializes on first call with cache/chat_sessions persistence.
+    Creates in-memory session manager (no local persistence per ARCHITECTURE.md).
 
     Returns:
         ChatSessionManager instance
@@ -365,9 +365,8 @@ def get_session_manager() -> ChatSessionManager:
     global _session_manager
 
     if _session_manager is None:
-        from zylch.config import settings
-        persistence_dir = Path(settings.cache_dir) / "chat_sessions"
-        _session_manager = ChatSessionManager(persistence_dir=str(persistence_dir))
-        logger.info("Initialized global chat session manager")
+        # No local persistence - sessions are ephemeral API sessions
+        _session_manager = ChatSessionManager(persistence_dir=None)
+        logger.info("Initialized global chat session manager (in-memory)")
 
     return _session_manager
