@@ -1,18 +1,18 @@
-"Task Orchestrator Agent - Stateful multi-turn orchestrator for task resolution.
+# Task Orchestrator Agent - Stateful multi-turn orchestrator for task resolution.
+#
+# This agent manages the conversation flow when a user enters \"task mode\" to work
+# on a specific task. It:
+#
+# 1. Understands the task context (from task_items)
+# 2. Decides which sub-agent to call (EmailerAgent, MrCallAgent, etc.)
+# 3. Manages the confirmation workflow for irreversible actions
+# 4. Maintains state across conversation turns
+#
+# Architecture:
+# - Inherits from BaseConversationalAgent for user interaction
+# - Orchestrates SpecializedAgents (EmailerAgent, MrCallAgent) via their run() method
+# - Uses SessionState for task mode persistence
 
-This agent manages the conversation flow when a user enters \"task mode\" to work
-on a specific task. It:
-
-1. Understands the task context (from task_items)
-2. Decides which sub-agent to call (EmailerAgent, MrCallAgent, etc.)
-3. Manages the confirmation workflow for irreversible actions
-4. Maintains state across conversation turns
-
-Architecture:
-- Inherits from BaseConversationalAgent for user interaction
-- Orchestrates SpecializedAgents (EmailerAgent, MrCallAgent) via their run() method
-- Uses SessionState for task mode persistence
-"
 
 import logging
 from typing import Any, Dict, Optional
