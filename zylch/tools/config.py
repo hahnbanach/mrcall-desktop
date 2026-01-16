@@ -43,14 +43,6 @@ class ToolConfig:
     calendar_id: str
     google_token_path: str
 
-    # Cache
-    cache_dir: str
-    cache_ttl_days: int
-
-    # Email Archive (all data in Supabase per ARCHITECTURE.md)
-    email_archive_initial_months: int
-    email_archive_batch_size: int
-
     # ============================================
     # Optional fields (with defaults) - must come after required
     # ============================================
@@ -63,7 +55,6 @@ class ToolConfig:
 
     # Pipedrive CRM (BYOK via /connect pipedrive)
     pipedrive_api_token: str = ""
-    pipedrive_enabled: bool = False
 
     # SendGrid (BYOK via /connect sendgrid)
     sendgrid_api_key: str = ""
@@ -77,12 +68,8 @@ class ToolConfig:
     # Vonage SMS: credentials stored per-user in Supabase via /connect vonage
     # (no fields here - fetched directly in sms_tools.py)
 
-    # Email Style
-    email_style_prompt: str = ""
-
     # My Email Addresses
     my_emails: str = ""
-    bot_emails: str = ""
 
     # Multi-tenant Configuration
     owner_id: str = "owner_default"
@@ -112,20 +99,8 @@ class ToolConfig:
             calendar_id=settings.calendar_id,
             google_token_path=settings.google_token_path,
 
-            # Cache
-            cache_dir=settings.cache_dir,
-            cache_ttl_days=settings.cache_ttl_days,
-
-            # Email Archive (all data in Supabase per ARCHITECTURE.md)
-            email_archive_initial_months=settings.email_archive_initial_months,
-            email_archive_batch_size=settings.email_archive_batch_size,
-
-            # Email Style
-            email_style_prompt=settings.email_style_prompt,
-
             # My Emails
             my_emails=settings.my_emails,
-            bot_emails=settings.bot_emails,
 
             # Multi-tenant Configuration
             owner_id=settings.owner_id,
@@ -185,7 +160,6 @@ class ToolConfig:
         pipedrive_token = storage.get_pipedrive_key(owner_id)
         if pipedrive_token:
             config.pipedrive_api_token = pipedrive_token
-            config.pipedrive_enabled = True
 
         # SendGrid
         sendgrid_key = storage.get_sendgrid_key(owner_id)
@@ -204,9 +178,4 @@ class ToolConfig:
 
         return config
 
-    def get_cache_path(self) -> Path:
-        """Get cache directory as Path object."""
-        path = Path(self.cache_dir)
-        path.mkdir(parents=True, exist_ok=True)
-        return path
 

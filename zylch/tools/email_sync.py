@@ -1,4 +1,4 @@
-"""Email synchronization and intelligent caching system."""
+"""Email synchronization with Supabase storage."""
 
 import json
 import logging
@@ -10,7 +10,6 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from bs4 import BeautifulSoup
 
-from zylch.config import settings
 from zylch.llm import LLMClient
 
 if TYPE_CHECKING:
@@ -56,76 +55,50 @@ def clean_html(html: str) -> str:
 
 
 class EmailSyncManager:
-    """Manages email synchronization and intelligent caching.
+    """Manages email synchronization with Supabase storage.
 
-    NOW READS FROM EMAIL ARCHIVE instead of Gmail directly.
-    Analyzes threads from archive with Haiku and caches intelligence.
-
-    Supports both local JSON cache and Supabase multi-tenant storage.
+    Reads from email archive and analyzes threads with LLM.
     """
 
     def __init__(
         self,
-        email_archive,  # CHANGED: EmailArchiveManager instead of gmail_client
+        email_archive,
         api_key: str,
         provider: str,
-        cache_dir: str = "cache/emails",
         days_back: int = 30,
-        owner_id: Optional[str] = None,
+        owner_id: str = "",
         supabase_storage: Optional['SupabaseStorage'] = None,
     ):
         """Initialize email sync manager.
 
         Args:
-            email_archive: EmailArchiveManager instance (reads from archive, not Gmail)
-            cache_dir: Directory to store intelligence cache
+            email_archive: EmailArchiveManager instance
             api_key: API key for the LLM provider
             provider: LLM provider (anthropic, openai, mistral)
             days_back: Days back for intelligence window (default: 30)
-            owner_id: User's Firebase UID (required for Supabase backend)
-            supabase_storage: Optional SupabaseStorage instance for multi-tenant
+            owner_id: User's Firebase UID (required)
+            supabase_storage: SupabaseStorage instance (required)
         """
-        self.archive = email_archive  # CHANGED: use archive instead of gmail
-        self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        if not owner_id or not supabase_storage:
+            raise ValueError("owner_id and supabase_storage are required")
+
+        self.archive = email_archive
         self.llm_client = LLMClient(api_key=api_key, provider=provider) if api_key else None
         self.days_back = 30  # Fixed: always 1 month intelligence window
         self.owner_id = owner_id
         self.supabase = supabase_storage
 
-        # Use Supabase if provided
-        self._use_supabase = bool(self.supabase and self.owner_id)
-
-        if self._use_supabase:
-            logger.info(f"EmailSyncManager using Supabase for owner {owner_id}")
-        else:
-            logger.info(f"EmailSyncManager using local JSON cache")
-
-    def _get_cache_path(self) -> Path:
-        """Get path to email cache file."""
-        return self.cache_dir / "threads.json"
+        logger.info(f"EmailSyncManager initialized for owner {owner_id}")
 
     def _load_cache(self) -> Dict[str, Any]:
-        """Load existing email cache from local JSON file."""
-        if self._use_supabase:
-            # Supabase mode: return empty (use hybrid_search_emails instead)
-            return {"last_sync": None, "threads": {}}
-
-        cache_path = self._get_cache_path()
-        if cache_path.exists():
-            with open(cache_path, 'r') as f:
-                return json.load(f)
+        """Load email threads from Supabase."""
+        # Return empty - use hybrid_search_emails for querying
         return {"last_sync": None, "threads": {}}
 
     def _save_cache(self, cache: Dict[str, Any]) -> None:
-        """Save email cache to local JSON file."""
-        if self._use_supabase:
-            return  # No-op in Supabase mode
-
-        cache_path = self._get_cache_path()
-        with open(cache_path, 'w') as f:
-            json.dump(cache, f, indent=2)
-        logger.info(f"Saved {len(cache['threads'])} threads to cache")
+        """Save email threads to Supabase."""
+        # Threads are saved via hybrid search, no-op here
+        pass
 
     def _save_analyzed_threads(self, threads: Dict[str, Any]) -> None:
         """Save analyzed threads. No-op - full cache is saved elsewhere."""

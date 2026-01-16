@@ -13,7 +13,6 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-from zylch.config import settings
 from zylch.api import token_storage
 
 logger = logging.getLogger(__name__)
@@ -403,10 +402,7 @@ class GmailClient:
         # Create message
         from email.mime.text import MIMEText
 
-        # Append Zylch signature to body
-        body_with_signature = f"{body}\n\n{settings.made_by_zylch_email}"
-
-        message = MIMEText(body_with_signature)
+        message = MIMEText(body)
         message['to'] = to
         message['subject'] = subject
         if from_email:
@@ -472,10 +468,7 @@ class GmailClient:
 
         from email.mime.text import MIMEText
 
-        # Append Zylch signature to body
-        body_with_signature = f"{body}\n\n{settings.made_by_zylch_email}"
-
-        message = MIMEText(body_with_signature)
+        message = MIMEText(body)
         message['to'] = to
         message['subject'] = subject
 
@@ -566,8 +559,8 @@ class GmailClient:
                 else:
                     final_body = ""
             else:
-                # New body provided - append signature
-                final_body = f"{body}\n\n{settings.made_by_zylch_email}"
+                # New body provided
+                final_body = body
 
             # Create new message with preserved headers
             message = MIMEText(final_body)

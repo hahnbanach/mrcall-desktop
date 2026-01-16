@@ -1,8 +1,6 @@
 """Configuration management for Zylch AI."""
 
-import json
 from pathlib import Path
-from typing import List, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -130,12 +128,6 @@ class Settings(BaseSettings):
         description="Comma-separated list of allowed CORS origins"
     )
 
-    # Email signature
-    made_by_zylch_email: str = Field(
-        default="Written with the help of Zylch AI",
-        description="Signature appended to all outgoing emails"
-    )
-
     # SendGrid
     sendgrid_api_key: str = Field(default="", description="SendGrid API key")
     sendgrid_from_email: str = Field(
@@ -211,44 +203,14 @@ class Settings(BaseSettings):
         description="Current user's display name (for sharing system)"
     )
 
-    # Cache
-    cache_dir: str = Field(default="cache/", description="Cache directory")
-    cache_ttl_days: int = Field(default=30, description="Cache TTL in days")
 
-    # Campaign Data
-    campaigns_file: str = Field(
-        default="data/campaigns.json",
-        description="Campaign configuration file"
-    )
-    templates_file: str = Field(
-        default="data/templates.json",
-        description="Email templates file"
-    )
-
-    # CRM (Optional) - Pipedrive API token REMOVED from .env, now BYOK via Supabase
-    # Users set their Pipedrive API key via /connect pipedrive command
-    pipedrive_enabled: bool = Field(default=False, description="Enable Pipedrive")
-
-    # Apollo (Future)
-    apollo_api_key: str = Field(default="", description="Apollo.io API key")
-    apollo_enabled: bool = Field(default=False, description="Enable Apollo.io")
-
-    # Email Style Preferences
-    email_style_prompt: str = Field(
-        default="",
-        description="Custom email writing style instructions"
-    )
+    # CRM (Optional) - API tokens via /connect commands (BYOK)
+    # No env vars needed - tokens stored per-user in Supabase
 
     # My Email Addresses (for contact identification)
     my_emails: str = Field(
         default="",
         description="Comma-separated list of my email addresses (supports wildcards like *@domain.com)"
-    )
-
-    # Bot Email Patterns (to downgrade priority)
-    bot_emails: str = Field(
-        default="*@noreply.*,*@no-reply.*,noreply@*,no-reply@*,*@notifications.*,notifications@*,*@updates.*,updates@*,*@alerts.*,alerts@*,*@automated.*,automated@*",
-        description="Comma-separated list of bot email patterns (supports wildcards)"
     )
 
     # Skill System Configuration
@@ -267,17 +229,6 @@ class Settings(BaseSettings):
 
     # Performance Optimization
     enable_prompt_caching: bool = Field(default=True, description="Enable prompt caching")
-    enable_batch_processing: bool = Field(default=False, description="Enable batch processing")
-    claude_queue_enabled: bool = Field(default=False, description="Enable API request queue")
-
-    # Pattern Learning System
-    pattern_store_enabled: bool = Field(default=True, description="Enable pattern store")
-    pattern_store_path: str = Field(default=".swarm/patterns.db", description="Pattern store path")
-    pattern_confidence_threshold: float = Field(default=0.5, description="Pattern confidence threshold")
-    pattern_max_results: int = Field(default=3, description="Max pattern results")
-
-    # Storage Backend (legacy - all data now in Supabase per ARCHITECTURE.md)
-    storage_backend: str = Field(default="supabase", description="Storage backend (supabase only)")
 
     # Skill System Feature Flags
     skill_mode_enabled: bool = Field(default=False, description="Enable skill-based interface")
@@ -291,34 +242,6 @@ class Settings(BaseSettings):
         default=True,
         description="Enable alpha testers allowlist check"
     )
-
-    # Email Archive Configuration (all data stored in Supabase per ARCHITECTURE.md)
-    email_archive_initial_months: int = Field(
-        default=1,
-        description="Months of email to fetch during initial sync"
-    )
-    email_archive_batch_size: int = Field(
-        default=500,
-        description="Messages per batch during archive sync"
-    )
-
-    def get_cache_path(self) -> Path:
-        """Get cache directory as Path object."""
-        path = Path(self.cache_dir)
-        path.mkdir(parents=True, exist_ok=True)
-        return path
-
-    def get_campaigns_path(self) -> Path:
-        """Get campaigns file path."""
-        path = Path(self.campaigns_file)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        return path
-
-    def get_templates_path(self) -> Path:
-        """Get templates file path."""
-        path = Path(self.templates_file)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        return path
 
     def get_alpha_testers(self) -> set:
         """Get set of allowed alpha tester emails.
