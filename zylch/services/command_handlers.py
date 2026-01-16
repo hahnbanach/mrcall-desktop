@@ -4097,7 +4097,10 @@ For quick changes without dialogue, use single-turn mode:
 | `/mrcall unlink` | Disconnect from assistant |
 | `/mrcall variables` | List all configuration variables |
 | `/sync mrcall --days 30` | Sync call transcriptions |
+| `/agent mrcall train` | Train MrCall configuration agent |
 | `/agent mrcall run "..."` | Single-turn config (alternative) |
+| `/agent mrcall show` | Show current agent prompt |
+| `/agent mrcall reset` | Delete config agent |
 | `/agent memory train mrcall` | Train call memory extraction |
 | `/agent memory process mrcall` | Extract entities from calls |
 
