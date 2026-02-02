@@ -258,6 +258,7 @@ class GmailClient:
             'date': headers.get('Date', ''),
             'snippet': msg.get('snippet', ''),
             'body': body,
+            'internal_date': msg.get('internalDate'),
             'labels': msg.get('labelIds', []),
             # Threading headers needed for replies
             'message_id': headers.get('Message-ID', ''),

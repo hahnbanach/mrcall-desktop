@@ -191,18 +191,36 @@ class EmailArchiveManager:
         Returns:
             Message in archive format
         """
-        # Parse date to timestamp and ISO format - no fallback, fail loudly
+        # Parse date to timestamp and ISO format
         date_timestamp = None
         date_iso = None
+
+        # 1. Try Date header first
         if gmail_msg.get('date'):
             try:
                 dt = parsedate_to_datetime(gmail_msg['date'])
                 date_timestamp = int(dt.timestamp())
                 date_iso = dt.isoformat()
             except Exception as e:
-                raise ValueError(
-                    f"Failed to parse email date '{gmail_msg['date']}' for message {gmail_msg.get('id')}: {e}"
-                )
+                logger.warning(f"Failed to parse Date header '{gmail_msg['date']}' for message {gmail_msg.get('id')}: {e}")
+
+        # 2. Fallback to internal_date (from Gmail API)
+        if date_iso is None and gmail_msg.get('internal_date'):
+            try:
+                # internalDate is ms since epoch
+                ts = int(gmail_msg['internal_date']) / 1000
+                dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+                date_timestamp = int(ts)
+                date_iso = dt.isoformat()
+            except Exception as e:
+                logger.warning(f"Failed to parse internal_date '{gmail_msg['internal_date']}': {e}")
+
+        # 3. Final fallback to current time (to satisfy NOT NULL constraint)
+        if date_iso is None:
+            now = datetime.now(timezone.utc)
+            date_timestamp = int(now.timestamp())
+            date_iso = now.isoformat()
+            logger.warning(f"Using current time for message {gmail_msg.get('id')} as no date could be parsed")
 
         # Extract email from "Name <email>" format
         from_email = None
