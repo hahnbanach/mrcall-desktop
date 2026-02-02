@@ -550,7 +550,6 @@ class JobExecutor:
                     owner_id=owner_id
                 )
                 calendar_client = GoogleCalendarClient(
-                    credentials_path="credentials/gmail_oauth.json",
                     calendar_id="primary",
                     account=user_email,
                     owner_id=owner_id
