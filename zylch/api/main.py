@@ -118,10 +118,7 @@ async def root():
 @app.get("/health")
 async def health():
     """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "skill_mode": settings.skill_mode_enabled
-    }
+    return {"status": "healthy"}
 
 
 @app.get("/robots.txt", response_class=PlainTextResponse)
