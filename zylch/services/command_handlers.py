@@ -1542,7 +1542,10 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
             if not connections:
                 return "**📡 Connection Status**\n\n❌ No providers available"
 
-            output = f"**📡 Connection Status** ({status_data['connected_count']}/{status_data['available_count']} connected)\n\n"
+            output = f"**📡 Connection Status** ({status_data['connected_count']}/{status_data['available_count']} connected)\n"
+            if user_email:
+                output += f"**Login:** {user_email}\n"
+            output += "\n"
 
             for conn in connections:
                 emoji = get_category_emoji(conn.get('category', ''))
