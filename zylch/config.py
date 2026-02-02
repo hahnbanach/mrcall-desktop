@@ -166,6 +166,12 @@ class Settings(BaseSettings):
     # Performance Optimization
     enable_prompt_caching: bool = Field(default=True, description="Enable prompt caching")
 
+    # System-level LLM API key (fallback for integrations like MrCall)
+    anthropic_api_key: str = Field(
+        default="",
+        description="System-level Anthropic API key (fallback when user has no key configured)"
+    )
+
     # Alpha Testers Allowlist
     alpha_testers_file: str = Field(
         default="data/alpha_testers.txt",
