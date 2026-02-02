@@ -1048,7 +1048,7 @@ async def google_oauth_authorize(
         'response_type': 'code',
         'scope': ' '.join(GOOGLE_SCOPES),
         'access_type': 'offline',  # Get refresh token
-        'prompt': 'consent',  # Force consent to get refresh token
+        'prompt': 'select_account consent',  # Force account picker + consent for refresh token
         'state': state,
         'login_hint': user_email,  # Pre-fill email
     }
