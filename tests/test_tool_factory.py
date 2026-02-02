@@ -8,57 +8,27 @@ from zylch.tools.factory import ToolFactory
 from zylch.tools.config import ToolConfig
 from zylch.tools.base import Tool
 from zylch.assistant.models import ModelSelector
-from zylch.memory import ZylchMemory
 
 
 @pytest.fixture
 def mock_config():
     """Create a mock ToolConfig for testing."""
     return ToolConfig(
-        # Anthropic
+        # LLM Provider
+        llm_provider="anthropic",
         anthropic_api_key="test_anthropic_key",
-        default_model="claude-3-5-sonnet-20241022",
-        classification_model="claude-3-5-haiku-20241022",
-        executive_model="claude-3-opus-20240229",
-
-        # Google OAuth
-        google_credentials_path="/tmp/test_credentials.json",
-        google_token_path="/tmp/test_token.json",
-        gmail_accounts=["test@example.com"],
-        calendar_id="primary",
-
-        # StarChat
-        starchat_api_url="http://test-starchat.com",
-        starchat_api_key="test_starchat_key",
-        starchat_username="test_user",
-        starchat_password="test_pass",
-        starchat_business_id="test_business_123",
-        starchat_auth_method="basic",
-
-        # Cache
-        cache_dir="/tmp/test_cache",
-        cache_ttl_days=30,
-
-        # Email Archive
-        email_archive_backend="sqlite",
-        email_archive_sqlite_path="/tmp/test_emails.db",
-        email_archive_postgres_url="",
-        email_archive_initial_months=6,
-        email_archive_batch_size=50,
-        email_archive_enable_fts=True,
 
         # Optional services
         pipedrive_api_token="",
-        pipedrive_enabled=False,
         sendgrid_api_key="",
         sendgrid_from_email="",
 
-        # Email style
-        email_style_prompt="Test style prompt",
-
         # My emails
         my_emails="test@example.com",
-        bot_emails="bot@example.com",
+
+        # Multi-tenant (required for Google clients)
+        owner_id="test_owner_123",
+        user_email="test@example.com",
     )
 
 
@@ -198,29 +168,6 @@ async def test_create_all_tools_without_business_id(
         assert session_state is not None
 
 
-@pytest.mark.asyncio
-async def test_create_memory_system(mock_config):
-    """Test memory system creation."""
-
-    with patch('zylch.tools.factory.ZylchMemory') as mock_memory_class:
-        mock_memory_instance = MagicMock(spec=ZylchMemory)
-        mock_memory_class.return_value = mock_memory_instance
-
-        memory = await ToolFactory.create_memory_system(mock_config)
-
-        # Verify ZylchMemory was instantiated
-        mock_memory_class.assert_called_once()
-
-        # Verify the config passed to memory system
-        call_args = mock_memory_class.call_args
-        memory_config = call_args[1]['config']
-
-        assert memory_config.db_path == Path(mock_config.cache_dir) / "zylch_memory.db"
-        assert memory_config.index_dir == Path(mock_config.cache_dir) / "indices"
-
-        assert memory is mock_memory_instance
-
-
 def test_create_model_selector(mock_config):
     """Test model selector creation."""
 
@@ -319,63 +266,26 @@ async def test_config_from_settings():
 
     BYOK credentials (anthropic_api_key, pipedrive_api_token, etc.) are NOT
     populated from settings - they're fetched from Supabase via from_settings_with_owner().
-    StarChat credentials removed - pending OAuth2.0 implementation.
     """
 
     with patch('zylch.tools.config.settings') as mock_settings:
-        # Set up mock settings (only non-BYOK fields)
-        mock_settings.default_model = "test_model"
-        mock_settings.classification_model = "test_classification"
-        mock_settings.executive_model = "test_executive"
-        mock_settings.google_credentials_path = "/test/creds.json"
-        mock_settings.google_token_path = "/test/tokens"  # Local fallback for dev
-        mock_settings.gmail_accounts = ["test@example.com"]
-        mock_settings.calendar_id = "primary"
-        mock_settings.cache_dir = "/test/cache"
-        mock_settings.cache_ttl_days = 30
-        mock_settings.email_archive_backend = "sqlite"
-        mock_settings.email_archive_sqlite_path = "/test/emails.db"
-        mock_settings.email_archive_postgres_url = ""
-        mock_settings.email_archive_initial_months = 6
-        mock_settings.email_archive_batch_size = 50
-        mock_settings.email_archive_enable_fts = True
-        mock_settings.email_style_prompt = ""
+        # Set up mock settings (only non-BYOK fields that ToolConfig reads)
         mock_settings.my_emails = "me@example.com"
-        mock_settings.bot_emails = "bot@example.com"
         mock_settings.owner_id = "test_owner"
         mock_settings.zylch_assistant_id = "test_assistant"
-        mock_settings.user_email = ""
-        mock_settings.user_display_name = ""
+        mock_settings.user_email = "user@example.com"
+        mock_settings.user_display_name = "Test User"
 
         config = ToolConfig.from_settings()
 
         # Verify non-BYOK fields are populated from settings
-        assert config.default_model == "test_model"
-        assert config.gmail_accounts == ["test@example.com"]
-        assert config.cache_dir == "/test/cache"
+        assert config.my_emails == "me@example.com"
+        assert config.owner_id == "test_owner"
+        assert config.zylch_assistant_id == "test_assistant"
+        assert config.user_email == "user@example.com"
+        assert config.user_display_name == "Test User"
 
         # Verify BYOK credentials are empty (must use from_settings_with_owner)
         assert config.anthropic_api_key == ""
         assert config.pipedrive_api_token == ""
         assert config.sendgrid_api_key == ""
-
-
-def test_get_cache_path(mock_config):
-    """Test cache path creation."""
-
-    with patch('pathlib.Path.mkdir') as mock_mkdir:
-        cache_path = mock_config.get_cache_path()
-
-        assert cache_path == Path(mock_config.cache_dir)
-        mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
-
-
-def test_get_email_archive_path(mock_config):
-    """Test email archive path creation."""
-
-    with patch('pathlib.Path.mkdir') as mock_mkdir:
-        archive_path = mock_config.get_email_archive_path()
-
-        assert archive_path == Path(mock_config.email_archive_sqlite_path)
-        # Parent directory should be created
-        mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
