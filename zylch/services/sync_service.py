@@ -394,10 +394,29 @@ class SyncService:
             logger.info(f"[mrcall_sync] Calling API: {url}")
             logger.debug(f"[mrcall_sync] Request body: {json.dumps(request_body)}")
 
+            # Retry logic for 401 (token refresh)
+            from zylch.api.token_storage import refresh_mrcall_token
+            
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(url, headers=headers, json=request_body)
-                response.raise_for_status()
-                data = response.json()
+                for attempt in range(2):
+                    try:
+                        response = await client.post(url, headers=headers, json=request_body)
+                        response.raise_for_status()
+                        data = response.json()
+                        break  # Success
+                    except httpx.HTTPStatusError as e:
+                        if e.response.status_code == 401 and attempt == 0:
+                            logger.warning("[mrcall_sync] 401 Unauthorized. Attempting token refresh...")
+                            new_creds = await refresh_mrcall_token(self.owner_id)
+                            if new_creds and new_creds.get('access_token'):
+                                logger.info("[mrcall_sync] Token refreshed successfully. Retrying...")
+                                headers['auth'] = new_creds['access_token']
+                                continue
+                            else:
+                                logger.error("[mrcall_sync] Token refresh failed")
+                                raise e
+                        else:
+                            raise e
 
             # Parse response - it should be SearchResults with 'items' array
             conversations = data.get('items', []) if isinstance(data, dict) else data
