@@ -301,7 +301,8 @@ class SyncService:
         limit: int = 100,
         debug: bool = False,
         firebase_token: str = None,
-        business_id: str = None
+        business_id: str = None,
+        realm: str = None
     ) -> Dict[str, Any]:
         """Sync MrCall phone call conversations to database.
 
@@ -314,6 +315,7 @@ class SyncService:
             debug: If True, print conversation data to stdout
             firebase_token: MrCall OAuth access token for authentication
             business_id: Optional business ID override (otherwise fetched from storage)
+            realm: Optional realm override (otherwise fetched from settings)
 
         Returns:
             Result dict with sync statistics
@@ -367,8 +369,11 @@ class SyncService:
             end_date = datetime.now(timezone.utc)
             start_date = end_date - timedelta(days=days_back)
 
+            # Use provided realm or fallback to settings
+            target_realm = realm if realm else settings.mrcall_realm
+
             # Call MrCall conversation search API (delegated realm for partner access)
-            url = f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/customer/conversation/search"
+            url = f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{target_realm}/customer/conversation/search"
             headers = {
                 "auth": firebase_token,
                 "Content-Type": "application/json"
@@ -660,5 +665,6 @@ class SyncService:
         return await self.sync_mrcall(
             days_back=days_back,
             firebase_token=mrcall_creds.get('access_token'),
-            business_id=business_id
+            business_id=business_id,
+            realm=mrcall_creds.get('realm')
         )
