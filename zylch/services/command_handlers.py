@@ -358,7 +358,8 @@ Your MrCall is linked to business `{business_id}` but OAuth credentials are miss
                 days_back=days_back,
                 debug=debug_mode,
                 firebase_token=mrcall_creds.get('access_token'),
-                business_id=mrcall_creds.get('business_id')
+                business_id=mrcall_creds.get('business_id'),
+                realm=mrcall_creds.get('realm')
             )
 
             if result.get('skipped'):
