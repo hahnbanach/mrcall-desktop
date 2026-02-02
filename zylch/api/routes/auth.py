@@ -1050,7 +1050,7 @@ async def google_oauth_authorize(
         'access_type': 'offline',  # Get refresh token
         'prompt': 'select_account consent',  # Force account picker + consent for refresh token
         'state': state,
-        'login_hint': user_email,  # Pre-fill email
+        # login_hint removed - conflicts with select_account, prevents account picker from showing
     }
 
     auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
