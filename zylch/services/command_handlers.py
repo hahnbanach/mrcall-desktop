@@ -1922,7 +1922,6 @@ For simple drafts without context, use the `compose_email` tool in chat."""
                     from zylch.tools.gmail import GmailClient
 
                     gmail = GmailClient(
-                        credentials_path="credentials/gmail_oauth.json",
                         account=user_email,
                         owner_id=owner_id
                     )

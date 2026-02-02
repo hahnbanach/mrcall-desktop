@@ -491,7 +491,6 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                 from zylch.tools.gmail import GmailClient
 
                 gmail = GmailClient(
-                    credentials_path="credentials/gmail_oauth.json",
                     account=user_email,
                     owner_id=self.owner_id
                 )
