@@ -182,6 +182,12 @@ class Settings(BaseSettings):
         description="Enable alpha testers allowlist check"
     )
 
+    # Email Archive
+    email_archive_batch_size: int = Field(
+        default=10,
+        description="Number of emails to fetch per batch during archive sync"
+    )
+
     def get_alpha_testers(self) -> set:
         """Get set of allowed alpha tester emails.
 
