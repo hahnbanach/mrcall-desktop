@@ -371,6 +371,9 @@ class SyncService:
 
             # Use provided realm or fallback to settings
             target_realm = realm if realm else settings.mrcall_realm
+            
+            logger.info(f"[mrcall_sync] Using realm: '{target_realm}' (provided: '{realm}', default: '{settings.mrcall_realm}')")
+            logger.info(f"[mrcall_sync] Auth token len: {len(firebase_token) if firebase_token else 0}")
 
             # Call MrCall conversation search API (delegated realm for partner access)
             url = f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{target_realm}/customer/conversation/search"
@@ -640,6 +643,19 @@ class SyncService:
 
         # Get MrCall credentials
         mrcall_creds = self.supabase.get_provider_credentials(self.owner_id, 'mrcall')
+        
+        # DEBUG: Log raw credentials keys and values (carefully)
+        if mrcall_creds:
+            logger.info(f"[mrcall_sync] Loaded credentials. Keys: {list(mrcall_creds.keys())}")
+            logger.info(f"[mrcall_sync] Realm from creds: '{mrcall_creds.get('realm')}'")
+            token = mrcall_creds.get('access_token')
+            if token:
+                logger.info(f"[mrcall_sync] Access token present (len={len(token)}, ends_with={token[-5:] if len(token)>5 else 'short'})")
+            else:
+                logger.error("[mrcall_sync] Access token MISSING in credentials")
+        else:
+            logger.error("[mrcall_sync] No credentials returned from get_provider_credentials")
+
         if not mrcall_creds or not mrcall_creds.get('access_token'):
             return {
                 "success": True,
