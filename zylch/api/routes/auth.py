@@ -1530,7 +1530,7 @@ async def mrcall_oauth_callback(
             business_id=business_info.get("business_id"),
             target_owner=tokens.get("targetOwner"),
             realm=settings.mrcall_realm,
-            email=business_info.get("business_id")  # Store business_id for get_mrcall_link() compatibility
+            email=business_info.get("email")  # Store MrCall account email for /connect status display
         )
 
         logger.info(f"Successfully saved MrCall OAuth credentials for user {owner_id}")
