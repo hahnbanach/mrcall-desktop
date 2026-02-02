@@ -546,7 +546,6 @@ class JobExecutor:
             else:
                 # Google
                 email_client = GmailClient(
-                    credentials_path="credentials/gmail_oauth.json",
                     account=user_email,
                     owner_id=owner_id
                 )
