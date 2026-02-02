@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 import logging
 
 import colorlog
@@ -121,6 +122,38 @@ async def health():
         "status": "healthy",
         "skill_mode": settings.skill_mode_enabled
     }
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+async def robots_txt():
+    """Robots.txt for search engines and LLM crawlers."""
+    return """# Zylch AI API - https://api.zylchai.com
+# AI-powered assistant for email, calendar, CRM, and integrations
+#
+# Zylch helps users manage:
+# - Email (Gmail, Outlook) - smart inbox management
+# - Calendar - scheduling and availability
+# - CRM (Pipedrive) - contact and deal management
+# - Phone (MrCall) - AI phone assistant configuration
+#
+# Main website: https://zylchai.com
+# Documentation: https://zylchai.com/docs
+# Contact: support@zylchai.com
+
+User-agent: *
+# Allow info endpoints
+Allow: /
+Allow: /health
+Allow: /docs
+Allow: /robots.txt
+
+# Disallow API endpoints (require authentication, would fail anyway)
+Disallow: /api/
+Disallow: /webhooks/
+
+# For LLM crawlers (GPTBot, Claude-Web, etc.):
+# This is a REST API backend. For integration info, see https://zylchai.com/docs
+"""
 
 
 if __name__ == "__main__":

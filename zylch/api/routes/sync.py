@@ -5,7 +5,6 @@ clients for the authenticated user using their OAuth tokens.
 """
 
 import logging
-from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
@@ -86,22 +85,6 @@ class FullSyncRequest(BaseModel):
 _sync_status: dict[str, SyncStatusResponse] = {}
 
 
-def _get_user_token_dir(user_id: str) -> Path:
-    """Get user-specific token directory.
-
-    Args:
-        user_id: Firebase user ID
-
-    Returns:
-        Path to user's token directory
-    """
-    # Store tokens per-user to support multi-tenant
-    base_path = Path(settings.google_token_path)
-    user_token_dir = base_path / user_id
-    user_token_dir.mkdir(parents=True, exist_ok=True)
-    return user_token_dir
-
-
 def _get_email_client_for_user(user: dict) -> GmailClient:
     """Get or create Gmail client for authenticated user.
 
@@ -116,19 +99,16 @@ def _get_email_client_for_user(user: dict) -> GmailClient:
     """
     user_id = get_user_id_from_token(user)
     user_email = get_user_email_from_token(user)
-    user_token_dir = _get_user_token_dir(user_id)
 
     logger.info(f"Initializing Gmail client for user {user_id} ({user_email})")
 
     # Create Gmail client with owner_id for Supabase token storage
     gmail_client = GmailClient(
-        credentials_path=settings.google_credentials_path,
-        token_dir=str(user_token_dir),
         account=user_email,
-        owner_id=user_id  # Enables Supabase token storage
+        owner_id=user_id
     )
 
-    # Check for existing credentials (Supabase or filesystem)
+    # Check for existing credentials in Supabase
     from zylch.api import token_storage
     has_credentials = token_storage.has_google_credentials(user_id)
 
@@ -146,7 +126,7 @@ def _get_email_client_for_user(user: dict) -> GmailClient:
         logger.warning(f"No Gmail token found for user {user_id}")
         raise HTTPException(
             status_code=401,
-            detail="Gmail not configured. Please authenticate with Google first via the CLI or OAuth flow."
+            detail="Gmail not configured. Please connect your Google account: /connect google"
         )
 
     return gmail_client
@@ -166,20 +146,17 @@ def _get_calendar_client_for_user(user: dict) -> GoogleCalendarClient:
     """
     user_id = get_user_id_from_token(user)
     user_email = get_user_email_from_token(user)
-    user_token_dir = _get_user_token_dir(user_id)
 
     logger.info(f"Initializing Calendar client for user {user_id} ({user_email})")
 
     # Create Calendar client with owner_id for Supabase token storage
     calendar_client = GoogleCalendarClient(
-        credentials_path=settings.google_credentials_path,
-        token_dir=str(user_token_dir),
-        calendar_id=settings.calendar_id,
+        calendar_id="primary",  # Default calendar
         account=user_email,
-        owner_id=user_id  # Enables Supabase token storage
+        owner_id=user_id
     )
 
-    # Check for existing credentials (Supabase or filesystem)
+    # Check for existing credentials in Supabase
     from zylch.api import token_storage
     has_credentials = token_storage.has_google_credentials(user_id)
 
@@ -197,7 +174,7 @@ def _get_calendar_client_for_user(user: dict) -> GoogleCalendarClient:
         logger.warning(f"No Google token found for user {user_id}")
         raise HTTPException(
             status_code=401,
-            detail="Google Calendar not configured. Please authenticate with Google first via the CLI or OAuth flow."
+            detail="Google Calendar not configured. Please connect your Google account: /connect google"
         )
 
     return calendar_client

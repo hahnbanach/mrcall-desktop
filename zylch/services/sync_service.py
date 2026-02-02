@@ -1,7 +1,6 @@
 """Email and calendar sync service - business logic layer."""
 
 from typing import Dict, Any, Optional, Union, TYPE_CHECKING
-from pathlib import Path
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -73,10 +72,13 @@ class SyncService:
     def _ensure_calendar_client(self):
         """Ensure Calendar client is initialized."""
         if not self.calendar_client:
+            if not self.owner_id:
+                raise ValueError(
+                    "owner_id is required for Calendar client - Zylch uses Supabase for all token storage"
+                )
             self.calendar_client = GoogleCalendarClient(
-                credentials_path=settings.google_credentials_path,
-                token_dir=settings.google_token_path,
-                calendar_id=settings.calendar_id
+                calendar_id="primary",  # Default calendar
+                owner_id=self.owner_id
             )
             self.calendar_client.authenticate()
         return self.calendar_client
