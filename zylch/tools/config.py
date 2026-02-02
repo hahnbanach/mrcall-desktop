@@ -128,6 +128,12 @@ class ToolConfig:
                 config.anthropic_api_key = anthropic_key
                 config.llm_provider = "anthropic"
 
+        # System-level fallback if user has no key configured
+        # (useful for integrations like MrCall where operator provides the key)
+        if not config.anthropic_api_key and settings.anthropic_api_key:
+            config.llm_provider = "anthropic"
+            config.anthropic_api_key = settings.anthropic_api_key
+
         # Pipedrive
         pipedrive_token = storage.get_pipedrive_key(owner_id)
         if pipedrive_token:

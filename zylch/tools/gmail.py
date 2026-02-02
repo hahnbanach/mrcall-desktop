@@ -2,15 +2,10 @@
 
 import base64
 import logging
-import os
-import pickle
-from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 from zylch.api import token_storage
@@ -33,64 +28,38 @@ class GmailClient:
     """Client for Gmail API operations.
 
     Handles OAuth authentication and email operations.
-    Supports both filesystem tokens (local dev) and Supabase tokens (production).
+    All tokens are stored in Supabase (no filesystem storage).
     """
 
     def __init__(
         self,
-        credentials_path: str = "credentials/gmail_oauth.json",
-        token_dir: str = "credentials/gmail_tokens/",
         account: Optional[str] = None,
         owner_id: Optional[str] = None,
     ):
         """Initialize Gmail client.
 
         Args:
-            credentials_path: Path to OAuth credentials JSON
-            token_dir: Directory to store tokens (filesystem fallback)
             account: Email account (for multi-account support)
-            owner_id: Firebase UID (enables Supabase token storage)
+            owner_id: Firebase UID (required for Supabase token storage)
         """
-        self.credentials_path = Path(credentials_path)
-        self.token_dir = Path(token_dir)
-        self.token_dir.mkdir(parents=True, exist_ok=True)
+        if not owner_id:
+            raise ValueError("owner_id is required - GmailClient requires Supabase token storage")
+
         self.account = account
         self.owner_id = owner_id
         self.service = None
 
-        # Use Supabase token storage if owner_id is provided
-        self._use_token_storage = bool(owner_id)
-
-        logger.info(f"GmailClient.__init__: account={account or 'default'}, owner_id={owner_id}, _use_token_storage={self._use_token_storage}")
-
-    def _get_token_path(self) -> Path:
-        """Get token file path for this account."""
-        if self.account:
-            # Use account-specific token
-            safe_account = self.account.replace("@", "_at_").replace(".", "_")
-            return self.token_dir / f"token_{safe_account}.pickle"
-        else:
-            return self.token_dir / "token.pickle"
+        logger.info(f"GmailClient.__init__: account={account or 'default'}, owner_id={owner_id}")
 
     def authenticate(self) -> None:
         """Authenticate with Gmail API using OAuth 2.0.
 
-        Uses Supabase token storage when owner_id is set, otherwise filesystem.
+        Loads credentials from Supabase. Never starts OAuth flow - that's the CLI's job.
         """
-        creds = None
-
-        # Load existing token from appropriate backend
-        if self._use_token_storage:
-            # Load from Supabase via token_storage
-            creds = token_storage.get_google_credentials(self.owner_id)
-            if creds:
-                logger.info(f"Loaded credentials from Supabase for owner {self.owner_id}")
-        else:
-            # Load from filesystem
-            token_path = self._get_token_path()
-            if token_path.exists():
-                with open(token_path, "rb") as token:
-                    creds = pickle.load(token)
+        # Load from Supabase via token_storage
+        creds = token_storage.get_google_credentials(self.owner_id)
+        if creds:
+            logger.info(f"Loaded credentials from Supabase for owner {self.owner_id}")
 
         # Check if credentials are valid
         # Note: Google OAuth library may raise TypeError on timezone-aware vs naive datetime comparison
@@ -105,30 +74,10 @@ class GmailClient:
                 # Save refreshed credentials
                 self._save_credentials(creds)
             else:
-                # When using Supabase token storage (backend/server mode),
-                # we should NEVER start a new OAuth flow - that's the CLI's job.
-                # The backend only uses existing tokens from Supabase.
-                if self._use_token_storage:
-                    raise ValueError(
-                        f"Google credentials not found in Supabase for owner {self.owner_id}. "
-                        "Please connect your Google account using the CLI or dashboard: /connect google"
-                    )
-
-                # Filesystem fallback (local development only)
-                if not self.credentials_path.exists():
-                    raise FileNotFoundError(
-                        f"Gmail credentials not found at {self.credentials_path}. "
-                        "Please download OAuth credentials from Google Cloud Console."
-                    )
-
-                logger.info("Starting OAuth flow for new credentials")
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    str(self.credentials_path), SCOPES
+                raise ValueError(
+                    f"Google credentials not found in Supabase for owner {self.owner_id}. "
+                    "Please connect your Google account using the CLI or dashboard: /connect google"
                 )
-                creds = flow.run_local_server(port=0)
-
-                # Save credentials
-                self._save_credentials(creds)
 
         # Build Gmail service
         # cache_discovery=False avoids warning about file_cache requiring oauth2client<4.0.0
@@ -136,25 +85,17 @@ class GmailClient:
         logger.info("Gmail API authenticated successfully")
 
     def _save_credentials(self, creds: Credentials) -> None:
-        """Save credentials to appropriate backend.
+        """Save credentials to Supabase.
 
         Args:
             creds: Google OAuth credentials
         """
-        if self._use_token_storage:
-            # Save to Supabase via token_storage
-            token_storage.save_google_credentials(
-                owner_id=self.owner_id,
-                credentials=creds,
-                email=self.account or ""
-            )
-            logger.info(f"Saved credentials to Supabase for owner {self.owner_id}")
-        else:
-            # Save to filesystem
-            token_path = self._get_token_path()
-            with open(token_path, "wb") as token:
-                pickle.dump(creds, token)
-            logger.info(f"Saved credentials to {token_path}")
+        token_storage.save_google_credentials(
+            owner_id=self.owner_id,
+            credentials=creds,
+            email=self.account or ""
+        )
+        logger.info(f"Saved credentials to Supabase for owner {self.owner_id}")
 
     def list_message_ids(
         self,

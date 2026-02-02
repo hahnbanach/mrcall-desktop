@@ -219,33 +219,25 @@ class ToolFactory:
 
             else:
                 # Gmail client (default)
-                # Pass owner_id to enable Supabase token storage
-                # Note: credentials_path is not used when owner_id is provided (uses Supabase)
+                # Requires owner_id for Supabase token storage
+                owner_id = config.owner_id if config.owner_id != "owner_default" else None
+                if not owner_id:
+                    raise ValueError("owner_id is required for Gmail client - Zylch uses Supabase for all token storage")
+
                 email_client = GmailClient(
-                    credentials_path="credentials/gmail_oauth.json",  # Not used with owner_id
-                    token_dir=config.google_token_path,
-                    account=config.user_email,  # Isolate tokens per user account
-                    owner_id=config.owner_id if config.owner_id != "owner_default" else None,
+                    account=config.user_email,
+                    owner_id=owner_id,
                 )
                 logger.info("Using Gmail for email")
 
                 # Try to authenticate Google services silently
                 try:
-                    # Check Supabase first if owner_id is set, then fallback to local
                     from ..api import token_storage
-                    has_creds = False
-                    if config.owner_id and config.owner_id != "owner_default":
-                        has_creds = token_storage.has_google_credentials(config.owner_id)
-                    if not has_creds:
-                        # Fallback to local token file
-                        token_path = Path(config.google_token_path) / "token.pickle"
-                        has_creds = token_path.exists()
-
-                    if has_creds:
+                    if token_storage.has_google_credentials(owner_id):
                         email_client.authenticate()
                         logger.info("Google services authenticated (Gmail)")
                     else:
-                        logger.warning("Google authentication needed - tokens not found")
+                        logger.warning("Google authentication needed - tokens not found in Supabase")
                 except Exception as e:
                     logger.warning(f"Google authentication needed: {e}")
 
@@ -253,14 +245,11 @@ class ToolFactory:
             calendar = None
             if config.auth_provider == "google":
                 # Gmail users get Google Calendar automatically
-                # Pass owner_id to enable Supabase token storage
-                # Note: credentials_path is not used when owner_id is provided (uses Supabase)
+                # Requires owner_id for Supabase token storage
                 calendar = GoogleCalendarClient(
-                    credentials_path="credentials/gmail_oauth.json",  # Not used with owner_id
-                    token_dir=config.google_token_path,
-                    calendar_id=config.calendar_id,
+                    calendar_id="primary",  # Default calendar
                     account=config.user_email,
-                    owner_id=config.owner_id if config.owner_id != "owner_default" else None,
+                    owner_id=owner_id,  # Reuse owner_id from Gmail client initialization
                 )
                 logger.info("Google Calendar initialized for Gmail user")
             elif config.auth_provider == "microsoft":
@@ -1254,39 +1243,19 @@ class _RefreshGoogleAuthTool(Tool):
         self.calendar = calendar_client
 
     async def execute(self):
-        try:
-            # Delete existing tokens to force re-authentication
-            import shutil
-
-            token_dir = Path(settings.google_token_path)
-            if token_dir.exists():
-                shutil.rmtree(token_dir)
-                token_dir.mkdir(parents=True, exist_ok=True)
-
-            # Re-authenticate
-            logger.info("🔐 Opening browser for Google authentication...")
-            print("\n🔐 Opening browser window for Google authentication...")
-            print("   Authorize access to Gmail and Calendar in the browser window that opens.\n")
-
-            self.gmail.authenticate()
-
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data={"authenticated": True},
-                message="Google authentication completed successfully! Now have access to Gmail and Calendar."
-            )
-        except Exception as e:
-            logger.error(f"Failed to refresh Google auth: {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=f"Error during authentication: {str(e)}"
-            )
+        # In Supabase-only mode, we cannot start OAuth flows from the backend.
+        # Users must use the CLI or dashboard to re-authenticate.
+        return ToolResult(
+            status=ToolStatus.ERROR,
+            data=None,
+            error="To refresh Google authentication, please use: /connect google reset\n"
+                  "Then reconnect with: /connect google"
+        )
 
     def get_schema(self):
         return {
             "name": self.name,
-            "description": "Rinnova i permessi Google (Gmail e Calendar). Apre una finestra del browser per l'autenticazione OAuth. Usa questo quando l'utente chiede di rinnovare i permessi o quando ricevi errori di autenticazione.",
+            "description": "Rinnova i permessi Google (Gmail e Calendar). Guida l'utente a usare /connect google per riautenticarsi.",
             "input_schema": {
                 "type": "object",
                 "properties": {},
