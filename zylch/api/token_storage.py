@@ -509,15 +509,28 @@ async def refresh_mrcall_token(owner_id: str) -> Optional[Dict[str, Any]]:
 
     # Make refresh request to StarChat
     try:
+        refresh_url = f"{settings.mrcall_base_url.rstrip('/')}/oauth/token/refresh"
+        payload = {
+            "grant_type": "refresh_token",
+            "refresh_token": credentials["refresh_token"],
+            "client_id": settings.mrcall_client_id,
+            "client_secret": settings.mrcall_client_secret
+        }
+        
+        # DEBUG: Log the exact request details
+        logger.error(f"[DEBUG_REFRESH] Requesting URL: {refresh_url}")
+        logger.error(f"[DEBUG_REFRESH] Base URL setting: {settings.mrcall_base_url}")
+        safe_payload = payload.copy()
+        if "client_secret" in safe_payload:
+            safe_payload["client_secret"] = "***"
+        if "refresh_token" in safe_payload:
+            safe_payload["refresh_token"] = f"{safe_payload['refresh_token'][:5]}..."
+        logger.error(f"[DEBUG_REFRESH] Payload: {safe_payload}")
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{settings.mrcall_base_url.rstrip('/')}/oauth/token/refresh",
-                data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": credentials["refresh_token"],
-                    "client_id": settings.mrcall_client_id,
-                    "client_secret": settings.mrcall_client_secret
-                },
+                refresh_url,
+                data=payload,
                 headers={"Content-Type": "application/x-www-form-urlencoded"}
             )
 
