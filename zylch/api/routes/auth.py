@@ -1307,8 +1307,9 @@ async def fetch_mrcall_business_info(access_token: str) -> dict:
             raise HTTPException(status_code=400, detail="Failed to fetch business info")
 
         data = response.json()
+        logger.info(f"[MrCall OAuth] fetch_business_info RAW response: {data}")
         businesses_count = len(data) if isinstance(data, list) else len(data.get('results', data.get('items', data.get('businesses', []))))
-        logger.debug(f"[MrCall OAuth] fetch_business_info: POST response businesses={businesses_count}")
+        logger.info(f"[MrCall OAuth] fetch_business_info: POST response businesses={businesses_count}")
 
         # Extract business info from search response (returns list of businesses)
         business = None
@@ -1324,12 +1325,16 @@ async def fetch_mrcall_business_info(access_token: str) -> dict:
                 business = data
 
         if business:
-            return {
+            logger.info(f"[MrCall OAuth] fetch_business_info extracted business keys: {list(business.keys())}")
+            logger.info(f"[MrCall OAuth] fetch_business_info business FULL: {business}")
+            result = {
                 "business_id": business.get("businessId") or business.get("id"),
                 "email": business.get("emailAddress") or business.get("email"),
                 "nickname": business.get("nickname"),
                 "company_name": business.get("companyName")
             }
+            logger.info(f"[MrCall OAuth] fetch_business_info returning: {result}")
+            return result
 
         raise HTTPException(status_code=400, detail="No business found")
 
@@ -1469,6 +1474,11 @@ async def mrcall_oauth_callback(
     user_email = state_data.get('email', '')  # User's email from Firebase token
     code_verifier = state_data.get("metadata", {}).get("code_verifier")
 
+    logger.info(f"[MrCall OAuth callback] state_data keys={list(state_data.keys())}")
+    logger.info(f"[MrCall OAuth callback] state_data email={state_data.get('email')}")
+    logger.info(f"[MrCall OAuth callback] user_email={user_email}")
+    logger.info(f"[MrCall OAuth callback] owner_id={owner_id}")
+
     if not code_verifier:
         logger.error(f"Missing code_verifier in state data")
         return HTMLResponse(content=_oauth_error_page("Invalid state data. Please try again."))
@@ -1509,6 +1519,8 @@ async def mrcall_oauth_callback(
 
             tokens = token_response.json()
             # StarChat returns camelCase: {"accessToken": "...", "refreshToken": "...", "expiresIn": 3600, "targetOwner": "firebase_uid"}
+            logger.info(f"[MrCall OAuth callback] token response keys={list(tokens.keys())}")
+            logger.info(f"[MrCall OAuth callback] tokens (no secrets): targetOwner={tokens.get('targetOwner')}, tokenType={tokens.get('tokenType')}, expiresIn={tokens.get('expiresIn')}")
 
         # Fetch business info from StarChat using access token
         business_info = {"business_id": None, "email": None, "nickname": None, "company_name": None}
@@ -1517,6 +1529,10 @@ async def mrcall_oauth_callback(
         except Exception as e:
             logger.error(f"Failed to fetch business info: {e}")
             # Continue anyway, business_id can be None
+
+        logger.info(f"[MrCall OAuth callback] business_info={business_info}")
+        logger.info(f"[MrCall OAuth callback] FINAL email being stored: {user_email}")
+        logger.info(f"[MrCall OAuth callback] business email (NOT used): {business_info.get('email')}")
 
         # Store credentials in Supabase (encrypted)
         from zylch.api.token_storage import save_mrcall_credentials
