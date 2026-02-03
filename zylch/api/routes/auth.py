@@ -1307,9 +1307,8 @@ async def fetch_mrcall_business_info(access_token: str) -> dict:
             raise HTTPException(status_code=400, detail="Failed to fetch business info")
 
         data = response.json()
-        logger.info(f"[MrCall OAuth] fetch_business_info RAW response: {data}")
         businesses_count = len(data) if isinstance(data, list) else len(data.get('results', data.get('items', data.get('businesses', []))))
-        logger.info(f"[MrCall OAuth] fetch_business_info: POST response businesses={businesses_count}")
+        logger.info(f"[MrCall OAuth] fetch_business_info: businesses_count={businesses_count}")
 
         # Extract business info from search response (returns list of businesses)
         business = None
@@ -1326,7 +1325,6 @@ async def fetch_mrcall_business_info(access_token: str) -> dict:
 
         if business:
             logger.info(f"[MrCall OAuth] fetch_business_info extracted business keys: {list(business.keys())}")
-            logger.info(f"[MrCall OAuth] fetch_business_info business FULL: {business}")
             result = {
                 "business_id": business.get("businessId") or business.get("id"),
                 "email": business.get("emailAddress") or business.get("email"),
@@ -1531,8 +1529,13 @@ async def mrcall_oauth_callback(
             # Continue anyway, business_id can be None
 
         logger.info(f"[MrCall OAuth callback] business_info={business_info}")
-        logger.info(f"[MrCall OAuth callback] FINAL email being stored: {user_email}")
-        logger.info(f"[MrCall OAuth callback] business email (NOT used): {business_info.get('email')}")
+        # MrCall API does NOT return the user's MrCall account email.
+        # user_email = Firebase login email (e.g. support@mrcall.ai) — not the MrCall account email.
+        # business_info["email"] = assistant's configured emailAddress — also wrong.
+        # Store empty to avoid showing a misleading email.
+        logger.info(f"[MrCall OAuth callback] Firebase email (NOT stored): {user_email}")
+        logger.info(f"[MrCall OAuth callback] business email (NOT stored): {business_info.get('email')}")
+        logger.info(f"[MrCall OAuth callback] FINAL email being stored: '' (MrCall API does not provide user account email)")
 
         # Store credentials in Supabase (encrypted)
         from zylch.api.token_storage import save_mrcall_credentials
@@ -1546,7 +1549,7 @@ async def mrcall_oauth_callback(
             business_id=business_info.get("business_id"),
             target_owner=tokens.get("targetOwner"),
             realm=settings.mrcall_realm,
-            email=user_email  # Store user's actual email (from Firebase), not business assistant's email
+            email=""  # MrCall API does not provide user account email; empty avoids showing wrong email
         )
 
         logger.info(f"Successfully saved MrCall OAuth credentials for user {owner_id}")
@@ -1558,7 +1561,7 @@ async def mrcall_oauth_callback(
             return JSONResponse({
                 "success": True,
                 "service": "mrcall",
-                "email": user_email,  # User's email (from Firebase), not assistant's email
+                "email": "",  # MrCall API does not provide user account email
                 "business_id": business_info.get("business_id"),
                 "nickname": business_info.get("nickname"),
                 "company_name": business_info.get("company_name"),
