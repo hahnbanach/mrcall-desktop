@@ -509,29 +509,39 @@ async def refresh_mrcall_token(owner_id: str) -> Optional[Dict[str, Any]]:
 
     # Make refresh request to StarChat
     try:
-        refresh_url = f"{settings.mrcall_base_url.rstrip('/')}/oauth/token/refresh"
+        # Endpoint is /oauth/token, NOT /oauth/token/refresh
+        refresh_url = f"{settings.mrcall_base_url.rstrip('/')}/oauth/token"
+        
+        # Payload must be camelCase as per StarChat implementation (see docs/STARCHAT_OAUTH_TOKEN_ROUTE_BUG.md)
         payload = {
-            "grant_type": "refresh_token",
-            "refresh_token": credentials["refresh_token"],
-            "client_id": settings.mrcall_client_id,
-            "client_secret": settings.mrcall_client_secret
+            "grantType": "refresh_token",
+            "refreshToken": credentials["refresh_token"],
+            "clientId": settings.mrcall_client_id,
+            "clientSecret": settings.mrcall_client_secret
         }
         
-        # DEBUG: Log the exact request details
-        logger.error(f"[DEBUG_REFRESH] Requesting URL: {refresh_url}")
-        logger.error(f"[DEBUG_REFRESH] Base URL setting: {settings.mrcall_base_url}")
+        # DEBUG: Log the exact request details (with masked secrets)
+        logger.info(f"[DEBUG_REFRESH] Requesting URL: {refresh_url}")
+        logger.info(f"[DEBUG_REFRESH] Base URL setting: {settings.mrcall_base_url}")
+        
         safe_payload = payload.copy()
-        if "client_secret" in safe_payload:
-            safe_payload["client_secret"] = "***"
-        if "refresh_token" in safe_payload:
-            safe_payload["refresh_token"] = f"{safe_payload['refresh_token'][:5]}..."
-        logger.error(f"[DEBUG_REFRESH] Payload: {safe_payload}")
+        if "clientSecret" in safe_payload:
+            secret = safe_payload["clientSecret"]
+            # Show last 4 chars if long enough
+            masked_secret = f"****{secret[-4:]}" if secret and len(secret) > 4 else "****"
+            safe_payload["clientSecret"] = masked_secret
+            
+        if "refreshToken" in safe_payload:
+            token = safe_payload["refreshToken"]
+            safe_payload["refreshToken"] = f"{token[:5]}..." if token else "None"
+            
+        logger.info(f"[DEBUG_REFRESH] Payload: {safe_payload}")
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 refresh_url,
-                data=payload,
-                headers={"Content-Type": "application/x-www-form-urlencoded"}
+                json=payload,  # use json=payload for application/json content-type
+                headers={"Content-Type": "application/json"}
             )
 
             if response.status_code != 200:
