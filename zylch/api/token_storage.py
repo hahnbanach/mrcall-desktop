@@ -420,6 +420,8 @@ def save_mrcall_credentials(
     """
     from datetime import datetime, timedelta, timezone
 
+    logger.info(f"[save_mrcall_credentials] owner_id={owner_id}, email={email}, business_id={business_id}, target_owner={target_owner}")
+
     supabase = _get_supabase()
 
     # Calculate expiration timestamp
