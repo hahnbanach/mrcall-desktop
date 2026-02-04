@@ -353,12 +353,17 @@ Your MrCall is linked to business `{business_id}` but OAuth credentials are miss
                 supabase_storage=supabase
             )
 
+            # Use explicitly linked business_id, not OAuth-stored one
+            business_id = supabase.get_mrcall_link(owner_id)
+            if not business_id:
+                return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
+
             # Run MrCall sync
             result = await sync_service.sync_mrcall(
                 days_back=days_back,
                 debug=debug_mode,
                 firebase_token=mrcall_creds.get('access_token'),
-                business_id=mrcall_creds.get('business_id'),
+                business_id=business_id,
                 realm=mrcall_creds.get('realm')
             )
 
@@ -918,7 +923,7 @@ In config mode, use natural language:
             logger.debug(f"[/mrcall variables] get_mrcall_link(owner_id={owner_id}) -> business_id={business_id}")
 
             if not business_id:
-                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <business_id>` to select one."
+                return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
 
             # Check for sub-subcommand (get/set)
             # args[0] is 'variables'. Check args[1]
@@ -1077,7 +1082,7 @@ Your Zylch is now connected to this MrCall assistant!
             business_id = client.get_mrcall_link(owner_id)
             logger.debug(f"[/mrcall show] get_mrcall_link(owner_id={owner_id}) -> business_id={business_id}")
             if not business_id:
-                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <business_id>` first."
+                return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
 
             # Parse feature argument
             feature_name = positional[1] if len(positional) > 1 else "welcome_message"
@@ -1150,7 +1155,7 @@ Run `/agent mrcall train` to generate configuration context for all features."""
             # Get linked business ID (explicit /mrcall link takes priority over OAuth default)
             business_id = client.get_mrcall_link(owner_id)
             if not business_id:
-                return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <business_id>` first."
+                return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
 
             logger.debug(f"[/mrcall config] feature={feature_name}, business_id={business_id}, instructions_len={len(instructions)}")
 
@@ -3494,11 +3499,7 @@ Connect your LLM provider:
     # Check MrCall is linked
     business_id = storage.get_mrcall_link(owner_id)
     if not business_id:
-        return """❌ **No MrCall assistant linked**
-
-Link your assistant first:
-1. `/mrcall list` - See your assistants
-2. `/mrcall link <business_id>` - Link to assistant by ID"""
+        return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
 
     # Validate feature if specified
     if feature and feature not in MrCallConfiguratorTrainer.FEATURES:
@@ -3702,11 +3703,7 @@ async def _handle_mrcall_agent_show(storage, owner_id: str) -> str:
     """Show MrCall agent prompt."""
     business_id = storage.get_mrcall_link(owner_id)
     if not business_id:
-        return """❌ **No MrCall assistant linked**
-
-Link your assistant first:
-1. `/mrcall list` - See your assistants
-2. `/mrcall link <business_id>` - Link to assistant by ID"""
+        return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
 
     agent_prompt = storage.get_agent_prompt(owner_id, f"mrcall_{business_id}")
     if not agent_prompt:
@@ -3736,9 +3733,7 @@ async def _handle_mrcall_agent_reset(storage, owner_id: str) -> str:
     """Delete MrCall agent prompt."""
     business_id = storage.get_mrcall_link(owner_id)
     if not business_id:
-        return """❌ **No MrCall assistant linked**
-
-Nothing to reset."""
+        return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
 
     deleted = storage.delete_agent_prompt(owner_id, f"mrcall_{business_id}")
     if deleted:

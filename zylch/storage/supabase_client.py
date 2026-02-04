@@ -1624,7 +1624,7 @@ class SupabaseStorage:
         """Get MrCall business ID for user.
 
         PRIORITY: Explicit /mrcall link (email field) takes precedence over OAuth default.
-        Falls back to credentials.business_id if no explicit link set.
+        Only returns explicitly linked business_id (via /mrcall link).
 
         Args:
             owner_id: Firebase UID
@@ -1641,12 +1641,6 @@ class SupabaseStorage:
         if result.data and result.data[0].get('email'):
             logger.debug(f"get_mrcall_link: explicit link found in email field: {result.data[0]['email']}")
             return result.data[0]['email']
-
-        # FALLBACK: Use OAuth business_id if no explicit link
-        creds = self.get_provider_credentials(owner_id, 'mrcall')
-        if creds and creds.get('business_id'):
-            logger.debug(f"get_mrcall_link: using OAuth business_id: {creds['business_id']}")
-            return creds['business_id']
 
         return None
 

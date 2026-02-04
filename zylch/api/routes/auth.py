@@ -1308,7 +1308,7 @@ async def fetch_mrcall_business_info(access_token: str) -> dict:
 
         data = response.json()
         businesses_count = len(data) if isinstance(data, list) else len(data.get('results', data.get('items', data.get('businesses', []))))
-        logger.info(f"[MrCall OAuth] fetch_business_info: businesses_count={businesses_count}")
+        logger.debug(f"[MrCall OAuth] fetch_business_info: businesses_count={businesses_count}")
 
         # Extract business info from search response (returns list of businesses)
         business = None
@@ -1324,14 +1324,14 @@ async def fetch_mrcall_business_info(access_token: str) -> dict:
                 business = data
 
         if business:
-            logger.info(f"[MrCall OAuth] fetch_business_info extracted business keys: {list(business.keys())}")
+            logger.debug(f"[MrCall OAuth] fetch_business_info extracted business keys: {list(business.keys())}")
             result = {
                 "business_id": business.get("businessId") or business.get("id"),
                 "email": business.get("emailAddress") or business.get("email"),
                 "nickname": business.get("nickname"),
                 "company_name": business.get("companyName")
             }
-            logger.info(f"[MrCall OAuth] fetch_business_info returning: {result}")
+            logger.debug(f"[MrCall OAuth] fetch_business_info returning: {result}")
             return result
 
         raise HTTPException(status_code=400, detail="No business found")
@@ -1472,10 +1472,10 @@ async def mrcall_oauth_callback(
     user_email = state_data.get('email', '')  # User's email from Firebase token
     code_verifier = state_data.get("metadata", {}).get("code_verifier")
 
-    logger.info(f"[MrCall OAuth callback] state_data keys={list(state_data.keys())}")
-    logger.info(f"[MrCall OAuth callback] state_data email={state_data.get('email')}")
-    logger.info(f"[MrCall OAuth callback] user_email={user_email}")
-    logger.info(f"[MrCall OAuth callback] owner_id={owner_id}")
+    logger.debug(f"[MrCall OAuth callback] state_data keys={list(state_data.keys())}")
+    logger.debug(f"[MrCall OAuth callback] state_data email={state_data.get('email')}")
+    logger.debug(f"[MrCall OAuth callback] user_email={user_email}")
+    logger.debug(f"[MrCall OAuth callback] owner_id={owner_id}")
 
     if not code_verifier:
         logger.error(f"Missing code_verifier in state data")
@@ -1495,9 +1495,8 @@ async def mrcall_oauth_callback(
 
         # DEBUG: Log exactly what we're sending
         import json as json_module
-        logger.info(f"=== DEBUG: OAuth Token Exchange ===")
-        logger.info(f"URL: {token_url}")
-        logger.info(f"Request body: {json_module.dumps(request_body, indent=2)}")
+        logger.debug(f"[MrCall OAuth] Token exchange URL: {token_url}")
+        logger.debug(f"[MrCall OAuth] Token exchange body: {json_module.dumps(request_body, indent=2)}")
 
         async with httpx.AsyncClient() as client:
             token_response = await client.post(
@@ -1506,10 +1505,9 @@ async def mrcall_oauth_callback(
                 headers={"Content-Type": "application/json"}
             )
 
-            # DEBUG: Log full response
-            logger.info(f"Response status: {token_response.status_code}")
-            logger.info(f"Response headers: {dict(token_response.headers)}")
-            logger.info(f"Response body: {token_response.text}")
+            logger.debug(f"[MrCall OAuth] Token response status: {token_response.status_code}")
+            logger.debug(f"[MrCall OAuth] Token response headers: {dict(token_response.headers)}")
+            logger.debug(f"[MrCall OAuth] Token response body: {token_response.text}")
 
             if token_response.status_code != 200:
                 logger.error(f"Token exchange failed: {token_response.status_code} - {token_response.text}")
@@ -1517,8 +1515,8 @@ async def mrcall_oauth_callback(
 
             tokens = token_response.json()
             # StarChat returns camelCase: {"accessToken": "...", "refreshToken": "...", "expiresIn": 3600, "targetOwner": "firebase_uid"}
-            logger.info(f"[MrCall OAuth callback] token response keys={list(tokens.keys())}")
-            logger.info(f"[MrCall OAuth callback] tokens (no secrets): targetOwner={tokens.get('targetOwner')}, tokenType={tokens.get('tokenType')}, expiresIn={tokens.get('expiresIn')}")
+            logger.debug(f"[MrCall OAuth callback] token response keys={list(tokens.keys())}")
+            logger.debug(f"[MrCall OAuth callback] tokens (no secrets): targetOwner={tokens.get('targetOwner')}, tokenType={tokens.get('tokenType')}, expiresIn={tokens.get('expiresIn')}")
 
         # Fetch business info from StarChat using access token
         business_info = {"business_id": None, "email": None, "nickname": None, "company_name": None}
@@ -1528,14 +1526,13 @@ async def mrcall_oauth_callback(
             logger.error(f"Failed to fetch business info: {e}")
             # Continue anyway, business_id can be None
 
-        logger.info(f"[MrCall OAuth callback] business_info={business_info}")
+        logger.debug(f"[MrCall OAuth callback] business_info={business_info}")
         # MrCall API does NOT return the user's MrCall account email.
         # user_email = Firebase login email (e.g. support@mrcall.ai) — not the MrCall account email.
         # business_info["email"] = assistant's configured emailAddress — also wrong.
         # Store empty to avoid showing a misleading email.
-        logger.info(f"[MrCall OAuth callback] Firebase email (NOT stored): {user_email}")
-        logger.info(f"[MrCall OAuth callback] business email (NOT stored): {business_info.get('email')}")
-        logger.info(f"[MrCall OAuth callback] FINAL email being stored: '' (MrCall API does not provide user account email)")
+        logger.debug(f"[MrCall OAuth callback] Firebase email (NOT stored): {user_email}")
+        logger.debug(f"[MrCall OAuth callback] business email (NOT stored): {business_info.get('email')}")
 
         # Store credentials in Supabase (encrypted)
         from zylch.api.token_storage import save_mrcall_credentials
@@ -1546,7 +1543,7 @@ async def mrcall_oauth_callback(
             refresh_token=tokens.get("refreshToken"),
             expires_in=tokens.get("expiresIn", 3600),
             token_type=tokens.get("tokenType", "Bearer"),
-            business_id=business_info.get("business_id"),
+            business_id=None,  # Do NOT auto-link; user must run /mrcall link <ID>
             target_owner=tokens.get("targetOwner"),
             realm=settings.mrcall_realm,
             email=""  # MrCall API does not provide user account email; empty avoids showing wrong email
