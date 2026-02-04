@@ -155,11 +155,7 @@ class MrCallOrchestratorAgent:
             Welcome message or error string
         """
         if not self.business_id:
-            return """**Error: No MrCall assistant linked**
-
-Link your assistant first:
-1. `/mrcall list` - See your assistants
-2. `/mrcall link <business_id>` - Link to assistant"""
+            return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
 
         # Auto-train if needed
         trained = await self._ensure_trained()

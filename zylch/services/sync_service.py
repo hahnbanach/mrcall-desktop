@@ -336,15 +336,9 @@ class SyncService:
                 "synced": 0
             }
 
-        # Get MrCall business ID from credentials or simple link
+        # Get MrCall business ID from explicit link only
         if not business_id:
-            # Try to get from OAuth credentials first
-            mrcall_creds = self.supabase.get_provider_credentials(self.owner_id, 'mrcall')
-            if mrcall_creds and mrcall_creds.get('business_id'):
-                business_id = mrcall_creds.get('business_id')
-            else:
-                # Fall back to simple link (legacy)
-                business_id = self.supabase.get_mrcall_link(self.owner_id)
+            business_id = self.supabase.get_mrcall_link(self.owner_id)
 
         if not business_id:
             logger.info("[mrcall_sync] Skipping - MrCall not linked")
