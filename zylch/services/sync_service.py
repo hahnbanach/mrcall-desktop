@@ -659,11 +659,11 @@ class SyncService:
         
         # DEBUG: Log raw credentials keys and values (carefully)
         if mrcall_creds:
-            logger.info(f"[mrcall_sync] Loaded credentials. Keys: {list(mrcall_creds.keys())}")
-            logger.info(f"[mrcall_sync] Realm from creds: '{mrcall_creds.get('realm')}'")
+            logger.debug(f"[mrcall_sync] Loaded credentials. Keys: {list(mrcall_creds.keys())}")
+            logger.debug(f"[mrcall_sync] Realm from creds: '{mrcall_creds.get('realm')}'")
             token = mrcall_creds.get('access_token')
             if token:
-                logger.info(f"[mrcall_sync] Access token present (len={len(token)}, ends_with={token[-5:] if len(token)>5 else 'short'})")
+                logger.debug(f"[mrcall_sync] Access token present ({token[:2]}...{token[-2:]}, len={len(token)})" if len(token) > 4 else "[mrcall_sync] Access token present (<short>)")
             else:
                 logger.error("[mrcall_sync] Access token MISSING in credentials")
         else:

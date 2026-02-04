@@ -826,13 +826,13 @@ In config mode, use natural language:
         if subcommand == 'list':
             # Get OAuth credentials
             creds = get_mrcall_credentials(owner_id)
-            logger.info(f"handle_mrcall list: creds keys = {list(creds.keys()) if creds else None}")
+            logger.debug(f"handle_mrcall list: creds_keys={list(creds.keys()) if creds else None}")
             if not creds or not creds.get('access_token'):
-                logger.info(f"handle_mrcall list: access_token missing, creds = {creds}")
+                logger.debug(f"handle_mrcall list: access_token missing, creds_keys={list(creds.keys()) if creds else None}, " + ", ".join(f"{k}={v[:2]}...{v[-2:]}" if isinstance(v, str) and len(v) > 4 else f"{k}=<short>" for k, v in (creds or {}).items() if k in ('access_token', 'refresh_token', 'client_secret')))
                 return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
 
             access_token = creds.get('access_token')
-            logger.info(f"handle_mrcall list: access_token exists = {bool(access_token)}, len = {len(access_token) if access_token else 0}")
+            logger.debug(f"handle_mrcall list: access_token={access_token[:2]}...{access_token[-2:]} (len={len(access_token)})" if access_token and len(access_token) > 4 else f"handle_mrcall list: access_token=<short or missing>")
             # Get the linked business (explicit /mrcall link takes priority over OAuth default)
             current_business_id = client.get_mrcall_link(owner_id)
             logger.debug(f"[/mrcall list] current_business_id={current_business_id}")
@@ -914,7 +914,7 @@ In config mode, use natural language:
             logger.debug(f"[/mrcall variables] args={args}")
             # Get credentials
             creds = get_mrcall_credentials(owner_id)
-            logger.debug(f"[/mrcall variables] get_mrcall_credentials(owner_id={owner_id}) -> keys={list(creds.keys()) if creds else None}, business_id={creds.get('business_id') if creds else None}")
+            logger.debug(f"[/mrcall variables] get_mrcall_credentials(owner_id={owner_id}) -> keys={list(creds.keys()) if creds else None}, has_business_id={bool(creds.get('business_id')) if creds else None}")
             if not creds or not creds.get('access_token'):
                 return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
             

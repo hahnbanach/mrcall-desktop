@@ -1493,10 +1493,17 @@ async def mrcall_oauth_callback(
             "codeVerifier": code_verifier
         }
 
-        # DEBUG: Log exactly what we're sending
-        import json as json_module
+        # DEBUG: Log token exchange request (secrets masked)
         logger.debug(f"[MrCall OAuth] Token exchange URL: {token_url}")
-        logger.debug(f"[MrCall OAuth] Token exchange body: {json_module.dumps(request_body, indent=2)}")
+        _masked_body = {
+            "grantType": request_body.get("grantType"),
+            "clientId": (lambda s: f"{s[:2]}...{s[-2:]}" if s and len(s) > 4 else "<short>")(request_body.get("clientId", "")),
+            "clientSecret": (lambda s: f"{s[:2]}...{s[-2:]}" if s and len(s) > 4 else "<short>")(request_body.get("clientSecret", "")),
+            "code": (lambda s: f"{s[:2]}...{s[-2:]}" if s and len(s) > 4 else "<short>")(request_body.get("code", "")),
+            "codeVerifier": (lambda s: f"{s[:2]}...{s[-2:]}" if s and len(s) > 4 else "<short>")(request_body.get("codeVerifier", "")),
+            "redirectUri": request_body.get("redirectUri"),
+        }
+        logger.debug(f"[MrCall OAuth] Token exchange body: {_masked_body}")
 
         async with httpx.AsyncClient() as client:
             token_response = await client.post(
@@ -1507,7 +1514,18 @@ async def mrcall_oauth_callback(
 
             logger.debug(f"[MrCall OAuth] Token response status: {token_response.status_code}")
             logger.debug(f"[MrCall OAuth] Token response headers: {dict(token_response.headers)}")
-            logger.debug(f"[MrCall OAuth] Token response body: {token_response.text}")
+            try:
+                _resp_json = token_response.json()
+                _masked_resp = {
+                    "keys": list(_resp_json.keys()),
+                    "accessToken": (lambda s: f"{s[:2]}...{s[-2:]}" if s and len(s) > 4 else "<short>")(str(_resp_json.get("accessToken", ""))),
+                    "refreshToken": (lambda s: f"{s[:2]}...{s[-2:]}" if s and len(s) > 4 else "<short>")(str(_resp_json.get("refreshToken", ""))),
+                    "expiresIn": _resp_json.get("expiresIn"),
+                    "tokenType": _resp_json.get("tokenType"),
+                }
+                logger.debug(f"[MrCall OAuth] Token response body (masked): {_masked_resp}")
+            except Exception:
+                logger.debug(f"[MrCall OAuth] Token response body: <non-JSON, len={len(token_response.text)}>")
 
             if token_response.status_code != 200:
                 logger.error(f"Token exchange failed: {token_response.status_code} - {token_response.text}")
