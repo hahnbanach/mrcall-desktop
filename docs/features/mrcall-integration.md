@@ -674,6 +674,55 @@ See [WHATSAPP_INTEGRATION_TODO.md](WHATSAPP_INTEGRATION_TODO.md) for comprehensi
 - **Call suggestions**: Recommend who to call based on relationship gaps
 - **Script optimization**: A/B test assistant scripts, learn what works
 
+## MrCall Dashboard Integration
+
+The MrCall Dashboard (Vue.js, hosted at `dashboard.mrcall.ai`) integrates directly with Zylch's `/api/chat` endpoint to provide AI-powered assistant configuration.
+
+### Shared Firebase Authentication
+
+Both apps use the same Firebase project (`talkmeapp-e696c`), so authentication tokens are interchangeable. When a user is logged into the MrCall Dashboard, their Firebase JWT is accepted by Zylch without additional login.
+
+**Key files (Dashboard)**:
+- `src/views/ConfigureAI.vue` - Two-column layout (command sidebar + chat)
+- `src/components/ZylchChat.vue` - Chat component using Zylch API
+- `src/utils/Zylch.js` - API client (`Authorization: Bearer <token>`)
+
+### User Flow
+
+1. User navigates to **Business Configuration** in MrCall Dashboard
+2. Clicks **"Configure with AI"** button
+3. Dashboard navigates to `ConfigureAI` page with `businessId` in query params
+4. On mount, the page automatically sends `/mrcall open <businessId>` to Zylch
+5. Zylch enters MrCall config mode for that assistant
+6. User interacts via chat to configure the assistant (prompts, variables, etc.)
+7. Left sidebar provides quick command buttons: `/mrcall variables`, `/mrcall show`, `/help`
+
+### System-Level API Key
+
+For MrCall Dashboard users, the operator provides an Anthropic API key via `ANTHROPIC_API_KEY` in `.env.mrcall`. This eliminates the need for users to run `/connect anthropic`:
+
+- The key is configured server-side in Zylch's `.env` file
+- It's used as a fallback only when the user has no personal key configured
+- The key is never exposed to the frontend (not in API responses or network traffic)
+- If a user has their own key configured via `/connect anthropic`, that takes priority
+
+### Environment Configuration
+
+The `.env.mrcall` file contains all configuration for the MrCall integration:
+
+```bash
+# Firebase (same project as MrCall Dashboard)
+FIREBASE_PROJECT_ID=talkmeapp-e696c
+FIREBASE_API_KEY=...
+FIREBASE_SERVICE_ACCOUNT_BASE64=...
+
+# CORS (allow MrCall Dashboard domains)
+CORS_ALLOWED_ORIGINS=http://localhost:8080,https://dashboard.mrcall.ai,...
+
+# System-level LLM key (so users don't need /connect anthropic)
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
 ## Related Documentation
 
 - **[WhatsApp Integration](WHATSAPP_INTEGRATION_TODO.md)** - Comprehensive WhatsApp roadmap
@@ -699,4 +748,4 @@ See [WHATSAPP_INTEGRATION_TODO.md](WHATSAPP_INTEGRATION_TODO.md) for comprehensi
 
 ---
 
-**Last Updated**: December 2025
+**Last Updated**: February 2026

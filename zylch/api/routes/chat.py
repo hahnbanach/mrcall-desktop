@@ -2,7 +2,7 @@
 
 import logging
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Header
 from pydantic import BaseModel, Field
 
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token, get_user_email_from_token
@@ -78,7 +78,8 @@ class GetHistoryResponse(BaseModel):
 @router.post("/message", response_model=SendMessageResponse)
 async def send_message(
     request: SendMessageRequest,
-    user: dict = Depends(get_current_user)
+    user: dict = Depends(get_current_user),
+    authorization: str = Header(...)
 ):
     """Send a message to Zylch AI and get response.
 
@@ -133,6 +134,9 @@ async def send_message(
             for msg in session.get_history(limit=50)  # Last 50 messages for context
         ]
 
+        # Extract raw Firebase token for StarChat passthrough
+        raw_firebase_token = authorization.replace("Bearer ", "") if authorization.startswith("Bearer ") else authorization
+
         # Process message through ChatService
         chat_service = get_chat_service()
         result = await chat_service.process_message(
@@ -140,7 +144,7 @@ async def send_message(
             user_id=user_id,
             conversation_history=history[:-1],  # Exclude current message
             session_id=session.session_id,
-            context={"source": "dashboard", "user_id": user_id, "email": user_email}
+            context={"source": "dashboard", "user_id": user_id, "email": user_email, "firebase_token": raw_firebase_token}
         )
 
         # Extract response from result

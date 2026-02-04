@@ -822,19 +822,19 @@ class SupabaseStorage:
             'owner_id', owner_id
         ).eq('provider', provider).execute()
 
-        logger.info(f"get_oauth_token query for owner={owner_id}, provider={provider}")
-        logger.info(f"  result.data: {result.data}")
-        logger.info(f"  result.count: {getattr(result, 'count', 'N/A')}")
+        logger.debug(f"get_oauth_token query for owner={owner_id}, provider={provider}")
+        logger.debug(f"  result.data: {len(result.data) if result.data else 0} rows")
+        logger.debug(f"  result.count: {getattr(result, 'count', 'N/A')}")
 
         if result.data:
-            logger.info(f"  Found {len(result.data)} rows")
+            logger.debug(f"  Found {len(result.data)} rows")
             return result.data[0]
 
-        logger.info(f"  No rows found")
+        logger.debug(f"  No rows found")
         return None
 
     def get_google_token(self, owner_id: str) -> Optional[str]:
-        """Get Google OAuth token data (base64-encoded pickle, decrypted).
+        """Get Google OAuth token data (base64-encoded JSON, decrypted).
 
         Uses unified credentials JSONB storage.
 
@@ -1227,11 +1227,11 @@ class SupabaseStorage:
             try:
                 decrypted_json = decrypt(token_row['credentials'])
                 all_credentials = json.loads(decrypted_json)
-                logger.info(f"get_provider_credentials({provider_key}): all_credentials keys = {list(all_credentials.keys())}")
+                logger.debug(f"get_provider_credentials({provider_key}): all_credentials keys = {list(all_credentials.keys())}")
 
                 # Extract provider-specific credentials
                 provider_creds = all_credentials.get(provider_key, {})
-                logger.info(f"get_provider_credentials({provider_key}): provider_creds keys = {list(provider_creds.keys()) if provider_creds else 'EMPTY'}")
+                logger.debug(f"get_provider_credentials({provider_key}): provider_creds keys = {list(provider_creds.keys()) if provider_creds else 'EMPTY'}")
                 if not provider_creds:
                     # Fall through to legacy columns
                     pass

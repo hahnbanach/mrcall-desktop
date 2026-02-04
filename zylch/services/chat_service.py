@@ -187,7 +187,9 @@ class ChatService:
             # SEMANTIC COMMAND MATCHING - Only when NOT in task mode or MrCall config mode
             # In these modes, agents handle natural language directly
             # (e.g., "send it" should be understood as confirmation, not transformed to "/email send")
-            if not is_in_task_mode and not is_in_mrcall_config_mode:
+            # Also skip for messages that already start with /mrcall (prevent rewriting valid slash commands)
+            starts_with_slash_command = user_message.strip().startswith('/mrcall')
+            if not is_in_task_mode and not is_in_mrcall_config_mode and not starts_with_slash_command:
                 matched_command = self._match_semantic_command(user_message)
                 if matched_command:
                     logger.info(f"Semantic match: '{user_message}' -> {matched_command}")
@@ -318,7 +320,7 @@ class ChatService:
                 # Enter MrCall config mode
                 business_id_input = mrcall_open_match.group(1)  # Optional business ID
                 owner_id = (context.get("user_id") if context else None) or user_id
-                response_text = await self._enter_mrcall_config_mode(business_id_input, owner_id)
+                response_text = await self._enter_mrcall_config_mode(business_id_input, owner_id, context)
                 return {
                     "response": self._prepend_notification(response_text, notification_banner),
                     "tool_calls": [],
@@ -792,28 +794,41 @@ What would you like to do?"""
             logger.error(f"Error in task mode: {e}", exc_info=True)
             return f"❌ **Error:** {str(e)}\n\nUse `/tasks exit` to return to normal chat."
 
-    async def _enter_mrcall_config_mode(self, business_id_input: Optional[str], owner_id: str) -> str:
+    async def _enter_mrcall_config_mode(
+        self,
+        business_id_input: Optional[str],
+        owner_id: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> str:
         """Enter MrCall configuration mode.
 
         Args:
             business_id_input: Optional business ID (if None, uses linked business)
             owner_id: Firebase UID
+            context: Optional request context (source, firebase_token, etc.)
 
         Returns:
             Response message indicating success or failure
         """
-        logger.debug(f"[/mrcall open] _enter_mrcall_config_mode: business_id_input={business_id_input}, owner_id={owner_id}")
+        is_dashboard = context and context.get("source") == "dashboard"
+        firebase_token = context.get("firebase_token") if context else None
+        logger.debug(f"[/mrcall open] _enter_mrcall_config_mode: business_id_input={business_id_input}, owner_id={owner_id}, is_dashboard={is_dashboard}, firebase_token={'present' if firebase_token else 'absent'}")
 
         try:
-            # Check MrCall is connected first
+            # Check MrCall connection - OAuth credentials or dashboard Firebase token
             from zylch.api.token_storage import get_mrcall_credentials
             mrcall_creds = get_mrcall_credentials(owner_id)
-            if not mrcall_creds or not mrcall_creds.get('access_token'):
+            has_oauth = mrcall_creds and mrcall_creds.get('access_token')
+
+            if not has_oauth and not (is_dashboard and firebase_token):
                 return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
 
             # Resolve business_id - use provided or get linked
             if business_id_input:
                 business_id = business_id_input
+                # Auto-link business_id so subsequent commands work without /mrcall link
+                self.storage.set_mrcall_link(owner_id, business_id)
+                logger.info(f"[/mrcall open] Auto-linked business_id={business_id} for owner={owner_id}")
             else:
                 business_id = self.storage.get_mrcall_link(owner_id)
 
@@ -825,16 +840,37 @@ What would you like to do?"""
                 from zylch.tools.factory import SessionState
                 ToolFactory._session_state = SessionState()
 
-            # Get LLM credentials
+            # Get LLM credentials (with system-level fallback)
             from zylch.api.token_storage import get_active_llm_provider
             llm_provider, api_key = get_active_llm_provider(owner_id)
+            if not api_key:
+                # System-level fallback for integrations (e.g., MrCall dashboard users)
+                from zylch.config import settings
+                if settings.anthropic_api_key:
+                    llm_provider = "anthropic"
+                    api_key = settings.anthropic_api_key
+                    logger.info(f"[/mrcall open] Using system-level Anthropic API key for owner={owner_id}")
             if not api_key or not llm_provider:
                 return "❌ LLM API key required. Run `/connect anthropic` to set up."
 
             # Get or create StarChat client
             if not ToolFactory._starchat_client:
-                from zylch.tools.starchat import create_starchat_client
-                ToolFactory._starchat_client = await create_starchat_client(owner_id)
+                if has_oauth:
+                    # Standard OAuth flow
+                    from zylch.tools.starchat import create_starchat_client
+                    ToolFactory._starchat_client = await create_starchat_client(owner_id)
+                elif is_dashboard and firebase_token:
+                    # Dashboard flow: use Firebase token directly as StarChat auth
+                    from zylch.config import settings
+                    from zylch.tools.starchat import StarChatClient
+                    logger.info(f"[/mrcall open] Creating StarChat client with Firebase token for dashboard user owner={owner_id}")
+                    ToolFactory._starchat_client = StarChatClient(
+                        base_url=settings.mrcall_base_url.rstrip('/'),
+                        auth_type="firebase",
+                        jwt_token=firebase_token,
+                        realm=settings.mrcall_realm,
+                        owner_id=owner_id,
+                    )
 
             # Create orchestrator
             from zylch.agents.mrcall_orchestrator_agent import MrCallOrchestratorAgent

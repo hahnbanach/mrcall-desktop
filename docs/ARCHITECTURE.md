@@ -170,6 +170,11 @@ services/      # Business logic layer (shared with CLI)
 - `/api/webhooks/sendgrid` - Email read tracking webhooks
 - `/api/track/pixel/{tracking_id}` - Tracking pixel endpoint
 
+**Static Endpoints** (served directly from `main.py`):
+- `/` - API info (name, version, status)
+- `/health` - Health check
+- `/robots.txt` - SEO/crawler directives (allows `/`, `/health`, `/docs`; disallows `/api/`, `/webhooks/`)
+
 ### Commands API (`/api/commands`)
 
 **Purpose**: Expose command metadata so any frontend (CLI, web, mobile) can discover available commands and their help text. The backend is the single source of truth.
@@ -407,8 +412,9 @@ All user credentials (OAuth tokens, API keys) are stored in Supabase's `oauth_to
 ### Configuration
 - **Environment**: Railway env vars (backend), Vercel env vars (frontend)
 - **Defaults**: `zylch/config.py` (Pydantic settings)
-- **System .env only contains**: Supabase config, Firebase config, Google OAuth client, encryption key
-- **NOT in .env**: User credentials (Anthropic, Pipedrive, Vonage) - these are BYOK via `/connect`
+- **System .env contains**: Supabase config, Firebase config, Google OAuth client, encryption key, optional `ANTHROPIC_API_KEY` (system-level fallback for integrations)
+- **NOT in .env**: User credentials (Pipedrive, Vonage) - these are BYOK via `/connect`
+- **Optional in .env**: `ANTHROPIC_API_KEY` - system-level fallback when user has no key (used by MrCall integration)
 
 ### Firebase Service Account
 
@@ -442,8 +448,8 @@ Zylch supports multiple LLM providers through LiteLLM abstraction:
 | **Mistral** | `mistral-large-3` | 🇪🇺 EU | Tool use, GDPR-friendly |
 
 **Credential Storage**: User provides API key via `/connect <provider>`
-**No system .env fallback**: Users must connect their own provider
-**Provider Selection**: `get_active_llm_provider(owner_id)` checks connected providers in order
+**System-level fallback**: If `ANTHROPIC_API_KEY` is set in `.env`, it's used when the user has no key configured. This enables integrations like MrCall Dashboard where the operator provides the key so users don't need to run `/connect anthropic`.
+**Provider Selection**: `get_active_llm_provider(owner_id)` checks connected providers in order. If no user key found, `ToolConfig.from_settings_with_owner()` falls back to `settings.anthropic_api_key`.
 
 **Anthropic-Only Features**:
 - Web search (`web_search_20250305` tool type)
@@ -625,6 +631,24 @@ business:read business:write contacts:read contacts:write sessions:read sessions
 - Tokens refreshed when within 5 minutes of expiration
 - Refresh happens automatically on API calls via StarChat client
 - Failed refresh triggers re-authentication prompt
+
+#### MrCall Dashboard Integration
+
+The MrCall Dashboard (Vue.js) integrates with Zylch via the `/api/chat` endpoint, sharing the same Firebase project (`talkmeapp-e696c`) so authentication tokens are interchangeable.
+
+**Integration Flow**:
+1. User clicks "Configure with AI" button on BusinessConfiguration page
+2. Dashboard navigates to `ConfigureAI.vue` with `businessId` in query params
+3. On mount, the page automatically sends `/mrcall open <businessId>` to Zylch
+4. Zylch enters MrCall config mode for that assistant
+5. Left sidebar provides quick command buttons (`/mrcall variables`, `/mrcall show`, `/help`)
+
+**Key Files (Dashboard)**:
+- `src/views/ConfigureAI.vue` - Two-column layout (commands sidebar + chat)
+- `src/components/ZylchChat.vue` - Chat component using Zylch API
+- `src/utils/Zylch.js` - API client (uses `Authorization: Bearer` header)
+
+**System-Level API Key**: The MrCall `.env` includes `ANTHROPIC_API_KEY` so dashboard users don't need to run `/connect anthropic`. The key stays server-side and is never exposed to the frontend.
 
 ### Sensitive Data Encryption
 

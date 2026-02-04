@@ -7,7 +7,6 @@ NO filesystem fallback - Supabase is required.
 import base64
 import json
 import logging
-import pickle
 from typing import Optional, Dict, Any, TYPE_CHECKING
 
 from zylch.config import settings
@@ -190,27 +189,27 @@ def save_google_credentials(owner_id: str, credentials, email: str = "") -> None
         credentials: google.oauth2.credentials.Credentials object
         email: User's email address
     """
-    logger.info(f"save_google_credentials called for owner {owner_id}, email={email}")
+    logger.debug(f"save_google_credentials called for owner {owner_id}, email={email}")
 
     supabase = _get_supabase()
 
-    # Pickle and base64 encode credentials
-    logger.info("Pickling credentials...")
-    pickled = pickle.dumps(credentials)
-    logger.info(f"Pickled data length: {len(pickled)}")
+    # Serialize credentials to JSON and base64 encode
+    logger.debug("Serializing credentials to JSON...")
+    creds_json = credentials.to_json()
+    logger.debug(f"JSON credentials length: {len(creds_json)}")
 
-    logger.info("Base64 encoding...")
-    token_data = base64.b64encode(pickled).decode('utf-8')
-    logger.info(f"Token data length: {len(token_data)}")
+    logger.debug("Base64 encoding...")
+    token_data = base64.b64encode(creds_json.encode('utf-8')).decode('utf-8')
+    logger.debug(f"Token data length: {len(token_data)}")
 
-    logger.info(f"Calling store_oauth_token for owner {owner_id}...")
+    logger.debug(f"Calling store_oauth_token for owner {owner_id}...")
     supabase.store_oauth_token(
         owner_id=owner_id,
         provider="google",
         email=email or get_email(owner_id) or "",
         google_token_data=token_data
     )
-    logger.info(f"✅ Saved Google credentials for owner {owner_id}")
+    logger.debug(f"Saved Google credentials for owner {owner_id}")
 
 
 def get_google_credentials(owner_id: str):
@@ -222,18 +221,21 @@ def get_google_credentials(owner_id: str):
     Returns:
         google.oauth2.credentials.Credentials object or None if not found
     """
+    from google.oauth2.credentials import Credentials as GoogleCredentials
+
     supabase = _get_supabase()
-    logger.info(f"Looking up Google credentials for owner {owner_id} in Supabase")
+    logger.debug(f"Looking up Google credentials for owner {owner_id} in Supabase")
     token_data = supabase.get_google_token(owner_id)
     if token_data:
-        logger.info(f"Found Google token data for owner {owner_id} (length: {len(token_data)})")
+        logger.debug(f"Found Google token data for owner {owner_id} (length: {len(token_data)})")
         try:
-            pickled = base64.b64decode(token_data)
-            credentials = pickle.loads(pickled)
-            logger.info(f"Successfully loaded Google credentials for owner {owner_id}")
+            decoded = base64.b64decode(token_data)
+            creds_info = json.loads(decoded)
+            credentials = GoogleCredentials.from_authorized_user_info(creds_info)
+            logger.debug(f"Successfully loaded Google credentials for owner {owner_id}")
             return credentials
         except Exception as e:
-            logger.error(f"Failed to unpickle Google credentials for owner {owner_id}: {e}")
+            logger.error(f"Failed to deserialize Google credentials for owner {owner_id}: {e}")
             return None
     else:
         logger.warning(f"No Google token data found in Supabase for owner {owner_id}")
@@ -523,21 +525,19 @@ async def refresh_mrcall_token(owner_id: str) -> Optional[Dict[str, Any]]:
         }
         
         # DEBUG: Log the exact request details (with masked secrets)
-        logger.info(f"[DEBUG_REFRESH] Requesting URL: {refresh_url}")
-        logger.info(f"[DEBUG_REFRESH] Base URL setting: {settings.mrcall_base_url}")
-        
+        logger.debug(f"[DEBUG_REFRESH] Requesting URL: {refresh_url}")
+        logger.debug(f"[DEBUG_REFRESH] Base URL setting: {settings.mrcall_base_url}")
+
         safe_payload = payload.copy()
         if "clientSecret" in safe_payload:
             secret = safe_payload["clientSecret"]
-            # Show last 4 chars if long enough
-            masked_secret = f"****{secret[-4:]}" if secret and len(secret) > 4 else "****"
-            safe_payload["clientSecret"] = masked_secret
-            
+            safe_payload["clientSecret"] = f"{secret[:2]}...{secret[-2:]}" if secret and len(secret) > 4 else "<short>"
+
         if "refreshToken" in safe_payload:
             token = safe_payload["refreshToken"]
-            safe_payload["refreshToken"] = f"{token[:5]}..." if token else "None"
-            
-        logger.info(f"[DEBUG_REFRESH] Payload: {safe_payload}")
+            safe_payload["refreshToken"] = f"{token[:2]}...{token[-2:]}" if token and len(token) > 4 else "<short>"
+
+        logger.debug(f"[DEBUG_REFRESH] Payload: {safe_payload}")
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
