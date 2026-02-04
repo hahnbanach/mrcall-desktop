@@ -3490,6 +3490,12 @@ async def _handle_mrcall_agent_train(storage, owner_id: str, api_key: str, llm_p
     from zylch.agents.trainers import MrCallAgentTrainer, MrCallConfiguratorTrainer
     from zylch.tools.starchat import create_starchat_client
 
+    # Check MrCall is connected
+    from zylch.api.token_storage import get_mrcall_credentials
+    mrcall_creds = get_mrcall_credentials(owner_id)
+    if not mrcall_creds or not mrcall_creds.get('access_token'):
+        return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
+
     if not api_key or not llm_provider:
         return """❌ **LLM API key required**
 
@@ -3701,6 +3707,11 @@ Please connect your MrCall account:
 
 async def _handle_mrcall_agent_show(storage, owner_id: str) -> str:
     """Show MrCall agent prompt."""
+    from zylch.api.token_storage import get_mrcall_credentials
+    mrcall_creds = get_mrcall_credentials(owner_id)
+    if not mrcall_creds or not mrcall_creds.get('access_token'):
+        return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
+
     business_id = storage.get_mrcall_link(owner_id)
     if not business_id:
         return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
@@ -3731,6 +3742,11 @@ _Use `/agent mrcall reset` to delete._"""
 
 async def _handle_mrcall_agent_reset(storage, owner_id: str) -> str:
     """Delete MrCall agent prompt."""
+    from zylch.api.token_storage import get_mrcall_credentials
+    mrcall_creds = get_mrcall_credentials(owner_id)
+    if not mrcall_creds or not mrcall_creds.get('access_token'):
+        return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
+
     business_id = storage.get_mrcall_link(owner_id)
     if not business_id:
         return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."

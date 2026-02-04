@@ -805,6 +805,12 @@ What would you like to do?"""
         logger.debug(f"[/mrcall open] _enter_mrcall_config_mode: business_id_input={business_id_input}, owner_id={owner_id}")
 
         try:
+            # Check MrCall is connected first
+            from zylch.api.token_storage import get_mrcall_credentials
+            mrcall_creds = get_mrcall_credentials(owner_id)
+            if not mrcall_creds or not mrcall_creds.get('access_token'):
+                return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
+
             # Resolve business_id - use provided or get linked
             if business_id_input:
                 business_id = business_id_input
@@ -812,11 +818,7 @@ What would you like to do?"""
                 business_id = self.storage.get_mrcall_link(owner_id)
 
             if not business_id:
-                return """❌ **No MrCall assistant linked**
-
-Link your assistant first:
-1. `/mrcall list` - See your assistants
-2. `/mrcall link <business_id>` - Link to assistant"""
+                return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
 
             # Create session state if needed
             if not ToolFactory._session_state:
@@ -849,7 +851,7 @@ Link your assistant first:
             response = await self._mrcall_orchestrator.enter_session()
 
             # Only enter mode if session entry succeeded
-            if not response.startswith("**Error"):
+            if not response.startswith("❌"):
                 ToolFactory._session_state.enter_mrcall_config_mode(business_id)
                 logger.info(f"[/mrcall open] Entered MrCall config mode for business={business_id}")
 
