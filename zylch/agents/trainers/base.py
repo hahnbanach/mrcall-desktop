@@ -41,7 +41,7 @@ class BaseAgentTrainer:
         self.storage = storage
         self.owner_id = owner_id
         self.provider = provider
-        self.model = PROVIDER_MODELS.get(provider, settings.default_model)
+        self.model = PROVIDER_MODELS.get(provider, "claude-sonnet-4-20250514")
         self.client = LLMClient(api_key=api_key, provider=provider)
         self.user_email = user_email.lower() if user_email else ''
         self.user_domain = (
