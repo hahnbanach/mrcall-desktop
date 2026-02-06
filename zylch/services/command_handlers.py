@@ -3741,9 +3741,8 @@ Connect your LLM provider:
                 # Single feature
                 lines = [f"**{feature.replace('_', ' ').title()} Configuration:**", ""]
                 for var, val in config.items():
-                    # Truncate long values
-                    display_val = str(val)[:100] + '...' if len(str(val)) > 100 else str(val)
-                    lines.append(f"• `{var}` = `{display_val}`")
+                    # Show full value in code block (NEVER truncate user-facing output)
+                    lines.append(f"• `{var}` = \n\n```\n{val}\n```\n")
                 return chr(10).join(lines)
             else:
                 # All features
@@ -3751,8 +3750,8 @@ Connect your LLM provider:
                 for feat_name, feat_config in config.items():
                     lines.append(f"### {feat_name.replace('_', ' ').title()}")
                     for var, val in feat_config.items():
-                        display_val = str(val)[:100] + '...' if len(str(val)) > 100 else str(val)
-                        lines.append(f"• `{var}` = `{display_val}`")
+                        # Show full value in code block (NEVER truncate user-facing output)
+                        lines.append(f"• `{var}` = \n\n```\n{val}\n```\n")
                     lines.append("")
                 return chr(10).join(lines)
 
