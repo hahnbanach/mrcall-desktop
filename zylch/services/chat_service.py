@@ -854,7 +854,7 @@ What would you like to do?"""
         Returns:
             Response message indicating success or failure
         """
-        is_dashboard = context and context.get("source") == "dashboard"
+        is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
         firebase_token = context.get("firebase_token") if context else None
         logger.debug(f"[/mrcall open] _enter_mrcall_config_mode: business_id_input={business_id_input}, owner_id={owner_id}, is_dashboard={is_dashboard}, firebase_token={'present' if firebase_token else 'absent'}")
 
