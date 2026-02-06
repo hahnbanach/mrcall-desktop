@@ -356,19 +356,21 @@ class ChatService:
                 }
 
             # MRCALL CONFIG MODE ROUTING - If in MrCall config mode, route to MrCallOrchestratorAgent
+            # BUT exclude slash commands - they should go to their normal handlers (e.g., /agent mrcall train)
             if ToolFactory._session_state and ToolFactory._session_state.is_mrcall_config_mode():
-                owner_id = (context.get("user_id") if context else None) or user_id
-                response_text = await self._process_mrcall_config_message(user_message, owner_id, context)
-                return {
-                    "response": self._prepend_notification(response_text, notification_banner),
-                    "tool_calls": [],
-                    "metadata": {
-                        "execution_time_ms": round((time.time() - start_time) * 1000, 2),
-                        "mrcall_config_mode": True,
-                        "business_id": ToolFactory._session_state.get_mrcall_config_business_id()
-                    },
-                    "session_id": session_id
-                }
+                if not user_message.strip().startswith('/'):  # Only route free-form messages
+                    owner_id = (context.get("user_id") if context else None) or user_id
+                    response_text = await self._process_mrcall_config_message(user_message, owner_id, context)
+                    return {
+                        "response": self._prepend_notification(response_text, notification_banner),
+                        "tool_calls": [],
+                        "metadata": {
+                            "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                            "mrcall_config_mode": True,
+                            "business_id": ToolFactory._session_state.get_mrcall_config_business_id()
+                        },
+                        "session_id": session_id
+                    }
 
             # INTERCEPT SLASH COMMANDS - NEVER SEND TO ANTHROPIC
             if user_message.strip().startswith('/'):
