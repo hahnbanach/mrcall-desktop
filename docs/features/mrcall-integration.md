@@ -692,10 +692,16 @@ Both apps use the same Firebase project (`talkmeapp-e696c`), so authentication t
 1. User navigates to **Business Configuration** in MrCall Dashboard
 2. Clicks **"Configure with AI"** button
 3. Dashboard navigates to `ConfigureAI` page with `businessId` in query params
-4. On mount, the page automatically sends `/mrcall open <businessId>` to Zylch
-5. Zylch enters MrCall config mode for that assistant
+4. On mount, the page sends `/mrcall open <businessId>` silently (not displayed in chat)
+5. Zylch enters MrCall config mode for that assistant and shows welcome message
 6. User interacts via chat to configure the assistant (prompts, variables, etc.)
 7. Left sidebar provides quick command buttons: `/mrcall variables`, `/mrcall show`, `/help`
+8. Chat auto-scrolls to latest messages on load and after each message
+
+**UI Features**:
+- **Silent initial command**: The `/mrcall open` command is sent without displaying "You: /mrcall open..." in chat
+- **Auto-scroll**: Chat scrolls to bottom on load and after each message
+- **Message styling**: User messages use teal background (#00897B) for visual distinction
 
 ### System-Level API Key
 
@@ -705,6 +711,40 @@ For MrCall Dashboard users, the operator provides an Anthropic API key via `ANTH
 - It's used as a fallback only when the user has no personal key configured
 - The key is never exposed to the frontend (not in API responses or network traffic)
 - If a user has their own key configured via `/connect anthropic`, that takes priority
+
+### Sandbox Mode
+
+Dashboard users operate in a restricted "sandbox" environment that limits functionality to MrCall configuration only. This is enforced server-side and cannot be bypassed by the client.
+
+**How It Works**:
+
+1. **Detection**: Dashboard sends `X-Client-Source: mrcall_dashboard` header with every request
+2. **Sandbox Activation**: Backend sets `SessionState.sandbox_mode = "mrcall"` for these requests
+3. **Command Gating**: At COMMAND_HANDLERS dispatch, non-whitelisted commands are blocked
+4. **Exit Prevention**: `/mrcall exit` is blocked (user stays in config mode)
+
+**Whitelist** (allowed commands):
+- `/mrcall open <id>` - Enter config mode for an assistant
+- `/mrcall list` - List available assistants
+- `/mrcall variables` - Show configurable variables
+- `/mrcall show` - Show current configuration
+- `/mrcall config <var> <value>` - Set a configuration value
+- `/agent mrcall train` - Generate personalized prompt
+- `/agent mrcall run` - Apply configuration
+- `/help` - Show sandbox-specific help
+
+**Blocked**:
+- All other commands (`/email`, `/calendar`, `/sync`, `/tasks`, `/memory`, etc.)
+- `/mrcall exit` and `/mrcall close` - User cannot leave config mode
+- Free-form chat when not in config mode (prompts user to `/mrcall open` first)
+
+**Semantic Matching**: Natural language triggers still work, but the resulting command is blocked at execution. Example: "sincronizza le email" → recognized as `/sync` → blocked with friendly error message.
+
+**Implementation**:
+- `zylch/services/sandbox_service.py` - Whitelist logic and response messages
+- `zylch/tools/factory.py` - `SessionState.sandbox_mode` field
+- `zylch/api/routes/chat.py` - Header detection
+- `zylch/services/chat_service.py` - Multiple sandbox gates
 
 ### Environment Configuration
 
