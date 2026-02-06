@@ -2823,7 +2823,7 @@ def _format_job_detail(job: dict) -> str:
 **Error:** {job.get('last_error', 'None')}"""
 
 
-async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> str:
+async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, context: dict = None) -> str:
     """Handle /agent command - manage personalized agents for memory and task processing.
 
     Command structure:
@@ -2832,6 +2832,12 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
     Domains: memory, task, email, mrcall
     Actions: train, run, show, reset
     Channels: email (includes calendar automatically), all
+
+    Args:
+        args: Command arguments
+        config: Tool configuration
+        owner_id: User's Firebase UID
+        context: Request context (for dashboard detection)
     """
     from zylch.storage.supabase_client import SupabaseStorage
     from zylch.api.token_storage import get_email
@@ -2996,7 +3002,7 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
 
             elif action == 'run':
                 instructions = ' '.join(args[2:]) if len(args) > 2 else ''
-                return await _handle_mrcall_agent_run(storage, owner_id, api_key, llm_provider, instructions)
+                return await _handle_mrcall_agent_run(storage, owner_id, api_key, llm_provider, instructions, context)
 
             elif action == 'show':
                 return await _handle_mrcall_agent_show(storage, owner_id)
@@ -3640,11 +3646,20 @@ Please connect your MrCall account:
         return f"❌ **Error:** {str(e)}"
 
 
-async def _handle_mrcall_agent_run(storage, owner_id: str, api_key: str, llm_provider: str, instructions: str) -> str:
-    """Execute the MrCall agent with given instructions."""
+async def _handle_mrcall_agent_run(storage, owner_id: str, api_key: str, llm_provider: str, instructions: str, context: dict = None) -> str:
+    """Execute the MrCall agent with given instructions.
+
+    Args:
+        storage: Supabase storage instance
+        owner_id: User's Firebase UID
+        api_key: LLM API key
+        llm_provider: LLM provider name
+        instructions: User instructions for the agent
+        context: Request context (for dashboard detection)
+    """
     import asyncio
     from zylch.agents.mrcall_agent import MrCallAgent
-    from zylch.tools.starchat import create_starchat_client
+    from zylch.tools.starchat import StarChatClient, create_starchat_client
 
     if not instructions.strip():
         return """❌ **Missing instructions**
@@ -3664,8 +3679,22 @@ Connect your LLM provider:
 `/connect anthropic` or `/connect openai` or `/connect mistral`"""
 
     try:
-        # Create StarChat client
-        starchat = await create_starchat_client(owner_id)
+        # Create StarChat client (dashboard vs CLI)
+        is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
+        firebase_token = context.get("firebase_token") if context else None
+
+        if is_dashboard and firebase_token:
+            from zylch.config import settings
+            starchat = StarChatClient(
+                base_url=settings.mrcall_base_url.rstrip('/'),
+                auth_type="firebase",
+                jwt_token=firebase_token,
+                realm=settings.mrcall_realm,
+                owner_id=owner_id,
+            )
+            logger.info(f"[/agent mrcall run] Created StarChatClient with firebase_token")
+        else:
+            starchat = await create_starchat_client(owner_id)
 
         # Initialize the MrCall agent
         agent = MrCallAgent(
