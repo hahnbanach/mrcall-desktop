@@ -163,6 +163,13 @@ async def handle_echo(args: List[str] = None) -> str:
 
 async def handle_help() -> str:
     """Return help message."""
+    # Check if in sandbox mode - show sandbox-specific help
+    from zylch.tools.factory import ToolFactory
+    sandbox_mode = ToolFactory._session_state.sandbox_mode if ToolFactory._session_state else None
+    if sandbox_mode:
+        from zylch.services.sandbox_service import get_sandbox_help
+        return get_sandbox_help(sandbox_mode)
+
     return """**📋 Zylch AI Commands**
 
 💡 **Remember:** All commands accept `--help` for detailed usage

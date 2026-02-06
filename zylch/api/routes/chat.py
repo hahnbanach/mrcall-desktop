@@ -79,7 +79,8 @@ class GetHistoryResponse(BaseModel):
 async def send_message(
     request: SendMessageRequest,
     user: dict = Depends(get_current_user),
-    authorization: str = Header(...)
+    authorization: str = Header(...),
+    x_client_source: Optional[str] = Header(None, alias="X-Client-Source")
 ):
     """Send a message to Zylch AI and get response.
 
@@ -144,7 +145,12 @@ async def send_message(
             user_id=user_id,
             conversation_history=history[:-1],  # Exclude current message
             session_id=session.session_id,
-            context={"source": "dashboard", "user_id": user_id, "email": user_email, "firebase_token": raw_firebase_token}
+            context={
+                "source": x_client_source if x_client_source else "dashboard",
+                "user_id": user_id,
+                "email": user_email,
+                "firebase_token": raw_firebase_token
+            }
         )
 
         # Extract response from result
