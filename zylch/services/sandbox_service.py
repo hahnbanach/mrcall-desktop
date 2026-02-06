@@ -50,10 +50,8 @@ def _is_command_allowed_mrcall_sandbox(cmd: str, args: List[str]) -> bool:
     if cmd == "/help":
         return True
 
-    # /mrcall is allowed, but NOT exit/close subcommands (user must stay in config mode)
+    # /mrcall is allowed (exit is blocked earlier in chat_service.py)
     if cmd == "/mrcall":
-        if len(args) > 0 and args[0].lower() in ("exit", "close"):
-            return False
         return True
 
     # /agent is allowed ONLY with "mrcall" subcommand
