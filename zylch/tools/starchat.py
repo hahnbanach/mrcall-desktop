@@ -583,14 +583,8 @@ class StarChatClient:
             "nested": str(nested).lower(),
         }
 
-<<<<<<< HEAD
-        # OAuth uses delegated_{realm}, Firebase uses plain {realm}
-        prefix = self._realm_prefix()
-        endpoint = f"/mrcall/v1/{prefix}/crm/variables"
-=======
         # The realm should already include any prefix (e.g., "delegated_mrcall0")
         endpoint = f"/mrcall/v1/{self.realm}/crm/variables"
->>>>>>> vk/11b6-readoc
         logger.info(f"Fetching variable schema from: {endpoint} with params={params}")
         logger.debug(f"[StarChat] get_variable_schema: auth_type={self.auth_type}, realm_prefix={prefix}")
 
@@ -728,14 +722,8 @@ class StarChatClient:
         }
 
         # PUT the updated business back
-<<<<<<< HEAD
-        # OAuth uses delegated_{realm}, Firebase uses plain {realm}
-        prefix = self._realm_prefix()
-        endpoint = f"/mrcall/v1/{prefix}/crm/business"
-=======
         # The realm should already include any prefix (e.g., "delegated_mrcall0")
         endpoint = f"/mrcall/v1/{self.realm}/crm/business"
->>>>>>> vk/11b6-readoc
         logger.info(f"Putting updated business to: {endpoint}")
         logger.debug(f"[StarChat] update_business_variables: auth_type={self.auth_type}, realm_prefix={prefix}")
         logger.debug(f"PUT request body: {minimal_payload}")
