@@ -2924,6 +2924,14 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str) -> st
         llm_provider, api_key = get_active_llm_provider(owner_id)
         user_email = get_email(owner_id)
 
+        # System-level fallback for MrCall domain (dashboard users don't have BYOK)
+        if domain == 'mrcall' and not api_key:
+            from zylch.config import settings
+            if settings.anthropic_api_key:
+                llm_provider = "anthropic"
+                api_key = settings.anthropic_api_key
+                logger.info(f"[/agent mrcall] Using system-level Anthropic API key for owner={owner_id}")
+
         # Build agent_type for DB storage (e.g., 'memory_email', 'task_calendar')
         def get_agent_type(domain: str, channel: str) -> str:
             return f"{domain}_{channel}"
