@@ -515,9 +515,8 @@ class StarChatClient:
 
         try:
             # Note: This endpoint uses POST with JSON body for search
-            # CRITICAL: For OAuth/Delegated access, we must use the delegated_{realm} prefix
-            # path: /mrcall/v1/delegated_{realm}/crm/business/search
-            endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/business/search"
+            # The realm should already include any prefix (e.g., "delegated_mrcall0")
+            endpoint = f"/mrcall/v1/{self.realm}/crm/business/search"
             
             logger.info(f"Using business search endpoint: {endpoint}")
             
@@ -579,8 +578,8 @@ class StarChatClient:
             "nested": str(nested).lower(),
         }
 
-        # CRITICAL: For OAuth/Delegated access, we must use the delegated_{realm} prefix
-        endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/variables"
+        # The realm should already include any prefix (e.g., "delegated_mrcall0")
+        endpoint = f"/mrcall/v1/{self.realm}/crm/variables"
         logger.info(f"Fetching variable schema from: {endpoint} with params={params}")
 
         response = await self.client.get(endpoint, params=params)
@@ -717,8 +716,8 @@ class StarChatClient:
         }
 
         # PUT the updated business back
-        # CRITICAL: For OAuth/Delegated access, we must use the delegated_{realm} prefix
-        endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/business"
+        # The realm should already include any prefix (e.g., "delegated_mrcall0")
+        endpoint = f"/mrcall/v1/{self.realm}/crm/business"
         logger.info(f"Putting updated business to: {endpoint}")
         logger.debug(f"PUT request body: {minimal_payload}")
 
