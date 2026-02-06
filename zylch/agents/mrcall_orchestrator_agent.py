@@ -178,9 +178,7 @@ I can help you configure your MrCall assistant. Tell me what you'd like to chang
 - "Enable booking with 30-minute appointments"
 - "Change the greeting to be more formal"
 - "Show me the current settings"
-- "What can I configure?"
-
-Type `/mrcall exit` to return to normal chat."""
+- "What can I configure?" """
 
     async def process_message(self, user_message: str, context: Optional[Dict] = None) -> str:
         """Process user message with full conversation context.
