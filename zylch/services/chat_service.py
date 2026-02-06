@@ -180,6 +180,12 @@ class ChatService:
             logger.warning(f"Failed to check notifications: {e}")
 
         try:
+            # Set sandbox mode based on source (MrCall Dashboard users)
+            if context and context.get("source") == "mrcall_dashboard":
+                if ToolFactory._session_state:
+                    ToolFactory._session_state.sandbox_mode = "mrcall"
+                    logger.debug(f"[Sandbox] Session sandbox_mode=mrcall (source=mrcall_dashboard)")
+
             # Check if we're in task mode or MrCall config mode FIRST (before semantic matching)
             is_in_task_mode = ToolFactory._session_state and ToolFactory._session_state.is_task_mode()
             is_in_mrcall_config_mode = ToolFactory._session_state and ToolFactory._session_state.is_mrcall_config_mode()
@@ -387,6 +393,25 @@ class ChatService:
 
                 # Check if command is implemented
                 if cmd in COMMAND_HANDLERS:
+                    # 🛡️ SANDBOX GATE - Block execution of non-allowed commands
+                    sandbox_mode = ToolFactory._session_state.sandbox_mode if ToolFactory._session_state else None
+                    if sandbox_mode:
+                        from zylch.services.sandbox_service import is_command_allowed_in_sandbox, get_sandbox_blocked_response
+                        if not is_command_allowed_in_sandbox(cmd, args, sandbox_mode):
+                            logger.info(f"[Sandbox:{sandbox_mode}] Blocked command: {cmd} {args}")
+                            return {
+                                "response": get_sandbox_blocked_response(sandbox_mode),
+                                "tool_calls": [],
+                                "metadata": {
+                                    "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                                    "command": cmd,
+                                    "blocked_by_sandbox": True,
+                                    "sandbox_mode": sandbox_mode,
+                                    "instant": True
+                                },
+                                "session_id": session_id
+                            }
+
                     handler = COMMAND_HANDLERS[cmd]
 
                     # Get owner_id and email from context
@@ -446,6 +471,25 @@ class ChatService:
                     },
                     "session_id": session_id
                 }
+
+            # 🛡️ SANDBOX GATE - Block free-form chat if sandboxed and NOT in appropriate mode
+            sandbox_mode = ToolFactory._session_state.sandbox_mode if ToolFactory._session_state else None
+            if sandbox_mode:
+                # For MrCall sandbox, require mrcall_config_mode for free-form chat
+                if sandbox_mode == "mrcall" and not ToolFactory._session_state.is_mrcall_config_mode():
+                    from zylch.services.sandbox_service import get_sandbox_freeform_blocked_response
+                    logger.info(f"[Sandbox:{sandbox_mode}] Blocked free-form chat (not in config mode)")
+                    return {
+                        "response": get_sandbox_freeform_blocked_response(sandbox_mode),
+                        "tool_calls": [],
+                        "metadata": {
+                            "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                            "blocked_by_sandbox": True,
+                            "sandbox_mode": sandbox_mode,
+                            "reason": "not_in_config_mode"
+                        },
+                        "session_id": session_id
+                    }
 
             # Ensure agent is initialized with user's owner_id for per-user tools
             await self._initialize_agent(owner_id=user_id)

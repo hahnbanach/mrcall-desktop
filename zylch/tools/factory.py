@@ -34,6 +34,8 @@ class SessionState:
         # MrCall config mode
         self.mrcall_config_mode: bool = False
         self.mrcall_config_business_id: Optional[str] = None
+        # Sandbox mode (None = no sandbox, "mrcall" = MrCall Dashboard, etc.)
+        self.sandbox_mode: Optional[str] = None
 
     def set_business_id(self, business_id: Optional[str]):
         """Update the current business ID."""

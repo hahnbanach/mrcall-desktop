@@ -172,6 +172,12 @@ class Settings(BaseSettings):
         description="System-level Anthropic API key (fallback when user has no key configured)"
     )
 
+    # Default LLM model
+    default_model: str = Field(
+        default="claude-opus-4-6-20260205",
+        description="Default Claude model for AI operations"
+    )
+
     # Alpha Testers Allowlist
     alpha_testers_file: str = Field(
         default="data/alpha_testers.txt",
