@@ -65,6 +65,9 @@ class ToolConfig:
     user_email: str = ""
     user_display_name: str = ""
 
+    # Default LLM model
+    default_model: str = "claude-opus-4-6-20260205"
+
     @classmethod
     def from_settings(cls) -> 'ToolConfig':
         """Create ToolConfig from global settings (without BYOK credentials).
@@ -86,6 +89,9 @@ class ToolConfig:
             # User Identity (for sharing)
             user_email=settings.user_email,
             user_display_name=settings.user_display_name,
+
+            # Default LLM model
+            default_model=settings.default_model,
 
             # BYOK credentials left empty - use from_settings_with_owner()
         )
