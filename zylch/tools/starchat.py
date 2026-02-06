@@ -586,7 +586,7 @@ class StarChatClient:
         # The realm should already include any prefix (e.g., "delegated_mrcall0")
         endpoint = f"/mrcall/v1/{self.realm}/crm/variables"
         logger.info(f"Fetching variable schema from: {endpoint} with params={params}")
-        logger.debug(f"[StarChat] get_variable_schema: auth_type={self.auth_type}, realm_prefix={prefix}")
+        logger.debug(f"[StarChat] get_variable_schema: auth_type={self.auth_type}, realm={self.realm}")
 
         response = await self.client.get(endpoint, params=params)
         response.raise_for_status()
@@ -725,7 +725,7 @@ class StarChatClient:
         # The realm should already include any prefix (e.g., "delegated_mrcall0")
         endpoint = f"/mrcall/v1/{self.realm}/crm/business"
         logger.info(f"Putting updated business to: {endpoint}")
-        logger.debug(f"[StarChat] update_business_variables: auth_type={self.auth_type}, realm_prefix={prefix}")
+        logger.debug(f"[StarChat] update_business_variables: auth_type={self.auth_type}, realm={self.realm}")
         logger.debug(f"PUT request body: {minimal_payload}")
 
         response = await self.client.put(
