@@ -764,12 +764,24 @@ Run `/agent process` to rebuild memory from your synced data."""
         return f"**❌ Error:** {str(e)}\n\n{help_text}"
 
 
-async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None) -> str:
-    """Handle /mrcall command - MrCall integration."""
+async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None, context: dict = None) -> str:
+    """Handle /mrcall command - MrCall integration.
+
+    Args:
+        args: Command arguments
+        owner_id: User's Firebase UID
+        user_email: User's email (optional)
+        context: Request context containing source, firebase_token, etc.
+    """
     from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
     from zylch.api.token_storage import get_mrcall_credentials
     import httpx
     from zylch.config import settings
+
+    # Dashboard detection: use firebase_token instead of OAuth
+    is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
+    firebase_token = context.get("firebase_token") if context else None
+    logger.debug(f"[/mrcall] is_dashboard={is_dashboard}, has_firebase_token={bool(firebase_token)}")
 
     # Derive from single source of truth (MrCallConfiguratorTrainer.FEATURES)
     from zylch.agents.trainers import MrCallConfiguratorTrainer
@@ -831,22 +843,27 @@ In config mode, use natural language:
 
         # Subcommand: list - List all businesses
         if subcommand == 'list':
-            # Get OAuth credentials
-            creds = get_mrcall_credentials(owner_id)
-            logger.debug(f"handle_mrcall list: creds_keys={list(creds.keys()) if creds else None}")
-            if not creds or not creds.get('access_token'):
-                logger.debug(f"handle_mrcall list: access_token missing, creds_keys={list(creds.keys()) if creds else None}, " + ", ".join(f"{k}={v[:2]}...{v[-2:]}" if isinstance(v, str) and len(v) > 4 else f"{k}=<short>" for k, v in (creds or {}).items() if k in ('access_token', 'refresh_token', 'client_secret')))
-                return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
+            # Dashboard: use firebase_token; CLI: use OAuth credentials
+            if is_dashboard and firebase_token:
+                access_token = firebase_token
+                logger.debug(f"[/mrcall list] Using firebase_token (dashboard)")
+            else:
+                # Get OAuth credentials (CLI)
+                creds = get_mrcall_credentials(owner_id)
+                logger.debug(f"handle_mrcall list: creds_keys={list(creds.keys()) if creds else None}")
+                if not creds or not creds.get('access_token'):
+                    logger.debug(f"handle_mrcall list: access_token missing, creds_keys={list(creds.keys()) if creds else None}, " + ", ".join(f"{k}={v[:2]}...{v[-2:]}" if isinstance(v, str) and len(v) > 4 else f"{k}=<short>" for k, v in (creds or {}).items() if k in ('access_token', 'refresh_token', 'client_secret')))
+                    return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
+                access_token = creds.get('access_token')
+                logger.debug(f"handle_mrcall list: access_token={access_token[:2]}...{access_token[-2:]} (len={len(access_token)})" if access_token and len(access_token) > 4 else f"handle_mrcall list: access_token=<short or missing>")
 
-            access_token = creds.get('access_token')
-            logger.debug(f"handle_mrcall list: access_token={access_token[:2]}...{access_token[-2:]} (len={len(access_token)})" if access_token and len(access_token) > 4 else f"handle_mrcall list: access_token=<short or missing>")
             # Get the linked business (explicit /mrcall link takes priority over OAuth default)
             current_business_id = client.get_mrcall_link(owner_id)
             logger.debug(f"[/mrcall list] current_business_id={current_business_id}")
 
             # Fetch businesses from StarChat API
             try:
-                url = f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business/search"
+                url = f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/{settings.mrcall_realm}/crm/business/search"
                 logger.info(f"handle_mrcall list: Fetching from {url}")
                 async with httpx.AsyncClient(timeout=30.0) as http_client:
                     response = await http_client.post(
@@ -919,12 +936,15 @@ In config mode, use natural language:
         # Subcommand: variables - List all variables
         if subcommand == 'variables':
             logger.debug(f"[/mrcall variables] args={args}")
-            # Get credentials
-            creds = get_mrcall_credentials(owner_id)
-            logger.debug(f"[/mrcall variables] get_mrcall_credentials(owner_id={owner_id}) -> keys={list(creds.keys()) if creds else None}, has_business_id={bool(creds.get('business_id')) if creds else None}")
-            if not creds or not creds.get('access_token'):
-                return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
-            
+
+            # Dashboard: skip OAuth check (use firebase_token)
+            if not is_dashboard:
+                # CLI: verify OAuth credentials exist
+                creds = get_mrcall_credentials(owner_id)
+                logger.debug(f"[/mrcall variables] get_mrcall_credentials(owner_id={owner_id}) -> keys={list(creds.keys()) if creds else None}, has_business_id={bool(creds.get('business_id')) if creds else None}")
+                if not creds or not creds.get('access_token'):
+                    return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
+
             # Get linked business ID (explicit /mrcall link takes priority over OAuth default)
             business_id = client.get_mrcall_link(owner_id)
             logger.debug(f"[/mrcall variables] get_mrcall_link(owner_id={owner_id}) -> business_id={business_id}")
@@ -932,27 +952,38 @@ In config mode, use natural language:
             if not business_id:
                 return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
 
+            # Create StarChat client (dashboard vs CLI)
+            from zylch.tools.starchat import StarChatClient, create_starchat_client
+            if is_dashboard and firebase_token:
+                sc_client = StarChatClient(
+                    base_url=settings.mrcall_base_url.rstrip('/'),
+                    auth_type="firebase",
+                    jwt_token=firebase_token,
+                    realm=settings.mrcall_realm,
+                    owner_id=owner_id,
+                )
+                logger.debug(f"[/mrcall variables] Created StarChatClient with firebase_token")
+            else:
+                sc_client = await create_starchat_client(owner_id)
+                logger.debug(f"[/mrcall variables] Created StarChatClient with OAuth")
+
             # Check for sub-subcommand (get/set)
             # args[0] is 'variables'. Check args[1]
             var_subcommand = args[1].lower() if len(args) > 1 else 'get'
             logger.debug(f"[/mrcall variables] var_subcommand={var_subcommand}")
-            
+
             # Sub-subcommand: set VARIABLE value
             if var_subcommand == 'set':
                 if len(args) < 4:
                     return "❌ **Usage:** `/mrcall variables set <VARIABLE_NAME> <value>`"
-                
+
                 var_name = args[2]
                 # Join all remaining args to allow spaces without strict quoting if user prefers
                 # But since shlex split the input, quotes are already handled.
                 # If user typed: set VAR "my value", args=['variables', 'set', 'VAR', 'my value'] -> value='my value'
                 # If user typed: set VAR my value, args=['variables', 'set', 'VAR', 'my', 'value'] -> value='my value'
                 var_value = " ".join(args[3:])
-                
-                # Use factory to get client
-                from zylch.tools.starchat import create_starchat_client
-                sc_client = await create_starchat_client(owner_id)
-                
+
                 try:
                     await sc_client.update_business_variable(business_id, var_name, var_value)
                     await sc_client.close()
@@ -973,10 +1004,6 @@ In config mode, use natural language:
                 except ValueError:
                     pass
             logger.debug(f"[/mrcall variables] filter: '--name' in args={('--name' in args)}, filter_name={filter_name}")
-
-            # Use factory to get client
-            from zylch.tools.starchat import create_starchat_client
-            sc_client = await create_starchat_client(owner_id)
 
             try:
                 variables = await sc_client.get_all_variables(business_id)
