@@ -65,8 +65,10 @@ class ToolConfig:
     user_email: str = ""
     user_display_name: str = ""
 
-    # Default LLM model
+    # LLM Models
     default_model: str = "claude-opus-4-6-20260205"
+    classification_model: str = "claude-haiku-3-5-20241022"
+    executive_model: str = "claude-opus-4-6-20260205"
 
     @classmethod
     def from_settings(cls) -> 'ToolConfig':
@@ -90,8 +92,10 @@ class ToolConfig:
             user_email=settings.user_email,
             user_display_name=settings.user_display_name,
 
-            # Default LLM model
+            # LLM Models
             default_model=settings.default_model,
+            classification_model=settings.classification_model,
+            executive_model=settings.executive_model,
 
             # BYOK credentials left empty - use from_settings_with_owner()
         )
