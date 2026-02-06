@@ -304,6 +304,23 @@ class ChatService:
             mrcall_exit_match = re.match(r'^/mrcall\s+exit\b', user_message.strip(), re.IGNORECASE)
 
             if mrcall_exit_match:
+                # 🛡️ SANDBOX GATE - Block exit in mrcall sandbox (user must stay in config mode)
+                sandbox_mode = ToolFactory._session_state.sandbox_mode if ToolFactory._session_state else None
+                if sandbox_mode == "mrcall":
+                    from zylch.services.sandbox_service import get_sandbox_blocked_response
+                    logger.info(f"[Sandbox:mrcall] Blocked /mrcall exit")
+                    return {
+                        "response": get_sandbox_blocked_response(sandbox_mode),
+                        "tool_calls": [],
+                        "metadata": {
+                            "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                            "command": "mrcall_exit",
+                            "blocked_by_sandbox": True,
+                            "instant": True
+                        },
+                        "session_id": session_id
+                    }
+
                 # Exit MrCall config mode
                 if ToolFactory._session_state and ToolFactory._session_state.is_mrcall_config_mode():
                     ToolFactory._session_state.exit_mrcall_config_mode()
