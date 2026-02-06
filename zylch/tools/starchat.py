@@ -95,6 +95,12 @@ class StarChatClient:
 
         return headers
 
+    def _realm_prefix(self) -> str:
+        """Return realm path prefix: 'delegated_{realm}' for OAuth, '{realm}' for Firebase/other."""
+        if self.auth_type == "oauth":
+            return f"delegated_{self.realm}"
+        return self.realm
+
     async def _refresh_token_if_needed(self):
         """Check if OAuth token expired and refresh if needed."""
         if self.auth_type != "oauth" or not self.supabase or not self.owner_id:
@@ -514,38 +520,38 @@ class StarChatClient:
         logger.info(f"Fetching business configuration: {business_id}")
 
         try:
-            # Note: This endpoint uses POST with JSON body for search
-            # CRITICAL: For OAuth/Delegated access, we must use the delegated_{realm} prefix
-            # path: /mrcall/v1/delegated_{realm}/crm/business/search
-            endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/business/search"
-            
-            logger.info(f"Using business search endpoint: {endpoint}")
-            
-            logger.debug(f"[StarChat] get_business_config: POST body={{'businessId': '{business_id}'}}")
-            response = await self.client.request(
-                "POST",
-                endpoint,
-                json={"businessId": business_id}
-            )
+            if self.auth_type == "oauth":
+                # OAuth: use delegated search endpoint with businessId in body
+                endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/business/search"
+                logger.info(f"[StarChat] get_business_config: POST {endpoint} body={{'businessId': '{business_id}'}}")
+                response = await self.client.request("POST", endpoint, json={"businessId": business_id})
+            else:
+                # Firebase: use direct GET endpoint with ?id= query param
+                # (matches dashboard's Business.js getBusiness method)
+                endpoint = f"/mrcall/v1/{self.realm}/crm/business"
+                logger.info(f"[StarChat] get_business_config: GET {endpoint}?id={business_id}")
+                response = await self.client.get(endpoint, params={"id": business_id})
+
+            logger.info(f"[StarChat] get_business_config: response status={response.status_code}")
 
             if response.status_code == 404:
-                logger.debug(f"[StarChat] get_business_config: 404 not found for business_id={business_id}")
+                logger.info(f"[StarChat] get_business_config: 404 not found for business_id={business_id}")
                 return None
 
             response.raise_for_status()
             data = response.json()
-            logger.debug(f"[StarChat] get_business_config: response status={response.status_code}, data={json.dumps(data, indent=4)[:300]} bytes")
+            logger.info(f"[StarChat] get_business_config: response type={type(data).__name__}, len={len(data) if isinstance(data, list) else 'N/A'}")
 
-            # API returns a list, extract first element
+            # API returns a list, extract matching element
             if isinstance(data, list) and len(data) > 0:
-                result = data[0]
-                logger.debug(f"[StarChat] get_business_config: template={result.get('template')}, number of variables={len(result.get('variables', {}))}")
+                result = next((b for b in data if b.get("businessId") == business_id), data[0])
+                logger.info(f"[StarChat] get_business_config: FOUND template={result.get('template')}, variables={len(result.get('variables', {}))}")
                 return result
-            # elif isinstance(data, dict):
-            #     logger.debug(f"[StarChat] get_business_config: template={data.get('template')}, vars_count={len(data.get('variables', {}))}")
-            #     return data
+            elif isinstance(data, dict) and data:
+                logger.info(f"[StarChat] get_business_config: FOUND (dict) template={data.get('template')}, variables={len(data.get('variables', {}))}")
+                return data
             else:
-                logger.debug(f"[StarChat] get_business_config: unexpected response. Type={type(data)} (list?) and value={json.dumps(data, indent=4)}")
+                logger.info(f"[StarChat] get_business_config: empty or unexpected response. Type={type(data).__name__}, value={json.dumps(data, indent=4) if data else 'empty'}")
                 return None
 
         except Exception as e:
@@ -579,9 +585,11 @@ class StarChatClient:
             "nested": str(nested).lower(),
         }
 
-        # CRITICAL: For OAuth/Delegated access, we must use the delegated_{realm} prefix
-        endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/variables"
+        # OAuth uses delegated_{realm}, Firebase uses plain {realm}
+        prefix = self._realm_prefix()
+        endpoint = f"/mrcall/v1/{prefix}/crm/variables"
         logger.info(f"Fetching variable schema from: {endpoint} with params={params}")
+        logger.debug(f"[StarChat] get_variable_schema: auth_type={self.auth_type}, realm_prefix={prefix}")
 
         response = await self.client.get(endpoint, params=params)
         response.raise_for_status()
@@ -717,9 +725,11 @@ class StarChatClient:
         }
 
         # PUT the updated business back
-        # CRITICAL: For OAuth/Delegated access, we must use the delegated_{realm} prefix
-        endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/business"
+        # OAuth uses delegated_{realm}, Firebase uses plain {realm}
+        prefix = self._realm_prefix()
+        endpoint = f"/mrcall/v1/{prefix}/crm/business"
         logger.info(f"Putting updated business to: {endpoint}")
+        logger.debug(f"[StarChat] update_business_variables: auth_type={self.auth_type}, realm_prefix={prefix}")
         logger.debug(f"PUT request body: {minimal_payload}")
 
         response = await self.client.put(
