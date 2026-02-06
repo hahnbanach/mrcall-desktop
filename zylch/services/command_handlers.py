@@ -1181,10 +1181,16 @@ Run `/agent mrcall train` to generate configuration context for all features."""
 /mrcall config welcome_message "use formal tone, don't ask for name"
 ```"""
 
-            # Get MrCall credentials
-            creds = get_mrcall_credentials(owner_id)
-            if not creds or not creds.get('access_token'):
-                return "❌ **MrCall not connected**\n\nRun `/connect mrcall` first."
+            # Dashboard detection for firebase_token
+            is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
+            firebase_token = context.get("firebase_token") if context else None
+            logger.debug(f"[/mrcall config] is_dashboard={is_dashboard}, firebase_token={'present' if firebase_token else 'absent'}")
+
+            # Get MrCall credentials (skip OAuth check for dashboard users)
+            if not is_dashboard:
+                creds = get_mrcall_credentials(owner_id)
+                if not creds or not creds.get('access_token'):
+                    return "❌ **MrCall not connected**\n\nRun `/connect mrcall` first."
 
             # Get linked business ID (explicit /mrcall link takes priority over OAuth default)
             business_id = client.get_mrcall_link(owner_id)
@@ -1193,8 +1199,15 @@ Run `/agent mrcall train` to generate configuration context for all features."""
 
             logger.debug(f"[/mrcall config] feature={feature_name}, business_id={business_id}, instructions_len={len(instructions)}")
 
-            # Get LLM credentials
+            # Get LLM credentials (with system-level fallback for dashboard)
             llm_provider, api_key = get_active_llm_provider(owner_id)
+            if not api_key and is_dashboard:
+                # System-level fallback for dashboard users
+                from zylch.config import settings
+                if settings.anthropic_api_key:
+                    llm_provider = "anthropic"
+                    api_key = settings.anthropic_api_key
+                    logger.info(f"[/mrcall config] Using system-level Anthropic API key for owner={owner_id}")
             logger.debug(f"[/mrcall config] llm_provider={llm_provider}, api_key={'present' if api_key else 'absent'}")
             if not api_key:
                 return "❌ **No LLM configured**\n\nRun `/connect anthropic` to configure an LLM provider."
@@ -1204,9 +1217,10 @@ Run `/agent mrcall train` to generate configuration context for all features."""
             logger.debug(f"[/mrcall config] variable_names={variable_names}")
 
             # Run the config update in executor (involves multiple async calls)
+            # Pass is_dashboard and firebase_token into closure for StarChat client creation
             def _config_feature():
                 import asyncio
-                from zylch.tools.starchat import create_starchat_client
+                from zylch.tools.starchat import StarChatClient, create_starchat_client
                 from zylch.agents.trainers import MrCallConfiguratorTrainer
                 from zylch.tools.mrcall.llm_helper import modify_variables_with_llm
 
@@ -1214,9 +1228,20 @@ Run `/agent mrcall train` to generate configuration context for all features."""
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
-                    # Create StarChat client
-                    starchat = loop.run_until_complete(create_starchat_client(owner_id))
-                    logger.debug(f"[/mrcall config] StarChat client created")
+                    # Create StarChat client (dashboard uses firebase_token, CLI uses OAuth)
+                    if is_dashboard and firebase_token:
+                        from zylch.config import settings
+                        starchat = StarChatClient(
+                            base_url=settings.mrcall_base_url.rstrip('/'),
+                            auth_type="firebase",
+                            jwt_token=firebase_token,
+                            realm=settings.mrcall_realm,
+                            owner_id=owner_id,
+                        )
+                        logger.debug(f"[/mrcall config] StarChat client created with firebase_token")
+                    else:
+                        starchat = loop.run_until_complete(create_starchat_client(owner_id))
+                        logger.debug(f"[/mrcall config] StarChat client created with OAuth")
 
                     # 1. Load context (lazy generate if missing)
                     agent_type = f"mrcall_{business_id}_{feature_name}"
@@ -2998,17 +3023,17 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
             if action == 'train':
                 # Optional feature argument: /agent mrcall train [feature]
                 feature = args[2] if len(args) > 2 else None
-                return await _handle_mrcall_agent_train(storage, owner_id, api_key, llm_provider, user_email, feature=feature)
+                return await _handle_mrcall_agent_train(storage, owner_id, api_key, llm_provider, user_email, feature=feature, context=context)
 
             elif action == 'run':
                 instructions = ' '.join(args[2:]) if len(args) > 2 else ''
                 return await _handle_mrcall_agent_run(storage, owner_id, api_key, llm_provider, instructions, context)
 
             elif action == 'show':
-                return await _handle_mrcall_agent_show(storage, owner_id)
+                return await _handle_mrcall_agent_show(storage, owner_id, context)
 
             elif action == 'reset':
-                return await _handle_mrcall_agent_reset(storage, owner_id)
+                return await _handle_mrcall_agent_reset(storage, owner_id, context)
 
         return help_text
 
@@ -3528,21 +3553,27 @@ Say "send it" or use `/email send {draft_id}` to send."""
 # MRCALL AGENT HELPERS
 # =====================
 
-async def _handle_mrcall_agent_train(storage, owner_id: str, api_key: str, llm_provider: str, user_email: str, feature: str = None) -> str:
+async def _handle_mrcall_agent_train(storage, owner_id: str, api_key: str, llm_provider: str, user_email: str, feature: str = None, context: dict = None) -> str:
     """Train MrCall features and build unified agent.
 
     Args:
         feature: Optional specific feature to train. If None, trains all features.
+        context: Request context (for dashboard detection)
     """
     import asyncio
     from zylch.agents.trainers import MrCallAgentTrainer, MrCallConfiguratorTrainer
-    from zylch.tools.starchat import create_starchat_client
+    from zylch.tools.starchat import StarChatClient, create_starchat_client
 
-    # Check MrCall is connected
-    from zylch.api.token_storage import get_mrcall_credentials
-    mrcall_creds = get_mrcall_credentials(owner_id)
-    if not mrcall_creds or not mrcall_creds.get('access_token'):
-        return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
+    # Dashboard detection
+    is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
+    firebase_token = context.get("firebase_token") if context else None
+
+    # Check MrCall is connected (skip for dashboard - they use firebase_token)
+    if not is_dashboard:
+        from zylch.api.token_storage import get_mrcall_credentials
+        mrcall_creds = get_mrcall_credentials(owner_id)
+        if not mrcall_creds or not mrcall_creds.get('access_token'):
+            return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
 
     if not api_key or not llm_provider:
         return """❌ **LLM API key required**
@@ -3567,8 +3598,19 @@ Usage:
 • `/agent mrcall train {available[0]}` - Train specific feature"""
 
     try:
-        # Create StarChat client
-        starchat = await create_starchat_client(owner_id)
+        # Create StarChat client (dashboard vs CLI)
+        if is_dashboard and firebase_token:
+            from zylch.config import settings
+            starchat = StarChatClient(
+                base_url=settings.mrcall_base_url.rstrip('/'),
+                auth_type="firebase",
+                jwt_token=firebase_token,
+                realm=settings.mrcall_realm,
+                owner_id=owner_id,
+            )
+            logger.info(f"[/agent mrcall train] Created StarChatClient with firebase_token")
+        else:
+            starchat = await create_starchat_client(owner_id)
 
         # Train feature(s) using MrCallConfiguratorTrainer
         configurator = MrCallConfiguratorTrainer(
@@ -3775,12 +3817,20 @@ Please connect your MrCall account:
         return f"❌ **Error:** {str(e)}"
 
 
-async def _handle_mrcall_agent_show(storage, owner_id: str) -> str:
-    """Show MrCall agent prompt."""
-    from zylch.api.token_storage import get_mrcall_credentials
-    mrcall_creds = get_mrcall_credentials(owner_id)
-    if not mrcall_creds or not mrcall_creds.get('access_token'):
-        return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
+async def _handle_mrcall_agent_show(storage, owner_id: str, context: dict = None) -> str:
+    """Show MrCall agent prompt.
+
+    Args:
+        context: Request context (for dashboard detection)
+    """
+    # Dashboard detection - skip OAuth check for dashboard users
+    is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
+
+    if not is_dashboard:
+        from zylch.api.token_storage import get_mrcall_credentials
+        mrcall_creds = get_mrcall_credentials(owner_id)
+        if not mrcall_creds or not mrcall_creds.get('access_token'):
+            return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
 
     business_id = storage.get_mrcall_link(owner_id)
     if not business_id:
@@ -3810,12 +3860,20 @@ Train the agent first:
 _Use `/agent mrcall reset` to delete._"""
 
 
-async def _handle_mrcall_agent_reset(storage, owner_id: str) -> str:
-    """Delete MrCall agent prompt."""
-    from zylch.api.token_storage import get_mrcall_credentials
-    mrcall_creds = get_mrcall_credentials(owner_id)
-    if not mrcall_creds or not mrcall_creds.get('access_token'):
-        return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
+async def _handle_mrcall_agent_reset(storage, owner_id: str, context: dict = None) -> str:
+    """Delete MrCall agent prompt.
+
+    Args:
+        context: Request context (for dashboard detection)
+    """
+    # Dashboard detection - skip OAuth check for dashboard users
+    is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
+
+    if not is_dashboard:
+        from zylch.api.token_storage import get_mrcall_credentials
+        mrcall_creds = get_mrcall_credentials(owner_id)
+        if not mrcall_creds or not mrcall_creds.get('access_token'):
+            return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
 
     business_id = storage.get_mrcall_link(owner_id)
     if not business_id:
