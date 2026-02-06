@@ -520,20 +520,18 @@ class StarChatClient:
         logger.info(f"Fetching business configuration: {business_id}")
 
         try:
-            if self.auth_type == "oauth":
-                # OAuth: use delegated search endpoint with businessId in body
-                endpoint = f"/mrcall/v1/delegated_{self.realm}/crm/business/search"
-                logger.info(f"[StarChat] get_business_config: POST {endpoint} body={{'businessId': '{business_id}'}}")
-                response = await self.client.request("POST", endpoint, json={"businessId": business_id})
-            else:
-                # Firebase: use direct GET endpoint with ?id= query param
-                # (matches dashboard's Business.js getBusiness method)
-                endpoint = f"/mrcall/v1/{self.realm}/crm/business"
-                logger.info(f"[StarChat] get_business_config: GET {endpoint}?id={business_id}")
-                response = await self.client.get(endpoint, params={"id": business_id})
-
-            logger.info(f"[StarChat] get_business_config: response status={response.status_code}")
-
+            # Note: This endpoint uses POST with JSON body for search
+            # The realm should already include any prefix (e.g., "delegated_mrcall0")
+            endpoint = f"/mrcall/v1/{self.realm}/crm/business/search"
+            
+            logger.info(f"Using business search endpoint: {endpoint}")
+            
+            logger.debug(f"[StarChat] get_business_config: POST body={{'businessId': '{business_id}'}}")
+            response = await self.client.request(
+                "POST",
+                endpoint,
+                json={"businessId": business_id}
+            )
             if response.status_code == 404:
                 logger.info(f"[StarChat] get_business_config: 404 not found for business_id={business_id}")
                 return None
@@ -585,9 +583,14 @@ class StarChatClient:
             "nested": str(nested).lower(),
         }
 
+<<<<<<< HEAD
         # OAuth uses delegated_{realm}, Firebase uses plain {realm}
         prefix = self._realm_prefix()
         endpoint = f"/mrcall/v1/{prefix}/crm/variables"
+=======
+        # The realm should already include any prefix (e.g., "delegated_mrcall0")
+        endpoint = f"/mrcall/v1/{self.realm}/crm/variables"
+>>>>>>> vk/11b6-readoc
         logger.info(f"Fetching variable schema from: {endpoint} with params={params}")
         logger.debug(f"[StarChat] get_variable_schema: auth_type={self.auth_type}, realm_prefix={prefix}")
 
@@ -725,9 +728,14 @@ class StarChatClient:
         }
 
         # PUT the updated business back
+<<<<<<< HEAD
         # OAuth uses delegated_{realm}, Firebase uses plain {realm}
         prefix = self._realm_prefix()
         endpoint = f"/mrcall/v1/{prefix}/crm/business"
+=======
+        # The realm should already include any prefix (e.g., "delegated_mrcall0")
+        endpoint = f"/mrcall/v1/{self.realm}/crm/business"
+>>>>>>> vk/11b6-readoc
         logger.info(f"Putting updated business to: {endpoint}")
         logger.debug(f"[StarChat] update_business_variables: auth_type={self.auth_type}, realm_prefix={prefix}")
         logger.debug(f"PUT request body: {minimal_payload}")

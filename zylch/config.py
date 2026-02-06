@@ -122,9 +122,9 @@ class Settings(BaseSettings):
         description="MrCall OAuth client secret"
     )
     mrcall_realm: str = Field(
-        default="mrcall0",
+        default="delegated_mrcall0",
         env="MRCALL_REALM",
-        description="MrCall realm for StarChat API"
+        description="MrCall realm for StarChat API (include full path segment, e.g., 'delegated_mrcall0')"
     )
     mrcall_base_url: str = Field(
         default="https://test-env-0.scw.hbsrv.net",

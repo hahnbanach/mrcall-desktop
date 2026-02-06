@@ -650,6 +650,38 @@ The MrCall Dashboard (Vue.js) integrates with Zylch via the `/api/chat` endpoint
 
 **System-Level API Key**: The MrCall `.env` includes `ANTHROPIC_API_KEY` so dashboard users don't need to run `/connect anthropic`. The key stays server-side and is never exposed to the frontend.
 
+#### MrCall Dashboard Sandbox Mode
+
+Dashboard users operate in a restricted "sandbox" environment that limits access to MrCall configuration features only.
+
+**Sandbox Enforcement**:
+- **Detection**: `X-Client-Source: mrcall_dashboard` HTTP header identifies dashboard requests
+- **Gate Location**: Command execution blocked at COMMAND_HANDLERS dispatch (not at parsing)
+- **Extensibility**: `sandbox_mode: Optional[str]` in SessionState allows future sandbox types
+
+**Allowed Commands** (whitelist):
+| Command | Behavior |
+|---------|----------|
+| `/mrcall *` | All subcommands except `/mrcall exit` |
+| `/agent mrcall *` | Only agent mrcall permitted |
+| `/help` | Shows sandbox-specific help |
+
+**Blocked Commands** (everything else):
+| Command | Result |
+|---------|--------|
+| `/email`, `/calendar`, `/tasks`, `/memory`, `/sync`, `/connect`, etc. | "Comando non disponibile nella dashboard MrCall" |
+| `/mrcall exit` | Blocked (user must stay in config mode) |
+
+**Semantic Matching**: Natural language still works, but the resulting command is blocked at execution. Example: "sincronizza le email" → `/sync` → blocked.
+
+**Free-form Chat**: Allowed only when in MrCall config mode (user must first `/mrcall open <id>`).
+
+**Key Files**:
+- `zylch/services/sandbox_service.py` - Whitelist logic and blocked responses
+- `zylch/tools/factory.py` - `SessionState.sandbox_mode`
+- `zylch/api/routes/chat.py` - X-Client-Source header detection
+- `zylch/services/chat_service.py` - Sandbox gates at multiple points
+
 ### Sensitive Data Encryption
 
 **All User Credentials (BYOK)**:
