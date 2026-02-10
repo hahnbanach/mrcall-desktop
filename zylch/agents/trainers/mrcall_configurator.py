@@ -33,10 +33,14 @@ logger = logging.getLogger(__name__)
 
 
 # Meta-prompt for generating welcome message sub-prompts
+# Uses {variables_context} placeholder for dynamically-fetched StarChat metadata
 WELCOME_MESSAGE_META_PROMPT = """You are analyzing the welcome message configuration for a MrCall AI phone assistant.
 
-Your task: Given the current value of OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT, generate a
-self-contained sub-prompt that another LLM can use to both UNDERSTAND and MODIFY the configuration.
+Your task: Generate a self-contained sub-prompt that teaches another LLM how to configure the welcome message.
+
+## VARIABLE METADATA FROM STARCHAT
+
+{variables_context}
 
 ## UNDERSTANDING THE PROMPT STRUCTURE
 
@@ -100,10 +104,6 @@ Start with: "When modifying, preserve all `%%...%%` variable references and the 
 Then include the complete prompt in a code block.
 
 ---
-
-## CURRENT CONFIGURATION TO ANALYZE:
-
-{current_value}
 
 ---
 
@@ -241,6 +241,7 @@ class MrCallConfiguratorTrainer:
             "description": "How the assistant answers the phone",  # for devs
             "display_name": "Come risponde al telefono l'assistente",  # for users
             "meta_prompt": WELCOME_MESSAGE_META_PROMPT,
+            "dynamic_context": True,  # Uses _build_variables_context for metadata
         },
         "booking": {
             "variables": [
@@ -399,42 +400,20 @@ class MrCallConfiguratorTrainer:
             f"variables: {variable_names}"
         )
 
-        # Check if this feature uses dynamic context (multi-variable with metadata)
-        if feature.get("dynamic_context"):
-            # Build context from StarChat metadata for all variables
-            variables_context = await self._build_variables_context(
-                business_id, variable_names
-            )
-            logger.debug(f"[MrCallConfiguratorTrainer] train_feature: variables_context prefix: {variables_context[:500]}...")
-            meta_prompt = meta_prompt_template.format(
-                variables_context=variables_context
-            )
-            # For metadata, use total length of all variables
-            business = await self.starchat.get_business_config(business_id)
-            current_values = business.get("variables", {})
-            total_length = sum(
-                len(str(current_values.get(v, ""))) for v in variable_names
-            )
-        else:
-            # Legacy single-variable behavior
-            business = await self.starchat.get_business_config(business_id)
-            if not business:
-                raise ValueError(f"Business not found: {business_id}")
-
-            current_values = business.get("variables", {})
-            variable_name = variable_names[0]
-            current_value = current_values.get(variable_name)
-
-            logger.debug(f"[MrCallConfiguratorTrainer] train_feature (legacy): var={variable_name}, value='{current_value}'")
-
-            if not current_value:
-                raise ValueError(
-                    f"Variable {variable_name} not found in business {business_id}. "
-                    f"Available: {list(current_values.keys())}"
-                )
-
-            meta_prompt = meta_prompt_template.format(current_value=current_value)
-            total_length = len(current_value)
+        # All features use dynamic_context - fetch metadata from StarChat
+        variables_context = await self._build_variables_context(
+            business_id, variable_names
+        )
+        logger.debug(f"[MrCallConfiguratorTrainer] train_feature: variables_context prefix: {variables_context[:500]}...")
+        meta_prompt = meta_prompt_template.format(
+            variables_context=variables_context
+        )
+        # For metadata, use total length of all variables
+        business = await self.starchat.get_business_config(business_id)
+        current_values = business.get("variables", {})
+        total_length = sum(
+            len(str(current_values.get(v, ""))) for v in variable_names
+        )
 
         logger.info(
             f"Generating sub-prompt for {feature_name} "
