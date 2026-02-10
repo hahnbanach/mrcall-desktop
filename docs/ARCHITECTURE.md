@@ -57,7 +57,7 @@ Run locally with `uvicorn zylch.api.main:app --reload --port 8000` - connects to
   - `mrcall_agent.py`: Runs unified MrCall agent with 4 tools (configure_*, get_current_config, respond_text)
 - **Sub-packages**:
   - `trainers/`: Agent trainers (generate personalized prompts from user data)
-    - `mrcall_configurator.py`: Layer 1 - Generates feature-specific sub-prompts for MrCall
+    - `mrcall_configurator.py`: Layer 1 - Generates feature-specific sub-prompts for MrCall. All features use a unified `dynamic_context` path: StarChat metadata is fetched via `_build_variables_context()` and injected into meta-prompts via `{variables_context}` placeholder.
     - `mrcall.py`: Layer 2 - Combines sub-prompts into unified agent with tool selection
     - `memory_email.py`: EmailMemoryAgentTrainer for fact extraction
     - `task_email.py`: EmailTaskAgentTrainer for task detection
@@ -650,6 +650,21 @@ The MrCall Dashboard (Vue.js) integrates with Zylch via the `/api/chat` endpoint
 
 **System-Level API Key**: The MrCall `.env` includes `ANTHROPIC_API_KEY` so dashboard users don't need to run `/connect anthropic`. The key stays server-side and is never exposed to the frontend.
 
+**Firebase Token Authentication**: Dashboard users authenticate via Firebase JWT (shared Firebase project `talkmeapp-e696c`). Since they don't run the CLI OAuth flow, MrCall commands create a `StarChatClient` with `auth_type="firebase"` using the Firebase token from the request context. This bypasses the OAuth credential lookup entirely. The pattern is:
+```python
+is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
+firebase_token = context.get("firebase_token") if context else None
+
+if is_dashboard and firebase_token:
+    starchat = StarChatClient(
+        base_url=settings.mrcall_base_url,
+        auth_type="firebase",
+        jwt_token=firebase_token,
+        realm=settings.mrcall_realm,
+        owner_id=owner_id,
+    )
+```
+
 #### MrCall Dashboard Sandbox Mode
 
 Dashboard users operate in a restricted "sandbox" environment that limits access to MrCall configuration features only.
@@ -675,6 +690,8 @@ Dashboard users operate in a restricted "sandbox" environment that limits access
 **Semantic Matching**: Natural language still works, but the resulting command is blocked at execution. Example: "sincronizza le email" → `/sync` → blocked.
 
 **Free-form Chat**: Allowed only when in MrCall config mode (user must first `/mrcall open <id>`).
+
+**Slash Command Routing**: When in MrCall config mode, only free-form messages (not starting with `/`) are routed to the MrCall Orchestrator Agent. Slash commands like `/agent mrcall train` bypass the config mode router and go directly to their normal handlers. This is enforced in `chat_service.py` with `if not user_message.strip().startswith('/')`.
 
 **Key Files**:
 - `zylch/services/sandbox_service.py` - Whitelist logic and blocked responses

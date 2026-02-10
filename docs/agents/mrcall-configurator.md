@@ -52,8 +52,8 @@ The MrCall Configurator uses a **two-tier architecture** to configure AI phone a
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| ConfiguratorTrainer | `zylch/agents/mrcall_configurator_trainer.py` | Layer 1: Generates feature sub-prompts |
-| AgentTrainer | `zylch/agents/mrcall_agent_trainer.py` | Layer 2: Combines into unified agent |
+| ConfiguratorTrainer | `zylch/agents/trainers/mrcall_configurator.py` | Layer 1: Generates feature sub-prompts |
+| AgentTrainer | `zylch/agents/trainers/mrcall.py` | Layer 2: Combines into unified agent |
 | Agent | `zylch/agents/mrcall_agent.py` | Runs unified agent with tools |
 | Command Handler | `zylch/services/command_handlers.py` | CLI command routing |
 
@@ -68,6 +68,7 @@ FEATURES = {
         "description": "How the assistant answers the phone",
         "display_name": "Come risponde al telefono l'assistente",
         "meta_prompt": WELCOME_MESSAGE_META_PROMPT,
+        "dynamic_context": True,
     },
     "booking": {
         "variables": [
@@ -85,6 +86,8 @@ FEATURES = {
 ```
 
 This is the **single source of truth** - other files derive mappings via import.
+
+**Unified Training Path**: ALL features use `dynamic_context: True`. During training, `_build_variables_context()` fetches variable metadata (type, description, default, current value) from StarChat and injects it into the meta-prompt via `{variables_context}` placeholder. There is no separate path for single-variable vs multi-variable features.
 
 ## Tool Selection
 
@@ -186,8 +189,8 @@ Example:
 See skill: `zylch-mrcall-feature-configuration`
 
 Summary:
-1. Add meta-prompt constant in `mrcall_configurator_trainer.py`
-2. Add to `FEATURES` dict (single source of truth)
+1. Add meta-prompt constant in `mrcall_configurator.py` (uses `{variables_context}` placeholder)
+2. Add to `FEATURES` dict with `"dynamic_context": True` (single source of truth)
 3. Add tool in `mrcall_agent.py` (`MRCALL_AGENT_TOOLS` + handler)
 4. Update help text in `command_handlers.py`
 

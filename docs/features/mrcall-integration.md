@@ -249,9 +249,25 @@ client = StarChatClient(
 
 ### StarChat Client Authentication
 
-The `StarChatClient` class automatically handles authentication:
+The `StarChatClient` class supports three authentication methods:
 
-**OAuth-First Strategy**:
+**Firebase Token Authentication (Dashboard)**:
+```python
+from zylch.tools.starchat import StarChatClient
+
+# Dashboard users authenticate with Firebase JWT (no OAuth flow needed)
+client = StarChatClient(
+    base_url="https://test-env-0.scw.hbsrv.net/",
+    auth_type="firebase",
+    jwt_token=firebase_token,  # from request context
+    realm="delegated_mrcall0",
+    owner_id="firebase_uid_abc123",
+)
+```
+
+This is used by MrCall Dashboard users who share the same Firebase project (`talkmeapp-e696c`) as MrCall/StarChat. The Firebase JWT is passed directly as a bearer token to StarChat API calls, bypassing the OAuth credential flow entirely.
+
+**OAuth-First Strategy (CLI)**:
 ```python
 from zylch.tools.starchat import StarChatClient
 
@@ -739,6 +755,8 @@ Dashboard users operate in a restricted "sandbox" environment that limits functi
 - Free-form chat when not in config mode (prompts user to `/mrcall open` first)
 
 **Semantic Matching**: Natural language triggers still work, but the resulting command is blocked at execution. Example: "sincronizza le email" → recognized as `/sync` → blocked with friendly error message.
+
+**Slash Command Routing in Config Mode**: When in MrCall config mode (after `/mrcall open`), only free-form messages are routed to the MrCall Orchestrator Agent. Slash commands (messages starting with `/`) bypass the config mode router and go to their normal command handlers. This ensures `/agent mrcall train`, `/mrcall variables`, etc. work correctly even while in config mode.
 
 **Implementation**:
 - `zylch/services/sandbox_service.py` - Whitelist logic and response messages
