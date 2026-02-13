@@ -326,11 +326,26 @@ class MrCallConfiguratorTrainer:
         logger.debug(f"[MrCallConfiguratorTrainer] template={template}, current_values_count={len(current_values)}, languageCountry={raw_lang} -> biz_lang={biz_lang}")
 
         # Get schema for metadata (type, description, default)
-        schema = await self.starchat.get_variable_schema(
+        # nested=True returns multilang dicts (description_multilang, default_value_multilang)
+        # nested=False returns flat keys without multilang data
+        raw_schema = await self.starchat.get_variable_schema(
             template_name=template,
-            nested=False
+            nested=True
         )
-        logger.debug(f"[MrCallConfiguratorTrainer] get_variable_schema(template={template}) -> {len(schema) if schema else 0} vars")
+        logger.debug(f"[MrCallConfiguratorTrainer] get_variable_schema(template={template}, nested=True) -> {len(raw_schema) if raw_schema else 0} top-level keys")
+
+        # Flatten nested schema into {var_name: var_data}
+        schema: Dict[str, Any] = {}
+        def _flatten(data: Any, parent_key: str = "") -> None:
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    full_key = f"{parent_key}.{key}" if parent_key else key
+                    if isinstance(value, dict) and "type" in value:
+                        schema[full_key] = value
+                    else:
+                        _flatten(value, full_key)
+        _flatten(raw_schema)
+        logger.debug(f"[MrCallConfiguratorTrainer] flattened schema: {len(schema)} variables")
 
         # Build context for each variable
         lines = []

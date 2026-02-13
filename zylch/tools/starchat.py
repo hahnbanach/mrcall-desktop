@@ -632,31 +632,29 @@ class StarChatClient:
             logger.info(f"Fetching variables for template: {template}")
 
             # 2. Get schema for descriptions
-            # Note: The API returns a Map[String, CrmVariable] or List?
-            # Based on usage, likely a list or dict.
-            logger.debug(f"[StarChat] get_all_variables: get_variable_schema(template={template}, nested=False)")
-            schema = await self.get_variable_schema(template_name=template, nested=False)
-            logger.debug(f"[StarChat] get_all_variables: schema type={type(schema).__name__}, items={len(schema) if schema else 0}")
+            # nested=True returns multilang dicts (description_multilang, default_value_multilang)
+            # nested=False returns flat keys without multilang data
+            logger.debug(f"[StarChat] get_all_variables: get_variable_schema(template={template}, nested=True)")
+            raw_schema = await self.get_variable_schema(template_name=template, nested=True)
+            logger.debug(f"[StarChat] get_all_variables: raw_schema type={type(raw_schema).__name__}, items={len(raw_schema) if raw_schema else 0}")
 
-            # 3. Combine them
+            # 3. Flatten nested schema into {var_name: var_data} list
+            flat_schema: Dict[str, Any] = {}
+            def _flatten(data: Any, parent_key: str = "") -> None:
+                if isinstance(data, dict):
+                    for key, value in data.items():
+                        full_key = f"{parent_key}.{key}" if parent_key else key
+                        if isinstance(value, dict) and "type" in value:
+                            flat_schema[full_key] = value
+                        else:
+                            _flatten(value, full_key)
+            _flatten(raw_schema)
+            logger.debug(f"[StarChat] get_all_variables: flattened schema: {len(flat_schema)} variables")
+
+            # 4. Combine schema with current values
             combined = []
 
-            # Handle schema if it's a list or dict
-            # Schema is typically { "VAR_NAME": { "description": "...", ... } } or list
-            schema_items = []
-            if isinstance(schema, dict):
-                for k, v in schema.items():
-                    if isinstance(v, dict):
-                        v['name'] = k
-                        schema_items.append(v)
-            elif isinstance(schema, list):
-                schema_items = schema
-
-            for item in schema_items:
-                name = item.get("name")
-                if not name:
-                    continue
-
+            for name, item in flat_schema.items():
                 # Get description from description_multilang
                 # Fallback: en-US -> en -> * (first available)
                 desc_ml = item.get("description_multilang", {})
