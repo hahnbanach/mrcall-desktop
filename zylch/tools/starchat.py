@@ -594,6 +594,12 @@ class StarChatClient:
         var_count = len(schema) if isinstance(schema, (dict, list)) else 0
         logger.debug(f"[StarChat] get_variable_schema(template={params['templateName']}) -> {var_count} variables")
 
+        # Log a sample variable's raw schema keys for debugging metadata extraction
+        if isinstance(schema, dict) and schema:
+            sample_key = next(iter(schema))
+            sample_val = schema[sample_key]
+            logger.debug(f"[StarChat] get_variable_schema: sample var='{sample_key}', keys={list(sample_val.keys()) if isinstance(sample_val, dict) else type(sample_val).__name__}")
+
         return schema
 
     async def get_all_variables(self, business_id: str) -> List[Dict[str, Any]]:
@@ -618,7 +624,11 @@ class StarChatClient:
 
             current_values = business.get("variables", {})
             template = business.get("template", "businesspro")
-            logger.debug(f"[StarChat] get_all_variables: template={template}, current_values_count={len(current_values)}")
+            # languageCountry for default value fallback (e.g. "it_IT" -> "it-IT")
+            raw_lang = business.get("languageCountry", "")
+            biz_lang = raw_lang.replace("_", "-") if raw_lang else ""
+            biz_lang_short = biz_lang[:2] if biz_lang else ""
+            logger.debug(f"[StarChat] get_all_variables: template={template}, current_values_count={len(current_values)}, languageCountry={raw_lang} -> biz_lang={biz_lang}")
             logger.info(f"Fetching variables for template: {template}")
 
             # 2. Get schema for descriptions
@@ -646,19 +656,36 @@ class StarChatClient:
                 name = item.get("name")
                 if not name:
                     continue
-                
-                # Get description (handle multiple languages if present, or just 'description')
-                desc = item.get("description", "")
-                if isinstance(desc, dict):
-                    # Try to get English or Italian
-                    desc = desc.get("en-US") or desc.get("en-GB") or desc.get("it-IT") or list(desc.values())[0]
-                
+
+                # Get description from description_multilang
+                # Fallback: en-US -> en -> * (first available)
+                desc_ml = item.get("description_multilang", {})
+                if isinstance(desc_ml, dict):
+                    desc = desc_ml.get("en-US") or desc_ml.get("en") or next(iter(desc_ml.values()), "")
+                else:
+                    desc = str(desc_ml) if desc_ml else ""
+
+                # Get default from default_value_multilang
+                # Fallback: business languageCountry (e.g. it-IT) -> short (e.g. it) -> * (first available)
+                default_ml = item.get("default_value_multilang", {})
+                if isinstance(default_ml, dict):
+                    default_val = (
+                        (default_ml.get(biz_lang) if biz_lang else None)
+                        or (default_ml.get(biz_lang_short) if biz_lang_short else None)
+                        or next(iter(default_ml.values()), "")
+                    )
+                else:
+                    default_val = str(default_ml) if default_ml else ""
+
                 # Get current value
                 value = current_values.get(name, "Not set")
-                
+
+                logger.debug(f"[StarChat] get_all_variables: var={name}, desc='{desc}', default='{default_val}', value='{value}'")
+
                 combined.append({
                     "name": name,
                     "description": desc,
+                    "default": default_val,
                     "value": value
                 })
                 
