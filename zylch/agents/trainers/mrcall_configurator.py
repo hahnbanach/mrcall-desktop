@@ -319,7 +319,11 @@ class MrCallConfiguratorTrainer:
 
         current_values = business.get("variables", {})
         template = business.get("template", "businesspro")
-        logger.debug(f"[MrCallConfiguratorTrainer] template={template}, current_values_count={len(current_values)}")
+        # languageCountry for default value fallback (e.g. "it_IT" -> "it-IT")
+        raw_lang = business.get("languageCountry", "")
+        biz_lang = raw_lang.replace("_", "-") if raw_lang else ""
+        biz_lang_short = biz_lang[:2] if biz_lang else ""
+        logger.debug(f"[MrCallConfiguratorTrainer] template={template}, current_values_count={len(current_values)}, languageCountry={raw_lang} -> biz_lang={biz_lang}")
 
         # Get schema for metadata (type, description, default)
         schema = await self.starchat.get_variable_schema(
@@ -333,23 +337,37 @@ class MrCallConfiguratorTrainer:
         for var_name in variable_names:
             var_schema = schema.get(var_name, {})
 
-            # Extract English from multilang dicts
-            human = var_schema.get("human_multilang", {})
-            if isinstance(human, dict):
-                desc = human.get("en-US") or human.get("en-GB") or next(iter(human.values()), "")
-            else:
-                desc = str(human) if human else ""
+            logger.debug(
+                f"[MrCallConfiguratorTrainer] _build_variables_context: var={var_name}, "
+                f"schema_keys={list(var_schema.keys())}, "
+                f"description_multilang={var_schema.get('description_multilang', {})}, "
+                f"default_value_multilang={var_schema.get('default_value_multilang', {})}"
+            )
 
+            # Extract description from description_multilang (NOT human_multilang which is the name)
+            # Fallback: en-US -> en -> * (first available)
+            desc_ml = var_schema.get("description_multilang", {})
+            if isinstance(desc_ml, dict):
+                desc = desc_ml.get("en-US") or desc_ml.get("en") or next(iter(desc_ml.values()), "")
+            else:
+                desc = str(desc_ml) if desc_ml else ""
+
+            # Extract default from default_value_multilang
+            # Fallback: business languageCountry (e.g. it-IT) -> short (e.g. it) -> * (first available)
             default_ml = var_schema.get("default_value_multilang", {})
             if isinstance(default_ml, dict):
-                default = default_ml.get("en-US") or default_ml.get("en-GB") or next(iter(default_ml.values()), "")
+                default = (
+                    (default_ml.get(biz_lang) if biz_lang else None)
+                    or (default_ml.get(biz_lang_short) if biz_lang_short else None)
+                    or next(iter(default_ml.values()), "")
+                )
             else:
                 default = str(default_ml) if default_ml else ""
 
             var_type = var_schema.get("type", "unknown")
             current = current_values.get(var_name, "Not set")
 
-            logger.debug(f"[MrCallConfiguratorTrainer] _build_variables_context: var={var_name}, current='{current}'")
+            logger.debug(f"[MrCallConfiguratorTrainer] _build_variables_context: var={var_name}, desc='{desc}', default='{default}', current='{current}'")
 
             if current == "Not set":
                 # Diagnostic logging for missing variable
