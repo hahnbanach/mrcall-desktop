@@ -604,8 +604,20 @@ class StarChatClient:
         if isinstance(schema, list) and schema:
             first_collection = schema[0]
             variables = first_collection.get("variables", []) if isinstance(first_collection, dict) else []
-            if variables:
-                sample = variables[0]
+            # variables may contain nested lists — find first dict item
+            sample = None
+            for item in variables:
+                if isinstance(item, dict):
+                    sample = item
+                    break
+                elif isinstance(item, list):
+                    for sub in item:
+                        if isinstance(sub, dict):
+                            sample = sub
+                            break
+                    if sample:
+                        break
+            if sample:
                 logger.debug(f"[StarChat] get_variable_schema: response is list of {len(schema)} collections, sample var='{sample.get('name')}', keys={list(sample.keys())}")
         elif isinstance(schema, dict) and schema:
             sample_key = next(iter(schema))
@@ -656,13 +668,20 @@ class StarChatClient:
             logger.debug(f"[StarChat] get_all_variables: raw_schema type={type(raw_schema).__name__}, items={len(raw_schema) if raw_schema else 0}")
 
             # 3. Flatten collections array into {var_name: var_data}
+            # variables arrays may contain nested lists (dashboard uses .flat())
             flat_schema: Dict[str, Any] = {}
             if isinstance(raw_schema, list):
                 for collection in raw_schema:
-                    for var in collection.get("variables", []):
-                        name = var.get("name")
-                        if name:
-                            flat_schema[name] = var
+                    if not isinstance(collection, dict):
+                        continue
+                    for item in collection.get("variables", []):
+                        # Handle nested lists: [[{var}, {var}], [{var}]]
+                        vars_to_process = item if isinstance(item, list) else [item]
+                        for var in vars_to_process:
+                            if isinstance(var, dict):
+                                name = var.get("name")
+                                if name:
+                                    flat_schema[name] = var
             elif isinstance(raw_schema, dict):
                 flat_schema = raw_schema
             logger.debug(f"[StarChat] get_all_variables: flattened schema: {len(flat_schema)} variables")

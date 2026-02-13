@@ -337,13 +337,20 @@ class MrCallConfiguratorTrainer:
         logger.debug(f"[MrCallConfiguratorTrainer] get_variable_schema(template={template}, nested=True, langDesc={biz_lang_short or 'en'}) -> type={type(raw_schema).__name__}, len={len(raw_schema) if raw_schema else 0}")
 
         # Flatten collections array into {var_name: var_data}
+        # variables arrays may contain nested lists (dashboard uses .flat())
         schema: Dict[str, Any] = {}
         if isinstance(raw_schema, list):
             for collection in raw_schema:
-                for var in collection.get("variables", []):
-                    name = var.get("name")
-                    if name:
-                        schema[name] = var
+                if not isinstance(collection, dict):
+                    continue
+                for item in collection.get("variables", []):
+                    # Handle nested lists: [[{var}, {var}], [{var}]]
+                    vars_to_process = item if isinstance(item, list) else [item]
+                    for var in vars_to_process:
+                        if isinstance(var, dict):
+                            name = var.get("name")
+                            if name:
+                                schema[name] = var
         elif isinstance(raw_schema, dict):
             schema = raw_schema
         logger.debug(f"[MrCallConfiguratorTrainer] flattened schema: {len(schema)} variables")
