@@ -326,25 +326,26 @@ class MrCallConfiguratorTrainer:
         logger.debug(f"[MrCallConfiguratorTrainer] template={template}, current_values_count={len(current_values)}, languageCountry={raw_lang} -> biz_lang={biz_lang}")
 
         # Get schema for metadata (type, description, default)
-        # nested=True returns multilang dicts (description_multilang, default_value_multilang)
-        # nested=False returns flat keys without multilang data
+        # nested=True with languageDescriptions returns localized flat fields
+        # Response is an array of collections: [{variables: [{name, type, description, defaultValue, ...}]}]
         raw_schema = await self.starchat.get_variable_schema(
             template_name=template,
-            nested=True
+            language=biz_lang or "en-US",
+            nested=True,
+            language_descriptions=biz_lang_short or "en",
         )
-        logger.debug(f"[MrCallConfiguratorTrainer] get_variable_schema(template={template}, nested=True) -> {len(raw_schema) if raw_schema else 0} top-level keys")
+        logger.debug(f"[MrCallConfiguratorTrainer] get_variable_schema(template={template}, nested=True, langDesc={biz_lang_short or 'en'}) -> type={type(raw_schema).__name__}, len={len(raw_schema) if raw_schema else 0}")
 
-        # Flatten nested schema into {var_name: var_data}
+        # Flatten collections array into {var_name: var_data}
         schema: Dict[str, Any] = {}
-        def _flatten(data: Any, parent_key: str = "") -> None:
-            if isinstance(data, dict):
-                for key, value in data.items():
-                    full_key = f"{parent_key}.{key}" if parent_key else key
-                    if isinstance(value, dict) and "type" in value:
-                        schema[full_key] = value
-                    else:
-                        _flatten(value, full_key)
-        _flatten(raw_schema)
+        if isinstance(raw_schema, list):
+            for collection in raw_schema:
+                for var in collection.get("variables", []):
+                    name = var.get("name")
+                    if name:
+                        schema[name] = var
+        elif isinstance(raw_schema, dict):
+            schema = raw_schema
         logger.debug(f"[MrCallConfiguratorTrainer] flattened schema: {len(schema)} variables")
 
         # Build context for each variable
@@ -355,30 +356,13 @@ class MrCallConfiguratorTrainer:
             logger.debug(
                 f"[MrCallConfiguratorTrainer] _build_variables_context: var={var_name}, "
                 f"schema_keys={list(var_schema.keys())}, "
-                f"description_multilang={var_schema.get('description_multilang', {})}, "
-                f"default_value_multilang={var_schema.get('default_value_multilang', {})}"
+                f"description='{var_schema.get('description', '')}', "
+                f"defaultValue='{var_schema.get('defaultValue', '')}'"
             )
 
-            # Extract description from description_multilang (NOT human_multilang which is the name)
-            # Fallback: en-US -> en -> * (first available)
-            desc_ml = var_schema.get("description_multilang", {})
-            if isinstance(desc_ml, dict):
-                desc = desc_ml.get("en-US") or desc_ml.get("en") or next(iter(desc_ml.values()), "")
-            else:
-                desc = str(desc_ml) if desc_ml else ""
-
-            # Extract default from default_value_multilang
-            # Fallback: business languageCountry (e.g. it-IT) -> short (e.g. it) -> * (first available)
-            default_ml = var_schema.get("default_value_multilang", {})
-            if isinstance(default_ml, dict):
-                default = (
-                    (default_ml.get(biz_lang) if biz_lang else None)
-                    or (default_ml.get(biz_lang_short) if biz_lang_short else None)
-                    or next(iter(default_ml.values()), "")
-                )
-            else:
-                default = str(default_ml) if default_ml else ""
-
+            # Use server-localized flat keys (populated by languageDescriptions param)
+            desc = var_schema.get("description", "")
+            default = var_schema.get("defaultValue", "")
             var_type = var_schema.get("type", "unknown")
             current = current_values.get(var_name, "Not set")
 
