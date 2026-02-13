@@ -192,6 +192,8 @@ services/      # Business logic layer (shared with CLI)
 
 Natural language triggers that route to slash commands without using Claude API. Uses **hybrid scoring** (same pattern as memory blob search).
 
+**Exclusions**: Semantic matching is skipped when in Task Mode, MrCall Config Mode, or when the input starts with `/mrcall` (to prevent false rewrites of valid slash commands).
+
 **Key Files**:
 - `trigger_parser.py`: Hybrid matching (keyword + semantic) with typed parameter DSL
 - `command_matcher.py`: Routes natural language to commands
@@ -415,6 +417,7 @@ All user credentials (OAuth tokens, API keys) are stored in Supabase's `oauth_to
 - **System .env contains**: Supabase config, Firebase config, Google OAuth client, encryption key, optional `ANTHROPIC_API_KEY` (system-level fallback for integrations)
 - **NOT in .env**: User credentials (Pipedrive, Vonage) - these are BYOK via `/connect`
 - **Optional in .env**: `ANTHROPIC_API_KEY` - system-level fallback when user has no key (used by MrCall integration)
+- **CRITICAL**: `MRCALL_BASE_URL` must point to the same StarChat server as the MrCall Dashboard's `VUE_APP_STARCHAT_URL`. In dev both use `https://test-env-0.scw.hbsrv.net`; in production both use `https://api.mrcall.ai`. A mismatch causes "business not found" errors because business data is server-specific.
 
 ### Firebase Service Account
 
@@ -604,8 +607,10 @@ Supported providers: google, microsoft, mrcall, anthropic, openai, mistral, pipe
   - Integration with StarChat client
 
 - **StarChat Client** (`zylch/tools/starchat.py`):
-  - Supports both Basic Auth (legacy) and OAuth bearer tokens (new)
-  - Automatic token refresh on 401 responses
+  - Supports three auth types: OAuth (CLI), Firebase (Dashboard), Basic Auth (legacy)
+  - Both OAuth and Firebase tokens sent via `auth` header (not `Authorization`)
+  - All authenticated endpoints use `delegated_{realm}` path prefix (e.g., `/mrcall/v1/delegated_mrcall0/crm/...`)
+  - Automatic token refresh on 401 responses (OAuth only)
   - Fallback to Basic Auth if OAuth not configured
 
 **Configuration** (`zylch/config.py`):
@@ -634,7 +639,7 @@ business:read business:write contacts:read contacts:write sessions:read sessions
 
 #### MrCall Dashboard Integration
 
-The MrCall Dashboard (Vue.js) integrates with Zylch via the `/api/chat` endpoint, sharing the same Firebase project (`talkmeapp-e696c`) so authentication tokens are interchangeable.
+The MrCall Dashboard (Vue.js) integrates with Zylch via the `/api/chat` endpoint, sharing the same Firebase project (`talkmeapp-e696c`) so authentication tokens are interchangeable. Dashboard users require **zero manual setup** — no `/connect mrcall`, no `/connect anthropic`, no `/mrcall link`.
 
 **Integration Flow**:
 1. User clicks "Configure with AI" button on BusinessConfiguration page
@@ -643,12 +648,22 @@ The MrCall Dashboard (Vue.js) integrates with Zylch via the `/api/chat` endpoint
 4. Zylch enters MrCall config mode for that assistant
 5. Left sidebar provides quick command buttons (`/mrcall variables`, `/mrcall show`, `/help`)
 
+**Seamless Authentication**:
+- Dashboard sends the user's Firebase JWT in `Authorization: Bearer <token>` header
+- Zylch API (`routes/chat.py`) extracts the raw token and passes it in context as `firebase_token`
+- `_enter_mrcall_config_mode()` creates a `StarChatClient` with `auth_type="firebase"`, passing the JWT via StarChat's `auth` header
+- This works because both apps share Firebase project `talkmeapp-e696c` — StarChat accepts the token and returns `x-mrcall-role: owner`
+
+**Auto-Link**: When `/mrcall open <businessId>` is sent, the business_id is automatically linked for the user (`set_mrcall_link()`), so subsequent commands like `/mrcall variables` work without a separate `/mrcall link` step.
+
+**Semantic Matcher Exclusion**: Messages starting with `/mrcall` bypass the semantic command matcher, and messages in MrCall config mode skip semantic matching entirely. This prevents false rewrites (e.g., `/mrcall open` being rewritten to something else).
+
 **Key Files (Dashboard)**:
 - `src/views/ConfigureAI.vue` - Two-column layout (commands sidebar + chat)
 - `src/components/ZylchChat.vue` - Chat component using Zylch API
 - `src/utils/Zylch.js` - API client (uses `Authorization: Bearer` header)
 
-**System-Level API Key**: The MrCall `.env` includes `ANTHROPIC_API_KEY` so dashboard users don't need to run `/connect anthropic`. The key stays server-side and is never exposed to the frontend.
+**System-Level API Key**: The MrCall `.env` includes `ANTHROPIC_API_KEY` so dashboard users don't need to run `/connect anthropic`. The key stays server-side and is never exposed to the frontend. If a user has their own key via `/connect anthropic`, that takes priority.
 
 **Firebase Token Authentication**: Dashboard users authenticate via Firebase JWT (shared Firebase project `talkmeapp-e696c`). Since they don't run the CLI OAuth flow, MrCall commands create a `StarChatClient` with `auth_type="firebase"` using the Firebase token from the request context. This bypasses the OAuth credential lookup entirely. The pattern is:
 ```python

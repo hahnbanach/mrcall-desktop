@@ -10,10 +10,13 @@ MrCall (via StarChat API) provides telephony and WhatsApp integration for Zylch,
 
 ### Overview
 
-StarChat API supports two authentication methods:
+StarChat API supports three authentication methods:
 
-1. **OAuth 2.0 (Recommended)**: Modern, secure authentication with automatic token refresh
-2. **Basic Auth (Legacy)**: Username/password authentication for backward compatibility
+1. **OAuth 2.0 (Recommended)**: Modern, secure authentication with automatic token refresh (CLI users via `/connect mrcall`)
+2. **Firebase Auth (Dashboard)**: Direct Firebase JWT passthrough for MrCall Dashboard users — no OAuth setup needed
+3. **Basic Auth (Legacy)**: Username/password authentication for backward compatibility
+
+All token-based auth (OAuth and Firebase) uses the `auth` header (not `Authorization`). All authenticated endpoints use `delegated_{realm}` path prefix (e.g., `/mrcall/v1/delegated_mrcall0/crm/...`).
 
 ### OAuth 2.0 Authentication
 
@@ -249,45 +252,41 @@ client = StarChatClient(
 
 ### StarChat Client Authentication
 
-The `StarChatClient` class supports three authentication methods:
+The `StarChatClient` class supports three authentication modes:
 
-**Firebase Token Authentication (Dashboard)**:
+**OAuth (CLI users)**:
+```python
+from zylch.tools.starchat import create_starchat_client
+
+# Creates client with OAuth tokens from Supabase
+client = await create_starchat_client(owner_id)
+```
+
+**Firebase (Dashboard users)**:
 ```python
 from zylch.tools.starchat import StarChatClient
 
-# Dashboard users authenticate with Firebase JWT (no OAuth flow needed)
+# Dashboard flow: Firebase JWT passed directly to StarChat
+client = StarChatClient(
+    base_url=settings.mrcall_base_url,
+    auth_type="firebase",
+    jwt_token=firebase_token,  # Raw Firebase JWT from dashboard request
+    realm=settings.mrcall_realm,
+    owner_id=owner_id,
+)
+```
+
+**Basic Auth (Legacy)**:
+```python
 client = StarChatClient(
     base_url="https://test-env-0.scw.hbsrv.net/",
-    auth_type="firebase",
-    jwt_token=firebase_token,  # from request context
-    realm="delegated_mrcall0",
-    owner_id="firebase_uid_abc123",
+    username="username",
+    password="password",
+    realm="mrcall0"
 )
 ```
 
-This is used by MrCall Dashboard users who share the same Firebase project (`talkmeapp-e696c`) as MrCall/StarChat. The Firebase JWT is passed directly as a bearer token to StarChat API calls, bypassing the OAuth credential flow entirely.
-
-**OAuth-First Strategy (CLI)**:
-```python
-from zylch.tools.starchat import StarChatClient
-
-# Try OAuth first (if tokens exist for user)
-client = StarChatClient.from_oauth(
-    base_url="https://test-env-0.scw.hbsrv.net/",
-    owner_id="firebase_uid_abc123"
-)
-
-# Fallback to Basic Auth if OAuth not configured
-if not client.has_valid_token():
-    client = StarChatClient(
-        base_url="https://test-env-0.scw.hbsrv.net/",
-        username="username",
-        password="password",
-        realm="mrcall0"
-    )
-```
-
-**Automatic Token Refresh**:
+**Automatic Token Refresh** (OAuth only):
 - Client automatically refreshes expired tokens
 - Refresh triggered when access token within 5 minutes of expiration
 - On 401 Unauthorized response, attempts refresh and retries request
@@ -692,11 +691,11 @@ See [WHATSAPP_INTEGRATION_TODO.md](WHATSAPP_INTEGRATION_TODO.md) for comprehensi
 
 ## MrCall Dashboard Integration
 
-The MrCall Dashboard (Vue.js, hosted at `dashboard.mrcall.ai`) integrates directly with Zylch's `/api/chat` endpoint to provide AI-powered assistant configuration.
+The MrCall Dashboard (Vue.js, hosted at `dashboard.mrcall.ai`) integrates directly with Zylch's `/api/chat` endpoint to provide AI-powered assistant configuration. Dashboard users require **zero manual setup** — no `/connect mrcall`, no `/connect anthropic`, no `/mrcall link`.
 
 ### Shared Firebase Authentication
 
-Both apps use the same Firebase project (`talkmeapp-e696c`), so authentication tokens are interchangeable. When a user is logged into the MrCall Dashboard, their Firebase JWT is accepted by Zylch without additional login.
+Both apps use the same Firebase project (`talkmeapp-e696c`), so authentication tokens are interchangeable. When a user is logged into the MrCall Dashboard, their Firebase JWT is accepted by both Zylch and StarChat without additional login.
 
 **Key files (Dashboard)**:
 - `src/views/ConfigureAI.vue` - Two-column layout (command sidebar + chat)
@@ -718,6 +717,28 @@ Both apps use the same Firebase project (`talkmeapp-e696c`), so authentication t
 - **Silent initial command**: The `/mrcall open` command is sent without displaying "You: /mrcall open..." in chat
 - **Auto-scroll**: Chat scrolls to bottom on load and after each message
 - **Message styling**: User messages use teal background (#00897B) for visual distinction
+
+### Seamless Authentication (Firebase Token Passthrough)
+
+When the dashboard sends a message to Zylch's `/api/chat` endpoint:
+
+1. **Dashboard** sends the user's Firebase JWT in `Authorization: Bearer <token>` header
+2. **Zylch API** (`routes/chat.py`) validates the JWT via Firebase Auth, extracts the raw token, and passes it in context as `firebase_token`
+3. **`_enter_mrcall_config_mode()`** detects the dashboard source and creates a `StarChatClient` with `auth_type="firebase"`, passing the JWT directly via StarChat's `auth` header
+4. **StarChat** accepts the Firebase JWT because both apps share the same Firebase project, and returns `x-mrcall-role: owner`
+
+This eliminates the need for `/connect mrcall` OAuth flow — the user's existing Firebase session is sufficient.
+
+### Auto-Link
+
+When `/mrcall open <businessId>` is sent with a `businessId`, the business is automatically linked for the user via `set_mrcall_link()`. Subsequent commands (`/mrcall variables`, `/agent mrcall run`, etc.) use the linked business without requiring a separate `/mrcall link` step.
+
+### Semantic Matcher Exclusion
+
+To prevent false rewrites of valid slash commands:
+- Messages starting with `/mrcall` bypass the semantic command matcher entirely
+- Messages sent while in MrCall config mode also skip semantic matching
+- This prevents e.g. `/mrcall open` from being incorrectly rewritten to another command
 
 ### System-Level API Key
 
@@ -773,6 +794,12 @@ The `.env.mrcall` file contains all configuration for the MrCall integration:
 FIREBASE_PROJECT_ID=talkmeapp-e696c
 FIREBASE_API_KEY=...
 FIREBASE_SERVICE_ACCOUNT_BASE64=...
+
+# CRITICAL: Must match dashboard's VUE_APP_STARCHAT_URL
+# Business data is server-specific — a mismatch causes "business not found" errors
+# Dev: https://test-env-0.scw.hbsrv.net
+# Prod: https://api.mrcall.ai
+MRCALL_BASE_URL=https://test-env-0.scw.hbsrv.net
 
 # CORS (allow MrCall Dashboard domains)
 CORS_ALLOWED_ORIGINS=http://localhost:8080,https://dashboard.mrcall.ai,...
