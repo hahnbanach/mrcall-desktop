@@ -239,7 +239,7 @@ class MrCallConfiguratorTrainer:
         "welcome_message": {
             "variables": ["OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT"],
             "description": "How the assistant answers the phone",  # for devs
-            "display_name": "Come risponde al telefono l'assistente",  # for users
+            "display_name": "How the assistant answers the phone",  # for users
             "meta_prompt": WELCOME_MESSAGE_META_PROMPT,
             "dynamic_context": True,  # Uses _build_variables_context for metadata
         },
@@ -266,7 +266,7 @@ class MrCallConfiguratorTrainer:
             "display_name": "How your MrCall assistant manages booking requests",
             "meta_prompt": BOOKING_META_PROMPT,
             "dynamic_context": True,  # Uses _build_variables_context for metadata
-        },
+        }
     }
 
     def __init__(
