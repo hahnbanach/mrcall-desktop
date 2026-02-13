@@ -59,7 +59,7 @@ FIRST_NAME=%%crm.contact.variables.FIRST_NAME=not known%%
 This means: "FIRST_NAME comes from the CRM contact record. If not found, use 'not known'."
 
 Common variable sources:
-- `%%crm.contact.variables.X%%` - Data from the caller's contact record
+- `%%crm.contact.variables.X%%` - Data about the caller (the new / recurrent contact)
 - `%%HB_FROM_NUMBER%%` - The caller's phone number
 - `%%public:X%%` - Public/shared values (like current time)
 

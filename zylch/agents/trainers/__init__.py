@@ -8,7 +8,7 @@ from .base import BaseAgentTrainer
 from .emailer import EmailerAgentTrainer
 from .memory_email import EmailMemoryAgentTrainer
 from .mrcall import MrCallAgentTrainer
-from .mrcall_memory import MrCallMemoryTrainer
+from .memory_mrcall import MrCallMemoryTrainer
 from .mrcall_configurator import MrCallConfiguratorTrainer
 from .task_email import EmailTaskAgentTrainer
 
