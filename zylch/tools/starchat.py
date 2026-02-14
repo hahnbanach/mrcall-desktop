@@ -691,16 +691,16 @@ class StarChatClient:
 
             for name, item in flat_schema.items():
                 # Use server-localized flat keys (populated by languageDescriptions param)
+                human_name = item.get("humanName", "")
                 desc = item.get("description", "")
                 default_val = item.get("defaultValue", "")
-
-                # Get current value
                 value = current_values.get(name, "Not set")
 
-                logger.debug(f"[StarChat] get_all_variables: var={name}, desc='{desc}', default='{default_val}', value='{value}'")
+                logger.debug(f"[StarChat] get_all_variables: var={name}, humanName='{human_name}', desc='{desc}', default='{default_val}', value='{value}'")
 
                 combined.append({
                     "name": name,
+                    "human_name": human_name,
                     "description": desc,
                     "default": default_val,
                     "value": value
