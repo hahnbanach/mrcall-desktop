@@ -863,7 +863,7 @@ Detailed implementation plans for future features are documented in `docs/featur
 
 ### Anthropic Claude
 ```
-Models: claude-3-5-haiku, claude-sonnet-4, claude-opus-4
+Models: Configured via ANTHROPIC_MODEL env var (one model per provider)
 Features: tool_use, prompt caching
 ```
 

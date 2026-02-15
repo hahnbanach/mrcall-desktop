@@ -141,7 +141,7 @@ For complete guide, see `MEMORY_USAGE.md`
 ```
 User Input
     ↓
-Zylch AIAgent (Claude Sonnet 4.5)
+Zylch AIAgent (LLM)
     ↓
 Tools (via native function calling):
   - query_contacts
@@ -154,13 +154,14 @@ Human Approval
 Action Execution
 ```
 
-### Model Selection (Automatic)
+### Model Configuration
 
-- **Haiku** (claude-3-5-haiku): Classification, simple queries (~$0.92/1K emails)
-- **Sonnet** (claude-sonnet-4-5): Email drafting, enrichment (~$7/1K emails)
-- **Opus** (claude-opus-4): Executive communications only (<5% volume)
+One model per provider, configured via environment variables:
+- `ANTHROPIC_MODEL` - Anthropic model to use
+- `OPENAI_MODEL` - OpenAI model to use
+- `MISTRAL_MODEL` - Mistral model to use
 
-Model selection happens automatically based on your message content.
+No multi-tier selection -- all tasks use the same model per provider.
 
 ## Project Structure
 
@@ -186,7 +187,7 @@ zylch/
 - Configuration loading from .env
 - Multi-tenant architecture with Firebase Auth
 - Email archive with SQLite + FTS5 full-text search
-- Model selection (Haiku/Sonnet/Opus tiering)
+- Model configuration (one model per provider via env vars)
 
 ✅ **Agent System**
 - ZylchAIAgent with Claude API and 30+ tools

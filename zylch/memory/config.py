@@ -98,7 +98,7 @@ class MemoryConfig(BaseSettings):
         description="Enable LLM-assisted merge for reconsolidation"
     )
     llm_merge_model: str = Field(
-        default="claude-3-5-haiku-20241022",
+        default="claude-opus-4-6-20260205",
         description="Model for LLM merge"
     )
 

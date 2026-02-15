@@ -308,7 +308,7 @@ Output ONLY the merged memory text, nothing else."""
 class LLMMergeService:
     """LLM-assisted memory merge for reconsolidation."""
 
-    def __init__(self, api_key: str, model: str = "claude-3-5-haiku-20241022"):
+    def __init__(self, api_key: str, model: str = None):  # model from env var
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model
 
@@ -689,8 +689,8 @@ llm_merge_enabled: bool = Field(
 )
 
 llm_merge_model: str = Field(
-    default="claude-3-5-haiku-20241022",
-    description="Model for LLM merge"
+    default=None,  # uses ANTHROPIC_MODEL env var
+    description="Model for LLM merge (defaults to provider model from env)"
 )
 ```
 

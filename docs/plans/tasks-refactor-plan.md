@@ -84,7 +84,7 @@ class TaskWorker:
 
         # 3. Ask LLM
         response = self.anthropic.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=self.model,  # configured via env var
             messages=[{
                 "role": "user",
                 "content": prompt.format(

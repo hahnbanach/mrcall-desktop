@@ -176,10 +176,8 @@ def test_create_model_selector(mock_config):
     # Verify model selector was created
     assert isinstance(model_selector, ModelSelector)
 
-    # Verify models are configured correctly
-    assert model_selector.default_model == "claude-3-5-sonnet-20241022"
-    assert model_selector.classification_model == "claude-3-5-haiku-20241022"
-    assert model_selector.executive_model == "claude-3-opus-20240229"
+    # Verify model is configured correctly
+    assert model_selector.default_model == "claude-opus-4-6-20260205"
 
 
 @pytest.mark.asyncio

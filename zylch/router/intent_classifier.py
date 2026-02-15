@@ -3,7 +3,6 @@
 import json
 from typing import Dict, Any, List, Optional
 
-from zylch.config import settings
 from zylch.llm import LLMClient, PROVIDER_MODELS
 
 
@@ -24,7 +23,7 @@ class IntentRouter:
                 "Please run `/connect <provider>` to configure your API key."
             )
         self.provider = provider
-        self.router_model = PROVIDER_MODELS.get(provider, settings.skill_router_model)
+        self.router_model = PROVIDER_MODELS.get(provider, PROVIDER_MODELS["anthropic"])
         self.client = LLMClient(api_key=api_key, provider=provider)
         self.skill_registry = skill_registry
 
@@ -34,7 +33,7 @@ class IntentRouter:
         conversation_history: Optional[List] = None
     ) -> Dict[str, Any]:
         """
-        Classify user intent using configured model (typically Haiku for speed/cost).
+        Classify user intent using configured model.
 
         Returns:
             {

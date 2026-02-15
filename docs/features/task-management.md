@@ -41,7 +41,7 @@ ALL of these are TASKs. None should be filtered out.
 ### Task Aggregation
 Tasks are grouped by PERSON:
 - One person = maximum one task
-- Sonnet analyzes ALL threads with that person
+- LLM analyzes ALL threads with that person
 - Provides single consolidated action needed
 
 ---
@@ -115,7 +115,7 @@ oggi per rassicurarla e risolvere i problemi di configurazione.
 ┌─────────────────────────────────────────────────────────────┐
 │ TIER 1: Thread Cache (threads.json)                        │
 │                                                             │
-│ - Haiku analysis (~$0.92/1K emails)                        │
+│ - LLM analysis                                             │
 │ - Fast sync (Gmail API → JSON)                             │
 │ - Thread-by-thread view                                    │
 │ - Preserves all details                                    │
@@ -134,12 +134,12 @@ oggi per rassicurarla e risolvere i problemi di configurazione.
 └──────────────────────┬──────────────────────────────────────┘
                        ↓
          TaskManager.build_tasks_from_threads()
-         (Groups by contact, analyzes with Sonnet)
+         (Groups by contact, analyzes with LLM)
                        ↓
 ┌─────────────────────────────────────────────────────────────┐
 │ TIER 2: Task Cache (tasks.json)                            │
 │                                                             │
-│ - Sonnet analysis (~$1.40/200 contacts)                    │
+│ - LLM analysis                                             │
 │ - Person-centric aggregation                               │
 │ - One task per contact                                     │
 │ - Intelligent view with context                            │
@@ -163,13 +163,13 @@ oggi per rassicurarla e risolvere i problemi di configurazione.
 ### Why Two Tiers?
 
 **Thread Cache (Tier 1):**
-- Fast to sync (Haiku is cheap and fast)
+- Fast to sync (LLM analysis)
 - Preserves all email details
 - Enables granular search
 - Source of truth for raw email data
 
 **Task Cache (Tier 2):**
-- Expensive to build (Sonnet analysis)
+- Expensive to build (LLM analysis)
 - But only built once or on-demand
 - Provides **actionable intelligence**
 - Saves time: you see what matters
@@ -219,10 +219,10 @@ def _extract_contact_email(thread):
 
 ---
 
-## Task Analysis with Sonnet
+## Task Analysis with LLM
 
 ### Input Context
-When analyzing a contact, TaskManager provides Sonnet with:
+When analyzing a contact, TaskManager provides the LLM with:
 
 ```json
 {
@@ -251,7 +251,7 @@ When analyzing a contact, TaskManager provides Sonnet with:
 }
 ```
 
-### Sonnet Prompt
+### LLM Prompt
 ```
 Analyze these 5 email threads for Luisa Boni and create a TASK summary.
 
@@ -295,17 +295,13 @@ Rules:
 ### Initial Setup (First Time)
 
 ```bash
-# 1. Sync emails (30 days, Haiku analysis)
+# 1. Sync emails (30 days, LLM analysis)
 You: sync emails
 # Takes: ~5-10 minutes for 1000 emails
-# Cost: ~$0.92
 
-# 2. Build tasks (Sonnet aggregation)
+# 2. Build tasks (LLM aggregation)
 You: build tasks
 # Takes: ~2-3 minutes for 200 contacts
-# Cost: ~$1.40
-
-# Total: ~$2.50, 10-15 minutes
 ```
 
 ### Daily Workflow
@@ -352,7 +348,7 @@ You: build tasks
 You: build tasks force_rebuild=true
 ```
 
-**Cost:** ~$7 per 1K contacts (Sonnet)
+**Cost:** Depends on configured model
 
 ---
 
@@ -412,23 +408,20 @@ You: situazione generale
 ## Performance & Costs
 
 ### Initial Sync (First Time)
-| Operation | Volume | Model | Time | Cost |
-|-----------|--------|-------|------|------|
-| Sync emails | 1000 emails | Haiku | 5-10 min | $0.92 |
-| Build tasks | 200 contacts | Sonnet | 2-3 min | $1.40 |
-| **Total** | | | **~12 min** | **$2.32** |
+| Operation | Volume | Model | Time |
+|-----------|--------|-------|------|
+| Sync emails | 1000 emails | LLM | 5-10 min |
+| Build tasks | 200 contacts | LLM | 2-3 min |
+| **Total** | | | **~12 min** |
 
 ### Daily Usage
-| Operation | Frequency | Model | Cost/day |
-|-----------|-----------|-------|----------|
-| Sync new emails | 1x/day (50 new) | Haiku | $0.05 |
-| Update 5 contacts | As needed | Sonnet | $0.04 |
-| **Total** | | | **~$0.10** |
+| Operation | Frequency | Model |
+|-----------|-----------|-------|
+| Sync new emails | 1x/day (50 new) | LLM |
+| Update 5 contacts | As needed | LLM |
 
 ### Monthly Cost Estimate
-- Initial: $2.32 (one-time)
-- Daily: $0.10 × 30 = $3.00
-- **Total: ~$5.50/month** for 1000 emails, 200 contacts
+Cost depends on the configured model. See your provider's pricing page.
 
 ---
 
@@ -459,7 +452,7 @@ Track decisions and actions over time:
 
 **Benefits:**
 - Continuity: Don't repeat same actions
-- Context: Sonnet knows what was already tried
+- Context: LLM knows what was already tried
 - Learning: Patterns emerge over time
 - Audit trail: Full history of decisions
 

@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from datetime import datetime
-from zylch.config import settings
 
 
 @dataclass
@@ -38,7 +37,8 @@ class BaseSkill(ABC):
     def __init__(self, skill_name: str, description: str):
         self.skill_name = skill_name
         self.description = description
-        self.execution_model = settings.skill_execution_model  # From config!
+        from zylch.llm import PROVIDER_MODELS
+        self.execution_model = PROVIDER_MODELS["anthropic"]
 
     async def activate(self, context: SkillContext) -> SkillResult:
         """Main entry point for skill activation."""

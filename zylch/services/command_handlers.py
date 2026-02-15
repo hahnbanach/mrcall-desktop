@@ -198,7 +198,7 @@ async def handle_help() -> str:
 • `/revoke <email>` - Revoke sharing access
 
 **🔧 Configuration:**
-• `/model [haiku|sonnet|opus|auto]` - Change AI model
+• `/model` - Show current AI model
 
 **📚 Utility:**
 • `/clear` - Clear conversation history
@@ -4488,7 +4488,7 @@ COMMAND_HANDLERS = {
 #   date     - date expressions (e.g., "tomorrow", "next monday", "March 5")
 #   time     - time expressions (e.g., "3pm", "15:30", "noon")
 #   duration - duration expressions (e.g., "30 minutes", "2 hours")
-#   model    - AI model names (e.g., "haiku", "sonnet", "opus")
+#   model    - AI model names (e.g., "opus")
 #
 # The semantic matcher:
 # 1. Strips placeholders from templates for embedding comparison

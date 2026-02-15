@@ -2,13 +2,13 @@
 
 from typing import Dict, Any
 
+from zylch.config import settings
 
-# Single model per provider (Sonnet-equivalent tier)
-# No Haiku/mini models - they underperform for our use cases
+# One model per provider — configured via env vars (ANTHROPIC_MODEL, OPENAI_MODEL, MISTRAL_MODEL)
 PROVIDER_MODELS: Dict[str, str] = {
-    "anthropic": "claude-sonnet-4-20250514",
-    "openai": "gpt-4.1",           # Best non-reasoning, 1M context
-    "mistral": "mistral-large-3",  # Dec 2025, open-weight, multimodal
+    "anthropic": settings.anthropic_model,
+    "openai": settings.openai_model,
+    "mistral": settings.mistral_model,
 }
 
 # LiteLLM model prefixes
@@ -85,7 +85,7 @@ def get_litellm_model(provider: str) -> str:
         provider: Provider name (anthropic, openai, mistral)
 
     Returns:
-        LiteLLM model string (e.g., "anthropic/claude-sonnet-4-20250514")
+        LiteLLM model string (e.g., "anthropic/claude-opus-4-6-20260205")
     """
     if provider not in PROVIDER_MODELS:
         raise ValueError(f"Unknown provider: {provider}")

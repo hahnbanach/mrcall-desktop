@@ -278,7 +278,7 @@ class EmailSyncManager:
         last_message: Dict[str, Any],
         all_messages: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Analyze email thread with Haiku.
+        """Analyze email thread with LLM.
 
         Args:
             thread_id: Thread ID

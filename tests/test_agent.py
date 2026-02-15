@@ -53,21 +53,22 @@ async def test_agent_initialization():
 
 @pytest.mark.asyncio
 async def test_model_selector():
-    """Test model selection logic."""
+    """Test model selection — always returns default model."""
     selector = ModelSelector()
 
-    # Test classification - uses haiku for explicit classification keywords
+    # All queries return the same default model
     model = selector.select_model("classify this email priority")
-    assert model == selector.classification_model
+    assert model == selector.default_model
 
-    # Test "who is" queries - uses Sonnet (default) for tool calling intelligence
     model = selector.select_model("who is john@example.com?")
     assert model == selector.default_model
 
-    # Test drafting
     model = selector.select_model("draft an email to jane@example.com")
     assert model == selector.default_model
 
-    # Test executive (use message without "write" to avoid quality model trigger)
     model = selector.select_model("urgent message for the CEO")
-    assert model == selector.executive_model
+    assert model == selector.default_model
+
+    # force_model overrides
+    model = selector.select_model("anything", force_model="custom-model")
+    assert model == "custom-model"

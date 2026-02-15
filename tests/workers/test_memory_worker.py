@@ -321,7 +321,7 @@ class TestProcessEmail:
             call_args = mock_anthropic_client.messages.create.call_args
 
             # Verify correct model and parameters
-            assert call_args[1]["model"] == "claude-3-5-haiku-20241022"
+            assert call_args[1]["model"] == "claude-opus-4-6-20260205"
             assert call_args[1]["max_tokens"] == 2000
 
             # Verify message content includes email body and old memory

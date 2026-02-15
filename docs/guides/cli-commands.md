@@ -80,7 +80,7 @@ Triggers support typed parameters using `{param:type}` syntax:
 | `date` | "on {date:date}" | `tomorrow`, `next monday` |
 | `time` | "at {time:time}" | `3pm`, `15:30` |
 | `duration` | "in {duration:duration}" | `30 minutes`, `2 hours` |
-| `model` | "use {model:model}" | `haiku`, `sonnet`, `opus` |
+| `model` | "use {model:model}" | Model configured via env vars |
 
 **Performance**: <100ms matching (embeddings cached after first request)
 
@@ -126,7 +126,7 @@ Triggers support typed parameters using `{param:type}` syntax:
 • /revoke <email> - Revoke sharing access
 
 🔧 Configuration:
-• /model [haiku|sonnet|opus|auto] - Change AI model
+• Model configured via env vars (ANTHROPIC_MODEL, OPENAI_MODEL, etc.)
 
 📚 Utility:
 • /tutorial [topic] - Quick guides
@@ -504,7 +504,7 @@ Use /memory search <query> to find stored information.
 
 **How Processing Works**:
 1. Fetches unprocessed items (where `memory_processed_at IS NULL`)
-2. Extracts facts using Claude Haiku LLM
+2. Extracts facts using LLM
 3. Searches for existing blob about same entity (hybrid search)
 4. If found (score ≥ 0.65): LLM-merges new facts with existing
 5. If not found: Creates new blob
@@ -736,7 +736,7 @@ Output:
 
 **Background Processing**: Triggers execute in background worker (runs every 1 minute). Events are queued in `trigger_events` table and processed asynchronously.
 
-**Execution Model**: Claude Haiku (fast, economical, ~$0.0001-0.0003 per trigger execution)
+**Execution Model**: LLM (configured via env var)
 
 **Performance**: <1s per trigger execution (depends on instruction complexity)
 
@@ -1171,57 +1171,19 @@ Restore: Use /share colleague@example.com to share again.
 
 ## 🔧 Configuration Commands
 
-### `/model [haiku|sonnet|opus|auto]`
+### Model Configuration
 
-**Summary**: Switch AI model
+**Summary**: Model is configured via environment variables, not runtime commands.
 
-**Description**: Changes which Claude model Zylch uses for responses. Each model has different speed/quality/cost tradeoffs.
+**Description**: The model is now set per-provider via environment variables. There is no runtime `/model` command -- one model per provider is used for all tasks.
 
-**Models**:
-- `haiku` - Claude 3.5 Haiku (fast, economical)
-- `sonnet` - Claude 3.5 Sonnet (balanced) ⭐ default
-- `opus` - Claude 3 Opus (powerful, expensive)
-- `auto` - Automatic selection based on task
+**Environment Variables**:
+- `ANTHROPIC_MODEL` - Anthropic model (e.g. `claude-sonnet-4-20250514`)
+- `OPENAI_MODEL` - OpenAI model
+- `MISTRAL_MODEL` - Mistral model
+- `DEFAULT_MODEL` - Fallback model identifier
 
-**Usage**:
-```bash
-# Switch to Haiku (fast)
-/model haiku
-
-# Switch to Sonnet (balanced)
-/model sonnet
-
-# Switch to Opus (powerful)
-/model opus
-
-# Enable automatic selection
-/model auto
-```
-
-**Output**:
-```
-✅ Model selected: sonnet
-
-Model ID: claude-3-5-sonnet-20241022
-
-For this to take effect:
-API clients should include in context for future requests:
-{
-  "context": {
-    "forced_model": "claude-3-5-sonnet-20241022"
-  }
-}
-```
-
-**Model Comparison**:
-
-| Model | Speed | Quality | Cost | Best For |
-|-------|-------|---------|------|----------|
-| Haiku | Fast | Good | Low | Quick queries, triggers |
-| Sonnet | Medium | Excellent | Medium | General use, drafts |
-| Opus | Slow | Best | High | Complex analysis, critical emails |
-
-**Note**: Model selection is per-session. For programmatic access, pass `forced_model` in API context.
+**Note**: No multi-tier selection. All tasks use the same model per provider.
 
 ---
 
@@ -1465,7 +1427,7 @@ Next steps:
 🤖 Agents:   /agent memory|task train|process|show|reset
 ⚡ Triggers: /trigger --add|--list|--remove|--toggle
 📞 Phone:    /mrcall  /connect
-🔧 Config:   /model haiku|sonnet|opus
+🔧 Config:   Model via env vars (ANTHROPIC_MODEL, etc.)
 📚 Help:     /help  /tutorial  /reset
 
 💡 All commands support --help for details
@@ -1703,7 +1665,7 @@ All CLI commands are accessible via API:
   "message": "/sync 7",
   "owner_id": "user123",
   "context": {
-    "forced_model": "claude-3-5-sonnet-20241022"
+    "forced_model": "configured-via-env-var"
   }
 }
 ```

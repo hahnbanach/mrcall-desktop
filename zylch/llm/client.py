@@ -173,7 +173,7 @@ class LLMClient:
             model: Optional model name override
 
         Returns:
-            LiteLLM model string (e.g., "anthropic/claude-sonnet-4-20250514")
+            LiteLLM model string (e.g., "anthropic/claude-opus-4-6-20260205")
         """
         model_name = model or self.model
 
