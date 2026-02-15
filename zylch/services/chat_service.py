@@ -675,8 +675,6 @@ class ChatService:
             "tools": tool_names,
             "model_info": {
                 "default_model": settings.default_model,
-                "classification_model": settings.classification_model,
-                "executive_model": settings.executive_model
             }
         }
 

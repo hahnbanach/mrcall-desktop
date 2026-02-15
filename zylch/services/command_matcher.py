@@ -362,7 +362,7 @@ class SemanticCommandMatcher:
         return "/calendar list"
 
     def _format_model(self, params: Dict[str, Any]) -> str:
-        """/model [haiku|sonnet|opus]"""
+        """/model"""
         model = params.get('model', '')
         if model:
             return f"/model {model}"

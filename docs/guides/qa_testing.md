@@ -110,9 +110,11 @@ WEBHOOK_PUBLIC_URL=http://localhost
 # CORS Settings (if using web frontend)
 CORS_ALLOWED_ORIGINS=http://localhost:8080,http://localhost:3000
 
-# Model Configuration
-DEFAULT_MODEL=claude-sonnet-4-20250514
-CLASSIFICATION_MODEL=claude-3-5-haiku-20241022
+# Model Configuration (one model per provider)
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
+OPENAI_MODEL=gpt-4o
+MISTRAL_MODEL=mistral-large-latest
+DEFAULT_MODEL=anthropic
 
 # Optional: Log Level
 LOG_LEVEL=DEBUG
@@ -150,8 +152,7 @@ The CLI supports a profile file at `~/.zylch/profile` that runs commands automat
 # Show gaps after sync
 /gaps
 
-# Set preferred AI model
-/model sonnet
+# Model is configured via env vars (ANTHROPIC_MODEL, etc.)
 ```
 
 The profile runs after successful `/login` and shows output for each command.
@@ -382,7 +383,7 @@ Memory Agent processing 127 emails...
    - Uses regex to extract phone numbers (US: `(555) 123-4567`, international: `+44 20 7946 0958`)
    - Uses regex to extract LinkedIn URLs (`linkedin.com/in/username`)
    - Creates entries in `identifier_map` table
-   - Optionally uses Claude Haiku to extract relationship context
+   - Optionally uses LLM to extract relationship context
 
 **Verify in database (via Supabase dashboard or SQL):**
 
@@ -424,7 +425,7 @@ Zylch: Your behavioral memories:
 **Behind the scenes:**
 - Memory entries stored in `zylch_memory` table (using ZylchMemory class)
 - Phone/LinkedIn from `identifier_map`
-- Relationship context from Memory Agent's Haiku extraction
+- Relationship context from Memory Agent's LLM extraction
 
 ### Step 8: View Gaps (Action Items)
 
@@ -993,8 +994,8 @@ SELECT * FROM relationship_gaps WHERE owner_id = 'YOUR_OWNER_ID';
 |-----------|------|
 | Gmail API | Free (quota-limited) |
 | Supabase DB | ~$0.01 per 1000 rows |
-| Claude Haiku (relationship context) | ~$0.001 per email |
-| Claude Sonnet (gap analysis) | ~$0.01 per analysis |
+| LLM (relationship context) | depends on model |
+| LLM (gap analysis) | depends on model |
 
 ## 10. Success Criteria
 

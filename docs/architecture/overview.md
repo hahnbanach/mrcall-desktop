@@ -695,7 +695,7 @@ creds = storage.get_oauth_token(owner_id, "anthropic")
 - Natural language: 5-15s (full agent + Claude)
 
 **Background Workers**:
-- Trigger processing: <1s per trigger (Claude Haiku)
+- Trigger processing: <1s per trigger (LLM)
 - Event queue: Processed every 1 minute
 
 ---

@@ -43,7 +43,7 @@ Complete email archiving system with incremental sync, full-text search, and int
 │         Intelligence Cache Manager (Refactored)             │
 │  • Reads from archive (not Gmail)                          │
 │  • 30-day rolling window                                    │
-│  • AI analysis with Claude Sonnet                          │
+│  • AI analysis with LLM                                    │
 └────────────────┬────────────────────────────────────────────┘
                  │
                  ▼

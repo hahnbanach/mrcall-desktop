@@ -87,7 +87,7 @@ FEATURES = {
 
 This is the **single source of truth** - other files derive mappings via import.
 
-**Unified Training Path**: ALL features use `dynamic_context: True`. During training, `_build_variables_context()` fetches variable metadata (type, description, default, current value) from StarChat and injects it into the meta-prompt via `{variables_context}` placeholder. There is no separate path for single-variable vs multi-variable features.
+**Unified Training Path**: ALL features use `dynamic_context: True`. During training, `_build_variables_context()` fetches variable metadata from StarChat API using `get_variable_schema(nested=True, language_descriptions={lang})`. The response is a collections array `[{variables: [...]}]` where variables arrays can contain nested lists (matching the MrCall dashboard's `.flat()` pattern). Per-variable metadata includes localized flat keys: `humanName` (rich user-facing description from `human_name_multilang`), `description` (short behavioral note from `description_multilang`), `defaultValue`, `type`, and the current value. Language fallback: description uses `en-US` → `en` → `*`; default value uses business `languageCountry` (e.g. `it-IT`) → short code (e.g. `it`) → `*`. The context is injected into meta-prompts via `{variables_context}` placeholder. There is no separate path for single-variable vs multi-variable features.
 
 ## Tool Selection
 

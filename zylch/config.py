@@ -172,18 +172,22 @@ class Settings(BaseSettings):
         description="System-level Anthropic API key (fallback when user has no key configured)"
     )
 
-    # LLM Models
+    # LLM Models — one per provider
     default_model: str = Field(
         default="claude-opus-4-6-20260205",
-        description="Default Claude model for AI operations"
+        description="Default model for all AI operations"
     )
-    classification_model: str = Field(
-        default="claude-haiku-3-5-20241022",
-        description="Model for classification/routing tasks (fast, cheap)"
-    )
-    executive_model: str = Field(
+    anthropic_model: str = Field(
         default="claude-opus-4-6-20260205",
-        description="Model for complex reasoning tasks"
+        description="Anthropic model to use"
+    )
+    openai_model: str = Field(
+        default="gpt-4.1",
+        description="OpenAI model to use"
+    )
+    mistral_model: str = Field(
+        default="mistral-large-3",
+        description="Mistral model to use"
     )
 
     # Alpha Testers Allowlist

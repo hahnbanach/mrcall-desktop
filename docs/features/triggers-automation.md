@@ -124,9 +124,9 @@ Data: {json.dumps(event['event_data'])}
 User instruction: {instruction}
 """
 
-# 3. Execute with AI (Claude Haiku for speed)
+# 3. Execute with AI (LLM)
 response = await claude_client.messages.create(
-    model="claude-3-5-haiku-20241022",
+    model=settings.anthropic_model,  # configured via env var
     max_tokens=1024,
     messages=[{"role": "user", "content": context}]
 )
@@ -433,9 +433,8 @@ asyncio.run(main())
 - **Max triggers per user**: No hard limit (recommended <100)
 
 ### Execution
-- **Model**: Claude Haiku (fast, economical)
+- **Model**: LLM (configured via env var)
 - **Token usage**: ~200-500 tokens per execution
-- **Cost**: ~$0.0001-0.0003 per trigger execution
 - **Timeout**: 30 seconds per instruction
 
 ## Known Limitations

@@ -444,7 +444,7 @@ class HybridTriageClassifier:
 | Training sample collection | N/A | <50ms (async, non-blocking) |
 | Importance rule evaluation | N/A | <10ms |
 
-**API Cost Savings**: Auto-reply threads skip Claude entirely, saving ~$0.003-0.01 per thread (Sonnet pricing).
+**API Cost Savings**: Auto-reply threads skip LLM entirely, saving API costs per thread.
 
 ## Architecture Decisions
 

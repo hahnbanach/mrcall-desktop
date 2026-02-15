@@ -43,8 +43,8 @@ class TestLLMMergeService:
         mock_client.messages.create.return_value = mock_response
         mock_anthropic.return_value = mock_client
 
-        service = LLMMergeService(api_key="test-key", model="claude-3-5-haiku-20241022")
+        service = LLMMergeService(api_key="test-key", model="claude-opus-4-6-20260205")
         service.merge("existing", "new")
 
         call_args = mock_client.messages.create.call_args
-        assert call_args.kwargs["model"] == "claude-3-5-haiku-20241022"
+        assert call_args.kwargs["model"] == "claude-opus-4-6-20260205"

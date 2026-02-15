@@ -1,7 +1,7 @@
 """LLM abstraction layer using LiteLLM for multi-provider support.
 
 Supported providers:
-- Anthropic (claude-sonnet-4-20250514) - Full features including web search and prompt caching
+- Anthropic (claude-opus-4-6-20260205) - Full features including web search and prompt caching
 - OpenAI (gpt-4.1) - Tool calling supported, no web search or prompt caching
 - Mistral (mistral-large-3) - Tool calling supported, no web search or prompt caching
 """

@@ -53,7 +53,7 @@ Reaching out from Sesamers where we are curating...
 → **NO TASK** (Email 100% AI-generated da business developer che vuole vendere stand)
 
 ### Performance Philosophy
-- Precision > Cost (always use Sonnet, not Haiku)
+- One model per provider -- no multi-tier selection
 - Full context > Partial analysis
 - Real-time > Batch processing
 

@@ -428,8 +428,6 @@ class ToolFactory:
         """
         return ModelSelector(
             default_model=config.default_model,
-            classification_model=config.classification_model,
-            executive_model=config.executive_model,
         )
 
     @staticmethod

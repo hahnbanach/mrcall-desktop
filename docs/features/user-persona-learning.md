@@ -24,7 +24,7 @@ User Persona Learning is a background system that analyzes conversations between
 ### Key Features
 
 - **Background Processing**: Analysis runs asynchronously without blocking conversations
-- **Economical**: Uses Haiku model for fast, low-cost extraction
+- **Economical**: Uses LLM for fast extraction
 - **Reconsolidation**: Similar facts are merged, not duplicated
 - **Proactive Usage**: Zylch references learned facts naturally when relevant
 - **Privacy-Focused**: All data stays in user's own namespace
@@ -62,7 +62,7 @@ User <--> Zylch Agent (main conversation)
               ▼
   ┌─────────────────────────┐
   │    PersonaAnalyzer      │
-  │   (background, Haiku)   │
+  │   (background, LLM)     │
   └─────────────────────────┘
               │
               ▼
@@ -81,7 +81,7 @@ User <--> Zylch Agent (main conversation)
 | Aspect | Decision | Rationale |
 |--------|----------|-----------|
 | Timing | Background async | Doesn't block conversation |
-| Model | Haiku | Fast, economical (~$0.25/1M tokens) |
+| Model | LLM (configured via env var) | One model per provider |
 | Trigger | Every N messages | Configurable, default: 5 |
 | Storage | zylch_memory | Semantic search, reconsolidation |
 | Usage | Proactive | AI references facts naturally |
@@ -125,7 +125,7 @@ if self.persona_analyzer:
 
 ### 2. Extract Facts
 
-PersonaAnalyzer calls Haiku with the extraction prompt:
+PersonaAnalyzer calls the LLM with the extraction prompt:
 
 ```python
 # Simplified
@@ -262,7 +262,7 @@ Never mention that you "learned" something - just use the information as if you 
 |----------|---------|-------------|
 | `PERSONA_ANALYSIS_ENABLED` | `true` | Enable/disable persona learning |
 | `PERSONA_ANALYSIS_INTERVAL` | `5` | Analyze every N messages |
-| `PERSONA_ANALYSIS_MODEL` | `claude-3-5-haiku-20241022` | Model for extraction |
+| `PERSONA_ANALYSIS_MODEL` | Uses `ANTHROPIC_MODEL` env var | Model for extraction |
 
 ### In Code
 
@@ -271,7 +271,7 @@ persona_analyzer = PersonaAnalyzer(
     zylch_memory=zylch_memory,
     owner_id=config.owner_id,
     anthropic_api_key=config.anthropic_api_key,
-    model="claude-3-5-haiku-20241022",
+    model=config.anthropic_model,  # from ANTHROPIC_MODEL env var
     analysis_interval=5,
     enabled=True
 )
@@ -310,7 +310,7 @@ class PersonaAnalyzer:
         """Extract and store persona facts."""
 
     async def _extract_facts(conversation_text) -> Dict[str, List[str]]
-        """Call Haiku to extract facts."""
+        """Call LLM to extract facts."""
 
     async def _store_facts(extracted)
         """Store facts with reconsolidation."""

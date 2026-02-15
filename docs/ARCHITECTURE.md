@@ -57,7 +57,7 @@ Run locally with `uvicorn zylch.api.main:app --reload --port 8000` - connects to
   - `mrcall_agent.py`: Runs unified MrCall agent with 4 tools (configure_*, get_current_config, respond_text)
 - **Sub-packages**:
   - `trainers/`: Agent trainers (generate personalized prompts from user data)
-    - `mrcall_configurator.py`: Layer 1 - Generates feature-specific sub-prompts for MrCall. All features use a unified `dynamic_context` path: StarChat metadata is fetched via `_build_variables_context()` and injected into meta-prompts via `{variables_context}` placeholder.
+    - `mrcall_configurator.py`: Layer 1 - Generates feature-specific sub-prompts for MrCall. All features use a unified `dynamic_context` path: `_build_variables_context()` fetches variable metadata from StarChat API (`nested=True`, `languageDescriptions` param), parses the collections-array response `[{variables: [...]}]`, and injects per-variable context (humanName, description, defaultValue, type, current value) into meta-prompts via `{variables_context}` placeholder.
     - `mrcall.py`: Layer 2 - Combines sub-prompts into unified agent with tool selection
     - `memory_email.py`: EmailMemoryAgentTrainer for fact extraction
     - `task_email.py`: EmailTaskAgentTrainer for task detection
@@ -272,7 +272,7 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
                                           ↓
                               /agent process (MemoryWorker)
                                           ↓
-                           Extract facts via Haiku LLM
+                           Extract facts via LLM
                                           ↓
                           Hybrid search for existing blob
                                           ↓
@@ -414,9 +414,10 @@ All user credentials (OAuth tokens, API keys) are stored in Supabase's `oauth_to
 ### Configuration
 - **Environment**: Railway env vars (backend), Vercel env vars (frontend)
 - **Defaults**: `zylch/config.py` (Pydantic settings)
-- **System .env contains**: Supabase config, Firebase config, Google OAuth client, encryption key, optional `ANTHROPIC_API_KEY` (system-level fallback for integrations)
+- **System .env contains**: Supabase config, Firebase config, Google OAuth client, encryption key, optional `ANTHROPIC_API_KEY` (system-level fallback for integrations), LLM model names (`ANTHROPIC_MODEL`, `OPENAI_MODEL`, `MISTRAL_MODEL`, `DEFAULT_MODEL`)
 - **NOT in .env**: User credentials (Pipedrive, Vonage) - these are BYOK via `/connect`
 - **Optional in .env**: `ANTHROPIC_API_KEY` - system-level fallback when user has no key (used by MrCall integration)
+- **Optional in .env**: `ANTHROPIC_MODEL`, `OPENAI_MODEL`, `MISTRAL_MODEL` - override default model per provider (defaults defined in `config.py`)
 - **CRITICAL**: `MRCALL_BASE_URL` must point to the same StarChat server as the MrCall Dashboard's `VUE_APP_STARCHAT_URL`. In dev both use `https://test-env-0.scw.hbsrv.net`; in production both use `https://api.mrcall.ai`. A mismatch causes "business not found" errors because business data is server-specific.
 
 ### Firebase Service Account
@@ -444,11 +445,13 @@ Backend decodes automatically on startup (`zylch/api/firebase_auth.py`).
 
 Zylch supports multiple LLM providers through LiteLLM abstraction:
 
-| Provider | Model | Region | Features |
-|----------|-------|--------|----------|
-| **Anthropic** | `claude-sonnet-4-20250514` | US | Tool use, web search, prompt caching |
+| Provider | Default Model | Region | Features |
+|----------|---------------|--------|----------|
+| **Anthropic** | `claude-opus-4-6-20260205` | US | Tool use, web search, prompt caching |
 | **OpenAI** | `gpt-4.1` | US | Tool use (1M context) |
 | **Mistral** | `mistral-large-3` | 🇪🇺 EU | Tool use, GDPR-friendly |
+
+**Model Configuration**: One model per provider, configured via environment variables (`ANTHROPIC_MODEL`, `OPENAI_MODEL`, `MISTRAL_MODEL`). `PROVIDER_MODELS` in `zylch/llm/providers.py` reads from `zylch/config.py` settings (pydantic-settings). No multi-tier model selection — the same model handles all tasks (classification, drafting, analysis). `ModelSelector` in `zylch/assistant/models.py` is a pass-through that returns the configured default model (supports `force_model` override).
 
 **Credential Storage**: User provides API key via `/connect <provider>`
 **System-level fallback**: If `ANTHROPIC_API_KEY` is set in `.env`, it's used when the user has no key configured. This enables integrations like MrCall Dashboard where the operator provides the key so users don't need to run `/connect anthropic`.
@@ -814,7 +817,7 @@ The memory system stores knowledge as entity blobs with sentence-level embedding
 
 During `/sync`, the Memory Agent processes unprocessed emails:
 
-1. **Extract facts** from each email using Haiku (cheap, fast)
+1. **Extract facts** from each email using LLM
 2. **Hybrid search** for existing blob about the entity (FTS + semantic)
 3. **Reconsolidate** if match found (LLM-merge), else create new blob
 4. **Mark email as processed** via `memory_processed_at` column
@@ -1003,7 +1006,7 @@ EmailMemoryAgentTrainer analyzes:
   - Sent emails (user profile)
   - Frequent contacts
     ↓
-Claude Sonnet generates personalized agent
+LLM generates personalized agent
     ↓
 Stored in agent_prompts table
     ↓

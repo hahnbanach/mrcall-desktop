@@ -308,29 +308,3 @@ Contact Variables in StarChat:
 
 Remember: This is an assistance tool, not automation. The human makes all final decisions."""
 
-MODEL_SELECTION_PROMPT = """Select the appropriate Claude model based on task:
-
-- Haiku (claude-3-5-haiku-20241022):
-  * Classification tasks
-  * Priority scoring
-  * Simple categorization
-  * Quick responses
-  * Cost: ~$0.92 per 1K emails
-
-- Sonnet (claude-sonnet-4-20250514): DEFAULT
-  * Email drafting
-  * Contact enrichment synthesis
-  * Complex analysis
-  * General conversation
-  * Cost: ~$7 per 1K emails
-
-- Opus (claude-opus-4-20250514): RARE USE ONLY
-  * High-stakes executive communications
-  * Critical business decisions
-  * Maximum quality needed
-  * Less than 5% of volume
-  * Cost: Very high
-
-Use Haiku for speed and cost optimization when quality difference is minimal.
-Use Sonnet for most tasks requiring quality.
-Use Opus only when explicitly requested or for C-level executives."""
