@@ -129,44 +129,26 @@ Every MrCall variable value is a string. There are NO native booleans, numbers, 
 
 ## VARIABLE RELATIONSHIPS
 
-The configurator LLM must understand these dependencies:
+Each variable in the VARIABLE METADATA above may include these annotations:
+- **"Depends On: VAR_X"**: This variable is only relevant when VAR_X is enabled/configured. VAR_X is the parent switch.
+- **"Modifiable: No (locked by subscription plan)"**: This variable cannot be changed for the current subscription plan. Do NOT attempt to modify it. If the user asks, explain it's locked by their subscription plan.
+- **"Visible: No"**: This variable is hidden from end users. Do NOT include it in the generated sub-prompt.
+- **"Admin: Yes"**: This variable is for administrators only. Do NOT include it in the generated sub-prompt.
 
-### Master Switch
-- START_BOOKING_PROCESS is the master switch
-- When enabling booking (START_BOOKING_PROCESS="true"), MUST also configure:
-  - BOOKING_HOURS (JSON string with available slots)
-  - BOOKING_EVENTS_MINUTES (appointment duration)
-  - ENABLE_GET_CALENDAR_EVENTS "true" / "false" (callers can ask about their appointment)
-  - ENABLE_CLEAR_CALENDAR_EVENT "true" / "false" (callers can cancel their appointment)
-   - BOOKING_DAYS_TO_GENERATE: How many days in advance can the caller book
-  - BOOKING_SHORTEST_NOTICE: Minimum notice in hours for appointments
-   - BOOKING_ONLY_WORKING_HOURS: 
-   - BOOKING_MULTIPLE_ALLOWED",
-    - BOOKING_TITLE",
-    - BOOKING_DESCRIPTION",
-    - BOOKING_PRE_INSTRUCTION",
-    - BOOKING_LAST_INSTRUCTION",
-    - COMMUNICATE_BOOKING_MESSAGE",
+### Rules for generating the sub-prompt
+1. **Exclude** variables marked `Visible: No` or `Admin: Yes` from the generated sub-prompt entirely
+2. **Include** variables marked `Modifiable: No` in the sub-prompt, but clearly mark them as locked by the subscription plan
+3. Show dependency chains from "Depends On" annotations so the configurator agent understands relationships
+4. When enabling a parent switch (e.g., setting it to "true"), ASK the user if they also want to configure its dependent variables (they may already have values from a previous configuration)
+5. When disabling a parent switch, dependent variables become inactive — no need to modify them
+6. If a parent switch is LOCKED, all its dependent variables are effectively locked too
 
-
-### Slot Configuration
-- BOOKING_HOURS format: "{{\\"monday\\": [{{\\"09:00:"17:00\\"}}], \\"tuesday\\": [...]}}"
+### Value Format Reference
+- BOOKING_HOURS format: "{{\\"monday\\": [{{\\"09:00-17:00\\"}}], \\"tuesday\\": [...]}}"
   (Valid JSON embedded in a string with escaped quotes)
 - BOOKING_EVENTS_MINUTES determines slot granularity (e.g., "30" for 30-min slots)
-
-### Availability Rules
 - BOOKING_DAYS_TO_GENERATE: how many days ahead to show (e.g., "14")
 - BOOKING_SHORTEST_NOTICE: minimum hours notice (e.g., "2")
-- BOOKING_MULTIPLE_ALLOWED: can same caller book multiple times
-
-### Appointment Content
-- BOOKING_TITLE: template for calendar event title
-- BOOKING_DESCRIPTION: template for event description
-- COMMUNICATE_BOOKING_MESSAGE: what assistant says to confirm
-
-### When Booking Disabled
-- NO_BOOKING_INSTRUCTIONS: what to say when booking not available
-- Only relevant when START_BOOKING_PROCESS="false"
 
 ## COMMON USER INTENTS → VARIABLE MAPPINGS
 
@@ -200,11 +182,15 @@ Generate a sub-prompt with these sections:
 ### SECTION 1: CURRENT BOOKING STATUS
 Is booking enabled? What are the current hours/duration?
 
-### SECTION 2: VARIABLE RELATIONSHIPS
-Explain which variables must be set together.
+### SECTION 2: VARIABLE RELATIONSHIPS & RESTRICTIONS
+Based on the "Depends On" and "LOCKED" annotations in the metadata above:
+- Which variables are parent switches (no dependencies)
+- Which variables depend on others (from their "Depends On" field)
+- Which variables are locked and cannot be modified
+- If a parent is locked, note that all its dependents are effectively locked too
 
 ### SECTION 3: INTENT → CHANGES MAPPING
-List common requests and which variables to change.
+List common requests and which variables to change. Only suggest changes to modifiable variables whose parent dependencies are enabled.
 
 ### SECTION 4: VARIABLE TYPES & VALIDATION
 - Booleans: "true"/"false" (string, not primitive)
@@ -355,7 +341,8 @@ class MrCallConfiguratorTrainer:
             schema = raw_schema
         logger.debug(f"[MrCallConfiguratorTrainer] flattened schema: {len(schema)} variables")
 
-        # Build context for each variable
+        # Build context for each variable — include ALL variables with full metadata
+        # so the sub-prompt-generating LLM has the complete picture
         lines = []
         for var_name in variable_names:
             var_schema = schema.get(var_name, {})
@@ -366,22 +353,45 @@ class MrCallConfiguratorTrainer:
             default = var_schema.get("defaultValue", "")
             var_type = var_schema.get("type", "unknown")
             current = current_values.get(var_name, "Not set")
+            modifiable = var_schema.get("modifiable", True)
+            visible = var_schema.get("visible", True)
+            admin = var_schema.get("admin", False)
 
-            logger.debug(f"[MrCallConfiguratorTrainer] var={var_name}, type={var_type}, humanName='{human_name}', desc='{desc}', default='{default}', current='{current}'")
+            # Flatten depends_on from [["VAR"]] to ["VAR"]
+            depends_on_raw = var_schema.get("depends_on", [])
+            depends_on = []
+            if isinstance(depends_on_raw, list):
+                for dep_item in depends_on_raw:
+                    if isinstance(dep_item, list) and dep_item:
+                        depends_on.append(dep_item[0])
+                    elif isinstance(dep_item, str):
+                        depends_on.append(dep_item)
+
+            logger.debug(f"[MrCallConfiguratorTrainer] var={var_name}, type={var_type}, humanName='{human_name}', desc='{desc}', default='{default}', current='{current}', modifiable={modifiable}, visible={visible}, admin={admin}, depends_on={depends_on}")
 
             if current == "Not set":
                 matching_keys = [k for k in current_values.keys() if "BOOKING" in k]
                 logger.warning(f"[MrCallConfiguratorTrainer] Variable {var_name} not found in current_values. BusinessID={business_id}")
                 logger.warning(f"[MrCallConfiguratorTrainer] Available keys with 'BOOKING': {matching_keys}")
 
-            lines.append(f"""
+            var_context = f"""
 **{var_name}**
 - Type: {var_type}
 - Human Name: {human_name}
 - Description: {desc}
 - Default: {default}
-- Current Value: {current}
-""")
+- Current Value: {current}"""
+
+            if depends_on:
+                var_context += f"\n- Depends On: {', '.join(depends_on)}"
+            if not modifiable:
+                var_context += "\n- Modifiable: No (locked by subscription plan)"
+            if not visible:
+                var_context += "\n- Visible: No"
+            if admin:
+                var_context += "\n- Admin: Yes"
+
+            lines.append(var_context)
 
         return "\n".join(lines)
 

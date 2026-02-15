@@ -696,14 +696,33 @@ class StarChatClient:
                 default_val = item.get("defaultValue", "")
                 value = current_values.get(name, "Not set")
 
-                logger.debug(f"[StarChat] get_all_variables: var={name}, humanName='{human_name}', desc='{desc}', default='{default_val}', value='{value}'")
+                # Extract dependency and visibility metadata from schema
+                modifiable = item.get("modifiable", True)
+                visible = item.get("visible", True)
+                admin = item.get("admin", False)
+
+                # Flatten depends_on from [["VAR"]] to ["VAR"]
+                depends_on_raw = item.get("depends_on", [])
+                depends_on = []
+                if isinstance(depends_on_raw, list):
+                    for dep_item in depends_on_raw:
+                        if isinstance(dep_item, list) and dep_item:
+                            depends_on.append(dep_item[0])
+                        elif isinstance(dep_item, str):
+                            depends_on.append(dep_item)
+
+                logger.debug(f"[StarChat] get_all_variables: var={name}, humanName='{human_name}', desc='{desc}', default='{default_val}', value='{value}', modifiable={modifiable}, visible={visible}, admin={admin}, depends_on={depends_on}")
 
                 combined.append({
                     "name": name,
                     "human_name": human_name,
                     "description": desc,
                     "default": default_val,
-                    "value": value
+                    "value": value,
+                    "modifiable": modifiable,
+                    "visible": visible,
+                    "admin": admin,
+                    "depends_on": depends_on,
                 })
                 
             # Sort by name
