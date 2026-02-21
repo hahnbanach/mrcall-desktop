@@ -87,7 +87,13 @@ FEATURES = {
 
 This is the **single source of truth** - other files derive mappings via import.
 
-**Unified Training Path**: ALL features use `dynamic_context: True`. During training, `_build_variables_context()` fetches variable metadata from StarChat API using `get_variable_schema(nested=True, language_descriptions={lang})`. The response is a collections array `[{variables: [...]}]` where variables arrays can contain nested lists (matching the MrCall dashboard's `.flat()` pattern). Per-variable metadata includes localized flat keys: `humanName` (rich user-facing description from `human_name_multilang`), `description` (short behavioral note from `description_multilang`), `defaultValue`, `type`, and the current value. Language fallback: description uses `en-US` → `en` → `*`; default value uses business `languageCountry` (e.g. `it-IT`) → short code (e.g. `it`) → `*`. The context is injected into meta-prompts via `{variables_context}` placeholder. There is no separate path for single-variable vs multi-variable features.
+**Unified Training Path**: ALL features use `dynamic_context: True`. During training, two context builders run:
+
+1. **`_build_variables_context()`** fetches variable metadata from StarChat API using `get_variable_schema(nested=True, language_descriptions={lang})`. The response is a collections array `[{variables: [...]}]` where variables arrays can contain nested lists (matching the MrCall dashboard's `.flat()` pattern). Per-variable metadata includes localized flat keys: `humanName` (rich user-facing description from `human_name_multilang`), `description` (short behavioral note from `description_multilang`), `defaultValue`, `type`, and the current value. Language fallback: description uses `en-US` → `en` → `*`; default value uses business `languageCountry` (e.g. `it-IT`) → short code (e.g. `it`) → `*`. Injected via `{variables_context}` placeholder.
+
+2. **`_build_conversation_variables_context()`** parses `ASSISTANT_TOOL_VARIABLE_EXTRACTION` from the business config to discover which caller-extracted variables are available (e.g., FIRST_NAME, EMAIL_ADDRESS, BOOKING_DATE). Combines these with static `public:*` variables (date/time, business status) and exportable aliases (CALLER_NUMBER, RECURRENT_CONTACT, OUTBOUND_CALL). Injected via `{conversation_variables_context}` placeholder.
+
+Both context builders accept an optional pre-fetched `business` dict — `train_feature()` fetches it once and passes it to both. New meta-prompts should include both `{variables_context}` and `{conversation_variables_context}` placeholders. There is no separate path for single-variable vs multi-variable features.
 
 ## Tool Selection
 

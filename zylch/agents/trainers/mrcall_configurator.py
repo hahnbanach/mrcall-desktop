@@ -22,6 +22,7 @@ Salva come "mrcall_{business_id}"
 
 """
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -42,6 +43,12 @@ Your task: Generate a self-contained sub-prompt that teaches another LLM how to 
 
 {variables_context}
 
+## CONVERSATION VARIABLES AVAILABLE IN PROMPTS
+
+These variables are resolved at runtime during the phone call. Use `%%var%%` or `%%var=fallback%%` syntax in prompts.
+
+{conversation_variables_context}
+
 ## UNDERSTANDING THE PROMPT STRUCTURE
 
 The welcome message prompt has two parts:
@@ -57,11 +64,6 @@ Example:
 FIRST_NAME=%%crm.contact.variables.FIRST_NAME=not known%%
 ```
 This means: "FIRST_NAME comes from the CRM contact record. If not found, use 'not known'."
-
-Common variable sources:
-- `%%crm.contact.variables.X%%` - Data about the caller (the new / recurrent contact)
-- `%%HB_FROM_NUMBER%%` - The caller's phone number
-- `%%public:X%%` - Public/shared values (like current time)
 
 ### Part 2: Behavioral Instructions
 After the `---` separator, the prompt contains instructions for how the assistant should behave.
@@ -119,6 +121,12 @@ Your task: Generate a self-contained sub-prompt that teaches another LLM how to 
 ## VARIABLE METADATA FROM STARCHAT
 
 {variables_context}
+
+## CONVERSATION VARIABLES AVAILABLE IN PROMPTS
+
+These variables are resolved at runtime during the phone call. Use `%%var%%` or `%%var=fallback%%` syntax in prompts.
+
+{conversation_variables_context}
 
 ## CRITICAL: ALL VALUES ARE STRINGS
 
@@ -283,6 +291,7 @@ class MrCallConfiguratorTrainer:
         self,
         business_id: str,
         variable_names: List[str],
+        business: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Build variables context from StarChat metadata.
 
@@ -292,13 +301,15 @@ class MrCallConfiguratorTrainer:
         Args:
             business_id: MrCall business ID
             variable_names: List of variable names to include
+            business: Pre-fetched business config (avoids redundant API call)
 
         Returns:
             Formatted string with metadata for each variable
         """
         # Get business config for current values and template
         logger.debug(f"[MrCallConfiguratorTrainer] _build_variables_context(business_id={business_id}, vars={variable_names})")
-        business = await self.starchat.get_business_config(business_id)
+        if business is None:
+            business = await self.starchat.get_business_config(business_id)
         logger.debug(f"[MrCallConfiguratorTrainer] get_business_config -> found={business is not None}")
         if not business:
             raise ValueError(f"Business not found: {business_id}")
@@ -395,6 +406,142 @@ class MrCallConfiguratorTrainer:
 
         return "\n".join(lines)
 
+    async def _build_conversation_variables_context(
+        self,
+        business_id: str,
+        business: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Build conversation variables context for injection into meta-prompts.
+
+        Fetches ASSISTANT_TOOL_VARIABLE_EXTRACTION from the business config
+        to discover which caller variables are available, and combines them
+        with the static public:* variables and exportable aliases.
+
+        Args:
+            business_id: MrCall business ID
+            business: Pre-fetched business config (avoids redundant API call)
+
+        Returns:
+            Formatted markdown string describing all conversation variables
+        """
+        if business is None:
+            business = await self.starchat.get_business_config(business_id)
+        if not business:
+            raise ValueError(f"Business not found: {business_id}")
+
+        current_values = business.get("variables", {})
+
+        # --- Dynamic: parse ASSISTANT_TOOL_VARIABLE_EXTRACTION ---
+        # Format: [["VAR_NAME", "Description", "required", "forget"], ...]
+        extraction_vars = []
+        raw_extraction = current_values.get("ASSISTANT_TOOL_VARIABLE_EXTRACTION", "")
+        if raw_extraction:
+            try:
+                parsed = json.loads(raw_extraction)
+                for entry in parsed:
+                    if isinstance(entry, list) and len(entry) >= 2:
+                        var_name = entry[0].strip()
+                        description = entry[1]
+                        forget = entry[3].lower() == "true" if len(entry) > 3 else False
+                        extraction_vars.append((var_name, description, forget))
+            except (json.JSONDecodeError, IndexError) as e:
+                logger.warning(
+                    f"[MrCallConfiguratorTrainer] Failed to parse "
+                    f"ASSISTANT_TOOL_VARIABLE_EXTRACTION: {e}"
+                )
+
+        logger.debug(
+            f"[MrCallConfiguratorTrainer] _build_conversation_variables_context: "
+            f"extraction_vars={len(extraction_vars)}"
+        )
+
+        lines = []
+
+        # Section 1: Caller-extracted variables
+        lines.append("### Caller Information (extracted from conversation)")
+        lines.append("")
+        lines.append(
+            "| Variable | Syntax in prompts | Description | Persists across calls |"
+        )
+        lines.append("|---|---|---|---|")
+        if extraction_vars:
+            for var_name, description, forget in extraction_vars:
+                syntax = f"%%crm.contact.variables.{var_name}%%"
+                persists = "No (fresh each call)" if forget else "Yes"
+                lines.append(f"| {var_name} | `{syntax}` | {description} | {persists} |")
+        else:
+            # Fallback defaults (from sanitizeBusinessVariables.sc)
+            lines.append(
+                "| FIRST_NAME | `%%crm.contact.variables.FIRST_NAME%%` "
+                "| Caller's first name | Yes |"
+            )
+            lines.append(
+                "| FAMILY_NAME | `%%crm.contact.variables.FAMILY_NAME%%` "
+                "| Caller's family name | Yes |"
+            )
+            lines.append(
+                "| CALL_REASON | `%%crm.contact.variables.CALL_REASON%%` "
+                "| Reason for the call | Yes |"
+            )
+
+        # Section 2: Date/time and business status (static, from public:* variables)
+        lines.append("")
+        lines.append("### Date/Time & Business Status")
+        lines.append("")
+        lines.append("| Variable | Syntax in prompts | Description |")
+        lines.append("|---|---|---|")
+        lines.append(
+            '| HUMANIZED_TODAY | `%%public:HUMANIZED_TODAY%%` '
+            '| Current date in natural language (e.g., "venerdì 20 febbraio 2026") |'
+        )
+        lines.append(
+            '| HUMANIZED_NOW | `%%public:HUMANIZED_NOW%%` '
+            '| Current time in natural language (e.g., "Ore 14 e 30 minuti") |'
+        )
+        lines.append(
+            '| HUMANIZED_DAY_OF_WEEK | `%%public:HUMANIZED_DAY_OF_WEEK%%` '
+            '| Current day of week name (e.g., "venerdì") |'
+        )
+        lines.append(
+            "| HUMANIZED_TOMORROW_DAY_OF_WEEK "
+            "| `%%public:HUMANIZED_TOMORROW_DAY_OF_WEEK%%` "
+            "| Tomorrow's day of week name |"
+        )
+        lines.append(
+            '| BUSINESS_OPEN | `%%public:BUSINESS_OPEN%%` '
+            '| Whether the business is currently open ("true"/"false") |'
+        )
+        lines.append(
+            '| OPENING_HOURS_TEXT | `%%public:OPENING_HOURS_TEXT%%` '
+            '| Human-readable opening hours schedule |'
+        )
+        lines.append(
+            '| HUMANIZED_NEXT_CHANGE_STATUS_DATETIME '
+            '| `%%public:HUMANIZED_NEXT_CHANGE_STATUS_DATETIME%%` '
+            '| When business will next open/close (e.g., "chiuderemo alle 18:00") |'
+        )
+
+        # Section 3: Other caller info (exportable aliases from defineExportableVariables.sc)
+        lines.append("")
+        lines.append("### Other Caller Info")
+        lines.append("")
+        lines.append("| Variable | Syntax in prompts | Description |")
+        lines.append("|---|---|---|")
+        lines.append(
+            "| CALLER_NUMBER | `%%CALLER_NUMBER%%` or `%%HB_FROM_NUMBER%%` "
+            "| Caller's phone number |"
+        )
+        lines.append(
+            '| RECURRENT_CONTACT | `%%RECURRENT_CONTACT%%` '
+            '| Whether this caller has called before ("true"/"false") |'
+        )
+        lines.append(
+            '| OUTBOUND_CALL | `%%OUTBOUND_CALL%%` '
+            '| Whether this is an outbound call ("true"/"false") |'
+        )
+
+        return "\n".join(lines)
+
     async def train_feature(
         self,
         feature_name: str,
@@ -427,16 +574,31 @@ class MrCallConfiguratorTrainer:
             f"variables: {variable_names}"
         )
 
+        # Fetch business config once — reused by both context builders + metadata
+        business = await self.starchat.get_business_config(business_id)
+        if not business:
+            raise ValueError(f"Business not found: {business_id}")
+
         # All features use dynamic_context - fetch metadata from StarChat
         variables_context = await self._build_variables_context(
-            business_id, variable_names
+            business_id, variable_names, business=business
         )
         logger.debug(f"[MrCallConfiguratorTrainer] train_feature: variables_context prefix: {variables_context[:500]}...")
+
+        # Build conversation variables context (caller info, public vars, aliases)
+        conversation_variables_context = await self._build_conversation_variables_context(
+            business_id, business=business
+        )
+        logger.debug(
+            f"[MrCallConfiguratorTrainer] train_feature: "
+            f"conversation_variables_context length: {len(conversation_variables_context)}"
+        )
+
         meta_prompt = meta_prompt_template.format(
-            variables_context=variables_context
+            variables_context=variables_context,
+            conversation_variables_context=conversation_variables_context,
         )
         # For metadata, use total length of all variables
-        business = await self.starchat.get_business_config(business_id)
         current_values = business.get("variables", {})
         total_length = sum(
             len(str(current_values.get(v, ""))) for v in variable_names
