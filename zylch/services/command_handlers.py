@@ -2891,10 +2891,12 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
 
 **MrCall Agent** (multi-tool MrCall configuration):
 • `/agent mrcall train` - Train all features and build unified agent
-• `/agent mrcall train <feature>` - Train specific feature (e.g., booking)
+• `/agent mrcall train <feature>` - Train specific feature (e.g., booking, call_transfer)
 • `/agent mrcall run "instructions"` - Configure MrCall (auto-detects feature)
 • `/agent mrcall show` - Show current agent prompt
 • `/agent mrcall reset` - Delete agent prompt
+
+  Available features: welcome_message, booking, caller_followup, conversation, knowledge_base, notifications_business, runtime_data, call_transfer
 
 **Channels:** `email` (includes calendar), `mrcall` (phone calls), `all`
 
@@ -3758,7 +3760,16 @@ Connect your LLM provider:
         tool_result = result.get('result', {})
 
         # Format response based on tool used
-        if tool_used in ('configure_welcome_message', 'configure_booking'):
+        if tool_used in (
+            'configure_welcome_message',
+            'configure_booking',
+            'configure_caller_followup',
+            'configure_conversation',
+            'configure_knowledge_base',
+            'configure_notifications_business',
+            'configure_runtime_data',
+            'configure_call_transfer',
+        ):
             if tool_result.get('success'):
                 updated = tool_result.get('updated', [])
                 feature = tool_result.get('feature', 'unknown')

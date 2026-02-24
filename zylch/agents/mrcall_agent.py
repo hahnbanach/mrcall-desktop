@@ -70,6 +70,72 @@ MRCALL_AGENT_TOOLS = [
         }
     },
     {
+        "name": "configure_caller_followup",
+        "description": "Modify post-call WhatsApp/SMS messages sent to the caller. Use this when user wants to CHANGE, UPDATE, or MODIFY what message callers receive after the call — including enabling/disabling WhatsApp (MrZappa, WATI, Callbell) or SMS channels.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "changes": _build_changes_schema("caller_followup")
+            },
+            "required": ["changes"]
+        }
+    },
+    {
+        "name": "configure_conversation",
+        "description": "Modify the conversation flow — what the assistant asks or does after the greeting. Use this when user wants to CHANGE, UPDATE, or MODIFY the questions asked, information collected, or steps followed during the call.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "changes": _build_changes_schema("conversation")
+            },
+            "required": ["changes"]
+        }
+    },
+    {
+        "name": "configure_knowledge_base",
+        "description": "Modify the knowledge base Q&A pairs and general behavior instructions. Use this when user wants to ADD, REMOVE, or CHANGE how the assistant answers specific caller questions.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "changes": _build_changes_schema("knowledge_base")
+            },
+            "required": ["changes"]
+        }
+    },
+    {
+        "name": "configure_notifications_business",
+        "description": "Modify notification settings that inform the business owner about calls — email, WhatsApp, SMS, Firebase push. Use this when user wants to CHANGE, UPDATE, or MODIFY how/where call notifications are sent to the business.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "changes": _build_changes_schema("notifications_business")
+            },
+            "required": ["changes"]
+        }
+    },
+    {
+        "name": "configure_runtime_data",
+        "description": "Modify external API integrations (PREFETCH/RUNNINGLOOP/FINAL stages). Use this when user wants to CONNECT external systems — CRM lookups before calls, real-time data queries during calls, or webhook/CRM pushes after calls.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "changes": _build_changes_schema("runtime_data")
+            },
+            "required": ["changes"]
+        }
+    },
+    {
+        "name": "configure_call_transfer",
+        "description": "Modify call forwarding/transfer rules. Use this when user wants to CHANGE, UPDATE, ADD, or REMOVE rules for transferring calls to specific phone numbers based on caller intent or business hours.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "changes": _build_changes_schema("call_transfer")
+            },
+            "required": ["changes"]
+        }
+    },
+    {
         "name": "get_current_config",
         "description": "Show current configuration for a feature. ONLY use when the user explicitly asks to SEE, VIEW, or DISPLAY their current settings WITHOUT making changes. Do NOT use this for modification requests.",
         "input_schema": {
@@ -77,7 +143,7 @@ MRCALL_AGENT_TOOLS = [
             "properties": {
                 "feature": {
                     "type": "string",
-                    "enum": ["welcome_message", "booking", "all"],
+                    "enum": ["welcome_message", "booking", "caller_followup", "conversation", "knowledge_base", "notifications_business", "runtime_data", "call_transfer", "all"],
                     "description": "Which feature to show config for"
                 }
             },
@@ -287,6 +353,36 @@ Choose the appropriate tool based on what the user wants. Remember:
                         logger.info("[MrCallAgent] Calling _process_configure for booking")
                         result['result'] = await self._process_configure(
                             block.input, 'booking'
+                        )
+                    elif block.name == 'configure_caller_followup':
+                        logger.info("[MrCallAgent] Calling _process_configure for caller_followup")
+                        result['result'] = await self._process_configure(
+                            block.input, 'caller_followup'
+                        )
+                    elif block.name == 'configure_conversation':
+                        logger.info("[MrCallAgent] Calling _process_configure for conversation")
+                        result['result'] = await self._process_configure(
+                            block.input, 'conversation'
+                        )
+                    elif block.name == 'configure_knowledge_base':
+                        logger.info("[MrCallAgent] Calling _process_configure for knowledge_base")
+                        result['result'] = await self._process_configure(
+                            block.input, 'knowledge_base'
+                        )
+                    elif block.name == 'configure_notifications_business':
+                        logger.info("[MrCallAgent] Calling _process_configure for notifications_business")
+                        result['result'] = await self._process_configure(
+                            block.input, 'notifications_business'
+                        )
+                    elif block.name == 'configure_runtime_data':
+                        logger.info("[MrCallAgent] Calling _process_configure for runtime_data")
+                        result['result'] = await self._process_configure(
+                            block.input, 'runtime_data'
+                        )
+                    elif block.name == 'configure_call_transfer':
+                        logger.info("[MrCallAgent] Calling _process_configure for call_transfer")
+                        result['result'] = await self._process_configure(
+                            block.input, 'call_transfer'
                         )
                     elif block.name == 'get_current_config':
                         logger.info("[MrCallAgent] Calling _process_get_config")
