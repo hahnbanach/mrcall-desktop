@@ -174,11 +174,11 @@ class Settings(BaseSettings):
 
     # LLM Models — one per provider
     default_model: str = Field(
-        default="claude-opus-4-6-20260205",
+        default="claude-opus-4-6",
         description="Default model for all AI operations"
     )
     anthropic_model: str = Field(
-        default="claude-opus-4-6-20260205",
+        default="claude-opus-4-6",
         description="Anthropic model to use"
     )
     openai_model: str = Field(

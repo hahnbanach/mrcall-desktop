@@ -216,6 +216,649 @@ Format:
 OUTPUT ONLY THE SUB-PROMPT TEXT."""
 
 
+# Meta-prompt for generating caller followup sub-prompts
+CALLER_FOLLOWUP_META_PROMPT = """You are analyzing the caller followup configuration for a MrCall AI phone assistant.
+
+Your task: Generate a self-contained sub-prompt that teaches another LLM how to configure the post-call messaging system that sends WhatsApp or SMS to the CALLER after a call ends.
+
+## VARIABLE METADATA FROM STARCHAT
+
+{variables_context}
+
+## CONVERSATION VARIABLES AVAILABLE IN PROMPTS
+
+{conversation_variables_context}
+
+## CRITICAL: CHANNEL EXECUTION PRIORITY ORDER
+
+After a call ends, channels are evaluated in this STRICT ORDER. The first enabled channel sends the message — understanding this order is essential:
+
+```
+1. WATI (official WhatsApp)     ← highest priority, runs first and independently
+2. TextMeBot (unofficial WA)   ← first in the unofficial/SMS chain
+3. Callbell (official WhatsApp) ← second in chain
+4. MrZappa (unofficial WA)     ← third in chain (free, unreliable)
+5. SMS                          ← last in chain (or fallback-only)
+```
+
+This means: if WATI is enabled AND MrZappa is enabled, only WATI sends (it wins). If you want SMS as a fallback for MrZappa, set SEND_SMS_TO_CUSTOMER_ONLY_FALLBACK = "true".
+
+## CHANNEL TIERS
+
+**Official (reliable, paid):** WATI, Callbell — guaranteed delivery, Meta-approved APIs
+**Unofficial (unreliable, free/cheap):** MrZappa (WHATSAPP_TO_CALLER_ENABLED), TextMeBot — Meta actively blocks these; outages are expected
+**SMS:** Paid per message unit; can be standalone or fallback
+
+## MANDATORY TROUBLESHOOTING MESSAGE
+
+When the user reports unofficial WhatsApp (MrZappa) is not working, the configurator MUST deliver this explanation (adapt language to user's language):
+
+"We are sorry for the disruption. The free WhatsApp service works by emulating a WhatsApp Web session — Meta does not support this and actively prevents it from working. Outages are expected and recurring. For guaranteed delivery, switch to Meta's official APIs via Callbell or WATI (cost: a few tens of euros/month)."
+
+## COMMON USER INTENTS → VARIABLE MAPPINGS
+
+**"Send a WhatsApp after each call (free, unreliable)"** →
+  WHATSAPP_TO_CALLER_ENABLED = "true"
+  TEXT_TO_CUSTOMER_ONLY_UPON_INTERACTION = "false"
+
+**"Send WhatsApp only when caller spoke"** →
+  TEXT_TO_CUSTOMER_ONLY_UPON_INTERACTION = "true"
+
+**"Use official WhatsApp (WATI)"** →
+  WATI_ENABLED = "true"
+  WATI_DOMAIN = "<live-server-XXXXX.wati.io>"
+  WATI_BEARER = "<bearer_token>"
+  WATI_TEMPLATE = "<template_name>"
+
+**"Personalized message based on conversation"** →
+  OSCAR_DYNAMIC_TEXTMESSAGE_GENERATION = "true"
+
+**"SMS as fallback if WhatsApp fails"** →
+  SEND_SMS_TO_CUSTOMER_ENABLED = "true"
+  SEND_SMS_TO_CUSTOMER_ONLY_FALLBACK = "true"
+
+**"SMS only, no WhatsApp"** →
+  WHATSAPP_TO_CALLER_ENABLED = "false"
+  WATI_ENABLED = "false"
+  CALLBELL_ENABLED = "false"
+  SEND_SMS_TO_CUSTOMER_ENABLED = "true"
+  SEND_SMS_TO_CUSTOMER_ONLY_FALLBACK = "false"
+
+**"Disable all caller followup"** →
+  WHATSAPP_TO_CALLER_ENABLED = "false"
+  WATI_ENABLED = "false"
+  SEND_SMS_TO_CUSTOMER_ENABLED = "true" → "false"
+
+## YOUR OUTPUT FORMAT
+
+Generate a sub-prompt with these sections:
+
+### SECTION 1: CURRENT FOLLOWUP STATUS
+Which channels are currently enabled? What messages are configured? Static or dynamic mode?
+
+### SECTION 2: CHANNEL PRIORITY CHAIN
+Explain the 5-step priority order. Note which channels are official vs unofficial. Warn about MrZappa reliability.
+
+### SECTION 3: VARIABLE RELATIONSHIPS & RESTRICTIONS
+From "Depends On" and visibility annotations in the metadata:
+- WATI_DOMAIN, WATI_BEARER, WATI_TEMPLATE depend on WATI_ENABLED
+- SEND_SMS_TO_CUSTOMER_INTERACTION_MESSAGE depends on SEND_SMS_TO_CUSTOMER_INTERACTION
+- SEND_SMS_TO_CUSTOMER_NO_INTERACTION_MESSAGE depends on SEND_SMS_TO_CUSTOMER_NO_INTERACTION
+- Admin/invisible variables: list them but mark as not configurable
+- SMS_FROM must be max 11 characters
+
+### SECTION 4: INTENT → CHANGES MAPPING
+Common requests and which variables to set. Include the WATI/Callbell admin variable caveats.
+
+### SECTION 5: ALL CURRENT VALUES
+Explicitly list every variable's current value. The configurator agent needs this to know the state.
+Format:
+- VARIABLE_NAME: "exact_current_value"
+
+---
+
+OUTPUT ONLY THE SUB-PROMPT TEXT."""
+
+
+# Meta-prompt for generating conversation sub-prompts
+CONVERSATION_META_PROMPT = """You are analyzing the conversation flow configuration for a MrCall AI phone assistant.
+
+Your task: Generate a self-contained sub-prompt that teaches another LLM how to configure CONVERSATION_INSTRUCTIONS — the single source of truth for what the assistant does after the welcome greeting.
+
+## VARIABLE METADATA FROM STARCHAT
+
+{variables_context}
+
+## CONVERSATION VARIABLES AVAILABLE IN PROMPTS
+
+These variables can be used inside CONVERSATION_INSTRUCTIONS using %%var%% syntax:
+
+{conversation_variables_context}
+
+## CRITICAL: READ-BEFORE-WRITE RULE
+
+BEFORE proposing any changes to CONVERSATION_INSTRUCTIONS, the configurator MUST check INBOUND_WELCOME_MESSAGE_PROMPT to avoid duplication. If the greeting already asks for the caller's name, do NOT add "ask for name" to CONVERSATION_INSTRUCTIONS.
+
+The 4 FIRST_NAME coordination scenarios:
+| Welcome asks name? | FIRST_NAME known? | What happens |
+|---|---|---|
+| No | Yes ("Mario") | Conversation uses stored name directly |
+| No | No (unknown) | Conversation should ask for the name |
+| Yes | No (unknown) | Caller gives name during greeting — conversation has it |
+| Yes | Yes ("Mario") | Welcome skips asking — conversation uses it |
+
+## VALUE FORMAT
+
+CONVERSATION_INSTRUCTIONS is freeform text in two optional parts:
+
+**Part 1: Variable declarations (optional)**
+```
+STORED_NAME=%%crm.contact.variables.FIRST_NAME=not available%%
+BUSINESS_OPEN=%%public:BUSINESS_OPEN=true%%
+```
+
+**Part 2: Behavioral instructions (natural language)**
+```
+If STORED_NAME is "not available", ask the caller for their name.
+Ask what brings them in today.
+When all questions are answered, ask if there's anything else, then hang up.
+```
+
+Always include a hangup instruction at the end.
+
+## LEGACY FURTHER_QUESTIONS MIGRATION
+
+If FURTHER_QUESTIONS is non-empty (not `[]`), the configurator MUST migrate it:
+1. Convert each [question, instruction] pair to natural language in CONVERSATION_INSTRUCTIONS
+2. Set FURTHER_QUESTIONS to "[]" in a separate API call
+
+Example conversion:
+- BEFORE: `["How many guests?", "If more than 10, inform about deposit."]`
+- AFTER in CONVERSATION_INSTRUCTIONS: `Ask how many people will be dining.\nIf more than 10, inform them that large groups require a deposit.`
+
+## COMMON USER INTENTS → VARIABLE MAPPINGS
+
+**"Add a question about [topic]"** →
+  Append to CONVERSATION_INSTRUCTIONS: "Ask [question about topic]. [Handle response]."
+
+**"Use the caller's name"** →
+  Add `STORED_NAME=%%crm.contact.variables.FIRST_NAME=not available%%` at the top
+  Add: "If STORED_NAME is 'not available', ask for their name. Otherwise greet by name."
+
+**"Ask for email address"** →
+  Add to CONVERSATION_INSTRUCTIONS: "Ask for the caller's email address."
+  (Also check if EMAIL_ADDRESS is in ASSISTANT_TOOL_VARIABLE_EXTRACTION so it gets saved)
+
+**"End call after collecting info"** →
+  Add at the end: "When all questions are answered, ask if there's anything else, then hang up."
+
+**"Handle returning callers differently"** →
+  Add `RECURRENT_CALLER=%%RECURRENT_CONTACT%%`
+  Add: "If RECURRENT_CALLER is 'true', greet them as a returning customer and ask how you can help."
+
+## YOUR OUTPUT FORMAT
+
+Generate a sub-prompt with these sections:
+
+### SECTION 1: CURRENT CONVERSATION FLOW
+Describe in plain language what the assistant currently does step by step after the greeting.
+Note if FURTHER_QUESTIONS is non-empty (migration needed).
+
+### SECTION 2: AVAILABLE VARIABLES
+Table of %%...%% variables that can be used in CONVERSATION_INSTRUCTIONS.
+Include the full syntax (e.g., `%%crm.contact.variables.FIRST_NAME=not available%%`) and what it means.
+
+### SECTION 3: COORDINATION WITH WELCOME MESSAGE
+What does the welcome message currently cover? What should NOT be duplicated in CONVERSATION_INSTRUCTIONS?
+
+### SECTION 4: HOW TO MODIFY
+Rules for editing CONVERSATION_INSTRUCTIONS:
+- Adding a question: append natural language
+- Using a variable: add declaration at top
+- Always end with hangup logic
+- Do NOT re-ask what the welcome message already covers
+- If FURTHER_QUESTIONS is non-empty: migrate before modifying
+
+### SECTION 5: ALL CURRENT VALUES
+- CONVERSATION_INSTRUCTIONS: (full current value in a code block)
+- FURTHER_QUESTIONS: (current value — if non-empty, flag migration needed)
+
+---
+
+OUTPUT ONLY THE SUB-PROMPT TEXT."""
+
+
+# Meta-prompt for generating knowledge base sub-prompts
+KNOWLEDGE_BASE_META_PROMPT = """You are analyzing the knowledge base configuration for a MrCall AI phone assistant.
+
+Your task: Generate a self-contained sub-prompt that teaches another LLM how to configure the Q&A knowledge base that the assistant uses to answer caller questions during phone calls.
+
+## VARIABLE METADATA FROM STARCHAT
+
+{variables_context}
+
+## CONVERSATION VARIABLES AVAILABLE IN PROMPTS
+
+{conversation_variables_context}
+
+## TWO-COMPONENT STRUCTURE
+
+The knowledge base has TWO independent components:
+
+**1. `OSCAR2_KNOWLEDGE_BASE`** (type: verbatim, plain text)
+→ Admin-level instructions placed at the TOP of the knowledge base section.
+→ Controls: how the assistant handles questions not in the Q&A list, tone, expertise level, off-topic handling.
+→ Example: "You are an expert dental assistant. For questions not covered here, say you will pass the request to a dentist who will call back."
+
+**2. `KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS`** (type: tuples, JSON array)
+→ Structured Q&A pairs. Format: `[["topic or keywords", "answer instructions"], ...]`
+→ Each pair renders in the prompt as: "IF THE CALLER ASKS QUESTIONS LIKE OR ABOUT: {topic}\n→ {answer}"
+
+Modifying one does NOT affect the other.
+
+## AUTO-GENERATED ENTRIES (DO NOT ADD MANUALLY)
+
+The following Q&A entries are ALWAYS auto-generated by the runtime. Do NOT add these to KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS:
+- Business address
+- Opening hours
+- Current date
+- Current time
+- Booking availability (handled by booking configuration)
+
+## JSON FORMAT FOR KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS
+
+```json
+[
+  ["question topic or keywords", "answer instructions"],
+  ["second topic", "second answer"]
+]
+```
+
+Rules:
+- Each inner array MUST have exactly 2 elements
+- Both elements MUST be non-empty strings (pairs with empty elements are silently dropped)
+- The value is stored as a JSON string
+
+## ADDITIVE OPERATIONS
+
+When the user says "add a question about X":
+→ READ the current value first
+→ APPEND the new pair to the existing array
+→ Do NOT replace the entire array
+
+## COMMON USER INTENTS → VARIABLE MAPPINGS
+
+**"Add Q&A about [topic]"** →
+  Append `["topic keywords", "answer instructions"]` to KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS
+
+**"Set general behavior for unknown questions"** →
+  OSCAR2_KNOWLEDGE_BASE = "For questions not covered here, say you will [action]."
+
+**"Remove Q&A about [topic]"** →
+  Read current value, filter out the matching pair, write back the updated array
+
+**"Clear all Q&A"** →
+  KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS = "[]"
+
+**"Make assistant more expert/authoritative"** →
+  Update OSCAR2_KNOWLEDGE_BASE with expertise framing
+
+## YOUR OUTPUT FORMAT
+
+Generate a sub-prompt with these sections:
+
+### SECTION 1: CURRENT KNOWLEDGE BASE STATE
+Is OSCAR2_KNOWLEDGE_BASE set? How many Q&A pairs are in KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS?
+List current Q&A topics briefly.
+
+### SECTION 2: COMPONENT ROLES
+Explain the two components and when to modify each.
+List auto-generated entries that must NOT be manually added.
+
+### SECTION 3: INTENT → CHANGES MAPPING
+Common requests and which component/variable to update.
+Include the additive operation rule (append, don't replace).
+
+### SECTION 4: JSON FORMAT & VALIDATION
+Rules for KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS: 2-element arrays, no empty strings.
+Show how the Q&A renders in the final prompt.
+
+### SECTION 5: ALL CURRENT VALUES
+- OSCAR2_KNOWLEDGE_BASE: (full current value)
+- KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS: (full current JSON in a code block)
+
+---
+
+OUTPUT ONLY THE SUB-PROMPT TEXT."""
+
+
+# Meta-prompt for generating business notifications sub-prompts
+NOTIFICATIONS_BUSINESS_META_PROMPT = """You are analyzing the business notification configuration for a MrCall AI phone assistant.
+
+Your task: Generate a self-contained sub-prompt that teaches another LLM how to configure the notification channels that inform the BUSINESS OWNER about incoming calls (not the caller — that's a different feature).
+
+## VARIABLE METADATA FROM STARCHAT
+
+{variables_context}
+
+## CONVERSATION VARIABLES AVAILABLE IN PROMPTS
+
+{conversation_variables_context}
+
+## NOTIFICATION CHANNELS
+
+Four independent channels, each configurable separately:
+
+1. **Firebase push** — Mobile app notification (always active, only control: block empty calls)
+2. **Email** — Call transcription + audio recording attachment
+3. **WhatsApp to business** — Via WATI platform (REQUIRES purchased package)
+4. **SMS to business** — Via Nexmo/Vonage (requires purchased SMS package)
+
+Pipeline runs sequentially: Firebase → Email → WhatsApp → SMS. All enabled channels send (no priority chain — unlike caller followup).
+
+## CRITICAL: PAYMENT GATE
+
+`WHATSAPP_TO_BIZ_PAID` is set ONLY by the payment system. NEVER set it manually.
+- If the user wants WhatsApp notifications and WHATSAPP_TO_BIZ_PAID = "false":
+  → Tell them: "WhatsApp business notifications require purchasing the WhatsApp package first. Once purchased, it will be activated automatically."
+
+## "EMPTY CALL" DEFAULTS (important — each channel differs)
+
+An "empty call" = caller did not speak with the assistant (silent or immediate hangup).
+
+| Channel | Variable | Default | Meaning |
+|---|---|---|---|
+| Firebase | NO_EMPTY_FIREBASE_NOTIFICATION | "false" | Push SENT for empty calls by default |
+| Email | NO_EMAIL_EMPTY_MESSAGE | "false" | Email SENT for empty calls by default |
+| WhatsApp | WHATSAPP_TO_BIZ_NO_EMPTY_MESSAGE | "false" | WhatsApp SENT for empty calls by default |
+| SMS | NO_SMS_EMPTY_MESSAGE | "true" | SMS NOT sent for empty calls by default (saves credits) |
+
+Setting a "NO_EMPTY_*" variable to "true" BLOCKS notifications for empty calls.
+
+## WHATSAPP_MESSAGE_BIZ_TO_CUSTOMER
+
+This is NOT the notification text itself. It is the pre-filled text for the "Send WhatsApp to caller" BUTTON embedded in the notification email. When the business owner clicks it, WhatsApp opens with this text pre-filled.
+
+## COMMON USER INTENTS → VARIABLE MAPPINGS
+
+**"Enable email notifications"** →
+  EMAIL_SERVICE = "true"
+  EMAIL_TO = "<email@address.com>"
+
+**"Add a CC email recipient"** →
+  (Admin only — not directly configurable by the agent)
+
+**"Don't notify for silent calls"** →
+  NO_EMPTY_FIREBASE_NOTIFICATION = "true"
+  NO_EMAIL_EMPTY_MESSAGE = "true"
+  WHATSAPP_TO_BIZ_NO_EMPTY_MESSAGE = "true" (if WhatsApp enabled)
+
+**"Enable SMS notifications"** →
+  SMS_TO_BIZ_ENABLED = "true"
+  SMS_TO_NUMBER = "+<international_number>"
+
+**"Enable WhatsApp notifications to business"** →
+  Check WHATSAPP_TO_BIZ_PAID first. If "true":
+    WHATSAPP_TO_BIZ_ENABLED = "true"
+    WHATSAPP_TO_BIZ_NUMBER = "+<international_number>"
+
+**"Use special characters in SMS (Cyrillic, Arabic, etc.)"** →
+  SMS_TO_BIZ_UNICODE = "true" (note: doubles cost)
+
+**"Set the pre-filled WhatsApp reply text"** →
+  WHATSAPP_MESSAGE_BIZ_TO_CUSTOMER = "<text in business language>"
+
+## YOUR OUTPUT FORMAT
+
+Generate a sub-prompt with these sections:
+
+### SECTION 1: CURRENT NOTIFICATION STATE
+Which channels are enabled? What email address(es) are configured? Is WhatsApp paid? What phone numbers are set?
+
+### SECTION 2: CHANNEL OVERVIEW & PAYMENT GATES
+Describe each channel and its payment requirements. Emphasize WHATSAPP_TO_BIZ_PAID cannot be set manually.
+
+### SECTION 3: EMPTY CALL BEHAVIOR
+Table showing each channel's default for empty calls and how to change it.
+
+### SECTION 4: INTENT → CHANGES MAPPING
+Common requests and which variables to set. Include the WHATSAPP_TO_BIZ_PAID check rule.
+
+### SECTION 5: ALL CURRENT VALUES
+Explicitly list every variable's current value.
+Format:
+- VARIABLE_NAME: "exact_current_value"
+
+---
+
+OUTPUT ONLY THE SUB-PROMPT TEXT."""
+
+
+# Meta-prompt for generating runtime data management sub-prompts
+RUNTIME_DATA_META_PROMPT = """You are analyzing the runtime data management configuration for a MrCall AI phone assistant.
+
+Your task: Generate a self-contained sub-prompt that teaches another LLM how to configure external API integrations that operate during phone calls across 3 lifecycle stages.
+
+## VARIABLE METADATA FROM STARCHAT
+
+{variables_context}
+
+## CONVERSATION VARIABLES AVAILABLE IN PROMPTS (available as %%VARIABLE%% in API templates)
+
+{conversation_variables_context}
+
+## THREE-STAGE LIFECYCLE
+
+**PREFETCH** — Before conversation starts: call external APIs to load context into the assistant's prompt (e.g., look up caller in CRM by phone number).
+
+**RUNNINGLOOP** — During conversation: assistant invokes external APIs based on caller intent (e.g., "check my order status"). Each configured function becomes an OpenAI function that GPT can call.
+
+**FINAL** — After conversation ends: push collected data to external systems (e.g., create CRM lead, send webhook).
+
+## CRITICAL: ELEMENT COUNT DIFFERENCE
+
+PREFETCH and FINAL use **9-element** arrays. RUNNINGLOOP uses **11-element** arrays (adds Trigger at pos 2 and Variables at pos 9).
+
+### PREFETCH / FINAL array (9 elements):
+| Pos | Name | Type | Notes |
+|---|---|---|---|
+| 0 | Function Name | string | Unique identifier |
+| 1 | Active | "true"/"false" | Enable/disable |
+| 2 | Prompt Template (Success) | text | Use %%FUNCTION_RESPONSE_BODY%% for API response |
+| 3 | Prompt Template (Failure) | text | What to do if API fails |
+| 4 | Output Format | "JSON" or "TEXT" | Default: "JSON" |
+| 5 | HTTP Method | "GET","POST","UPDATE","DELETE" | Default: "GET" |
+| 6 | HTTP Headers | array of [key, value] pairs | e.g., [["Authorization","Bearer xyz"]] |
+| 7 | URL | string | Supports %%VARIABLE%% substitution |
+| 8 | Input JSON Body | JSON string | "" for no body; %%VARIABLE%% in string values |
+
+### RUNNINGLOOP array (11 elements — positions 2 and 9 are extra):
+| Pos | Name | Type | Notes |
+|---|---|---|---|
+| 0 | Function Name | string | Becomes `rest_{{FunctionName}}` in OpenAI |
+| 1 | Active | "true"/"false" | |
+| **2** | **Trigger** | text | **When GPT should call this function (becomes OpenAI function description)** |
+| 3 | Prompt Template (Success) | text | |
+| 4 | Prompt Template (Failure) | text | |
+| 5 | Output Format | "JSON" or "TEXT" | |
+| 6 | HTTP Method | | |
+| 7 | HTTP Headers | array of [key, value] pairs | |
+| 8 | URL | string | |
+| **9** | **Variables** | array of [name, description, required] | **Parameters GPT extracts from conversation** |
+| 10 | Input JSON Body | JSON string | |
+
+## %%VARIABLE%% TEMPLATE SYNTAX
+
+Always available in URL and body templates:
+- `%%HB_FROM_NUMBER%%` — caller's phone number
+- `%%HB_TS_MILLIS_NOW%%` — current timestamp in milliseconds
+- `%%HB_TS_SEC_NOW%%` — current timestamp in seconds
+- `%%FIRST_NAME%%`, `%%FAMILY_NAME%%`, `%%CALL_REASON%%` — conversation-extracted values
+
+Syntax variants: `%%VAR%%`, `%%VAR=default%%`, `%%VAR:=default%%`
+
+Security: Variables whose keys start with `private` or `secret` are blocked.
+
+## PREREQUISITE CHECK
+
+1. `OSCAR_VERSION` must be "4" — check and set if needed
+2. `ENABLE_DATA_MANAGEMENT_TAB` must be "true"
+
+## DECISIONAL GUIDE
+
+When a user wants to set up data management, ask:
+1. "Do you need to look up caller data BEFORE the conversation?" → PREFETCH
+2. "Does the assistant need to query APIs based on WHAT the caller says?" → RUNNINGLOOP
+3. "Do you need to PUSH data to external systems AFTER the call?" → FINAL
+
+For each stage: collect URL, auth method, HTTP method, and stage-specific fields.
+
+## COMMON USER INTENTS → VARIABLE MAPPINGS
+
+**"Look up caller in CRM before call"** →
+  DATA_MANAGEMENT_PREFETCH_RESTAPI_PROGRAMMATIC with GET to CRM URL using %%HB_FROM_NUMBER%%
+
+**"Let assistant check order status during call"** →
+  DATA_MANAGEMENT_RUNNINGLOOP_RESTAPI_PROGRAMMATIC with trigger describing when to call,
+  variables defining what GPT extracts from conversation (e.g., ORDER_ID)
+
+**"Create a lead after call"** →
+  DATA_MANAGEMENT_FINAL_RESTAPI_PROGRAMMATIC with POST including %%FIRST_NAME%%, %%FAMILY_NAME%%, %%CALL_REASON%%
+
+**"Enable data management tab"** →
+  ENABLE_DATA_MANAGEMENT_TAB = "true"
+
+## YOUR OUTPUT FORMAT
+
+Generate a sub-prompt with these sections:
+
+### SECTION 1: CURRENT DATA MANAGEMENT STATE
+Is ENABLE_DATA_MANAGEMENT_TAB enabled? OSCAR_VERSION? How many functions configured per stage?
+
+### SECTION 2: THREE-STAGE LIFECYCLE
+Explain PREFETCH / RUNNINGLOOP / FINAL with the element count difference highlighted.
+
+### SECTION 3: ELEMENT SCHEMAS
+Include the 9-element (PREFETCH/FINAL) and 11-element (RUNNINGLOOP) tables as reference.
+
+### SECTION 4: TEMPLATE VARIABLES
+List %%VARIABLE%% templates available in URLs and bodies. Note security restrictions.
+
+### SECTION 5: INTENT → CONFIGURATION GUIDE
+The decisional guide (which stage for which need).
+
+### SECTION 6: ALL CURRENT VALUES
+Full current JSON for each configured stage in code blocks.
+
+---
+
+OUTPUT ONLY THE SUB-PROMPT TEXT."""
+
+
+# Meta-prompt for generating call transfer sub-prompts
+CALL_TRANSFER_META_PROMPT = """You are analyzing the call transfer/forwarding configuration for a MrCall AI phone assistant.
+
+Your task: Generate a self-contained sub-prompt that teaches another LLM how to configure transfer rules that allow the AI to forward calls to specific phone numbers based on caller intent.
+
+## VARIABLE METADATA FROM STARCHAT
+
+{variables_context}
+
+## CONVERSATION VARIABLES AVAILABLE IN PROMPTS
+
+{conversation_variables_context}
+
+## HOW TRANSFER RULES WORK
+
+Each transfer rule = one OpenAI function with `name = "transfer"`.
+GPT reads all trigger descriptions and invokes `transfer` with the matching NUMBER and MESSAGE when caller intent matches.
+
+All functions are named "transfer" — they are distinguished ONLY by their trigger description. Therefore, triggers must be specific and non-overlapping.
+
+## VALUE FORMAT: TRANSFER_CALL_OSCAR
+
+JSON array of 4-element arrays:
+```json
+[
+  ["trigger description", "phone_number", "message before transfer", "enabled_status"],
+  ...
+]
+```
+
+| Position | Name | Format | Notes |
+|---|---|---|---|
+| 0 | Trigger | Natural language condition | Becomes OpenAI function description — write specifically |
+| 1 | Phone number | International format, e.g. "+393471149738" | Spaces stripped at runtime |
+| 2 | Message | What to say before transferring | |
+| 3 | Enabled status | "enabled", "enabled_open", or "enabled_close" | Default: "enabled" if omitted |
+
+## ENABLED STATUS LOGIC (business hours filtering)
+
+| Business State | "enabled" | "enabled_open" | "enabled_close" |
+|---|---|---|---|
+| Open (business hours) | Active | Active | **Inactive** |
+| Closed (outside hours) | Active | **Inactive** | Active |
+
+Use cases:
+- `"enabled"` — always active regardless of hours
+- `"enabled_open"` — only during business hours (e.g., transfer to office)
+- `"enabled_close"` — only outside hours (e.g., transfer to on-call/emergency)
+
+## COMMON USER INTENTS → VARIABLE MAPPINGS
+
+**"Transfer to [person] when caller asks for them"** →
+  Add: `["the CALLER wants to speak with [person name]", "+number", "message", "enabled"]`
+
+**"Transfer to office during hours, emergency after hours"** →
+  Add two rules:
+  - `["the CALLER wants to speak with an operator", "+office", "Transferring...", "enabled_open"]`
+  - `["the CALLER has an urgent issue outside business hours", "+oncall", "Transferring to emergency...", "enabled_close"]`
+
+**"Enable call transfer"** →
+  TRANSFER_CALL_ENABLED = "true"
+
+**"Disable call transfer"** →
+  TRANSFER_CALL_ENABLED = "false"
+
+**"Remove a transfer rule"** →
+  Read current TRANSFER_CALL_OSCAR, filter out matching rule, write back
+
+**"Add a transfer rule"** →
+  Read current TRANSFER_CALL_OSCAR, append new 4-element array, write back
+
+## VALIDATION RULES
+
+- Each inner array: 3 or 4 elements (4th optional, defaults to "enabled")
+- Phone number: international format
+- Enabled status: must be exactly "enabled", "enabled_open", or "enabled_close"
+- Trigger must be specific enough for GPT to distinguish from other triggers
+- Max trigger length: keep it concise (it's an OpenAI function description)
+
+## YOUR OUTPUT FORMAT
+
+Generate a sub-prompt with these sections:
+
+### SECTION 1: CURRENT TRANSFER STATE
+Is TRANSFER_CALL_ENABLED = "true"? How many rules are configured? List current rules with their trigger, number, and status.
+
+### SECTION 2: HOW TRANSFER RULES WORK
+Explain the OpenAI function model, the trigger-as-description pattern, and why triggers must be specific.
+
+### SECTION 3: BUSINESS HOURS FILTERING
+Explain enabled/enabled_open/enabled_close with the matrix table. When to use each.
+
+### SECTION 4: INTENT → CHANGES MAPPING
+Common requests mapped to variable changes. Include additive operation rule (append, don't replace).
+
+### SECTION 5: ALL CURRENT VALUES
+- TRANSFER_CALL_ENABLED: "exact_value"
+- TRANSFER_CALL_OSCAR: (full current JSON in a code block)
+
+---
+
+OUTPUT ONLY THE SUB-PROMPT TEXT."""
+
+
 class MrCallConfiguratorTrainer:
     """Generates feature-specific sub-prompts from MrCall configuration.
 
@@ -260,7 +903,99 @@ class MrCallConfiguratorTrainer:
             "display_name": "How your MrCall assistant manages booking requests",
             "meta_prompt": BOOKING_META_PROMPT,
             "dynamic_context": True,  # Uses _build_variables_context for metadata
-        }
+        },
+        "caller_followup": {
+            "variables": [
+                "WHATSAPP_TO_CALLER_ENABLED",
+                "WHATSAPP_TO_CALLER_INSTRUCTIONS_INTERACTION",
+                "WHATSAPP_TO_CALLER_INSTRUCTIONS_NO_INTERACTION",
+                "TEXT_ME_BOT_ENABLED",
+                "TEXT_ME_BOT_API_KEY",
+                "TEXT_TO_CUSTOMER_ONLY_UPON_INTERACTION",
+                "OSCAR_DYNAMIC_TEXTMESSAGE_GENERATION",
+                "SEND_SMS_TO_CUSTOMER_ENABLED",
+                "SMS_TO_BIZ_UNICODE",
+                "SMS_FROM",
+                "SEND_SMS_TO_CUSTOMER_ONLY_FALLBACK",
+                "SEND_SMS_TO_CUSTOMER_INTERACTION",
+                "SEND_SMS_TO_CUSTOMER_INTERACTION_MESSAGE",
+                "SEND_SMS_TO_CUSTOMER_NO_INTERACTION",
+                "SEND_SMS_TO_CUSTOMER_NO_INTERACTION_MESSAGE",
+                "WATI_ENABLED",
+                "WATI_DOMAIN",
+                "WATI_BEARER",
+                "WATI_TEMPLATE",
+                "CALLBELL_ENABLED",
+                "CALLBELL_API_KEY",
+            ],
+            "description": "Post-call WhatsApp/SMS messages sent to the caller",
+            "display_name": "Post-call messages sent to the caller (WhatsApp/SMS)",
+            "meta_prompt": CALLER_FOLLOWUP_META_PROMPT,
+            "dynamic_context": True,
+        },
+        "conversation": {
+            "variables": [
+                "CONVERSATION_INSTRUCTIONS",
+                "FURTHER_QUESTIONS",
+            ],
+            "description": "What the assistant does after the welcome greeting",
+            "display_name": "Conversation flow and questions the assistant asks",
+            "meta_prompt": CONVERSATION_META_PROMPT,
+            "dynamic_context": True,
+        },
+        "knowledge_base": {
+            "variables": [
+                "KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS",
+                "OSCAR2_KNOWLEDGE_BASE",
+            ],
+            "description": "Q&A pairs and instructions for answering caller questions",
+            "display_name": "Knowledge base Q&A for answering caller questions",
+            "meta_prompt": KNOWLEDGE_BASE_META_PROMPT,
+            "dynamic_context": True,
+        },
+        "notifications_business": {
+            "variables": [
+                "NO_EMPTY_FIREBASE_NOTIFICATION",
+                "EMAIL_SERVICE",
+                "EMAIL_TO",
+                "NO_EMAIL_EMPTY_MESSAGE",
+                "WHATSAPP_MESSAGE_BIZ_TO_CUSTOMER",
+                "WHATSAPP_TO_BIZ_PAID",
+                "WHATSAPP_TO_BIZ_ENABLED",
+                "WHATSAPP_TO_BIZ_NUMBER",
+                "WHATSAPP_TO_BIZ_NO_EMPTY_MESSAGE",
+                "SMS_TO_BIZ_ENABLED",
+                "SMS_TO_BIZ_UNICODE",
+                "SMS_TO_NUMBER",
+                "NO_SMS_EMPTY_MESSAGE",
+            ],
+            "description": "Notification channels that inform the business owner about calls",
+            "display_name": "Notifications sent to the business owner after each call",
+            "meta_prompt": NOTIFICATIONS_BUSINESS_META_PROMPT,
+            "dynamic_context": True,
+        },
+        "runtime_data": {
+            "variables": [
+                "ENABLE_DATA_MANAGEMENT_TAB",
+                "DATA_MANAGEMENT_PREFETCH_RESTAPI_PROGRAMMATIC",
+                "DATA_MANAGEMENT_RUNNINGLOOP_RESTAPI_PROGRAMMATIC",
+                "DATA_MANAGEMENT_FINAL_RESTAPI_PROGRAMMATIC",
+            ],
+            "description": "External API integrations for PREFETCH/RUNNINGLOOP/FINAL stages",
+            "display_name": "External API integrations (CRM, webhooks, real-time data)",
+            "meta_prompt": RUNTIME_DATA_META_PROMPT,
+            "dynamic_context": True,
+        },
+        "call_transfer": {
+            "variables": [
+                "TRANSFER_CALL_ENABLED",
+                "TRANSFER_CALL_OSCAR",
+            ],
+            "description": "Call forwarding rules based on caller intent and business hours",
+            "display_name": "Call transfer rules (forward calls to specific numbers)",
+            "meta_prompt": CALL_TRANSFER_META_PROMPT,
+            "dynamic_context": True,
+        },
     }
 
     def __init__(
