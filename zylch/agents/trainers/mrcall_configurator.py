@@ -251,7 +251,7 @@ This means: if WATI is enabled AND MrZappa is enabled, only WATI sends (it wins)
 
 ## MANDATORY TROUBLESHOOTING MESSAGE
 
-When the user reports unofficial WhatsApp (MrZappa) is not working, the configurator MUST deliver this explanation (adapt language to user's language):
+When the user reports unofficial WhatsApp is not working, the configurator MUST deliver this explanation (adapt language to user's language):
 
 "We are sorry for the disruption. The free WhatsApp service works by emulating a WhatsApp Web session — Meta does not support this and actively prevents it from working. Outages are expected and recurring. For guaranteed delivery, switch to Meta's official APIs via Callbell or WATI (cost: a few tens of euros/month)."
 
@@ -342,10 +342,10 @@ BEFORE proposing any changes to CONVERSATION_INSTRUCTIONS, the configurator MUST
 The 4 FIRST_NAME coordination scenarios:
 | Welcome asks name? | FIRST_NAME known? | What happens |
 |---|---|---|
-| No | Yes ("Mario") | Conversation uses stored name directly |
+| No | Yes ("Anna") | Conversation uses stored name directly |
 | No | No (unknown) | Conversation should ask for the name |
 | Yes | No (unknown) | Caller gives name during greeting — conversation has it |
-| Yes | Yes ("Mario") | Welcome skips asking — conversation uses it |
+| Yes | Yes ("Anna") | Welcome skips asking — conversation uses it |
 
 ## VALUE FORMAT
 
@@ -452,7 +452,7 @@ The knowledge base has TWO independent components:
 
 **2. `KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS`** (type: tuples, JSON array)
 → Structured Q&A pairs. Format: `[["topic or keywords", "answer instructions"], ...]`
-→ Each pair renders in the prompt as: "IF THE CALLER ASKS QUESTIONS LIKE OR ABOUT: {topic}\n→ {answer}"
+→ Each pair renders in the prompt as: "IF THE CALLER ASKS QUESTIONS LIKE OR ABOUT: {{topic}}\n→ {{answer}}"
 
 Modifying one does NOT affect the other.
 
