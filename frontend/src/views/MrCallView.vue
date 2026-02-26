@@ -12,20 +12,63 @@ const setupForm = ref({
 
 onMounted(() => {
   mrcallStore.fetchAssistants()
+  mrcallStore.fetchTrainingStatus()
 })
 
 // Computed property to expose assistant info from linkedAssistant
 const assistant = computed(() => mrcallStore.linkedAssistant)
 
-// Note: These functions are currently unused but kept for future call history feature
-// function formatDate(_date: string) {
-//   return new Date(_date).toLocaleString()
-// }
-// function formatDuration(seconds: number) {
-//   const mins = Math.floor(seconds / 60)
-//   const secs = seconds % 60
-//   return `${mins}:${secs.toString().padStart(2, '0')}`
-// }
+// Training button computed properties
+const trainingButtonClass = computed(() => {
+  const status = mrcallStore.trainingStatus?.status
+  switch (status) {
+    case 'current':
+      return 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+    case 'stale':
+      return 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 cursor-pointer'
+    case 'in_progress':
+      return 'bg-yellow-50 text-yellow-700 border-yellow-200 animate-pulse'
+    case 'untrained':
+      return 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200 cursor-pointer'
+    default:
+      return 'bg-gray-100 text-gray-500 border-gray-200'
+  }
+})
+
+const trainingButtonLabel = computed(() => {
+  const ts = mrcallStore.trainingStatus
+  if (!ts) return 'Loading...'
+
+  switch (ts.status) {
+    case 'current':
+      return 'Agent Trained'
+    case 'stale': {
+      const count = ts.changed_variables.length
+      return `Retrain needed (${count} change${count !== 1 ? 's' : ''})`
+    }
+    case 'in_progress': {
+      const pct = ts.job_progress_pct ?? 0
+      return `Training... ${pct}%`
+    }
+    case 'untrained':
+      return 'Train Agent'
+    case 'unknown':
+      return ts.error ? 'Status unknown' : 'Loading...'
+    default:
+      return 'Loading...'
+  }
+})
+
+const canTrain = computed(() => {
+  const status = mrcallStore.trainingStatus?.status
+  return status === 'untrained' || status === 'stale'
+})
+
+function handleTrainClick() {
+  if (canTrain.value) {
+    mrcallStore.startTraining()
+  }
+}
 
 async function handleSetup() {
   // Note: configure is not in the store, link an existing assistant instead
@@ -114,6 +157,70 @@ async function handleSetup() {
             >
               Get Started
             </button>
+          </div>
+        </div>
+
+        <!-- Training Status Card -->
+        <div v-if="mrcallStore.isLinked" class="bg-white border border-gray-200 rounded-xl p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-semibold text-gray-900">Agent Training</h2>
+            <button
+              @click="handleTrainClick"
+              :disabled="!canTrain && mrcallStore.trainingStatus?.status !== 'in_progress'"
+              :class="[
+                'px-4 py-1.5 rounded-full text-sm font-medium border transition-colors',
+                trainingButtonClass
+              ]"
+            >
+              {{ trainingButtonLabel }}
+            </button>
+          </div>
+
+          <!-- Training details -->
+          <div v-if="mrcallStore.trainingStatus" class="space-y-3">
+            <!-- Progress bar during training -->
+            <div v-if="mrcallStore.trainingStatus.status === 'in_progress'" class="w-full bg-gray-200 rounded-full h-2">
+              <div
+                class="bg-yellow-500 h-2 rounded-full transition-all duration-300"
+                :style="{ width: `${mrcallStore.trainingStatus.job_progress_pct ?? 0}%` }"
+              ></div>
+            </div>
+
+            <!-- Changed variables (when stale) -->
+            <div v-if="mrcallStore.trainingStatus.status === 'stale' && mrcallStore.trainingStatus.changed_variables.length > 0">
+              <p class="text-sm text-gray-600 mb-2">Changed variables:</p>
+              <div class="space-y-1">
+                <div
+                  v-for="cv in mrcallStore.trainingStatus.changed_variables"
+                  :key="cv.name"
+                  class="flex items-center gap-2 text-xs"
+                >
+                  <span class="px-1.5 py-0.5 bg-red-50 text-red-600 rounded">{{ cv.feature }}</span>
+                  <span class="text-gray-600 font-mono">{{ cv.name }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Features summary -->
+            <div v-if="mrcallStore.trainingStatus.status === 'stale'" class="text-xs text-gray-500">
+              {{ mrcallStore.trainingStatus.stale_features.length }} of {{ mrcallStore.trainingStatus.all_features.length }} features need retraining
+            </div>
+
+            <!-- Last trained -->
+            <div v-if="mrcallStore.trainingStatus.snapshot_at" class="text-xs text-gray-400">
+              Last trained: {{ new Date(mrcallStore.trainingStatus.snapshot_at).toLocaleString() }}
+            </div>
+
+            <!-- Error message -->
+            <div v-if="mrcallStore.trainingError" class="text-sm text-red-600 bg-red-50 rounded-lg p-3">
+              {{ mrcallStore.trainingError }}
+            </div>
+          </div>
+
+          <!-- Loading state -->
+          <div v-else-if="mrcallStore.isTrainingLoading" class="flex items-center gap-2 text-sm text-gray-500">
+            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
+            Checking training status...
           </div>
         </div>
 

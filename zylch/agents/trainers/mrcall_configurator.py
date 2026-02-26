@@ -1465,3 +1465,83 @@ class MrCallConfiguratorTrainer:
         if feature_name not in cls.FEATURES:
             return []
         return cls.FEATURES[feature_name]["variables"]
+
+    @classmethod
+    def diff_snapshot(
+        cls,
+        snapshot_variables: Dict[str, str],
+        live_variables: Dict[str, str],
+    ) -> Dict[str, Any]:
+        """Compare trained snapshot against live variables to find stale features.
+
+        Args:
+            snapshot_variables: Variable values at last training time
+            live_variables: Current live variable values from StarChat
+
+        Returns:
+            Dict with:
+                - changed_variables: list of {name, feature, old_value, new_value}
+                - stale_features: set of feature names that need retraining
+                - current_features: set of feature names that are up to date
+        """
+        # Build inverse map: variable_name -> feature_name
+        variable_to_feature = {
+            var: feature_name
+            for feature_name, feature in cls.FEATURES.items()
+            for var in feature["variables"]
+        }
+
+        changed_variables = []
+        stale_features = set()
+
+        for var_name, feature_name in variable_to_feature.items():
+            old_val = snapshot_variables.get(var_name)
+            new_val = live_variables.get(var_name)
+
+            # Convert both to string for comparison (StarChat returns strings)
+            old_str = str(old_val) if old_val is not None else None
+            new_str = str(new_val) if new_val is not None else None
+
+            if old_str != new_str:
+                changed_variables.append({
+                    "name": var_name,
+                    "feature": feature_name,
+                    "old_value": old_val,
+                    "new_value": new_val,
+                })
+                stale_features.add(feature_name)
+
+        all_features = set(cls.FEATURES.keys())
+        current_features = all_features - stale_features
+
+        logger.debug(
+            f"[diff_snapshot] Changed: {len(changed_variables)} variables, "
+            f"stale features: {stale_features}, current features: {current_features}"
+        )
+
+        return {
+            "changed_variables": changed_variables,
+            "stale_features": stale_features,
+            "current_features": current_features,
+        }
+
+    @classmethod
+    def build_snapshot_from_business(cls, business_variables: Dict[str, str]) -> Dict[str, str]:
+        """Extract only the tracked variables from business config for snapshot storage.
+
+        Args:
+            business_variables: Full business variables dict from StarChat
+
+        Returns:
+            Dict with only the variables tracked by FEATURES
+        """
+        tracked_vars = {
+            var
+            for feature in cls.FEATURES.values()
+            for var in feature["variables"]
+        }
+        return {
+            var_name: str(value) if value is not None else None
+            for var_name, value in business_variables.items()
+            if var_name in tracked_vars
+        }

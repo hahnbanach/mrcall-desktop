@@ -2945,6 +2945,73 @@ class SupabaseStorage:
             logger.warning(f"Failed to get agent prompt metadata: {e}")
             return None
 
+    # ==================== Training Snapshots ====================
+
+    def get_training_snapshot(self, owner_id: str, business_id: str) -> Optional[Dict[str, Any]]:
+        """Get training snapshot for a business.
+
+        The snapshot stores the variable values that were used to generate
+        the current trained prompts. Used to detect if retraining is needed.
+
+        Args:
+            owner_id: Firebase UID
+            business_id: MrCall business ID
+
+        Returns:
+            Dict with 'variables' (snapshot dict), 'metadata', 'updated_at', or None
+        """
+        agent_type = f"mrcall_{business_id}_snapshot"
+        try:
+            result = self.client.table('agent_prompts')\
+                .select('agent_prompt, metadata, updated_at')\
+                .eq('owner_id', owner_id)\
+                .eq('agent_type', agent_type)\
+                .limit(1)\
+                .execute()
+
+            if result.data:
+                row = result.data[0]
+                try:
+                    variables = json.loads(row['agent_prompt'])
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning(f"Failed to parse training snapshot for {owner_id}/{business_id}")
+                    return None
+                return {
+                    'variables': variables,
+                    'metadata': row.get('metadata', {}),
+                    'updated_at': row.get('updated_at'),
+                }
+            return None
+
+        except Exception as e:
+            logger.warning(f"Failed to get training snapshot: {e}")
+            return None
+
+    def store_training_snapshot(
+        self,
+        owner_id: str,
+        business_id: str,
+        variables: Dict[str, str],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Store training snapshot after successful training.
+
+        Args:
+            owner_id: Firebase UID
+            business_id: MrCall business ID
+            variables: Dict of variable_name -> value at training time
+            metadata: Optional metadata (features_trained, generated_at, etc.)
+        """
+        agent_type = f"mrcall_{business_id}_snapshot"
+        logger.debug(f"[store_training_snapshot] Storing snapshot for {owner_id}/{business_id}, {len(variables)} variables")
+        self.store_agent_prompt(
+            owner_id=owner_id,
+            agent_type=agent_type,
+            prompt=json.dumps(variables, ensure_ascii=False),
+            metadata=metadata or {},
+        )
+        logger.info(f"Stored training snapshot for {owner_id}/{business_id} ({len(variables)} variables)")
+
     # ==================== Task Items ====================
 
     def store_task_item(self, owner_id: str, item: Dict[str, Any]) -> bool:

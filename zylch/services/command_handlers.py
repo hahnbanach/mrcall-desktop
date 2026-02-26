@@ -3023,9 +3023,12 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
         # =====================
         elif domain == 'mrcall':
             if action == 'train':
-                # Optional feature argument: /agent mrcall train [feature]
-                feature = args[2] if len(args) > 2 else None
-                return await _handle_mrcall_agent_train(storage, owner_id, api_key, llm_provider, user_email, feature=feature, context=context)
+                # Optional feature argument: /agent mrcall train [feature] [--force]
+                remaining = args[2:] if len(args) > 2 else []
+                force = '--force' in remaining
+                remaining = [a for a in remaining if a != '--force']
+                feature = remaining[0] if remaining else None
+                return await _handle_mrcall_agent_train(storage, owner_id, api_key, llm_provider, user_email, feature=feature, context=context, force=force)
 
             elif action == 'run':
                 instructions = ' '.join(args[2:]) if len(args) > 2 else ''
@@ -3555,14 +3558,19 @@ Say "send it" or use `/email send {draft_id}` to send."""
 # MRCALL AGENT HELPERS
 # =====================
 
-async def _handle_mrcall_agent_train(storage, owner_id: str, api_key: str, llm_provider: str, user_email: str, feature: str = None, context: dict = None) -> str:
+async def _handle_mrcall_agent_train(storage, owner_id: str, api_key: str, llm_provider: str, user_email: str, feature: str = None, context: dict = None, force: bool = False) -> str:
     """Train MrCall features and build unified agent.
 
+    Supports selective retraining: only re-generates prompts for features
+    whose variables changed since the last training snapshot.
+
     Args:
-        feature: Optional specific feature to train. If None, trains all features.
+        feature: Optional specific feature to train. If None, uses diff logic.
         context: Request context (for dashboard detection)
+        force: If True, skip diff and retrain all features.
     """
     import asyncio
+    from datetime import datetime, timezone
     from zylch.agents.trainers import MrCallAgentTrainer, MrCallConfiguratorTrainer
     from zylch.tools.starchat import StarChatClient, create_starchat_client
 
@@ -3623,18 +3631,66 @@ Usage:
             provider=llm_provider,
         )
 
-        trained_features = []
+        # Fetch live business config for snapshot comparison
+        business = await starchat.get_business_config(business_id)
+        if not business:
+            return f"❌ **Error:** Business not found: {business_id}"
+        live_variables = business.get("variables", {})
+
+        # Determine which features to train
+        features_to_train = []
+        skipped_features = []
+        diff_info = None
+
         if feature:
-            # Train specific feature
-            await configurator.train_feature(feature, business_id)
-            trained_features.append(feature)
+            # Explicit feature requested — always train it
+            features_to_train = [feature]
+            logger.info(f"[/agent mrcall train] Explicit feature requested: {feature}")
+        elif force:
+            # Force retrain all
+            features_to_train = list(MrCallConfiguratorTrainer.FEATURES.keys())
+            logger.info(f"[/agent mrcall train] Force retrain all {len(features_to_train)} features")
         else:
-            # Train all features
-            for feat_name in MrCallConfiguratorTrainer.FEATURES.keys():
+            # Selective retraining: load snapshot and diff
+            snapshot = storage.get_training_snapshot(owner_id, business_id)
+
+            if snapshot is None:
+                # First training — no snapshot exists, train everything
+                features_to_train = list(MrCallConfiguratorTrainer.FEATURES.keys())
+                logger.info(f"[/agent mrcall train] First training (no snapshot), training all {len(features_to_train)} features")
+            else:
+                # Diff snapshot vs live variables
+                snapshot_variables = snapshot.get('variables', {})
+                diff_info = MrCallConfiguratorTrainer.diff_snapshot(snapshot_variables, live_variables)
+                stale_features = diff_info["stale_features"]
+
+                if not stale_features:
+                    return """✅ **Already up to date**
+
+No variables have changed since the last training. Nothing to retrain.
+
+Use `/agent mrcall train --force` to retrain all features anyway."""
+
+                features_to_train = list(stale_features)
+                skipped_features = list(diff_info["current_features"])
+                logger.info(
+                    f"[/agent mrcall train] Selective retraining: "
+                    f"{len(features_to_train)} stale ({features_to_train}), "
+                    f"{len(skipped_features)} current ({skipped_features})"
+                )
+
+        # Train the features
+        trained_features = []
+        failed_features = []
+        for feat_name in features_to_train:
+            try:
                 await configurator.train_feature(feat_name, business_id)
                 trained_features.append(feat_name)
+            except Exception as e:
+                logger.error(f"[/agent mrcall train] Failed to train {feat_name}: {e}", exc_info=True)
+                failed_features.append((feat_name, str(e)))
 
-        # Build unified agent prompt (combines all feature sub-prompts)
+        # Build unified agent prompt (combines ALL feature sub-prompts, including unchanged ones)
         agent_trainer = MrCallAgentTrainer(
             storage=storage,
             owner_id=owner_id,
@@ -3654,7 +3710,45 @@ Usage:
             metadata
         )
 
+        # Update snapshot — only for successfully trained features
+        # Load existing snapshot and merge in new values for trained features
+        existing_snapshot = storage.get_training_snapshot(owner_id, business_id)
+        snapshot_vars = existing_snapshot.get('variables', {}) if existing_snapshot else {}
+
+        for feat_name in trained_features:
+            feat_var_names = MrCallConfiguratorTrainer.FEATURES[feat_name]["variables"]
+            for var_name in feat_var_names:
+                val = live_variables.get(var_name)
+                snapshot_vars[var_name] = str(val) if val is not None else None
+
+        storage.store_training_snapshot(
+            owner_id=owner_id,
+            business_id=business_id,
+            variables=snapshot_vars,
+            metadata={
+                "features_trained": trained_features,
+                "features_skipped": skipped_features,
+                "features_failed": [f[0] for f in failed_features],
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "total_features": len(MrCallConfiguratorTrainer.FEATURES),
+                "selective": diff_info is not None,
+            },
+        )
+
         features_included = metadata.get('features_included', trained_features)
+
+        # Build response message
+        if failed_features:
+            failed_msg = "\n".join(f"  - {f}: {e}" for f, e in failed_features)
+            return f"""⚠️ **Training partially completed**
+
+**Trained:** {', '.join(trained_features)}
+**Failed:**
+{failed_msg}
+{"**Skipped (unchanged):** " + ', '.join(skipped_features) if skipped_features else ""}
+
+**Usage:**
+`/agent mrcall run "your instructions here"`"""
 
         if feature:
             return f"""✅ **Feature '{feature}' Trained**
@@ -3665,6 +3759,23 @@ Agent updated with new '{feature}' configuration knowledge.
 
 **Usage:**
 `/agent mrcall run "your instructions here"`"""
+
+        if skipped_features:
+            changed_vars_msg = ""
+            if diff_info and diff_info["changed_variables"]:
+                changed_vars_msg = "\n**Changed variables:** " + ", ".join(
+                    cv["name"] for cv in diff_info["changed_variables"]
+                )
+
+            return f"""✅ **MrCall Agent Trained (selective)**
+
+**Retrained:** {', '.join(trained_features)}
+**Skipped (unchanged):** {', '.join(skipped_features)}{changed_vars_msg}
+
+Saved {len(skipped_features)} LLM calls by only retraining features with changed variables.
+
+**Usage:**
+`/agent mrcall run "enable booking with 30-min appointments"`"""
         else:
             return f"""✅ **MrCall Agent Trained**
 

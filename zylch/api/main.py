@@ -7,7 +7,7 @@ import logging
 
 import colorlog
 
-from zylch.api.routes import sync, chat, admin, webhooks, data, auth, commands, connections, memory, jobs
+from zylch.api.routes import sync, chat, admin, webhooks, data, auth, commands, connections, memory, jobs, mrcall
 from zylch.api.firebase_auth import initialize_firebase
 from zylch.config import settings
 
@@ -68,6 +68,7 @@ app.include_router(commands.router, prefix="/api", tags=["commands"])
 app.include_router(connections.router, prefix="/api", tags=["connections"])
 app.include_router(memory.router, prefix="/api/memory", tags=["memory"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
+app.include_router(mrcall.router, prefix="/api/mrcall", tags=["mrcall"])
 
 
 @app.on_event("startup")

@@ -188,6 +188,34 @@ export interface MrCallAssistant {
   linkedZylchAssistant: string | null
 }
 
+export interface MrCallChangedVariable {
+  name: string
+  feature: string
+  old_value: string | null
+  new_value: string | null
+}
+
+export interface MrCallTrainingStatus {
+  status: 'untrained' | 'current' | 'stale' | 'in_progress' | 'unknown'
+  business_id: string | null
+  checked_at: string | null
+  snapshot_at: string | null
+  job_id: string | null
+  job_progress_pct: number | null
+  changed_variables: MrCallChangedVariable[]
+  stale_features: string[]
+  current_features: string[]
+  all_features: string[]
+  error: string | null
+}
+
+export interface MrCallStartTrainingResponse {
+  job_id: string | null
+  status: string
+  features_to_train: string[]
+  message: string
+}
+
 // Sync Types
 export interface SyncStatus {
   isRunning: boolean
