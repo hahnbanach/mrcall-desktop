@@ -35,6 +35,6 @@ from zylch.memory import HybridSearchEngine, EmbeddingEngine
 
 ## Related Documentation
 
-- [Architecture Overview](../architecture/overview.md) - System context
+- [Architecture](../ARCHITECTURE.md) - System context
 - [Entity Memory System](../features/entity-memory-system.md) - Blob storage
 - [Task Management](../features/task-management.md) - Task items table

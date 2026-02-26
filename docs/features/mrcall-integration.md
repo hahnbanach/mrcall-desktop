@@ -691,16 +691,19 @@ See [WHATSAPP_INTEGRATION_TODO.md](WHATSAPP_INTEGRATION_TODO.md) for comprehensi
 
 ## MrCall Dashboard Integration
 
-The MrCall Dashboard (Vue.js, hosted at `dashboard.mrcall.ai`) integrates directly with Zylch's `/api/chat` endpoint to provide AI-powered assistant configuration. Dashboard users require **zero manual setup** — no `/connect mrcall`, no `/connect anthropic`, no `/mrcall link`.
+The MrCall Dashboard (`~/hb/mrcall-dashboard`, Vue 3 + PrimeVue, hosted at `dashboard.mrcall.ai`) integrates directly with Zylch's `/api/chat` endpoint to provide AI-powered assistant configuration. Dashboard users require **zero manual setup** — no `/connect mrcall`, no `/connect anthropic`, no `/mrcall link`.
+
+**Note**: This is the active frontend for MrCall. Zylch also has a `frontend/` directory containing a dormant Vue 3 prototype — all MrCall UI development happens in `~/hb/mrcall-dashboard`.
 
 ### Shared Firebase Authentication
 
 Both apps use the same Firebase project (`talkmeapp-e696c`), so authentication tokens are interchangeable. When a user is logged into the MrCall Dashboard, their Firebase JWT is accepted by both Zylch and StarChat without additional login.
 
-**Key files (Dashboard)**:
-- `src/views/ConfigureAI.vue` - Two-column layout (command sidebar + chat)
+**Key files (MrCall Dashboard at ~/hb/mrcall-dashboard)**:
+- `src/views/ConfigureAI.vue` - Two-column layout (command sidebar + chat) + training status indicator
+- `src/views/business/BusinessConfiguration.vue` - Business config with training status button
 - `src/components/ZylchChat.vue` - Chat component using Zylch API
-- `src/utils/Zylch.js` - API client (`Authorization: Bearer <token>`)
+- `src/utils/Zylch.js` - API client (`Authorization: Bearer <token>`, includes training methods)
 
 ### User Flow
 
@@ -807,6 +810,42 @@ CORS_ALLOWED_ORIGINS=http://localhost:8080,https://dashboard.mrcall.ai,...
 # System-level LLM key (so users don't need /connect anthropic)
 ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+## Training Optimization (February 2026)
+
+### Selective Retraining
+
+The MrCall agent training now supports **selective retraining** — only features whose variables changed since the last training are re-generated. This saves LLM API calls and wall-clock time.
+
+**How it works**:
+1. After training, variable values are saved as a snapshot (stored in `agent_prompts` table as `mrcall_{business_id}_snapshot`)
+2. On next training, live values are diffed against the snapshot
+3. Changed variables are mapped to affected features via `VARIABLE_TO_FEATURE`
+4. Only stale features are retrained; current features are skipped
+5. Snapshot is updated only for successfully trained features
+
+**CLI**: `/agent mrcall train` (selective) or `/agent mrcall train --force` (full)
+
+### Training Status API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/mrcall/training/status` | GET | Returns `untrained`/`current`/`stale`/`in_progress` + changed variables |
+| `/api/mrcall/training/start` | POST | Starts background training job, returns `job_id` |
+
+### Dashboard Training Button
+
+**BusinessConfiguration.vue** shows a color-coded button in the footer:
+- **Green**: "Agent Trained" (all variables match snapshot)
+- **Red**: "Retrain needed (N changes)" (variables changed)
+- **Yellow + spinner**: "Training..." (job in progress)
+- **Gray**: "Train Agent" (never trained)
+
+**ConfigureAI.vue** shows a read-only training status badge in the sidebar.
+
+For detailed implementation, see:
+- [MrCall Configurator Agent docs](../agents/mrcall-configurator.md#training-optimization-selective-retraining)
+- [MrCall Dashboard docs](~/hb/mrcall-dashboard/docs/zylch-integration.md)
 
 ## Related Documentation
 

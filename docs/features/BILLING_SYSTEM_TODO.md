@@ -368,7 +368,7 @@ CREATE TABLE invoices (
 
 ## Related Documentation
 
-- **Architecture**: `docs/architecture/overview.md` - Multi-tenant architecture
+- **Architecture**: `docs/ARCHITECTURE.md` - Multi-tenant architecture
 - **API**: `docs/api/auth-api.md` - User authentication and JWT
 - **Frontend**: `frontend/ARCHITECTURE.md` - Vue 3 dashboard
 - **Development Plan**: `.claude/DEVELOPMENT_PLAN.md` - Phase H details

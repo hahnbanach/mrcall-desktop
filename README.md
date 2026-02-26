@@ -214,8 +214,7 @@ Zylch AI provides HTTP API endpoints for web/mobile integration. See `docs/api/c
 - [MrCall Integration](docs/features/mrcall-integration.md) - Telephony & WhatsApp
 
 **🏗️ Architecture**
-- [Architecture Overview](docs/architecture/overview.md) - System design and philosophy
-- [.claude/ARCHITECTURE.md](.claude/ARCHITECTURE.md) - Detailed technical architecture
+- [Architecture](docs/ARCHITECTURE.md) - System architecture and design
 - [.claude/DEVELOPMENT_PLAN.md](.claude/DEVELOPMENT_PLAN.md) - Development roadmap
 
 **🔮 Future Development**

@@ -440,7 +440,7 @@ hit_rate = cache_hits / (cache_hits + cache_misses)
 
 ## Related Documentation
 
-- **Architecture**: `docs/architecture/overview.md` - Caching layer
+- **Architecture**: `docs/ARCHITECTURE.md` - Caching layer
 - **Performance**: Monitoring and alerting setup
 - **Development Plan**: `.claude/DEVELOPMENT_PLAN.md` - Phase J details
 

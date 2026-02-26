@@ -388,7 +388,7 @@ CREATE TABLE whatsapp_contacts (
 
 ## Related Documentation
 
-- **Architecture**: `docs/architecture/overview.md` - Multi-channel architecture
+- **Architecture**: `docs/ARCHITECTURE.md` - Multi-channel architecture
 - **Contact Tools**: Tool factory pattern for new channels
 - **Gap Analysis**: `docs/features/relationship-intelligence.md` - Extend gap detection
 - **StarChat Requests**: `STARCHAT_REQUESTS.md` - API requirements

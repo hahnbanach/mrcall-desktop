@@ -106,7 +106,8 @@ Zylch AI is a multi-channel sales intelligence system that helps sales professio
 | **SMS** | Vonage | — | Campaigns + webhooks |
 | **Email Campaigns** | SendGrid | — | Bulk email |
 | **Desktop App** | Terminal | - | Future consideration |
-| **Mobile/Web App** | Just a test in ./frontend |  | Most probably no native |
+| **MrCall Dashboard** | ~/hb/mrcall-dashboard | — | Vue 3 + PrimeVue, **active** |
+| **Web Frontend** | ./frontend (dormant) |  | Prototype only, not under development |
 
 ---
 
@@ -445,11 +446,13 @@ When desktop/mobile apps are developed, we may explore local-first storage:
 - `docs/TRIGGERED_INSTRUCTIONS.md` - Updated for new architecture
 - `docs/SHARING.md` - New documentation for sharing system
 
-### ✅ Phase G: Dashboard (Frontend) (Complete & Deployed)
+### ✅ Phase G: Dashboard (Frontend) (Complete & Deployed — now DORMANT)
 
 **Goal**: Web dashboard for non-CLI users.
 
-**Status**: ✅ **DEPLOYED ON VERCEL** at https://app.zylchai.com
+**Status**: ✅ **DEPLOYED ON VERCEL** at https://app.zylchai.com — **DORMANT: not under active development**
+
+**Note**: Active user interfaces are **zylch-cli** (`~/hb/zylch-cli`) and **mrcall-dashboard** (`~/hb/mrcall-dashboard`). The `frontend/` directory is a prototype that may be revisited in the future.
 
 **Tasks**:
 - [x] Set up Vue 3 + Vite + TypeScript project
@@ -808,11 +811,17 @@ Detailed implementation plans for future features are documented in `docs/featur
 - SQLAlchemy 2.0 style queries
 - Dependency injection via FastAPI `Depends`
 
-### TypeScript (Frontend - when implemented)
+### TypeScript (Zylch Frontend — dormant, reference only)
 - Composition API with `<script setup>`
 - Pinia for state management
 - Axios for HTTP
 - TypeScript strict mode
+
+### Vue.js (MrCall Dashboard — active at ~/hb/mrcall-dashboard)
+- Options API + Composition API (mixed)
+- Vuex for state management
+- PrimeVue 4 for UI components
+- Axios for HTTP, Firebase Auth
 
 ### Naming
 - API endpoints: kebab-case (`/api/email-archive`)

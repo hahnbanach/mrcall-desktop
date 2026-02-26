@@ -362,7 +362,7 @@ CREATE INDEX IF NOT EXISTS idx_calendar_provider ON calendar_events(owner_id, pr
 
 ## Related Documentation
 
-- **Architecture**: `docs/architecture/overview.md` - Multi-provider architecture
+- **Architecture**: `docs/ARCHITECTURE.md` - Multi-provider architecture
 - **Calendar Integration**: `docs/features/calendar-integration.md` - Google Calendar reference
 - **Gap Analysis**: `docs/features/relationship-intelligence.md` - Relationship intelligence
 - **Command Handlers**: `zylch/services/command_handlers.py:167` - TODO reference
