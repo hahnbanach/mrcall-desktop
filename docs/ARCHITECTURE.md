@@ -37,6 +37,59 @@
 
 Zylch is an AI-powered email assistant that provides relationship intelligence, task management, and automated communication workflows (email, whatsapp, phone, slack etc) through multiple interfaces (CLI, HTTP API).
 
+### High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   Client Interfaces                      │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐   │
+│  │   CLI   │  │   Web   │  │ Mobile  │  │   API   │   │
+│  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘   │
+└───────┼───────────┼─────────────┼────────────┼─────────┘
+        │           │              │            │
+        └───────────┴──────────────┴────────────┘
+                           ▼
+        ┌────────────────────────────────────────┐
+        │        FastAPI Backend (Python)        │
+        │  ┌──────────────────────────────────┐  │
+        │  │       Service Layer              │  │
+        │  │  • SyncService                   │  │
+        │  │  • ChatService                   │  │
+        │  │  • TriggerService (background)   │  │
+        │  │  • TaskAgent (task detection)    │  │
+        │  │  • Memory Agent Pipeline         │  │
+        │  └──────────────────────────────────┘  │
+        │  ┌──────────────────────────────────┐  │
+        │  │       Tool System                │  │
+        │  │  • Email (Gmail/Outlook)         │  │
+        │  │  • Calendar (Google/MS)          │  │
+        │  │  • StarChat (MrCall)             │  │
+        │  │  • Memory (ZylchMemory)          │  │
+        │  └──────────────────────────────────┘  │
+        └────────────────┬───────────────────────┘
+                         │
+        ┌────────────────┴───────────────────────┐
+        │                                         │
+        ▼                                         ▼
+┌───────────────┐                      ┌──────────────────┐
+│   Supabase    │                      │  External APIs   │
+│  (Postgres)   │                      │  • Gmail API     │
+│               │                      │  • Calendar API  │
+│ • RLS enabled │                      │  • Graph API     │
+│ • pg_vector   │                      │  • StarChat      │
+│ • encrypted   │                      │  • Claude        │
+└───────────────┘                      └──────────────────┘
+```
+
+### Active User Interfaces
+
+| Interface | Location | Stack | Status |
+|-----------|----------|-------|--------|
+| **zylch-cli** | `~/hb/zylch-cli` | Python (Textual TUI) | Active - primary Zylch user interface |
+| **mrcall-dashboard** | `~/hb/mrcall-dashboard` | Vue 3, Vuex, PrimeVue | Active - MrCall business configuration |
+| **Zylch API** | `zylch/api/` | FastAPI | Active - backend for all interfaces |
+| **Zylch web frontend** | `frontend/` | Vue 3, Pinia, Tailwind | **Dormant** - prototype, not under active development |
+
 ## Local Development
 
 **Local development uses the SAME architecture as production:**
@@ -85,6 +138,20 @@ Modular tools for agent capabilities:
 - **Anonymizer** (`zylch/ml/anonymizer.py`): PII detection and replacement for training data extraction
 
 **Key Pattern**: Tools are identical for all users. Credentials are loaded per-user at execution time from Supabase. If a user hasn't connected a provider, the tool returns a helpful error (e.g., "Vonage not connected. Please use /connect vonage").
+
+**Tool Registration** (`factory.py`):
+```python
+def create_all_tools(config, memory, owner_id):
+    tools = [
+        _SyncEmailsTool(sync_service),
+        _GetContactTool(starchat_client),
+        _GetWhatsAppContactsTool(starchat_client),
+        _SearchLocalMemoryTool(memory, search_engine),
+        _GetTasksTool(supabase_client),
+        # ... more tools
+    ]
+    return tools
+```
 
 ### 3. Two-Tier Email System (Cloud-Based)
 
@@ -167,6 +234,8 @@ services/      # Business logic layer (shared with CLI)
 - `/api/sync` - Email/calendar sync
 - `/api/gaps` - Relationship gap analysis
 - `/api/commands` - Command discovery and help (see below)
+- `/api/mrcall/training/status` - MrCall training status (snapshot-based change detection)
+- `/api/mrcall/training/start` - Start MrCall training (selective retraining)
 - `/api/webhooks/sendgrid` - Email read tracking webhooks
 - `/api/track/pixel/{tracking_id}` - Tracking pixel endpoint
 
@@ -265,6 +334,25 @@ Interactive command-line interface:
 **Note**: The `email` channel automatically includes calendar events. There is no separate `calendar` channel - output shows separate counts for transparency (e.g., "42 emails, 15 calendar events").
 
 ### 8. Memory System (Entity-Centric Blobs)
+
+**Core Principle: A person is NOT an email address.**
+
+A person can have multiple email addresses, phone numbers, and names. The memory system stores knowledge as entity blobs with sentence-level embeddings. Entity identity lives IN the blob content (not in namespace structure), found via hybrid search.
+
+**Namespace = Ownership** (e.g., `user:{owner_id}`), not per-entity. This prevents fragmentation when the same entity appears in different contexts.
+
+**Namespace Pattern**: `{scope}:{identifier}`
+
+| Namespace | Purpose | Example |
+|-----------|---------|---------|
+| `user:{owner_id}` | Personal memories | `user:abc123` |
+| `global:skills` | System-wide patterns | `global:skills` |
+| `shared:{recipient}:{sender}` | Shared intelligence | `shared:xyz789:abc123` |
+
+**Cascading Retrieval**:
+1. Search `user:{owner_id}` (1.5x relevance boost for personal patterns)
+2. If no match, search `global:skills` (system patterns)
+3. If sharing enabled, search `shared:{owner_id}:{*}` (received intelligence)
 
 **Data Flow**:
 ```
@@ -367,7 +455,7 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
 | `triage_training_samples` | Anonymized training data + user corrections |
 | `email_read_events` | Email read tracking events (SendGrid + custom pixel) |
 | `sendgrid_message_mapping` | SendGrid message ID to Zylch message ID mapping |
-| `agent_prompts` | Personalized agents generated from user email patterns |
+| `agent_prompts` | Personalized agents generated from user email patterns. Also stores MrCall training snapshots (`mrcall_{business_id}_snapshot`) for selective retraining |
 
 **Email Triage Tables** (December 2025):
 
@@ -409,7 +497,7 @@ All user credentials (OAuth tokens, API keys) are stored in Supabase's `oauth_to
 - `integration_providers`: Provider configuration (dynamic UI generation)
 - `oauth_states`: CSRF protection for OAuth flows
 
-**For complete details**, see [Credentials Management Documentation](/docs/architecture/credentials-management.md)
+**For complete details**, see [Credentials Management Documentation](architecture/credentials-management.md)
 
 ### Configuration
 - **Environment**: Railway env vars (backend), Vercel env vars (frontend)
@@ -570,7 +658,7 @@ Supported providers: google, microsoft, mrcall, anthropic, openai, mistral, pipe
 
 ### Authentication
 
-**For complete authentication details**, see [Credentials Management Documentation](/docs/architecture/credentials-management.md)
+**For complete authentication details**, see [Credentials Management Documentation](architecture/credentials-management.md)
 
 **Summary**:
 - **Firebase Auth**: JWT tokens validated on all API endpoints
@@ -661,10 +749,11 @@ The MrCall Dashboard (Vue.js) integrates with Zylch via the `/api/chat` endpoint
 
 **Semantic Matcher Exclusion**: Messages starting with `/mrcall` bypass the semantic command matcher, and messages in MrCall config mode skip semantic matching entirely. This prevents false rewrites (e.g., `/mrcall open` being rewritten to something else).
 
-**Key Files (Dashboard)**:
-- `src/views/ConfigureAI.vue` - Two-column layout (commands sidebar + chat)
+**Key Files (Dashboard at ~/hb/mrcall-dashboard)**:
+- `src/views/ConfigureAI.vue` - Two-column layout (commands sidebar + chat) with training status indicator
+- `src/views/business/BusinessConfiguration.vue` - Business config page with training status button (green/red/yellow)
 - `src/components/ZylchChat.vue` - Chat component using Zylch API
-- `src/utils/Zylch.js` - API client (uses `Authorization: Bearer` header)
+- `src/utils/Zylch.js` - API client (uses `Authorization: Bearer` header, includes training API methods)
 
 **System-Level API Key**: The MrCall `.env` includes `ANTHROPIC_API_KEY` so dashboard users don't need to run `/connect anthropic`. The key stays server-side and is never exposed to the frontend. If a user has their own key via `/connect anthropic`, that takes priority.
 
@@ -726,7 +815,7 @@ Dashboard users operate in a restricted "sandbox" environment that limits access
 - **No fallback**: If user hasn't connected a provider, tools return helpful error (not system default)
 - **Applies to**: Anthropic API key, Vonage credentials, Pipedrive token, OAuth tokens
 
-**For complete details on the unified credentials system**, see [Credentials Management Documentation](/docs/architecture/credentials-management.md)
+**For complete details on the unified credentials system**, see [Credentials Management Documentation](architecture/credentials-management.md)
 
 ### Data Privacy
 - All user data scoped by Firebase UID (`owner_id`)
@@ -755,10 +844,29 @@ Dashboard users operate in a restricted "sandbox" environment that limits access
 - **Threads**: 30-day intelligence window (~250-300 threads typical)
 - **Concurrent API**: Railway auto-scaling
 
-### Future Scaling
-- **API**: Add Railway replicas
-- **Cache**: Redis for session management
-- **Search**: Consider Elasticsearch for advanced queries
+### Scaling Strategy
+
+**Phase 1: Current** (0-1,000 users)
+- Single FastAPI instance on Railway
+- Supabase Postgres (managed)
+- Background workers (APScheduler in-process)
+
+**Phase 2: Growth** (1,000-10,000 users)
+- Add Railway replicas (horizontal scaling)
+- Move background workers to separate processes
+- Add Redis for caching and session management
+
+**Phase 3: Scale** (10,000+ users)
+- Railway auto-scaling (multiple replicas)
+- Redis caching layer (Upstash)
+- Separate worker pool for triggers
+- Consider Elasticsearch for advanced search
+
+**Bottlenecks to Monitor**:
+- Database connections (Supabase limit: 60)
+- Claude API rate limits (1,000 requests/min for Pro)
+- Background worker queue depth
+- Memory system HNSW index size
 
 ## Error Handling
 
@@ -1145,6 +1253,30 @@ Each TODO file contains:
 - Desktop/Mobile: When user requests justify development effort
 - Real-time Push: When real-time features become competitive requirement
 - Redis Scaling: When API P95 >500ms OR database costs >$200/month
+
+## Related Documentation
+
+### Core Features
+- **[Email Archive](features/email-archive.md)** - Email storage and AI-powered analysis
+- **[Calendar Integration](features/calendar-integration.md)** - Google/Microsoft calendars
+- **[Relationship Intelligence](features/relationship-intelligence.md)** - Task detection
+- **[Entity Memory System](features/entity-memory-system.md)** - Entity-centric memory with hybrid search
+- **[Triggers & Automation](features/triggers-automation.md)** - Event-driven automation
+- **[Sharing System](features/sharing-system.md)** - Consent-based intelligence sharing
+- **[MrCall Integration](features/mrcall-integration.md)** - Telephony and WhatsApp
+
+### Architecture Deep-Dives
+- **[Credentials Management](architecture/credentials-management.md)** - Unified token/credential storage
+- **[Database Schema](architecture/db_schema.sql)** - Full SQL schema reference
+
+### Future Development
+- **[Billing System](features/BILLING_SYSTEM_TODO.md)** - Stripe subscriptions (Phase H)
+- **[WhatsApp Integration](features/WHATSAPP_INTEGRATION_TODO.md)** - Multi-channel messaging
+- **[Microsoft Calendar](features/MICROSOFT_CALENDAR_TODO.md)** - Full Outlook support (Phase I.5)
+- **[Desktop App](features/DESKTOP_APP_TODO.md)** - Tauri local-first app
+- **[Mobile App](features/MOBILE_APP_TODO.md)** - React Native iOS + Android
+- **[Real-Time Push](features/REAL_TIME_PUSH_TODO.md)** - Gmail Pub/Sub notifications
+- **[Redis Scaling](features/REDIS_SCALING_TODO.md)** - Caching layer (Phase J)
 
 ## Known Limitations
 

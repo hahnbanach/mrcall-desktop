@@ -400,7 +400,7 @@ reqwest = { version = "0.11", features = ["json"] }
 
 ## Related Documentation
 
-- **Architecture**: `docs/architecture/overview.md` - Hybrid sync architecture
+- **Architecture**: `docs/ARCHITECTURE.md` - Hybrid sync architecture
 - **API**: `docs/api/` - REST API endpoints for desktop client
 - **Frontend**: `frontend/ARCHITECTURE.md` - Reusable Vue 3 components
 

@@ -33,9 +33,8 @@ This documentation is organized into the following sections:
 - **[Redis Scaling](features/REDIS_SCALING_TODO.md)** 🟢 Low - Caching and performance optimization
 
 ### Architecture & Development
-- **[Architecture Overview](architecture/overview.md)** - System architecture and design patterns *(coming soon)*
+- **[Architecture](ARCHITECTURE.md)** - System architecture, design patterns, and technical specifications
 - **[Development Plan](../.claude/DEVELOPMENT_PLAN.md)** - Project roadmap and phases
-- **[Technical Architecture](ARCHITECTURE.md)** - Detailed technical specifications
 - **[Conventions](../.claude/CONVENTIONS.md)** - Code style and development standards
 - **[Testing Strategy](../.claude/TESTING.md)** - Testing approach and guidelines
 - **[Documentation Guide](../.claude/DOCUMENTATION.md)** - How to write documentation
@@ -83,9 +82,10 @@ This documentation is organized into the following sections:
 - **Firebase Auth**: [Architecture](ARCHITECTURE.md#authentication)
 
 ### By User Type
-- **CLI Users**: [CLI Commands](guides/cli-commands.md) *(coming soon)*
-- **Web Dashboard Users**: See deployed app at https://app.zylchai.com
+- **CLI Users**: [CLI Commands](guides/cli-commands.md) *(coming soon)* — primary interface at `~/hb/zylch-cli`
+- **MrCall Dashboard Users**: `~/hb/mrcall-dashboard` — Vue 3 + PrimeVue business configuration
 - **API Users**: API documentation *(coming soon)*
+- **Web Dashboard Users**: `frontend/` — dormant prototype, not under active development
 - **Mobile Users**: [Mobile App TODO](features/MOBILE_APP_TODO.md) (future)
 - **Desktop Users**: [Desktop App TODO](features/DESKTOP_APP_TODO.md) (future)
 
@@ -175,10 +175,11 @@ Zylch AI
 │   ├── Webhook Handlers (StarChat, SendGrid, Vonage)
 │   └── Scheduler (APScheduler for reminders)
 │
-└── User Interface
-    ├── CLI (interactive commands)
-    ├── Web Dashboard (Vue 3 at app.zylchai.com)
-    └── API (FastAPI at api.zylchai.com)
+└── User Interfaces
+    ├── CLI — ~/hb/zylch-cli (primary Zylch interface, Python/Textual)
+    ├── MrCall Dashboard — ~/hb/mrcall-dashboard (Vue 3/PrimeVue, MrCall config)
+    ├── API (FastAPI at api.zylchai.com)
+    └── [DORMANT] Web Dashboard (Vue 3 at frontend/, prototype only)
 ```
 
 ## 🔗 External Integrations
@@ -233,8 +234,8 @@ zylch/
 │   ├── tools/               # Email, Calendar, Archive, etc.
 │   ├── storage/             # Supabase client
 │   └── workers/             # Background workers
-├── frontend/                # Vue 3 web dashboard
-├── zylch-cli/               # Thin CLI client (separate repo)
+├── frontend/                # [DORMANT] Vue 3 web dashboard prototype (not active)
+├── zylch-cli/               # Thin CLI client (separate repo at ~/hb/zylch-cli)
 ├── tests/                   # Test suite
 └── cache/                   # Legacy (gitignored, unused)
 ```
@@ -257,6 +258,13 @@ See [Documentation Guide](../.claude/DOCUMENTATION.md) for:
 
 ## 📝 Recent Updates
 
+**February 2026**:
+- ✅ MrCall training optimization: selective retraining (only stale features), snapshot-based change detection
+- ✅ Training status button in MrCall Dashboard (BusinessConfiguration.vue)
+- ✅ Training status indicator in ConfigureAI sidebar
+- ✅ New API endpoints: `GET /api/mrcall/training/status`, `POST /api/mrcall/training/start`
+- ✅ Clarified active interfaces: CLI (`~/hb/zylch-cli`) + MrCall Dashboard (`~/hb/mrcall-dashboard`), frontend/ is dormant
+
 **December 2025**:
 - ✅ Created 7 comprehensive TODO files for future development
 - ✅ Updated ARCHITECTURE.md with TODOs section
@@ -270,5 +278,5 @@ See [CHANGELOG](../CHANGELOG.md) for complete version history.
 
 ---
 
-**Last Updated**: December 2025
+**Last Updated**: February 2026
 **Version**: 0.3.0

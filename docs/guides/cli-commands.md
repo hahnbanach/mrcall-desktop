@@ -1852,7 +1852,7 @@ const handleMessage = async (message) => {
 - **[Sharing System](../features/sharing-system.md)** - Consent-based intelligence sharing
 - **[MrCall Integration](../features/mrcall-integration.md)** - Telephony and WhatsApp
 - **[Email Archive](../features/email-archive.md)** - Email archiving details
-- **[Architecture](../architecture/overview.md)** - System architecture
+- **[Architecture](../ARCHITECTURE.md)** - System architecture
 
 ---
 

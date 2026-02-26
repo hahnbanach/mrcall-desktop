@@ -184,11 +184,77 @@ Without `business:write`, variable updates will fail. Users must re-run `/connec
 |-------------|---------|
 | `mrcall_{business_id}` | Unified agent prompt |
 | `mrcall_{business_id}_{feature}` | Feature sub-prompt |
+| `mrcall_{business_id}_snapshot` | Training snapshot (variable values at last training) |
 
 Example:
 - `mrcall_abc123` → Unified agent
 - `mrcall_abc123_welcome_message` → Welcome message sub-prompt
 - `mrcall_abc123_booking` → Booking sub-prompt
+- `mrcall_abc123_snapshot` → Last-trained variable values (JSON)
+
+## Training Optimization (Selective Retraining)
+
+### Problem
+Full training regenerates ALL 8 feature prompts via LLM calls (each 3-5s), even when only 1 variable changed. This wastes time and API credits.
+
+### Solution: Snapshot-based selective retraining
+
+After each training, variable values are saved as a **snapshot** in `agent_prompts` table (key: `mrcall_{business_id}_snapshot`). On the next training:
+
+1. **Load snapshot** of last-trained values
+2. **Fetch live values** from StarChat
+3. **Diff**: identify which variables changed
+4. **Map** changed variables → affected features (via `VARIABLE_TO_FEATURE` inverse mapping from `FEATURES` dict)
+5. **Retrain only stale features** (skip current ones)
+6. **Save updated snapshot** (only for successfully trained features)
+
+### CLI Usage
+
+```bash
+/agent mrcall train          # Selective (only changed features)
+/agent mrcall train --force  # Force full retrain (all features)
+```
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/mrcall/training/status` | GET | Returns status: `untrained`, `current`, `stale`, `in_progress` + changed variables list |
+| `/api/mrcall/training/start` | POST | Starts training as background job, returns `job_id` for polling |
+| `/api/jobs/{job_id}` | GET | Poll background job status |
+
+### Training Status Values
+
+| Status | Meaning | Dashboard Button Color |
+|--------|---------|----------------------|
+| `untrained` | No snapshot exists (first time) | Gray |
+| `current` | All variables match snapshot | Green |
+| `stale` | Some variables changed since last training | Red |
+| `in_progress` | Training job running | Yellow (animated) |
+
+### Dashboard Integration
+
+**BusinessConfiguration.vue** (`~/hb/mrcall-dashboard`): Color-coded training button in footer between "Configure with AI" and "Save". Shows changed variable count when stale. Starts background training job and polls for completion.
+
+**ConfigureAI.vue** (`~/hb/mrcall-dashboard`): Training status badge in sidebar showing current status before user enters chat.
+
+### Key Files
+
+| File | What |
+|------|------|
+| `zylch/storage/supabase_client.py` | `get_training_snapshot()`, `store_training_snapshot()` |
+| `zylch/agents/trainers/mrcall_configurator.py` | `diff_snapshot()`, `build_snapshot_from_business()` classmethods |
+| `zylch/services/command_handlers.py` | Updated `_handle_mrcall_agent_train()` with selective logic + `--force` |
+| `zylch/api/routes/mrcall.py` | Training status + start endpoints |
+| `zylch/tools/mrcall/config_tools.py` | Inline snapshot update after `ConfigureAssistantTool.execute()` |
+
+### Edge Cases
+
+- **First training** (no snapshot): trains all features, saves initial snapshot
+- **Partial failure**: snapshot only updated for successfully trained features
+- **`--force` flag**: bypasses diff, retrains everything
+- **Inline retraining** (via `ConfigureAssistantTool`): updates snapshot for the affected feature's variables
+- **Stuck jobs**: self-healing — jobs older than 10 minutes auto-marked as failed
 
 ## Adding New Features
 
