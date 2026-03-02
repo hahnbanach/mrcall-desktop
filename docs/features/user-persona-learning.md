@@ -1,3 +1,11 @@
+---
+description: |
+  Background system that analyzes user conversations to extract persistent persona facts (e.g.,
+  "has a sister named Francesca"). Runs asynchronously, uses LLM for extraction, stores in user's
+  memory namespace with reconsolidation (merges similar facts, no duplicates). Zylch references
+  learned facts proactively in future interactions when relevant.
+---
+
 # User Persona Learning
 
 **Background AI system that learns about the user from conversations**

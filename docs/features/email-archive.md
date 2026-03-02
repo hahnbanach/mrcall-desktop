@@ -1,3 +1,11 @@
+---
+description: |
+  Two-tier email storage: permanent archive (all emails forever in Supabase) and intelligence cache
+  (30-day AI-analyzed window for active relationship intelligence). Incremental sync via Gmail
+  History API (<1 second daily). FTS5-powered full-text search across all archived emails.
+  Configurable backend (SQLite/Postgres). Production ready since November 2025.
+---
+
 # Email Archive System
 
 **Status**: Production Ready

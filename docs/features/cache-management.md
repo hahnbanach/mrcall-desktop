@@ -1,3 +1,11 @@
+---
+description: |
+  Cache directory structure: zylch_memory.db (behavioral corrections), contact caches (JSON),
+  email archive (local DB), calendar cache, relationship data. CLI commands for management
+  include /memory --remove --all (clear behavioral corrections). Note: parts of this predate
+  the Supabase migration; the primary storage is now Supabase, not local filesystem.
+---
+
 # Cache and Memory Management
 
 This document describes the cache and memory management features in Zylch AI.

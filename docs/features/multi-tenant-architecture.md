@@ -1,3 +1,11 @@
+---
+description: |
+  Multi-tenant system where each owner (Firebase UID) has complete data isolation via Supabase RLS.
+  Currently limited to single-assistant mode (one Zylch assistant per owner, auto-created as
+  default_assistant). Namespace structure is {owner}:{assistant}:{contact} for future multi-assistant
+  expansion. Each tenant gets separate business info, contacts, memories with zero data leakage.
+---
+
 # Multi-Tenant Architecture
 
 **Complete guide to Zylch AI's multi-tenant person-centric memory system**

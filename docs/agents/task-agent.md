@@ -1,3 +1,11 @@
+---
+description: |
+  Analyzes emails and calendar events to detect tasks requiring user action, using a personalized
+  prompt trained via /agent task train. Uses structured output (tool_use) for task lifecycle
+  decisions: create new tasks, update existing ones, or close completed ones. Consolidates tasks
+  per contact. Source: zylch/agents/task_agent.py.
+---
+
 # Task Agent
 
 Analyzes events using trained prompt and identifies actionable items with intelligent task lifecycle management.

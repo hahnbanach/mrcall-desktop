@@ -1,3 +1,11 @@
+---
+description: |
+  Implementation details for dual email read tracking. SendGrid webhooks (primary): built-in open
+  tracking for batch emails, webhook to POST /api/webhooks/sendgrid. Custom tracking pixel
+  (secondary): for individual non-SendGrid emails, requires HTML pixel injection and a self-hosted
+  tracking endpoint. SendGrid is more reliable; pixels may be blocked by email clients.
+---
+
 # Email Read Notification - Implementation Summary
 
 ## Overview

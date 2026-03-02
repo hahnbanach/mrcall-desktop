@@ -1,3 +1,11 @@
+---
+description: |
+  User guide for sharing relational intelligence. Flow: /share colleague@example.com creates
+  pending request, recipient authorizes via /sharing --authorize. Shared data: contact intelligence,
+  relationship context, email patterns, meeting history. Enables team context, better handoffs
+  when employees leave, and shared meeting prep across team members.
+---
+
 # Data Sharing
 
 ## Overview

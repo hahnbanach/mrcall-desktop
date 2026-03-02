@@ -1,3 +1,11 @@
+---
+description: |
+  Feature proposal for email open tracking via two complementary approaches: SendGrid webhooks
+  (batch emails, more reliable, simpler) and custom tracking pixels (individual emails, full
+  control but less reliable due to image blocking). Both feed engagement metrics into Zylch's
+  relationship intelligence layer for understanding recipient responsiveness.
+---
+
 # Email Read Notification Feature Documentation
 
 ## Executive Summary

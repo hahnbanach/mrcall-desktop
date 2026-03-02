@@ -1,3 +1,11 @@
+---
+description: |
+  Fixes a bug where support emails were falsely marked "resolved" when auto-replies were sent.
+  Pipeline: detect auto-replies via RFC 3834 headers (saves Claude API costs), then ask "Should
+  someone take care of this?" for real emails. Applies configurable importance rules based on
+  contact metadata. Collects anonymized training data for future small model fine-tuning.
+---
+
 # Email Triage System
 
 **See [ARCHITECTURE.md](../ARCHITECTURE.md) for system overview**

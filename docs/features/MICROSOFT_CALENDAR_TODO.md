@@ -1,3 +1,11 @@
+---
+description: |
+  [TODO - Medium-High Priority] Outlook Calendar via Graph API for feature parity with Google
+  Calendar. Outlook email client (tools/outlook.py) and partial OutlookCalendarClient already
+  exist, OAuth flow works. Target: event CRUD, Teams meeting links (equivalent to Google Meet),
+  calendar gap analysis. Critical for enterprise/B2B adoption (400M+ Outlook users).
+---
+
 # Microsoft Calendar - Future Development
 
 ## Status

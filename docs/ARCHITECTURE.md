@@ -1,3 +1,12 @@
+---
+description: |
+  Zylch is a pre-alpha AI email assistant using Supabase for ALL data storage (no local filesystem).
+  Four layers: Email (Gmail/Outlook sync + permanent archive), Intelligence (entity memory with
+  reconsolidation, relationship gap detection, task extraction), Automation (triggers, webhooks,
+  APScheduler), and UIs (CLI at zylch-cli, MrCall Dashboard, FastAPI API at api.zylchai.com).
+  Auth: Firebase Auth + Supabase RLS for multi-tenant isolation.
+---
+
 # Zylch Architecture
 
 > **⚠️ PRE-ALPHA DEVELOPMENT**

@@ -1,3 +1,11 @@
+---
+description: |
+  Index of Zylch backend agents that process data and generate content via LLM. All agents use
+  LLMClient (LiteLLM wrapper) for model calls, SupabaseStorage for persistence, ToolFactory for
+  Claude tool exposure, and tool_use for structured JSON output. Flow: User Request -> Tool
+  (factory.py) -> Agent -> LLMClient -> Response, with SupabaseStorage for persistence.
+---
+
 # Zylch Agents
 
 Backend agents that process data and generate content using LLM.

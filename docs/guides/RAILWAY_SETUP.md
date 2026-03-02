@@ -1,3 +1,11 @@
+---
+description: |
+  Railway multi-service deployment config: API Service (FastAPI HTTP) and Background Workers
+  (scheduled email sync, task detection, trigger processing). Prerequisites: Railway account,
+  GitHub repo, Supabase with migrations applied. Covers environment variables for Supabase,
+  Firebase, Anthropic (BYOK), Google OAuth, and worker scheduling configuration.
+---
+
 # Railway Deployment Setup
 
 This document explains how to deploy Zylch on Railway.

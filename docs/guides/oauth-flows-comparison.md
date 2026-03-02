@@ -1,3 +1,11 @@
+---
+description: |
+  Compares Google OAuth (standard OAuth 2.0, single identity system) vs MrCall/StarChat OAuth
+  (OAuth 2.0 + PKCE, dual Firebase identity systems). Google is simpler - user's Google account
+  is the identity. MrCall requires PKCE because two separate Firebase apps must be linked, mapping
+  Zylch user (owner_id) to MrCall user (target_owner). Both use callback port 8766.
+---
+
 # OAuth Flows Comparison: Google vs MrCall/StarChat
 
 This guide compares the OAuth authentication flows for Google and MrCall/StarChat integrations in Zylch.

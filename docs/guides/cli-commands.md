@@ -1,3 +1,11 @@
+---
+description: |
+  Complete slash commands reference: /sync (data), /gaps (relationships), /memory and /trigger
+  (memory + automation), /connect and /mrcall (integrations), /share and /revoke (sharing).
+  Features semantic command matching via local embeddings (no Claude API calls) - natural language
+  like "synchronize with the past 2 days" auto-routes to /sync 2. All commands support --help.
+---
+
 # CLI Commands Reference
 
 ## Overview

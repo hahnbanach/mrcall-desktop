@@ -1,3 +1,11 @@
+---
+description: |
+  Guide for deploying Zylch backend to Railway. Prerequisites: Railway account, GitHub repo,
+  Firebase service account, API keys (Anthropic, Google OAuth, etc.). Uses railway.json for
+  build/deploy config, Procfile for web server. Covers project creation, environment variable
+  setup, health checks, and deployment via Railway CLI.
+---
+
 # Zylch AI - Railway Deployment Guide
 
 ## Overview
