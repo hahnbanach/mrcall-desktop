@@ -361,43 +361,14 @@ class ConfigureAssistantTool(Tool):
                                 behavior_start:behavior_end
                             ].strip()
 
-                    # Update training snapshot for this feature's variables
-                    # so the status endpoint doesn't show stale after inline retrain
-                    owner_id = self.session_state.owner_id
-                    if owner_id:
-                        try:
-                            existing_snapshot = self.trainer.storage.get_training_snapshot(
-                                owner_id, business_id
-                            )
-                            snapshot_vars = existing_snapshot.get('variables', {}) if existing_snapshot else {}
-
-                            # Update snapshot with current values for this feature's variables
-                            feat_var_names = MrCallConfiguratorTrainer.FEATURES[feature_name]["variables"]
-                            for var_name in feat_var_names:
-                                val = current_values.get(var_name)
-                                # Use new_value for the variable we just changed
-                                if var_name == variable_name:
-                                    val = new_value
-                                snapshot_vars[var_name] = str(val) if val is not None else None
-
-                            from datetime import datetime, timezone
-                            self.trainer.storage.store_training_snapshot(
-                                owner_id=owner_id,
-                                business_id=business_id,
-                                variables=snapshot_vars,
-                                metadata={
-                                    "features_trained": [feature_name],
-                                    "generated_at": datetime.now(timezone.utc).isoformat(),
-                                    "source": "inline_retrain",
-                                    "changed_variable": variable_name,
-                                },
-                            )
-                            logger.debug(
-                                f"Updated training snapshot after inline retrain "
-                                f"for {feature_name} (var: {variable_name})"
-                            )
-                        except Exception as snap_err:
-                            logger.warning(f"Failed to update training snapshot: {snap_err}")
+                    # NOTE: We intentionally do NOT update the training snapshot here.
+                    # The snapshot stays frozen from the last full training run, so the
+                    # training status endpoint will correctly detect this variable change
+                    # as "stale" and prompt the user to retrain.
+                    logger.debug(
+                        f"[ConfigureAssistantTool] Sub-prompt regenerated for {feature_name} "
+                        f"(var: {variable_name}). Snapshot NOT updated — status will show stale."
+                    )
 
                 except Exception as e:
                     logger.warning(f"Failed to regenerate sub-prompt: {e}")
