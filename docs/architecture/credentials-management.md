@@ -136,6 +136,19 @@ if conn.get('credentials'):
 - **System .env only contains**: Supabase config, Firebase config, Google OAuth client, encryption key
 - **NOT in .env**: User credentials (Anthropic, Pipedrive, Vonage) - these are BYOK via `/connect`
 
+### Environment Files
+
+| File | Purpose | Firebase Project | Google OAuth Client |
+|------|---------|-----------------|---------------------|
+| `.env.development` | Zylch local dev | `zylch-test-9a895` | `49237749736-o0f2h...` (Zylch Frontend, GCP `zylch-test`) |
+| `.env.production` | Zylch production (Railway) | `zylch-test-9a895` | `49237749736-o0f2h...` (same) |
+| `.env.railway` | Railway deploy (exported vars) | `zylch-test-9a895` | `49237749736-o0f2h...` (same) |
+| `.env.mrcall` | MrCall Dashboard backend | `talkmeapp-e696c` (MrCall) | `375340415237-...` (GCP `talkmeapp`) |
+
+**Important**: Each `.env` uses a different GCP project's Google OAuth client. The `redirect_uri` registered in Google Cloud Console must match the GCP project of the active `.env`. If you get `redirect_uri_mismatch`, check which `.env` file is symlinked to `.env` and verify the redirect URIs in the corresponding GCP project.
+
+`.env.mrcall` is for when Zylch runs as the MrCall Dashboard backend. MrCall Dashboard users don't use `/connect google` (only `/connect mrcall`), so the Google OAuth client in `.env.mrcall` is rarely exercised.
+
 ## Firebase Service Account
 
 Stored as **Base64-encoded JSON** in Railway env vars:

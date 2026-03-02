@@ -65,6 +65,15 @@ for msg in messages[:3]:
 
 ## Troubleshooting
 
+**Error: "Error 400: redirect_uri_mismatch"**
+- This means the `redirect_uri` sent by the backend is not registered in Google Cloud Console
+- The backend sends `http://localhost:8000/api/auth/google/callback` (from `API_SERVER_URL` setting)
+- **Fix**: In Google Cloud Console → Credentials → your OAuth Client → Authorized redirect URIs, add:
+  - `http://localhost:8000/api/auth/google/callback` (local dev)
+  - `https://api.zylchai.com/api/auth/google/callback` (production)
+- **Common mistake**: Using the wrong `.env` file (e.g., `.env.mrcall` uses a different GCP project's client ID than `.env.development`). Make sure the `GOOGLE_CLIENT_ID` in your active `.env` matches the OAuth client in the GCP project where you registered the redirect URIs
+- Changes in Google Cloud Console can take a few minutes to propagate
+
 **Error: "Access blocked: This app's request is invalid"**
 - Go back to OAuth consent screen
 - Add your email to "Test users"
