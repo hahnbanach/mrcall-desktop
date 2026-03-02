@@ -90,6 +90,24 @@ Zylch is an AI-powered email assistant that provides relationship intelligence, 
 | **Zylch API** | `zylch/api/` | FastAPI | Active - backend for all interfaces |
 | **Zylch web frontend** | `frontend/` | Vue 3, Pinia, Tailwind | **Dormant** - prototype, not under active development |
 
+## Deployment Model
+
+The Zylch backend (`zylch/api/`) is a single codebase that serves **two distinct products** depending on configuration:
+
+| Deployment | `.env` file | Firebase Project | Purpose | Users connect via |
+|------------|-------------|-----------------|---------|-------------------|
+| **Zylch** | `.env.development` / `.env.production` | `zylch-test-9a895` | Full AI email assistant (Gmail, Calendar, Memory, Tasks) | zylch-cli (`~/hb/zylch-cli`) |
+| **MrCall Configurator** | `.env.mrcall` | `talkmeapp-e696c` | MrCall assistant configuration only | mrcall-dashboard (`~/hb/mrcall-dashboard`) |
+
+**Why two deployments?**
+- **Different Firebase projects**: Zylch users authenticate via `zylch-test` Firebase, MrCall Dashboard users via `talkmeapp` Firebase. Firebase tokens are not interchangeable across projects.
+- **Different feature scope**: Zylch exposes the full feature set (email, calendar, memory, tasks, etc.). MrCall Configurator only exposes MrCall assistant configuration via sandbox mode.
+- **Different Google OAuth clients**: Each deployment uses a different GCP project for Google OAuth (see [Environment Files](#configuration)).
+
+**Same codebase, same Supabase**: Both deployments share the same Supabase database and the same code. The `.env` file determines which Firebase project validates tokens and which Google OAuth client is used.
+
+**Release process**: Changes to the backend require deploying both Railway instances (if both are affected). Changes to zylch-cli require a separate CLI release.
+
 ## Local Development
 
 **Local development uses the SAME architecture as production:**
@@ -98,7 +116,7 @@ Zylch is an AI-powered email assistant that provides relationship intelligence, 
 - Same OAuth flows as production (server-side, not InstalledAppFlow)
 - No separate local database or file-based token storage
 
-Run locally with `uvicorn zylch.api.main:app --reload --port 8000` - connects to Supabase directly.
+Run locally with `uvicorn zylch.api.main:app --reload --port 8000` — symlink `.env` to the deployment you're working on (`.env.development` for Zylch, `.env.mrcall` for MrCall Configurator).
 
 ## Core Components
 
@@ -507,6 +525,16 @@ All user credentials (OAuth tokens, API keys) are stored in Supabase's `oauth_to
 - **Optional in .env**: `ANTHROPIC_API_KEY` - system-level fallback when user has no key (used by MrCall integration)
 - **Optional in .env**: `ANTHROPIC_MODEL`, `OPENAI_MODEL`, `MISTRAL_MODEL` - override default model per provider (defaults defined in `config.py`)
 - **CRITICAL**: `MRCALL_BASE_URL` must point to the same StarChat server as the MrCall Dashboard's `VUE_APP_STARCHAT_URL`. In dev both use `https://test-env-0.scw.hbsrv.net`; in production both use `https://api.mrcall.ai`. A mismatch causes "business not found" errors because business data is server-specific.
+
+**Environment Files** (symlink `.env` → the one you need):
+
+| File | Purpose | Firebase Project | Google OAuth Client (GCP project) |
+|------|---------|-----------------|-----------------------------------|
+| `.env.development` | Zylch local dev | `zylch-test-9a895` | `49237749736-...` (`zylch-test`) |
+| `.env.production` | Zylch prod (Railway) | `zylch-test-9a895` | `49237749736-...` (`zylch-test`) |
+| `.env.mrcall` | MrCall Dashboard backend | `talkmeapp-e696c` | `375340415237-...` (`talkmeapp`) |
+
+**⚠️ Common pitfall**: Using `.env.mrcall` when testing Zylch CLI features like `/connect google` causes `redirect_uri_mismatch` because the Google OAuth client (`375340415237-...`) belongs to a different GCP project that may not have `http://localhost:8000/api/auth/google/callback` registered. MrCall Dashboard users don't need `/connect google` — they only use `/connect mrcall`.
 
 ### Firebase Service Account
 
