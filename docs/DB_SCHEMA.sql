@@ -27,6 +27,7 @@ CREATE TABLE public.background_jobs (
   last_error text,
   retry_count integer DEFAULT 0,
   result jsonb DEFAULT '{}'::jsonb,
+  params jsonb DEFAULT '{}'::jsonb,
   CONSTRAINT background_jobs_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.blob_sentences (
@@ -340,4 +341,17 @@ CREATE TABLE public.user_notifications (
   read boolean DEFAULT false,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT user_notifications_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.verification_codes (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  owner_id text NOT NULL,
+  phone_number text NOT NULL,
+  code text NOT NULL,
+  context text,
+  expires_in_minutes integer DEFAULT 15,
+  expires_at timestamp with time zone NOT NULL,
+  verified boolean DEFAULT false,
+  verified_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT verification_codes_pkey PRIMARY KEY (id)
 );
