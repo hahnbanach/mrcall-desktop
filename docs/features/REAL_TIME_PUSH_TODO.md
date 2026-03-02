@@ -1,3 +1,11 @@
+---
+description: |
+  [TODO - Medium Priority] Replace batch sync (every 5 min or manual /sync) with zero-latency
+  Gmail push via Google Pub/Sub. Currently gap analysis runs only after sync. Target: instant
+  email detection via Pub/Sub webhook, real-time relationship gap analysis, push notifications
+  for urgent contacts. Use case: sales reps get instant alerts when clients reply.
+---
+
 # Real-Time Gmail Push Notifications - Future Development
 
 ## Status

@@ -1,3 +1,11 @@
+---
+description: |
+  A task exists when the user needs to take action - period. Not about urgency or type
+  classification, only "Does Mario need to do something?" Categories (answer, deliver, follow-up,
+  fix, schedule) exist for context but all are TASKs equally. Detection logic: expected_action
+  != None. Never filter by type - any expected action means a task.
+---
+
 # Task Management System - Person-Centric Email Intelligence
 
 ## What is a Task?

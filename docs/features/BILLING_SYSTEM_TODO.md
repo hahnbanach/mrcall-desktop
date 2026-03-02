@@ -1,3 +1,11 @@
+---
+description: |
+  [TODO - Critical Priority] Stripe billing - the revenue generation blocker. Tiers: Free (1
+  account, 100 emails/month), Pro ($29/month, 3 accounts, unlimited), Team ($99/month, 10 users,
+  shared intelligence). Multi-tenant architecture and all feature infrastructure already exist.
+  Requires Stripe checkout, subscription management, usage tracking, and webhook handling.
+---
+
 # Billing System - Future Development
 
 ## Status

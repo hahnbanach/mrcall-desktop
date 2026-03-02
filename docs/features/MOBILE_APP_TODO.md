@@ -1,3 +1,11 @@
+---
+description: |
+  [TODO - Medium Priority] React Native mobile app for iOS and Android. All backend features
+  already accessible via REST API with JWT auth, responsive web app works on mobile browsers.
+  Target: push notifications for relationship gaps, on-the-go email drafting, contact lookup,
+  App Store/Play Store distribution for mobile-first user acquisition.
+---
+
 # Mobile Application - Future Development
 
 ## Status

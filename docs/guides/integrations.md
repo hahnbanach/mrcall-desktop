@@ -1,3 +1,11 @@
+---
+description: |
+  Unified connections system for managing external services. Available: Google (Gmail + Calendar),
+  Microsoft (Outlook + Calendar), Pipedrive CRM, MrCall (phone + SMS), Vonage SMS, SendGrid
+  (campaigns). Coming soon: WhatsApp, Slack, Teams. All use BYOK model - users connect via
+  /connect command, credentials stored per-user in Supabase with Fernet encryption.
+---
+
 # Zylch Integrations Guide
 
 **Last Updated**: December 2025

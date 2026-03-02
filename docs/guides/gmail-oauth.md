@@ -1,3 +1,11 @@
+---
+description: |
+  Step-by-step guide (5 min) for Google OAuth: create project in Google Cloud Console, enable
+  Gmail API, create OAuth client ID (Desktop app type), download credentials JSON. Covers consent
+  screen setup (External user type), credential paths (configurable via env vars), and first auth
+  flow. Paths shown are examples for local dev - see project config for production.
+---
+
 # Gmail OAuth Setup Guide
 
 > **Note**: Credential and token paths shown below are examples for local development. These paths are configurable via environment variables or application settings. See your project's configuration for actual paths used in production.

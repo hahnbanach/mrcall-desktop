@@ -1,3 +1,11 @@
+---
+description: |
+  Event-driven automation: users define instructions via /trigger that execute when specific events
+  occur (email_received, sms_received, call_received, session_start). Different from behavioral
+  memory (/memory) which is always-on for every interaction. Triggers stored in Supabase, queued
+  for background processing. Supports --check mode to preview without saving.
+---
+
 # Triggers & Automation - Event-Driven Workflow Automation
 
 ## Overview

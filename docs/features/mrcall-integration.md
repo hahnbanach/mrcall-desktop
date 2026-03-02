@@ -1,3 +1,11 @@
+---
+description: |
+  MrCall (StarChat API) integration for AI-powered phone calls and multi-channel messaging. Three
+  auth methods: OAuth 2.0 + PKCE (CLI via /connect mrcall), Firebase JWT passthrough (Dashboard),
+  Basic Auth (legacy). All endpoints use delegated_{realm} path prefix. CRM contacts, outbound
+  calls, and assistant config implemented; WhatsApp pending StarChat REST API endpoint.
+---
+
 # MrCall Integration - Telephony & WhatsApp via StarChat
 
 ## Overview

@@ -1,3 +1,11 @@
+---
+description: |
+  Consent-based intelligence sharing between Zylch users. Sender initiates /share, intel goes to
+  pending queue, recipient must explicitly accept before anything is visible. States: pending,
+  accepted, rejected, revoked. Shared data stored in ZylchMemory namespace
+  shared:{recipient_owner_id}:{sender_owner_id}. After first acceptance, future shares are automatic.
+---
+
 # Sharing System - Consent-Based Intelligence Sharing
 
 ## Overview

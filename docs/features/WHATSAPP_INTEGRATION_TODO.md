@@ -1,3 +1,11 @@
+---
+description: |
+  [TODO - High Priority] WhatsApp Business API via StarChat for multi-channel relationship
+  intelligence. Tool structure (_GetWhatsAppContactsTool) and StarChat integration already exist.
+  Blocked on StarChat REST API endpoint for WhatsApp messaging. Target: track WhatsApp
+  conversations, unified gap detection across email/calendar/calls/SMS/WhatsApp.
+---
+
 # WhatsApp Integration - Future Development
 
 ## Status

@@ -1,3 +1,11 @@
+---
+description: |
+  [TODO - Low Priority, Phase J] Redis caching (Upstash) for when Supabase becomes a bottleneck
+  at 1,000+ concurrent users or >500ms API responses. Use cases: cache email threads, relationship
+  gaps, tasks for fast lookups, session storage, rate limiting per user. Currently unnecessary -
+  Supabase responses are under 500ms.
+---
+
 # Redis Caching & Scaling - Future Development
 
 ## Status

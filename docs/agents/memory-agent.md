@@ -1,3 +1,11 @@
+---
+description: |
+  Processes incoming data (emails, calendar events, Pipedrive deals) to extract relationship facts,
+  storing in entity-centric blobs with automatic reconsolidation. Training uses thread-based email
+  fetching (20 threads, last email per thread only) to avoid context window overflow while
+  preserving conversation context. Source: zylch/agents/memory_agent.py.
+---
+
 # Memory Agent
 
 Extracts facts from emails and stores them in entity-centric blobs with reconsolidation.

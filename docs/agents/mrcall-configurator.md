@@ -1,3 +1,11 @@
+---
+description: |
+  Two-tier architecture for configuring MrCall AI phone assistants. Layer 1 (ConfiguratorTrainer):
+  for each feature, fetches current variable values from StarChat, applies meta-prompt template,
+  generates feature sub-prompt via LLM. Layer 2 (AgentTrainer): combines all sub-prompts into a
+  unified agent with tool selection. Trained via /agent mrcall train.
+---
+
 # MrCall Configurator Agent
 
 Manages MrCall assistant configuration through a two-tier sub-prompt architecture.

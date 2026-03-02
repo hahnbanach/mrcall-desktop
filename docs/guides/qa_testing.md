@@ -1,3 +1,11 @@
+---
+description: |
+  QA testing guide for Zylch's three components: Backend Server (FastAPI at zylch/), CLI Client
+  (thin Python client at zylch-cli/), and Database (Supabase PostgreSQL). Covers test scenarios
+  for email sync, calendar integration, AI chat, relationship gap detection, and the core value
+  proposition of answering "Who haven't I responded to?" and "What gaps do I have?"
+---
+
 # Zylch QA Testing Guide
 
 ## 1. Introduction: What is Zylch?

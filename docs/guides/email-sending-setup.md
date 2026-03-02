@@ -1,3 +1,11 @@
+---
+description: |
+  Setup guide for Gmail send capability. Code implementation and Google Cloud Console gmail.send
+  scope authorization are already complete. The OAuth token needs a refresh to acquire the send
+  permission - trigger via "refresh google auth" or "re-authenticate gmail" in the CLI. Covers
+  re-authentication steps and verification of send functionality.
+---
+
 # Email Sending Setup Guide
 
 ## Current Status

@@ -1,3 +1,11 @@
+---
+description: |
+  Google Calendar integration via OAuth 2.0 with automatic Google Meet link generation. Zylch
+  schedules events from email threads, extracts proposed times from conversations, sends invites
+  to all attendees, and attaches unique Meet video conference URLs (add_meet_link=True). Events
+  are created via the Google Calendar API using the gcalendar.py tool.
+---
+
 # Google Calendar & Meet Integration
 
 **Complete guide to Zylch AI's calendar management and Google Meet video conference features**

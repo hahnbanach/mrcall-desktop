@@ -1,3 +1,11 @@
+---
+description: |
+  [TODO - Medium Priority] Tauri desktop app for local-first offline experience. Target: native
+  OS integration with system tray, keyboard shortcuts, system notifications, and local database
+  for offline access. Backend API already supports desktop client auth. Positioned as premium
+  offering for privacy-conscious power users and offline scenarios (flights, low connectivity).
+---
+
 # Desktop Application - Future Development
 
 ## Status

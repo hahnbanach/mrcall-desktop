@@ -1,3 +1,11 @@
+---
+description: |
+  Quick start for Zylch AI: single-agent assistant for sales professionals covering email
+  intelligence (read/draft/send), contact enrichment (Gmail + web search), task scheduling (Google
+  Calendar), mass campaigns (SendGrid + Vonage SMS), and outbound calls (MrCall). Human-in-the-loop
+  principle. Setup: clone, run setup.sh, activate venv, configure .env, launch CLI.
+---
+
 # Zylch AI Quick Start Guide
 
 ## What is Zylch AI?

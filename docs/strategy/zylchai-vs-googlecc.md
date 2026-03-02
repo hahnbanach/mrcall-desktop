@@ -1,3 +1,11 @@
+---
+description: |
+  Strategic comparison: Zylch AI is a Business Communication Assistant synthesizing meetings,
+  emails, and phone calls into actionable intelligence across channels. Google CC (Labs) is a
+  Personal Productivity Agent delivering morning briefings within Google Workspace. Zylch targets
+  business professionals/teams (commercial SaaS); Google CC targets personal users (experimental).
+---
+
 # Comparison: Zylch AI vs. Google CC (2026)
 
 ## Executive Summary

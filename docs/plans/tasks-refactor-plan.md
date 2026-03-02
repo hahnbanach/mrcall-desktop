@@ -1,3 +1,11 @@
+---
+description: |
+  Replace rule-based /tasks (query task_items table, format as list) with LLM-reasoning approach.
+  New flow: get recent events (emails, calendar, mrcall), load relevant Blobs from memory per
+  event, ask LLM "Does user need to take action?", collect actionable items. Uses TaskAgentBuilder
+  pattern similar to email_agent_builder.py.
+---
+
 # /tasks Refactor Plan
 
 ## Goal

@@ -1,3 +1,11 @@
+---
+description: |
+  All credentials in Supabase only - filesystem fallback completely removed from token_storage.py.
+  BYOK model: users connect services via /connect, credentials stored per-user with Fernet
+  encryption in oauth_tokens table (JSONB column). Strict separation: system config (.env/Railway)
+  vs user credentials (Supabase) vs OAuth tokens (Supabase) for multi-tenant security.
+---
+
 # Unified Credentials & Token Storage
 
 **See [ARCHITECTURE.md](../ARCHITECTURE.md) for system overview**

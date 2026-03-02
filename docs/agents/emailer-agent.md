@@ -1,3 +1,11 @@
+---
+description: |
+  Composes contextual emails using LLM with full context from hybrid search. EmailContextGatherer
+  retrieves PERSON, COMPANY, and TEMPLATE blobs via FTS + semantic search, plus task source emails
+  and blobs. Recipient info extracted from conversation or thread. Source:
+  zylch/agents/emailer_agent.py, exposed via ToolFactory for Claude to call.
+---
+
 # Emailer Agent
 
 Composes contextual emails using hybrid search and LLM.

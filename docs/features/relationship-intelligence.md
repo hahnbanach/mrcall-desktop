@@ -1,3 +1,11 @@
+---
+description: |
+  Task-first philosophy: the only question is "Does Mario need to act?" - not email classification.
+  If a contact expects something, Mario promised something, or a contact didn't respond when
+  expected, it's a TASK. AI-generated cold outreach from business developers is filtered as NO
+  TASK. Gap detection identifies contacts where communication lapsed and follow-up is needed.
+---
+
 # Relationship Intelligence System
 
 ## Philosophy: Task-First, Not Classification-First

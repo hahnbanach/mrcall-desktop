@@ -1,3 +1,11 @@
+---
+description: |
+  ZylchMemory stores everything known about an entity (person, company) in a single natural-language
+  "blob" - no structured fields. When new info arrives, existing memories update via reconsolidation
+  (like human memory) instead of creating duplicates. Search uses hybrid FTS + semantic vectors
+  (all-MiniLM-L6-v2, 384 dims) with namespace isolation per user (user:{uid}).
+---
+
 # Entity-Centric Memory System
 
 ## Overview
