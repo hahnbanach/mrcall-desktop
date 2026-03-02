@@ -3665,6 +3665,16 @@ Usage:
                 stale_features = diff_info["stale_features"]
 
                 if not stale_features:
+                    if is_dashboard:
+                        import random
+                        _DASHBOARD_UPTODATE_MESSAGES = [
+                            "Your assistant is already up to date! Nothing to retrain.",
+                            "All good! The assistant already knows everything.",
+                            "No changes detected — your assistant is sharp as ever.",
+                            "Already trained and ready to go!",
+                            "Nothing new to learn — your assistant is all caught up.",
+                        ]
+                        return random.choice(_DASHBOARD_UPTODATE_MESSAGES)
                     return """✅ **Already up to date**
 
 No variables have changed since the last training. Nothing to retrain.
