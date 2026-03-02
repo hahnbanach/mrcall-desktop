@@ -3737,7 +3737,35 @@ Use `/agent mrcall train --force` to retrain all features anyway."""
 
         features_included = metadata.get('features_included', trained_features)
 
+        # Dashboard-friendly completion messages (random, fun)
+        _DASHBOARD_TRAINING_MESSAGES = [
+            "Done! Sorry for keeping you waiting, but patience is a virtue... or so they say.",
+            "All trained up! Your assistant is now smarter than it was 30 seconds ago.",
+            "Training complete! The assistant learned a lot. Pop quiz later.",
+            "Finished! Your assistant is ready to impress your callers.",
+            "Done! I'd give your assistant an A+ if I could grade it.",
+            "All set! Your assistant just graduated from configuration school.",
+            "Training done! Your assistant promises to use this knowledge wisely.",
+            "Complete! The assistant has been thoroughly briefed and is eager to perform.",
+            "Voila! Configuration absorbed, understood, and committed to memory.",
+            "That's a wrap! Your assistant is locked and loaded.",
+            "Mission accomplished! All features trained and ready to go.",
+            "Done! The assistant took great notes. It's a star student.",
+            "Training complete! No configurations were harmed in the process.",
+            "All done! Your assistant is now fully up to speed.",
+            "Finished! It took a moment, but perfection takes time.",
+            "Complete! The assistant is now an expert on your setup.",
+            "Done and dusted! Your MrCall assistant is ready to shine.",
+            "Training wrapped up! Everything looks good from here.",
+            "Success! Your assistant has memorized every configuration detail.",
+            "All features trained! Your assistant is ready for its first day.",
+        ]
+
         # Build response message
+        if is_dashboard and not failed_features:
+            import random
+            return random.choice(_DASHBOARD_TRAINING_MESSAGES)
+
         if failed_features:
             failed_msg = "\n".join(f"  - {f}: {e}" for f, e in failed_features)
             return f"""⚠️ **Training partially completed**
