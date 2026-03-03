@@ -111,8 +111,7 @@ async def root():
         "name": "Zylch AI API",
         "version": "1.0.0",
         "status": "running",
-        "docs": "/docs",
-        "skill_mode_enabled": settings.skill_mode_enabled
+        "docs": "/docs"
     }
 
 
