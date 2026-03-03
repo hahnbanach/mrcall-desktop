@@ -1,41 +1,14 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS"
+    "builder": "DOCKERFILE"
   },
   "deploy": {
     "numReplicas": 1,
+    "startCommand": "uvicorn zylch.api.main:app --host 0.0.0.0 --port $PORT",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
-  },
-  "services": [
-    {
-      "name": "api",
-      "startCommand": "uvicorn zylch.api.main:app --host 0.0.0.0 --port $PORT",
-      "healthcheckPath": "/health",
-      "healthcheckTimeout": 100
-    },
-    {
-      "name": "avatar-worker",
-      "cronSchedule": "*/5 * * * *",
-      "startCommand": "python -m zylch.workers.avatar_compute_worker",
-      "variables": {
-        "WORKER_TYPE": "avatar_compute"
-      }
-    }
-  ],
-  "environments": {
-    "production": {
-      "variables": {
-        "ENVIRONMENT": "production",
-        "LOG_LEVEL": "INFO"
-      }
-    },
-    "staging": {
-      "variables": {
-        "ENVIRONMENT": "staging",
-        "LOG_LEVEL": "DEBUG"
-      }
-    }
   }
 }
