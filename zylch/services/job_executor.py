@@ -787,24 +787,26 @@ def _process_email_sync(worker: 'MemoryWorker', email: Dict) -> bool:
     from zylch.workers import MemoryWorker
 
     email_id = email.get("id", "unknown")
+    logger.info(f"[memory_process] START email {email_id} from={email.get('from_email', '?')}")
     try:
-        logger.debug(f"Processing email {email_id}")
-
         # Get contact email
         from_email = email.get("from_email", "")
         if not from_email:
-            logger.warning(f"No contact email for {email_id}")
+            logger.warning(f"[memory_process] No contact email for {email_id}, marking processed")
             worker.storage.mark_email_processed(worker.owner_id, email_id)
             return True
 
         contact_email = from_email
 
         # Extract entities (sync LLM call inside)
+        logger.info(f"[memory_process] Extracting entities from {email_id}...")
         entities = worker._extract_entities(email, contact_email)
         if not entities:
-            logger.debug(f"No entities extracted from {email_id}")
+            logger.info(f"[memory_process] No entities from {email_id}, marking processed")
             worker.storage.mark_email_processed(worker.owner_id, email_id)
             return True
+
+        logger.info(f"[memory_process] Got {len(entities)} entities from {email_id}, upserting...")
 
         # Process each entity
         event_desc = f"Extracted from email {email_id} ({email.get('date', 'unknown date')})"
@@ -814,7 +816,7 @@ def _process_email_sync(worker: 'MemoryWorker', email: Dict) -> bool:
 
         # Mark as processed - this is the checkpoint that enables resume
         worker.storage.mark_email_processed(worker.owner_id, email_id)
-        logger.info(f"[memory_process] Marked email {email_id} as processed (memory_processed_at set)")
+        logger.info(f"[memory_process] DONE email {email_id} - marked as processed")
         return True
 
     except Exception as e:
