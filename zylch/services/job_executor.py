@@ -87,8 +87,11 @@ class JobExecutor:
 
             # Dispatch to appropriate handler
             if job_type == "memory_process":
+                job_params = job.get("params", {})
+                chain_task = bool(job_params.get("chain_task", False))
                 await self._execute_memory_process(
-                    job_id, owner_id, channel, api_key, llm_provider
+                    job_id, owner_id, channel, api_key, llm_provider,
+                    chain_task=chain_task, user_email=user_email
                 )
             elif job_type == "task_process":
                 await self._execute_task_process(
@@ -125,7 +128,9 @@ class JobExecutor:
         owner_id: str,
         channel: str,
         api_key: str,
-        llm_provider: str
+        llm_provider: str,
+        chain_task: bool = False,
+        user_email: str = ""
     ) -> None:
         """Execute memory processing in thread pool.
 
@@ -135,6 +140,9 @@ class JobExecutor:
             channel: 'email', 'calendar', 'mrcall', or 'all'
             api_key: User's LLM API key
             llm_provider: LLM provider name (anthropic, openai, mistral)
+            chain_task: If True, auto-chain task_process after completion
+                        (set by _chain_processing_after_sync)
+            user_email: User's email address (needed for task chaining)
         """
         storage = self.storage  # Capture for closure
 
@@ -257,6 +265,11 @@ class JobExecutor:
         if mrcall_count > 0:
             msg += f", {mrcall_count} phone calls"
         self.storage.create_notification(owner_id, msg, "info")
+
+        # Chain task processing after memory is done (blobs must exist before task analysis)
+        if chain_task:
+            logger.info(f"[SYNC-CHAIN] Memory complete, now chaining task_process")
+            await self._chain_task_processing(owner_id, api_key, llm_provider, user_email)
 
     async def _execute_task_process(
         self,
@@ -669,10 +682,13 @@ class JobExecutor:
         llm_provider: str,
         user_email: str
     ) -> None:
-        """Auto-chain memory and task processing after sync completes.
+        """Auto-chain memory processing after sync completes.
 
-        Only chains if the respective agents are trained and there are
-        unprocessed items. Creates background jobs for each.
+        Memory must run BEFORE task processing because TaskWorker reads
+        memory blobs (via _get_blob_for_contact) as context for task decisions.
+        Task processing is chained after memory completes (see _execute_memory_process).
+
+        Only chains if the memory agent is trained and there are unprocessed items.
 
         Args:
             owner_id: Firebase UID
@@ -684,49 +700,73 @@ class JobExecutor:
 
         # Check if memory agent is trained
         has_memory_agent = storage.get_agent_prompt(owner_id, 'memory_email') is not None
-        has_task_agent = storage.get_agent_prompt(owner_id, 'task_email') is not None
 
-        if not has_memory_agent and not has_task_agent:
-            logger.info(f"[SYNC-CHAIN] No trained agents for {owner_id}, skipping processing chain")
+        if not has_memory_agent:
+            logger.info(f"[SYNC-CHAIN] No trained memory agent for {owner_id}, skipping")
+            # Even without memory agent, try task processing directly
+            has_task_agent = storage.get_agent_prompt(owner_id, 'task_email') is not None
+            if has_task_agent:
+                await self._chain_task_processing(owner_id, api_key, llm_provider, user_email)
             return
 
-        # Chain memory processing
-        if has_memory_agent:
-            unprocessed_emails = storage.get_unprocessed_emails(owner_id, limit=1)
-            if unprocessed_emails:
-                job = storage.create_background_job(
-                    owner_id=owner_id,
-                    job_type="memory_process",
-                    channel="all"
-                )
-                if job["status"] == "pending":
-                    logger.info(f"[SYNC-CHAIN] Chaining memory_process job {job['id']}")
-                    asyncio.create_task(self.execute_job(
-                        job["id"], owner_id, api_key, llm_provider, user_email
-                    ))
-                else:
-                    logger.info(f"[SYNC-CHAIN] memory_process job already {job['status']}")
+        unprocessed_emails = storage.get_unprocessed_emails(owner_id, limit=1)
+        if unprocessed_emails:
+            # Pass chain_task=true so memory job will trigger task processing when done
+            job = storage.create_background_job(
+                owner_id=owner_id,
+                job_type="memory_process",
+                channel="all",
+                params={"chain_task": True}
+            )
+            if job["status"] == "pending":
+                logger.info(f"[SYNC-CHAIN] Chaining memory_process job {job['id']} (will chain task_process after)")
+                asyncio.create_task(self.execute_job(
+                    job["id"], owner_id, api_key, llm_provider, user_email
+                ))
             else:
-                logger.info(f"[SYNC-CHAIN] No unprocessed emails for memory, skipping")
+                logger.info(f"[SYNC-CHAIN] memory_process job already {job['status']}")
+        else:
+            logger.info(f"[SYNC-CHAIN] No unprocessed emails for memory, trying task chain directly")
+            await self._chain_task_processing(owner_id, api_key, llm_provider, user_email)
 
-        # Chain task processing
-        if has_task_agent:
-            unprocessed_task_emails = storage.get_unprocessed_emails_for_task(owner_id, limit=1)
-            if unprocessed_task_emails:
-                job = storage.create_background_job(
-                    owner_id=owner_id,
-                    job_type="task_process",
-                    channel="all"
-                )
-                if job["status"] == "pending":
-                    logger.info(f"[SYNC-CHAIN] Chaining task_process job {job['id']}")
-                    asyncio.create_task(self.execute_job(
-                        job["id"], owner_id, api_key, llm_provider, user_email
-                    ))
-                else:
-                    logger.info(f"[SYNC-CHAIN] task_process job already {job['status']}")
+    async def _chain_task_processing(
+        self,
+        owner_id: str,
+        api_key: str,
+        llm_provider: str,
+        user_email: str
+    ) -> None:
+        """Chain task processing (called after memory processing completes).
+
+        Args:
+            owner_id: Firebase UID
+            api_key: User's LLM API key
+            llm_provider: LLM provider name
+            user_email: User's email address
+        """
+        storage = self.storage
+        has_task_agent = storage.get_agent_prompt(owner_id, 'task_email') is not None
+
+        if not has_task_agent:
+            logger.info(f"[SYNC-CHAIN] No trained task agent for {owner_id}, skipping task chain")
+            return
+
+        unprocessed_task_emails = storage.get_unprocessed_emails_for_task(owner_id, limit=1)
+        if unprocessed_task_emails:
+            job = storage.create_background_job(
+                owner_id=owner_id,
+                job_type="task_process",
+                channel="all"
+            )
+            if job["status"] == "pending":
+                logger.info(f"[SYNC-CHAIN] Chaining task_process job {job['id']}")
+                asyncio.create_task(self.execute_job(
+                    job["id"], owner_id, api_key, llm_provider, user_email
+                ))
             else:
-                logger.info(f"[SYNC-CHAIN] No unprocessed emails for tasks, skipping")
+                logger.info(f"[SYNC-CHAIN] task_process job already {job['status']}")
+        else:
+            logger.info(f"[SYNC-CHAIN] No unprocessed emails for tasks, skipping")
 
 
 # =============================================================================
