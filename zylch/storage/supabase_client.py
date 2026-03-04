@@ -1835,6 +1835,83 @@ class SupabaseStorage:
             .in_('id', email_ids)\
             .execute()
 
+    def reset_processing_timestamps_for_period(
+        self,
+        owner_id: str,
+        days_back: int,
+        reset_memory: bool = True,
+        reset_task: bool = True
+    ) -> Dict[str, int]:
+        """Reset memory_processed_at and/or task_processed_at for emails in a date range.
+
+        Used by /sync --force to force reprocessing of already-processed emails.
+        Also resets calendar_events and mrcall_conversations for the same period.
+
+        Args:
+            owner_id: Firebase UID
+            days_back: Number of days back from now to reset
+            reset_memory: Whether to reset memory_processed_at
+            reset_task: Whether to reset task_processed_at
+
+        Returns:
+            Dict with counts of reset items per table
+        """
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days_back)).isoformat()
+        counts: Dict[str, int] = {}
+
+        if reset_memory:
+            # Reset emails
+            result = self.client.table('emails')\
+                .update({'memory_processed_at': None})\
+                .eq('owner_id', owner_id)\
+                .not_.is_('memory_processed_at', 'null')\
+                .gte('date', cutoff)\
+                .execute()
+            counts['emails_memory_reset'] = len(result.data) if result.data else 0
+
+            # Reset calendar events
+            result = self.client.table('calendar_events')\
+                .update({'memory_processed_at': None})\
+                .eq('owner_id', owner_id)\
+                .not_.is_('memory_processed_at', 'null')\
+                .gte('start_time', cutoff)\
+                .execute()
+            counts['calendar_memory_reset'] = len(result.data) if result.data else 0
+
+            # Reset mrcall conversations
+            result = self.client.table('mrcall_conversations')\
+                .update({'memory_processed_at': None})\
+                .eq('owner_id', owner_id)\
+                .not_.is_('memory_processed_at', 'null')\
+                .gte('call_started_at', cutoff)\
+                .execute()
+            counts['mrcall_memory_reset'] = len(result.data) if result.data else 0
+
+        if reset_task:
+            # Reset emails
+            result = self.client.table('emails')\
+                .update({'task_processed_at': None})\
+                .eq('owner_id', owner_id)\
+                .not_.is_('task_processed_at', 'null')\
+                .gte('date', cutoff)\
+                .execute()
+            counts['emails_task_reset'] = len(result.data) if result.data else 0
+
+            # Reset calendar events
+            result = self.client.table('calendar_events')\
+                .update({'task_processed_at': None})\
+                .eq('owner_id', owner_id)\
+                .not_.is_('task_processed_at', 'null')\
+                .gte('start_time', cutoff)\
+                .execute()
+            counts['calendar_task_reset'] = len(result.data) if result.data else 0
+
+        logger.info(
+            f"[reset_processing] owner={owner_id} days_back={days_back} "
+            f"reset_memory={reset_memory} reset_task={reset_task} counts={counts}"
+        )
+        return counts
+
     def get_unprocessed_calendar_events(
         self,
         owner_id: str,

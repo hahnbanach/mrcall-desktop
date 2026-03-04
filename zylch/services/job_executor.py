@@ -98,9 +98,10 @@ class JobExecutor:
                 job_params = job.get("params", {})
                 days_back_raw = job_params.get("days_back", 30)
                 days_back = int(days_back_raw) if days_back_raw is not None else 30
+                force = bool(job_params.get("force", False))
                 await self._execute_sync(
                     job_id, owner_id, channel, api_key, llm_provider,
-                    days_back=days_back
+                    days_back=days_back, force=force, user_email=user_email
                 )
             elif job_type == "task_train":
                 await self._execute_task_train(
@@ -181,6 +182,11 @@ class JobExecutor:
                     continue
 
                 total = len(items)
+                logger.info(
+                    f"[memory_process] job={job_id} channel={ch} "
+                    f"unprocessed_items={total} owner={owner_id} "
+                    f"(items with memory_processed_at IS NULL)"
+                )
                 if total == 0:
                     logger.info(f"No unprocessed {ch} items for {owner_id}")
                     continue
@@ -308,6 +314,11 @@ class JobExecutor:
                     continue
 
                 total = len(items)
+                logger.info(
+                    f"[task_process] job={job_id} channel={ch} "
+                    f"unprocessed_items={total} owner={owner_id} "
+                    f"(items with task_processed_at IS NULL)"
+                )
                 if total == 0:
                     logger.info(f"No unprocessed {ch} items for task detection")
                     continue
@@ -493,11 +504,15 @@ class JobExecutor:
         channel: str,
         api_key: str,
         llm_provider: str,
-        days_back: int = 30
+        days_back: int = 30,
+        force: bool = False,
+        user_email: str = ""
     ) -> None:
         """Execute email/calendar sync in thread pool.
 
         Loads OAuth credentials autonomously using owner_id.
+        If force=True, resets processing timestamps after sync so all emails
+        in the period get reprocessed by memory/task agents.
 
         Args:
             job_id: Background job UUID
@@ -506,6 +521,8 @@ class JobExecutor:
             api_key: User's LLM API key (BYOK) - required for calendar sync
             llm_provider: LLM provider name (anthropic, openai, mistral)
             days_back: Number of days to sync (default: 30)
+            force: If True, reset processing timestamps to force reprocessing
+            user_email: User's email address (for task processing chain)
         """
         storage = self.storage
 
@@ -580,6 +597,20 @@ class JobExecutor:
             finally:
                 loop.close()
 
+            # If force mode, reset processing timestamps so everything gets reprocessed
+            if force:
+                storage.update_background_job_progress(
+                    job_id, 90, 0, 1, "Resetting processing timestamps (force mode)..."
+                )
+                reset_counts = storage.reset_processing_timestamps_for_period(
+                    owner_id=owner_id,
+                    days_back=days_back,
+                    reset_memory=True,
+                    reset_task=True
+                )
+                results['force_reset'] = reset_counts
+                logger.info(f"[SYNC] Force mode: reset processing timestamps: {reset_counts}")
+
             return results
 
         loop = asyncio.get_event_loop()
@@ -618,8 +649,84 @@ class JobExecutor:
                 msg_parts.append(f"MrCall: {error}")
 
         msg = f"Sync complete: {', '.join(msg_parts)}" if msg_parts else "Sync complete"
+        if force:
+            reset_info = result.get('force_reset', {})
+            emails_reset = reset_info.get('emails_memory_reset', 0) + reset_info.get('emails_task_reset', 0)
+            if emails_reset > 0:
+                msg += f" (force: {reset_info.get('emails_memory_reset', 0)} emails reset for reprocessing)"
 
         self.storage.create_notification(owner_id, msg, "info")
+
+        # Auto-chain memory_process + task_process if agents are trained
+        await self._chain_processing_after_sync(
+            owner_id, api_key, llm_provider, user_email
+        )
+
+    async def _chain_processing_after_sync(
+        self,
+        owner_id: str,
+        api_key: str,
+        llm_provider: str,
+        user_email: str
+    ) -> None:
+        """Auto-chain memory and task processing after sync completes.
+
+        Only chains if the respective agents are trained and there are
+        unprocessed items. Creates background jobs for each.
+
+        Args:
+            owner_id: Firebase UID
+            api_key: User's LLM API key
+            llm_provider: LLM provider name
+            user_email: User's email address
+        """
+        storage = self.storage
+
+        # Check if memory agent is trained
+        has_memory_agent = storage.get_agent_prompt(owner_id, 'memory_email') is not None
+        has_task_agent = storage.get_agent_prompt(owner_id, 'task_email') is not None
+
+        if not has_memory_agent and not has_task_agent:
+            logger.info(f"[SYNC-CHAIN] No trained agents for {owner_id}, skipping processing chain")
+            return
+
+        # Chain memory processing
+        if has_memory_agent:
+            unprocessed_emails = storage.get_unprocessed_emails(owner_id, limit=1)
+            if unprocessed_emails:
+                job = storage.create_background_job(
+                    owner_id=owner_id,
+                    job_type="memory_process",
+                    channel="all"
+                )
+                if job["status"] == "pending":
+                    logger.info(f"[SYNC-CHAIN] Chaining memory_process job {job['id']}")
+                    asyncio.create_task(self.execute_job(
+                        job["id"], owner_id, api_key, llm_provider, user_email
+                    ))
+                else:
+                    logger.info(f"[SYNC-CHAIN] memory_process job already {job['status']}")
+            else:
+                logger.info(f"[SYNC-CHAIN] No unprocessed emails for memory, skipping")
+
+        # Chain task processing
+        if has_task_agent:
+            unprocessed_task_emails = storage.get_unprocessed_emails_for_task(owner_id, limit=1)
+            if unprocessed_task_emails:
+                job = storage.create_background_job(
+                    owner_id=owner_id,
+                    job_type="task_process",
+                    channel="all"
+                )
+                if job["status"] == "pending":
+                    logger.info(f"[SYNC-CHAIN] Chaining task_process job {job['id']}")
+                    asyncio.create_task(self.execute_job(
+                        job["id"], owner_id, api_key, llm_provider, user_email
+                    ))
+                else:
+                    logger.info(f"[SYNC-CHAIN] task_process job already {job['status']}")
+            else:
+                logger.info(f"[SYNC-CHAIN] No unprocessed emails for tasks, skipping")
 
 
 # =============================================================================
@@ -667,12 +774,16 @@ def _process_email_sync(worker: 'MemoryWorker', email: Dict) -> bool:
         for i, entity_content in enumerate(entities):
             _upsert_entity_sync(worker, entity_content, event_desc, email_id, i + 1, len(entities))
 
-        # Mark as processed
+        # Mark as processed - this is the checkpoint that enables resume
         worker.storage.mark_email_processed(worker.owner_id, email_id)
+        logger.debug(f"[memory_process] Marked email {email_id} as processed (memory_processed_at set)")
         return True
 
     except Exception as e:
-        logger.error(f"Error processing email {email_id}: {e}", exc_info=True)
+        logger.error(
+            f"[memory_process] FAILED email {email_id} - NOT marked as processed, "
+            f"will be retried on resume: {e}", exc_info=True
+        )
         return False
 
 
