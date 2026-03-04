@@ -173,7 +173,7 @@ class TaskWorker:
 
         # Process emails - only unprocessed ones, and only latest per thread
         # Use task_processed_at to track which emails have been analyzed
-        all_emails = self.storage.get_unprocessed_emails_for_task(self.owner_id, limit=200)
+        all_emails = self.storage.get_unprocessed_emails_for_task(self.owner_id)
 
         # Group by thread_id, keep only latest email per thread
         threads: Dict[str, Dict] = {}
@@ -303,7 +303,7 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
 
         # Process calendar events - only unprocessed ones
         # Use task_processed_at to track which events have been analyzed
-        events = self.storage.get_unprocessed_calendar_events_for_task(self.owner_id, limit=100)
+        events = self.storage.get_unprocessed_calendar_events_for_task(self.owner_id)
         logger.debug(f"[TASK] Found {len(events)} unprocessed calendar events")
 
         for event in events:

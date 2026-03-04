@@ -181,11 +181,11 @@ class JobExecutor:
             for ch in channels:
                 # Get unprocessed items
                 if ch == "email":
-                    items = storage.get_unprocessed_emails(owner_id, limit=500)
+                    items = storage.get_unprocessed_emails(owner_id)
                 elif ch == "calendar":
-                    items = storage.get_unprocessed_calendar_events(owner_id, limit=500)
+                    items = storage.get_unprocessed_calendar_events(owner_id)
                 elif ch == "mrcall":
-                    items = storage.get_unprocessed_mrcall_conversations(owner_id, limit=500)
+                    items = storage.get_unprocessed_mrcall_conversations(owner_id)
                 else:
                     continue
 
@@ -319,9 +319,9 @@ class JobExecutor:
             for ch in channels:
                 # Get unprocessed items
                 if ch == "email":
-                    items = storage.get_unprocessed_emails_for_task(owner_id, limit=200)
+                    items = storage.get_unprocessed_emails_for_task(owner_id)
                 elif ch == "calendar":
-                    items = storage.get_unprocessed_calendar_events_for_task(owner_id, limit=100)
+                    items = storage.get_unprocessed_calendar_events_for_task(owner_id)
                 else:
                     continue
 
@@ -707,7 +707,7 @@ class JobExecutor:
                 await self._chain_task_processing(owner_id, api_key, llm_provider, user_email)
             return
 
-        unprocessed_emails = storage.get_unprocessed_emails(owner_id, limit=1)
+        unprocessed_emails = storage.get_unprocessed_emails(owner_id)
         if unprocessed_emails:
             # Pass chain_task=true so memory job will trigger task processing when done
             job = storage.create_background_job(
@@ -749,7 +749,7 @@ class JobExecutor:
             logger.info(f"[SYNC-CHAIN] No trained task agent for {owner_id}, skipping task chain")
             return
 
-        unprocessed_task_emails = storage.get_unprocessed_emails_for_task(owner_id, limit=1)
+        unprocessed_task_emails = storage.get_unprocessed_emails_for_task(owner_id)
         if unprocessed_task_emails:
             job = storage.create_background_job(
                 owner_id=owner_id,
