@@ -1809,11 +1809,17 @@ class SupabaseStorage:
             owner_id: Firebase UID
             email_id: Email ID to mark
         """
-        self.client.table('emails')\
+        result = self.client.table('emails')\
             .update({'memory_processed_at': datetime.now(timezone.utc).isoformat()})\
             .eq('owner_id', owner_id)\
             .eq('id', email_id)\
             .execute()
+        if not result.data:
+            logger.error(
+                f"[mark_email_processed] UPDATE returned no rows! "
+                f"owner_id={owner_id} email_id={email_id} - "
+                f"email will be reprocessed on next run"
+            )
 
     def mark_emails_processed(
         self,
