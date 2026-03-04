@@ -814,7 +814,7 @@ def _process_email_sync(worker: 'MemoryWorker', email: Dict) -> bool:
 
         # Mark as processed - this is the checkpoint that enables resume
         worker.storage.mark_email_processed(worker.owner_id, email_id)
-        logger.debug(f"[memory_process] Marked email {email_id} as processed (memory_processed_at set)")
+        logger.info(f"[memory_process] Marked email {email_id} as processed (memory_processed_at set)")
         return True
 
     except Exception as e:
