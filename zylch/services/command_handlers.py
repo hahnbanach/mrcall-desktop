@@ -216,15 +216,19 @@ async def handle_sync(args: List[str], config, owner_id: str) -> str:
     help_text = """**🔄 Sync**
 
 **Usage:**
-• `/sync` - Sync emails and calendar (incremental)
+• `/sync` - Sync emails and calendar (incremental, process only new)
+• `/sync --force` - Sync and reprocess ALL emails (even already processed)
 • `/sync status` - Show sync status
 • `/sync reset` - Clear all synced data
 • `/sync --days N` - Sync last N days
+• `/sync --days N --force` - Sync last N days and reprocess all
 • `/sync mrcall` - Test MrCall conversation fetch (debug)
 
 **Examples:**
 • `/sync` - Quick incremental sync
 • `/sync --days 90` - Sync last 90 days
+• `/sync --force` - Force reprocess everything
+• `/sync --days 90 --force` - Sync 90 days and reprocess all
 • `/sync status` - Check last sync time
 • `/sync mrcall` - Fetch latest MrCall conversation"""
 
@@ -405,8 +409,9 @@ Your MrCall is linked to business `{business_id}` but OAuth credentials are miss
             logger.error(f"[/sync] MrCall sync failed: {e}", exc_info=True)
             return f"❌ **MrCall sync failed:** {str(e)}"
 
-    # Parse --days option (kept for future use, not currently used with background jobs)
+    # Parse --days and --force options
     days_back = 30
+    force = '--force' in args
     for i, arg in enumerate(args):
         if arg == '--days' and i + 1 < len(args):
             try:
@@ -437,7 +442,7 @@ Your MrCall is linked to business `{business_id}` but OAuth credentials are miss
             owner_id=owner_id,
             job_type="sync",
             channel="all",  # sync always does all channels
-            params={"days_back": days_back}
+            params={"days_back": days_back, "force": force}
         )
 
         logger.info(f"[/sync] Job request: sync/all for user {owner_id} -> {job['status']}")
@@ -465,11 +470,12 @@ Please wait for the current sync to complete."""
                 llm_provider or ""
             ))
 
-            logger.info(f"[/sync] Scheduled background job {job['id']}")
+            logger.info(f"[/sync] Scheduled background job {job['id']} (force={force})")
 
+            force_note = "\n**Mode:** Force reprocess (all emails will be re-analyzed)" if force else ""
             return f"""🚀 **Sync started in background**
 
-Job ID: `{job['id']}`
+Job ID: `{job['id']}`{force_note}
 
 Your sync is running in the background. You'll be notified when complete.
 
