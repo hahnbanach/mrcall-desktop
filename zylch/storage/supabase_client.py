@@ -1776,14 +1776,12 @@ class SupabaseStorage:
 
     def get_unprocessed_emails(
         self,
-        owner_id: str,
-        limit: int = 100
+        owner_id: str
     ) -> List[Dict[str, Any]]:
-        """Get emails not yet processed by Memory Agent.
+        """Get all emails not yet processed by Memory Agent.
 
         Args:
             owner_id: Firebase UID
-            limit: Maximum number of emails to return
 
         Returns:
             List of email dicts with id, from_email, body_plain, snippet, subject, date
@@ -1793,7 +1791,6 @@ class SupabaseStorage:
             .eq('owner_id', owner_id)\
             .is_('memory_processed_at', 'null')\
             .order('date', desc=True)\
-            .limit(limit)\
             .execute()
 
         return result.data or []
@@ -1929,14 +1926,12 @@ class SupabaseStorage:
 
     def get_unprocessed_calendar_events(
         self,
-        owner_id: str,
-        limit: int = 100
+        owner_id: str
     ) -> List[Dict[str, Any]]:
-        """Get calendar events not yet processed by Memory Agent.
+        """Get all calendar events not yet processed by Memory Agent.
 
         Args:
             owner_id: Firebase UID
-            limit: Maximum number of events to return
 
         Returns:
             List of event dicts
@@ -1946,7 +1941,6 @@ class SupabaseStorage:
             .eq('owner_id', owner_id)\
             .is_('memory_processed_at', 'null')\
             .order('start_time', desc=True)\
-            .limit(limit)\
             .execute()
 
         return result.data or []
@@ -2034,14 +2028,12 @@ class SupabaseStorage:
 
     def get_unprocessed_emails_for_task(
         self,
-        owner_id: str,
-        limit: int = 100
+        owner_id: str
     ) -> List[Dict[str, Any]]:
-        """Get emails not yet processed by Task Agent.
+        """Get all emails not yet processed by Task Agent.
 
         Args:
             owner_id: Firebase UID
-            limit: Maximum number of emails to return
 
         Returns:
             List of email dicts with all fields needed for task analysis
@@ -2051,7 +2043,6 @@ class SupabaseStorage:
             .eq('owner_id', owner_id)\
             .is_('task_processed_at', 'null')\
             .order('date_timestamp', desc=True)\
-            .limit(limit)\
             .execute()
 
         return result.data or []
@@ -2095,14 +2086,12 @@ class SupabaseStorage:
 
     def get_unprocessed_calendar_events_for_task(
         self,
-        owner_id: str,
-        limit: int = 100
+        owner_id: str
     ) -> List[Dict[str, Any]]:
-        """Get calendar events not yet processed by Task Agent.
+        """Get all calendar events not yet processed by Task Agent.
 
         Args:
             owner_id: Firebase UID
-            limit: Maximum number of events to return
 
         Returns:
             List of event dicts
@@ -2112,7 +2101,6 @@ class SupabaseStorage:
             .eq('owner_id', owner_id)\
             .is_('task_processed_at', 'null')\
             .order('start_time', desc=True)\
-            .limit(limit)\
             .execute()
 
         return result.data or []
@@ -2190,14 +2178,12 @@ class SupabaseStorage:
 
     def get_unprocessed_pipedrive_deals(
         self,
-        owner_id: str,
-        limit: int = 100
+        owner_id: str
     ) -> List[Dict[str, Any]]:
-        """Get pipedrive deals not yet processed by Memory Agent.
+        """Get all pipedrive deals not yet processed by Memory Agent.
 
         Args:
             owner_id: Firebase UID
-            limit: Maximum number of deals to return
 
         Returns:
             List of deal dicts
@@ -2207,7 +2193,6 @@ class SupabaseStorage:
             .eq('owner_id', owner_id)\
             .is_('memory_processed_at', 'null')\
             .order('updated_at', desc=True)\
-            .limit(limit)\
             .execute()
 
         return result.data or []
@@ -3913,14 +3898,12 @@ class SupabaseStorage:
 
     def get_unprocessed_mrcall_conversations(
         self,
-        owner_id: str,
-        limit: int = 50
+        owner_id: str
     ) -> List[Dict[str, Any]]:
-        """Get MrCall conversations not yet processed by memory agent.
+        """Get all MrCall conversations not yet processed by memory agent.
 
         Args:
             owner_id: Firebase UID
-            limit: Maximum number of conversations to return
 
         Returns:
             List of unprocessed conversations, most recent first
@@ -3930,7 +3913,6 @@ class SupabaseStorage:
             .eq('owner_id', owner_id)\
             .is_('memory_processed_at', 'null')\
             .order('call_started_at', desc=True)\
-            .limit(limit)\
             .execute()
 
         return result.data or []
