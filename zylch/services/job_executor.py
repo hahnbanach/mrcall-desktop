@@ -204,6 +204,17 @@ class JobExecutor:
                 )
 
                 for i, item in enumerate(items):
+                    # Check if user stopped the job BEFORE processing
+                    if _should_stop_job(storage, job_id, owner_id):
+                        logger.info(f"Job {job_id} was stopped by user at item {i}/{total}, exiting")
+                        return {
+                            "email_count": email_count,
+                            "calendar_count": calendar_count,
+                            "mrcall_count": mrcall_count,
+                            "channels": channels,
+                            "stopped": True
+                        }
+
                     # Process item (sync, blocking - OK in thread)
                     try:
                         if ch == "email":
@@ -218,24 +229,12 @@ class JobExecutor:
                     except Exception as e:
                         logger.error(f"Failed to process {ch} item: {e}")
 
-                    # Update progress every 5 items (or at end)
-                    if i % 5 == 0 or i == total - 1:
-                        pct = int((i + 1) / total * 100) if total > 0 else 100
-                        storage.update_background_job_progress(
-                            job_id, pct, i + 1, total,
-                            f"Processing {ch}: {i + 1}/{total}"
-                        )
-
-                        # Check if user stopped the job
-                        if _should_stop_job(storage, job_id, owner_id):
-                            logger.info(f"Job {job_id} was stopped by user, exiting")
-                            return {
-                                "email_count": email_count,
-                                "calendar_count": calendar_count,
-                                "mrcall_count": mrcall_count,
-                                "channels": channels,
-                                "stopped": True
-                            }
+                    # Update progress after each item
+                    pct = int((i + 1) / total * 100) if total > 0 else 100
+                    storage.update_background_job_progress(
+                        job_id, pct, i + 1, total,
+                        f"Processing {ch}: {i + 1}/{total}"
+                    )
 
             return {
                 "email_count": email_count,
@@ -353,6 +352,17 @@ class JobExecutor:
                 )
 
                 for i, item in enumerate(items):
+                    # Check if user stopped the job BEFORE processing
+                    if _should_stop_job(storage, job_id, owner_id):
+                        logger.info(f"Job {job_id} was stopped by user at item {i}/{total}, exiting")
+                        return {
+                            "email_count": email_count,
+                            "calendar_count": calendar_count,
+                            "actions_found": action_count,
+                            "channels": channels,
+                            "stopped": True
+                        }
+
                     try:
                         # Use TaskWorker's single implementation with cached calendar context
                         result = worker.analyze_item_sync(ch, item, calendar_cache=calendar_cache)
@@ -365,24 +375,12 @@ class JobExecutor:
                     except Exception as e:
                         logger.error(f"Failed to analyze {ch} item: {e}")
 
-                    # Update progress every 5 items
-                    if i % 5 == 0 or i == total - 1:
-                        pct = int((i + 1) / total * 100) if total > 0 else 100
-                        storage.update_background_job_progress(
-                            job_id, pct, i + 1, total,
-                            f"Detecting tasks from {ch}: {i + 1}/{total}"
-                        )
-
-                        # Check if user stopped the job
-                        if _should_stop_job(storage, job_id, owner_id):
-                            logger.info(f"Job {job_id} was stopped by user, exiting")
-                            return {
-                                "email_count": email_count,
-                                "calendar_count": calendar_count,
-                                "actions_found": action_count,
-                                "channels": channels,
-                                "stopped": True
-                            }
+                    # Update progress after each item
+                    pct = int((i + 1) / total * 100) if total > 0 else 100
+                    storage.update_background_job_progress(
+                        job_id, pct, i + 1, total,
+                        f"Detecting tasks from {ch}: {i + 1}/{total}"
+                    )
 
             return {
                 "email_count": email_count,
