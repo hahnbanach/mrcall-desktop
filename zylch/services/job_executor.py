@@ -185,7 +185,11 @@ class JobExecutor:
                 elif ch == "calendar":
                     items = storage.get_unprocessed_calendar_events(owner_id)
                 elif ch == "mrcall":
-                    items = storage.get_unprocessed_mrcall_conversations(owner_id)
+                    try:
+                        items = storage.get_unprocessed_mrcall_conversations(owner_id)
+                    except Exception as e:
+                        logger.warning(f"[memory_process] mrcall channel unavailable (table may not exist): {e}")
+                        continue
                 else:
                     continue
 
