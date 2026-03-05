@@ -35,10 +35,16 @@ def _should_stop_job(storage: 'SupabaseStorage', job_id: str, owner_id: str) -> 
     Returns:
         True if job should stop (status != running or job not found)
     """
-    job = storage.get_background_job(job_id, owner_id)
-    if job is None:
-        return True
-    return job.get('status') != 'running'
+    try:
+        job = storage.get_background_job(job_id, owner_id)
+        if job is None:
+            return True
+        return job.get('status') != 'running'
+    except Exception as e:
+        # Transient HTTP errors (connection pool contention, network blips)
+        # should not kill the job — assume still running and continue
+        logger.warning(f"[_should_stop_job] Failed to check job {job_id}: {e} — assuming still running")
+        return False
 
 
 class JobExecutor:
@@ -203,9 +209,12 @@ class JobExecutor:
                     logger.info(f"No unprocessed {ch} items for {owner_id}")
                     continue
 
-                storage.update_background_job_progress(
-                    job_id, 0, 0, total, f"Processing {ch}: 0/{total}"
-                )
+                try:
+                    storage.update_background_job_progress(
+                        job_id, 0, 0, total, f"Processing {ch}: 0/{total}"
+                    )
+                except Exception as e:
+                    logger.warning(f"[memory_process] Failed to set initial progress: {e} — continuing")
 
                 for i, item in enumerate(items):
                     # Check if user stopped the job BEFORE processing
@@ -235,10 +244,13 @@ class JobExecutor:
 
                     # Update progress after each item
                     pct = int((i + 1) / total * 100) if total > 0 else 100
-                    storage.update_background_job_progress(
-                        job_id, pct, i + 1, total,
-                        f"Processing {ch}: {i + 1}/{total}"
-                    )
+                    try:
+                        storage.update_background_job_progress(
+                            job_id, pct, i + 1, total,
+                            f"Processing {ch}: {i + 1}/{total}"
+                        )
+                    except Exception as e:
+                        logger.warning(f"[memory_process] Failed to update progress: {e} — continuing")
 
             return {
                 "email_count": email_count,
@@ -351,9 +363,12 @@ class JobExecutor:
                     for email in contact_emails:
                         calendar_cache[email] = worker._get_calendar_context(email)
 
-                storage.update_background_job_progress(
-                    job_id, 0, 0, total, f"Detecting tasks from {ch}: 0/{total}"
-                )
+                try:
+                    storage.update_background_job_progress(
+                        job_id, 0, 0, total, f"Detecting tasks from {ch}: 0/{total}"
+                    )
+                except Exception as e:
+                    logger.warning(f"[task_process] Failed to set initial progress: {e} — continuing")
 
                 for i, item in enumerate(items):
                     # Check if user stopped the job BEFORE processing
@@ -381,10 +396,13 @@ class JobExecutor:
 
                     # Update progress after each item
                     pct = int((i + 1) / total * 100) if total > 0 else 100
-                    storage.update_background_job_progress(
-                        job_id, pct, i + 1, total,
-                        f"Detecting tasks from {ch}: {i + 1}/{total}"
-                    )
+                    try:
+                        storage.update_background_job_progress(
+                            job_id, pct, i + 1, total,
+                            f"Detecting tasks from {ch}: {i + 1}/{total}"
+                        )
+                    except Exception as e:
+                        logger.warning(f"[task_process] Failed to update progress: {e} — continuing")
 
             return {
                 "email_count": email_count,
