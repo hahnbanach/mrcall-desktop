@@ -421,7 +421,13 @@ class MemoryWorker:
         """
         try:
             attendees = event.get("attendees", [])
-            attendees_str = ", ".join(attendees) if isinstance(attendees, list) else str(attendees)
+            if isinstance(attendees, list):
+                attendees_str = ", ".join(
+                    a.get("email", "") if isinstance(a, dict) else str(a)
+                    for a in attendees
+                )
+            else:
+                attendees_str = str(attendees)
 
             prompt = f"""Extract key facts about attendees from this calendar event.
 
