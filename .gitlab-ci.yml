@@ -1,0 +1,104 @@
+# Zylch GitLab CI/CD Pipeline
+# ===========================
+# Builds ARM64 Docker image and deploys to Scaleway Kubernetes.
+#
+# Branches:
+#   dev        -> builds + deploys to starchat-test namespace
+#   production -> builds + deploys to starchat-production namespace
+#
+# Required CI/CD Variables (Settings > CI/CD > Variables):
+#   CI_REGISTRY, CI_REGISTRY_USER, CI_REGISTRY_PASSWORD  (auto-set by GitLab)
+#   KUBECONFIG_TEST        - base64-encoded kubeconfig for test cluster
+#   KUBECONFIG_PRODUCTION  - base64-encoded kubeconfig for production cluster
+#
+
+stages:
+  - build
+  - deploy
+
+variables:
+  IMAGE_NAME: $CI_REGISTRY_IMAGE
+  DOCKER_BUILDKIT: "1"
+
+# ============================================================
+# BUILD: ARM64 Docker image
+# ============================================================
+build:
+  stage: build
+  image: docker:27
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    # Set up buildx for cross-platform builds (ARM64)
+    - docker buildx create --use --name armbuilder --driver docker-container
+    - docker buildx inspect armbuilder --bootstrap
+  script:
+    - |
+      if [ "$CI_COMMIT_REF_NAME" = "production" ]; then
+        TAG="prod-${CI_COMMIT_SHORT_SHA}"
+      else
+        TAG="dev-${CI_COMMIT_SHORT_SHA}"
+      fi
+      echo "Building $IMAGE_NAME:$TAG for linux/arm64"
+      docker buildx build \
+        --platform linux/arm64 \
+        --tag "$IMAGE_NAME:$TAG" \
+        --tag "$IMAGE_NAME:$CI_COMMIT_REF_NAME" \
+        --push \
+        .
+      echo "TAG=$TAG" > build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+    - if: $CI_COMMIT_BRANCH == "production"
+
+# ============================================================
+# DEPLOY: Test (from dev branch)
+# ============================================================
+deploy-test:
+  stage: deploy
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
+  needs:
+    - build
+  script:
+    - echo "$KUBECONFIG_TEST" | base64 -d > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
+    - NAMESPACE="starchat-test"
+    - echo "Deploying $IMAGE_NAME:$TAG to $NAMESPACE"
+    - kubectl set image deployment/zylch zylch="$IMAGE_NAME:$TAG" -n "$NAMESPACE"
+    - kubectl rollout status deployment/zylch -n "$NAMESPACE" --timeout=300s
+    - kubectl get pods -n "$NAMESPACE" -l app=zylch
+  after_script:
+    - rm -f /tmp/kubeconfig
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+
+# ============================================================
+# DEPLOY: Production (from production branch)
+# ============================================================
+deploy-production:
+  stage: deploy
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
+  needs:
+    - build
+  script:
+    - echo "$KUBECONFIG_PRODUCTION" | base64 -d > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
+    - NAMESPACE="starchat-production"
+    - echo "Deploying $IMAGE_NAME:$TAG to $NAMESPACE"
+    - kubectl set image deployment/zylch zylch="$IMAGE_NAME:$TAG" -n "$NAMESPACE"
+    - kubectl rollout status deployment/zylch -n "$NAMESPACE" --timeout=300s
+    - kubectl get pods -n "$NAMESPACE" -l app=zylch
+  after_script:
+    - rm -f /tmp/kubeconfig
+  rules:
+    - if: $CI_COMMIT_BRANCH == "production"
