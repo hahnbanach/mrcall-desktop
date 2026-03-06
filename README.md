@@ -1,6 +1,6 @@
 # Zylch AI - Multi-Channel Sales Intelligence System
 
-Zylch AI is a single-agent AI assistant that helps sales professionals manage email communications, enrich contact data, and automate follow-up workflows across multiple channels (email, SMS, phone). It also integrate with MrCall for configuring assistants.
+Zylch AI is a single-agent AI assistant that helps sales professionals manage email communications, enrich contact data, and automate follow-up workflows across multiple channels (email, SMS, phone). It also integrate with MrCall for configuring assistants
 
 ## Design Philosophy
 
