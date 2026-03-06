@@ -33,8 +33,7 @@ build:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     # Register QEMU for ARM64 emulation
     - docker run --rm --privileged tonistiigi/binfmt --install arm64
-    # Use the default buildx builder (docker driver, no TLS conflict)
-    - docker buildx create --use --name armbuilder --driver docker
+    # Use the default buildx builder (already has docker driver)
   script:
     - |
       if [ "$CI_COMMIT_REF_NAME" = "production" ]; then
