@@ -1,7 +1,7 @@
 # Zylch GitLab CI/CD Pipeline
 # ===========================
-# Builds ARM64 Docker image natively on GitLab SaaS ARM runner
-# and deploys to Scaleway Kubernetes.
+# Builds ARM64 Docker image via QEMU emulation on amd64 runner
+# and deploys to Scaleway Kubernetes (ARM nodes).
 #
 # Branches:
 #   dev        -> builds + deploys to starchat-test namespace
@@ -19,21 +19,26 @@ stages:
 
 variables:
   IMAGE_NAME: $CI_REGISTRY_IMAGE
+  DOCKER_TLS_CERTDIR: "/certs"
 
 # ============================================================
-# BUILD: Native ARM64 Docker image
+# BUILD: ARM64 Docker image (QEMU on amd64 runner)
 # ============================================================
 build:
   stage: build
   image: docker:27
-  tags:
-    - saas-linux-medium-arm64
   services:
     - docker:27-dind
-  variables:
-    DOCKER_TLS_CERTDIR: "/certs"
   before_script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    # Register QEMU for ARM64 emulation
+    - docker run --rm --privileged tonistiigi/binfmt --install arm64
+    # Create buildx builder using docker-container driver
+    # The DOCKER_TLS_CERTDIR certs are passed via env to the builder
+    - docker buildx create --use --name armbuilder
+      --driver docker-container
+      --driver-opt "network=host"
+    - docker buildx inspect armbuilder --bootstrap
   script:
     - |
       if [ "$CI_COMMIT_REF_NAME" = "production" ]; then
@@ -41,13 +46,13 @@ build:
       else
         TAG="dev-${CI_COMMIT_SHORT_SHA}"
       fi
-      echo "Building $IMAGE_NAME:$TAG (native ARM64)"
-      docker build \
+      echo "Building $IMAGE_NAME:$TAG for linux/arm64 (QEMU)"
+      docker buildx build \
+        --platform linux/arm64 \
         --tag "$IMAGE_NAME:$TAG" \
         --tag "$IMAGE_NAME:$CI_COMMIT_REF_NAME" \
+        --push \
         .
-      docker push "$IMAGE_NAME:$TAG"
-      docker push "$IMAGE_NAME:$CI_COMMIT_REF_NAME"
       echo "TAG=$TAG" > build.env
   artifacts:
     reports:
