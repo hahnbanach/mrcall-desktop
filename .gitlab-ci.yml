@@ -19,7 +19,7 @@ stages:
 
 variables:
   IMAGE_NAME: $CI_REGISTRY_IMAGE
-  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_TLS_CERTDIR: ""
 
 # ============================================================
 # BUILD: ARM64 Docker image (QEMU on amd64 runner)
@@ -33,12 +33,8 @@ build:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     # Register QEMU for ARM64 emulation
     - docker run --rm --privileged tonistiigi/binfmt --install arm64
-    # Create buildx builder using docker-container driver
-    # The DOCKER_TLS_CERTDIR certs are passed via env to the builder
-    - docker buildx create --use --name armbuilder
-      --driver docker-container
-      --driver-opt "network=host"
-    - docker buildx inspect armbuilder --bootstrap
+    # Use the default buildx builder (docker driver, no TLS conflict)
+    - docker buildx create --use --name armbuilder --driver docker
   script:
     - |
       if [ "$CI_COMMIT_REF_NAME" = "production" ]; then
@@ -51,8 +47,10 @@ build:
         --platform linux/arm64 \
         --tag "$IMAGE_NAME:$TAG" \
         --tag "$IMAGE_NAME:$CI_COMMIT_REF_NAME" \
-        --push \
+        --load \
         .
+      docker push "$IMAGE_NAME:$TAG"
+      docker push "$IMAGE_NAME:$CI_COMMIT_REF_NAME"
       echo "TAG=$TAG" > build.env
   artifacts:
     reports:
