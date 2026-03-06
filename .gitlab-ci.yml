@@ -1,6 +1,7 @@
 # Zylch GitLab CI/CD Pipeline
 # ===========================
-# Builds ARM64 Docker image and deploys to Scaleway Kubernetes.
+# Builds ARM64 Docker image natively on GitLab SaaS ARM runner
+# and deploys to Scaleway Kubernetes.
 #
 # Branches:
 #   dev        -> builds + deploys to starchat-test namespace
@@ -18,23 +19,21 @@ stages:
 
 variables:
   IMAGE_NAME: $CI_REGISTRY_IMAGE
-  DOCKER_BUILDKIT: "1"
 
 # ============================================================
-# BUILD: ARM64 Docker image
+# BUILD: Native ARM64 Docker image
 # ============================================================
 build:
   stage: build
   image: docker:27
+  tags:
+    - saas-linux-medium-arm64
   services:
     - docker:27-dind
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
   before_script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    # Set up buildx for cross-platform builds (ARM64)
-    - docker buildx create --use --name armbuilder --driver docker-container
-    - docker buildx inspect armbuilder --bootstrap
   script:
     - |
       if [ "$CI_COMMIT_REF_NAME" = "production" ]; then
@@ -42,13 +41,13 @@ build:
       else
         TAG="dev-${CI_COMMIT_SHORT_SHA}"
       fi
-      echo "Building $IMAGE_NAME:$TAG for linux/arm64"
-      docker buildx build \
-        --platform linux/arm64 \
+      echo "Building $IMAGE_NAME:$TAG (native ARM64)"
+      docker build \
         --tag "$IMAGE_NAME:$TAG" \
         --tag "$IMAGE_NAME:$CI_COMMIT_REF_NAME" \
-        --push \
         .
+      docker push "$IMAGE_NAME:$TAG"
+      docker push "$IMAGE_NAME:$CI_COMMIT_REF_NAME"
       echo "TAG=$TAG" > build.env
   artifacts:
     reports:
