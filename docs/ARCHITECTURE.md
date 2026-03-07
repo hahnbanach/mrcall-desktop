@@ -101,7 +101,7 @@ Zylch is an AI-powered email assistant that provides relationship intelligence, 
 
 ## Deployment Model
 
-The Zylch backend (`zylch/api/`) is a single codebase that serves **two distinct products** depending on configuration:
+The Zylch backend (`zylch/api/`) is a single codebase deployed on **Scaleway Kubernetes** (ARM64 nodes), built via **GitLab CI/CD** with a self-hosted ARM runner.
 
 | Deployment | `.env` file | Firebase Project | Purpose | Users connect via |
 |------------|-------------|-----------------|---------|-------------------|
@@ -113,9 +113,19 @@ The Zylch backend (`zylch/api/`) is a single codebase that serves **two distinct
 - **Different feature scope**: Zylch exposes the full feature set (email, calendar, memory, tasks, etc.). MrCall Configurator only exposes MrCall assistant configuration via sandbox mode.
 - **Different Google OAuth clients**: Each deployment uses a different GCP project for Google OAuth (see [Environment Files](#configuration)).
 
-**Same codebase, same Supabase**: Both deployments share the same Supabase database and the same code. The `.env` file determines which Firebase project validates tokens and which Google OAuth client is used.
+**Same codebase, same database**: Both deployments share the same database and the same code. The `.env` file determines which Firebase project validates tokens and which Google OAuth client is used.
 
-**Release process**: Changes to the backend require deploying both Railway instances (if both are affected). Changes to zylch-cli require a separate CLI release.
+**Infrastructure:**
+- **K8s clusters**: Two Scaleway Kapsule clusters (test + production), ARM64 node pool (`zylch-pool`, BASIC2-A2C-4G)
+- **CI/CD**: GitLab (`git@gitlab.com:hahnbanach/zylch.git`), self-hosted ARM64 runner on Scaleway for native Docker builds
+- **Registry**: GitLab Container Registry (`registry.gitlab.com/hahnbanach/zylch`)
+- **Branches**: `dev` → starchat-test namespace, `production` → starchat-production namespace
+- **Manifests**: `~/hb/zylch-deploy/` (test/ and production/ directories)
+- **Database**: Scaleway Managed PostgreSQL (migrating from Supabase — Phase 2)
+
+**Release process**: Push to `dev` or `production` branch triggers GitLab CI build + deploy. A pre-push git hook auto-starts the runner if it's stopped (auto-shuts down after 4h idle to save costs).
+
+For complete deployment details, see [Deployment Guide](guides/DEPLOYMENT.md).
 
 ## Local Development
 
@@ -527,7 +537,7 @@ All user credentials (OAuth tokens, API keys) are stored in Supabase's `oauth_to
 **For complete details**, see [Credentials Management Documentation](architecture/credentials-management.md)
 
 ### Configuration
-- **Environment**: Railway env vars (backend), Vercel env vars (frontend)
+- **Environment**: K8s secrets via `zylch-secrets` (backend), Vercel env vars (frontend)
 - **Defaults**: `zylch/config.py` (Pydantic settings)
 - **System .env contains**: Supabase config, Firebase config, Google OAuth client, encryption key, optional `ANTHROPIC_API_KEY` (system-level fallback for integrations), LLM model names (`ANTHROPIC_MODEL`, `OPENAI_MODEL`, `MISTRAL_MODEL`, `DEFAULT_MODEL`)
 - **NOT in .env**: User credentials (Pipedrive, Vonage) - these are BYOK via `/connect`
@@ -540,20 +550,20 @@ All user credentials (OAuth tokens, API keys) are stored in Supabase's `oauth_to
 | File | Purpose | Firebase Project | Google OAuth Client (GCP project) |
 |------|---------|-----------------|-----------------------------------|
 | `.env.development` | Zylch local dev | `zylch-test-9a895` | `49237749736-...` (`zylch-test`) |
-| `.env.production` | Zylch prod (Railway) | `zylch-test-9a895` | `49237749736-...` (`zylch-test`) |
+| `.env.production` | Zylch prod (Scaleway K8s) | `zylch-test-9a895` | `49237749736-...` (`zylch-test`) |
 | `.env.mrcall` | MrCall Dashboard backend | `talkmeapp-e696c` | `375340415237-...` (`talkmeapp`) |
 
 **⚠️ Common pitfall**: Using `.env.mrcall` when testing Zylch CLI features like `/connect google` causes `redirect_uri_mismatch` because the Google OAuth client (`375340415237-...`) belongs to a different GCP project that may not have `http://localhost:8000/api/auth/google/callback` registered. MrCall Dashboard users don't need `/connect google` — they only use `/connect mrcall`.
 
 ### Firebase Service Account
 
-Stored as **Base64-encoded JSON** in Railway env vars:
+Stored as **Base64-encoded JSON** in K8s secrets:
 
 ```bash
 # Encode the service account JSON:
 cat firebase-service-account.json | base64
 
-# Set in Railway:
+# Set in secrets.env:
 FIREBASE_SERVICE_ACCOUNT_BASE64=eyJ0eXBlIjoic2VydmljZV9hY2NvdW50Ii...
 ```
 
@@ -848,7 +858,7 @@ Dashboard users operate in a restricted "sandbox" environment that limits access
 **All User Credentials (BYOK)**:
 - **Storage**: Supabase `oauth_tokens` table in unified `credentials` JSONB column
 - **Encryption**: Fernet (AES-128-CBC + HMAC) via `zylch/utils/encryption.py`
-- **Key**: `ENCRYPTION_KEY` environment variable (set in Railway)
+- **Key**: `ENCRYPTION_KEY` environment variable (set in K8s secrets)
 - **No fallback**: If user hasn't connected a provider, tools return helpful error (not system default)
 - **Applies to**: Anthropic API key, Vonage credentials, Pipedrive token, OAuth tokens
 
@@ -879,22 +889,22 @@ Dashboard users operate in a restricted "sandbox" environment that limits access
 ### Current Limits
 - **Emails**: Tested with 500 messages, scales to millions with Supabase
 - **Threads**: 30-day intelligence window (~250-300 threads typical)
-- **Concurrent API**: Railway auto-scaling
+- **Concurrent API**: Scaleway K8s scaling
 
 ### Scaling Strategy
 
 **Phase 1: Current** (0-1,000 users)
-- Single FastAPI instance on Railway
-- Supabase Postgres (managed)
+- Scaleway Kubernetes (ARM64 nodes)
+- Scaleway Managed PostgreSQL (migrating from Supabase)
 - Background workers (APScheduler in-process)
 
 **Phase 2: Growth** (1,000-10,000 users)
-- Add Railway replicas (horizontal scaling)
+- Add K8s replicas (horizontal scaling)
 - Move background workers to separate processes
 - Add Redis for caching and session management
 
 **Phase 3: Scale** (10,000+ users)
-- Railway auto-scaling (multiple replicas)
+- K8s auto-scaling (multiple replicas)
 - Redis caching layer (Upstash)
 - Separate worker pool for triggers
 - Consider Elasticsearch for advanced search
