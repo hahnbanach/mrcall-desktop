@@ -8,6 +8,7 @@ This documentation is organized into the following sections:
 
 ### Quick Start
 - **[Gmail OAuth Setup](guides/gmail-oauth.md)** - Configure Google OAuth for Gmail access
+- **[Deployment Guide](guides/DEPLOYMENT.md)** - Scaleway Kubernetes deployment with GitLab CI/CD
 - **[Getting Started Guide](../ZYLCH_BUSINESS_MODEL.md)** - Business model and product vision
 
 ### Core Features
@@ -258,6 +259,12 @@ See [Documentation Guide](../.claude/DOCUMENTATION.md) for:
 
 ## 📝 Recent Updates
 
+**March 2026**:
+- ✅ Migrated deployment from Railway to Scaleway Kubernetes (ARM64 nodes)
+- ✅ GitLab CI/CD with self-hosted ARM runner on Scaleway (native builds, no QEMU)
+- ✅ Auto-shutdown runner after 4h idle, auto-start via pre-push git hook
+- ✅ Database migration planned: Supabase → Scaleway Managed PostgreSQL (Phase 2)
+
 **February 2026**:
 - ✅ MrCall training optimization: selective retraining (only stale features), snapshot-based change detection
 - ✅ Training status button in MrCall Dashboard (BusinessConfiguration.vue)
@@ -278,5 +285,5 @@ See [CHANGELOG](../CHANGELOG.md) for complete version history.
 
 ---
 
-**Last Updated**: February 2026
+**Last Updated**: March 2026
 **Version**: 0.3.0

@@ -26,6 +26,7 @@ variables:
 # ============================================================
 build:
   stage: build
+  timeout: 2h
   tags:
     - arm64
   before_script:
