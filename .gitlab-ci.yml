@@ -1,6 +1,6 @@
 # Zylch GitLab CI/CD Pipeline
 # ===========================
-# Builds ARM64 Docker image via QEMU emulation on amd64 runner
+# Builds ARM64 Docker image natively on self-hosted ARM runner (Scaleway)
 # and deploys to Scaleway Kubernetes (ARM nodes).
 #
 # Branches:
@@ -12,6 +12,7 @@
 #   KUBECONFIG_TEST        - base64-encoded kubeconfig for test cluster
 #   KUBECONFIG_PRODUCTION  - base64-encoded kubeconfig for production cluster
 #
+# Runner: self-hosted ARM64 on Scaleway (tag: arm64), shell executor
 
 stages:
   - build
@@ -19,21 +20,16 @@ stages:
 
 variables:
   IMAGE_NAME: $CI_REGISTRY_IMAGE
-  DOCKER_TLS_CERTDIR: ""
 
 # ============================================================
-# BUILD: ARM64 Docker image (QEMU on amd64 runner)
+# BUILD: ARM64 Docker image (native on self-hosted ARM runner)
 # ============================================================
 build:
   stage: build
-  image: docker:27
-  services:
-    - docker:27-dind
+  tags:
+    - arm64
   before_script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    # Register QEMU for ARM64 emulation
-    - docker run --rm --privileged tonistiigi/binfmt --install arm64
-    # Use the default buildx builder (already has docker driver)
   script:
     - |
       if [ "$CI_COMMIT_REF_NAME" = "production" ]; then
@@ -41,12 +37,10 @@ build:
       else
         TAG="dev-${CI_COMMIT_SHORT_SHA}"
       fi
-      echo "Building $IMAGE_NAME:$TAG for linux/arm64 (QEMU)"
-      docker buildx build \
-        --platform linux/arm64 \
+      echo "Building $IMAGE_NAME:$TAG natively on ARM64"
+      docker build \
         --tag "$IMAGE_NAME:$TAG" \
         --tag "$IMAGE_NAME:$CI_COMMIT_REF_NAME" \
-        --load \
         .
       docker push "$IMAGE_NAME:$TAG"
       docker push "$IMAGE_NAME:$CI_COMMIT_REF_NAME"
@@ -63,9 +57,8 @@ build:
 # ============================================================
 deploy-test:
   stage: deploy
-  image:
-    name: bitnami/kubectl:latest
-    entrypoint: [""]
+  tags:
+    - arm64
   needs:
     - build
   script:
@@ -86,9 +79,8 @@ deploy-test:
 # ============================================================
 deploy-production:
   stage: deploy
-  image:
-    name: bitnami/kubectl:latest
-    entrypoint: [""]
+  tags:
+    - arm64
   needs:
     - build
   script:
