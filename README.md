@@ -12,10 +12,6 @@ Zylch AI is a single-agent AI assistant that helps sales professionals manage em
 
 **Multi-tenant**: Complete data isolation per owner with support for multiple assistants - run completely different businesses from the same system.
 
-## Key Innovation: Person-Centric Task Management
-
-Unlike traditional email clients that show thread-by-thread views, Zylch AI aggregates all email threads **by person** to create intelligent, actionable tasks. One person = one task maximum.
-
 ## Features
 
 ### Multi-Tenant Architecture ⭐ NEW
