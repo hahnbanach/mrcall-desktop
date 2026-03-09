@@ -25,6 +25,9 @@ sendgrid>=6.11.0
 # Firebase & Database
 firebase-admin>=6.0.0
 sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.9
+alembic>=1.13.0
+pgvector>=0.3.0
 
 # Scheduling
 croniter>=1.4.0  # Cron expression parsing for recurring jobs
@@ -40,7 +43,6 @@ hnswlib>=0.7.0
 
 # HTTP
 requests>=2.31.0
-supabase
 
 # HTML parsing
 beautifulsoup4>=4.12.0

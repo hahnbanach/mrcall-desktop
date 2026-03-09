@@ -9,6 +9,9 @@ import logging
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 
+from zylch.storage.database import get_session
+from zylch.storage.models import IntegrationProvider, OAuthToken
+
 logger = logging.getLogger(__name__)
 
 # Provider categories
@@ -39,17 +42,18 @@ def get_available_providers(
         List of provider dictionaries with metadata
     """
     try:
-        query = supabase_client.client.table('integration_providers').select('*')
+        with get_session() as session:
+            q = session.query(IntegrationProvider)
 
-        if category:
-            query = query.eq('category', category)
+            if category:
+                q = q.filter(IntegrationProvider.category == category)
 
-        if not include_unavailable:
-            query = query.eq('is_available', True)
+            if not include_unavailable:
+                q = q.filter(IntegrationProvider.is_available == True)
 
-        result = query.order('display_name').execute()
+            rows = q.order_by(IntegrationProvider.display_name).all()
 
-        return result.data if result.data else []
+        return [r.to_dict() for r in rows]
 
     except Exception as e:
         logger.error(f"Failed to get available providers: {e}")
@@ -71,19 +75,19 @@ def get_user_connections(supabase_client, owner_id: str) -> List[Dict[str, Any]]
         List of connected provider dictionaries with status
     """
     try:
-        # Fetch oauth_tokens rows with unified credentials
-        result = supabase_client.client.table('oauth_tokens')\
-            .select('provider, email, connection_status, last_sync, error_message, display_name, created_at, '
-                   'credentials')\
-            .eq('owner_id', owner_id)\
-            .execute()
+        # Fetch oauth_tokens rows with unified credentials via ORM
+        with get_session() as session:
+            rows = session.query(OAuthToken).filter(
+                OAuthToken.owner_id == owner_id
+            ).all()
+            all_connections = [r.to_dict() for r in rows]
 
-        if not result.data:
+        if not all_connections:
             return []
 
         # Filter out connections that don't have actual credential data
         valid_connections = []
-        for conn in result.data:
+        for conn in all_connections:
             provider = conn['provider']
             has_credentials = False
 

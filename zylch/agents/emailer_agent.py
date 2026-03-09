@@ -21,6 +21,8 @@ from typing import Any, Dict, List, Optional
 
 from zylch.agents.base_agent import SpecializedAgent
 from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage.database import get_session
+from zylch.storage.models import Blob
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 from zylch.memory.hybrid_search import SearchResult
 
@@ -248,14 +250,13 @@ class EmailContextGatherer:
     def _get_blobs_by_ids(self, blob_ids: List[str]) -> List[dict]:
         """Load blobs by their UUIDs."""
         blobs = []
-        for blob_id in blob_ids:
-            result = self.storage.client.table('blobs')\
-                .select('*')\
-                .eq('id', blob_id)\
-                .limit(1)\
-                .execute()
-            if result.data:
-                blobs.append(result.data[0])
+        with get_session() as session:
+            for blob_id in blob_ids:
+                row = session.query(Blob).filter(
+                    Blob.id == blob_id
+                ).first()
+                if row:
+                    blobs.append(row.to_dict())
         return blobs
 
 

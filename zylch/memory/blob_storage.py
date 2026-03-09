@@ -1,17 +1,24 @@
-"""Blob storage with sentence-level embeddings for Supabase."""
+"""Blob storage with sentence-level embeddings using SQLAlchemy."""
 
+import logging
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 import uuid
 
+from sqlalchemy import func
+
 from .text_processing import split_sentences
 from .embeddings import EmbeddingEngine
+from zylch.storage.models import Blob, BlobSentence
+
+logger = logging.getLogger(__name__)
+
 
 class BlobStorage:
     """Storage for entity blobs with sentence-level embeddings."""
 
-    def __init__(self, supabase_client, embedding_engine: EmbeddingEngine):
-        self.supabase = supabase_client
+    def __init__(self, get_session, embedding_engine: EmbeddingEngine):
+        self._get_session = get_session
         self.embeddings = embedding_engine
 
     def store_blob(
@@ -42,33 +49,32 @@ class BlobStorage:
                 "description": event_description
             })
 
-        # Insert blob
-        blob_data = {
-            "id": blob_id,
-            "owner_id": owner_id,
-            "namespace": namespace,
-            "content": content,
-            "embedding": blob_embedding.tolist(),
-            "events": events
-        }
+        with self._get_session() as session:
+            # Insert blob
+            blob = Blob(
+                id=uuid.UUID(blob_id),
+                owner_id=owner_id,
+                namespace=namespace,
+                content=content,
+                embedding=blob_embedding.tolist(),
+                events=events,
+            )
+            session.add(blob)
+            session.flush()
 
-        result = self.supabase.table("blobs").insert(blob_data).execute()
+            # Insert sentences
+            for i, sent in enumerate(sentences):
+                emb = sentence_embeddings[i] if len(sentence_embeddings) > i else self.embeddings.encode(sent)
+                sentence = BlobSentence(
+                    blob_id=uuid.UUID(blob_id),
+                    owner_id=owner_id,
+                    sentence_text=sent,
+                    embedding=emb.tolist() if hasattr(emb, 'tolist') else list(emb),
+                )
+                session.add(sentence)
 
-        # Insert sentences
-        sentence_records = []
-        for i, sent in enumerate(sentences):
-            emb = sentence_embeddings[i] if len(sentence_embeddings) > i else self.embeddings.encode(sent)
-            sentence_records.append({
-                "blob_id": blob_id,
-                "owner_id": owner_id,
-                "sentence_text": sent,
-                "embedding": emb.tolist() if hasattr(emb, 'tolist') else list(emb)
-            })
-
-        if sentence_records:
-            self.supabase.table("blob_sentences").insert(sentence_records).execute()
-
-        return result.data[0]
+            session.flush()
+            return blob.to_dict()
 
     def update_blob(
         self,
@@ -77,100 +83,92 @@ class BlobStorage:
         content: str,
         event_description: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Update blob content and regenerate sentence embeddings."""
-        # Get existing blob to append event
-        existing = self.supabase.table("blobs")\
-            .select("events")\
-            .eq("id", blob_id)\
-            .eq("owner_id", owner_id)\
-            .single()\
-            .execute()
+        """Update blob content and regenerate sentence embeddings.
 
-        events = existing.data.get("events", []) if existing.data else []
-        if event_description:
-            events.append({
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "description": event_description
-            })
-
-        # Generate new embeddings
+        Atomic: reads blob with FOR UPDATE lock, deletes old sentences,
+        inserts new ones — all in a single transaction.
+        """
+        # Generate new embeddings before entering transaction
         blob_embedding = self.embeddings.encode(content)
         sentences = split_sentences(content)
         sentence_embeddings = self.embeddings.encode(sentences) if sentences else []
 
-        # Update blob
-        blob_data = {
-            "content": content,
-            "embedding": blob_embedding.tolist(),
-            "events": events
-        }
+        with self._get_session() as session:
+            # Lock the blob row for atomic read-then-write
+            blob = session.query(Blob)\
+                .filter(Blob.id == blob_id, Blob.owner_id == owner_id)\
+                .with_for_update()\
+                .one_or_none()
 
-        result = self.supabase.table("blobs")\
-            .update(blob_data)\
-            .eq("id", blob_id)\
-            .eq("owner_id", owner_id)\
-            .execute()
+            if blob is None:
+                logger.warning(f"update_blob: blob {blob_id} not found for owner {owner_id}")
+                return {}
 
-        # Delete old sentences (CASCADE doesn't apply to updates)
-        self.supabase.table("blob_sentences")\
-            .delete()\
-            .eq("blob_id", blob_id)\
-            .execute()
+            # Append event
+            events = list(blob.events or [])
+            if event_description:
+                events.append({
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "description": event_description
+                })
 
-        # Insert new sentences
-        sentence_records = []
-        for i, sent in enumerate(sentences):
-            emb = sentence_embeddings[i] if len(sentence_embeddings) > i else self.embeddings.encode(sent)
-            sentence_records.append({
-                "blob_id": blob_id,
-                "owner_id": owner_id,
-                "sentence_text": sent,
-                "embedding": emb.tolist() if hasattr(emb, 'tolist') else list(emb)
-            })
+            # Update blob fields
+            blob.content = content
+            blob.embedding = blob_embedding.tolist()
+            blob.events = events
 
-        if sentence_records:
-            self.supabase.table("blob_sentences").insert(sentence_records).execute()
+            # Delete old sentences
+            session.query(BlobSentence)\
+                .filter(BlobSentence.blob_id == blob_id)\
+                .delete(synchronize_session=False)
 
-        return result.data[0]
+            # Insert new sentences
+            for i, sent in enumerate(sentences):
+                emb = sentence_embeddings[i] if len(sentence_embeddings) > i else self.embeddings.encode(sent)
+                sentence = BlobSentence(
+                    blob_id=uuid.UUID(blob_id) if isinstance(blob_id, str) else blob_id,
+                    owner_id=owner_id,
+                    sentence_text=sent,
+                    embedding=emb.tolist() if hasattr(emb, 'tolist') else list(emb),
+                )
+                session.add(sentence)
+
+            session.flush()
+            return blob.to_dict()
 
     def get_blob(self, blob_id: str, owner_id: str) -> Optional[Dict[str, Any]]:
         """Get blob by ID."""
-        result = self.supabase.table("blobs")\
-            .select("*")\
-            .eq("id", blob_id)\
-            .eq("owner_id", owner_id)\
-            .single()\
-            .execute()
-        return result.data if result.data else None
+        with self._get_session() as session:
+            blob = session.query(Blob)\
+                .filter(Blob.id == blob_id, Blob.owner_id == owner_id)\
+                .one_or_none()
+            return blob.to_dict() if blob else None
 
     def delete_blob(self, blob_id: str, owner_id: str) -> bool:
-        """Delete blob (sentences cascade automatically)."""
-        result = self.supabase.table("blobs")\
-            .delete()\
-            .eq("id", blob_id)\
-            .eq("owner_id", owner_id)\
-            .execute()
-        return len(result.data) > 0
+        """Delete blob (sentences cascade automatically via FK)."""
+        with self._get_session() as session:
+            count = session.query(Blob)\
+                .filter(Blob.id == blob_id, Blob.owner_id == owner_id)\
+                .delete(synchronize_session=False)
+            return count > 0
 
     def get_stats(self, owner_id: str) -> Dict[str, Any]:
         """Get memory statistics for owner."""
-        blobs = self.supabase.table("blobs")\
-            .select("id, namespace, content")\
-            .eq("owner_id", owner_id)\
-            .execute()
+        with self._get_session() as session:
+            blobs = session.query(Blob.id, Blob.namespace, Blob.content)\
+                .filter(Blob.owner_id == owner_id)\
+                .all()
 
-        sentences = self.supabase.table("blob_sentences")\
-            .select("id", count="exact")\
-            .eq("owner_id", owner_id)\
-            .execute()
+            sentence_count = session.query(func.count(BlobSentence.id))\
+                .filter(BlobSentence.owner_id == owner_id)\
+                .scalar() or 0
 
-        namespaces = list(set(b["namespace"] for b in blobs.data)) if blobs.data else []
-        sentence_count = sentences.count if hasattr(sentences, 'count') else len(sentences.data) if sentences.data else 0
-        avg_sentences = sentence_count / len(blobs.data) if blobs.data else 0
+            namespaces = list(set(b.namespace for b in blobs))
+            avg_sentences = sentence_count / len(blobs) if blobs else 0
 
-        return {
-            "total_blobs": len(blobs.data) if blobs.data else 0,
-            "total_sentences": sentence_count,
-            "namespaces": namespaces,
-            "avg_blob_size": round(avg_sentences, 2)
-        }
+            return {
+                "total_blobs": len(blobs),
+                "total_sentences": sentence_count,
+                "namespaces": namespaces,
+                "avg_blob_size": round(avg_sentences, 2)
+            }

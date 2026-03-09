@@ -1,6 +1,6 @@
 ---
 description: |
-  Multi-tenant system where each owner (Firebase UID) has complete data isolation via Supabase RLS.
+  Multi-tenant system where each owner (Firebase UID) has complete data isolation via PostgreSQL with owner_id filtering.
   Currently limited to single-assistant mode (one Zylch assistant per owner, auto-created as
   default_assistant). Namespace structure is {owner}:{assistant}:{contact} for future multi-assistant
   expansion. Each tenant gets separate business info, contacts, memories with zero data leakage.

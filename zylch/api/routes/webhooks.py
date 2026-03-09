@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field
 
 from ...services.webhook_processor import WebhookProcessor
 from ...config import settings
+from ...storage.database import get_session
+from ...storage.models import SendgridMessageMapping, EmailReadEvent, Email
 
 logger = logging.getLogger(__name__)
 
@@ -197,8 +199,6 @@ async def process_sendgrid_open_event(event: Dict[str, Any]) -> None:
     Args:
         event: SendGrid event data dictionary
     """
-    from ...storage.supabase_client import SupabaseStorage
-
     try:
         sg_message_id = event.get("sg_message_id")
         recipient_email = event.get("email")
@@ -214,20 +214,17 @@ async def process_sendgrid_open_event(event: Dict[str, Any]) -> None:
         event_timestamp = datetime.fromtimestamp(timestamp_unix, tz=timezone.utc)
 
         # Look up Zylch message_id from SendGrid message mapping
-        storage = SupabaseStorage.get_instance()
-        mapping_result = storage.client.table('sendgrid_message_mapping')\
-            .select('message_id, owner_id')\
-            .eq('sendgrid_message_id', sg_message_id)\
-            .limit(1)\
-            .execute()
+        with get_session() as session:
+            mapping_row = session.query(SendgridMessageMapping).filter(
+                SendgridMessageMapping.sendgrid_message_id == sg_message_id
+            ).first()
 
-        if not mapping_result.data:
+        if not mapping_row:
             logger.warning(f"No mapping found for SendGrid message ID: {sg_message_id}")
             return
 
-        mapping = mapping_result.data[0]
-        message_id = mapping['message_id']
-        owner_id = mapping['owner_id']
+        message_id = mapping_row.message_id
+        owner_id = mapping_row.owner_id
 
         # Record read event
         await record_sendgrid_read_event(
@@ -278,73 +275,52 @@ async def record_sendgrid_read_event(
     Returns:
         Dictionary with read event data
     """
-    from ...storage.supabase_client import SupabaseStorage
+    with get_session() as session:
+        # Check if record already exists
+        existing = session.query(EmailReadEvent).filter(
+            EmailReadEvent.sendgrid_message_id == sendgrid_message_id,
+            EmailReadEvent.recipient_email == recipient_email,
+        ).first()
 
-    storage = SupabaseStorage.get_instance()
+        if existing:
+            # Update existing record (recipient opened email multiple times)
+            current_user_agents = existing.user_agents or []
+            current_ip_addresses = existing.ip_addresses or []
 
-    # Check if record already exists
-    existing_result = storage.client.table('email_read_events')\
-        .select('id, read_count, user_agents, ip_addresses, first_read_at')\
-        .eq('sendgrid_message_id', sendgrid_message_id)\
-        .eq('recipient_email', recipient_email)\
-        .limit(1)\
-        .execute()
+            if user_agent not in current_user_agents:
+                current_user_agents.append(user_agent)
+            if ip_address not in current_ip_addresses:
+                current_ip_addresses.append(ip_address)
 
-    if existing_result.data:
-        # Update existing record (recipient opened email multiple times)
-        existing = existing_result.data[0]
+            existing.read_count = (existing.read_count or 0) + 1
+            existing.last_read_at = timestamp
+            existing.user_agents = current_user_agents
+            existing.ip_addresses = current_ip_addresses
+            existing.sendgrid_event_data = [event_data]
+            existing.updated_at = datetime.now(timezone.utc)
 
-        # Append user_agent and ip_address to arrays
-        user_agents = existing.get('user_agents') or []
-        ip_addresses = existing.get('ip_addresses') or []
+            session.flush()
+            read_event = existing.to_dict()
+            read_event['first_read_at'] = existing.first_read_at.isoformat() if existing.first_read_at else None
 
-        if user_agent not in user_agents:
-            user_agents.append(user_agent)
-        if ip_address not in ip_addresses:
-            ip_addresses.append(ip_address)
-
-        # Append event data to JSONB array
-        # Note: Supabase doesn't support array concatenation easily, so we'll replace
-        sendgrid_event_data = [event_data]
-
-        update_data = {
-            'read_count': existing['read_count'] + 1,
-            'last_read_at': timestamp.isoformat(),
-            'user_agents': user_agents,
-            'ip_addresses': ip_addresses,
-            'sendgrid_event_data': sendgrid_event_data,
-            'updated_at': datetime.now(timezone.utc).isoformat()
-        }
-
-        result = storage.client.table('email_read_events')\
-            .update(update_data)\
-            .eq('id', existing['id'])\
-            .execute()
-
-        read_event = result.data[0] if result.data else {}
-        read_event['first_read_at'] = existing['first_read_at']
-
-    else:
-        # Create new record (first open)
-        insert_data = {
-            'sendgrid_message_id': sendgrid_message_id,
-            'message_id': message_id,
-            'owner_id': owner_id,
-            'recipient_email': recipient_email,
-            'tracking_source': 'sendgrid_webhook',
-            'read_count': 1,
-            'first_read_at': timestamp.isoformat(),
-            'last_read_at': timestamp.isoformat(),
-            'user_agents': [user_agent],
-            'ip_addresses': [ip_address],
-            'sendgrid_event_data': [event_data]
-        }
-
-        result = storage.client.table('email_read_events')\
-            .insert(insert_data)\
-            .execute()
-
-        read_event = result.data[0] if result.data else {}
+        else:
+            # Create new record (first open)
+            new_record = EmailReadEvent(
+                sendgrid_message_id=sendgrid_message_id,
+                message_id=message_id,
+                owner_id=owner_id,
+                recipient_email=recipient_email,
+                tracking_source='sendgrid_webhook',
+                read_count=1,
+                first_read_at=timestamp,
+                last_read_at=timestamp,
+                user_agents=[user_agent],
+                ip_addresses=[ip_address],
+                sendgrid_event_data=[event_data],
+            )
+            session.add(new_record)
+            session.flush()
+            read_event = new_record.to_dict()
 
     # Update messages.read_events JSON field (summary)
     await update_message_read_events(
@@ -385,42 +361,34 @@ async def update_message_read_events(
         first_read_at: First read timestamp
         last_read_at: Last read timestamp
     """
-    from ...storage.supabase_client import SupabaseStorage
+    with get_session() as session:
+        # Get current email/message with read_events
+        email_row = session.query(Email).filter(Email.id == message_id).first()
 
-    storage = SupabaseStorage.get_instance()
+        if not email_row:
+            logger.warning(f"Message not found: {message_id}")
+            return
 
-    # Get current message with read_events
-    message_result = storage.client.table('messages')\
-        .select('read_events')\
-        .eq('id', message_id)\
-        .limit(1)\
-        .execute()
+        current_read_events = email_row.read_events or []
 
-    if not message_result.data:
-        logger.warning(f"Message not found: {message_id}")
-        return
+        # Remove existing entry for this recipient
+        updated_events = [
+            event for event in current_read_events
+            if event.get('recipient') != recipient_email
+        ]
 
-    current_read_events = message_result.data[0].get('read_events') or []
+        # Add updated entry
+        updated_events.append({
+            'recipient': recipient_email,
+            'read_count': read_count,
+            'first_read_at': first_read_at,
+            'last_read_at': last_read_at
+        })
 
-    # Remove existing entry for this recipient
-    updated_events = [
-        event for event in current_read_events
-        if event.get('recipient') != recipient_email
-    ]
-
-    # Add updated entry
-    updated_events.append({
-        'recipient': recipient_email,
-        'read_count': read_count,
-        'first_read_at': first_read_at,
-        'last_read_at': last_read_at
-    })
-
-    # Update message
-    storage.client.table('messages')\
-        .update({'read_events': updated_events, 'updated_at': datetime.now(timezone.utc).isoformat()})\
-        .eq('id', message_id)\
-        .execute()
+        # Update email
+        email_row.read_events = updated_events
+        email_row.updated_at = datetime.now(timezone.utc)
+        session.flush()
 
 
 @router.post("/sendgrid")

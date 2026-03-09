@@ -15,8 +15,12 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
+from sqlalchemy import func, or_
+
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token
 from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage.database import get_session
+from zylch.storage.models import CalendarEvent, Contact
 
 logger = logging.getLogger(__name__)
 
@@ -287,18 +291,14 @@ async def get_calendar_event(
         # Extract owner_id from Firebase token
         owner_id = get_user_id_from_token(user)
 
-        # Get Supabase storage
-        storage = get_storage()
-
         # Query event by google_event_id
-        result = storage.client.table('calendar_events')\
-            .select('*')\
-            .eq('owner_id', owner_id)\
-            .eq('google_event_id', event_id)\
-            .limit(1)\
-            .execute()
+        with get_session() as session:
+            row = session.query(CalendarEvent).filter(
+                CalendarEvent.owner_id == owner_id,
+                CalendarEvent.google_event_id == event_id,
+            ).first()
 
-        event = result.data[0] if result.data else None
+        event = row.to_dict() if row else None
 
         if not event:
             raise HTTPException(
@@ -349,22 +349,20 @@ async def list_contacts(
         owner_id = get_user_id_from_token(user)
         logger.info(f"Listing contacts for user {owner_id}")
 
-        # Get Supabase storage
-        storage = get_storage()
+        # Query contacts via ORM
+        with get_session() as session:
+            q = session.query(Contact).filter(Contact.owner_id == owner_id)
 
-        # Build query
-        q = storage.client.table('contacts')\
-            .select('*')\
-            .eq('owner_id', owner_id)
+            # Add search filter if query provided
+            if query:
+                q = q.filter(or_(
+                    Contact.email.ilike(f'%{query}%'),
+                    Contact.name.ilike(f'%{query}%'),
+                ))
 
-        # Add search filter if query provided
-        if query:
-            # Search in email or name (case insensitive using ilike)
-            q = q.or_(f'email.ilike.%{query}%,name.ilike.%{query}%')
-
-        # Execute with pagination
-        result = q.range(offset, offset + limit - 1).execute()
-        contacts = result.data or []
+            # Execute with pagination
+            rows = q.offset(offset).limit(limit).all()
+            contacts = [r.to_dict() for r in rows]
 
         return {
             "success": True,
@@ -400,21 +398,20 @@ async def get_contact(
         # Extract owner_id from Firebase token
         owner_id = get_user_id_from_token(user)
 
-        # Get Supabase storage
+        # Get storage for email lookup
         storage = get_storage()
 
         # Try by email first (if it looks like an email), then by ID
         if '@' in contact_id:
             contact = storage.get_contact_by_email(owner_id, contact_id)
         else:
-            # Query by Supabase UUID
-            result = storage.client.table('contacts')\
-                .select('*')\
-                .eq('owner_id', owner_id)\
-                .eq('id', contact_id)\
-                .limit(1)\
-                .execute()
-            contact = result.data[0] if result.data else None
+            # Query by UUID via ORM
+            with get_session() as session:
+                row = session.query(Contact).filter(
+                    Contact.owner_id == owner_id,
+                    Contact.id == contact_id,
+                ).first()
+            contact = row.to_dict() if row else None
 
         if not contact:
             raise HTTPException(
@@ -550,25 +547,22 @@ async def get_storage_stats(user: dict = Depends(get_current_user)):
         owner_id = get_user_id_from_token(user)
         logger.info(f"Getting storage stats for user {owner_id}")
 
-        # Get Supabase storage
+        # Get storage for email stats
         storage = get_storage()
 
         # Get email stats (already implemented in SupabaseStorage)
         email_stats = storage.get_email_stats(owner_id)
 
-        # Get calendar count
-        calendar_result = storage.client.table('calendar_events')\
-            .select('id', count='exact')\
-            .eq('owner_id', owner_id)\
-            .execute()
-        calendar_count = calendar_result.count or 0
+        # Get calendar count via ORM
+        with get_session() as session:
+            calendar_count = session.query(func.count(CalendarEvent.id)).filter(
+                CalendarEvent.owner_id == owner_id
+            ).scalar() or 0
 
-        # Get contact count
-        contacts_result = storage.client.table('contacts')\
-            .select('id', count='exact')\
-            .eq('owner_id', owner_id)\
-            .execute()
-        contacts_count = contacts_result.count or 0
+            # Get contact count via ORM
+            contacts_count = session.query(func.count(Contact.id)).filter(
+                Contact.owner_id == owner_id
+            ).scalar() or 0
 
         return {
             "success": True,

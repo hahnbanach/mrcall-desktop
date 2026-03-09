@@ -51,8 +51,9 @@ class SpecializedAgent:
         # Initialize hybrid search for context gathering
         config = MemoryConfig()
         embedding_engine = EmbeddingEngine(config)
+        from zylch.storage.database import get_session
         self.search_engine = HybridSearchEngine(
-            supabase_client=storage.client,
+            get_session=get_session,
             embedding_engine=embedding_engine
         )
 

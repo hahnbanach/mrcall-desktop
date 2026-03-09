@@ -1,14 +1,16 @@
-"""Hybrid search combining FTS and semantic search."""
+"""Hybrid search combining FTS and semantic search via SQLAlchemy."""
 
-import json
 import logging
 import re
 from dataclasses import dataclass
 from typing import List, Optional
 import numpy as np
 
+from sqlalchemy import text
+
 from .embeddings import EmbeddingEngine
 from .pattern_detection import detect_pattern
+from zylch.storage.models import BlobSentence
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +49,8 @@ class HybridSearchEngine:
 
     RECONSOLIDATION_THRESHOLD = 0.65
 
-    def __init__(self, supabase_client, embedding_engine: EmbeddingEngine, default_alpha: float = 0.5):
-        self.supabase = supabase_client
+    def __init__(self, get_session, embedding_engine: EmbeddingEngine, default_alpha: float = 0.5):
+        self._get_session = get_session
         self.embeddings = embedding_engine
         self.default_alpha = default_alpha
 
@@ -84,34 +86,46 @@ class HybridSearchEngine:
         # Extract #IDENTIFIERS section for FTS (matches stored tsv which also uses only #IDENTIFIERS)
         fts_query = extract_identifiers_section(query)
 
-        # Build RPC params - always include p_exact_pattern (can be NULL)
+        # Build RPC params
         rpc_params = {
             "p_owner_id": owner_id,
-            "p_query": fts_query,  # FTS uses only #IDENTIFIERS section
-            "p_query_embedding": query_embedding.tolist(),  # Semantic uses full query
+            "p_query": fts_query,
+            "p_query_embedding": str(query_embedding.tolist()),
             "p_namespace": namespace,
             "p_fts_weight": fts_weight,
             "p_limit": limit,
-            "p_exact_pattern": exact_pattern,  # None becomes SQL NULL
+            "p_exact_pattern": exact_pattern,
         }
 
         # Debug: Log FTS query (extracted identifiers only)
         logger.debug(f"FTS query (extracted #IDENTIFIERS):\n{fts_query}")
         logger.debug(f"Exact pattern: {exact_pattern}")
 
-        # Call Supabase hybrid search function
-        result = self.supabase.rpc(
-            "hybrid_search_blobs",
-            rpc_params
-        ).execute()
+        # Call hybrid_search_blobs stored function via SQLAlchemy
+        with self._get_session() as session:
+            result = session.execute(
+                text("""
+                    SELECT * FROM hybrid_search_blobs(
+                        :p_owner_id,
+                        :p_query,
+                        :p_query_embedding::vector(384),
+                        :p_namespace,
+                        :p_fts_weight,
+                        :p_limit,
+                        :p_exact_pattern
+                    )
+                """),
+                rpc_params,
+            )
+            rows = [dict(r._mapping) for r in result]
 
         # Check for query failure
-        if result.data is None:
-            logger.error("Hybrid search returned None - possible database error")
+        if not rows:
+            logger.debug("Hybrid search returned no results")
             return []
 
-        # Debug: Log FTS scores for each result (full content)
-        for row in result.data:
+        # Debug: Log scores for each result
+        for row in rows:
             logger.debug(
                 f"Result blob_id={row['blob_id']}:\n{row['content']}\n"
                 f"FTS: {row['fts_score']:.3f}, semantic: {row['semantic_score']:.3f}, "
@@ -121,7 +135,7 @@ class HybridSearchEngine:
 
         # Get matching sentences for each result
         results = []
-        for row in result.data:
+        for row in rows:
             sentences = self._get_matching_sentences(
                 row["blob_id"],
                 owner_id,
@@ -221,27 +235,32 @@ class HybridSearchEngine:
         top_k: int = 3
     ) -> List[str]:
         """Get top-k matching sentences from a blob."""
-        sentences = self.supabase.table("blob_sentences")\
-            .select("sentence_text, embedding")\
-            .eq("blob_id", blob_id)\
-            .eq("owner_id", owner_id)\
-            .execute()
+        with self._get_session() as session:
+            sentences = session.query(
+                BlobSentence.sentence_text,
+                BlobSentence.embedding,
+            ).filter(
+                BlobSentence.blob_id == blob_id,
+                BlobSentence.owner_id == owner_id,
+            ).all()
 
-        if not sentences.data:
+        if not sentences:
             return []
 
         # Compute similarities
         scored = []
-        for s in sentences.data:
-            # Supabase returns embedding as string, need to parse it
-            emb_data = s["embedding"]
-            if isinstance(emb_data, str):
-                emb_data = json.loads(emb_data)
+        for s in sentences:
+            # pgvector returns embedding as a Python list directly
+            emb_data = s.embedding
+            if emb_data is None:
+                continue
             emb = np.array(emb_data, dtype=np.float32)
-            sim = float(np.dot(query_embedding, emb) /
-                       (np.linalg.norm(query_embedding) * np.linalg.norm(emb)))
-            scored.append((sim, s["sentence_text"]))
+            norm_product = np.linalg.norm(query_embedding) * np.linalg.norm(emb)
+            if norm_product == 0:
+                continue
+            sim = float(np.dot(query_embedding, emb) / norm_product)
+            scored.append((sim, s.sentence_text))
 
         # Return top-k
         scored.sort(reverse=True)
-        return [text for _, text in scored[:top_k]]
+        return [text_val for _, text_val in scored[:top_k]]

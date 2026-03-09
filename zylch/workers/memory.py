@@ -59,12 +59,13 @@ class MemoryWorker:
         # Initialize components
         config = MemoryConfig()
         self.embedding_engine = EmbeddingEngine(config)
+        from zylch.storage.database import get_session
         self.blob_storage = BlobStorage(
-            storage.client,
+            get_session,
             self.embedding_engine
         )
         self.hybrid_search = HybridSearchEngine(
-            storage.client,
+            get_session,
             self.embedding_engine
         )
         self.llm_merge = LLMMergeService(api_key, provider)

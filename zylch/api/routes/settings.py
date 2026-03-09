@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token
 from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage.database import get_session
+from zylch.storage.models import ImportanceRule
 
 logger = logging.getLogger(__name__)
 
@@ -83,19 +85,16 @@ async def list_importance_rules(
     """
     try:
         owner_id = get_user_id_from_token(user)
-        supabase = SupabaseStorage()
 
-        # Query rules
-        query = supabase.client.table('importance_rules')\
-            .select('*')\
-            .eq('owner_id', owner_id)
+        with get_session() as session:
+            q = session.query(ImportanceRule).filter(ImportanceRule.owner_id == owner_id)
 
-        if account_id:
-            query = query.eq('account_id', account_id)
+            if account_id:
+                q = q.filter(ImportanceRule.account_id == account_id)
 
-        result = query.order('priority', desc=True).execute()
+            rows = q.order_by(ImportanceRule.priority.desc()).all()
 
-        rules = result.data or []
+        rules = [r.to_dict() for r in rows]
         return {
             "items": rules,
             "count": len(rules)
@@ -124,19 +123,17 @@ async def get_importance_rule(
     """
     try:
         owner_id = get_user_id_from_token(user)
-        supabase = SupabaseStorage()
 
-        result = supabase.client.table('importance_rules')\
-            .select('*')\
-            .eq('id', rule_id)\
-            .eq('owner_id', owner_id)\
-            .limit(1)\
-            .execute()
+        with get_session() as session:
+            row = session.query(ImportanceRule).filter(
+                ImportanceRule.id == rule_id,
+                ImportanceRule.owner_id == owner_id,
+            ).first()
 
-        if not result.data:
+        if not row:
             raise HTTPException(status_code=404, detail="Rule not found")
 
-        return result.data[0]
+        return row.to_dict()
 
     except HTTPException:
         raise
@@ -161,7 +158,6 @@ async def create_importance_rule(
     """
     try:
         owner_id = get_user_id_from_token(user)
-        supabase = SupabaseStorage()
 
         # Validate importance value
         if rule.importance not in ('high', 'normal', 'low'):
@@ -183,27 +179,27 @@ async def create_importance_rule(
         except Exception as e:
             logger.warning(f"Unexpected error during condition validation (ignored): {e}")
 
-        now = datetime.now(timezone.utc).isoformat()
-        data = {
-            'owner_id': owner_id,
-            'account_id': rule.account_id,
-            'name': rule.name,
-            'condition': rule.condition,
-            'importance': rule.importance,
-            'reason': rule.reason,
-            'priority': rule.priority,
-            'enabled': True,
-            'created_at': now,
-            'updated_at': now,
-        }
+        now = datetime.now(timezone.utc)
 
-        result = supabase.client.table('importance_rules').insert(data).execute()
-
-        if not result.data:
-            raise HTTPException(status_code=500, detail="Failed to create rule")
+        with get_session() as session:
+            new_rule = ImportanceRule(
+                owner_id=owner_id,
+                account_id=rule.account_id,
+                name=rule.name,
+                condition=rule.condition,
+                importance=rule.importance,
+                reason=rule.reason,
+                priority=rule.priority,
+                enabled=True,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(new_rule)
+            session.flush()
+            created = new_rule.to_dict()
 
         logger.info(f"Created importance rule '{rule.name}' for user {owner_id}")
-        return result.data[0]
+        return created
 
     except HTTPException:
         raise
@@ -235,18 +231,6 @@ async def update_importance_rule(
     """
     try:
         owner_id = get_user_id_from_token(user)
-        supabase = SupabaseStorage()
-
-        # Verify rule exists and belongs to user
-        existing = supabase.client.table('importance_rules')\
-            .select('id')\
-            .eq('id', rule_id)\
-            .eq('owner_id', owner_id)\
-            .limit(1)\
-            .execute()
-
-        if not existing.data:
-            raise HTTPException(status_code=404, detail="Rule not found")
 
         # Build update data (only include non-None fields)
         update_data = {}
@@ -282,19 +266,25 @@ async def update_importance_rule(
         if not update_data:
             raise HTTPException(status_code=400, detail="No updates provided")
 
-        update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+        update_data['updated_at'] = datetime.now(timezone.utc)
 
-        result = supabase.client.table('importance_rules')\
-            .update(update_data)\
-            .eq('id', rule_id)\
-            .eq('owner_id', owner_id)\
-            .execute()
+        with get_session() as session:
+            # Verify rule exists and belongs to user, then update
+            row = session.query(ImportanceRule).filter(
+                ImportanceRule.id == rule_id,
+                ImportanceRule.owner_id == owner_id,
+            ).first()
 
-        if not result.data:
-            raise HTTPException(status_code=500, detail="Failed to update rule")
+            if not row:
+                raise HTTPException(status_code=404, detail="Rule not found")
+
+            for key, value in update_data.items():
+                setattr(row, key, value)
+            session.flush()
+            updated = row.to_dict()
 
         logger.info(f"Updated importance rule {rule_id} for user {owner_id}")
-        return result.data[0]
+        return updated
 
     except HTTPException:
         raise
@@ -319,18 +309,18 @@ async def delete_importance_rule(
     """
     try:
         owner_id = get_user_id_from_token(user)
-        supabase = SupabaseStorage()
 
-        # Delete the rule (RLS will ensure ownership)
-        result = supabase.client.table('importance_rules')\
-            .delete()\
-            .eq('id', rule_id)\
-            .eq('owner_id', owner_id)\
-            .execute()
+        with get_session() as session:
+            row = session.query(ImportanceRule).filter(
+                ImportanceRule.id == rule_id,
+                ImportanceRule.owner_id == owner_id,
+            ).first()
 
-        # Check if anything was deleted
-        if not result.data:
-            raise HTTPException(status_code=404, detail="Rule not found")
+            if not row:
+                raise HTTPException(status_code=404, detail="Rule not found")
+
+            session.delete(row)
+            session.flush()
 
         logger.info(f"Deleted importance rule {rule_id} for user {owner_id}")
         return {"success": True, "message": "Rule deleted successfully"}

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage.database import get_session
 from zylch.config import settings
 
 from zylch.memory import EmbeddingEngine, MemoryConfig, BlobStorage, HybridSearchEngine, LLMMergeService
@@ -21,9 +21,6 @@ _blob_storage: Optional[BlobStorage] = None
 _search_engine: Optional[HybridSearchEngine] = None
 _llm_merge: Optional[LLMMergeService] = None
 
-def get_supabase():
-    return SupabaseStorage.get_instance().client
-
 def get_embedding_engine() -> EmbeddingEngine:
     global _embedding_engine
     if _embedding_engine is None:
@@ -34,13 +31,13 @@ def get_embedding_engine() -> EmbeddingEngine:
 def get_blob_storage() -> BlobStorage:
     global _blob_storage
     if _blob_storage is None:
-        _blob_storage = BlobStorage(get_supabase(), get_embedding_engine())
+        _blob_storage = BlobStorage(get_session, get_embedding_engine())
     return _blob_storage
 
 def get_search_engine() -> HybridSearchEngine:
     global _search_engine
     if _search_engine is None:
-        _search_engine = HybridSearchEngine(get_supabase(), get_embedding_engine())
+        _search_engine = HybridSearchEngine(get_session, get_embedding_engine())
     return _search_engine
 
 def get_llm_merge(user_id: str) -> Optional[LLMMergeService]:
