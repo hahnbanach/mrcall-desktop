@@ -1,0 +1,2969 @@
+"""SQLAlchemy storage backend for Zylch AI.
+
+Replaces SupabaseStorage with direct PostgreSQL access via SQLAlchemy ORM.
+All queries scoped by owner_id for multi-tenant data isolation.
+Method signatures are identical to the original SupabaseStorage class.
+"""
+
+import json
+import logging
+from datetime import datetime, timezone, timedelta
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy import func, text, and_, or_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+from zylch.config import settings
+from .database import get_session
+from .models import (
+    Email, CalendarEvent, Blob, BlobSentence, OAuthToken, OAuthState,
+    Trigger, TriggerEvent, SharingAuth, Draft, TaskItem, BackgroundJob,
+    AgentPrompt, PipedriveDeal, UserNotification, EmailReadEvent,
+    SendgridMessageMapping, MrcallConversation, VerificationCode,
+    EmailTriage, TrainingSample, ImportanceRule, IntegrationProvider,
+    TriageTrainingSample, Contact,
+)
+
+logger = logging.getLogger(__name__)
+
+# Lazy-loaded embedding engine singleton
+_embedding_engine = None
+
+def _get_embedding_engine():
+    """Get or create the embedding engine singleton."""
+    global _embedding_engine
+    if _embedding_engine is None:
+        try:
+            from zylch.memory import EmbeddingEngine, MemoryConfig
+            config = MemoryConfig()
+            _embedding_engine = EmbeddingEngine(config)
+            logger.info("EmbeddingEngine initialized for email semantic search")
+        except ImportError:
+            logger.warning("Memory system not available, embeddings disabled")
+            return None
+    return _embedding_engine
+
+def _generate_email_embedding(email: Dict[str, Any]) -> Optional[List[float]]:
+    """Generate embedding for an email's subject + body."""
+    engine = _get_embedding_engine()
+    if engine is None:
+        return None
+    subject = email.get('subject', '') or ''
+    body = email.get('body_plain', '') or email.get('snippet', '') or ''
+    text_content = f"{subject} {body}".strip()
+    if not text_content:
+        return None
+    try:
+        embedding = engine.encode(text_content)
+        return embedding.tolist()
+    except Exception as e:
+        logger.debug(f"Failed to generate embedding: {e}")
+        return None
+
+
+class Storage:
+    """Multi-tenant storage backend using direct PostgreSQL via SQLAlchemy.
+
+    All queries are scoped by owner_id (Firebase UID) for data isolation.
+    """
+
+    _instance: Optional['Storage'] = None
+
+    def __init__(self):
+        """Initialize storage (validates DATABASE_URL is set)."""
+        if not settings.database_url:
+            raise ValueError(
+                "DATABASE_URL not configured. "
+                "Set DATABASE_URL=postgresql://user:pass@host:5432/zylch"
+            )
+        logger.info("Storage initialized (SQLAlchemy)")
+
+    @classmethod
+    def get_instance(cls) -> 'Storage':
+        """Get singleton instance."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    # ==========================================
+    # EMAILS
+    # ==========================================
+
+    def store_email(self, owner_id: str, email: Dict[str, Any]) -> Dict[str, Any]:
+        """Store a single email with embedding for semantic search."""
+        embedding = _generate_email_embedding(email)
+
+        data = {
+            'owner_id': owner_id,
+            'gmail_id': email['id'],
+            'thread_id': email['thread_id'],
+            'from_email': email.get('from_email'),
+            'from_name': email.get('from_name'),
+            'to_email': email.get('to_email'),
+            'cc_email': email.get('cc_email'),
+            'subject': email.get('subject'),
+            'date': email.get('date'),
+            'date_timestamp': email.get('date_timestamp'),
+            'snippet': email.get('snippet'),
+            'body_plain': email.get('body_plain'),
+            'body_html': email.get('body_html'),
+            'labels': email.get('labels'),
+            'message_id_header': email.get('message_id_header'),
+            'in_reply_to': email.get('in_reply_to'),
+            'references': email.get('references'),
+            'updated_at': datetime.now(timezone.utc),
+        }
+        if embedding is not None:
+            data['embedding'] = embedding
+
+        with get_session() as session:
+            stmt = pg_insert(Email).values(**data)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['owner_id', 'gmail_id'],
+                set_={k: v for k, v in data.items() if k not in ('owner_id', 'gmail_id')},
+            )
+            result = session.execute(stmt.returning(Email.__table__))
+            row = result.fetchone()
+            return dict(row._mapping) if row else {}
+
+    def store_emails_batch(self, owner_id: str, emails: List[Dict[str, Any]], chunk_size: int = 50) -> int:
+        """Store multiple emails in batch with embeddings, chunked to avoid timeouts."""
+        if not emails:
+            return 0
+
+        logger.debug(f"Generating embeddings for {len(emails)} emails...")
+
+        records = []
+        for email in emails:
+            embedding = _generate_email_embedding(email)
+            record = {
+                'owner_id': owner_id,
+                'gmail_id': email['id'],
+                'thread_id': email['thread_id'],
+                'from_email': email.get('from_email'),
+                'from_name': email.get('from_name'),
+                'to_email': email.get('to_email'),
+                'cc_email': email.get('cc_email'),
+                'subject': email.get('subject'),
+                'date': email.get('date'),
+                'date_timestamp': email.get('date_timestamp'),
+                'snippet': email.get('snippet'),
+                'body_plain': email.get('body_plain'),
+                'body_html': email.get('body_html'),
+                'labels': email.get('labels'),
+                'message_id_header': email.get('message_id_header'),
+                'in_reply_to': email.get('in_reply_to'),
+                'references': email.get('references'),
+                'updated_at': datetime.now(timezone.utc),
+            }
+            if embedding is not None:
+                record['embedding'] = embedding
+            records.append(record)
+
+        total_stored = 0
+        with get_session() as session:
+            for i in range(0, len(records), chunk_size):
+                chunk = records[i:i + chunk_size]
+                stmt = pg_insert(Email).values(chunk)
+                update_cols = {c.name: c for c in stmt.excluded if c.name not in ('owner_id', 'gmail_id')}
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=['owner_id', 'gmail_id'],
+                    set_=update_cols,
+                )
+                result = session.execute(stmt)
+                total_stored += result.rowcount
+
+        logger.debug(f"Stored {total_stored} emails with embeddings")
+        return total_stored
+
+    def get_emails(self, owner_id: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Get emails for user, ordered by date descending."""
+        with get_session() as session:
+            rows = session.query(Email)\
+                .filter(Email.owner_id == owner_id)\
+                .order_by(Email.date_timestamp.desc())\
+                .offset(offset).limit(limit)\
+                .all()
+            return [r.to_dict() for r in rows]
+
+    def get_thread_emails(self, owner_id: str, thread_id: str) -> List[Dict[str, Any]]:
+        """Get all emails in a thread."""
+        with get_session() as session:
+            rows = session.query(Email)\
+                .filter(Email.owner_id == owner_id, Email.thread_id == thread_id)\
+                .order_by(Email.date_timestamp.asc())\
+                .all()
+            return [r.to_dict() for r in rows]
+
+    def get_email_by_id(self, owner_id: str, gmail_id: str) -> Optional[Dict[str, Any]]:
+        """Get a single email by Gmail ID."""
+        with get_session() as session:
+            row = session.query(Email)\
+                .filter(Email.owner_id == owner_id, Email.gmail_id == gmail_id)\
+                .first()
+            return row.to_dict() if row else None
+
+    def get_email_by_supabase_id(self, owner_id: str, supabase_id: str) -> Optional[Dict[str, Any]]:
+        """Get a single email by internal UUID (id column)."""
+        with get_session() as session:
+            row = session.query(Email)\
+                .filter(Email.owner_id == owner_id, Email.id == supabase_id)\
+                .first()
+            return row.to_dict() if row else None
+
+    def get_threads_in_window(self, owner_id: str, days_back: int = 30) -> List[str]:
+        """Get thread IDs with activity in the last N days."""
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
+        cutoff_timestamp = int(cutoff.timestamp())
+
+        with get_session() as session:
+            rows = session.query(Email.thread_id)\
+                .filter(Email.owner_id == owner_id, Email.date_timestamp >= cutoff_timestamp)\
+                .distinct()\
+                .all()
+            return [r[0] for r in rows]
+
+    def get_oldest_email_date(self, owner_id: str) -> Optional[datetime]:
+        """Get the date of the oldest email in the archive."""
+        try:
+            with get_session() as session:
+                row = session.query(Email.date)\
+                    .filter(Email.owner_id == owner_id)\
+                    .order_by(Email.date.asc())\
+                    .first()
+                if row and row[0]:
+                    return row[0]
+                return None
+        except Exception as e:
+            logger.error(f"Failed to get oldest email date: {e}")
+            return None
+
+    def search_emails(
+        self,
+        owner_id: str,
+        query: str,
+        limit: int = 20,
+        alpha: float = 0.5
+    ) -> List[Dict[str, Any]]:
+        """Hybrid search emails (FTS + semantic + exact pattern)."""
+        engine = _get_embedding_engine()
+        if engine is None:
+            logger.warning("Embeddings unavailable, falling back to FTS-only search")
+            with get_session() as session:
+                result = session.execute(
+                    text("SELECT * FROM search_emails(:search_query, :user_id, :result_limit)"),
+                    {'search_query': query, 'user_id': owner_id, 'result_limit': limit}
+                )
+                return [dict(r._mapping) for r in result]
+
+        try:
+            query_embedding = engine.encode(query).tolist()
+        except Exception as e:
+            logger.warning(f"Failed to encode query, falling back to FTS: {e}")
+            with get_session() as session:
+                result = session.execute(
+                    text("SELECT * FROM search_emails(:search_query, :user_id, :result_limit)"),
+                    {'search_query': query, 'user_id': owner_id, 'result_limit': limit}
+                )
+                return [dict(r._mapping) for r in result]
+
+        exact_pattern = None
+        try:
+            from zylch.memory import detect_pattern
+            pattern = detect_pattern(query)
+            if pattern:
+                exact_pattern = pattern.value
+        except ImportError as e:
+            logger.warning(f"Pattern detection module not available: {e}")
+
+        with get_session() as session:
+            result = session.execute(
+                text(
+                    "SELECT * FROM hybrid_search_emails("
+                    ":p_owner_id, :p_query, :p_query_embedding::vector(384), "
+                    ":p_fts_weight, :p_limit, :p_exact_pattern)"
+                ),
+                {
+                    'p_owner_id': owner_id,
+                    'p_query': query,
+                    'p_query_embedding': str(query_embedding),
+                    'p_fts_weight': alpha,
+                    'p_limit': limit,
+                    'p_exact_pattern': exact_pattern,
+                }
+            )
+            return [dict(r._mapping) for r in result]
+
+    def delete_email(self, owner_id: str, gmail_id: str) -> bool:
+        """Delete an email."""
+        with get_session() as session:
+            count = session.query(Email)\
+                .filter(Email.owner_id == owner_id, Email.gmail_id == gmail_id)\
+                .delete()
+            return count > 0
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DRAFTS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def create_draft(
+        self,
+        owner_id: str,
+        to: str | list,
+        subject: str,
+        body: str,
+        in_reply_to: str = None,
+        references: list = None,
+        thread_id: str = None,
+        provider: str = 'google'
+    ) -> Dict[str, Any]:
+        """Create a draft email."""
+        to_list = to if isinstance(to, list) else [to]
+        with get_session() as session:
+            draft = Draft(
+                owner_id=owner_id,
+                to_addresses=to_list,
+                subject=subject,
+                body=body,
+                in_reply_to=in_reply_to,
+                references=references or [],
+                thread_id=thread_id,
+                provider=provider,
+                status='draft',
+            )
+            session.add(draft)
+            session.flush()
+            return draft.to_dict()
+
+    def list_drafts(self, owner_id: str, status: str = 'draft') -> List[Dict[str, Any]]:
+        """List drafts for a user."""
+        with get_session() as session:
+            rows = session.query(Draft)\
+                .filter(Draft.owner_id == owner_id, Draft.status == status)\
+                .order_by(Draft.created_at.desc())\
+                .all()
+            return [r.to_dict() for r in rows]
+
+    def get_draft(self, owner_id: str, draft_id: str) -> Dict[str, Any] | None:
+        """Get a specific draft by ID."""
+        with get_session() as session:
+            row = session.query(Draft)\
+                .filter(Draft.owner_id == owner_id, Draft.id == draft_id)\
+                .one_or_none()
+            return row.to_dict() if row else None
+
+    def update_draft(self, owner_id: str, draft_id: str, updates: Dict[str, Any]) -> Dict[str, Any] | None:
+        """Update a draft."""
+        with get_session() as session:
+            row = session.query(Draft)\
+                .filter(Draft.owner_id == owner_id, Draft.id == draft_id)\
+                .one_or_none()
+            if not row:
+                return None
+            for k, v in updates.items():
+                if hasattr(row, k):
+                    setattr(row, k, v)
+            session.flush()
+            return row.to_dict()
+
+    def delete_draft(self, owner_id: str, draft_id: str) -> bool:
+        """Delete a draft."""
+        with get_session() as session:
+            count = session.query(Draft)\
+                .filter(Draft.owner_id == owner_id, Draft.id == draft_id)\
+                .delete()
+            return count > 0
+
+    def mark_draft_sent(self, owner_id: str, draft_id: str, sent_message_id: str) -> Dict[str, Any] | None:
+        """Mark draft as sent after email was delivered."""
+        return self.update_draft(owner_id, draft_id, {
+            'status': 'sent',
+            'sent_at': datetime.now(timezone.utc),
+            'sent_message_id': sent_message_id,
+        })
+
+    def get_email_stats(self, owner_id: str) -> Dict[str, Any]:
+        """Get email archive statistics."""
+        with get_session() as session:
+            total_emails = session.query(func.count(Email.id))\
+                .filter(Email.owner_id == owner_id)\
+                .scalar() or 0
+
+            if total_emails > 0:
+                earliest = session.query(Email.date)\
+                    .filter(Email.owner_id == owner_id)\
+                    .order_by(Email.date_timestamp.asc())\
+                    .first()
+
+                latest = session.query(Email.date)\
+                    .filter(Email.owner_id == owner_id)\
+                    .order_by(Email.date_timestamp.desc())\
+                    .first()
+
+                unique_threads = session.query(func.count(func.distinct(Email.thread_id)))\
+                    .filter(Email.owner_id == owner_id)\
+                    .scalar() or 0
+
+                return {
+                    'total_emails': total_emails,
+                    'total_threads': unique_threads,
+                    'earliest_date': earliest[0].isoformat() if earliest and earliest[0] else None,
+                    'latest_date': latest[0].isoformat() if latest and latest[0] else None,
+                }
+
+            return {
+                'total_emails': 0,
+                'total_threads': 0,
+                'earliest_date': None,
+                'latest_date': None,
+            }
+
+    # ==========================================
+    # CALENDAR EVENTS
+    # ==========================================
+
+    def store_calendar_event(self, owner_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
+        """Store a calendar event."""
+        data = {
+            'owner_id': owner_id,
+            'google_event_id': event['id'],
+            'summary': event.get('summary'),
+            'description': event.get('description'),
+            'start_time': event.get('start_time'),
+            'end_time': event.get('end_time'),
+            'location': event.get('location'),
+            'attendees': event.get('attendees'),
+            'organizer_email': event.get('organizer_email'),
+            'is_external': event.get('is_external', False),
+            'meet_link': event.get('meet_link'),
+            'calendar_id': event.get('calendar_id', 'primary'),
+            'updated_at': datetime.now(timezone.utc),
+        }
+
+        with get_session() as session:
+            stmt = pg_insert(CalendarEvent).values(**data)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['owner_id', 'google_event_id'],
+                set_={k: v for k, v in data.items() if k not in ('owner_id', 'google_event_id')},
+            )
+            result = session.execute(stmt.returning(CalendarEvent.__table__))
+            row = result.fetchone()
+            return dict(row._mapping) if row else {}
+
+    def get_calendar_events(
+        self,
+        owner_id: str,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None
+    ) -> List[Dict[str, Any]]:
+        """Get calendar events in a time range."""
+        with get_session() as session:
+            query = session.query(CalendarEvent)\
+                .filter(CalendarEvent.owner_id == owner_id)
+            if start_time:
+                query = query.filter(CalendarEvent.start_time >= start_time)
+            if end_time:
+                query = query.filter(CalendarEvent.start_time <= end_time)
+            rows = query.order_by(CalendarEvent.start_time.asc()).all()
+            return [r.to_dict() for r in rows]
+
+    def get_calendar_events_by_attendee(
+        self,
+        owner_id: str,
+        attendee_email: str,
+        days_back: int = 7,
+        days_forward: int = 14
+    ) -> List[Dict[str, Any]]:
+        """Get calendar events where a specific email is an attendee."""
+        now = datetime.now(timezone.utc)
+        start_time = now - timedelta(days=days_back)
+        end_time = now + timedelta(days=days_forward)
+
+        try:
+            with get_session() as session:
+                result = session.execute(
+                    text(
+                        "SELECT * FROM get_events_by_attendee("
+                        ":p_owner_id, :p_attendee_email, :p_start_time, :p_end_time)"
+                    ),
+                    {
+                        'p_owner_id': owner_id,
+                        'p_attendee_email': attendee_email.lower(),
+                        'p_start_time': start_time,
+                        'p_end_time': end_time,
+                    }
+                )
+                return [dict(r._mapping) for r in result]
+        except Exception as e:
+            logger.warning(f"RPC get_events_by_attendee failed, falling back to Python filter: {e}")
+            return self._get_calendar_events_by_attendee_fallback(
+                owner_id, attendee_email, start_time, end_time
+            )
+
+    def _get_calendar_events_by_attendee_fallback(
+        self,
+        owner_id: str,
+        attendee_email: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> List[Dict[str, Any]]:
+        """Fallback method using Python-side filtering."""
+        with get_session() as session:
+            rows = session.query(CalendarEvent)\
+                .filter(
+                    CalendarEvent.owner_id == owner_id,
+                    CalendarEvent.start_time >= start_time,
+                    CalendarEvent.start_time <= end_time,
+                )\
+                .order_by(CalendarEvent.start_time.asc())\
+                .all()
+
+            attendee_lower = attendee_email.lower()
+            matching = []
+            for event in rows:
+                d = event.to_dict()
+                attendees = d.get('attendees') or []
+                for att in attendees:
+                    if isinstance(att, str):
+                        if att.lower() == attendee_lower:
+                            matching.append(d)
+                            break
+                    elif isinstance(att, dict):
+                        if att.get('email', '').lower() == attendee_lower:
+                            matching.append(d)
+                            break
+            return matching
+
+    def store_calendar_events_batch(self, owner_id: str, events: List[Dict[str, Any]]) -> int:
+        """Store multiple calendar events in batch."""
+        if not events:
+            return 0
+
+        records = []
+        for event in events:
+            records.append({
+                'owner_id': owner_id,
+                'google_event_id': event['id'],
+                'summary': event.get('summary'),
+                'description': event.get('description'),
+                'start_time': event.get('start_time'),
+                'end_time': event.get('end_time'),
+                'location': event.get('location'),
+                'attendees': event.get('attendees'),
+                'organizer_email': event.get('organizer_email'),
+                'is_external': event.get('is_external', False),
+                'meet_link': event.get('meet_link'),
+                'calendar_id': event.get('calendar_id', 'primary'),
+                'updated_at': datetime.now(timezone.utc),
+            })
+
+        with get_session() as session:
+            stmt = pg_insert(CalendarEvent).values(records)
+            update_cols = {c.name: c for c in stmt.excluded if c.name not in ('owner_id', 'google_event_id')}
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['owner_id', 'google_event_id'],
+                set_=update_cols,
+            )
+            result = session.execute(stmt)
+            return result.rowcount
+
+    def get_all_calendar_events(self, owner_id: str) -> List[Dict[str, Any]]:
+        """Get all calendar events for a user."""
+        with get_session() as session:
+            rows = session.query(CalendarEvent)\
+                .filter(CalendarEvent.owner_id == owner_id)\
+                .order_by(CalendarEvent.start_time.asc())\
+                .all()
+            return [r.to_dict() for r in rows]
+
+    # ==========================================
+    # OAUTH TOKENS (with encryption for sensitive data)
+    # ==========================================
+
+    def store_oauth_token(
+        self,
+        owner_id: str,
+        provider: str,
+        email: str,
+        google_token_data: Optional[str] = None,
+        graph_access_token: Optional[str] = None,
+        graph_refresh_token: Optional[str] = None,
+        graph_expires_at: Optional[str] = None,
+        scopes: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Store OAuth token for a user (encrypted at rest)."""
+        from zylch.utils.encryption import encrypt
+
+        data = {
+            'owner_id': owner_id,
+            'provider': provider,
+            'email': email,
+            'updated_at': datetime.now(timezone.utc),
+        }
+
+        unified_creds = {}
+        if google_token_data:
+            unified_creds['google'] = {
+                'token_data': google_token_data,
+                'provider': 'google',
+                'email': email,
+            }
+        if graph_access_token:
+            unified_creds['microsoft'] = {
+                'access_token': graph_access_token,
+                'refresh_token': graph_refresh_token,
+                'expires_at': graph_expires_at,
+                'provider': 'microsoft',
+                'email': email,
+            }
+        if scopes:
+            data['scopes'] = scopes
+        if unified_creds:
+            creds_json = json.dumps(unified_creds)
+            data['credentials'] = encrypt(creds_json)
+            logger.info(f"Storing credentials in unified JSONB for provider {provider}")
+
+        with get_session() as session:
+            stmt = pg_insert(OAuthToken).values(**data)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['owner_id', 'provider'],
+                set_={k: v for k, v in data.items() if k not in ('owner_id', 'provider')},
+            )
+            result = session.execute(stmt.returning(OAuthToken.__table__))
+            row = result.fetchone()
+            logger.info(f"Stored OAuth token for owner {owner_id} provider {provider}")
+            return dict(row._mapping) if row else {}
+
+    def get_oauth_token(self, owner_id: str, provider: str) -> Optional[Dict[str, Any]]:
+        """Get OAuth token for a user."""
+        with get_session() as session:
+            row = session.query(OAuthToken)\
+                .filter(OAuthToken.owner_id == owner_id, OAuthToken.provider == provider)\
+                .first()
+            logger.debug(f"get_oauth_token query for owner={owner_id}, provider={provider}")
+            if row:
+                logger.debug(f"  Found 1 row")
+                return row.to_dict()
+            logger.debug(f"  No rows found")
+            return None
+
+    def get_google_token(self, owner_id: str) -> Optional[str]:
+        """Get Google OAuth token data (base64-encoded JSON, decrypted)."""
+        creds = self.get_provider_credentials(owner_id, 'google')
+        if creds:
+            token_data = creds.get('token_data')
+            if token_data:
+                logger.info(f"Found Google token_data in credentials JSONB for owner {owner_id}")
+                return token_data
+            else:
+                logger.warning(f"credentials JSONB exists but token_data is missing for owner {owner_id}")
+        else:
+            logger.warning(f"No Google credentials found for owner {owner_id}")
+        return None
+
+    def get_graph_token(self, owner_id: str) -> Optional[Dict[str, Any]]:
+        """Get Microsoft Graph token (decrypted)."""
+        creds = self.get_provider_credentials(owner_id, 'microsoft')
+        if creds:
+            return {
+                'access_token': creds.get('access_token'),
+                'refresh_token': creds.get('refresh_token'),
+                'expires_at': creds.get('expires_at'),
+            }
+        return None
+
+    def delete_oauth_token(self, owner_id: str, provider: str) -> bool:
+        """Delete OAuth token for a user."""
+        with get_session() as session:
+            session.query(OAuthToken)\
+                .filter(OAuthToken.owner_id == owner_id, OAuthToken.provider == provider)\
+                .delete()
+        logger.info(f"Deleted OAuth token for owner {owner_id} provider {provider}")
+        return True
+
+    def get_user_email_from_token(self, owner_id: str) -> Optional[str]:
+        """Get user's email from stored OAuth token."""
+        token = self.get_oauth_token(owner_id, 'google')
+        if token:
+            return token.get('email')
+        token = self.get_oauth_token(owner_id, 'microsoft')
+        if token:
+            return token.get('email')
+        return None
+
+    def get_user_provider(self, owner_id: str) -> Optional[str]:
+        """Get user's OAuth provider."""
+        creds = self.get_provider_credentials(owner_id, 'google')
+        if creds and creds.get('token_data'):
+            return 'google'
+        creds = self.get_provider_credentials(owner_id, 'microsoft')
+        if creds and (creds.get('access_token') or creds.get('refresh_token')):
+            return 'microsoft'
+        return None
+
+    # ==========================================
+    # API KEY MANAGEMENT (wrappers for unified credentials)
+    # ==========================================
+
+    def save_anthropic_key(self, owner_id: str, api_key: str) -> bool:
+        """Save Anthropic API key (encrypted)."""
+        return self.save_provider_credentials(
+            owner_id=owner_id, provider_key='anthropic',
+            credentials_dict={'api_key': api_key}
+        )
+
+    def get_anthropic_key(self, owner_id: str) -> Optional[str]:
+        """Get Anthropic API key (decrypted)."""
+        creds = self.get_provider_credentials(owner_id, 'anthropic')
+        if creds:
+            return creds.get('api_key')
+        return None
+
+    def delete_anthropic_key(self, owner_id: str) -> bool:
+        """Delete Anthropic API key."""
+        with get_session() as session:
+            session.query(OAuthToken)\
+                .filter(OAuthToken.owner_id == owner_id, OAuthToken.provider == 'anthropic')\
+                .delete()
+        logger.info(f"Deleted Anthropic API key for owner {owner_id}")
+        return True
+
+    def save_pipedrive_key(self, owner_id: str, api_token: str) -> bool:
+        """Save Pipedrive API token (encrypted)."""
+        return self.save_provider_credentials(
+            owner_id=owner_id, provider_key='pipedrive',
+            credentials_dict={'api_token': api_token}
+        )
+
+    def get_pipedrive_key(self, owner_id: str) -> Optional[str]:
+        """Get Pipedrive API token (decrypted)."""
+        creds = self.get_provider_credentials(owner_id, 'pipedrive')
+        if creds:
+            return creds.get('api_token')
+        return None
+
+    def delete_pipedrive_key(self, owner_id: str) -> bool:
+        """Delete Pipedrive API token."""
+        with get_session() as session:
+            session.query(OAuthToken)\
+                .filter(OAuthToken.owner_id == owner_id, OAuthToken.provider == 'pipedrive')\
+                .delete()
+        logger.info(f"Deleted Pipedrive API token for owner {owner_id}")
+        return True
+
+    def get_vonage_keys(self, owner_id: str) -> Optional[Dict[str, str]]:
+        """Get Vonage API credentials (decrypted)."""
+        return self.get_provider_credentials(owner_id, 'vonage')
+
+    def get_sendgrid_key(self, owner_id: str) -> Optional[str]:
+        """Get SendGrid API key (decrypted)."""
+        creds = self.get_provider_credentials(owner_id, 'sendgrid')
+        if creds:
+            return creds.get('api_key')
+        return None
+
+    def get_sendgrid_from_email(self, owner_id: str) -> Optional[str]:
+        """Get SendGrid from_email for a user."""
+        creds = self.get_provider_credentials(owner_id, 'sendgrid')
+        if creds:
+            return creds.get('from_email')
+        return None
+
+    # ==========================================
+    # UNIFIED CREDENTIALS STORAGE (JSONB)
+    # ==========================================
+
+    def save_provider_credentials(
+        self,
+        owner_id: str,
+        provider_key: str,
+        credentials_dict: Dict[str, Any],
+        metadata_dict: Optional[Dict[str, Any]] = None,
+        email: Optional[str] = None
+    ) -> bool:
+        """Save credentials for any provider using unified JSONB storage."""
+        from zylch.utils.encryption import encrypt
+
+        token_row = self.get_oauth_token(owner_id, provider_key)
+        if token_row and token_row.get('credentials'):
+            from zylch.utils.encryption import decrypt
+            existing_creds = json.loads(decrypt(token_row['credentials']))
+        else:
+            existing_creds = {}
+
+        # Get provider config to determine which fields need encryption
+        with get_session() as session:
+            provider_row = session.query(IntegrationProvider)\
+                .filter(IntegrationProvider.provider_key == provider_key)\
+                .first()
+            config_fields = provider_row.config_fields or {} if provider_row else {}
+
+        # Encrypt sensitive fields based on config
+        encrypted_credentials = {}
+        for field_name, field_value in credentials_dict.items():
+            field_config = config_fields.get(field_name, {})
+            should_encrypt = field_config.get('encrypted', True)
+            if should_encrypt and field_value:
+                encrypted_credentials[field_name] = f"encrypted:{encrypt(str(field_value))}"
+            else:
+                encrypted_credentials[field_name] = field_value
+
+        existing_creds[provider_key] = encrypted_credentials
+        if metadata_dict:
+            if 'metadata' not in existing_creds:
+                existing_creds['metadata'] = {}
+            existing_creds['metadata'][provider_key] = metadata_dict
+
+        credentials_json = encrypt(json.dumps(existing_creds))
+
+        data = {
+            'owner_id': owner_id,
+            'provider': provider_key,
+            'email': email or '',
+            'credentials': credentials_json,
+            'updated_at': datetime.now(timezone.utc),
+        }
+
+        with get_session() as session:
+            stmt = pg_insert(OAuthToken).values(**data)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['owner_id', 'provider'],
+                set_={k: v for k, v in data.items() if k not in ('owner_id', 'provider')},
+            )
+            session.execute(stmt)
+
+        logger.info(f"Saved credentials for provider {provider_key} for owner {owner_id}")
+        return True
+
+    def get_provider_credentials(
+        self,
+        owner_id: str,
+        provider_key: str,
+        include_metadata: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """Get credentials for any provider using unified JSONB storage."""
+        from zylch.utils.encryption import decrypt
+
+        token_row = self.get_oauth_token(owner_id, provider_key)
+        if not token_row:
+            return None
+
+        if token_row.get('credentials'):
+            try:
+                decrypted_json = decrypt(token_row['credentials'])
+                all_credentials = json.loads(decrypted_json)
+                logger.debug(f"get_provider_credentials({provider_key}): all_credentials keys = {list(all_credentials.keys())}")
+
+                provider_creds = all_credentials.get(provider_key, {})
+                logger.debug(f"get_provider_credentials({provider_key}): provider_creds keys = {list(provider_creds.keys()) if provider_creds else 'EMPTY'}")
+                if not provider_creds:
+                    return None
+
+                decrypted_creds = {}
+                for field_name, field_value in provider_creds.items():
+                    if isinstance(field_value, str) and field_value.startswith('encrypted:'):
+                        decrypted_creds[field_name] = decrypt(field_value[10:])
+                    else:
+                        decrypted_creds[field_name] = field_value
+
+                if include_metadata and 'metadata' in all_credentials:
+                    decrypted_creds['_metadata'] = all_credentials['metadata'].get(provider_key, {})
+
+                return decrypted_creds
+            except Exception as e:
+                logger.error(f"Failed to decrypt credentials for {provider_key}: {e}")
+
+        return None
+
+    def delete_provider_credentials(self, owner_id: str, provider_key: str) -> bool:
+        """Delete credentials for any provider."""
+        with get_session() as session:
+            session.query(OAuthToken)\
+                .filter(OAuthToken.owner_id == owner_id, OAuthToken.provider == provider_key)\
+                .delete()
+        logger.info(f"Deleted credentials for provider {provider_key} for owner {owner_id}")
+        return True
+
+    # ==========================================
+    # TRIGGERS
+    # ==========================================
+
+    def list_triggers(self, owner_id: str, active_only: bool = False) -> List[Dict[str, Any]]:
+        """List all triggers for a user."""
+        with get_session() as session:
+            query = session.query(Trigger).filter(Trigger.owner_id == owner_id)
+            if active_only:
+                query = query.filter(Trigger.active == True)
+            rows = query.order_by(Trigger.created_at.desc()).all()
+            return [r.to_dict() for r in rows]
+
+
+    def get_triggers_by_type(self, owner_id: str, trigger_type: str) -> List[Dict[str, Any]]:
+        """Get active triggers of a specific type for a user."""
+        with get_session() as session:
+            rows = session.query(Trigger)\
+                .filter(
+                    Trigger.owner_id == owner_id,
+                    Trigger.trigger_type == trigger_type,
+                    Trigger.active == True,
+                )\
+                .all()
+            return [r.to_dict() for r in rows]
+
+
+    def add_trigger(self, owner_id: str, trigger_type: str, instruction: str) -> Dict[str, Any]:
+        """Add a new trigger."""
+        with get_session() as session:
+            trigger = Trigger(
+                owner_id=owner_id,
+                trigger_type=trigger_type,
+                instruction=instruction,
+                active=True,
+            )
+            session.add(trigger)
+            session.flush()
+            logger.info(f"Created trigger {trigger_type} for owner {owner_id}")
+            return trigger.to_dict()
+
+
+    def remove_trigger(self, owner_id: str, trigger_id: str) -> bool:
+        """Remove a trigger."""
+        with get_session() as session:
+            session.query(Trigger)\
+                .filter(Trigger.owner_id == owner_id, Trigger.id == trigger_id)\
+                .delete()
+            logger.info(f"Deleted trigger {trigger_id} for owner {owner_id}")
+            return True
+
+
+    def update_trigger_active(self, owner_id: str, trigger_id: str, active: bool) -> bool:
+        """Enable or disable a trigger."""
+        with get_session() as session:
+            session.query(Trigger)\
+                .filter(Trigger.owner_id == owner_id, Trigger.id == trigger_id)\
+                .update({
+                    'active': active,
+                    'updated_at': datetime.now(timezone.utc),
+                })
+            logger.info(f"Updated trigger {trigger_id} active={active} for owner {owner_id}")
+            return True
+
+
+    # ==========================================
+    # SHARING
+    # ==========================================
+
+    def register_share_recipient(self, sender_id: str, sender_email: str, recipient_email: str) -> Dict[str, Any]:
+        """Register a recipient for sharing (creates pending request)."""
+        data = {
+            'sender_id': sender_id,
+            'sender_email': sender_email,
+            'recipient_email': recipient_email,
+            'status': 'pending',
+        }
+        with get_session() as session:
+            stmt = pg_insert(SharingAuth).values(**data)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['sender_id', 'recipient_email'],
+                set_={
+                    'sender_email': data['sender_email'],
+                    'status': data['status'],
+                },
+            )
+            result = session.execute(stmt.returning(SharingAuth.__table__))
+            row = result.fetchone()
+            logger.info(f"Registered share recipient {recipient_email} for sender {sender_id}")
+            return dict(row._mapping) if row else {}
+
+
+    def revoke_sharing(self, sender_id: str, recipient_email: str) -> bool:
+        """Revoke sharing access for a recipient."""
+        with get_session() as session:
+            session.query(SharingAuth)\
+                .filter(
+                    SharingAuth.sender_id == sender_id,
+                    SharingAuth.recipient_email == recipient_email,
+                )\
+                .update({'status': 'revoked'})
+            logger.info(f"Revoked sharing for {recipient_email} from sender {sender_id}")
+            return True
+
+
+    def get_sharing_status(self, user_id: str, user_email: str) -> Dict[str, Any]:
+        """Get sharing status for a user."""
+        with get_session() as session:
+            # Pending requests (others wanting to share with me)
+            pending = session.query(SharingAuth)\
+                .filter(
+                    SharingAuth.recipient_email == user_email,
+                    SharingAuth.status == 'pending',
+                ).all()
+
+            # Authorized senders (who can share with me - I accepted)
+            authorized = session.query(SharingAuth)\
+                .filter(
+                    SharingAuth.recipient_email == user_email,
+                    SharingAuth.status == 'authorized',
+                ).all()
+
+            # My recipients (who I'm sharing with)
+            recipients = session.query(SharingAuth)\
+                .filter(
+                    SharingAuth.sender_id == user_id,
+                    SharingAuth.status != 'revoked',
+                ).all()
+
+            return {
+                'pending_requests': [r.to_dict() for r in pending],
+                'authorized_senders': [r.to_dict() for r in authorized],
+                'registered_recipients': [r.to_dict() for r in recipients],
+            }
+
+
+    def authorize_sender(self, recipient_email: str, sender_email: str) -> bool:
+        """Authorize a sender (accept their sharing request)."""
+        with get_session() as session:
+            session.query(SharingAuth)\
+                .filter(
+                    SharingAuth.recipient_email == recipient_email,
+                    SharingAuth.sender_email == sender_email,
+                )\
+                .update({
+                    'status': 'authorized',
+                    'authorized_at': datetime.now(timezone.utc),
+                })
+            logger.info(f"Authorized sender {sender_email} for recipient {recipient_email}")
+            return True
+
+
+    # ==========================================
+    # OAUTH STATES
+    # ==========================================
+
+    def store_oauth_state(
+        self,
+        state: str,
+        owner_id: str,
+        email: str,
+        cli_callback: Optional[str] = None,
+        provider: str = "google",
+        metadata: Optional[Dict[str, Any]] = None,
+        expires_minutes: int = 10
+    ) -> bool:
+        """Store OAuth state for CSRF protection."""
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+
+        data = {
+            'state': state,
+            'owner_id': owner_id,
+            'email': email,
+            'cli_callback': cli_callback,
+            'provider': provider,
+            'metadata_': json.dumps(metadata) if metadata else None,
+            'expires_at': expires_at,
+        }
+
+        try:
+            logger.info(f"Storing OAuth state: {state} for owner {owner_id}")
+            with get_session() as session:
+                stmt = pg_insert(OAuthState).values(**data)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=['state'],
+                    set_={k: v for k, v in data.items() if k != 'state'},
+                )
+                session.execute(stmt)
+            logger.info(f"Successfully stored OAuth state for owner {owner_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to store OAuth state: {e}", exc_info=True)
+            return False
+
+
+    def get_oauth_state(self, state: str) -> Optional[Dict[str, Any]]:
+        """Get and consume OAuth state (one-time use)."""
+        try:
+            logger.info(f"Looking up OAuth state: {state}")
+            with get_session() as session:
+                row = session.query(OAuthState)\
+                    .filter(OAuthState.state == state)\
+                    .with_for_update()\
+                    .first()
+
+                if not row:
+                    logger.warning(f"OAuth state not found in database: {state}")
+                    return None
+
+                logger.info(f"Found OAuth state for owner: {row.owner_id}")
+
+                # Check if expired
+                if datetime.now(timezone.utc) > row.expires_at:
+                    session.delete(row)
+                    logger.warning(f"OAuth state expired for {row.owner_id}")
+                    return None
+
+                # Capture data before deleting (one-time use)
+                state_data = {
+                    'owner_id': row.owner_id,
+                    'email': row.email,
+                    'cli_callback': row.cli_callback,
+                    'provider': row.provider or 'google',
+                    'metadata': None,
+                    'created_at': row.created_at.isoformat() if row.created_at else None,
+                }
+
+                # Parse metadata JSON if present
+                raw_meta = row.metadata_
+                if raw_meta:
+                    try:
+                        if isinstance(raw_meta, str):
+                            state_data['metadata'] = json.loads(raw_meta)
+                        else:
+                            # JSONB column already parsed by SQLAlchemy
+                            state_data['metadata'] = raw_meta
+                    except (json.JSONDecodeError, TypeError):
+                        logger.warning(f"Failed to parse metadata for state: {state}")
+
+                # Delete state (one-time use)
+                session.delete(row)
+                logger.info(f"OAuth state consumed (deleted) for owner: {state_data['owner_id']}")
+
+                return state_data
+
+        except Exception as e:
+            logger.error(f"Failed to get OAuth state: {e}", exc_info=True)
+            return None
+
+
+    def cleanup_expired_oauth_states(self) -> int:
+        """Clean up expired OAuth states."""
+        try:
+            now = datetime.now(timezone.utc)
+            with get_session() as session:
+                deleted = session.query(OAuthState)\
+                    .filter(OAuthState.expires_at < now)\
+                    .delete()
+                if deleted > 0:
+                    logger.info(f"Cleaned up {deleted} expired OAuth states")
+                return deleted
+        except Exception as e:
+            logger.error(f"Failed to cleanup OAuth states: {e}")
+            return 0
+
+
+    # ==========================================
+    # MRCALL LINKING
+    # ==========================================
+
+    def set_mrcall_link(self, owner_id: str, mrcall_business_id: str) -> bool:
+        """Link user to MrCall business ID."""
+        data = {
+            'owner_id': owner_id,
+            'provider': 'mrcall',
+            'email': mrcall_business_id,  # business_id stored in email field
+            'updated_at': datetime.now(timezone.utc),
+        }
+        with get_session() as session:
+            stmt = pg_insert(OAuthToken).values(**data)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['owner_id', 'provider'],
+                set_={k: v for k, v in data.items() if k not in ('owner_id', 'provider')},
+            )
+            session.execute(stmt)
+        logger.info(f"Linked MrCall business {mrcall_business_id} for owner {owner_id}")
+        return True
+
+
+    def get_mrcall_link(self, owner_id: str) -> Optional[str]:
+        """Get MrCall business ID for user."""
+        with get_session() as session:
+            row = session.query(OAuthToken.email)\
+                .filter(OAuthToken.owner_id == owner_id, OAuthToken.provider == 'mrcall')\
+                .first()
+
+            if row and row[0]:
+                logger.debug(f"get_mrcall_link: explicit link found in email field: {row[0]}")
+                return row[0]
+            return None
+
+
+    def remove_mrcall_link(self, owner_id: str) -> bool:
+        """Remove MrCall link for user."""
+        with get_session() as session:
+            session.query(OAuthToken)\
+                .filter(OAuthToken.owner_id == owner_id, OAuthToken.provider == 'mrcall')\
+                .delete()
+        logger.info(f"Removed MrCall link for owner {owner_id}")
+        return True
+
+
+    # ==========================================
+    # TRIGGER EVENTS (Queue)
+    # ==========================================
+
+    def queue_trigger_event(self, owner_id: str, event_type: str, event_data: dict) -> dict:
+        """Queue a trigger event for background processing."""
+        with get_session() as session:
+            event = TriggerEvent(
+                owner_id=owner_id,
+                event_type=event_type,
+                event_data=event_data,
+                status='pending',
+            )
+            session.add(event)
+            session.flush()
+            logger.info(f"Queued {event_type} event for owner {owner_id}")
+            return event.to_dict()
+
+
+    def get_pending_events(self, limit: int = 10) -> list:
+        """Get pending trigger events to process (oldest first)."""
+        with get_session() as session:
+            rows = session.query(TriggerEvent)\
+                .filter(TriggerEvent.status == 'pending')\
+                .order_by(TriggerEvent.created_at.asc())\
+                .limit(limit)\
+                .all()
+            return [r.to_dict() for r in rows]
+
+
+    def mark_event_processing(self, event_id: str) -> bool:
+        """Mark event as being processed (atomic increment of attempts)."""
+        with get_session() as session:
+            count = session.query(TriggerEvent)\
+                .filter(
+                    TriggerEvent.id == event_id,
+                    TriggerEvent.status == 'pending',
+                )\
+                .update({
+                    'status': 'processing',
+                    'attempts': TriggerEvent.attempts + 1,
+                })
+            return count > 0
+
+
+    def mark_event_completed(self, event_id: str, trigger_id: str, result_data: dict) -> bool:
+        """Mark event as completed."""
+        with get_session() as session:
+            count = session.query(TriggerEvent)\
+                .filter(TriggerEvent.id == event_id)\
+                .update({
+                    'status': 'completed',
+                    'trigger_id': trigger_id,
+                    'result': result_data,
+                    'processed_at': datetime.now(timezone.utc),
+                })
+            return count > 0
+
+
+    def mark_event_failed(self, event_id: str, error: str) -> bool:
+        """Mark event as failed."""
+        with get_session() as session:
+            count = session.query(TriggerEvent)\
+                .filter(TriggerEvent.id == event_id)\
+                .update({
+                    'status': 'failed',
+                    'last_error': error,
+                    'processed_at': datetime.now(timezone.utc),
+                })
+            return count > 0
+
+
+    def get_event_history(self, owner_id: str, limit: int = 20) -> list:
+        """Get trigger event history for user (newest first)."""
+        with get_session() as session:
+            rows = session.query(TriggerEvent)\
+                .filter(TriggerEvent.owner_id == owner_id)\
+                .order_by(TriggerEvent.created_at.desc())\
+                .limit(limit)\
+                .all()
+            return [r.to_dict() for r in rows]
+
+
+    # ==========================================
+    # MEMORY AGENT PROCESSING
+    # ==========================================
+
+    def get_unprocessed_emails(self, owner_id: str) -> List[Dict[str, Any]]:
+        """Get all emails not yet processed by Memory Agent."""
+        with get_session() as session:
+            rows = session.query(
+                    Email.id, Email.from_email, Email.body_plain,
+                    Email.snippet, Email.subject, Email.date,
+                )\
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.memory_processed_at.is_(None),
+                )\
+                .order_by(Email.date.desc())\
+                .all()
+            return [
+                {
+                    'id': str(r.id),
+                    'from_email': r.from_email,
+                    'body_plain': r.body_plain,
+                    'snippet': r.snippet,
+                    'subject': r.subject,
+                    'date': r.date.isoformat() if r.date else None,
+                }
+                for r in rows
+            ]
+
+
+    def mark_email_processed(self, owner_id: str, email_id: str) -> None:
+        """Mark an email as processed by Memory Agent."""
+        ts = datetime.now(timezone.utc)
+        with get_session() as session:
+            count = session.query(Email)\
+                .filter(Email.owner_id == owner_id, Email.id == email_id)\
+                .update({'memory_processed_at': ts})
+            if count == 0:
+                logger.error(
+                    f"[mark_email_processed] UPDATE matched 0 rows! "
+                    f"owner_id={owner_id} email_id={email_id}"
+                )
+            else:
+                logger.info(
+                    f"[mark_email_processed] owner={owner_id} email={email_id} "
+                    f"rows={count} memory_processed_at={ts.isoformat()}"
+                )
+
+
+    def mark_emails_processed(self, owner_id: str, email_ids: List[str]) -> None:
+        """Mark multiple emails as processed by Memory Agent."""
+        if not email_ids:
+            return
+        with get_session() as session:
+            session.query(Email)\
+                .filter(Email.owner_id == owner_id, Email.id.in_(email_ids))\
+                .update({'memory_processed_at': datetime.now(timezone.utc)},
+                        synchronize_session=False)
+
+
+    def reset_processing_timestamps_for_period(
+        self,
+        owner_id: str,
+        days_back: int,
+        reset_memory: bool = True,
+        reset_task: bool = True
+    ) -> Dict[str, int]:
+        """Reset memory_processed_at and/or task_processed_at for items in a date range."""
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
+        counts: Dict[str, int] = {}
+
+        with get_session() as session:
+            if reset_memory:
+                # Reset emails
+                c = session.query(Email)\
+                    .filter(
+                        Email.owner_id == owner_id,
+                        Email.memory_processed_at.isnot(None),
+                        Email.date >= cutoff,
+                    )\
+                    .update({'memory_processed_at': None}, synchronize_session=False)
+                counts['emails_memory_reset'] = c
+
+                # Reset calendar events
+                c = session.query(CalendarEvent)\
+                    .filter(
+                        CalendarEvent.owner_id == owner_id,
+                        CalendarEvent.memory_processed_at.isnot(None),
+                        CalendarEvent.start_time >= cutoff,
+                    )\
+                    .update({'memory_processed_at': None}, synchronize_session=False)
+                counts['calendar_memory_reset'] = c
+
+                # Reset mrcall conversations
+                c = session.query(MrcallConversation)\
+                    .filter(
+                        MrcallConversation.owner_id == owner_id,
+                        MrcallConversation.memory_processed_at.isnot(None),
+                        MrcallConversation.call_started_at >= cutoff,
+                    )\
+                    .update({'memory_processed_at': None}, synchronize_session=False)
+                counts['mrcall_memory_reset'] = c
+
+            if reset_task:
+                # Reset emails
+                c = session.query(Email)\
+                    .filter(
+                        Email.owner_id == owner_id,
+                        Email.task_processed_at.isnot(None),
+                        Email.date >= cutoff,
+                    )\
+                    .update({'task_processed_at': None}, synchronize_session=False)
+                counts['emails_task_reset'] = c
+
+                # Reset calendar events
+                c = session.query(CalendarEvent)\
+                    .filter(
+                        CalendarEvent.owner_id == owner_id,
+                        CalendarEvent.task_processed_at.isnot(None),
+                        CalendarEvent.start_time >= cutoff,
+                    )\
+                    .update({'task_processed_at': None}, synchronize_session=False)
+                counts['calendar_task_reset'] = c
+
+        logger.info(
+            f"[reset_processing] owner={owner_id} days_back={days_back} "
+            f"reset_memory={reset_memory} reset_task={reset_task} counts={counts}"
+        )
+        return counts
+
+
+    def get_unprocessed_calendar_events(self, owner_id: str) -> List[Dict[str, Any]]:
+        """Get all calendar events not yet processed by Memory Agent."""
+        with get_session() as session:
+            rows = session.query(
+                    CalendarEvent.id, CalendarEvent.summary, CalendarEvent.description,
+                    CalendarEvent.location, CalendarEvent.start_time, CalendarEvent.end_time,
+                    CalendarEvent.attendees,
+                )\
+                .filter(
+                    CalendarEvent.owner_id == owner_id,
+                    CalendarEvent.memory_processed_at.is_(None),
+                )\
+                .order_by(CalendarEvent.start_time.desc())\
+                .all()
+            return [
+                {
+                    'id': str(r.id),
+                    'summary': r.summary,
+                    'description': r.description,
+                    'location': r.location,
+                    'start_time': r.start_time.isoformat() if r.start_time else None,
+                    'end_time': r.end_time.isoformat() if r.end_time else None,
+                    'attendees': r.attendees,
+                }
+                for r in rows
+            ]
+
+
+    def mark_calendar_event_processed(self, owner_id: str, event_id: str) -> None:
+        """Mark a calendar event as processed by Memory Agent."""
+        with get_session() as session:
+            session.query(CalendarEvent)\
+                .filter(CalendarEvent.owner_id == owner_id, CalendarEvent.id == event_id)\
+                .update({'memory_processed_at': datetime.now(timezone.utc)})
+
+
+    def mark_calendar_events_processed(self, owner_id: str, event_ids: List[str]) -> None:
+        """Mark multiple calendar events as processed by Memory Agent."""
+        if not event_ids:
+            return
+        with get_session() as session:
+            session.query(CalendarEvent)\
+                .filter(CalendarEvent.owner_id == owner_id, CalendarEvent.id.in_(event_ids))\
+                .update({'memory_processed_at': datetime.now(timezone.utc)},
+                        synchronize_session=False)
+
+
+    def reset_memory_processing_timestamps(self, owner_id: str) -> Dict[str, int]:
+        """Reset memory_processed_at timestamps for all services."""
+        counts: Dict[str, int] = {}
+
+        with get_session() as session:
+            # Reset emails
+            c = session.query(Email)\
+                .filter(Email.owner_id == owner_id, Email.memory_processed_at.isnot(None))\
+                .update({'memory_processed_at': None}, synchronize_session=False)
+            counts['emails'] = c
+
+            # Reset calendar events
+            c = session.query(CalendarEvent)\
+                .filter(CalendarEvent.owner_id == owner_id, CalendarEvent.memory_processed_at.isnot(None))\
+                .update({'memory_processed_at': None}, synchronize_session=False)
+            counts['calendar_events'] = c
+
+            # Reset pipedrive deals
+            try:
+                c = session.query(PipedriveDeal)\
+                    .filter(PipedriveDeal.owner_id == owner_id, PipedriveDeal.memory_processed_at.isnot(None))\
+                    .update({'memory_processed_at': None}, synchronize_session=False)
+                counts['pipedrive_deals'] = c
+            except Exception:
+                counts['pipedrive_deals'] = 0  # Table may not exist yet
+
+        return counts
+
+
+    # ==========================================
+    # TASK AGENT PROCESSING
+    # ==========================================
+
+    def get_unprocessed_emails_for_task(self, owner_id: str) -> List[Dict[str, Any]]:
+        """Get all emails not yet processed by Task Agent."""
+        with get_session() as session:
+            rows = session.query(
+                    Email.id, Email.from_email, Email.to_email, Email.body_plain,
+                    Email.snippet, Email.subject, Email.date_timestamp, Email.thread_id,
+                )\
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.task_processed_at.is_(None),
+                )\
+                .order_by(Email.date_timestamp.desc())\
+                .all()
+            return [
+                {
+                    'id': str(r.id),
+                    'from_email': r.from_email,
+                    'to_email': r.to_email,
+                    'body_plain': r.body_plain,
+                    'snippet': r.snippet,
+                    'subject': r.subject,
+                    'date_timestamp': r.date_timestamp,
+                    'thread_id': r.thread_id,
+                }
+                for r in rows
+            ]
+
+
+    def mark_email_task_processed(self, owner_id: str, email_id: str) -> None:
+        """Mark an email as processed by Task Agent."""
+        with get_session() as session:
+            session.query(Email)\
+                .filter(Email.owner_id == owner_id, Email.id == email_id)\
+                .update({'task_processed_at': datetime.now(timezone.utc)})
+
+
+    def mark_emails_task_processed(self, owner_id: str, email_ids: List[str]) -> None:
+        """Mark multiple emails as processed by Task Agent."""
+        if not email_ids:
+            return
+        with get_session() as session:
+            session.query(Email)\
+                .filter(Email.owner_id == owner_id, Email.id.in_(email_ids))\
+                .update({'task_processed_at': datetime.now(timezone.utc)},
+                        synchronize_session=False)
+
+
+    def get_unprocessed_calendar_events_for_task(self, owner_id: str) -> List[Dict[str, Any]]:
+        """Get all calendar events not yet processed by Task Agent."""
+        with get_session() as session:
+            rows = session.query(
+                    CalendarEvent.id, CalendarEvent.summary, CalendarEvent.description,
+                    CalendarEvent.location, CalendarEvent.start_time, CalendarEvent.end_time,
+                    CalendarEvent.attendees,
+                )\
+                .filter(
+                    CalendarEvent.owner_id == owner_id,
+                    CalendarEvent.task_processed_at.is_(None),
+                )\
+                .order_by(CalendarEvent.start_time.desc())\
+                .all()
+            return [
+                {
+                    'id': str(r.id),
+                    'summary': r.summary,
+                    'description': r.description,
+                    'location': r.location,
+                    'start_time': r.start_time.isoformat() if r.start_time else None,
+                    'end_time': r.end_time.isoformat() if r.end_time else None,
+                    'attendees': r.attendees,
+                }
+                for r in rows
+            ]
+
+
+    def mark_calendar_event_task_processed(self, owner_id: str, event_id: str) -> None:
+        """Mark a calendar event as processed by Task Agent."""
+        with get_session() as session:
+            session.query(CalendarEvent)\
+                .filter(CalendarEvent.owner_id == owner_id, CalendarEvent.id == event_id)\
+                .update({'task_processed_at': datetime.now(timezone.utc)})
+
+
+    def mark_calendar_events_task_processed(self, owner_id: str, event_ids: List[str]) -> None:
+        """Mark multiple calendar events as processed by Task Agent."""
+        if not event_ids:
+            return
+        with get_session() as session:
+            session.query(CalendarEvent)\
+                .filter(CalendarEvent.owner_id == owner_id, CalendarEvent.id.in_(event_ids))\
+                .update({'task_processed_at': datetime.now(timezone.utc)},
+                        synchronize_session=False)
+
+
+    def reset_task_processing_timestamps(
+        self,
+        owner_id: str,
+        channel: str = 'all'
+    ) -> Dict[str, int]:
+        """Reset task_processed_at timestamps for specified channel(s)."""
+        counts: Dict[str, int] = {}
+
+        with get_session() as session:
+            if channel in ('email', 'all'):
+                c = session.query(Email)\
+                    .filter(Email.owner_id == owner_id, Email.task_processed_at.isnot(None))\
+                    .update({'task_processed_at': None}, synchronize_session=False)
+                counts['emails'] = c
+
+            if channel in ('calendar', 'all'):
+                c = session.query(CalendarEvent)\
+                    .filter(CalendarEvent.owner_id == owner_id, CalendarEvent.task_processed_at.isnot(None))\
+                    .update({'task_processed_at': None}, synchronize_session=False)
+                counts['calendar_events'] = c
+
+        return counts
+
+
+    # ==========================================
+    # PIPEDRIVE DEALS
+    # ==========================================
+
+    def get_unprocessed_pipedrive_deals(self, owner_id: str) -> List[Dict[str, Any]]:
+        """Get all pipedrive deals not yet processed by Memory Agent."""
+        with get_session() as session:
+            rows = session.query(
+                    PipedriveDeal.id, PipedriveDeal.deal_id, PipedriveDeal.title,
+                    PipedriveDeal.person_name, PipedriveDeal.org_name,
+                    PipedriveDeal.value, PipedriveDeal.currency,
+                    PipedriveDeal.status, PipedriveDeal.stage_name,
+                    PipedriveDeal.deal_data,
+                )\
+                .filter(
+                    PipedriveDeal.owner_id == owner_id,
+                    PipedriveDeal.memory_processed_at.is_(None),
+                )\
+                .order_by(PipedriveDeal.updated_at.desc())\
+                .all()
+            return [
+                {
+                    'id': str(r.id),
+                    'deal_id': r.deal_id,
+                    'title': r.title,
+                    'person_name': r.person_name,
+                    'org_name': r.org_name,
+                    'value': float(r.value) if r.value is not None else None,
+                    'currency': r.currency,
+                    'status': r.status,
+                    'stage_name': r.stage_name,
+                    'deal_data': r.deal_data,
+                }
+                for r in rows
+            ]
+
+
+    def mark_pipedrive_deal_processed(self, owner_id: str, deal_id: str) -> None:
+        """Mark a pipedrive deal as processed by Memory Agent."""
+        with get_session() as session:
+            session.query(PipedriveDeal)\
+                .filter(PipedriveDeal.owner_id == owner_id, PipedriveDeal.id == deal_id)\
+                .update({'memory_processed_at': datetime.now(timezone.utc)})
+
+
+    def mark_pipedrive_deals_processed(self, owner_id: str, deal_ids: List[str]) -> None:
+        """Mark multiple pipedrive deals as processed by Memory Agent."""
+        if not deal_ids:
+            return
+        with get_session() as session:
+            session.query(PipedriveDeal)\
+                .filter(PipedriveDeal.owner_id == owner_id, PipedriveDeal.id.in_(deal_ids))\
+                .update({'memory_processed_at': datetime.now(timezone.utc)},
+                        synchronize_session=False)
+
+
+    # ==========================================
+    # USER NOTIFICATIONS
+    # ==========================================
+
+    def create_notification(
+        self,
+        owner_id: str,
+        message: str,
+        notification_type: str = 'warning'
+    ) -> Dict[str, Any]:
+        """Create a notification for a user."""
+        with get_session() as session:
+            notif = UserNotification(
+                owner_id=owner_id,
+                message=message,
+                notification_type=notification_type,
+                read=False,
+            )
+            session.add(notif)
+            session.flush()
+            logger.info(f"Created {notification_type} notification for user {owner_id}")
+            return notif.to_dict()
+
+
+    def get_unread_notifications(self, owner_id: str) -> List[Dict[str, Any]]:
+        """Get all unread notifications for a user (oldest first)."""
+        with get_session() as session:
+            rows = session.query(UserNotification)\
+                .filter(
+                    UserNotification.owner_id == owner_id,
+                    UserNotification.read == False,
+                )\
+                .order_by(UserNotification.created_at.asc())\
+                .all()
+            return [r.to_dict() for r in rows]
+
+
+    def mark_notifications_read(self, owner_id: str, notification_ids: List[str]) -> bool:
+        """Mark notifications as read."""
+        if not notification_ids:
+            return True
+        with get_session() as session:
+            count = session.query(UserNotification)\
+                .filter(
+                    UserNotification.owner_id == owner_id,
+                    UserNotification.id.in_(notification_ids),
+                )\
+                .update({'read': True}, synchronize_session=False)
+            logger.info(f"Marked {len(notification_ids)} notifications as read for user {owner_id}")
+            return count > 0
+
+
+    # ==========================================
+    # EMAIL TRIAGE
+    # ==========================================
+
+    def store_triage_verdict(
+        self,
+        owner_id: str,
+        thread_id: str,
+        verdict: dict
+    ) -> Dict[str, Any]:
+        """Store email triage verdict for a thread (upsert on owner_id+thread_id)."""
+        classification = verdict.get('classification', {})
+        data = {
+            'owner_id': owner_id,
+            'thread_id': thread_id,
+            'needs_human_attention': verdict.get('needs_human_attention', False),
+            'reason': verdict.get('reason'),
+            'triage_category': verdict.get('triage_category', 'low'),
+            'is_real_customer': classification.get('is_real_customer'),
+            'is_actionable': classification.get('is_actionable'),
+            'is_time_sensitive': classification.get('is_time_sensitive'),
+            'is_resolved': classification.get('is_resolved'),
+            'is_cold_outreach': classification.get('is_cold_outreach'),
+            'is_automated': classification.get('is_automated'),
+            'suggested_action': verdict.get('suggested_action'),
+            'deadline_detected': verdict.get('deadline_detected'),
+            'updated_at': datetime.now(timezone.utc),
+        }
+
+        with get_session() as session:
+            stmt = pg_insert(EmailTriage).values(**data)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['owner_id', 'thread_id'],
+                set_={k: v for k, v in data.items() if k not in ('owner_id', 'thread_id')},
+            )
+            result = session.execute(stmt.returning(EmailTriage.__table__))
+            row = result.fetchone()
+            logger.info(f"Stored triage verdict for thread {thread_id}: {verdict.get('triage_category')}")
+            return dict(row._mapping) if row else {}
+
+
+    def get_triage_verdict(self, owner_id: str, thread_id: str) -> Optional[Dict[str, Any]]:
+        """Get triage verdict for a specific thread."""
+        with get_session() as session:
+            row = session.query(EmailTriage)\
+                .filter(EmailTriage.owner_id == owner_id, EmailTriage.thread_id == thread_id)\
+                .first()
+            return row.to_dict() if row else None
+
+
+    def get_threads_needing_attention(
+        self,
+        owner_id: str,
+        category: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get threads that need human attention, optionally filtered by category."""
+        with get_session() as session:
+            query = session.query(EmailTriage)\
+                .filter(
+                    EmailTriage.owner_id == owner_id,
+                    EmailTriage.needs_human_attention == True,
+                )
+
+            if category:
+                query = query.filter(EmailTriage.triage_category == category)
+            else:
+                # Exclude noise by default when no category specified
+                query = query.filter(EmailTriage.triage_category != 'noise')
+
+            rows = query\
+                .order_by(
+                    EmailTriage.triage_category.asc(),
+                    EmailTriage.deadline_detected.asc(),
+                    EmailTriage.created_at.desc(),
+                )\
+                .all()
+            return [r.to_dict() for r in rows]
+
+
+    def store_training_sample(self, sample: dict) -> Dict[str, Any]:
+        """Store a training sample for triage model improvement."""
+        with get_session() as session:
+            ts = TriageTrainingSample(
+                owner_id=sample.get('owner_id'),
+                thread_id=sample.get('thread_id'),
+                email_data=sample.get('email_data', {}),
+                predicted_verdict=sample.get('predicted_verdict', {}),
+                actual_verdict=sample.get('actual_verdict'),
+                feedback_type=sample.get('feedback_type', 'correction'),
+                used_for_training=False,
+            )
+            session.add(ts)
+            session.flush()
+            logger.info(
+                f"Stored training sample for thread {sample.get('thread_id')} "
+                f"({sample.get('feedback_type')})"
+            )
+            return ts.to_dict()
+
+    # ==========================================
+    # TRAINING SAMPLES & RULES
+    # ==========================================
+
+    def get_training_samples(
+        self,
+        unused_only: bool = True,
+        limit: int = 1000,
+    ) -> List[Dict[str, Any]]:
+        """Get triage training samples for model fine-tuning."""
+        with get_session() as session:
+            query = session.query(TriageTrainingSample)
+            if unused_only:
+                query = query.filter(TriageTrainingSample.used_for_training == False)  # noqa: E712
+            rows = query.order_by(TriageTrainingSample.created_at.asc())\
+                .limit(limit)\
+                .all()
+            return [r.to_dict() for r in rows]
+
+
+    def get_importance_rules(
+        self,
+        owner_id: str,
+        enabled_only: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """Get importance rules for a user, sorted by priority descending."""
+        with get_session() as session:
+            query = session.query(ImportanceRule)\
+                .filter(ImportanceRule.owner_id == owner_id)
+            if enabled_only:
+                query = query.filter(ImportanceRule.enabled == True)  # noqa: E712
+            rows = query.order_by(ImportanceRule.priority.desc()).all()
+            return [r.to_dict() for r in rows]
+
+
+    def get_contact_by_email(
+        self,
+        owner_id: str,
+        email: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Get contact metadata by email address."""
+        try:
+            with get_session() as session:
+                row = session.query(Contact)\
+                    .filter(Contact.owner_id == owner_id, Contact.email == email)\
+                    .first()
+                return row.to_dict() if row else None
+        except Exception as e:
+            logger.debug(f"Contact lookup failed for {email}: {e}")
+            return None
+
+
+    # ==========================================
+    # EMAIL READ TRACKING
+    # ==========================================
+
+    def create_sendgrid_message_mapping(
+        self,
+        sendgrid_message_id: str,
+        message_id: str,
+        owner_id: str,
+        recipient_email: str,
+        campaign_id: str = None,
+    ) -> Dict[str, Any]:
+        """Create mapping between SendGrid message ID and internal message ID."""
+        data = {
+            'sendgrid_message_id': sendgrid_message_id,
+            'message_id': message_id,
+            'owner_id': owner_id,
+            'recipient_email': recipient_email,
+            'campaign_id': campaign_id,
+            'expires_at': datetime.now(timezone.utc) + timedelta(days=90),
+        }
+        try:
+            with get_session() as session:
+                stmt = pg_insert(SendgridMessageMapping).values(**data)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=['sendgrid_message_id'],
+                    set_={k: v for k, v in data.items() if k != 'sendgrid_message_id'},
+                )
+                session.execute(stmt)
+                logger.debug(f"Created SendGrid message mapping: {sendgrid_message_id} -> {message_id}")
+                return data
+        except Exception as e:
+            logger.error(f"Failed to create SendGrid message mapping: {e}")
+            raise
+
+
+    def get_sendgrid_message_mapping(
+        self,
+        sendgrid_message_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Look up internal message ID from SendGrid message ID."""
+        try:
+            with get_session() as session:
+                row = session.query(SendgridMessageMapping)\
+                    .filter(SendgridMessageMapping.sendgrid_message_id == sendgrid_message_id)\
+                    .first()
+                return row.to_dict() if row else None
+        except Exception as e:
+            logger.error(f"Failed to get SendGrid message mapping: {e}")
+            return None
+
+
+    def record_sendgrid_read_event(
+        self,
+        sendgrid_message_id: str,
+        message_id: str,
+        owner_id: str,
+        recipient_email: str,
+        timestamp: datetime,
+        user_agent: str = None,
+        ip_address: str = None,
+        event_data: Dict = None,
+    ) -> Dict[str, Any]:
+        """Record email read event from SendGrid webhook."""
+        try:
+            with get_session() as session:
+                existing = session.query(EmailReadEvent)\
+                    .filter(
+                        EmailReadEvent.sendgrid_message_id == sendgrid_message_id,
+                        EmailReadEvent.recipient_email == recipient_email,
+                    )\
+                    .with_for_update()\
+                    .first()
+
+                if existing:
+                    existing.read_count = (existing.read_count or 0) + 1
+                    existing.last_read_at = timestamp
+                    existing.updated_at = datetime.now(timezone.utc)
+                    read_count = existing.read_count
+                    session.flush()
+                    result = existing.to_dict()
+                    logger.debug(f"Updated read event for {sendgrid_message_id}, count: {read_count}")
+                else:
+                    new_event = EmailReadEvent(
+                        sendgrid_message_id=sendgrid_message_id,
+                        message_id=message_id,
+                        owner_id=owner_id,
+                        recipient_email=recipient_email,
+                        tracking_source='sendgrid_webhook',
+                        read_count=1,
+                        first_read_at=timestamp,
+                        last_read_at=timestamp,
+                        user_agents=[user_agent] if user_agent else [],
+                        ip_addresses=[ip_address] if ip_address else [],
+                        sendgrid_event_data=[event_data] if event_data else [],
+                    )
+                    session.add(new_event)
+                    session.flush()
+                    read_count = 1
+                    result = new_event.to_dict()
+                    logger.info(f"Created read event for {sendgrid_message_id}")
+
+            # Update emails.read_events JSONB field (separate session)
+            self._update_message_read_events(message_id, recipient_email, timestamp, read_count)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to record SendGrid read event: {e}")
+            raise
+
+
+    def record_custom_pixel_read_event(
+        self,
+        tracking_id: str,
+        user_agent: str = None,
+        ip_address: str = None,
+        timestamp: datetime = None,
+    ) -> Dict[str, Any]:
+        """Record email read event from custom tracking pixel."""
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
+
+        try:
+            with get_session() as session:
+                existing = session.query(EmailReadEvent)\
+                    .filter(EmailReadEvent.tracking_id == tracking_id)\
+                    .with_for_update()\
+                    .first()
+
+                if existing:
+                    existing.read_count = (existing.read_count or 0) + 1
+                    existing.last_read_at = timestamp
+                    existing.updated_at = datetime.now(timezone.utc)
+                    read_count = existing.read_count
+                    message_id = existing.message_id
+                    recipient_email = existing.recipient_email
+                    session.flush()
+                    result = existing.to_dict()
+
+                    logger.debug(f"Updated read event for tracking_id {tracking_id}, count: {read_count}")
+
+                    # Update emails.read_events
+                    self._update_message_read_events(message_id, recipient_email, timestamp, read_count)
+
+                    return result
+                else:
+                    logger.warning(f"No existing record found for tracking_id: {tracking_id}")
+                    return {}
+
+        except Exception as e:
+            logger.error(f"Failed to record custom pixel read event: {e}")
+            raise
+
+
+    def _update_message_read_events(
+        self,
+        message_id: str,
+        recipient_email: str,
+        timestamp: datetime,
+        read_count: int,
+    ) -> None:
+        """Update emails.read_events JSONB field with read summary."""
+        try:
+            with get_session() as session:
+                email = session.query(Email)\
+                    .filter(Email.id == message_id)\
+                    .with_for_update()\
+                    .first()
+
+                if not email:
+                    logger.warning(f"Email not found for read_events update: {message_id}")
+                    return
+
+                read_events = list(email.read_events or [])
+
+                # Update or add recipient's read stats
+                updated = False
+                for event in read_events:
+                    if event.get('recipient') == recipient_email:
+                        event['read_count'] = read_count
+                        event['last_read_at'] = timestamp.isoformat()
+                        if 'first_read_at' not in event:
+                            event['first_read_at'] = timestamp.isoformat()
+                        updated = True
+                        break
+
+                if not updated:
+                    read_events.append({
+                        'recipient': recipient_email,
+                        'read_count': read_count,
+                        'first_read_at': timestamp.isoformat(),
+                        'last_read_at': timestamp.isoformat(),
+                    })
+
+                email.read_events = read_events
+                email.updated_at = datetime.now(timezone.utc)
+                session.flush()
+
+                logger.debug(f"Updated read_events for email {message_id}")
+
+        except Exception as e:
+            logger.error(f"Failed to update email read_events: {e}")
+
+
+    # ==========================================
+    # AGENT PROMPTS
+    # ==========================================
+
+    def get_agent_prompt(self, owner_id: str, agent_type: str) -> Optional[str]:
+        """Get user's agent prompt by type."""
+        try:
+            with get_session() as session:
+                row = session.query(AgentPrompt)\
+                    .filter(
+                        AgentPrompt.owner_id == owner_id,
+                        AgentPrompt.agent_type == agent_type,
+                    )\
+                    .first()
+                if row:
+                    return row.agent_prompt
+                return None
+        except Exception as e:
+            logger.warning(f"Failed to get agent prompt: {e}")
+            return None
+
+
+    def store_agent_prompt(
+        self,
+        owner_id: str,
+        agent_type: str,
+        prompt: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Store or update a user's agent prompt."""
+        data = {
+            'owner_id': owner_id,
+            'agent_type': agent_type,
+            'agent_prompt': prompt,
+            'metadata': metadata or {},
+            'updated_at': datetime.now(timezone.utc),
+        }
+        with get_session() as session:
+            stmt = pg_insert(AgentPrompt).values(**data)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['owner_id', 'agent_type'],
+                set_={k: v for k, v in data.items() if k not in ('owner_id', 'agent_type')},
+            )
+            result = session.execute(stmt.returning(AgentPrompt.__table__))
+            row = result.fetchone()
+            logger.info(f"Stored agent prompt: {owner_id}/{agent_type}")
+            return dict(row._mapping) if row else {}
+
+
+    def delete_agent_prompt(self, owner_id: str, agent_type: str) -> bool:
+        """Delete a user's agent prompt."""
+        try:
+            with get_session() as session:
+                count = session.query(AgentPrompt)\
+                    .filter(
+                        AgentPrompt.owner_id == owner_id,
+                        AgentPrompt.agent_type == agent_type,
+                    )\
+                    .delete()
+                deleted = count > 0
+                if deleted:
+                    logger.info(f"Deleted agent prompt: {owner_id}/{agent_type}")
+                return deleted
+        except Exception as e:
+            logger.error(f"Failed to delete agent prompt: {e}")
+            return False
+
+
+    def get_agent_prompt_metadata(
+        self,
+        owner_id: str,
+        agent_type: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Get metadata for a user's agent prompt."""
+        try:
+            with get_session() as session:
+                row = session.query(
+                    AgentPrompt.metadata_,
+                    AgentPrompt.created_at,
+                    AgentPrompt.updated_at,
+                ).filter(
+                    AgentPrompt.owner_id == owner_id,
+                    AgentPrompt.agent_type == agent_type,
+                ).first()
+                if row:
+                    return {
+                        'metadata': row[0] or {},
+                        'created_at': row[1].isoformat() if row[1] else None,
+                        'updated_at': row[2].isoformat() if row[2] else None,
+                    }
+                return None
+        except Exception as e:
+            logger.warning(f"Failed to get agent prompt metadata: {e}")
+            return None
+
+
+    # ==========================================
+    # TRAINING SNAPSHOTS
+    # ==========================================
+
+    def get_training_snapshot(
+        self,
+        owner_id: str,
+        business_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Get training snapshot for a business (stored in agent_prompts)."""
+        agent_type = f"mrcall_{business_id}_snapshot"
+        try:
+            with get_session() as session:
+                row = session.query(AgentPrompt)\
+                    .filter(
+                        AgentPrompt.owner_id == owner_id,
+                        AgentPrompt.agent_type == agent_type,
+                    )\
+                    .first()
+                if row:
+                    try:
+                        variables = json.loads(row.agent_prompt)
+                    except (json.JSONDecodeError, TypeError):
+                        logger.warning(f"Failed to parse training snapshot for {owner_id}/{business_id}")
+                        return None
+                    return {
+                        'variables': variables,
+                        'metadata': row.metadata_ or {},
+                        'updated_at': row.updated_at.isoformat() if row.updated_at else None,
+                    }
+                return None
+        except Exception as e:
+            logger.warning(f"Failed to get training snapshot: {e}")
+            return None
+
+
+    def store_training_snapshot(
+        self,
+        owner_id: str,
+        business_id: str,
+        variables: Dict[str, str],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Store training snapshot after successful training."""
+        agent_type = f"mrcall_{business_id}_snapshot"
+        logger.debug(f"[store_training_snapshot] Storing snapshot for {owner_id}/{business_id}, {len(variables)} variables")
+        self.store_agent_prompt(
+            owner_id=owner_id,
+            agent_type=agent_type,
+            prompt=json.dumps(variables, ensure_ascii=False),
+            metadata=metadata or {},
+        )
+        logger.info(f"Stored training snapshot for {owner_id}/{business_id} ({len(variables)} variables)")
+
+
+    # ==========================================
+    # TASK ITEMS
+    # ==========================================
+
+    def store_task_item(self, owner_id: str, item: Dict[str, Any]) -> bool:
+        """Store a single task item (upsert on owner_id + event_type + event_id)."""
+        try:
+            data = {
+                'owner_id': owner_id,
+                'event_type': item.get('event_type'),
+                'event_id': item.get('event_id'),
+                'contact_email': item.get('contact_email'),
+                'contact_name': item.get('contact_name'),
+                'action_required': item.get('action_required', False),
+                'urgency': item.get('urgency'),
+                'reason': item.get('reason'),
+                'suggested_action': item.get('suggested_action'),
+                'analyzed_at': item.get('analyzed_at'),
+                'sources': item.get('sources', {}),
+            }
+            with get_session() as session:
+                stmt = pg_insert(TaskItem).values(**data)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=['owner_id', 'event_type', 'event_id'],
+                    set_={k: v for k, v in data.items() if k not in ('owner_id', 'event_type', 'event_id')},
+                )
+                session.execute(stmt)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to store task item: {e}")
+            return False
+
+
+    def get_task_by_contact(
+        self,
+        owner_id: str,
+        contact_email: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Get existing open task for a contact (returns first one)."""
+        try:
+            with get_session() as session:
+                row = session.query(TaskItem)\
+                    .filter(
+                        TaskItem.owner_id == owner_id,
+                        TaskItem.contact_email == contact_email.lower(),
+                        TaskItem.completed_at.is_(None),
+                    )\
+                    .first()
+                return row.to_dict() if row else None
+        except Exception as e:
+            logger.error(f"Failed to get task by contact {contact_email}: {e}")
+            return None
+
+
+    def get_tasks_by_contact(
+        self,
+        owner_id: str,
+        contact_email: str,
+    ) -> List[Dict[str, Any]]:
+        """Get ALL open tasks for a contact."""
+        try:
+            with get_session() as session:
+                rows = session.query(TaskItem)\
+                    .filter(
+                        TaskItem.owner_id == owner_id,
+                        func.lower(TaskItem.contact_email) == contact_email.lower(),
+                        TaskItem.completed_at.is_(None),
+                    )\
+                    .order_by(TaskItem.created_at.desc())\
+                    .all()
+                return [r.to_dict() for r in rows]
+        except Exception as e:
+            logger.error(f"Failed to get tasks by contact {contact_email}: {e}")
+            return []
+
+
+    def merge_task_sources(
+        self,
+        owner_id: str,
+        task_id: str,
+        new_sources: Dict[str, Any],
+        new_urgency: str,
+        new_action: str,
+        new_reason: str,
+    ) -> bool:
+        """Merge new sources into existing task, update if more urgent."""
+        try:
+            with get_session() as session:
+                task = session.query(TaskItem)\
+                    .filter(TaskItem.id == task_id)\
+                    .with_for_update()\
+                    .one_or_none()
+
+                if not task:
+                    return False
+
+                existing_sources = task.sources or {}
+                existing_urgency = task.urgency or 'low'
+
+                # Merge sources (append new email/blob IDs)
+                merged_sources = {
+                    'emails': list(set(
+                        existing_sources.get('emails', []) + new_sources.get('emails', [])
+                    )),
+                    'blobs': list(set(
+                        existing_sources.get('blobs', []) + new_sources.get('blobs', [])
+                    )),
+                    'calendar_events': list(set(
+                        existing_sources.get('calendar_events', []) + new_sources.get('calendar_events', [])
+                    )),
+                }
+
+                task.sources = merged_sources
+
+                # Update if new urgency is higher
+                urgency_order = {'high': 3, 'medium': 2, 'low': 1}
+                if urgency_order.get(new_urgency, 0) > urgency_order.get(existing_urgency, 0):
+                    task.urgency = new_urgency
+                    task.suggested_action = new_action
+                    task.reason = new_reason
+
+                session.flush()
+                return True
+
+        except Exception as e:
+            logger.error(f"Failed to merge task sources for {task_id}: {e}")
+            return False
+
+
+    def complete_task_item(self, owner_id: str, task_id: str) -> bool:
+        """Mark a task as completed."""
+        try:
+            with get_session() as session:
+                count = session.query(TaskItem)\
+                    .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)\
+                    .update({'completed_at': datetime.now(timezone.utc)})
+                return count > 0
+        except Exception as e:
+            logger.error(f"Failed to complete task {task_id}: {e}")
+            return False
+
+
+    def update_task_item(
+        self,
+        owner_id: str,
+        task_id: str,
+        urgency: str = None,
+        suggested_action: str = None,
+        reason: str = None,
+        add_source_email: str = None,
+    ) -> bool:
+        """Update an existing task with new information."""
+        try:
+            with get_session() as session:
+                task = session.query(TaskItem)\
+                    .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)\
+                    .with_for_update()\
+                    .one_or_none()
+
+                if not task:
+                    return False
+
+                sources = dict(task.sources or {})
+
+                if add_source_email:
+                    emails = list(sources.get('emails', []))
+                    if add_source_email not in emails:
+                        emails.append(add_source_email)
+                    sources['emails'] = emails
+
+                task.sources = sources
+                if urgency:
+                    task.urgency = urgency
+                if suggested_action:
+                    task.suggested_action = suggested_action
+                if reason:
+                    task.reason = reason
+
+                session.flush()
+                return True
+
+        except Exception as e:
+            logger.error(f"Failed to update task {task_id}: {e}")
+            return False
+
+
+    def store_task_items_batch(self, owner_id: str, items: List[Dict[str, Any]]) -> int:
+        """Store multiple task items."""
+        stored = 0
+        for item in items:
+            if self.store_task_item(owner_id, item):
+                stored += 1
+        return stored
+
+
+    def get_task_items(
+        self,
+        owner_id: str,
+        action_required: Optional[bool] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Get uncompleted task items, sorted by urgency then analyzed_at."""
+        try:
+            with get_session() as session:
+                query = session.query(TaskItem)\
+                    .filter(
+                        TaskItem.owner_id == owner_id,
+                        TaskItem.completed_at.is_(None),
+                    )
+                if action_required is not None:
+                    query = query.filter(TaskItem.action_required == action_required)
+
+                rows = query.order_by(TaskItem.analyzed_at.desc())\
+                    .limit(limit)\
+                    .all()
+
+                tasks = [r.to_dict() for r in rows]
+
+                # Sort by urgency priority: high -> medium -> low
+                # Python stable sort preserves analyzed_at desc order within each urgency
+                urgency_order = {'high': 0, 'medium': 1, 'low': 2}
+                tasks.sort(key=lambda t: urgency_order.get(t.get('urgency'), 9))
+
+                return tasks
+
+        except Exception as e:
+            logger.error(f"Failed to get task items: {e}")
+            return []
+
+
+    def task_item_exists(self, owner_id: str, event_type: str, event_id: str) -> bool:
+        """Check if a task item already exists."""
+        try:
+            with get_session() as session:
+                row = session.query(TaskItem.id)\
+                    .filter(
+                        TaskItem.owner_id == owner_id,
+                        TaskItem.event_type == event_type,
+                        TaskItem.event_id == event_id,
+                    )\
+                    .first()
+                return row is not None
+        except Exception as e:
+            logger.warning(f"Failed to check task item existence: {e}")
+            return False
+
+
+    def mark_task_complete(self, owner_id: str, task_id: str) -> bool:
+        """Mark a task as complete."""
+        try:
+            with get_session() as session:
+                count = session.query(TaskItem)\
+                    .filter(TaskItem.owner_id == owner_id, TaskItem.id == task_id)\
+                    .update({'completed_at': datetime.now(timezone.utc)})
+                return count > 0
+        except Exception as e:
+            logger.error(f"Failed to mark task complete: {e}")
+            return False
+
+
+    def get_task_items_stats(self, owner_id: str) -> Optional[Dict[str, Any]]:
+        """Get task items statistics for a user."""
+        try:
+            with get_session() as session:
+                rows = session.query(
+                    TaskItem.action_required,
+                    TaskItem.completed_at,
+                    TaskItem.analyzed_at,
+                ).filter(TaskItem.owner_id == owner_id).all()
+
+                if not rows:
+                    return None
+
+                total = len(rows)
+                action_required = sum(1 for r in rows if r[0])
+                completed = sum(1 for r in rows if r[1] is not None)
+
+                analyzed_dates = [r[2].isoformat() for r in rows if r[2] is not None]
+                last_analyzed = max(analyzed_dates) if analyzed_dates else 'Never'
+
+                return {
+                    'total': total,
+                    'action_required': action_required,
+                    'completed': completed,
+                    'last_analyzed': last_analyzed,
+                }
+
+        except Exception as e:
+            logger.error(f"Failed to get task items stats: {e}")
+            return None
+
+
+    def clear_task_items(self, owner_id: str) -> int:
+        """Clear all task items for a user (for refresh)."""
+        try:
+            with get_session() as session:
+                count = session.query(TaskItem)\
+                    .filter(TaskItem.owner_id == owner_id)\
+                    .delete()
+                logger.info(f"Cleared {count} task items for {owner_id}")
+                return count
+        except Exception as e:
+            logger.error(f"Failed to clear task items: {e}")
+            return 0
+
+
+    # ==========================================
+    # BACKGROUND JOBS
+    # ==========================================
+
+    def create_background_job(
+        self,
+        owner_id: str,
+        job_type: str,
+        channel: str | None = None,
+        params: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        """Create a new background job. Returns existing if duplicate (pending/running)."""
+        with get_session() as session:
+            # Check for duplicate
+            dup_query = session.query(BackgroundJob)\
+                .filter(
+                    BackgroundJob.owner_id == owner_id,
+                    BackgroundJob.job_type == job_type,
+                    BackgroundJob.status.in_(['pending', 'running']),
+                )
+            if channel is not None:
+                dup_query = dup_query.filter(BackgroundJob.channel == channel)
+            else:
+                dup_query = dup_query.filter(BackgroundJob.channel.is_(None))
+
+            existing = dup_query.first()
+            if existing:
+                logger.info(f"Background job already exists: {existing.id} ({existing.status})")
+                return existing.to_dict()
+
+            # Create new job
+            job = BackgroundJob(
+                owner_id=owner_id,
+                job_type=job_type,
+                channel=channel,
+                status='pending',
+                progress_pct=0,
+                items_processed=0,
+                params=params or {},
+            )
+            session.add(job)
+            session.flush()
+            result = job.to_dict()
+            logger.info(f"Created background job {result.get('id')}: {job_type}/{channel}")
+            return result
+
+
+    def claim_background_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """Atomically claim a pending job (pending -> running)."""
+        with get_session() as session:
+            count = session.query(BackgroundJob)\
+                .filter(
+                    BackgroundJob.id == job_id,
+                    BackgroundJob.status == 'pending',
+                )\
+                .update({
+                    'status': 'running',
+                    'started_at': datetime.now(timezone.utc),
+                })
+            if count > 0:
+                row = session.query(BackgroundJob)\
+                    .filter(BackgroundJob.id == job_id)\
+                    .one()
+                logger.info(f"Claimed background job {job_id}")
+                return row.to_dict()
+            return None
+
+
+    def update_background_job_progress(
+        self,
+        job_id: str,
+        progress_pct: int,
+        items_processed: int,
+        total_items: int,
+        status_message: str | None = None,
+    ) -> None:
+        """Update job progress."""
+        with get_session() as session:
+            update_data = {
+                'progress_pct': progress_pct,
+                'items_processed': items_processed,
+                'total_items': total_items,
+            }
+            if status_message is not None:
+                update_data['status_message'] = status_message
+
+            session.query(BackgroundJob)\
+                .filter(BackgroundJob.id == job_id)\
+                .update(update_data)
+
+
+    def complete_background_job(self, job_id: str, result: Dict[str, Any]) -> None:
+        """Mark job as completed."""
+        with get_session() as session:
+            session.query(BackgroundJob)\
+                .filter(BackgroundJob.id == job_id)\
+                .update({
+                    'status': 'completed',
+                    'progress_pct': 100,
+                    'completed_at': datetime.now(timezone.utc),
+                    'result': result,
+                })
+        logger.info(f"Completed background job {job_id}")
+
+
+    def fail_background_job(self, job_id: str, error: str) -> None:
+        """Mark job as failed."""
+        with get_session() as session:
+            session.query(BackgroundJob)\
+                .filter(BackgroundJob.id == job_id)\
+                .update({
+                    'status': 'failed',
+                    'completed_at': datetime.now(timezone.utc),
+                    'last_error': error,
+                })
+        logger.error(f"Failed background job {job_id}: {error}")
+
+
+    def get_background_job(self, job_id: str, owner_id: str) -> Optional[Dict[str, Any]]:
+        """Get job by ID (with owner check for security)."""
+        with get_session() as session:
+            row = session.query(BackgroundJob)\
+                .filter(BackgroundJob.id == job_id, BackgroundJob.owner_id == owner_id)\
+                .first()
+            return row.to_dict() if row else None
+
+
+    def get_user_background_jobs(
+        self,
+        owner_id: str,
+        status: str | List[str] | None = None,
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """List user's background jobs, most recent first."""
+        with get_session() as session:
+            query = session.query(BackgroundJob)\
+                .filter(BackgroundJob.owner_id == owner_id)\
+                .order_by(BackgroundJob.created_at.desc())\
+                .limit(limit)
+
+            if status:
+                if isinstance(status, list):
+                    query = query.filter(BackgroundJob.status.in_(status))
+                else:
+                    query = query.filter(BackgroundJob.status == status)
+
+            rows = query.all()
+            return [r.to_dict() for r in rows]
+
+
+    def cancel_background_job(self, job_id: str, owner_id: str) -> bool:
+        """Cancel a pending background job."""
+        with get_session() as session:
+            count = session.query(BackgroundJob)\
+                .filter(
+                    BackgroundJob.id == job_id,
+                    BackgroundJob.owner_id == owner_id,
+                    BackgroundJob.status == 'pending',
+                )\
+                .update({
+                    'status': 'cancelled',
+                    'completed_at': datetime.now(timezone.utc),
+                })
+            if count > 0:
+                logger.info(f"Cancelled background job {job_id}")
+                return True
+            return False
+
+
+    def stop_background_job(self, job_id: str, owner_id: str) -> bool:
+        """Stop a running job by setting status back to pending."""
+        with get_session() as session:
+            count = session.query(BackgroundJob)\
+                .filter(
+                    BackgroundJob.id == job_id,
+                    BackgroundJob.owner_id == owner_id,
+                    BackgroundJob.status == 'running',
+                )\
+                .update({
+                    'status': 'pending',
+                    'started_at': None,
+                })
+            if count > 0:
+                logger.info(f"Stopped background job {job_id} (now pending)")
+                return True
+            return False
+
+
+    def stop_all_running_jobs(self, owner_id: str) -> int:
+        """Stop all running jobs for user. Returns count stopped."""
+        with get_session() as session:
+            count = session.query(BackgroundJob)\
+                .filter(
+                    BackgroundJob.owner_id == owner_id,
+                    BackgroundJob.status == 'running',
+                )\
+                .update({
+                    'status': 'pending',
+                    'started_at': None,
+                })
+            if count > 0:
+                logger.info(f"Stopped {count} running jobs for {owner_id}")
+            return count
+
+
+    def reset_stale_background_jobs(self, timeout_hours: int = 2) -> int:
+        """Reset jobs stuck in 'running' for too long -> pending."""
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=timeout_hours)
+
+        with get_session() as session:
+            stale_jobs = session.query(BackgroundJob)\
+                .filter(
+                    BackgroundJob.status == 'running',
+                    BackgroundJob.started_at < cutoff,
+                )\
+                .with_for_update()\
+                .all()
+
+            if not stale_jobs:
+                return 0
+
+            reset_count = 0
+            for job in stale_jobs:
+                job.retry_count = (job.retry_count or 0) + 1
+                job.status = 'pending'
+                job.started_at = None
+                reset_count += 1
+
+            session.flush()
+
+            if reset_count > 0:
+                logger.warning(f"Reset {reset_count} stale background jobs (running > {timeout_hours}h)")
+
+            return reset_count
+
+
+    def cleanup_old_background_jobs(self, retention_days: int = 7) -> int:
+        """Delete completed/failed/cancelled jobs older than retention period."""
+        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+
+        with get_session() as session:
+            count = session.query(BackgroundJob)\
+                .filter(
+                    BackgroundJob.status.in_(['completed', 'failed', 'cancelled']),
+                    BackgroundJob.created_at < cutoff,
+                )\
+                .delete(synchronize_session='fetch')
+            if count > 0:
+                logger.info(f"Cleaned up {count} old background jobs (>{retention_days} days)")
+            return count
+
+
+    def reset_all_running_jobs(self) -> int:
+        """Reset ALL running jobs to pending. Use in dev/restart scenarios."""
+        with get_session() as session:
+            count = session.query(BackgroundJob)\
+                .filter(BackgroundJob.status == 'running')\
+                .update({
+                    'status': 'pending',
+                    'started_at': None,
+                })
+            if count > 0:
+                logger.info(f"Reset {count} running jobs to pending")
+            return count
+
+
+    # ==========================================
+    # MRCALL CONVERSATIONS
+    # ==========================================
+
+    def store_mrcall_conversation(
+        self,
+        owner_id: str,
+        conversation_id: str,
+        business_id: str,
+        contact_phone: Optional[str],
+        contact_name: Optional[str],
+        call_duration_ms: Optional[int],
+        call_started_at: Optional[str],
+        subject: Optional[str],
+        body: Optional[Dict[str, Any]],
+        custom_values: Optional[Dict[str, Any]],
+        raw_data: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Store or update a MrCall conversation (upsert on text PK)."""
+        data = {
+            'id': conversation_id,
+            'owner_id': owner_id,
+            'business_id': business_id,
+            'contact_phone': contact_phone,
+            'contact_name': contact_name,
+            'call_duration_ms': call_duration_ms,
+            'call_started_at': call_started_at,
+            'subject': subject,
+            'body': body,
+            'custom_values': custom_values,
+            'raw_data': raw_data,
+            'updated_at': datetime.now(timezone.utc),
+        }
+        with get_session() as session:
+            stmt = pg_insert(MrcallConversation).values(**data)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['id'],
+                set_={k: v for k, v in data.items() if k != 'id'},
+            )
+            session.execute(stmt)
+            return data
+
+
+    def get_unprocessed_mrcall_conversations(
+        self,
+        owner_id: str,
+    ) -> List[Dict[str, Any]]:
+        """Get MrCall conversations not yet processed by memory agent."""
+        with get_session() as session:
+            rows = session.query(MrcallConversation)\
+                .filter(
+                    MrcallConversation.owner_id == owner_id,
+                    MrcallConversation.memory_processed_at.is_(None),
+                )\
+                .order_by(MrcallConversation.call_started_at.desc())\
+                .all()
+            return [r.to_dict() for r in rows]
+
+
+    def mark_mrcall_memory_processed(
+        self,
+        owner_id: str,
+        conversation_id: str,
+    ) -> None:
+        """Mark a MrCall conversation as processed by memory agent."""
+        with get_session() as session:
+            session.query(MrcallConversation)\
+                .filter(
+                    MrcallConversation.id == conversation_id,
+                    MrcallConversation.owner_id == owner_id,
+                )\
+                .update({'memory_processed_at': datetime.now(timezone.utc)})
+
+
+    def get_mrcall_conversations(
+        self,
+        owner_id: str,
+        limit: int = 50,
+        days_back: int = 30,
+    ) -> List[Dict[str, Any]]:
+        """Get recent MrCall conversations."""
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
+
+        with get_session() as session:
+            rows = session.query(MrcallConversation)\
+                .filter(
+                    MrcallConversation.owner_id == owner_id,
+                    MrcallConversation.call_started_at >= cutoff,
+                )\
+                .order_by(MrcallConversation.call_started_at.desc())\
+                .limit(limit)\
+                .all()
+            return [r.to_dict() for r in rows]
+
+
+    def reset_mrcall_processing(self, owner_id: str) -> int:
+        """Reset memory processing flags for all MrCall conversations."""
+        with get_session() as session:
+            count = session.query(MrcallConversation)\
+                .filter(MrcallConversation.owner_id == owner_id)\
+                .update({'memory_processed_at': None})
+            if count > 0:
+                logger.info(f"Reset memory processing for {count} MrCall conversations")
+            return count
+
+
+    def get_mrcall_conversation_count(self, owner_id: str) -> int:
+        """Get total count of MrCall conversations for user."""
+        with get_session() as session:
+            return session.query(func.count(MrcallConversation.id))\
+                .filter(MrcallConversation.owner_id == owner_id)\
+                .scalar() or 0
+
+
+    # ==========================================
+    # VERIFICATION CODES
+    # ==========================================
+
+    def create_verification_code(
+        self,
+        owner_id: str,
+        phone_number: str,
+        code: str,
+        context: Optional[str] = None,
+        expires_in_minutes: int = 15,
+    ) -> Dict[str, Any]:
+        """Create a verification code."""
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_in_minutes)
+
+        with get_session() as session:
+            vc = VerificationCode(
+                owner_id=owner_id,
+                phone_number=phone_number,
+                code=code,
+                context=context,
+                expires_at=expires_at,
+                verified=False,
+            )
+            session.add(vc)
+            session.flush()
+            return vc.to_dict()
+
+
+    def verify_code(
+        self,
+        owner_id: str,
+        phone_number: str,
+        code: str,
+    ) -> bool:
+        """Verify a code. Returns True if valid and verified."""
+        now = datetime.now(timezone.utc)
+
+        with get_session() as session:
+            row = session.query(VerificationCode)\
+                .filter(
+                    VerificationCode.owner_id == owner_id,
+                    VerificationCode.phone_number == phone_number,
+                    VerificationCode.code == code,
+                    VerificationCode.verified == False,  # noqa: E712
+                    VerificationCode.expires_at > now,
+                )\
+                .order_by(VerificationCode.created_at.desc())\
+                .with_for_update()\
+                .first()
+
+            if not row:
+                return False
+
+            row.verified = True
+            row.verified_at = now
+            session.flush()
+            return True
