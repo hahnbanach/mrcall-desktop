@@ -1,0 +1,21 @@
+# PostgreSQL Service - Test
+# ========================
+# Internal service for zylch to connect to postgres.
+#
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: starchat-test
+  labels:
+    app: postgres
+    environment: test
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+    protocol: TCP

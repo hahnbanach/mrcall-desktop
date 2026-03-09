@@ -1,0 +1,90 @@
+# PostgreSQL with pgvector - Test
+# ================================
+# Local postgres for test environment. Production uses Scaleway Managed PostgreSQL.
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: starchat-test
+  labels:
+    app: postgres
+    environment: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: postgres
+        environment: test
+    spec:
+      nodeSelector:
+        k8s.scaleway.com/pool-name: zylch-pool
+
+      containers:
+      - name: postgres
+        image: pgvector/pgvector:pg16
+        ports:
+        - containerPort: 5432
+          protocol: TCP
+
+        env:
+        - name: POSTGRES_DB
+          value: "zylch"
+        - name: POSTGRES_USER
+          value: "zylch"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: zylch-secrets
+              key: DB_PASSWORD
+
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - zylch
+            - -d
+            - zylch
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          failureThreshold: 3
+
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - zylch
+            - -d
+            - zylch
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+
+      volumes:
+      - name: postgres-data
+        emptyDir: {}
+      - name: init-scripts
+        configMap:
+          name: postgres-init
