@@ -2,8 +2,8 @@
 description: |
   Scaleway Kubernetes deployment with GitLab CI/CD. ARM64 nodes (COPARM1/BASIC2),
   self-hosted GitLab Runner on Scaleway for native builds, auto-shutdown after 4h idle.
-  Two environments: test (starchat-test) and production (starchat-production).
-  Database: Scaleway Managed PostgreSQL (db-dev-s, PostgreSQL 16, pgvector 0.8).
+  Two environments: test (starchat-test, in-cluster postgres) and production
+  (starchat-production, Scaleway Managed PostgreSQL). Internal API only (no public ingress).
 ---
 
 # Zylch Deployment - Scaleway Kubernetes
@@ -18,8 +18,9 @@ Zylch runs on **Scaleway Kubernetes** with **ARM64 nodes**, built via **GitLab C
 | **Nodes** | ARM64 — BASIC2-A2C-4G (2 vCPU, 4GB) |
 | **CI/CD** | GitLab CI with self-hosted ARM runner |
 | **Registry** | GitLab Container Registry (`registry.gitlab.com/hahnbanach/zylch`) |
-| **Ingress** | Nginx Ingress Controller + cert-manager (Let's Encrypt) |
-| **Database** | Scaleway Managed PostgreSQL 16 (`zylch-db`, db-dev-s, pgvector 0.8) |
+| **Database (test)** | In-cluster PostgreSQL 16 + pgvector (container) |
+| **Database (prod)** | Scaleway Managed PostgreSQL 16 (`zylch-db`, db-dev-s, pgvector 0.8) |
+| **Network** | Internal ClusterIP only (accessed by dashboard within same cluster) |
 
 ## Architecture
 
@@ -44,25 +45,30 @@ git push (dev/production)
 ┌─────────────────────────────────────────────┐
 │  Scaleway Kubernetes                        │
 │                                             │
-│  ┌─────────────────┐  ┌─────────────────┐  │
-│  │  starchat-test   │  │ starchat-prod   │  │
-│  │  (dev branch)    │  │ (prod branch)   │  │
-│  │                  │  │                  │  │
-│  │  Deployment      │  │  Deployment      │  │
-│  │  Service :8000   │  │  Service :8000   │  │
-│  │  Ingress (HTTPS) │  │  Ingress (HTTPS) │  │
-│  └─────────────────┘  └─────────────────┘  │
-│                                             │
-│  Pool: zylch-pool (BASIC2-A2C-4G ARM64)    │
-└─────────────────────────────────────────────┘
+│  ┌──────────────────┐  ┌──────────────────┐ │
+│  │  starchat-test    │  │ starchat-prod    │ │
+│  │  (dev branch)     │  │ (prod branch)    │ │
+│  │                   │  │                  │ │
+│  │  zylch (API)      │  │  zylch (API)     │ │
+│  │  postgres (DB)    │  │  Service :8000   │ │
+│  │  Service :8000    │  │                  │ │
+│  └──────────────────┘  └────────┬─────────┘ │
+│                                 │            │
+│  Pool: zylch-pool (ARM64)       │            │
+└─────────────────────────────────┼────────────┘
+                                  │
+                     ┌────────────▼────────────┐
+                     │  Scaleway Managed        │
+                     │  PostgreSQL (zylch-db)   │
+                     └─────────────────────────┘
 ```
 
 ## Environments
 
-| Branch | K8s Namespace | Domain | Description |
-|--------|--------------|--------|-------------|
-| `dev` | `starchat-test` | (TBD) | Test/staging environment |
-| `production` | `starchat-production` | (TBD) | Production environment |
+| Branch | K8s Namespace | Database | Description |
+|--------|--------------|----------|-------------|
+| `dev` | `starchat-test` | In-cluster postgres container | Test/staging environment |
+| `production` | `starchat-production` | Scaleway Managed PostgreSQL | Production environment |
 
 Both branches trigger build + deploy on push.
 
@@ -139,22 +145,32 @@ Two separate Scaleway Kapsule clusters:
 
 ### Kubernetes Manifests
 
-All manifests live in `~/hb/zylch-deploy/`:
+Manifests live in two locations:
+
+- **`~/hb/zylch-deploy/`** — operational manifests + secrets (not in git)
+- **`k8s/`** in the zylch repo — postgres manifests applied by CI
 
 ```
 zylch-deploy/
 ├── test/
 │   ├── kubeconfig.yaml
-│   ├── secrets.env.template
+│   ├── secrets.env                  ← DATABASE_URL + all app secrets
 │   ├── namespace.yaml
-│   ├── deployment-zylch.yaml    ← 21 env vars from zylch-secrets
-│   ├── service-zylch.yaml       ← port 8000
-│   ├── ingress-zylch.yaml       ← HTTPS via cert-manager
+│   ├── deployment-zylch.yaml        ← env vars from zylch-secrets
+│   ├── deployment-postgres.yaml     ← in-cluster postgres + pgvector
+│   ├── service-zylch.yaml           ← ClusterIP :8000
+│   ├── service-postgres.yaml        ← ClusterIP :5432
+│   ├── configmap-postgres-init.yaml ← uuid-ossp + vector extensions
 │   ├── create-secrets.sh
 │   ├── deploy.sh
 │   └── check-status.sh
 └── production/
-    └── (same structure, starchat-production namespace)
+    └── (same structure, no postgres — uses Managed DB)
+
+zylch/k8s/test/                      ← in repo, applied by CI
+├── configmap-postgres-init.yaml
+├── deployment-postgres.yaml
+└── service-postgres.yaml
 ```
 
 ## GitLab CI/CD
@@ -165,7 +181,7 @@ Defined in `.gitlab-ci.yml`:
 
 ```
 Stage 1: build    → docker build + push (ARM64 native)
-Stage 2: deploy   → kubectl set image + rollout status
+Stage 2: deploy   → kubectl apply (postgres for test) + set image + rollout status
 ```
 
 Both stages use the `arm64` tag to run on the self-hosted runner.
@@ -190,19 +206,23 @@ Set in **GitLab > Settings > CI/CD > Variables**:
 
 ## Secrets (Kubernetes)
 
-Each environment has a `zylch-secrets` K8s secret with 21 env vars:
+Each environment has a `zylch-secrets` K8s secret:
 
 | Category | Variables |
 |----------|-----------|
 | **Registry** | `REGISTRY_SERVER`, `REGISTRY_USERNAME`, `REGISTRY_TOKEN`, `REGISTRY_EMAIL` |
-| **Database** | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_SSLMODE` |
+| **Database** | `DATABASE_URL`, `DB_PASSWORD` (test only, for postgres container) |
 | **Firebase** | `FIREBASE_PROJECT_ID`, `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_SERVICE_ACCOUNT_BASE64` |
 | **Google OAuth** | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
 | **Encryption** | `ENCRYPTION_KEY` |
 | **CORS** | `CORS_ALLOWED_ORIGINS` |
-| **MrCall** | `MRCALL_BASE_URL`, `MRCALL_CLIENT_ID`, `MRCALL_CLIENT_SECRET`, `MRCALL_REALM`, `MRCALL_BASIC_AUTH` |
+| **MrCall** | `MRCALL_BASE_URL`, `MRCALL_CLIENT_ID`, `MRCALL_CLIENT_SECRET`, `MRCALL_REALM`, `MRCALL_OAUTH_AUTHORIZE_URL` |
 | **AI** | `ANTHROPIC_API_KEY` |
 | **App** | `LOG_LEVEL` |
+
+`DATABASE_URL` format:
+- **Test**: `postgresql://zylch:<pass>@postgres:5432/zylch` (in-cluster service)
+- **Production**: `postgresql://zylch:<pass>@62.210.39.141:4433/zylch?sslmode=require` (Managed DB)
 
 Setup:
 ```bash
@@ -214,7 +234,13 @@ cp secrets.env.template secrets.env
 
 ## Database
 
-**Scaleway Managed PostgreSQL** instance `zylch-db`:
+### Test: In-Cluster PostgreSQL
+
+A `pgvector/pgvector:pg16` container runs in the `starchat-test` namespace alongside zylch. Extensions `uuid-ossp` and `vector` are initialized via ConfigMap (`/docker-entrypoint-initdb.d/`). Data is ephemeral (`emptyDir` volume).
+
+### Production: Scaleway Managed PostgreSQL
+
+Instance `zylch-db`:
 
 | Property | Value |
 |----------|-------|
@@ -230,13 +256,20 @@ cp secrets.env.template secrets.env
 | **Region** | fr-par |
 | **Backups** | Daily, 7-day retention |
 
-Data layer uses SQLAlchemy ORM (29 models in `zylch/storage/models.py`). Schema managed by Alembic migrations (`alembic/versions/`). 23 tables with ~4,300 rows (pre-alpha).
+### Data Layer
+
+SQLAlchemy ORM (29 models in `zylch/storage/models.py`). Schema managed by Alembic migrations (`alembic/versions/`). On container start, `alembic upgrade head` runs automatically.
 
 ## Local Development
 
 ```bash
-# Run locally (same as always)
+# Option 1: Docker Compose (zylch + postgres containers)
+docker compose up --build
+
+# Option 2: Just the DB container, run zylch locally
+docker compose up postgres
 uvicorn zylch.api.main:app --reload --port 8000
+# DATABASE_URL=postgresql://zylch:zylch_dev@localhost:5432/zylch
 
 # .env symlink points to your development config
 ls -la .env  # → .env.development or .env.mrcall
@@ -294,8 +327,7 @@ ssh root@51.15.139.29 'docker image prune -af --filter "until=168h"'
 | **K8s nodes** (2x BASIC2-A2C-4G) | ~€33/mo total | 1 test + 1 prod |
 | **GitLab Runner** (COPARM1-2C-8G) | ~€0.043/h on-demand | Auto-shutdown after 4h, ~€2-5/mo typical |
 | **K8s control plane** | Free | Scaleway Kapsule control plane is free |
-| **Ingress/LB** | ~€10/mo | Scaleway Load Balancer |
-| **Managed PostgreSQL** (db-dev-s) | ~€7/mo | 5GB lssd, daily backups |
+| **Managed PostgreSQL** (db-dev-s) | ~€7/mo | Production only, 5GB lssd, daily backups |
 
 ## Troubleshooting
 

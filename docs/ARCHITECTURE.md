@@ -121,7 +121,9 @@ The Zylch backend (`zylch/api/`) is a single codebase deployed on **Scaleway Kub
 - **Registry**: GitLab Container Registry (`registry.gitlab.com/hahnbanach/zylch`)
 - **Branches**: `dev` → starchat-test namespace, `production` → starchat-production namespace
 - **Manifests**: `~/hb/zylch-deploy/` (test/ and production/ directories)
-- **Database**: Scaleway Managed PostgreSQL 16 (`zylch-db`, db-dev-s, host `62.210.39.141:4433`, pgvector 0.8 + uuid-ossp)
+- **Database (test)**: In-cluster PostgreSQL 16 + pgvector container (ephemeral)
+- **Database (prod)**: Scaleway Managed PostgreSQL 16 (`zylch-db`, db-dev-s, host `62.210.39.141:4433`, pgvector 0.8 + uuid-ossp)
+- **Network**: Internal ClusterIP only — no public ingress, accessed by dashboard within same cluster
 
 **Release process**: Push to `dev` or `production` branch triggers GitLab CI build + deploy. A pre-push git hook auto-starts the runner if it's stopped (auto-shuts down after 4h idle to save costs).
 
@@ -882,7 +884,8 @@ Dashboard users operate in a restricted "sandbox" environment that limits access
 
 **Phase 1: Current** (0-1,000 users)
 - Scaleway Kubernetes (ARM64 nodes)
-- Scaleway Managed PostgreSQL 16 (direct connection, pgvector + uuid-ossp)
+- Test: in-cluster PostgreSQL 16 + pgvector container
+- Production: Scaleway Managed PostgreSQL 16 (pgvector + uuid-ossp)
 - Background workers (APScheduler in-process)
 
 **Phase 2: Growth** (1,000-10,000 users)
