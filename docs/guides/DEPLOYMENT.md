@@ -3,7 +3,7 @@ description: |
   Scaleway Kubernetes deployment with GitLab CI/CD. ARM64 nodes (COPARM1/BASIC2),
   self-hosted GitLab Runner on Scaleway for native builds, auto-shutdown after 4h idle.
   Two environments: test (starchat-test) and production (starchat-production).
-  Database: Scaleway Managed PostgreSQL (Phase 2 migration from Supabase).
+  Database: Scaleway Managed PostgreSQL (db-dev-s, PostgreSQL 16, pgvector 0.8).
 ---
 
 # Zylch Deployment - Scaleway Kubernetes
@@ -19,7 +19,7 @@ Zylch runs on **Scaleway Kubernetes** with **ARM64 nodes**, built via **GitLab C
 | **CI/CD** | GitLab CI with self-hosted ARM runner |
 | **Registry** | GitLab Container Registry (`registry.gitlab.com/hahnbanach/zylch`) |
 | **Ingress** | Nginx Ingress Controller + cert-manager (Let's Encrypt) |
-| **Database** | Scaleway Managed PostgreSQL (Phase 2, currently Supabase) |
+| **Database** | Scaleway Managed PostgreSQL 16 (`zylch-db`, db-dev-s, pgvector 0.8) |
 
 ## Architecture
 
@@ -212,11 +212,25 @@ cp secrets.env.template secrets.env
 ./create-secrets.sh
 ```
 
-## Database (Phase 2 — pending)
+## Database
 
-Currently using **Supabase** (cloud). Migrating to **Scaleway Managed PostgreSQL** requires rewriting `supabase_client.py` (4028 lines, 139 methods, 25 tables) to SQLAlchemy.
+**Scaleway Managed PostgreSQL** instance `zylch-db`:
 
-See the data layer migration plan for details (Phase 2).
+| Property | Value |
+|----------|-------|
+| **Instance ID** | `7964a6db-25a2-4e98-b5ae-cf1c255a47d0` |
+| **Type** | db-dev-s |
+| **Engine** | PostgreSQL 16 |
+| **Extensions** | pgvector 0.8, uuid-ossp |
+| **Host** | `62.210.39.141` |
+| **Port** | `4433` |
+| **Database** | `zylch` |
+| **User** | `zylch` (admin) |
+| **Volume** | 5 GB lssd |
+| **Region** | fr-par |
+| **Backups** | Daily, 7-day retention |
+
+Data layer uses SQLAlchemy ORM (29 models in `zylch/storage/models.py`). Schema managed by Alembic migrations (`alembic/versions/`). 23 tables with ~4,300 rows (pre-alpha).
 
 ## Local Development
 
@@ -281,7 +295,7 @@ ssh root@51.15.139.29 'docker image prune -af --filter "until=168h"'
 | **GitLab Runner** (COPARM1-2C-8G) | ~€0.043/h on-demand | Auto-shutdown after 4h, ~€2-5/mo typical |
 | **K8s control plane** | Free | Scaleway Kapsule control plane is free |
 | **Ingress/LB** | ~€10/mo | Scaleway Load Balancer |
-| **Managed PostgreSQL** | TBD | Phase 2 |
+| **Managed PostgreSQL** (db-dev-s) | ~€7/mo | 5GB lssd, daily backups |
 
 ## Troubleshooting
 

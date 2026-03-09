@@ -121,7 +121,7 @@ The Zylch backend (`zylch/api/`) is a single codebase deployed on **Scaleway Kub
 - **Registry**: GitLab Container Registry (`registry.gitlab.com/hahnbanach/zylch`)
 - **Branches**: `dev` → starchat-test namespace, `production` → starchat-production namespace
 - **Manifests**: `~/hb/zylch-deploy/` (test/ and production/ directories)
-- **Database**: Scaleway Managed PostgreSQL (direct connection via `DATABASE_URL`)
+- **Database**: Scaleway Managed PostgreSQL 16 (`zylch-db`, db-dev-s, host `62.210.39.141:4433`, pgvector 0.8 + uuid-ossp)
 
 **Release process**: Push to `dev` or `production` branch triggers GitLab CI build + deploy. A pre-push git hook auto-starts the runner if it's stopped (auto-shuts down after 4h idle to save costs).
 
@@ -482,7 +482,7 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
 - **Upserts**: Via `pg_insert().on_conflict_do_update()`
 - **Stored functions**: Called via `session.execute(text(...))`
 
-**Storage class**: `zylch/storage/storage.py` - `Storage` class with singleton pattern (`get_instance()`). Backward-compat alias `SupabaseStorage = Storage` in `__init__.py`.
+**Storage class**: `zylch/storage/storage.py` - `Storage` class with singleton pattern (`get_instance()`).
 
 **All data scoped by `owner_id`** (Firebase UID):
 
@@ -882,7 +882,7 @@ Dashboard users operate in a restricted "sandbox" environment that limits access
 
 **Phase 1: Current** (0-1,000 users)
 - Scaleway Kubernetes (ARM64 nodes)
-- Scaleway Managed PostgreSQL (direct connection)
+- Scaleway Managed PostgreSQL 16 (direct connection, pgvector + uuid-ossp)
 - Background workers (APScheduler in-process)
 
 **Phase 2: Growth** (1,000-10,000 users)

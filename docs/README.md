@@ -79,7 +79,7 @@ This documentation is organized into the following sections:
 - **Google Calendar API**: [Calendar Integration](features/calendar-integration.md)
 - **Microsoft Graph API**: [Microsoft Calendar TODO](features/MICROSOFT_CALENDAR_TODO.md)
 - **Anthropic Claude**: [Email Archive](features/email-archive.md), [Relationship Intelligence](features/relationship-intelligence.md)
-- **Supabase**: [Architecture](ARCHITECTURE.md#data-storage)
+- **PostgreSQL (Scaleway Managed)**: [Architecture](ARCHITECTURE.md#data-storage)
 - **Firebase Auth**: [Architecture](ARCHITECTURE.md#authentication)
 
 ### By User Type
@@ -144,7 +144,7 @@ Visit https://app.zylchai.com for the web interface.
 ## 💡 Key Concepts
 
 ### Two-Tier Email System
-- **Archive**: Permanent storage of all emails (Supabase)
+- **Archive**: Permanent storage of all emails (PostgreSQL)
 - **Intelligence Cache**: 30-day AI-analyzed window for active intelligence
 
 ### Person-Centric Architecture
@@ -162,7 +162,7 @@ Goes beyond inbox management by correlating email + calendar data to identify co
 Zylch AI
 ├── Email Layer
 │   ├── Gmail/Outlook API sync
-│   ├── Archive (permanent Supabase storage)
+│   ├── Archive (permanent PostgreSQL storage)
 │   └── Intelligence Cache (30-day analyzed window)
 │
 ├── Intelligence Layer
@@ -233,7 +233,7 @@ zylch/
 │   ├── cli/                 # CLI interface
 │   ├── services/            # Business logic
 │   ├── tools/               # Email, Calendar, Archive, etc.
-│   ├── storage/             # Supabase client
+│   ├── storage/             # PostgreSQL/SQLAlchemy storage layer
 │   └── workers/             # Background workers
 ├── frontend/                # [DORMANT] Vue 3 web dashboard prototype (not active)
 ├── zylch-cli/               # Thin CLI client (separate repo at ~/hb/zylch-cli)
@@ -260,10 +260,11 @@ See [Documentation Guide](../.claude/DOCUMENTATION.md) for:
 ## 📝 Recent Updates
 
 **March 2026**:
-- ✅ Migrated deployment from Railway to Scaleway Kubernetes (ARM64 nodes)
+- ✅ Scaleway Kubernetes deployment (ARM64 nodes)
 - ✅ GitLab CI/CD with self-hosted ARM runner on Scaleway (native builds, no QEMU)
 - ✅ Auto-shutdown runner after 4h idle, auto-start via pre-push git hook
-- ✅ Database migration planned: Supabase → Scaleway Managed PostgreSQL (Phase 2)
+- ✅ Scaleway Managed PostgreSQL 16 with pgvector + uuid-ossp
+- ✅ SQLAlchemy ORM data layer (29 models, Alembic migrations)
 
 **February 2026**:
 - ✅ MrCall training optimization: selective retraining (only stale features), snapshot-based change detection

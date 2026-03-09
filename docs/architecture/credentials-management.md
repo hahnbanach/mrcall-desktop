@@ -2,7 +2,7 @@
 description: |
   All credentials in PostgreSQL only - filesystem fallback completely removed from token_storage.py.
   BYOK model: users connect services via /connect, credentials stored per-user with Fernet
-  encryption in oauth_tokens table (JSONB column). Strict separation: system config (.env/Railway)
+  encryption in oauth_tokens table (JSONB column). Strict separation: system config (.env/K8s secrets)
   vs user credentials (PostgreSQL) vs OAuth tokens (PostgreSQL) for multi-tenant security.
 ---
 

@@ -3,7 +3,7 @@ description: |
   Development rules: answer questions without coding, prefer editing over creating, no emojis.
   MrCall/StarChat integration requires realm parameter in all CRM paths and prefers POST search
   endpoints. Python style: type hints, Google-style docstrings, handler functions separated from
-  command registration. All user credentials stored in Supabase via BYOK model, never in .env.
+  command registration. All user credentials stored in PostgreSQL via BYOK model, never in .env.
 ---
 
 # Zylch Code Conventions
