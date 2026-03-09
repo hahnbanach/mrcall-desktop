@@ -56,6 +56,8 @@ build:
 # ============================================================
 # DEPLOY: Test (from dev branch)
 # ============================================================
+# Test uses in-cluster postgres (not Managed PostgreSQL).
+# Manifests are in the repo under k8s/test/.
 deploy-test:
   stage: deploy
   tags:
@@ -67,9 +69,15 @@ deploy-test:
     - export KUBECONFIG=/tmp/kubeconfig
     - NAMESPACE="starchat-test"
     - echo "Deploying $IMAGE_NAME:$TAG to $NAMESPACE"
+    # Apply postgres manifests (idempotent)
+    - kubectl apply -f k8s/test/configmap-postgres-init.yaml
+    - kubectl apply -f k8s/test/deployment-postgres.yaml
+    - kubectl apply -f k8s/test/service-postgres.yaml
+    # Deploy zylch with new image
     - kubectl set image deployment/zylch zylch="$IMAGE_NAME:$TAG" -n "$NAMESPACE"
+    - kubectl rollout status deployment/postgres -n "$NAMESPACE" --timeout=120s
     - kubectl rollout status deployment/zylch -n "$NAMESPACE" --timeout=300s
-    - kubectl get pods -n "$NAMESPACE" -l app=zylch
+    - kubectl get pods -n "$NAMESPACE"
   after_script:
     - rm -f /tmp/kubeconfig
   rules:
