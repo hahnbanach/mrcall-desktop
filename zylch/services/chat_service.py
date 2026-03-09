@@ -15,7 +15,10 @@ from litellm.exceptions import (
 from zylch.tools import ToolFactory, ToolConfig
 from zylch.assistant.core import ZylchAIAgent
 from zylch.config import settings
+from sqlalchemy import Text as SAText, cast as sa_cast
 from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage.database import get_session
+from zylch.storage.models import TaskItem
 
 logger = logging.getLogger(__name__)
 
@@ -784,27 +787,24 @@ What would you like to do?"""
             Task dict or None if not found
         """
         try:
-            # First try exact match
-            result = self.storage.client.table('task_items')\
-                .select('*')\
-                .eq('owner_id', owner_id)\
-                .eq('id', task_id_input)\
-                .limit(1)\
-                .execute()
+            with get_session() as session:
+                # First try exact match
+                task = session.query(TaskItem).filter(
+                    TaskItem.owner_id == owner_id,
+                    TaskItem.id == task_id_input
+                ).first()
 
-            if result.data:
-                return result.data[0]
+                if task:
+                    return task.to_dict()
 
-            # Try prefix match (ID starts with input)
-            result = self.storage.client.table('task_items')\
-                .select('*')\
-                .eq('owner_id', owner_id)\
-                .ilike('id', f'{task_id_input}%')\
-                .limit(1)\
-                .execute()
+                # Try prefix match (ID starts with input)
+                task = session.query(TaskItem).filter(
+                    TaskItem.owner_id == owner_id,
+                    sa_cast(TaskItem.id, SAText).ilike(f'{task_id_input}%')
+                ).first()
 
-            if result.data:
-                return result.data[0]
+                if task:
+                    return task.to_dict()
 
             return None
 

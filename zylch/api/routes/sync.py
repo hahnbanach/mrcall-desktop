@@ -14,40 +14,35 @@ from zylch.tools.gmail import GmailClient
 from zylch.tools.gcalendar import GoogleCalendarClient
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token, get_user_email_from_token
 from zylch.config import settings
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage.storage import Storage
 
 logger = logging.getLogger(__name__)
 
-# Shared Supabase storage instance (lazy-loaded)
-_supabase_storage: Optional[SupabaseStorage] = None
+# Shared storage instance (lazy-loaded)
+_storage: Optional[Storage] = None
 
 
-def get_supabase_storage() -> Optional[SupabaseStorage]:
-    """Get shared Supabase storage instance.
+def get_storage() -> Optional[Storage]:
+    """Get shared Storage instance.
 
     Returns:
-        SupabaseStorage if configured, None otherwise
+        Storage if DATABASE_URL configured, None otherwise
     """
-    global _supabase_storage
+    global _storage
 
-    # Check if Supabase is configured
-    if not settings.supabase_url or not settings.supabase_service_role_key:
-        logger.debug("Supabase not configured, using local storage")
+    if not settings.database_url:
+        logger.debug("DATABASE_URL not configured")
         return None
 
-    # Lazy initialize
-    if _supabase_storage is None:
+    if _storage is None:
         try:
-            _supabase_storage = SupabaseStorage(
-                url=settings.supabase_url,
-                key=settings.supabase_service_role_key
-            )
-            logger.info("Supabase storage initialized for sync routes")
+            _storage = Storage.get_instance()
+            logger.info("Storage initialized for sync routes")
         except Exception as e:
-            logger.error(f"Failed to initialize Supabase storage: {e}")
+            logger.error(f"Failed to initialize storage: {e}")
             return None
 
-    return _supabase_storage
+    return _storage
 
 router = APIRouter()
 
@@ -232,13 +227,13 @@ async def start_sync(
         calendar_client = _get_calendar_client_for_user(user)
 
         # Get Supabase storage for multi-tenant support
-        supabase = get_supabase_storage()
+        storage = get_storage()
 
         service = SyncService(
             email_client=email_client,
             calendar_client=calendar_client,
             owner_id=user_id,
-            supabase_storage=supabase
+            supabase_storage=storage
         )
 
         # Update progress
@@ -301,12 +296,12 @@ async def sync_emails(
         email_client = _get_email_client_for_user(user)
 
         # Get Supabase storage for multi-tenant support
-        supabase = get_supabase_storage()
+        storage = get_storage()
 
         service = SyncService(
             email_client=email_client,
             owner_id=user_id,
-            supabase_storage=supabase
+            supabase_storage=storage
         )
         results = await service.sync_emails(
             days_back=request.days_back,
@@ -342,12 +337,12 @@ async def sync_calendar(
         calendar_client = _get_calendar_client_for_user(user)
 
         # Get Supabase storage for multi-tenant support
-        supabase = get_supabase_storage()
+        storage = get_storage()
 
         service = SyncService(
             calendar_client=calendar_client,
             owner_id=user_id,
-            supabase_storage=supabase
+            supabase_storage=storage
         )
         results = service.sync_calendar()
         return {
@@ -384,13 +379,13 @@ async def full_sync(
         calendar_client = _get_calendar_client_for_user(user)
 
         # Get Supabase storage for multi-tenant support
-        supabase = get_supabase_storage()
+        storage = get_storage()
 
         service = SyncService(
             email_client=email_client,
             calendar_client=calendar_client,
             owner_id=user_id,
-            supabase_storage=supabase
+            supabase_storage=storage
         )
         results = await service.run_full_sync(days_back=request.days_back)
 

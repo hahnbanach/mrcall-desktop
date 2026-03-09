@@ -11,6 +11,8 @@ from pydantic import BaseModel
 
 from zylch.api.firebase_auth import get_current_user
 from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage.database import get_session
+from zylch.storage.models import IntegrationProvider
 from zylch.integrations.registry import (
     get_available_providers,
     get_user_connections,
@@ -169,17 +171,15 @@ async def get_provider_info(provider_key: str):
     ```
     """
     try:
-        supabase = SupabaseStorage()
+        with get_session() as session:
+            row = session.query(IntegrationProvider).filter(
+                IntegrationProvider.provider_key == provider_key
+            ).first()
 
-        result = supabase.client.table('integration_providers')\
-            .select('*')\
-            .eq('provider_key', provider_key)\
-            .execute()
-
-        if not result.data:
+        if not row:
             raise HTTPException(status_code=404, detail=f"Provider '{provider_key}' not found")
 
-        return result.data[0]
+        return row.to_dict()
 
     except HTTPException:
         raise
@@ -296,16 +296,16 @@ async def save_provider_credentials(
     try:
         supabase = SupabaseStorage()
 
-        # Verify provider exists
-        provider_result = supabase.client.table('integration_providers')\
-            .select('provider_key, display_name, is_available, config_fields')\
-            .eq('provider_key', provider_key)\
-            .execute()
+        # Verify provider exists via ORM
+        with get_session() as session:
+            provider_row = session.query(IntegrationProvider).filter(
+                IntegrationProvider.provider_key == provider_key
+            ).first()
 
-        if not provider_result.data:
+        if not provider_row:
             raise HTTPException(status_code=404, detail=f"Provider '{provider_key}' not found")
 
-        provider_info = provider_result.data[0]
+        provider_info = provider_row.to_dict()
 
         # Check if provider is available
         if not provider_info['is_available']:
@@ -439,13 +439,13 @@ async def delete_provider_credentials_endpoint(
     try:
         supabase = SupabaseStorage()
 
-        # Get provider info for display name
-        provider_result = supabase.client.table('integration_providers')\
-            .select('display_name')\
-            .eq('provider_key', provider_key)\
-            .execute()
+        # Get provider info for display name via ORM
+        with get_session() as session:
+            provider_row = session.query(IntegrationProvider.display_name).filter(
+                IntegrationProvider.provider_key == provider_key
+            ).first()
 
-        provider_name = provider_result.data[0]['display_name'] if provider_result.data else provider_key
+        provider_name = provider_row[0] if provider_row else provider_key
 
         # Delete credentials
         success = supabase.delete_provider_credentials(owner_id, provider_key)

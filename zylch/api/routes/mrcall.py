@@ -13,6 +13,8 @@ from pydantic import BaseModel
 
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token, get_user_email_from_token
 from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage.database import get_session
+from zylch.storage.models import BackgroundJob
 
 logger = logging.getLogger(__name__)
 
@@ -121,15 +123,16 @@ async def get_training_status(
 
     # Check for in-progress training job
     try:
-        existing_jobs = storage.client.table('background_jobs')\
-            .select('id, status, progress_pct, started_at')\
-            .eq('owner_id', owner_id)\
-            .eq('job_type', 'mrcall_train')\
-            .in_('status', ['pending', 'running'])\
-            .execute()
+        with get_session() as session:
+            job_rows = session.query(BackgroundJob).filter(
+                BackgroundJob.owner_id == owner_id,
+                BackgroundJob.job_type == 'mrcall_train',
+                BackgroundJob.status.in_(['pending', 'running']),
+            ).all()
+            existing_jobs_data = [j.to_dict() for j in job_rows]
 
-        if existing_jobs.data:
-            job = existing_jobs.data[0]
+        if existing_jobs_data:
+            job = existing_jobs_data[0]
             started_at = job.get('started_at')
 
             # Self-heal stuck jobs (> 10 minutes)
@@ -271,17 +274,18 @@ async def start_training(
 
     # Check for existing running job
     try:
-        existing_jobs = storage.client.table('background_jobs')\
-            .select('id, status')\
-            .eq('owner_id', owner_id)\
-            .eq('job_type', 'mrcall_train')\
-            .in_('status', ['pending', 'running'])\
-            .execute()
+        with get_session() as session:
+            job_rows = session.query(BackgroundJob).filter(
+                BackgroundJob.owner_id == owner_id,
+                BackgroundJob.job_type == 'mrcall_train',
+                BackgroundJob.status.in_(['pending', 'running']),
+            ).all()
+            existing_jobs_data = [j.to_dict() for j in job_rows]
 
-        if existing_jobs.data:
+        if existing_jobs_data:
             raise HTTPException(
                 status_code=409,
-                detail=f"Training already in progress (job {existing_jobs.data[0]['id']})"
+                detail=f"Training already in progress (job {existing_jobs_data[0]['id']})"
             )
     except HTTPException:
         raise

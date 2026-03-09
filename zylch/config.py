@@ -56,18 +56,10 @@ class Settings(BaseSettings):
         description="Firebase auth domain (e.g., project-id.firebaseapp.com)"
     )
 
-    # Supabase (multi-tenant database)
-    supabase_url: str = Field(
+    # PostgreSQL (direct connection via SQLAlchemy)
+    database_url: str = Field(
         default="",
-        description="Supabase project URL"
-    )
-    supabase_anon_key: str = Field(
-        default="",
-        description="Supabase anon/public key"
-    )
-    supabase_service_role_key: str = Field(
-        default="",
-        description="Supabase service role key (secret, for backend)"
+        description="PostgreSQL connection URL (e.g., postgresql://user:pass@host:5432/zylch)"
     )
 
     # Encryption (for sensitive data at rest)

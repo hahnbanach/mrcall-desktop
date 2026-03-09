@@ -21,6 +21,9 @@ dependencies = [
     "firebase-admin>=6.0.0",
     "apscheduler>=3.10.0",
     "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.9",
+    "alembic>=1.13.0",
+    "pgvector>=0.3.0",
 ]
 
 [project.optional-dependencies]

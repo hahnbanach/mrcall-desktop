@@ -1,7 +1,6 @@
 """Token storage utility for multi-tenant OAuth tokens.
 
-All credentials stored in Supabase oauth_tokens table.
-NO filesystem fallback - Supabase is required.
+All credentials stored in PostgreSQL oauth_tokens table via SQLAlchemy.
 """
 
 import base64
@@ -13,37 +12,37 @@ from zylch.config import settings
 
 # Avoid circular imports
 if TYPE_CHECKING:
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage.storage import Storage
 
 logger = logging.getLogger(__name__)
 
-# Shared Supabase storage instance
-_supabase_storage: Optional['SupabaseStorage'] = None
+# Shared storage instance
+_storage: Optional['Storage'] = None
 
 
-def _get_supabase() -> 'SupabaseStorage':
-    """Get Supabase storage instance.
+def _get_storage() -> 'Storage':
+    """Get Storage instance.
 
     Returns:
-        SupabaseStorage instance
+        Storage instance
 
     Raises:
-        ValueError: If Supabase is not configured
+        ValueError: If DATABASE_URL is not configured
     """
-    global _supabase_storage
+    global _storage
 
-    if not settings.supabase_url or not settings.supabase_service_role_key:
+    if not settings.database_url:
         raise ValueError(
-            "Supabase not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. "
-            "Filesystem fallback has been removed - Supabase is required."
+            "DATABASE_URL not configured. "
+            "Set DATABASE_URL=postgresql://user:pass@host:5432/zylch"
         )
 
-    if _supabase_storage is None:
-        from zylch.storage.supabase_client import SupabaseStorage
-        _supabase_storage = SupabaseStorage()
-        logger.info("Token storage using Supabase backend")
+    if _storage is None:
+        from zylch.storage.storage import Storage
+        _storage = Storage.get_instance()
+        logger.info("Token storage using PostgreSQL backend")
 
-    return _supabase_storage
+    return _storage
 
 
 def save_provider(owner_id: str, provider: str, email: str = "") -> None:
@@ -54,8 +53,8 @@ def save_provider(owner_id: str, provider: str, email: str = "") -> None:
         provider: 'google' or 'microsoft'
         email: User's email address (required for Supabase)
     """
-    supabase = _get_supabase()
-    supabase.store_oauth_token(owner_id, provider, email or "")
+    storage = _get_storage()
+    storage.store_oauth_token(owner_id, provider, email or "")
     logger.info(f"Saved provider '{provider}' for owner {owner_id}")
 
 
@@ -68,8 +67,8 @@ def get_provider(owner_id: str) -> Optional[str]:
     Returns:
         Provider string ('google' or 'microsoft') or None if not found
     """
-    supabase = _get_supabase()
-    return supabase.get_user_provider(owner_id)
+    storage = _get_storage()
+    return storage.get_user_provider(owner_id)
 
 
 def save_email(owner_id: str, email: str) -> None:
@@ -79,9 +78,9 @@ def save_email(owner_id: str, email: str) -> None:
         owner_id: Firebase UID
         email: User email address
     """
-    supabase = _get_supabase()
+    storage = _get_storage()
     provider = get_provider(owner_id) or "unknown"
-    supabase.store_oauth_token(owner_id, provider, email)
+    storage.store_oauth_token(owner_id, provider, email)
     logger.info(f"Saved email '{email}' for owner {owner_id}")
 
 
@@ -94,8 +93,8 @@ def get_email(owner_id: str) -> Optional[str]:
     Returns:
         Email string or None if not found
     """
-    supabase = _get_supabase()
-    return supabase.get_user_email_from_token(owner_id)
+    storage = _get_storage()
+    return storage.get_user_email_from_token(owner_id)
 
 
 def save_graph_token(owner_id: str, access_token: str, expires_at: Optional[str] = None, refresh_token: Optional[str] = None) -> None:
@@ -107,9 +106,9 @@ def save_graph_token(owner_id: str, access_token: str, expires_at: Optional[str]
         expires_at: ISO 8601 expiration timestamp (optional)
         refresh_token: Microsoft Graph refresh token (optional)
     """
-    supabase = _get_supabase()
+    storage = _get_storage()
     email = get_email(owner_id) or ""
-    supabase.store_oauth_token(
+    storage.store_oauth_token(
         owner_id=owner_id,
         provider="microsoft",
         email=email,
@@ -129,8 +128,8 @@ def get_graph_token(owner_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Dict with 'access_token', 'expires_at', 'refresh_token' or None if not found
     """
-    supabase = _get_supabase()
-    return supabase.get_graph_token(owner_id)
+    storage = _get_storage()
+    return storage.get_graph_token(owner_id)
 
 
 def delete_user_credentials(owner_id: str) -> None:
@@ -139,10 +138,10 @@ def delete_user_credentials(owner_id: str) -> None:
     Args:
         owner_id: Firebase UID
     """
-    supabase = _get_supabase()
+    storage = _get_storage()
     # Delete from Supabase for both providers
-    supabase.delete_oauth_token(owner_id, "google")
-    supabase.delete_oauth_token(owner_id, "microsoft")
+    storage.delete_oauth_token(owner_id, "google")
+    storage.delete_oauth_token(owner_id, "microsoft")
     logger.info(f"Deleted OAuth tokens for owner {owner_id}")
 
 
@@ -174,8 +173,8 @@ def get_user_token_info(owner_id: str) -> Dict[str, Any]:
             info["graph_token_expires_at"] = graph_token.get("expires_at")
 
     if provider == "google":
-        supabase = _get_supabase()
-        google_token = supabase.get_google_token(owner_id)
+        storage = _get_storage()
+        google_token = storage.get_google_token(owner_id)
         info["has_google_tokens"] = google_token is not None
 
     return info
@@ -191,7 +190,7 @@ def save_google_credentials(owner_id: str, credentials, email: str = "") -> None
     """
     logger.debug(f"save_google_credentials called for owner {owner_id}, email={email}")
 
-    supabase = _get_supabase()
+    storage = _get_storage()
 
     # Serialize credentials to JSON and base64 encode
     logger.debug("Serializing credentials to JSON...")
@@ -203,7 +202,7 @@ def save_google_credentials(owner_id: str, credentials, email: str = "") -> None
     logger.debug(f"Token data length: {len(token_data)}")
 
     logger.debug(f"Calling store_oauth_token for owner {owner_id}...")
-    supabase.store_oauth_token(
+    storage.store_oauth_token(
         owner_id=owner_id,
         provider="google",
         email=email or get_email(owner_id) or "",
@@ -223,9 +222,9 @@ def get_google_credentials(owner_id: str):
     """
     from google.oauth2.credentials import Credentials as GoogleCredentials
 
-    supabase = _get_supabase()
+    storage = _get_storage()
     logger.debug(f"Looking up Google credentials for owner {owner_id} in Supabase")
-    token_data = supabase.get_google_token(owner_id)
+    token_data = storage.get_google_token(owner_id)
     if token_data:
         logger.debug(f"Found Google token data for owner {owner_id} (length: {len(token_data)})")
         try:
@@ -251,8 +250,8 @@ def has_google_credentials(owner_id: str) -> bool:
     Returns:
         True if credentials exist
     """
-    supabase = _get_supabase()
-    token_data = supabase.get_google_token(owner_id)
+    storage = _get_storage()
+    token_data = storage.get_google_token(owner_id)
     return token_data is not None
 
 
@@ -271,8 +270,8 @@ def save_anthropic_key(owner_id: str, api_key: str) -> bool:
     Returns:
         True if saved successfully
     """
-    supabase = _get_supabase()
-    return supabase.save_anthropic_key(owner_id, api_key)
+    storage = _get_storage()
+    return storage.save_anthropic_key(owner_id, api_key)
 
 
 def get_anthropic_key(owner_id: str) -> Optional[str]:
@@ -284,8 +283,8 @@ def get_anthropic_key(owner_id: str) -> Optional[str]:
     Returns:
         Anthropic API key or None if not found
     """
-    supabase = _get_supabase()
-    return supabase.get_anthropic_key(owner_id)
+    storage = _get_storage()
+    return storage.get_anthropic_key(owner_id)
 
 
 def delete_anthropic_key(owner_id: str) -> bool:
@@ -297,8 +296,8 @@ def delete_anthropic_key(owner_id: str) -> bool:
     Returns:
         True if deleted
     """
-    supabase = _get_supabase()
-    supabase.delete_anthropic_key(owner_id)
+    storage = _get_storage()
+    storage.delete_anthropic_key(owner_id)
     logger.info(f"Deleted Anthropic API key for owner {owner_id}")
     return True
 
@@ -314,8 +313,8 @@ def save_llm_provider_key(owner_id: str, provider: str, api_key: str) -> bool:
     Returns:
         True if saved successfully
     """
-    supabase = _get_supabase()
-    return supabase.save_provider_credentials(
+    storage = _get_storage()
+    return storage.save_provider_credentials(
         owner_id=owner_id,
         provider_key=provider,
         credentials_dict={"api_key": api_key}
@@ -332,8 +331,8 @@ def get_llm_provider_key(owner_id: str, provider: str) -> Optional[str]:
     Returns:
         API key or None if not found
     """
-    supabase = _get_supabase()
-    credentials = supabase.get_provider_credentials(owner_id, provider)
+    storage = _get_storage()
+    credentials = storage.get_provider_credentials(owner_id, provider)
     if credentials:
         return credentials.get("api_key")
     return None
@@ -383,8 +382,8 @@ def delete_llm_provider_key(owner_id: str, provider: str) -> bool:
     Returns:
         True if deleted
     """
-    supabase = _get_supabase()
-    success = supabase.delete_provider_credentials(owner_id, provider)
+    storage = _get_storage()
+    success = storage.delete_provider_credentials(owner_id, provider)
     logger.info(f"Deleted {provider} API key for owner {owner_id}")
     return success
 
@@ -424,7 +423,7 @@ def save_mrcall_credentials(
 
     logger.debug(f"[save_mrcall_credentials] owner_id={owner_id}, email={email}, business_id={business_id}, target_owner={target_owner}")
 
-    supabase = _get_supabase()
+    storage = _get_storage()
 
     # Calculate expiration timestamp
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
@@ -448,7 +447,7 @@ def save_mrcall_credentials(
     }
 
     # Save to Supabase using provider credentials system
-    return supabase.save_provider_credentials(
+    return storage.save_provider_credentials(
         owner_id=owner_id,
         provider_key="mrcall",
         credentials_dict=credentials,
@@ -466,9 +465,9 @@ def get_mrcall_credentials(owner_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Dict with credentials or None if not found
     """
-    supabase = _get_supabase()
+    storage = _get_storage()
 
-    credentials = supabase.get_provider_credentials(
+    credentials = storage.get_provider_credentials(
         owner_id=owner_id,
         provider_key="mrcall",
         include_metadata=True
@@ -486,8 +485,8 @@ def delete_mrcall_credentials(owner_id: str) -> bool:
     Returns:
         True if deleted
     """
-    supabase = _get_supabase()
-    success = supabase.delete_provider_credentials(owner_id, "mrcall")
+    storage = _get_storage()
+    success = storage.delete_provider_credentials(owner_id, "mrcall")
     logger.info(f"Deleted MrCall credentials for owner {owner_id}")
     return success
 
@@ -504,7 +503,7 @@ async def refresh_mrcall_token(owner_id: str) -> Optional[Dict[str, Any]]:
     import httpx
     from datetime import datetime, timedelta, timezone
 
-    supabase = _get_supabase()
+    storage = _get_storage()
     credentials = get_mrcall_credentials(owner_id)
 
     if not credentials or not credentials.get("refresh_token"):
@@ -586,8 +585,8 @@ def save_pipedrive_key(owner_id: str, api_token: str) -> bool:
     Returns:
         True if saved successfully
     """
-    supabase = _get_supabase()
-    return supabase.save_pipedrive_key(owner_id, api_token)
+    storage = _get_storage()
+    return storage.save_pipedrive_key(owner_id, api_token)
 
 
 def get_pipedrive_key(owner_id: str) -> Optional[str]:
@@ -599,8 +598,8 @@ def get_pipedrive_key(owner_id: str) -> Optional[str]:
     Returns:
         Pipedrive API token or None if not found
     """
-    supabase = _get_supabase()
-    return supabase.get_pipedrive_key(owner_id)
+    storage = _get_storage()
+    return storage.get_pipedrive_key(owner_id)
 
 
 def delete_pipedrive_key(owner_id: str) -> bool:
@@ -612,8 +611,8 @@ def delete_pipedrive_key(owner_id: str) -> bool:
     Returns:
         True if deleted
     """
-    supabase = _get_supabase()
-    supabase.delete_pipedrive_key(owner_id)
+    storage = _get_storage()
+    storage.delete_pipedrive_key(owner_id)
     logger.info(f"Deleted Pipedrive API token for owner {owner_id}")
     return True
 
@@ -634,8 +633,8 @@ def save_vonage_keys(owner_id: str, api_key: str, api_secret: str, from_number: 
     Returns:
         True if saved successfully
     """
-    supabase = _get_supabase()
-    return supabase.save_provider_credentials(
+    storage = _get_storage()
+    return storage.save_provider_credentials(
         owner_id=owner_id,
         provider_key='vonage',
         credentials={
@@ -655,8 +654,8 @@ def get_vonage_keys(owner_id: str) -> Optional[Dict[str, str]]:
     Returns:
         Dict with api_key, api_secret, from_number or None if not found
     """
-    supabase = _get_supabase()
-    return supabase.get_vonage_keys(owner_id)
+    storage = _get_storage()
+    return storage.get_vonage_keys(owner_id)
 
 
 def delete_vonage_keys(owner_id: str) -> bool:
@@ -668,8 +667,8 @@ def delete_vonage_keys(owner_id: str) -> bool:
     Returns:
         True if deleted
     """
-    supabase = _get_supabase()
-    result = supabase.delete_provider_credentials(owner_id, 'vonage')
+    storage = _get_storage()
+    result = storage.delete_provider_credentials(owner_id, 'vonage')
     logger.info(f"Deleted Vonage API credentials for owner {owner_id}")
     return result
 
@@ -689,11 +688,11 @@ def save_sendgrid_key(owner_id: str, api_key: str, from_email: str = "") -> bool
     Returns:
         True if saved successfully
     """
-    supabase = _get_supabase()
+    storage = _get_storage()
     credentials = {'api_key': api_key}
     if from_email:
         credentials['from_email'] = from_email
-    return supabase.save_provider_credentials(
+    return storage.save_provider_credentials(
         owner_id=owner_id,
         provider_key='sendgrid',
         credentials=credentials
@@ -709,8 +708,8 @@ def get_sendgrid_key(owner_id: str) -> Optional[str]:
     Returns:
         API key string or None if not found
     """
-    supabase = _get_supabase()
-    creds = supabase.get_provider_credentials(owner_id, 'sendgrid')
+    storage = _get_storage()
+    creds = storage.get_provider_credentials(owner_id, 'sendgrid')
     return creds.get('api_key') if creds else None
 
 
@@ -723,7 +722,7 @@ def delete_sendgrid_key(owner_id: str) -> bool:
     Returns:
         True if deleted
     """
-    supabase = _get_supabase()
-    result = supabase.delete_provider_credentials(owner_id, 'sendgrid')
+    storage = _get_storage()
+    result = storage.delete_provider_credentials(owner_id, 'sendgrid')
     logger.info(f"Deleted SendGrid API credentials for owner {owner_id}")
     return result

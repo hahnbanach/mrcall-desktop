@@ -6,12 +6,16 @@ Handles:
 - Revocation
 - Pending share requests
 
-All storage uses Supabase (NO local filesystem per ARCHITECTURE.md).
+All storage uses SQLAlchemy ORM with direct PostgreSQL access.
 """
 
+import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+
+from zylch.storage.database import get_session
+from zylch.storage.models import OAuthToken, SharingAuth
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +23,7 @@ logger = logging.getLogger(__name__)
 class SharingAuthorizationManager:
     """Manages authorization for sharing intelligence between Zylch users.
 
-    Uses Supabase `sharing_auth` table via SupabaseStorage.
+    Uses SQLAlchemy ORM against the `sharing_auth` and `oauth_tokens` tables.
 
     Authorization flow:
     1. Mario registers Luigi as recipient with /share luigi@email.com
@@ -31,15 +35,16 @@ class SharingAuthorizationManager:
     """
 
     def __init__(self, db_path=None):
-        """Initialize authorization manager using Supabase.
+        """Initialize authorization manager using SQLAlchemy.
 
         Args:
             db_path: IGNORED - kept for backwards compatibility only.
-                     All storage uses Supabase.
+                     All storage uses SQLAlchemy + PostgreSQL.
         """
+        # Keep storage reference for non-client methods that may still be needed
         from ..storage.supabase_client import SupabaseStorage
         self._storage = SupabaseStorage.get_instance()
-        logger.info("Sharing authorization manager initialized with Supabase backend")
+        logger.info("Sharing authorization manager initialized with SQLAlchemy backend")
 
     # ==================== User Management ====================
 
@@ -72,20 +77,18 @@ class SharingAuthorizationManager:
             User dict with owner_id, email or None
         """
         try:
-            # Check oauth_tokens for registered users
-            result = self._storage.client.table('oauth_tokens')\
-                .select('owner_id, email')\
-                .eq('email', email.lower())\
-                .limit(1)\
-                .execute()
+            with get_session() as session:
+                row = session.query(OAuthToken)\
+                    .filter(OAuthToken.email == email.lower())\
+                    .first()
 
-            if result.data:
-                return {
-                    "owner_id": result.data[0].get('owner_id'),
-                    "email": result.data[0].get('email'),
-                    "display_name": None  # Not stored separately
-                }
-            return None
+                if row:
+                    return {
+                        "owner_id": row.owner_id,
+                        "email": row.email,
+                        "display_name": None  # Not stored separately
+                    }
+                return None
         except Exception as e:
             logger.warning(f"Failed to look up user by email: {e}")
             return None
@@ -100,19 +103,18 @@ class SharingAuthorizationManager:
             User dict or None
         """
         try:
-            result = self._storage.client.table('oauth_tokens')\
-                .select('owner_id, email')\
-                .eq('owner_id', owner_id)\
-                .limit(1)\
-                .execute()
+            with get_session() as session:
+                row = session.query(OAuthToken)\
+                    .filter(OAuthToken.owner_id == owner_id)\
+                    .first()
 
-            if result.data:
-                return {
-                    "owner_id": result.data[0].get('owner_id'),
-                    "email": result.data[0].get('email'),
-                    "display_name": None
-                }
-            return None
+                if row:
+                    return {
+                        "owner_id": row.owner_id,
+                        "email": row.email,
+                        "display_name": None
+                    }
+                return None
         except Exception as e:
             logger.warning(f"Failed to look up user by owner_id: {e}")
             return None
@@ -121,8 +123,6 @@ class SharingAuthorizationManager:
 
     def register_recipient(self, sender_email: str, recipient_email: str) -> Tuple[bool, str]:
         """Register a recipient for future sharing (called by /share command).
-
-        Uses SupabaseStorage.register_share_recipient().
 
         Args:
             sender_email: Email of the user who wants to share
@@ -137,37 +137,35 @@ class SharingAuthorizationManager:
             return False, f"{recipient_email} non è un utente Zylch registrato."
 
         try:
-            # Check existing status via sharing_auth table
-            result = self._storage.client.table('sharing_auth')\
-                .select('status')\
-                .eq('sender_email', sender_email.lower())\
-                .eq('recipient_email', recipient_email.lower())\
-                .limit(1)\
-                .execute()
+            with get_session() as session:
+                # Check existing status via sharing_auth table
+                row = session.query(SharingAuth)\
+                    .filter(
+                        SharingAuth.sender_email == sender_email.lower(),
+                        SharingAuth.recipient_email == recipient_email.lower(),
+                    )\
+                    .first()
 
-            if result.data:
-                status = result.data[0].get('status')
+                if row:
+                    status = row.status
+                    display = recipient.get('display_name') or recipient_email
+
+                    if status == "authorized":
+                        return True, f"Puoi già condividere con {display}."
+                    elif status == "pending":
+                        return True, f"Richiesta già inviata a {display} (in attesa di accettazione)."
+                    elif status in ["rejected", "revoked"]:
+                        # Re-activate as pending
+                        row.status = 'pending'
+
+                else:
+                    # Create new authorization using SupabaseStorage
+                    sender = self.get_user_by_email(sender_email)
+                    sender_id = sender.get('owner_id') if sender else 'unknown'
+                    self._storage.register_share_recipient(sender_id, sender_email.lower(), recipient_email.lower())
+
                 display = recipient.get('display_name') or recipient_email
-
-                if status == "authorized":
-                    return True, f"Puoi già condividere con {display}."
-                elif status == "pending":
-                    return True, f"Richiesta già inviata a {display} (in attesa di accettazione)."
-                elif status in ["rejected", "revoked"]:
-                    # Re-activate as pending
-                    self._storage.client.table('sharing_auth').update({
-                        'status': 'pending'
-                    }).eq('sender_email', sender_email.lower())\
-                      .eq('recipient_email', recipient_email.lower()).execute()
-
-            else:
-                # Create new authorization using SupabaseStorage
-                sender = self.get_user_by_email(sender_email)
-                sender_id = sender.get('owner_id') if sender else 'unknown'
-                self._storage.register_share_recipient(sender_id, sender_email.lower(), recipient_email.lower())
-
-            display = recipient.get('display_name') or recipient_email
-            return True, f"Registrato {display} come destinatario. Quando condividerai info, {display} dovrà accettare."
+                return True, f"Registrato {display} come destinatario. Quando condividerai info, {display} dovrà accettare."
 
         except Exception as e:
             logger.error(f"Failed to register recipient: {e}")
@@ -203,11 +201,14 @@ class SharingAuthorizationManager:
             (success, message) tuple
         """
         try:
-            self._storage.client.table('sharing_auth').update({
-                'status': 'rejected'
-            }).eq('sender_email', sender_email.lower())\
-              .eq('recipient_email', recipient_email.lower())\
-              .eq('status', 'pending').execute()
+            with get_session() as session:
+                session.query(SharingAuth)\
+                    .filter(
+                        SharingAuth.sender_email == sender_email.lower(),
+                        SharingAuth.recipient_email == recipient_email.lower(),
+                        SharingAuth.status == 'pending',
+                    )\
+                    .update({'status': 'rejected'})
 
             return True, f"Rifiutato. {sender_email} non potrà condividere informazioni con te."
         except Exception as e:
@@ -230,11 +231,14 @@ class SharingAuthorizationManager:
             if sender:
                 self._storage.revoke_sharing(sender.get('owner_id'), recipient_email.lower())
             else:
-                # Fallback: update directly
-                self._storage.client.table('sharing_auth').update({
-                    'status': 'revoked'
-                }).eq('sender_email', sender_email.lower())\
-                  .eq('recipient_email', recipient_email.lower()).execute()
+                # Fallback: update directly via SQLAlchemy
+                with get_session() as session:
+                    session.query(SharingAuth)\
+                        .filter(
+                            SharingAuth.sender_email == sender_email.lower(),
+                            SharingAuth.recipient_email == recipient_email.lower(),
+                        )\
+                        .update({'status': 'revoked'})
 
             return True, f"Revocato. {sender_email} non può più condividere informazioni con te."
         except Exception as e:
@@ -252,15 +256,16 @@ class SharingAuthorizationManager:
             True if authorization is accepted/authorized
         """
         try:
-            result = self._storage.client.table('sharing_auth')\
-                .select('status')\
-                .eq('sender_email', sender_email.lower())\
-                .eq('recipient_email', recipient_email.lower())\
-                .eq('status', 'authorized')\
-                .limit(1)\
-                .execute()
+            with get_session() as session:
+                row = session.query(SharingAuth)\
+                    .filter(
+                        SharingAuth.sender_email == sender_email.lower(),
+                        SharingAuth.recipient_email == recipient_email.lower(),
+                        SharingAuth.status == 'authorized',
+                    )\
+                    .first()
 
-            return len(result.data) > 0 if result.data else False
+                return row is not None
         except Exception as e:
             logger.warning(f"Failed to check authorization: {e}")
             return False
@@ -276,14 +281,15 @@ class SharingAuthorizationManager:
             Status string or None if no authorization exists
         """
         try:
-            result = self._storage.client.table('sharing_auth')\
-                .select('status')\
-                .eq('sender_email', sender_email.lower())\
-                .eq('recipient_email', recipient_email.lower())\
-                .limit(1)\
-                .execute()
+            with get_session() as session:
+                row = session.query(SharingAuth)\
+                    .filter(
+                        SharingAuth.sender_email == sender_email.lower(),
+                        SharingAuth.recipient_email == recipient_email.lower(),
+                    )\
+                    .first()
 
-            return result.data[0].get('status') if result.data else None
+                return row.status if row else None
         except Exception as e:
             logger.warning(f"Failed to get authorization status: {e}")
             return None
@@ -298,21 +304,24 @@ class SharingAuthorizationManager:
             List of sender info dicts
         """
         try:
-            result = self._storage.client.table('sharing_auth')\
-                .select('sender_email, sender_id, authorized_at, created_at')\
-                .eq('recipient_email', recipient_email.lower())\
-                .eq('status', 'authorized')\
-                .order('authorized_at', desc=True)\
-                .execute()
+            with get_session() as session:
+                rows = session.query(SharingAuth)\
+                    .filter(
+                        SharingAuth.recipient_email == recipient_email.lower(),
+                        SharingAuth.status == 'authorized',
+                    )\
+                    .order_by(SharingAuth.authorized_at.desc())\
+                    .all()
 
-            return [
-                {
-                    "sender_email": row.get('sender_email'),
-                    "accepted_at": row.get('authorized_at') or row.get('created_at'),
-                    "owner_id": row.get('sender_id')
-                }
-                for row in (result.data or [])
-            ]
+                return [
+                    {
+                        "sender_email": row.sender_email,
+                        "accepted_at": (row.authorized_at or row.created_at).isoformat()
+                            if (row.authorized_at or row.created_at) else None,
+                        "owner_id": row.sender_id
+                    }
+                    for row in rows
+                ]
         except Exception as e:
             logger.warning(f"Failed to list authorized senders: {e}")
             return []
@@ -327,20 +336,23 @@ class SharingAuthorizationManager:
             List of recipient info dicts
         """
         try:
-            result = self._storage.client.table('sharing_auth')\
-                .select('recipient_email, authorized_at, created_at')\
-                .eq('sender_email', sender_email.lower())\
-                .eq('status', 'authorized')\
-                .order('authorized_at', desc=True)\
-                .execute()
+            with get_session() as session:
+                rows = session.query(SharingAuth)\
+                    .filter(
+                        SharingAuth.sender_email == sender_email.lower(),
+                        SharingAuth.status == 'authorized',
+                    )\
+                    .order_by(SharingAuth.authorized_at.desc())\
+                    .all()
 
-            return [
-                {
-                    "recipient_email": row.get('recipient_email'),
-                    "accepted_at": row.get('authorized_at') or row.get('created_at')
-                }
-                for row in (result.data or [])
-            ]
+                return [
+                    {
+                        "recipient_email": row.recipient_email,
+                        "accepted_at": (row.authorized_at or row.created_at).isoformat()
+                            if (row.authorized_at or row.created_at) else None,
+                    }
+                    for row in rows
+                ]
         except Exception as e:
             logger.warning(f"Failed to list authorized recipients: {e}")
             return []
@@ -355,20 +367,22 @@ class SharingAuthorizationManager:
             List of pending registration dicts
         """
         try:
-            result = self._storage.client.table('sharing_auth')\
-                .select('recipient_email, created_at')\
-                .eq('sender_email', sender_email.lower())\
-                .eq('status', 'pending')\
-                .order('created_at', desc=True)\
-                .execute()
+            with get_session() as session:
+                rows = session.query(SharingAuth)\
+                    .filter(
+                        SharingAuth.sender_email == sender_email.lower(),
+                        SharingAuth.status == 'pending',
+                    )\
+                    .order_by(SharingAuth.created_at.desc())\
+                    .all()
 
-            return [
-                {
-                    "recipient_email": row.get('recipient_email'),
-                    "created_at": row.get('created_at')
-                }
-                for row in (result.data or [])
-            ]
+                return [
+                    {
+                        "recipient_email": row.recipient_email,
+                        "created_at": row.created_at.isoformat() if row.created_at else None,
+                    }
+                    for row in rows
+                ]
         except Exception as e:
             logger.warning(f"Failed to list pending registrations: {e}")
             return []
@@ -376,7 +390,7 @@ class SharingAuthorizationManager:
     # ==================== Pending Shares ====================
     #
     # Note: Pending shares are stored as JSON array in sharing_auth.pending_intel column.
-    # This keeps all sharing data in a single Supabase table for simplicity.
+    # This keeps all sharing data in a single table for simplicity.
 
     def add_pending_share(
         self,
@@ -399,60 +413,55 @@ class SharingAuthorizationManager:
             (success, message) tuple
         """
         try:
-            from datetime import timezone
-            import json
+            with get_session() as session:
+                # Get existing authorization
+                row = session.query(SharingAuth)\
+                    .filter(
+                        SharingAuth.sender_email == sender_email.lower(),
+                        SharingAuth.recipient_email == recipient_email.lower(),
+                    )\
+                    .first()
 
-            # Get existing authorization
-            result = self._storage.client.table('sharing_auth')\
-                .select('id, status, pending_intel')\
-                .eq('sender_email', sender_email.lower())\
-                .eq('recipient_email', recipient_email.lower())\
-                .limit(1)\
-                .execute()
+                if row:
+                    status = row.status
 
-            if result.data:
-                auth_record = result.data[0]
-                status = auth_record.get('status')
+                    if status == "rejected":
+                        return False, "Il destinatario ha rifiutato la tua richiesta di condivisione."
+                    elif status == "revoked":
+                        return False, "Il destinatario ha revocato la tua autorizzazione."
 
-                if status == "rejected":
-                    return False, "Il destinatario ha rifiutato la tua richiesta di condivisione."
-                elif status == "revoked":
-                    return False, "Il destinatario ha revocato la tua autorizzazione."
+                    # Append to existing pending_intel
+                    pending_intel = row.pending_intel or []
+                    if isinstance(pending_intel, str):
+                        pending_intel = json.loads(pending_intel) if pending_intel else []
 
-                # Append to existing pending_intel
-                pending_intel = auth_record.get('pending_intel') or []
-                if isinstance(pending_intel, str):
-                    pending_intel = json.loads(pending_intel) if pending_intel else []
+                    pending_intel.append({
+                        'intel_context': intel_context,
+                        'identifiers': identifiers,
+                        'created_at': datetime.now(timezone.utc).isoformat()
+                    })
 
-                pending_intel.append({
-                    'intel_context': intel_context,
-                    'identifiers': identifiers,
-                    'created_at': datetime.now(timezone.utc).isoformat()
-                })
+                    row.pending_intel = pending_intel
 
-                self._storage.client.table('sharing_auth').update({
-                    'pending_intel': json.dumps(pending_intel)
-                }).eq('id', auth_record['id']).execute()
+                else:
+                    # Create new pending authorization with intel
+                    sender = self.get_user_by_email(sender_email)
+                    sender_id = sender.get('owner_id') if sender else 'unknown'
 
-            else:
-                # Create new pending authorization with intel
-                sender = self.get_user_by_email(sender_email)
-                sender_id = sender.get('owner_id') if sender else 'unknown'
+                    pending_intel = [{
+                        'intel_context': intel_context,
+                        'identifiers': identifiers,
+                        'created_at': datetime.now(timezone.utc).isoformat()
+                    }]
 
-                pending_intel = [{
-                    'intel_context': intel_context,
-                    'identifiers': identifiers,
-                    'created_at': datetime.now(timezone.utc).isoformat()
-                }]
-
-                self._storage.client.table('sharing_auth').insert({
-                    'sender_id': sender_id,
-                    'sender_email': sender_email.lower(),
-                    'recipient_email': recipient_email.lower(),
-                    'status': 'pending',
-                    'pending_intel': json.dumps(pending_intel),
-                    'created_at': datetime.now(timezone.utc).isoformat()
-                }).execute()
+                    new_auth = SharingAuth(
+                        sender_id=sender_id,
+                        sender_email=sender_email.lower(),
+                        recipient_email=recipient_email.lower(),
+                        status='pending',
+                        pending_intel=pending_intel,
+                    )
+                    session.add(new_auth)
 
             return True, "Info aggiunta alla coda. Sarà visibile quando il destinatario accetterà."
 
@@ -469,35 +478,37 @@ class SharingAuthorizationManager:
         Returns:
             List of pending share dicts with sender info and intel
         """
-        import json
-
         try:
-            result = self._storage.client.table('sharing_auth')\
-                .select('id, sender_id, sender_email, pending_intel, created_at')\
-                .eq('recipient_email', recipient_email.lower())\
-                .eq('status', 'pending')\
-                .order('created_at', desc=False)\
-                .execute()
+            with get_session() as session:
+                rows = session.query(SharingAuth)\
+                    .filter(
+                        SharingAuth.recipient_email == recipient_email.lower(),
+                        SharingAuth.status == 'pending',
+                    )\
+                    .order_by(SharingAuth.created_at.asc())\
+                    .all()
 
-            results = []
-            for row in (result.data or []):
-                pending_intel = row.get('pending_intel') or []
-                if isinstance(pending_intel, str):
-                    pending_intel = json.loads(pending_intel) if pending_intel else []
+                results = []
+                for row in rows:
+                    pending_intel = row.pending_intel or []
+                    if isinstance(pending_intel, str):
+                        pending_intel = json.loads(pending_intel) if pending_intel else []
 
-                # Return one entry per pending intel item
-                for i, intel in enumerate(pending_intel):
-                    results.append({
-                        "id": f"{row['id']}_{i}",  # Composite ID
-                        "intel_context": intel.get('intel_context', ''),
-                        "identifiers": intel.get('identifiers', {}),
-                        "created_at": intel.get('created_at', row.get('created_at')),
-                        "sender_email": row.get('sender_email'),
-                        "sender_display_name": None,  # Could be fetched if needed
-                        "sender_owner_id": row.get('sender_id')
-                    })
+                    row_id = str(row.id)
+                    # Return one entry per pending intel item
+                    for i, intel in enumerate(pending_intel):
+                        results.append({
+                            "id": f"{row_id}_{i}",  # Composite ID
+                            "intel_context": intel.get('intel_context', ''),
+                            "identifiers": intel.get('identifiers', {}),
+                            "created_at": intel.get('created_at',
+                                row.created_at.isoformat() if row.created_at else None),
+                            "sender_email": row.sender_email,
+                            "sender_display_name": None,  # Could be fetched if needed
+                            "sender_owner_id": row.sender_id
+                        })
 
-            return results
+                return results
 
         except Exception as e:
             logger.warning(f"Failed to get pending requests: {e}")
@@ -507,36 +518,33 @@ class SharingAuthorizationManager:
         """Get all pending shares for a specific authorization.
 
         Args:
-            auth_id: Authorization ID (Supabase UUID)
+            auth_id: Authorization ID (UUID)
 
         Returns:
             List of pending share dicts
         """
-        import json
-
         try:
-            result = self._storage.client.table('sharing_auth')\
-                .select('pending_intel')\
-                .eq('id', auth_id)\
-                .limit(1)\
-                .execute()
+            with get_session() as session:
+                row = session.query(SharingAuth)\
+                    .filter(SharingAuth.id == auth_id)\
+                    .first()
 
-            if not result.data:
-                return []
+                if not row:
+                    return []
 
-            pending_intel = result.data[0].get('pending_intel') or []
-            if isinstance(pending_intel, str):
-                pending_intel = json.loads(pending_intel) if pending_intel else []
+                pending_intel = row.pending_intel or []
+                if isinstance(pending_intel, str):
+                    pending_intel = json.loads(pending_intel) if pending_intel else []
 
-            return [
-                {
-                    "id": i,
-                    "intel_context": intel.get('intel_context', ''),
-                    "identifiers": intel.get('identifiers', {}),
-                    "created_at": intel.get('created_at')
-                }
-                for i, intel in enumerate(pending_intel)
-            ]
+                return [
+                    {
+                        "id": i,
+                        "intel_context": intel.get('intel_context', ''),
+                        "identifiers": intel.get('identifiers', {}),
+                        "created_at": intel.get('created_at')
+                    }
+                    for i, intel in enumerate(pending_intel)
+                ]
 
         except Exception as e:
             logger.warning(f"Failed to get pending shares for auth {auth_id}: {e}")
@@ -548,36 +556,30 @@ class SharingAuthorizationManager:
         Clears the pending_intel JSON array.
 
         Args:
-            auth_id: Authorization ID (Supabase UUID)
+            auth_id: Authorization ID (UUID)
 
         Returns:
             Number of shares deleted
         """
-        import json
-
         try:
-            # Get current count first
-            result = self._storage.client.table('sharing_auth')\
-                .select('pending_intel')\
-                .eq('id', auth_id)\
-                .limit(1)\
-                .execute()
+            with get_session() as session:
+                row = session.query(SharingAuth)\
+                    .filter(SharingAuth.id == auth_id)\
+                    .first()
 
-            if not result.data:
-                return 0
+                if not row:
+                    return 0
 
-            pending_intel = result.data[0].get('pending_intel') or []
-            if isinstance(pending_intel, str):
-                pending_intel = json.loads(pending_intel) if pending_intel else []
+                pending_intel = row.pending_intel or []
+                if isinstance(pending_intel, str):
+                    pending_intel = json.loads(pending_intel) if pending_intel else []
 
-            count = len(pending_intel)
+                count = len(pending_intel)
 
-            # Clear pending_intel
-            self._storage.client.table('sharing_auth').update({
-                'pending_intel': json.dumps([])
-            }).eq('id', auth_id).execute()
+                # Clear pending_intel
+                row.pending_intel = []
 
-            return count
+                return count
 
         except Exception as e:
             logger.warning(f"Failed to delete pending shares for auth {auth_id}: {e}")
@@ -591,17 +593,18 @@ class SharingAuthorizationManager:
             recipient_email: Email of recipient
 
         Returns:
-            Authorization ID (Supabase UUID) or None
+            Authorization ID (UUID string) or None
         """
         try:
-            result = self._storage.client.table('sharing_auth')\
-                .select('id')\
-                .eq('sender_email', sender_email.lower())\
-                .eq('recipient_email', recipient_email.lower())\
-                .limit(1)\
-                .execute()
+            with get_session() as session:
+                row = session.query(SharingAuth)\
+                    .filter(
+                        SharingAuth.sender_email == sender_email.lower(),
+                        SharingAuth.recipient_email == recipient_email.lower(),
+                    )\
+                    .first()
 
-            return result.data[0]['id'] if result.data else None
+                return str(row.id) if row else None
 
         except Exception as e:
             logger.warning(f"Failed to get authorization ID: {e}")

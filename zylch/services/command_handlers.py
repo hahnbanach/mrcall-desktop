@@ -245,35 +245,37 @@ async def handle_sync(args: List[str], config, owner_id: str) -> str:
         logger.info(f"[/sync] Status check for owner_id={owner_id}")
         try:
             from datetime import datetime
-            supabase = SupabaseStorage()
+            from sqlalchemy import func as sa_func
+            from zylch.storage.database import get_session
+            from zylch.storage.models import Email, CalendarEvent
 
             # Count emails
-            email_count_result = supabase.client.table('emails').select('id', count='exact').eq('owner_id', owner_id).execute()
-            email_count = email_count_result.count if hasattr(email_count_result, 'count') else 0
+            with get_session() as session:
+                email_count = session.query(sa_func.count(Email.id)).filter(Email.owner_id == owner_id).scalar() or 0
 
-            # Get newest and oldest email dates
-            newest_email = supabase.client.table('emails').select('date').eq('owner_id', owner_id).order('date', desc=True).limit(1).execute()
-            oldest_email = supabase.client.table('emails').select('date').eq('owner_id', owner_id).order('date', desc=False).limit(1).execute()
+                # Get newest and oldest email dates
+                newest_row = session.query(Email.date).filter(Email.owner_id == owner_id).order_by(Email.date.desc()).limit(1).one_or_none()
+                oldest_row = session.query(Email.date).filter(Email.owner_id == owner_id).order_by(Email.date.asc()).limit(1).one_or_none()
 
             if not email_count or email_count == 0:
                 newest_display = "Never synced"
                 oldest_display = "-"
             else:
-                if newest_email.data:
-                    dt = datetime.fromisoformat(newest_email.data[0]['date'].replace('Z', '+00:00'))
+                if newest_row:
+                    dt = newest_row[0] if newest_row[0].tzinfo else newest_row[0].replace(tzinfo=timezone.utc)
                     newest_display = dt.strftime('%Y-%m-%d %H:%M UTC')
                 else:
                     newest_display = "Unknown"
 
-                if oldest_email.data:
-                    dt = datetime.fromisoformat(oldest_email.data[0]['date'].replace('Z', '+00:00'))
+                if oldest_row:
+                    dt = oldest_row[0] if oldest_row[0].tzinfo else oldest_row[0].replace(tzinfo=timezone.utc)
                     oldest_display = dt.strftime('%Y-%m-%d')
                 else:
                     oldest_display = "Unknown"
 
             # Count calendar events
-            event_count_result = supabase.client.table('calendar_events').select('id', count='exact').eq('owner_id', owner_id).execute()
-            event_count = event_count_result.count if hasattr(event_count_result, 'count') else 0
+            with get_session() as session:
+                event_count = session.query(sa_func.count(CalendarEvent.id)).filter(CalendarEvent.owner_id == owner_id).scalar() or 0
 
             return f"""📊 **Sync Status**
 
@@ -291,14 +293,17 @@ Run `/sync` or `/sync --days N` to sync more data."""
     if subcommand == 'reset':
         logger.info(f"[/sync] Reset flag detected, clearing all sync data for owner_id={owner_id}")
         try:
-            supabase = SupabaseStorage()
+            from zylch.storage.database import get_session
+            from zylch.storage.models import Email, CalendarEvent
 
             # Clear emails
-            supabase.client.table('emails').delete().eq('owner_id', owner_id).execute()
+            with get_session() as session:
+                session.query(Email).filter(Email.owner_id == owner_id).delete()
             logger.info(f"[/sync] Cleared emails")
 
             # Clear calendar events
-            supabase.client.table('calendar_events').delete().eq('owner_id', owner_id).execute()
+            with get_session() as session:
+                session.query(CalendarEvent).filter(CalendarEvent.owner_id == owner_id).delete()
             logger.info(f"[/sync] Cleared calendar_events")
 
             return """✅ **Sync reset!**
@@ -520,16 +525,16 @@ Use `/agent process` to extract facts from synced data:
         return help_text
 
     from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage.database import get_session
     from zylch.memory import BlobStorage, HybridSearchEngine, EmbeddingEngine, MemoryConfig, LLMMergeService
 
     try:
         # Initialize services
         storage = SupabaseStorage.get_instance()
-        supabase = storage.client
         mem_config = MemoryConfig()
         embedding_engine = EmbeddingEngine(mem_config)
-        blob_storage = BlobStorage(supabase, embedding_engine)
-        search_engine = HybridSearchEngine(supabase, embedding_engine)
+        blob_storage = BlobStorage(get_session, embedding_engine)
+        search_engine = HybridSearchEngine(get_session, embedding_engine)
 
         # Initialize LLM merge service (for reconsolidation)
         from zylch.api.token_storage import get_active_llm_provider
@@ -1698,20 +1703,20 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
         provider_key = subcommand
 
         # Get provider info
-        result = supabase.client.table('integration_providers')\
-            .select('*')\
-            .eq('provider_key', provider_key)\
-            .execute()
+        from zylch.storage.database import get_session
+        from zylch.storage.models import IntegrationProvider
+
+        with get_session() as session:
+            provider_row = session.query(IntegrationProvider).filter(IntegrationProvider.provider_key == provider_key).one_or_none()
 
         # Debug logging
-        logger.info(f"🔍 Query for provider_key='{provider_key}'")
-        logger.info(f"🔍 Result.data: {result.data}")
-        logger.info(f"🔍 Result.count: {result.count if hasattr(result, 'count') else 'N/A'}")
+        logger.info(f"[/connect] Query for provider_key='{provider_key}'")
+        logger.info(f"[/connect] Result: {provider_row.to_dict() if provider_row else None}")
 
-        if not result.data:
+        if not provider_row:
             return f"❌ **Error:** Provider '{provider_key}' not found\n\nRun `/connect` to see available providers"
 
-        provider = result.data[0]
+        provider = provider_row.to_dict()
 
         if not provider['is_available']:
             return f"⏳ **{provider['display_name']}** is coming soon!\n\nRun `/connect` to see available providers"
@@ -1773,7 +1778,8 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
         /email delete <draft_id>                 - Delete draft
         /email search <query> [--from X] [--days N] [--limit N]  - Search emails
     """
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Email, Draft
     from zylch.api.token_storage import get_provider, get_email
     from datetime import datetime, timezone, timedelta
 
@@ -1811,7 +1817,6 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
         return help_text
 
     try:
-        supabase = SupabaseStorage.get_instance().client
 
         # Get the subcommand (first positional arg)
         subcommand = args[0].lower() if args else ''
@@ -1836,20 +1841,20 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
 
             # If --draft flag, list drafts
             if has_flag('--draft'):
-                result = supabase.table('drafts')\
-                    .select('*')\
-                    .eq('owner_id', owner_id)\
-                    .eq('status', 'draft')\
-                    .order('updated_at', desc=True)\
-                    .limit(limit)\
-                    .execute()
+                with get_session() as session:
+                    drafts = session.query(Draft)\
+                        .filter(Draft.owner_id == owner_id, Draft.status == 'draft')\
+                        .order_by(Draft.updated_at.desc())\
+                        .limit(limit)\
+                        .all()
+                    drafts_data = [d.to_dict() for d in drafts]
 
-                if not result.data:
+                if not drafts_data:
                     return "**📭 No drafts**\n\nCreate one with `/email create --to <email> --subject <text>`"
 
-                output = f"**📝 Drafts** ({len(result.data)} found)\n\n"
-                for i, draft in enumerate(result.data, 1):
-                    to_str = ', '.join(draft.get('to_addresses', []))
+                output = f"**📝 Drafts** ({len(drafts_data)} found)\n\n"
+                for i, draft in enumerate(drafts_data, 1):
+                    to_str = ', '.join(draft.get('to_addresses', []) or [])
                     subject = draft.get('subject', '(no subject)')
                     draft_id = draft['id']
                     updated = draft.get('updated_at', '')
@@ -1870,18 +1875,29 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
             user_domain = user_email.split('@')[1].lower() if user_email and '@' in user_email else ''
 
             # Fetch more emails to allow filtering, then group by thread
-            result = supabase.table('emails')\
-                .select('gmail_id, thread_id, subject, from_email, from_name, snippet, body_plain, date')\
-                .eq('owner_id', owner_id)\
-                .gte('date', since_date)\
-                .order('date', desc=True)\
-                .limit(limit * 3)\
-                .execute()
+            with get_session() as session:
+                rows = session.query(
+                    Email.gmail_id, Email.thread_id, Email.subject,
+                    Email.from_email, Email.from_name, Email.snippet,
+                    Email.body_plain, Email.date
+                )\
+                    .filter(Email.owner_id == owner_id, Email.date >= since_date)\
+                    .order_by(Email.date.desc())\
+                    .limit(limit * 3)\
+                    .all()
+                emails = [
+                    {
+                        'gmail_id': r.gmail_id, 'thread_id': r.thread_id,
+                        'subject': r.subject, 'from_email': r.from_email,
+                        'from_name': r.from_name, 'snippet': r.snippet,
+                        'body_plain': r.body_plain,
+                        'date': r.date.isoformat() if r.date else None,
+                    }
+                    for r in rows
+                ]
 
-            if not result.data:
+            if not emails:
                 return f"**📭 No emails** in the last {days} days\n\nTry `/sync` to fetch recent emails."
-
-            emails = result.data
 
             # Filter: only RECEIVED emails (from_email NOT matching user's domain)
             received_emails = []
@@ -1943,31 +1959,26 @@ For simple drafts without context, use the `compose_email` tool in chat."""
 
             if draft_id:
                 # Find the draft by ID
-                result = supabase.table('drafts')\
-                    .select('*')\
-                    .eq('owner_id', owner_id)\
-                    .eq('status', 'draft')\
-                    .eq('id', draft_id)\
-                    .execute()
+                with get_session() as session:
+                    draft_row = session.query(Draft)\
+                        .filter(Draft.owner_id == owner_id, Draft.status == 'draft', Draft.id == draft_id)\
+                        .first()
+                    draft = draft_row.to_dict() if draft_row else None
 
-                if not result.data:
+                if not draft:
                     return f"❌ Draft not found: `{draft_id}`\n\nUse `/email list` to see your drafts."
-
-                draft = result.data[0]
             else:
                 # No draft_id provided - use the most recent draft
-                result = supabase.table('drafts')\
-                    .select('*')\
-                    .eq('owner_id', owner_id)\
-                    .eq('status', 'draft')\
-                    .order('updated_at', desc=True)\
-                    .limit(1)\
-                    .execute()
+                with get_session() as session:
+                    draft_row = session.query(Draft)\
+                        .filter(Draft.owner_id == owner_id, Draft.status == 'draft')\
+                        .order_by(Draft.updated_at.desc())\
+                        .first()
+                    draft = draft_row.to_dict() if draft_row else None
 
-                if not result.data:
+                if not draft:
                     return "❌ No drafts found.\n\nCreate a draft first with `/email create` or use the `compose_email` tool."
 
-                draft = result.data[0]
                 draft_id = draft['id']
 
             # Get user's email provider
@@ -1978,10 +1989,11 @@ For simple drafts without context, use the `compose_email` tool in chat."""
                 return "❌ No email provider connected\n\nUse `/connect google` or `/connect microsoft` first."
 
             # Mark as sending
-            supabase.table('drafts').update({
-                'status': 'sending',
-                'provider': provider
-            }).eq('id', draft['id']).execute()
+            with get_session() as session:
+                session.query(Draft).filter(Draft.id == draft['id']).update({
+                    'status': 'sending',
+                    'provider': provider
+                })
 
             try:
                 # Convert list fields to comma-separated strings for email APIs
@@ -2038,7 +2050,8 @@ For simple drafts without context, use the `compose_email` tool in chat."""
                     raise Exception(f"Unknown provider: {provider}")
 
                 # Delete draft after successful send
-                supabase.table('drafts').delete().eq('id', draft['id']).execute()
+                with get_session() as session:
+                    session.query(Draft).filter(Draft.id == draft['id']).delete()
 
                 to_str = ', '.join(draft['to_addresses'])
                 return f"""✅ **Email sent!**
@@ -2051,10 +2064,11 @@ Message ID: `{sent_id if sent_id else 'N/A'}`"""
 
             except Exception as e:
                 # Restore draft status on failure (so it appears in /email list --draft)
-                supabase.table('drafts').update({
-                    'status': 'draft',
-                    'error_message': str(e),
-                }).eq('id', draft['id']).execute()
+                with get_session() as session:
+                    session.query(Draft).filter(Draft.id == draft['id']).update({
+                        'status': 'draft',
+                        'error_message': str(e),
+                    })
 
                 logger.error(f"Failed to send email: {e}", exc_info=True)
                 return f"❌ **Failed to send:** {str(e)}\n\nDraft saved. Fix the issue and try again with `/email send {draft_id}`"
@@ -2067,21 +2081,22 @@ Message ID: `{sent_id if sent_id else 'N/A'}`"""
             if not draft_id:
                 return "❌ Missing draft ID\n\nUsage: `/email delete <draft_id>`"
 
-            result = supabase.table('drafts')\
-                .delete()\
-                .eq('owner_id', owner_id)\
-                .eq('id', draft_id)\
-                .execute()
+            with get_session() as session:
+                deleted_count = session.query(Draft)\
+                    .filter(Draft.owner_id == owner_id, Draft.id == draft_id)\
+                    .delete()
 
-            if result.data:
+            if deleted_count:
                 return f"✅ Draft `{draft_id}` deleted"
             else:
                 return f"❌ Draft not found: `{draft_id}`"
 
         # --- RESET (delete all emails) ---
         if subcommand == 'reset':
-            supabase = SupabaseStorage()
-            supabase.client.table('emails').delete().eq('owner_id', owner_id).execute()
+            from zylch.storage.database import get_session
+            from zylch.storage.models import Email as EmailModel
+            with get_session() as session:
+                session.query(EmailModel).filter(EmailModel.owner_id == owner_id).delete()
             return "✅ All emails deleted."
 
         # --- SEARCH EMAILS (DEPRECATED - use /agent email run) ---
@@ -2118,7 +2133,9 @@ COMMAND_HELP = {
 
 async def handle_stats(args: List[str], owner_id: str) -> str:
     """Handle /stats command - email statistics."""
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Email, TaskItem
+    from sqlalchemy import func, distinct
 
     help_text = """**📊 Email Statistics**
 
@@ -2135,46 +2152,32 @@ Shows statistics about your synced emails:
         return help_text
 
     try:
-        supabase = SupabaseStorage.get_instance().client
+        with get_session() as session:
+            # Count total emails
+            total_emails = session.query(func.count(Email.id))\
+                .filter(Email.owner_id == owner_id)\
+                .scalar() or 0
 
-        # Count total emails
-        email_result = supabase.table('emails')\
-            .select('id', count='exact')\
-            .eq('owner_id', owner_id)\
-            .execute()
-        total_emails = email_result.count if hasattr(email_result, 'count') else 0
+            # Count unique threads
+            unique_threads = session.query(func.count(distinct(Email.thread_id)))\
+                .filter(Email.owner_id == owner_id)\
+                .scalar() or 0
 
-        # Count threads
-        thread_result = supabase.table('emails')\
-            .select('thread_id')\
-            .eq('owner_id', owner_id)\
-            .execute()
-        unique_threads = len(set(e['thread_id'] for e in thread_result.data)) if thread_result.data else 0
+            # Get date range
+            oldest_date_val = session.query(func.min(Email.date))\
+                .filter(Email.owner_id == owner_id)\
+                .scalar()
+            newest_date_val = session.query(func.max(Email.date))\
+                .filter(Email.owner_id == owner_id)\
+                .scalar()
 
-        # Get date range
-        oldest = supabase.table('emails')\
-            .select('date')\
-            .eq('owner_id', owner_id)\
-            .order('date', desc=False)\
-            .limit(1)\
-            .execute()
-        newest = supabase.table('emails')\
-            .select('date')\
-            .eq('owner_id', owner_id)\
-            .order('date', desc=True)\
-            .limit(1)\
-            .execute()
+            oldest_date = oldest_date_val.isoformat() if oldest_date_val else 'N/A'
+            newest_date = newest_date_val.isoformat() if newest_date_val else 'N/A'
 
-        oldest_date = oldest.data[0]['date'] if oldest.data else 'N/A'
-        newest_date = newest.data[0]['date'] if newest.data else 'N/A'
-
-        # Count open tasks
-        task_result = supabase.table('task_items')\
-            .select('id', count='exact')\
-            .eq('owner_id', owner_id)\
-            .eq('action_required', True)\
-            .execute()
-        open_count = task_result.count if hasattr(task_result, 'count') else 0
+            # Count open tasks
+            open_count = session.query(func.count(TaskItem.id))\
+                .filter(TaskItem.owner_id == owner_id, TaskItem.action_required == True)\
+                .scalar() or 0
 
         return f"""**📊 Email Statistics**
 
@@ -2193,7 +2196,8 @@ Run `/sync` to update or `/tasks` for details."""
 
 async def handle_calendar(args: List[str], config: ToolConfig, owner_id: str) -> str:
     """Handle /calendar command - list calendar events."""
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage.database import get_session
+    from zylch.storage.models import CalendarEvent
     from datetime import datetime, timedelta, timezone
 
     help_text = """**📅 Calendar**
@@ -2229,32 +2233,32 @@ Shows your upcoming calendar events.
             elif arg.isdigit():
                 days_ahead = int(arg)
 
-        # Get from Supabase (synced via /sync)
-        supabase = SupabaseStorage.get_instance().client
-
         now = datetime.now(timezone.utc)
         end_date = now + timedelta(days=days_ahead)
 
-        result = supabase.table('calendar_events')\
-            .select('*')\
-            .eq('owner_id', owner_id)\
-            .gte('start_time', now.isoformat())\
-            .lte('start_time', end_date.isoformat())\
-            .order('start_time', desc=False)\
-            .limit(limit)\
-            .execute()
+        with get_session() as session:
+            events = session.query(CalendarEvent)\
+                .filter(
+                    CalendarEvent.owner_id == owner_id,
+                    CalendarEvent.start_time >= now,
+                    CalendarEvent.start_time <= end_date,
+                )\
+                .order_by(CalendarEvent.start_time.asc())\
+                .limit(limit)\
+                .all()
+            events_data = [e.to_dict() for e in events]
 
-        if not result.data:
+        if not events_data:
             return f"""**📅 Calendar** (next {days_ahead} days)
 
 📭 No events found.
 
 Run `/sync` to fetch calendar events."""
 
-        output = f"**📅 Calendar** ({len(result.data)} events, next {days_ahead} days)\n\n"
+        output = f"**📅 Calendar** ({len(events_data)} events, next {days_ahead} days)\n\n"
 
         current_date = None
-        for event in result.data:
+        for event in events_data:
             # Parse start time
             start_str = event.get('start_time', '')
             start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
@@ -2384,14 +2388,15 @@ Connect your LLM provider:
         # Check newest email date BEFORE starting analysis
         if refresh:
             try:
-                result = storage.client.table('emails').select('date').eq('owner_id', owner_id).order('date', desc=True).limit(1).execute()
-                if result.data:
-                    newest_email_str = result.data[0].get('date')
-                    if newest_email_str:
-                        newest_email_dt = datetime.fromisoformat(newest_email_str.replace('Z', '+00:00'))
-                        hours_ago = (datetime.now(timezone.utc) - newest_email_dt).total_seconds() / 3600
-                        if hours_ago > 6:
-                            return f"""⚠️ **Stale Data Warning**
+                from zylch.storage.database import get_session
+                from zylch.storage.models import Email as EmailModel
+                with get_session() as session:
+                    newest_row = session.query(EmailModel.date).filter(EmailModel.owner_id == owner_id).order_by(EmailModel.date.desc()).limit(1).one_or_none()
+                if newest_row:
+                    newest_email_dt = newest_row[0] if newest_row[0].tzinfo else newest_row[0].replace(tzinfo=timezone.utc)
+                    hours_ago = (datetime.now(timezone.utc) - newest_email_dt).total_seconds() / 3600
+                    if hours_ago > 6:
+                        return f"""⚠️ **Stale Data Warning**
 
 Newest email is **{hours_ago:.1f} hours old**.
 
@@ -2447,16 +2452,17 @@ def _load_blob_context(storage, owner_id: str, blob_ids: list) -> str:
         return ""
 
     try:
+        from zylch.storage.database import get_session
+        from zylch.storage.models import Blob
+
         contents = []
-        for blob_id in blob_ids:
-            result = storage.client.table('blobs')\
-                .select('content')\
-                .eq('owner_id', owner_id)\
-                .eq('id', blob_id)\
-                .limit(1)\
-                .execute()
-            if result.data:
-                contents.append(result.data[0].get('content', ''))
+        with get_session() as session:
+            for blob_id in blob_ids:
+                row = session.query(Blob.content)\
+                    .filter(Blob.owner_id == owner_id, Blob.id == blob_id)\
+                    .one_or_none()
+                if row:
+                    contents.append(row[0] or '')
 
         return "\n\n".join(contents)
     except Exception as e:
@@ -2617,18 +2623,18 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
 
         elif event_type == 'calendar':
             # Fetch calendar event by google_event_id
-            result = storage.client.table('calendar_events')\
-                .select('*')\
-                .eq('owner_id', owner_id)\
-                .eq('google_event_id', event_id)\
-                .limit(1)\
-                .execute()
-            logger.debug(f"[TASK_DETAIL] Calendar query result: {len(result.data) if result.data else 0} events")
+            from zylch.storage.database import get_session
+            from zylch.storage.models import CalendarEvent
+            with get_session() as session:
+                cal_row = session.query(CalendarEvent)\
+                    .filter(CalendarEvent.owner_id == owner_id, CalendarEvent.google_event_id == event_id)\
+                    .one_or_none()
+            logger.debug(f"[TASK_DETAIL] Calendar query result: {'found' if cal_row else 'not found'}")
 
-            if not result.data:
+            if not cal_row:
                 return f"Calendar event not found for task #{task_num}."
 
-            event = result.data[0]
+            event = cal_row.to_dict()
             summary = event.get('summary', '(no title)')
             description = event.get('description', '(no description)')
             start_time = event.get('start_time', '')
@@ -4149,28 +4155,35 @@ This action **cannot be undone**."""
     from concurrent.futures import ThreadPoolExecutor
 
     def _reset_all_data():
-        from zylch.storage.supabase_client import SupabaseStorage
-        storage = SupabaseStorage.get_instance()
+        from zylch.storage.database import get_session
+        from zylch.storage.models import (
+            BlobSentence, Blob, TaskItem, Trigger, TriggerEvent,
+            Draft, Email, CalendarEvent, BackgroundJob,
+            UserNotification, AgentPrompt,
+        )
         counts = {}
-        tables = [
-            'entity_memory_sentences',
-            'entity_memory_blobs',
-            'task_items',
-            'triggers',
-            'trigger_events',
-            'drafts',
-            'emails',
-            'calendar_events',
-            'background_jobs',
-            'user_notifications',
-            'agent_prompts',
+        # Map table display names to ORM models
+        # Delete order matters: sentences before blobs (FK), trigger_events before triggers
+        table_models = [
+            ('blob_sentences', BlobSentence),
+            ('blobs', Blob),
+            ('task_items', TaskItem),
+            ('trigger_events', TriggerEvent),
+            ('triggers', Trigger),
+            ('drafts', Draft),
+            ('emails', Email),
+            ('calendar_events', CalendarEvent),
+            ('background_jobs', BackgroundJob),
+            ('user_notifications', UserNotification),
+            ('agent_prompts', AgentPrompt),
         ]
-        for table in tables:
-            try:
-                result = storage.client.table(table).delete().eq('owner_id', owner_id).execute()
-                counts[table] = len(result.data) if result.data else 0
-            except Exception as e:
-                counts[table] = f"error: {e}"
+        with get_session() as session:
+            for table_name, model_cls in table_models:
+                try:
+                    deleted = session.query(model_cls).filter(model_cls.owner_id == owner_id).delete()
+                    counts[table_name] = deleted
+                except Exception as e:
+                    counts[table_name] = f"error: {e}"
         return counts
 
     executor = ThreadPoolExecutor(max_workers=1)

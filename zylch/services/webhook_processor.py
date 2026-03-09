@@ -15,6 +15,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from zylch.storage.database import get_session
+from zylch.storage.models import TriggerEvent, OAuthToken
+
 logger = logging.getLogger(__name__)
 
 
@@ -133,22 +136,17 @@ class WebhookEventStore:
             Stats dict with basic info
         """
         try:
-            # Get recent events count
-            result = self._storage.client.table('trigger_events')\
-                .select('id', count='exact')\
-                .like('event_type', 'webhook_%')\
-                .execute()
+            with get_session() as session:
+                # Get recent events count
+                total = session.query(TriggerEvent).filter(
+                    TriggerEvent.event_type.like('webhook_%')
+                ).count()
 
-            total = result.count or 0
-
-            # Get pending count
-            pending_result = self._storage.client.table('trigger_events')\
-                .select('id', count='exact')\
-                .like('event_type', 'webhook_%')\
-                .eq('status', 'pending')\
-                .execute()
-
-            pending = pending_result.count or 0
+                # Get pending count
+                pending = session.query(TriggerEvent).filter(
+                    TriggerEvent.event_type.like('webhook_%'),
+                    TriggerEvent.status == 'pending'
+                ).count()
 
             return {
                 "total": total,
@@ -178,18 +176,22 @@ class WebhookEventStore:
             List of event dicts
         """
         try:
-            query = self._storage.client.table('trigger_events')\
-                .select('*')\
-                .like('event_type', 'webhook_%')
+            with get_session() as session:
+                query = session.query(TriggerEvent).filter(
+                    TriggerEvent.event_type.like('webhook_%')
+                )
 
-            if source:
-                query = query.like('event_type', f'webhook_{source}%')
+                if source:
+                    query = query.filter(
+                        TriggerEvent.event_type.like(f'webhook_{source}%')
+                    )
 
-            result = query.order('created_at', desc=True)\
-                .range(offset, offset + limit - 1)\
-                .execute()
+                rows = query.order_by(TriggerEvent.created_at.desc())\
+                    .offset(offset)\
+                    .limit(limit)\
+                    .all()
 
-            return result.data or []
+            return [r.to_dict() for r in rows]
         except Exception as e:
             logger.warning(f"Failed to list webhook events: {e}")
             return []
@@ -488,17 +490,16 @@ class WebhookProcessor:
             owner_id (Firebase UID) or None if not found
         """
         try:
-            from ..storage.supabase_client import SupabaseStorage as SupabaseClient
-            client = SupabaseClient()
+            with get_session() as session:
+                # Look up in oauth_tokens where provider='mrcall' and email=business_id
+                # (we store business_id in the email field for mrcall provider)
+                row = session.query(OAuthToken).filter(
+                    OAuthToken.provider == 'mrcall',
+                    OAuthToken.email == business_id
+                ).first()
 
-            # Look up in oauth_tokens where provider='mrcall' and email=business_id
-            # (we store business_id in the email field for mrcall provider)
-            result = client.client.table('oauth_tokens').select('owner_id').eq(
-                'provider', 'mrcall'
-            ).eq('email', business_id).execute()
-
-            if result.data:
-                return result.data[0]['owner_id']
+                if row:
+                    return row.owner_id
 
             logger.warning(f"No owner found for MrCall business_id: {business_id}")
             return None

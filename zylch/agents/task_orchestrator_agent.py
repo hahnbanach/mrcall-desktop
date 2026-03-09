@@ -22,6 +22,8 @@ from zylch.agents.emailer_agent import EmailerAgent, EMAIL_AGENT_TOOLS
 from zylch.agents.mrcall_agent import MrCallAgent, MRCALL_AGENT_TOOLS
 from zylch.llm import LLMClient
 from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage.database import get_session
+from zylch.storage.models import Draft
 from zylch.tools.factory import SessionState
 
 logger = logging.getLogger(__name__)
@@ -437,20 +439,16 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
 
         # 3. Fetch draft from database
         try:
-            supabase = SupabaseStorage.get_instance()
-            result = (
-                supabase.client.table('drafts')
-                .select('*')
-                .eq('id', draft_id)
-                .eq('owner_id', self.owner_id)
-                .single()
-                .execute()
-            )
+            with get_session() as session:
+                draft_row = session.query(Draft).filter(
+                    Draft.id == draft_id,
+                    Draft.owner_id == self.owner_id
+                ).one_or_none()
 
-            if not result.data:
-                return f"⚠️ Draft not found (id: {draft_id}). It may have been deleted."
+                if not draft_row:
+                    return f"⚠️ Draft not found (id: {draft_id}). It may have been deleted."
 
-            draft = result.data
+                draft = draft_row.to_dict()
         except Exception as e:
             logger.error(f"[TaskOrchestrator] Failed to fetch draft {draft_id}: {e}")
             return f"❌ Failed to load draft: {str(e)}"
@@ -478,10 +476,11 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
 
         # Mark draft as sending
         try:
-            supabase.client.table('drafts').update({
-                'status': 'sending',
-                'provider': provider
-            }).eq('id', draft_id).execute()
+            with get_session() as session:
+                session.query(Draft).filter(Draft.id == draft_id).update({
+                    'status': 'sending',
+                    'provider': provider
+                })
         except Exception as e:
             logger.warning(f"[TaskOrchestrator] Failed to update draft status: {e}")
 
@@ -536,7 +535,8 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
 
             # 7. Delete draft after successful send
             try:
-                supabase.client.table('drafts').delete().eq('id', draft_id).execute()
+                with get_session() as session:
+                    session.query(Draft).filter(Draft.id == draft_id).delete()
                 logger.debug(f"[TaskOrchestrator] Deleted draft {draft_id} after sending")
             except Exception as e:
                 logger.warning(f"[TaskOrchestrator] Failed to delete draft after send: {e}")
@@ -557,10 +557,11 @@ The task may now be complete. Use `/tasks exit` to return to normal chat, or con
         except Exception as e:
             # Restore draft status on failure
             try:
-                supabase.client.table('drafts').update({
-                    'status': 'draft',
-                    'error_message': str(e),
-                }).eq('id', draft_id).execute()
+                with get_session() as session:
+                    session.query(Draft).filter(Draft.id == draft_id).update({
+                        'status': 'draft',
+                        'error_message': str(e),
+                    })
             except:
                 pass
 

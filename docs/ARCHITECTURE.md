@@ -1,10 +1,10 @@
 ---
 description: |
-  Zylch is a pre-alpha AI email assistant using Supabase for ALL data storage (no local filesystem).
+  Zylch is a pre-alpha AI email assistant using PostgreSQL (via SQLAlchemy ORM) for ALL data storage (no local filesystem).
   Four layers: Email (Gmail/Outlook sync + permanent archive), Intelligence (entity memory with
   reconsolidation, relationship gap detection, task extraction), Automation (triggers, webhooks,
   APScheduler), and UIs (CLI at zylch-cli, MrCall Dashboard, FastAPI API at api.zylchai.com).
-  Auth: Firebase Auth + Supabase RLS for multi-tenant isolation.
+  Auth: Firebase Auth for authentication, application-layer owner_id filtering for multi-tenant isolation.
 ---
 
 # Zylch Architecture
@@ -16,24 +16,24 @@ description: |
 > **Guidelines:**
 > - Delete legacy code freely - don't preserve unused columns/tables
 > - No dual-write patterns - use the new unified approach only
-> - No migration scripts needed - just update the schema directly
+> - Schema changes managed via Alembic migrations (`alembic/versions/`)
 > - Break things fast, fix things fast
 
 ---
 
 ## Critical: No Local Filesystem
 
-**The backend uses Supabase for ALL data storage. NO local filesystem.**
+**The backend uses PostgreSQL (via SQLAlchemy ORM) for ALL data storage. NO local filesystem.**
 
 | Data                                                | Storage | Table |
 |-----------------------------------------------------|---------|-------|
-| OAuth tokens (Google, Microsoft, LLM providers, MrCall) | Supabase | `oauth_tokens` (encrypted) |
-| Email data                                          | Supabase | `emails` (with vector/FTS search) |
-| Task items                                          | Supabase | `task_items` |
-| Calendar events                                     | Supabase | `calendar_events` |
-| Sync state                                          | Supabase | `sync_state` |
-| Triggers                                            | Supabase | `triggers`, `trigger_events` |
-| Memory blobs                                        | Supabase | `blobs`, `blob_sentences` (pg_vector) |
+| OAuth tokens (Google, Microsoft, LLM providers, MrCall) | PostgreSQL | `oauth_tokens` (encrypted) |
+| Email data                                          | PostgreSQL | `emails` (with pgvector/FTS search) |
+| Task items                                          | PostgreSQL | `task_items` |
+| Calendar events                                     | PostgreSQL | `calendar_events` |
+| Sync state                                          | PostgreSQL | `sync_state` |
+| Triggers                                            | PostgreSQL | `triggers`, `trigger_events` |
+| Memory blobs                                        | PostgreSQL | `blobs`, `blob_sentences` (pgvector) |
 
 **NEVER use local filesystem for:**
 - Token storage (no pickle files)
@@ -81,12 +81,12 @@ Zylch is an AI-powered email assistant that provides relationship intelligence, 
         │                                         │
         ▼                                         ▼
 ┌───────────────┐                      ┌──────────────────┐
-│   Supabase    │                      │  External APIs   │
-│  (Postgres)   │                      │  • Gmail API     │
+│  PostgreSQL   │                      │  External APIs   │
+│  (SQLAlchemy) │                      │  • Gmail API     │
 │               │                      │  • Calendar API  │
-│ • RLS enabled │                      │  • Graph API     │
-│ • pg_vector   │                      │  • StarChat      │
-│ • encrypted   │                      │  • Claude        │
+│ • pgvector    │                      │  • Graph API     │
+│ • Alembic     │                      │  • StarChat      │
+│ • conn pool   │                      │  • Claude        │
 └───────────────┘                      └──────────────────┘
 ```
 
@@ -121,7 +121,7 @@ The Zylch backend (`zylch/api/`) is a single codebase deployed on **Scaleway Kub
 - **Registry**: GitLab Container Registry (`registry.gitlab.com/hahnbanach/zylch`)
 - **Branches**: `dev` → starchat-test namespace, `production` → starchat-production namespace
 - **Manifests**: `~/hb/zylch-deploy/` (test/ and production/ directories)
-- **Database**: Scaleway Managed PostgreSQL (migrating from Supabase — Phase 2)
+- **Database**: Scaleway Managed PostgreSQL (direct connection via `DATABASE_URL`)
 
 **Release process**: Push to `dev` or `production` branch triggers GitLab CI build + deploy. A pre-push git hook auto-starts the runner if it's stopped (auto-shuts down after 4h idle to save costs).
 
@@ -131,11 +131,12 @@ For complete deployment details, see [Deployment Guide](guides/DEPLOYMENT.md).
 
 **Local development uses the SAME architecture as production:**
 - Firebase Auth for user authentication
-- Supabase for all data storage (emails, calendar, tokens, tasks, memory blobs)
+- PostgreSQL for all data storage (emails, calendar, tokens, tasks, memory blobs)
 - Same OAuth flows as production (server-side, not InstalledAppFlow)
-- No separate local database or file-based token storage
+- `docker compose up` starts a local PostgreSQL instance (pgvector/pgvector:pg16)
+- Alembic migrations run automatically on startup
 
-Run locally with `uvicorn zylch.api.main:app --reload --port 8000` — symlink `.env` to the deployment you're working on (`.env.development` for Zylch, `.env.mrcall` for MrCall Configurator).
+Run locally with `uvicorn zylch.api.main:app --reload --port 8000` — symlink `.env` to the deployment you're working on (`.env.development` for Zylch, `.env.mrcall` for MrCall Configurator). The `DATABASE_URL` in `.env` points to the local or remote PostgreSQL instance.
 
 ## Core Components
 
@@ -162,7 +163,7 @@ Run locally with `uvicorn zylch.api.main:app --reload --port 8000` — symlink `
 ### 2. Tools (`zylch/tools/`)
 Modular tools for agent capabilities:
 - **Email**: Gmail/Outlook API wrapper, draft management, sending
-- **Archive**: Permanent email storage in Supabase with full-text search
+- **Archive**: Permanent email storage in PostgreSQL with full-text search
 - **Calendar**: Google/Outlook Calendar integration with Meet/Teams links
 - **Tasks**: Email-to-task extraction, relationship gap analysis
 - **CRM**: Pipedrive integration (optional)
@@ -174,7 +175,7 @@ Modular tools for agent capabilities:
 - **Importance Rules** (`zylch/models/importance_rules.py`): User-configurable rules for contact prioritization
 - **Anonymizer** (`zylch/ml/anonymizer.py`): PII detection and replacement for training data extraction
 
-**Key Pattern**: Tools are identical for all users. Credentials are loaded per-user at execution time from Supabase. If a user hasn't connected a provider, the tool returns a helpful error (e.g., "Vonage not connected. Please use /connect vonage").
+**Key Pattern**: Tools are identical for all users. Credentials are loaded per-user at execution time from PostgreSQL. If a user hasn't connected a provider, the tool returns a helpful error (e.g., "Vonage not connected. Please use /connect vonage").
 
 **Tool Registration** (`factory.py`):
 ```python
@@ -184,7 +185,7 @@ def create_all_tools(config, memory, owner_id):
         _GetContactTool(starchat_client),
         _GetWhatsAppContactsTool(starchat_client),
         _SearchLocalMemoryTool(memory, search_engine),
-        _GetTasksTool(supabase_client),
+        _GetTasksTool(storage),
         # ... more tools
     ]
     return tools
@@ -192,20 +193,18 @@ def create_all_tools(config, memory, owner_id):
 
 ### 3. Two-Tier Email System (Cloud-Based)
 
-**Current Implementation: Supabase-Only**
+All email data is stored in PostgreSQL, scoped by `owner_id` (Firebase UID).
 
-All email data is stored in Supabase, scoped by `owner_id` (Firebase UID).
-
-**Tier 1: Email Archive (Supabase)**
+**Tier 1: Email Archive (PostgreSQL)**
 - **Purpose**: Permanent storage of email metadata and content
-- **Technology**: Supabase Postgres
+- **Technology**: PostgreSQL with pgvector and FTS
 - **Tables**: `email_archive`, `email_messages`
 - **Sync**: Gmail/Outlook History API (incremental, <1s)
 - **Features**: Complete history, cross-device access
 
-**Tier 2: Task Intelligence (Supabase `task_items`)**
+**Tier 2: Task Intelligence (PostgreSQL `task_items`)**
 - **Purpose**: Extracted tasks with source traceability
-- **Technology**: Supabase Postgres
+- **Technology**: PostgreSQL
 - **Content**: Task action, urgency, contact info, sources JSONB
 - **Features**: Full traceability via `sources` column linking to emails/blobs
 
@@ -213,14 +212,14 @@ All email data is stored in Supabase, scoped by `owner_id` (Firebase UID).
 ```
 Gmail/Outlook API
        ↓
-Supabase (emails) ← Email metadata/content stored here
+PostgreSQL (emails) ← Email metadata/content stored here
        ↓
 Claude AI (task extraction)
        ↓
-Supabase (task_items) ← Tasks with sources stored here
+PostgreSQL (task_items) ← Tasks with sources stored here
 ```
 
-**Privacy Note**: Email content is stored encrypted at rest by Supabase. All data is scoped by `owner_id` with Row Level Security (RLS).
+**Privacy Note**: Email content is stored encrypted at rest by the PostgreSQL host. All data is scoped by `owner_id` with application-layer filtering on every query.
 
 ### 4. Service Layer (`zylch/services/`)
 
@@ -244,7 +243,7 @@ Supabase (task_items) ← Tasks with sources stored here
 
 Background workers notify users of failures via `user_notifications` table. Notifications are shown once in chat (prepended to response), then marked read.
 
-**Key files**: `supabase_client.py` (`create_notification()`), `chat_service.py` (injection)
+**Key files**: `storage.py` (`create_notification()`), `chat_service.py` (injection)
 
 **Pattern**: CLI and API both use the same service layer functions
 
@@ -432,8 +431,8 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
 **Problem**: Old system re-fetched 600+ emails every sync (15-30 min), lost history outside 30-day window
 
 **Solution**:
-- **Archive**: Permanent Supabase storage (all emails forever)
-- **Intelligence Cache**: 30-day analyzed window in Supabase (AI-enriched)
+- **Archive**: Permanent PostgreSQL storage (all emails forever)
+- **Intelligence Cache**: 30-day analyzed window in PostgreSQL (AI-enriched)
 
 **Benefits**:
 - 100x faster sync (<1s vs 15-30min)
@@ -471,9 +470,21 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
 
 ## Data Storage
 
-### Current: Supabase (Cloud-Based)
+### PostgreSQL via SQLAlchemy ORM
 
-**All data stored in Supabase**, scoped by `owner_id` (Firebase UID):
+**All data stored in PostgreSQL** via SQLAlchemy ORM, scoped by `owner_id` (Firebase UID).
+
+**Database Layer**:
+- **Engine**: Singleton with connection pooling (`pool_size=10`, `max_overflow=20`, `pool_pre_ping=True`)
+- **Sessions**: `get_session()` context manager with auto-commit/rollback
+- **ORM Models**: 29 models in `zylch/storage/models.py` with `DictMixin.to_dict()` serialization (datetime to isoformat, UUID to str, numpy to list)
+- **Schema**: Managed by Alembic migrations (`alembic/versions/`)
+- **Upserts**: Via `pg_insert().on_conflict_do_update()`
+- **Stored functions**: Called via `session.execute(text(...))`
+
+**Storage class**: `zylch/storage/storage.py` - `Storage` class with singleton pattern (`get_instance()`). Backward-compat alias `SupabaseStorage = Storage` in `__init__.py`.
+
+**All data scoped by `owner_id`** (Firebase UID):
 
 | Table | Purpose |
 |-------|---------|
@@ -511,9 +522,9 @@ Gmail/Calendar/Pipedrive → /sync → Local Tables (emails, calendar_events)
 | `messages` | `read_events` | JSONB | Email read tracking events array |
 
 **Security**:
-- All tables use Row Level Security (RLS) scoped by `owner_id`
+- All queries filter by `owner_id` at the application layer (every query in `Storage` class)
 - Sensitive tokens encrypted with Fernet before storage
-- Supabase provides encryption at rest
+- PostgreSQL host provides encryption at rest
 
 ### Future: Local-First Options
 
@@ -523,11 +534,11 @@ When desktop/mobile apps are developed, we may explore local-first storage (SQLi
 
 **Unified Credentials Architecture** (December 2025):
 
-All user credentials (OAuth tokens, API keys) are stored in Supabase's `oauth_tokens` table using a unified JSONB column. This enables:
+All user credentials (OAuth tokens, API keys) are stored in PostgreSQL's `oauth_tokens` table using a unified JSONB column. This enables:
 - **BYOK (Bring Your Own Key)**: Users provide their own API keys (Anthropic, Vonage, etc.)
 - **Zero-schema migrations**: Add new providers by inserting database rows, not code changes
 - **Encrypted storage**: Fernet encryption for all sensitive credentials
-- **No filesystem fallback**: All credentials in Supabase only
+- **No filesystem fallback**: All credentials in PostgreSQL only
 
 **Key tables**:
 - `oauth_tokens`: User credentials (encrypted JSONB)
@@ -539,7 +550,7 @@ All user credentials (OAuth tokens, API keys) are stored in Supabase's `oauth_to
 ### Configuration
 - **Environment**: K8s secrets via `zylch-secrets` (backend), Vercel env vars (frontend)
 - **Defaults**: `zylch/config.py` (Pydantic settings)
-- **System .env contains**: Supabase config, Firebase config, Google OAuth client, encryption key, optional `ANTHROPIC_API_KEY` (system-level fallback for integrations), LLM model names (`ANTHROPIC_MODEL`, `OPENAI_MODEL`, `MISTRAL_MODEL`, `DEFAULT_MODEL`)
+- **System .env contains**: `DATABASE_URL` (PostgreSQL connection string), Firebase config, Google OAuth client, encryption key, optional `ANTHROPIC_API_KEY` (system-level fallback for integrations), LLM model names (`ANTHROPIC_MODEL`, `OPENAI_MODEL`, `MISTRAL_MODEL`, `DEFAULT_MODEL`)
 - **NOT in .env**: User credentials (Pipedrive, Vonage) - these are BYOK via `/connect`
 - **Optional in .env**: `ANTHROPIC_API_KEY` - system-level fallback when user has no key (used by MrCall integration)
 - **Optional in .env**: `ANTHROPIC_MODEL`, `OPENAI_MODEL`, `MISTRAL_MODEL` - override default model per provider (defaults defined in `config.py`)
@@ -654,52 +665,28 @@ Supported providers: google, microsoft, mrcall, anthropic, openai, mistral, pipe
 
 ## Security & Privacy
 
-### Current: Cloud-Based Storage
+### Cloud-Based Storage
 
 | Data | Where Stored | Security |
 |------|--------------|----------|
-| Email content | Supabase | RLS + encryption at rest |
-| Email metadata | Supabase | RLS + encryption at rest |
-| AI summaries | Supabase | RLS + encryption at rest |
-| OAuth tokens | Supabase | RLS + Fernet encryption |
-| Sync state | Supabase | RLS |
+| Email content | PostgreSQL | `owner_id` filtering + encryption at rest |
+| Email metadata | PostgreSQL | `owner_id` filtering + encryption at rest |
+| AI summaries | PostgreSQL | `owner_id` filtering + encryption at rest |
+| OAuth tokens | PostgreSQL | `owner_id` filtering + Fernet encryption |
+| Sync state | PostgreSQL | `owner_id` filtering |
 
 **How it works**:
 1. Emails fetched from Gmail/Outlook API by backend
-2. Stored in Supabase with `owner_id` scoping (Row Level Security)
+2. Stored in PostgreSQL with `owner_id` scoping (application-layer filtering on every query)
 3. Task extraction performed on-demand, stored in `task_items` with source traceability
 4. All sensitive tokens (OAuth, API keys) encrypted with Fernet before storage
 
 **Privacy model**:
 - All data scoped by Firebase UID (`owner_id`)
-- Row Level Security ensures users only access their own data
-- Supabase provides encryption at rest
+- Every query in the `Storage` class filters by `owner_id` — enforced at the application layer
+- Firebase Auth validates JWTs before any operation
+- PostgreSQL host provides encryption at rest
 - No data shared between users
-
-### RLS & Service Role Key
-
-**Important**: The backend uses Supabase's **service role key**, which **bypasses RLS entirely**.
-
-```python
-# From supabase_client.py
-# Use service_role key for backend (bypasses RLS, we enforce owner_id manually)
-```
-
-**Why?**
-- We use **Firebase Auth** (not Supabase Auth)
-- `owner_id` is a Firebase UID (text string like `"abc123xyz"`), not a Supabase UUID
-- Supabase's `auth.uid()` returns Supabase UUIDs, which don't match Firebase UIDs
-- RLS policies using `auth.uid()` won't work with Firebase tokens
-
-**How we enforce security instead**:
-- Every query manually filters by `owner_id`
-- The backend validates Firebase JWT before any operation
-- Service role key is never exposed to frontend
-
-**RLS policies in migrations**:
-- Still defined for defense-in-depth
-- Would protect if someone accidentally used the anon key
-- Use `current_setting('request.jwt.claims', true)::json->>'sub'` pattern for JWT-based RLS (not `auth.uid()`)
 
 **Future consideration**: Local-first architecture (see "Future: Local-First Options" above) would provide stronger privacy guarantees by keeping email content on user devices only.
 
@@ -724,7 +711,7 @@ Supported providers: google, microsoft, mrcall, anthropic, openai, mistral, pipe
 5. User logs in and approves permission on StarChat
 6. StarChat redirects to http://localhost:8765/callback with authorization code
 7. CLI sends code to backend which exchanges it for access/refresh tokens
-8. Backend stores encrypted tokens in Supabase `oauth_tokens` table
+8. Backend stores encrypted tokens in PostgreSQL `oauth_tokens` table
 9. Tokens automatically refreshed with 5-minute expiration buffer
 
 **Key Components**:
@@ -740,7 +727,7 @@ Supported providers: google, microsoft, mrcall, anthropic, openai, mistral, pipe
   - PKCE verifier management
 
 - **Token Storage** (`zylch/api/token_storage.py`):
-  - Encrypted storage in Supabase `oauth_tokens.credentials` (JSONB)
+  - Encrypted storage in PostgreSQL `oauth_tokens.credentials` (JSONB)
   - Automatic token refresh with 5-minute buffer
   - Integration with StarChat client
 
@@ -766,7 +753,7 @@ business:read business:write contacts:read contacts:write sessions:read sessions
 **Security Features**:
 - PKCE prevents authorization code interception
 - State parameter prevents CSRF attacks
-- Tokens encrypted with Fernet before Supabase storage
+- Tokens encrypted with Fernet before database storage
 - Local callback server only accepts connections from localhost
 - Automatic token cleanup on revocation
 
@@ -856,7 +843,7 @@ Dashboard users operate in a restricted "sandbox" environment that limits access
 ### Sensitive Data Encryption
 
 **All User Credentials (BYOK)**:
-- **Storage**: Supabase `oauth_tokens` table in unified `credentials` JSONB column
+- **Storage**: PostgreSQL `oauth_tokens` table in unified `credentials` JSONB column
 - **Encryption**: Fernet (AES-128-CBC + HMAC) via `zylch/utils/encryption.py`
 - **Key**: `ENCRYPTION_KEY` environment variable (set in K8s secrets)
 - **No fallback**: If user hasn't connected a provider, tools return helpful error (not system default)
@@ -866,9 +853,9 @@ Dashboard users operate in a restricted "sandbox" environment that limits access
 
 ### Data Privacy
 - All user data scoped by Firebase UID (`owner_id`)
-- Email content stored in Supabase (encrypted at rest by Supabase)
+- Email content stored in PostgreSQL (encrypted at rest by the database host)
 - LLM provider API keys encrypted with Fernet (application-level encryption)
-- No data shared between users (RLS enforced)
+- No data shared between users (`owner_id` filtering enforced on every query)
 - Data sent to LLM providers for analysis uses user's own API key (BYOK model)
 
 ## Performance Characteristics
@@ -887,7 +874,7 @@ Dashboard users operate in a restricted "sandbox" environment that limits access
 ## Scalability Considerations
 
 ### Current Limits
-- **Emails**: Tested with 500 messages, scales to millions with Supabase
+- **Emails**: Tested with 500 messages, scales to millions with PostgreSQL
 - **Threads**: 30-day intelligence window (~250-300 threads typical)
 - **Concurrent API**: Scaleway K8s scaling
 
@@ -895,7 +882,7 @@ Dashboard users operate in a restricted "sandbox" environment that limits access
 
 **Phase 1: Current** (0-1,000 users)
 - Scaleway Kubernetes (ARM64 nodes)
-- Scaleway Managed PostgreSQL (migrating from Supabase)
+- Scaleway Managed PostgreSQL (direct connection)
 - Background workers (APScheduler in-process)
 
 **Phase 2: Growth** (1,000-10,000 users)
@@ -910,7 +897,7 @@ Dashboard users operate in a restricted "sandbox" environment that limits access
 - Consider Elasticsearch for advanced search
 
 **Bottlenecks to Monitor**:
-- Database connections (Supabase limit: 60)
+- Database connections (pool_size=10, max_overflow=20 per instance)
 - Claude API rate limits (1,000 requests/min for Pro)
 - Background worker queue depth
 - Memory system HNSW index size
@@ -923,8 +910,8 @@ Dashboard users operate in a restricted "sandbox" environment that limits access
 - **Auth expiry**: Automatic token refresh
 
 ### Database Errors
-- **Supabase connection**: Automatic retry with exponential backoff
-- **RLS violations**: Check owner_id scoping
+- **PostgreSQL connection**: Connection pooling with `pool_pre_ping=True` for automatic reconnection
+- **Session errors**: `get_session()` context manager handles auto-rollback on exceptions
 
 ## Development Patterns
 
@@ -979,8 +966,8 @@ During `/sync`, the Memory Agent processes unprocessed emails:
 
 **Key Files**:
 - `zylch/workers/memory.py` - MemoryWorker class
-- `zylch/memory/blob_storage.py` - BlobStorage (store/update blobs)
-- `zylch/memory/hybrid_search.py` - HybridSearchEngine (FTS + semantic)
+- `zylch/memory/blob_storage.py` - BlobStorage (`__init__(self, get_session, embedding_engine)`)
+- `zylch/memory/hybrid_search.py` - HybridSearchEngine (`__init__(self, get_session, embedding_engine)`)
 - `zylch/memory/llm_merge.py` - LLMMergeService (reconsolidation)
 
 ### Task Agent (Task Processing)
@@ -1014,7 +1001,7 @@ The Task Agent processes emails and calendar events to detect actionable tasks w
 **Key Files**:
 - `zylch/workers/task_creation.py` - TaskWorker class with `_is_user_email()` hard check, `analyze_item_sync()` single source of truth
 - `zylch/agents/trainers/task_email.py` - EmailTaskAgentTrainer for prompt generation (includes calendar awareness)
-- `zylch/storage/migrations/022_calendar_attendee_search.sql` - RPC function and GIN index
+- `alembic/versions/` - RPC functions (get_events_by_attendee, etc.) and GIN indexes managed via Alembic migrations
 
 **Training**: `/agent task train email` runs as background job (5-30+ seconds), generates calendar-aware prompt, notifies on completion.
 
@@ -1038,9 +1025,9 @@ Combines 3 scoring components:
 **Pattern detection** (`zylch/memory/pattern_detection.py`): Extracts email, phone, URL from query using regex fullmatch. When detected, exact matching on #IDENTIFIERS takes priority.
 
 **Key files**:
-- `zylch/memory/hybrid_search.py` - HybridSearchEngine
+- `zylch/memory/hybrid_search.py` - HybridSearchEngine (uses `session.execute(text("SELECT * FROM hybrid_search_blobs(...)"))`)
 - `zylch/memory/pattern_detection.py` - detect_pattern()
-- `zylch/storage/migrations/009_hybrid_search_exact_match.sql` - SQL function
+- `alembic/versions/` - SQL functions (hybrid_search_blobs, etc.) managed via Alembic migrations
 
 ### Commands
 
@@ -1256,8 +1243,8 @@ The Email Read Tracking System enables Zylch to detect when recipients open emai
 **Components**:
 - `zylch/api/routes/webhooks.py` - SendGrid webhook handler with ECDSA signature verification
 - `zylch/api/routes/tracking.py` - Tracking pixel endpoint (1x1 transparent GIF)
-- `zylch/storage/supabase_client.py` - Database operations
-- `zylch/storage/migrations/003_email_read_tracking.sql` - Database schema
+- `zylch/storage/storage.py` - Database operations
+- `alembic/versions/` - Database schema migrations
 
 **Database tables**: `email_read_events`, `sendgrid_message_mapping`, `messages.read_events` (JSONB)
 

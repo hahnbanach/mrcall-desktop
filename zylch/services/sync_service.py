@@ -13,6 +13,8 @@ from zylch.tools.calendar_sync import CalendarSyncManager
 from zylch.tools.config import ToolConfig
 from zylch.tools.factory import ToolFactory
 from zylch.config import settings
+from zylch.storage.database import get_session
+from zylch.storage.models import PipedriveDeal
 
 # Avoid circular imports
 if TYPE_CHECKING:
@@ -259,7 +261,8 @@ class SyncService:
                         logger.error(f"[pipedrive_sync] Missing org_name for deal {deal_id}")
 
                     # Upsert deal into table
-                    self.supabase.client.table('pipedrive_deals').upsert({
+                    from sqlalchemy.dialects.postgresql import insert as pg_insert
+                    deal_values = {
                         'owner_id': self.owner_id,
                         'deal_id': deal_id,
                         'title': deal.get('title', ''),
@@ -272,8 +275,14 @@ class SyncService:
                         'pipeline_name': str(deal.get('pipeline_id', '')),
                         'expected_close_date': deal.get('expected_close_date'),
                         'deal_data': deal,
-                        'updated_at': datetime.now(timezone.utc).isoformat()
-                    }, on_conflict='owner_id,deal_id').execute()
+                        'updated_at': datetime.now(timezone.utc),
+                    }
+                    with get_session() as session:
+                        stmt = pg_insert(PipedriveDeal).values(**deal_values).on_conflict_do_update(
+                            index_elements=['owner_id', 'deal_id'],
+                            set_={k: v for k, v in deal_values.items() if k not in ('owner_id', 'deal_id')}
+                        )
+                        session.execute(stmt)
 
                     deals_synced += 1
 

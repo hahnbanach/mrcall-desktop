@@ -305,12 +305,11 @@ class ToolFactory:
             # No client initialization needed here - tool is always available
 
             # Initialize hybrid search engine for blob search
-            from zylch.storage.supabase_client import SupabaseStorage
-            supabase_storage = SupabaseStorage.get_instance()
+            from zylch.storage.database import get_session
             mem_config = MemoryConfig()
             embedding_engine = EmbeddingEngine(mem_config)
             search_engine = HybridSearchEngine(
-                supabase_client=supabase_storage.client,
+                get_session=get_session,
                 embedding_engine=embedding_engine,
                 default_alpha=0.3  # FTS weight (0.3 = 70% semantic, 30% FTS)
             )
@@ -1516,7 +1515,8 @@ class _GetTasksTool(Tool):
         self.session_state = session_state
 
     async def execute(self, days_back: int = 7):
-        from zylch.storage.supabase_client import SupabaseStorage
+        from zylch.storage.database import get_session
+        from zylch.storage.models import TaskItem
 
         owner_id = self.session_state.get_owner_id()
         if not owner_id:
@@ -1527,16 +1527,12 @@ class _GetTasksTool(Tool):
             )
 
         try:
-            supabase = SupabaseStorage()
-
-            result = supabase.client.table('task_items')\
-                .select('*')\
-                .eq('owner_id', owner_id)\
-                .eq('action_required', True)\
-                .order('analyzed_at', desc=True)\
-                .execute()
-
-            tasks = result.data or []
+            with get_session() as session:
+                rows = session.query(TaskItem).filter(
+                    TaskItem.owner_id == owner_id,
+                    TaskItem.action_required == True,
+                ).order_by(TaskItem.analyzed_at.desc()).all()
+                tasks = [r.to_dict() for r in rows]
 
             # Sort by urgency: high -> medium -> low
             urgency_order = {'high': 0, 'medium': 1, 'low': 2}

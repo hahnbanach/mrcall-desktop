@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from zylch.config import settings
 from zylch.llm import LLMClient, PROVIDER_MODELS
 from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage.database import get_session
+from zylch.storage.models import Blob
 
 logger = logging.getLogger(__name__)
 
@@ -95,13 +97,14 @@ class BaseAgentTrainer:
         Returns:
             List of blob dicts
         """
-        result = self.storage.client.table('blobs').select('*').eq('owner_id', self.owner_id)
+        with get_session() as session:
+            query = session.query(Blob).filter(Blob.owner_id == self.owner_id)
 
-        if entity_type:
-            result = result.ilike('content', f'%Entity type: {entity_type}%')
+            if entity_type:
+                query = query.filter(Blob.content.ilike(f'%Entity type: {entity_type}%'))
 
-        result = result.order('updated_at', desc=True).limit(limit).execute()
-        return result.data if result.data else []
+            rows = query.order_by(Blob.updated_at.desc()).limit(limit).all()
+            return [r.to_dict() for r in rows]
 
     def _generate_prompt(
         self,

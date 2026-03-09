@@ -145,8 +145,9 @@ class EmailTaskAgentTrainer:
         # Initialize hybrid search for blob retrieval
         config = MemoryConfig()
         self.embedding_engine = EmbeddingEngine(config)
+        from zylch.storage.database import get_session
         self.hybrid_search = HybridSearchEngine(
-            storage.client,
+            get_session,
             self.embedding_engine
         )
         self.search_limit = 20  # Reduced from 100 to avoid context window overflow
