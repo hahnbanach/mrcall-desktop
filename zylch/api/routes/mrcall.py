@@ -119,7 +119,11 @@ async def get_training_status(
     # Check MrCall is linked
     business_id = storage.get_mrcall_link(owner_id)
     if not business_id:
-        raise HTTPException(status_code=400, detail="No MrCall assistant linked.")
+        return TrainingStatusResponse(
+            status="untrained",
+            checked_at=datetime.now(timezone.utc).isoformat(),
+            all_features=all_features,
+        )
 
     # Check for in-progress training job
     try:
