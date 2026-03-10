@@ -128,6 +128,11 @@ class Settings(BaseSettings):
         env="MRCALL_OAUTH_AUTHORIZE_URL",
         description="MrCall Dashboard OAuth authorize URL (consent page is served by Dashboard, not API)"
     )
+    starchat_verify_ssl: bool = Field(
+        default=True,
+        env="STARCHAT_VERIFY_SSL",
+        description="Verify SSL certificates for StarChat API calls (disable for self-signed certs)"
+    )
 
     # Multi-tenant Configuration
     owner_id: str = Field(
