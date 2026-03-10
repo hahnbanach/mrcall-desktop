@@ -115,15 +115,21 @@ The Zylch backend (`zylch/api/`) is a single codebase deployed on **Scaleway Kub
 
 **Same codebase, same database**: Both deployments share the same database and the same code. The `.env` file determines which Firebase project validates tokens and which Google OAuth client is used.
 
+**Firebase project strategy:**
+- **`talkmeapp-e696c`**: Used for the MrCall integration. The user authenticates on the MrCall Dashboard, which shares this Firebase project with StarChat — tokens are interchangeable between MrCall Dashboard, StarChat, and Zylch. This is the **currently active deployment** on Scaleway.
+- **`zylch-test-9a895`**: Used for developing and testing Zylch as a **standalone product**, independent from MrCall. Future plans include a dedicated Zylch app/frontend.
+
+The Firebase service account needs the `roles/firebaseauth.admin` IAM role (verify tokens, get/create users, create custom tokens). See [Firebase Service Account](#firebase-service-account) for setup.
+
 **Infrastructure:**
 - **K8s clusters**: Two Scaleway Kapsule clusters (test + production), ARM64 node pool (`zylch-pool`, BASIC2-A2C-4G)
 - **CI/CD**: GitLab (`git@gitlab.com:hahnbanach/zylch.git`), self-hosted ARM64 runner on Scaleway for native Docker builds
 - **Registry**: GitLab Container Registry (`registry.gitlab.com/hahnbanach/zylch`)
 - **Branches**: `dev` → starchat-test namespace, `production` → starchat-production namespace
 - **Manifests**: `~/hb/zylch-deploy/` (test/ and production/ directories)
-- **Database (test)**: In-cluster PostgreSQL 16 + pgvector container (ephemeral)
-- **Database (prod)**: Scaleway Managed PostgreSQL 16 (`zylch-db`, db-dev-s, host `62.210.39.141:4433`, pgvector 0.8 + uuid-ossp)
-- **Network**: Internal ClusterIP only — no public ingress, accessed by dashboard within same cluster
+- **Database (test)**: Scaleway Managed PostgreSQL — `zylch-test` database inside `mrcall-test` instance (host `51.159.24.206:18948`, user `zylch-test`)
+- **Database (prod)**: Scaleway Managed PostgreSQL — `zylch` database inside `mrcall` instance (host `51.159.26.37:51494`, user `zylch`)
+- **Network**: Public ingress via nginx-ingress + cert-manager (Let's Encrypt). URLs: `zylch-test.mrcall.ai` (test), `zylch.mrcall.ai` (production)
 
 **Release process**: Push to `dev` or `production` branch triggers GitLab CI build + deploy. A pre-push git hook auto-starts the runner if it's stopped (auto-shuts down after 4h idle to save costs).
 
