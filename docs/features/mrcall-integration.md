@@ -705,7 +705,9 @@ The MrCall Dashboard (`~/hb/mrcall-dashboard`, Vue 3 + PrimeVue, hosted at `dash
 
 ### Shared Firebase Authentication
 
-Both apps use the same Firebase project (`talkmeapp-e696c`), so authentication tokens are interchangeable. When a user is logged into the MrCall Dashboard, their Firebase JWT is accepted by both Zylch and StarChat without additional login.
+Both the MrCall Dashboard and Zylch (in MrCall Configurator mode) use the same Firebase project (`talkmeapp-e696c`), so authentication tokens are interchangeable. When a user is logged into the MrCall Dashboard, their Firebase JWT is accepted by both Zylch and StarChat without additional login.
+
+**Why `talkmeapp-e696c`?** This is the Firebase project shared with StarChat/MrCall. Using it means MrCall Dashboard users get seamless SSO across all services — no separate login for Zylch. A separate Firebase project (`zylch-test-9a895`) exists for testing Zylch as a standalone product (see [Deployment Model](../ARCHITECTURE.md#deployment-model)).
 
 **Key files (MrCall Dashboard at ~/hb/mrcall-dashboard)**:
 - `src/views/ConfigureAI.vue` - Two-column layout (command sidebar + chat) + training status indicator
