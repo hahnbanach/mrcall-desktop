@@ -991,7 +991,8 @@ async def create_starchat_client(owner_id: str, supabase_storage: Optional[Any] 
                 access_token=credentials["access_token"],
                 realm=settings.mrcall_realm,
                 owner_id=owner_id,
-                supabase_storage=supabase_storage
+                supabase_storage=supabase_storage,
+                verify_ssl=settings.starchat_verify_ssl,
             )
     except Exception as e:
         logger.debug(f"OAuth credentials not available: {e}")
@@ -1005,7 +1006,8 @@ async def create_starchat_client(owner_id: str, supabase_storage: Optional[Any] 
             auth_type="basic",
             username=settings.starchat_username,
             password=settings.starchat_password,
-            realm=settings.mrcall_realm
+            realm=settings.mrcall_realm,
+            verify_ssl=settings.starchat_verify_ssl,
         )
 
     raise ValueError("MrCall not connected. Please use /connect mrcall to authorize.")

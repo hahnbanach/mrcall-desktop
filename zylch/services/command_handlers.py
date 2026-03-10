@@ -972,6 +972,7 @@ In config mode, use natural language:
                     jwt_token=firebase_token,
                     realm=settings.mrcall_realm,
                     owner_id=owner_id,
+                    verify_ssl=settings.starchat_verify_ssl,
                 )
                 logger.debug(f"[/mrcall variables] Created StarChatClient with firebase_token")
             else:
@@ -1248,6 +1249,7 @@ Run `/agent mrcall train` to generate configuration context for all features."""
                             jwt_token=firebase_token,
                             realm=settings.mrcall_realm,
                             owner_id=owner_id,
+                            verify_ssl=settings.starchat_verify_ssl,
                         )
                         logger.debug(f"[/mrcall config] StarChat client created with firebase_token")
                     else:
@@ -3629,6 +3631,7 @@ Usage:
                 jwt_token=firebase_token,
                 realm=settings.mrcall_realm,
                 owner_id=owner_id,
+                verify_ssl=settings.starchat_verify_ssl,
             )
             logger.info(f"[/agent mrcall train] Created StarChatClient with firebase_token")
         else:
@@ -3896,6 +3899,7 @@ Connect your LLM provider:
                 jwt_token=firebase_token,
                 realm=settings.mrcall_realm,
                 owner_id=owner_id,
+                verify_ssl=settings.starchat_verify_ssl,
             )
             logger.info(f"[/agent mrcall run] Created StarChatClient with firebase_token")
         else:

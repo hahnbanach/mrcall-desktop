@@ -938,6 +938,7 @@ What would you like to do?"""
                         jwt_token=firebase_token,
                         realm=settings.mrcall_realm,
                         owner_id=owner_id,
+                        verify_ssl=settings.starchat_verify_ssl,
                     )
 
             # Create orchestrator

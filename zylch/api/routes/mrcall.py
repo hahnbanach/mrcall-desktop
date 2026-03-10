@@ -178,6 +178,7 @@ async def get_training_status(
             jwt_token=firebase_token,
             realm=settings.mrcall_realm,
             owner_id=owner_id,
+            verify_ssl=settings.starchat_verify_ssl,
         )
 
         business = await starchat.get_business_config(business_id)
@@ -435,6 +436,7 @@ async def reset_variables_to_snapshot(
         jwt_token=firebase_token,
         realm=settings.mrcall_realm,
         owner_id=owner_id,
+        verify_ssl=settings.starchat_verify_ssl,
     )
 
     # Fetch live variables to diff
