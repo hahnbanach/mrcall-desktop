@@ -2106,7 +2106,7 @@ class Storage:
             'owner_id': owner_id,
             'agent_type': agent_type,
             'agent_prompt': prompt,
-            'metadata': metadata or {},
+            'metadata_': metadata or {},
             'updated_at': datetime.now(timezone.utc),
         }
         with get_session() as session:
