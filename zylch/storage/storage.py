@@ -1069,7 +1069,14 @@ class Storage:
                 stmt = pg_insert(OAuthState).values(**data)
                 stmt = stmt.on_conflict_do_update(
                     index_elements=['state'],
-                    set_={k: v for k, v in data.items() if k != 'state'},
+                    set_={
+                        'owner_id': stmt.excluded.owner_id,
+                        'email': stmt.excluded.email,
+                        'cli_callback': stmt.excluded.cli_callback,
+                        'provider': stmt.excluded.provider,
+                        'metadata': stmt.excluded.metadata,
+                        'expires_at': stmt.excluded.expires_at,
+                    },
                 )
                 session.execute(stmt)
             logger.info(f"Successfully stored OAuth state for owner {owner_id}")
@@ -2106,14 +2113,18 @@ class Storage:
             'owner_id': owner_id,
             'agent_type': agent_type,
             'agent_prompt': prompt,
-            'metadata_': metadata or {},
+            'metadata_': json.dumps(metadata) if metadata else '{}',
             'updated_at': datetime.now(timezone.utc),
         }
         with get_session() as session:
             stmt = pg_insert(AgentPrompt).values(**data)
             stmt = stmt.on_conflict_do_update(
                 index_elements=['owner_id', 'agent_type'],
-                set_={k: v for k, v in data.items() if k not in ('owner_id', 'agent_type')},
+                set_={
+                    'agent_prompt': stmt.excluded.agent_prompt,
+                    'metadata': stmt.excluded.metadata,
+                    'updated_at': stmt.excluded.updated_at,
+                },
             )
             result = session.execute(stmt.returning(AgentPrompt.__table__))
             row = result.fetchone()
