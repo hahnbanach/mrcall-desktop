@@ -178,6 +178,47 @@ async def start_job(
     return _job_to_response(job)
 
 
+# NOTE: /active MUST be defined BEFORE /{job_id} — otherwise FastAPI
+# matches the literal "active" as a job_id path parameter.
+@router.get("/active")
+async def get_active_job(
+    business_id: str,
+    user: dict = Depends(get_current_user)
+):
+    """Get any active (pending/running) job for a business_id.
+
+    This is the single endpoint frontends poll to determine if the chat
+    should be blocked. Job-type agnostic — any job (training, configure,
+    reset, etc.) that has a business_id will be returned.
+
+    Args:
+        business_id: MrCall business ID (query param)
+        user: Authenticated user
+
+    Returns:
+        {active: true, job_id, job_type, status, progress_pct, status_message, created_at}
+        or {active: false} if no active job
+    """
+    owner_id = get_user_id_from_token(user)
+    storage = get_storage()
+
+    logger.debug(f"[jobs/active] Checking active jobs for business_id={business_id}, owner_id={owner_id}")
+    job = storage.get_active_job_for_business(owner_id, business_id)
+
+    if not job:
+        return {"active": False}
+
+    return {
+        "active": True,
+        "job_id": str(job["id"]),
+        "job_type": job.get("job_type"),
+        "status": job.get("status"),
+        "progress_pct": job.get("progress_pct", 0),
+        "status_message": job.get("status_message"),
+        "created_at": str(job.get("created_at", "")),
+    }
+
+
 @router.get("/{job_id}", response_model=JobStatusResponse)
 async def get_job_status(
     job_id: str,
@@ -234,12 +275,53 @@ async def list_jobs(
     return [_job_to_response(j) for j in jobs]
 
 
+@router.post("/{job_id}/stop", response_model=CancelJobResponse)
+async def stop_job(
+    job_id: str,
+    user: dict = Depends(get_current_user)
+):
+    """Stop a running job by setting it to cancelled.
+
+    The worker thread detects the status change via _should_stop_job()
+    and exits gracefully at the next checkpoint.
+
+    Unlike cancel (which only works on pending jobs), stop works on
+    running jobs.
+
+    Args:
+        job_id: Job UUID
+        user: Authenticated user
+
+    Returns:
+        {cancelled: true} if stop succeeded
+    """
+    owner_id = get_user_id_from_token(user)
+    storage = get_storage()
+
+    logger.debug(f"[jobs/stop] Attempting to stop job {job_id} for owner {owner_id}")
+
+    killed = storage.kill_background_job(job_id, owner_id)
+    logger.debug(f"[jobs/stop] kill_background_job(job_id={job_id}, owner_id={owner_id}) -> {killed}")
+
+    if not killed:
+        job = storage.get_background_job(job_id, owner_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot stop job with status '{job['status']}'. Only running jobs can be stopped."
+        )
+
+    logger.info(f"[jobs/stop] Stopped running job {job_id}")
+    return CancelJobResponse(cancelled=True)
+
+
 @router.post("/{job_id}/cancel", response_model=CancelJobResponse)
 async def cancel_job(
     job_id: str,
     user: dict = Depends(get_current_user)
 ):
-    """Cancel a pending job. Running jobs cannot be cancelled.
+    """Cancel a pending job. Running jobs cannot be cancelled (use stop instead).
 
     Args:
         job_id: Job UUID

@@ -306,22 +306,24 @@ async def start_training(
                     detail=f"Unknown feature: {feat}. Available: {list(MrCallConfiguratorTrainer.FEATURES.keys())}"
                 )
 
-    # Create background job
+    # Create background job (with business_id as top-level column for generic active-job queries)
+    # Extract firebase token for StarChat auth (needed in job params)
+    authorization = request.headers.get("authorization", "")
+    firebase_token = authorization.replace("Bearer ", "") if authorization.startswith("Bearer ") else authorization
+
     job = storage.create_background_job(
         owner_id=owner_id,
         job_type='mrcall_train',
         channel='mrcall',
+        business_id=business_id,
         params={
             "force": body.force,
             "features": body.features,
             "business_id": business_id,
+            "firebase_token": firebase_token,
         }
     )
     job_id = job['id']
-
-    # Extract firebase token for StarChat auth
-    authorization = request.headers.get("authorization", "")
-    firebase_token = authorization.replace("Bearer ", "") if authorization.startswith("Bearer ") else authorization
 
     # Determine features to train (for the response message)
     features_to_train = body.features or list(MrCallConfiguratorTrainer.FEATURES.keys())
@@ -330,53 +332,19 @@ async def start_training(
     if not body.force and not body.features:
         message = "Training changed features (selective)"
 
-    # Schedule background execution
-    async def _run_training():
-        try:
-            # Claim the job
-            claimed = storage.claim_background_job(job_id)
-            if not claimed:
-                logger.warning(f"[training/start] Could not claim job {job_id}")
-                return
-
-            from zylch.services.command_handlers import _handle_mrcall_agent_train
-
-            context = {
-                "source": "dashboard",
-                "firebase_token": firebase_token,
-            }
-
-            # Determine feature / force from params
-            feature = body.features[0] if body.features and len(body.features) == 1 else None
-            force = body.force
-
-            # Update progress
-            storage.update_background_job_progress(
-                job_id, progress_pct=10, items_processed=0,
-                total_items=len(features_to_train),
-                status_message="Starting training..."
-            )
-
-            result_msg = await _handle_mrcall_agent_train(
-                storage, owner_id, api_key, llm_provider, user_email,
-                feature=feature, context=context, force=force,
-            )
-
-            # Complete the job
-            storage.complete_background_job(job_id, result={
-                "message": result_msg,
-                "features_trained": features_to_train,
-            })
-            logger.info(f"[training/start] Job {job_id} completed successfully")
-
-        except Exception as e:
-            logger.error(f"[training/start] Job {job_id} failed: {e}", exc_info=True)
-            storage.fail_background_job(job_id, str(e))
-
-    background_tasks.add_task(_run_training)
+    # Schedule background execution via JobExecutor (runs in ThreadPoolExecutor,
+    # keeping the FastAPI event loop free for other users' requests)
+    if job["status"] == "pending":
+        from zylch.services.job_executor import JobExecutor
+        executor = JobExecutor(storage)
+        background_tasks.add_task(
+            executor.execute_job,
+            job_id, owner_id, api_key, llm_provider, user_email
+        )
+        logger.info(f"[training/start] Scheduled job {job_id} via JobExecutor")
 
     return StartTrainingResponse(
-        job_id=job_id,
+        job_id=str(job_id),
         status="in_progress",
         features_to_train=features_to_train,
         message=message,

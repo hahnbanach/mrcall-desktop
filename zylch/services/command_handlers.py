@@ -3572,7 +3572,7 @@ Say "send it" or use `/email send {draft_id}` to send."""
 # MRCALL AGENT HELPERS
 # =====================
 
-async def _handle_mrcall_agent_train(storage, owner_id: str, api_key: str, llm_provider: str, user_email: str, feature: str = None, context: dict = None, force: bool = False) -> str:
+async def _handle_mrcall_agent_train(storage, owner_id: str, api_key: str, llm_provider: str, user_email: str, feature: str = None, context: dict = None, force: bool = False, job_id: str = None) -> str:
     """Train MrCall features and build unified agent.
 
     Supports selective retraining: only re-generates prompts for features
@@ -3582,6 +3582,7 @@ async def _handle_mrcall_agent_train(storage, owner_id: str, api_key: str, llm_p
         feature: Optional specific feature to train. If None, uses diff logic.
         context: Request context (for dashboard detection)
         force: If True, skip diff and retrain all features.
+        job_id: Optional background job ID for progress reporting and stop checks.
     """
     import asyncio
     from datetime import datetime, timezone
@@ -3704,16 +3705,69 @@ Use `/agent mrcall train --force` to retrain all features anyway."""
                     f"{len(skipped_features)} current ({skipped_features})"
                 )
 
-        # Train the features
+        # Train the features (parallel with asyncio.gather for speed)
         trained_features = []
         failed_features = []
-        for feat_name in features_to_train:
+        total_features = len(features_to_train)
+
+        # Helper: check if job was cancelled (for early exit)
+        def _is_stopped() -> bool:
+            if not job_id:
+                return False
+            from zylch.services.job_executor import _should_stop_job
+            return _should_stop_job(storage, job_id, owner_id)
+
+        # Update progress before training starts
+        if job_id:
+            storage.update_background_job_progress(
+                job_id, progress_pct=15, items_processed=0,
+                total_items=total_features,
+                status_message=f"Training {total_features} features..."
+            )
+
+        # Check for early cancellation
+        if _is_stopped():
+            return "Training cancelled by user."
+
+        # Train all features in parallel
+        completed_count = 0
+
+        async def _train_one(feat_name: str):
+            nonlocal completed_count
             try:
                 await configurator.train_feature(feat_name, business_id)
-                trained_features.append(feat_name)
+                completed_count += 1
+                # Update progress (thread-safe: only storage calls, no shared mutable state)
+                if job_id:
+                    pct = 15 + int(completed_count / total_features * 70)  # 15% → 85%
+                    storage.update_background_job_progress(
+                        job_id, progress_pct=pct, items_processed=completed_count,
+                        total_items=total_features,
+                        status_message=f"Trained {completed_count}/{total_features} features ({feat_name})"
+                    )
+                return (feat_name, None)
             except Exception as e:
                 logger.error(f"[/agent mrcall train] Failed to train {feat_name}: {e}", exc_info=True)
-                failed_features.append((feat_name, str(e)))
+                return (feat_name, str(e))
+
+        results = await asyncio.gather(*[_train_one(f) for f in features_to_train])
+        for feat_name, err in results:
+            if err is None:
+                trained_features.append(feat_name)
+            else:
+                failed_features.append((feat_name, err))
+
+        # Check for cancellation after training
+        if _is_stopped():
+            return "Training cancelled by user."
+
+        # Update progress: building unified prompt
+        if job_id:
+            storage.update_background_job_progress(
+                job_id, progress_pct=90, items_processed=total_features,
+                total_items=total_features,
+                status_message="Building unified agent prompt..."
+            )
 
         # Build unified agent prompt (combines ALL feature sub-prompts, including unchanged ones)
         agent_trainer = MrCallAgentTrainer(

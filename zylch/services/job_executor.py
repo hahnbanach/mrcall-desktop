@@ -116,6 +116,12 @@ class JobExecutor:
                 await self._execute_task_train(
                     job_id, owner_id, channel, api_key, llm_provider, user_email
                 )
+            elif job_type == "mrcall_train":
+                job_params = job.get("params", {})
+                await self._execute_mrcall_train(
+                    job_id, owner_id, channel, api_key, llm_provider,
+                    user_email, job_params
+                )
             else:
                 raise ValueError(f"Unknown job type: {job_type}")
 
@@ -527,6 +533,94 @@ class JobExecutor:
             f"**Task Agent Training Complete**\n\n{results_text}\n\n"
             f"Run `/agent task show {channel_display}` to review or "
             f"`/agent task process {channel_display}` to detect tasks.",
+            "info"
+        )
+
+    async def _execute_mrcall_train(
+        self,
+        job_id: str,
+        owner_id: str,
+        channel: str,
+        api_key: str,
+        llm_provider: str,
+        user_email: str,
+        job_params: dict,
+    ) -> None:
+        """Execute MrCall training in thread pool.
+
+        Runs _handle_mrcall_agent_train inside a worker thread with its own
+        event loop, keeping the main FastAPI event loop free for other users.
+
+        Args:
+            job_id: Background job UUID
+            owner_id: Firebase UID
+            channel: Job channel (typically 'mrcall')
+            api_key: User's LLM API key (BYOK)
+            llm_provider: LLM provider name
+            user_email: User's email address
+            job_params: Job parameters (force, features, business_id, firebase_token)
+        """
+        storage = self.storage
+
+        def _sync_train() -> dict:
+            """Sync training code that runs in thread pool."""
+            from zylch.services.command_handlers import _handle_mrcall_agent_train
+
+            # Check if stopped before starting
+            if _should_stop_job(storage, job_id, owner_id):
+                logger.info(f"[mrcall_train] Job {job_id} was stopped before starting")
+                return {"stopped": True}
+
+            storage.update_background_job_progress(
+                job_id, progress_pct=10, items_processed=0,
+                total_items=1, status_message="Starting MrCall training..."
+            )
+
+            # Extract params
+            firebase_token = job_params.get("firebase_token", "")
+            features = job_params.get("features")
+            force = bool(job_params.get("force", False))
+
+            feature = features[0] if features and len(features) == 1 else None
+            context = {
+                "source": "dashboard",
+                "firebase_token": firebase_token,
+            }
+
+            # Run async handler in a dedicated event loop (standard pattern
+            # for running async code in ThreadPoolExecutor - same as
+            # _execute_task_train and _execute_sync)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result_msg = loop.run_until_complete(
+                    _handle_mrcall_agent_train(
+                        storage, owner_id, api_key, llm_provider, user_email,
+                        feature=feature, context=context, force=force,
+                        job_id=job_id,
+                    )
+                )
+            finally:
+                loop.close()
+
+            # Check if stopped during training
+            if _should_stop_job(storage, job_id, owner_id):
+                logger.info(f"[mrcall_train] Job {job_id} stopped during training")
+                return {"stopped": True}
+
+            return {"message": result_msg}
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(_executor, _sync_train)
+
+        if result.get("stopped"):
+            logger.info(f"[mrcall_train] Job {job_id} stopped, not completing")
+            return
+
+        self.storage.complete_background_job(job_id, result)
+        self.storage.create_notification(
+            owner_id,
+            "MrCall training complete. Your assistant has been updated.",
             "info"
         )
 
