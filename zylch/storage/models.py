@@ -364,6 +364,7 @@ class BackgroundJob(DictMixin, Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     owner_id = Column(Text, nullable=False, index=True)
+    business_id = Column(Text, nullable=True, index=True)
     job_type = Column(Text, nullable=False)
     channel = Column(Text)
     status = Column(Text, nullable=False, server_default=text("'pending'"))

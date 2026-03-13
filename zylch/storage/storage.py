@@ -2550,6 +2550,7 @@ class Storage:
         job_type: str,
         channel: str | None = None,
         params: Dict[str, Any] | None = None,
+        business_id: str | None = None,
     ) -> Dict[str, Any]:
         """Create a new background job. Returns existing if duplicate (pending/running)."""
         with get_session() as session:
@@ -2573,6 +2574,7 @@ class Storage:
             # Create new job
             job = BackgroundJob(
                 owner_id=owner_id,
+                business_id=business_id,
                 job_type=job_type,
                 channel=channel,
                 status='pending',
@@ -2583,7 +2585,7 @@ class Storage:
             session.add(job)
             session.flush()
             result = job.to_dict()
-            logger.info(f"Created background job {result.get('id')}: {job_type}/{channel}")
+            logger.info(f"Created background job {result.get('id')}: {job_type}/{channel} business_id={business_id}")
             return result
 
 
@@ -2726,6 +2728,71 @@ class Storage:
                 logger.info(f"Stopped background job {job_id} (now pending)")
                 return True
             return False
+
+
+    def kill_background_job(self, job_id: str, owner_id: str) -> bool:
+        """Kill a running job by setting status to cancelled.
+
+        Unlike stop_background_job (which sets pending), this sets cancelled
+        so the job is excluded from active job queries. The worker thread
+        detects status != 'running' via _should_stop_job() and exits.
+
+        Args:
+            job_id: Background job UUID
+            owner_id: Firebase UID (security check)
+
+        Returns:
+            True if job was killed, False if not found or not running
+        """
+        logger.debug(f"[kill_background_job] job_id={job_id}, owner_id={owner_id}")
+        with get_session() as session:
+            count = session.query(BackgroundJob)\
+                .filter(
+                    BackgroundJob.id == job_id,
+                    BackgroundJob.owner_id == owner_id,
+                    BackgroundJob.status == 'running',
+                )\
+                .update({
+                    'status': 'cancelled',
+                    'completed_at': datetime.now(timezone.utc),
+                    'last_error': 'Cancelled by user',
+                })
+            if count > 0:
+                logger.info(f"Killed background job {job_id} (now cancelled)")
+                return True
+            logger.debug(f"[kill_background_job] job {job_id} not found or not running")
+            return False
+
+
+    def get_active_job_for_business(self, owner_id: str, business_id: str) -> Optional[Dict[str, Any]]:
+        """Get the most recent active (pending/running) job for a business.
+
+        Used by frontends to check if any job is running for a business_id,
+        regardless of job_type. This enables job-type-agnostic blocking.
+
+        Args:
+            owner_id: Firebase UID (security check)
+            business_id: MrCall business ID
+
+        Returns:
+            Job dict if active job exists, None otherwise
+        """
+        logger.debug(f"[get_active_job_for_business] owner_id={owner_id}, business_id={business_id}")
+        with get_session() as session:
+            job = session.query(BackgroundJob)\
+                .filter(
+                    BackgroundJob.owner_id == owner_id,
+                    BackgroundJob.business_id == business_id,
+                    BackgroundJob.status.in_(['pending', 'running']),
+                )\
+                .order_by(BackgroundJob.created_at.desc())\
+                .first()
+            if job:
+                result = job.to_dict()
+                logger.debug(f"[get_active_job_for_business] Found active job {result.get('id')} ({result.get('status')})")
+                return result
+            logger.debug(f"[get_active_job_for_business] No active job for business_id={business_id}")
+            return None
 
 
     def stop_all_running_jobs(self, owner_id: str) -> int:
