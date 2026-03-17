@@ -1,63 +1,50 @@
-# Claude Code Configuration - Zylch
+# Zylch AI - Multi-Channel Sales Intelligence System
 
-## CRITICAL: NO OUTPUT TRUNCATION IN CODE
+Pre-alpha AI assistant for email, calendar, CRM, and telephony management. Python/FastAPI/PostgreSQL.
 
-**NEVER truncate output in code you write:**
-- NO `[:8]`, `[:50]`, `[:100]`, `[:200]` slicing for display
-- NO `...` or `[truncated]` in user-facing output or **WORSE** when debugging!!
-- ALWAYS show FULL IDs, FULL content, FULL values
-- Let the USER decide if output is too long
+## Documentation Index
 
-## CRITICAL: DEBUG LOGGING OBBLIGATORIO
+| Document | Summary |
+|----------|---------|
+| [docs/architecture.md](docs/architecture.md) | System map, data flow, infrastructure, cross-cutting concerns |
+| [docs/system-rules.md](docs/system-rules.md) | Tech stack, coding standards, dependency rules, imperatives |
+| [docs/active-context.md](docs/active-context.md) | What works, what's in progress, next steps, known issues |
+| [docs/quality-grades.md](docs/quality-grades.md) | Per-module test coverage, docs completeness, conformance |
+| [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | Code style, MrCall integration rules, patterns |
+| [docs/features/](docs/features/) | Feature documentation (email, memory, tasks, MrCall, etc.) |
+| [docs/agents/](docs/agents/) | Agent architecture and per-agent docs |
+| [docs/guides/](docs/guides/) | Setup guides (Gmail OAuth, deployment, CLI) |
+| [docs/execution-plans/](docs/execution-plans/) | Active implementation plans |
+| [docs/harness-backlog.md](docs/harness-backlog.md) | Enforcement gaps and tooling debt |
 
-**Ogni comando/feature DEVE avere debug logging** per poter diagnosticare problemi:
+## Quick Reference
 
-1. **Input**: Loggare args/parametri ricevuti
-2. **Chiamate**: Loggare ogni funzione chiamata con input E output
-3. **Risultati**: Loggare valori intermedi e finali
+```bash
+# Build & Run
+pip install -e .                              # Install in dev mode
+uvicorn zylch.api.main:app --reload           # Start API server
+alembic upgrade head                          # Run DB migrations
 
-**Pattern**:
-```python
-logger.debug(f"[/comando] funzione(param={param}) -> result={result}")
+# Test
+python -m pytest tests/ -v                    # Run all tests
+python -m pytest tests/test_agent.py -v       # Run specific test
+
+# Lint & Format
+black --check zylch/ tests/                   # Check formatting
+ruff check zylch/ tests/                      # Lint
+
+# Deploy (via GitLab CI)
+# Push to `dev` branch → auto-deploy to starchat-test
+# Push to `production` branch → auto-deploy to starchat-production
 ```
 
-**MAI** loggare token/secrets. Solo "present"/"absent".
+## Critical Rules
 
-Senza logging, diagnosticare problemi è **IMPOSSIBILE**.
-
-## CRITICAL: CONCURRENT EXECUTION & FILE MANAGEMENT
-
-**ABSOLUTE RULES**:
-1. ALL operations MUST be concurrent/parallel in a single message
-2. **NEVER save working files, text/mds and tests to the root folder**
-3. ALWAYS organize files in appropriate subdirectories
-
-### GOLDEN RULE: "1 MESSAGE = ALL RELATED OPERATIONS"
-
-**MANDATORY PATTERNS:**
-- **File operations**: ALWAYS batch ALL reads/writes/edits in ONE message
-- **Bash commands**: ALWAYS batch ALL terminal operations in ONE message
-- **Agent tool**: ALWAYS spawn ALL agents in ONE message when independent
-
-### File Organization Rules
-
-**NEVER save to root folder. Use these directories:**
-- `/zylch` - Source code
-- `/tests` - Test files
-- `/docs` - Documentation and markdown files
-- `/scripts` - Utility scripts
-
-## Code Style & Best Practices
-
-- **Modular Design**: Files under 500 lines
-- **Environment Safety**: Never hardcode secrets
-- **Test-First**: Write tests before implementation
-- **Clean Architecture**: Separate concerns
-- **Documentation**: Keep updated
-
-# important-instruction-reminders
-Do what has been asked; nothing more, nothing less.
-NEVER create files unless they're absolutely necessary for achieving your goal.
-ALWAYS prefer editing an existing file to creating a new one.
-NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
-Never save working files, text/mds and tests to the root folder.
+- **NO OUTPUT TRUNCATION**: Never use `[:8]`, `[:50]`, `[:100]` slicing for display. Show FULL values.
+- **DEBUG LOGGING MANDATORY**: Every feature must log inputs, calls, and results. Pattern: `logger.debug(f"[/cmd] func(param={param}) -> result={result}")`
+- **NEVER log secrets**: Only "present"/"absent".
+- **CONCURRENT OPERATIONS**: Batch all independent operations in a single message.
+- **NO ROOT FILES**: Never save working files to root. Use: `/zylch` (source), `/tests` (tests), `/docs` (docs), `/scripts` (scripts).
+- **FILES < 500 LINES**: Keep modules small and focused.
+- **NO HARDCODED SECRETS**: Use environment variables via Pydantic Settings.
+- **POSTGRESQL ONLY**: No local filesystem for data storage.
