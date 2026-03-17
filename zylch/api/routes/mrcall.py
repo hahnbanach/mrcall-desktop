@@ -8,10 +8,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, List
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token, get_user_email_from_token
+from zylch.config import settings
 from zylch.storage.supabase_client import SupabaseStorage
 from zylch.storage.database import get_session
 from zylch.storage.models import BackgroundJob
@@ -49,6 +50,7 @@ class TrainingStatusResponse(BaseModel):
 class StartTrainingRequest(BaseModel):
     force: bool = False
     features: Optional[List[str]] = None
+    business_id: Optional[str] = None  # Dashboard can pass directly
 
 
 class StartTrainingResponse(BaseModel):
@@ -85,6 +87,11 @@ def _get_llm_credentials(owner_id: str, storage: SupabaseStorage):
         if creds and creds.get('api_key'):
             return creds['api_key'], provider
 
+    # Fallback to system-level key (for dashboard users who don't /connect anthropic)
+    if settings.anthropic_api_key:
+        logger.info(f"[training] Using system-level Anthropic API key for owner={owner_id}")
+        return settings.anthropic_api_key, 'anthropic'
+
     raise HTTPException(
         status_code=400,
         detail="No LLM provider connected. Connect one via /connect anthropic, /connect openai, or /connect mistral."
@@ -98,6 +105,7 @@ def _get_llm_credentials(owner_id: str, storage: SupabaseStorage):
 @router.get("/training/status", response_model=TrainingStatusResponse)
 async def get_training_status(
     request: Request,
+    business_id: Optional[str] = Query(None, description="Business ID (optional, uses stored link if omitted)"),
     user: dict = Depends(get_current_user),
 ):
     """Get MrCall training status for the linked assistant.
@@ -109,15 +117,14 @@ async def get_training_status(
     """
     from zylch.agents.trainers import MrCallConfiguratorTrainer
     from zylch.tools.starchat import StarChatClient
-    from zylch.config import settings
 
     owner_id = get_user_id_from_token(user)
     storage = get_storage()
 
     all_features = list(MrCallConfiguratorTrainer.FEATURES.keys())
 
-    # Check MrCall is linked
-    business_id = storage.get_mrcall_link(owner_id)
+    # Get business_id from query param or stored link
+    business_id = business_id or storage.get_mrcall_link(owner_id)
     if not business_id:
         return TrainingStatusResponse(
             status="untrained",
@@ -269,10 +276,15 @@ async def start_training(
     user_email = get_user_email_from_token(user)
     storage = get_storage()
 
-    # Check MrCall is linked
-    business_id = storage.get_mrcall_link(owner_id)
+    # Get business_id from request body or stored link
+    business_id = body.business_id or storage.get_mrcall_link(owner_id)
     if not business_id:
         raise HTTPException(status_code=400, detail="No MrCall assistant linked.")
+
+    # Auto-set link if business_id was passed explicitly (so subsequent calls work)
+    if body.business_id:
+        storage.set_mrcall_link(owner_id, body.business_id)
+        logger.info(f"[training/start] Auto-linked business {body.business_id} for owner {owner_id}")
 
     # Get LLM credentials
     api_key, llm_provider = _get_llm_credentials(owner_id, storage)
