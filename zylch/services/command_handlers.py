@@ -3729,7 +3729,7 @@ Use `/agent mrcall train --force` to retrain all features anyway."""
         if _is_stopped():
             return "Training cancelled by user."
 
-        # Train all features in parallel
+        # Train features SEQUENTIALLY to avoid Anthropic rate limits (429)
         completed_count = 0
 
         async def _train_one(feat_name: str):
@@ -3737,7 +3737,7 @@ Use `/agent mrcall train --force` to retrain all features anyway."""
             try:
                 await configurator.train_feature(feat_name, business_id)
                 completed_count += 1
-                # Update progress (thread-safe: only storage calls, no shared mutable state)
+                # Update progress
                 if job_id:
                     pct = 15 + int(completed_count / total_features * 70)  # 15% → 85%
                     storage.update_background_job_progress(
@@ -3750,12 +3750,21 @@ Use `/agent mrcall train --force` to retrain all features anyway."""
                 logger.error(f"[/agent mrcall train] Failed to train {feat_name}: {e}", exc_info=True)
                 return (feat_name, str(e))
 
-        results = await asyncio.gather(*[_train_one(f) for f in features_to_train])
-        for feat_name, err in results:
-            if err is None:
-                trained_features.append(feat_name)
+        for feat_name in features_to_train:
+            if _is_stopped():
+                return "Training cancelled by user."
+            result = await _train_one(feat_name)
+            feat_result_name, feat_err = result
+            # Retry once on rate limit errors
+            if feat_err and "rate_limit" in feat_err.lower():
+                logger.info(f"[/agent mrcall train] Rate limited on {feat_name}, retrying in 5s...")
+                await asyncio.sleep(5)
+                result = await _train_one(feat_name)
+                feat_result_name, feat_err = result
+            if feat_err is None:
+                trained_features.append(feat_result_name)
             else:
-                failed_features.append((feat_name, err))
+                failed_features.append((feat_result_name, feat_err))
 
         # Check for cancellation after training
         if _is_stopped():
