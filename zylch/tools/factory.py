@@ -345,8 +345,7 @@ class ToolFactory:
         # Calendar tools (4 tools)
         tools.extend(ToolFactory._create_calendar_tools(calendar))
 
-        # Web search tool (1 tool) - Anthropic-only feature
-        # Pass provider so WebSearchTool can show clear error for non-Anthropic providers
+        # Web search tool (1 tool) - Anthropic/OpenAI native, other providers fall back to OpenAI
         tools.append(WebSearchTool(
             api_key=config.anthropic_api_key,
             provider=getattr(config, 'llm_provider', 'anthropic')

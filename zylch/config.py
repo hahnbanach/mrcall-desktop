@@ -163,15 +163,27 @@ class Settings(BaseSettings):
     # Performance Optimization
     enable_prompt_caching: bool = Field(default=True, description="Enable prompt caching")
 
-    # System-level LLM API key (fallback for integrations like MrCall)
+    # System-level LLM API keys (fallback for integrations like MrCall dashboard)
     anthropic_api_key: str = Field(
         default="",
         description="System-level Anthropic API key (fallback when user has no key configured)"
     )
+    openai_api_key: str = Field(
+        default="",
+        description="System-level OpenAI API key (fallback when user has no key configured)"
+    )
+    scw_secret_key: str = Field(
+        default="",
+        description="Scaleway secret key for Generative APIs (Mistral models hosted in EU)"
+    )
+    system_llm_provider: str = Field(
+        default="openai",
+        description="System-level LLM provider for fallback operations (anthropic, openai, mistral, scaleway)"
+    )
 
     # LLM Models — one per provider
     default_model: str = Field(
-        default="claude-opus-4-6",
+        default="gpt-4.1",
         description="Default model for all AI operations"
     )
     anthropic_model: str = Field(
@@ -185,6 +197,10 @@ class Settings(BaseSettings):
     mistral_model: str = Field(
         default="mistral-large-3",
         description="Mistral model to use"
+    )
+    scaleway_model: str = Field(
+        default="mistral-small-3.2-24b-instruct-2506",
+        description="Scaleway model to use (see Scaleway Generative APIs supported models)"
     )
 
     # Alpha Testers Allowlist

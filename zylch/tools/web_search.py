@@ -1,13 +1,12 @@
-"""Web search tool using Anthropic's built-in web search capability.
+"""Web search tool supporting Anthropic, OpenAI, and fallback for other providers.
 
-NOTE: This feature is Anthropic-exclusive. OpenAI and Mistral do not have
-equivalent built-in web search functionality.
+- Anthropic: Uses built-in web_search_20250305 tool (Brave Search backend)
+- OpenAI: Uses Responses API with web_search_preview tool
+- Other providers (Scaleway, Mistral): Falls back to OpenAI if OPENAI_API_KEY is set
 """
 
 import logging
 from typing import Any, Dict, Optional
-
-import anthropic
 
 from zylch.config import settings
 from zylch.llm import PROVIDER_FEATURES
@@ -17,13 +16,11 @@ logger = logging.getLogger(__name__)
 
 
 class WebSearchTool(Tool):
-    """Web search tool using Anthropic's built-in web search (Brave Search backend).
+    """Web search tool supporting multiple LLM providers.
 
-    Uses Claude's web_search_20250305 tool for real-time web search with citations.
-
-    NOTE: This is an Anthropic-exclusive feature. Other providers (OpenAI, Mistral)
-    do not have equivalent built-in web search. Users will see a clear message
-    explaining this limitation.
+    - Anthropic: web_search_20250305 tool via Messages API
+    - OpenAI: web_search_preview tool via Responses API
+    - Other providers: falls back to OpenAI if system-level OPENAI_API_KEY available
     """
 
     def __init__(self, api_key: str, provider: str):
@@ -32,13 +29,30 @@ class WebSearchTool(Tool):
             description="Search the web for current information. Use when user explicitly asks to search online or needs up-to-date information."
         )
         self.provider = provider
+        self.api_key = api_key
         self.supports_web_search = PROVIDER_FEATURES.get(provider, {}).get("web_search", False)
 
-        # Only initialize Anthropic client if provider supports web search
+        # Determine which provider actually handles web search
+        self.web_search_provider = None
+        self.client = None
+
         if self.supports_web_search:
-            self.client = anthropic.Anthropic(api_key=api_key)
+            # Provider has native web search
+            self.web_search_provider = provider
+            if provider == "anthropic":
+                import anthropic
+                self.client = anthropic.Anthropic(api_key=api_key)
+            elif provider == "openai":
+                from openai import OpenAI
+                self.client = OpenAI(api_key=api_key)
         else:
-            self.client = None
+            # Fallback: use OpenAI for web search if system key available
+            if settings.openai_api_key:
+                from openai import OpenAI
+                self.client = OpenAI(api_key=settings.openai_api_key)
+                self.web_search_provider = "openai"
+                self.supports_web_search = True
+                logger.info(f"Web search: falling back to OpenAI (provider {provider} has no native web search)")
 
     async def execute(
         self,
@@ -46,7 +60,7 @@ class WebSearchTool(Tool):
         email: Optional[str] = None,
         company: Optional[str] = None,
     ) -> ToolResult:
-        """Search web for information using Claude's built-in web search.
+        """Search web for information.
 
         Args:
             query: Search query
@@ -56,15 +70,13 @@ class WebSearchTool(Tool):
         Returns:
             ToolResult with search findings and citations
         """
-        # Check if provider supports web search
         if not self.supports_web_search:
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
                 error=(
                     f"Web search is not available with {self.provider}. "
-                    f"This feature is exclusive to Anthropic. "
-                    f"To use web search, please run `/connect anthropic` to switch providers."
+                    f"Set OPENAI_API_KEY in .env for web search fallback, or use Anthropic/OpenAI."
                 )
             )
 
@@ -72,81 +84,123 @@ class WebSearchTool(Tool):
             # Build enhanced query
             search_query = query
             if email:
-                # Extract domain for company research
                 domain = email.split('@')[1] if '@' in email else ''
                 if domain:
                     search_query += f" {domain}"
             if company:
                 search_query += f" {company}"
 
-            logger.info(f"Web searching (built-in): {search_query}")
+            logger.info(f"Web searching (via {self.web_search_provider}): {search_query}")
 
-            # Use Anthropic's built-in web search tool
-            response = self.client.messages.create(
-                model=settings.default_model,
-                max_tokens=2048,
-                tools=[{
-                    "type": "web_search_20250305",
-                    "name": "web_search",
-                    "max_uses": 3  # Limit searches per request
-                }],
-                messages=[{
-                    "role": "user",
-                    "content": f"""Search the web for: {search_query}
-
-Provide a concise summary of the findings with relevant details. Include citations to sources."""
-                }]
-            )
-
-            # Extract text response and citations
-            search_results = ""
-            citations = []
-
-            for block in response.content:
-                if hasattr(block, 'text'):
-                    search_results += block.text
-                # Check for web search tool results with citations
-                if hasattr(block, 'type') and block.type == 'web_search_tool_result':
-                    if hasattr(block, 'content'):
-                        for result in block.content:
-                            if hasattr(result, 'url') and hasattr(result, 'title'):
-                                citations.append({
-                                    'url': result.url,
-                                    'title': result.title
-                                })
-
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data={
-                    "query": search_query,
-                    "findings": search_results,
-                    "citations": citations,
-                    "email": email,
-                    "company": company,
-                },
-                message=f"Found web information for: {search_query}"
-            )
-
-        except anthropic.BadRequestError as e:
-            # Web search may not be available on all plans/models
-            if "web_search" in str(e).lower():
-                logger.warning(f"Web search not available: {e}")
+            if self.web_search_provider == "openai":
+                return await self._search_openai(search_query, email, company)
+            elif self.web_search_provider == "anthropic":
+                return await self._search_anthropic(search_query, email, company)
+            else:
                 return ToolResult(
                     status=ToolStatus.ERROR,
                     data=None,
-                    error="Web search is not available. This feature requires a supported plan."
+                    error=f"Web search not implemented for provider: {self.web_search_provider}"
                 )
-            raise
+
         except Exception as e:
-            logger.error(f"Web search failed: {e}")
+            logger.error(f"Web search failed ({self.web_search_provider}): {e}")
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
                 error=str(e)
             )
 
+    async def _search_openai(
+        self,
+        search_query: str,
+        email: Optional[str],
+        company: Optional[str],
+    ) -> ToolResult:
+        """Web search via OpenAI Responses API."""
+        response = self.client.responses.create(
+            model=settings.openai_model,
+            tools=[{"type": "web_search_preview"}],
+            input=f"Search the web for: {search_query}\n\nProvide a concise summary of the findings with relevant details. Include citations to sources.",
+        )
+
+        # Extract text and citations from response.output
+        search_results = response.output_text or ""
+        citations = []
+
+        for item in response.output:
+            if getattr(item, 'type', None) == 'message':
+                for content_block in getattr(item, 'content', []):
+                    if getattr(content_block, 'type', None) == 'output_text':
+                        for annotation in getattr(content_block, 'annotations', []):
+                            if getattr(annotation, 'type', None) == 'url_citation':
+                                citations.append({
+                                    'url': getattr(annotation, 'url', ''),
+                                    'title': getattr(annotation, 'title', ''),
+                                })
+
+        return ToolResult(
+            status=ToolStatus.SUCCESS,
+            data={
+                "query": search_query,
+                "findings": search_results,
+                "citations": citations,
+                "email": email,
+                "company": company,
+            },
+            message=f"Found web information for: {search_query}"
+        )
+
+    async def _search_anthropic(
+        self,
+        search_query: str,
+        email: Optional[str],
+        company: Optional[str],
+    ) -> ToolResult:
+        """Web search via Anthropic's built-in web_search tool."""
+        response = self.client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=2048,
+            tools=[{
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 3,
+            }],
+            messages=[{
+                "role": "user",
+                "content": f"Search the web for: {search_query}\n\nProvide a concise summary of the findings with relevant details. Include citations to sources.",
+            }]
+        )
+
+        search_results = ""
+        citations = []
+
+        for block in response.content:
+            if hasattr(block, 'text'):
+                search_results += block.text
+            if hasattr(block, 'type') and block.type == 'web_search_tool_result':
+                if hasattr(block, 'content'):
+                    for result in block.content:
+                        if hasattr(result, 'url') and hasattr(result, 'title'):
+                            citations.append({
+                                'url': result.url,
+                                'title': result.title,
+                            })
+
+        return ToolResult(
+            status=ToolStatus.SUCCESS,
+            data={
+                "query": search_query,
+                "findings": search_results,
+                "citations": citations,
+                "email": email,
+                "company": company,
+            },
+            message=f"Found web information for: {search_query}"
+        )
+
     def get_schema(self) -> Dict[str, Any]:
-        """Get Anthropic function schema."""
+        """Get function schema for tool calling."""
         return {
             "name": self.name,
             "description": "Search the web for current information. Use when user asks to search online, needs up-to-date information not in their emails, or wants to research contacts, companies, or topics.",
@@ -155,7 +209,7 @@ Provide a concise summary of the findings with relevant details. Include citatio
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Search query (e.g., 'Anthropic Claude pricing 2025' or 'QBitSoft beach management software')"
+                        "description": "Search query (e.g., 'OpenAI pricing 2025' or 'QBitSoft beach management software')"
                     },
                     "email": {
                         "type": "string",

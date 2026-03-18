@@ -4,11 +4,12 @@ from typing import Dict, Any
 
 from zylch.config import settings
 
-# One model per provider — configured via env vars (ANTHROPIC_MODEL, OPENAI_MODEL, MISTRAL_MODEL)
+# One model per provider — configured via env vars (ANTHROPIC_MODEL, OPENAI_MODEL, MISTRAL_MODEL, SCALEWAY_MODEL)
 PROVIDER_MODELS: Dict[str, str] = {
     "anthropic": settings.anthropic_model,
     "openai": settings.openai_model,
     "mistral": settings.mistral_model,
+    "scaleway": settings.scaleway_model,
 }
 
 # LiteLLM model prefixes
@@ -16,6 +17,7 @@ LITELLM_MODEL_PREFIXES: Dict[str, str] = {
     "anthropic": "anthropic",
     "openai": "openai",
     "mistral": "mistral",
+    "scaleway": "scaleway",
 }
 
 # Feature availability per provider
@@ -28,15 +30,21 @@ PROVIDER_FEATURES: Dict[str, Dict[str, bool]] = {
     },
     "openai": {
         "tool_calling": True,
-        "web_search": False,     # Anthropic-only feature
+        "web_search": True,      # Via Responses API (web_search_preview tool)
         "prompt_caching": False, # Anthropic-only feature
         "vision": True,
     },
     "mistral": {
         "tool_calling": True,
-        "web_search": False,     # Anthropic-only feature
+        "web_search": False,     # Only via Mistral Agents API (not standard completions)
         "prompt_caching": False, # Anthropic-only feature
         "vision": True,          # mistral-large-3 is multimodal
+    },
+    "scaleway": {
+        "tool_calling": True,
+        "web_search": False,     # Scaleway Generative APIs don't support built-in tools
+        "prompt_caching": False,
+        "vision": True,          # Mistral models on Scaleway support vision
     },
 }
 
@@ -45,6 +53,7 @@ PROVIDER_API_KEY_NAMES: Dict[str, str] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
     "mistral": "MISTRAL_API_KEY",
+    "scaleway": "SCW_SECRET_KEY",
 }
 
 
@@ -74,7 +83,7 @@ def get_provider_info(provider: str) -> Dict[str, Any]:
         "features": features,
         "available_features": available,
         "unavailable_features": unavailable,
-        "is_eu": provider == "mistral",
+        "is_eu": provider in ("mistral", "scaleway"),
     }
 
 
@@ -129,6 +138,38 @@ def format_provider_info_message(provider: str) -> str:
 
     if info["unavailable_features"]:
         lines.append("")
-        lines.append("*Note: Web search and prompt caching are Anthropic-exclusive features.*")
+        lines.append("*Note: Prompt caching is Anthropic-exclusive. Web search is available with Anthropic and OpenAI.*")
 
     return "\n".join(lines)
+
+
+def get_system_llm_credentials(
+    fallback_provider: str = "",
+    fallback_api_key: str = "",
+) -> tuple[str, str]:
+    """Get system-level LLM credentials (for when user has no BYOK key).
+
+    Used by MrCall dashboard and other integrations where the operator
+    provides the API key (not the end user).
+
+    Uses system_llm_provider setting to determine which system key to use.
+    Falls back to provided values if no system key is available.
+
+    Returns:
+        (provider, api_key) tuple
+    """
+    provider = settings.system_llm_provider
+    if provider == "openai" and settings.openai_api_key:
+        return "openai", settings.openai_api_key
+    if provider == "anthropic" and settings.anthropic_api_key:
+        return "anthropic", settings.anthropic_api_key
+    if provider == "scaleway" and settings.scw_secret_key:
+        return "scaleway", settings.scw_secret_key
+    # Try any available key as last resort
+    if settings.openai_api_key:
+        return "openai", settings.openai_api_key
+    if settings.scw_secret_key:
+        return "scaleway", settings.scw_secret_key
+    if settings.anthropic_api_key:
+        return "anthropic", settings.anthropic_api_key
+    return fallback_provider, fallback_api_key

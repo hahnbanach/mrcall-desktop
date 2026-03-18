@@ -1214,12 +1214,11 @@ Run `/agent mrcall train` to generate configuration context for all features."""
             # Get LLM credentials (with system-level fallback for dashboard)
             llm_provider, api_key = get_active_llm_provider(owner_id)
             if not api_key and is_dashboard:
-                # System-level fallback for dashboard users
-                from zylch.config import settings
-                if settings.anthropic_api_key:
-                    llm_provider = "anthropic"
-                    api_key = settings.anthropic_api_key
-                    logger.info(f"[/mrcall config] Using system-level Anthropic API key for owner={owner_id}")
+                # System-level fallback for dashboard users (no BYOK)
+                from zylch.llm.providers import get_system_llm_credentials
+                llm_provider, api_key = get_system_llm_credentials()
+                if api_key:
+                    logger.info(f"[/mrcall config] Using system-level {llm_provider} API key for owner={owner_id}")
             logger.debug(f"[/mrcall config] llm_provider={llm_provider}, api_key={'present' if api_key else 'absent'}")
             if not api_key:
                 return "❌ **No LLM configured**\n\nRun `/connect anthropic` to configure an LLM provider."
@@ -2973,11 +2972,10 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
 
         # System-level fallback for MrCall domain (dashboard users don't have BYOK)
         if domain == 'mrcall' and not api_key:
-            from zylch.config import settings
-            if settings.anthropic_api_key:
-                llm_provider = "anthropic"
-                api_key = settings.anthropic_api_key
-                logger.info(f"[/agent mrcall] Using system-level Anthropic API key for owner={owner_id}")
+            from zylch.llm.providers import get_system_llm_credentials
+            llm_provider, api_key = get_system_llm_credentials()
+            if api_key:
+                logger.info(f"[/agent mrcall] Using system-level {llm_provider} API key for owner={owner_id}")
 
         # Build agent_type for DB storage (e.g., 'memory_email', 'task_calendar')
         def get_agent_type(domain: str, channel: str) -> str:

@@ -914,10 +914,10 @@ What would you like to do?"""
             if not api_key:
                 # System-level fallback for integrations (e.g., MrCall dashboard users)
                 from zylch.config import settings
-                if settings.anthropic_api_key:
-                    llm_provider = "anthropic"
-                    api_key = settings.anthropic_api_key
-                    logger.info(f"[/mrcall open] Using system-level Anthropic API key for owner={owner_id}")
+                from zylch.llm.providers import get_system_llm_credentials
+                llm_provider, api_key = get_system_llm_credentials()
+                if api_key:
+                    logger.info(f"[/mrcall open] Using system-level {llm_provider} API key for owner={owner_id}")
             if not api_key or not llm_provider:
                 return "❌ LLM API key required. Run `/connect anthropic` to set up."
 
