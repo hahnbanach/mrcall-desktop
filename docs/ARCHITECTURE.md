@@ -85,7 +85,7 @@ zylch/
 │
 ├── llm/                  # LLM client abstraction
 │   ├── client.py         # LLMClient (LiteLLM wrapper)
-│   └── providers.py      # Provider configuration (Anthropic, OpenAI, Mistral)
+│   └── providers.py      # Provider configuration (OpenAI, Scaleway, Anthropic, Mistral)
 │
 ├── skills/               # Skill registry (composable capabilities)
 │   ├── base.py           # Base skill class
@@ -174,8 +174,17 @@ Scaleway Kubernetes (ARM64 nodes)
 
 GitLab CI/CD
 ├── Self-hosted ARM64 runner on Scaleway
+│   ├── Instance: gitlab-runner-arm64 (COPARM1-2C-8G)
+│   ├── IP: 51.15.139.29 (fr-par-1)
+│   └── SSH: ssh ubuntu@51.15.139.29
 ├── Native ARM64 Docker builds (no QEMU emulation)
-└── Auto-shutdown runner after 4h idle
+├── Auto-shutdown runner after 4h idle
+└── If disk full: sudo docker system prune -af && sudo docker builder prune -af
+
+Deploy configs: ~/hb/zylch-deploy/{test,production}/
+├── secrets.env       # Env vars (OPENAI_API_KEY, SCW_SECRET_KEY, SYSTEM_LLM_PROVIDER, etc.)
+├── create-secrets.sh # Updates K8s secrets from secrets.env
+└── deploy.sh         # Rolls out new pod
 ```
 
 ### External Services
@@ -184,7 +193,7 @@ GitLab CI/CD
 | Gmail API | Email read/send/drafts | OAuth 2.0 (per-user) |
 | Google Calendar API | Events, Meet links | OAuth 2.0 (per-user) |
 | Microsoft Graph API | Outlook email + calendar | OAuth 2.0 (per-user) |
-| Anthropic Claude | AI processing | API key (BYOK per-user) |
+| LLM Providers | AI processing (OpenAI, Scaleway/Mistral, Anthropic) | System key (OPENAI_API_KEY/SCW_SECRET_KEY) + BYOK per-user |
 | StarChat/MrCall | Telephony, contacts, WhatsApp | OAuth 2.0 + API key |
 | SendGrid | Email campaigns, tracking | API key |
 | Vonage | SMS | API key (BYOK per-user) |
@@ -201,7 +210,8 @@ GitLab CI/CD
 ### Credentials (BYOK Model)
 - Users provide their own API keys via `/connect` commands
 - Stored encrypted in `oauth_tokens` table (Fernet encryption)
-- System-level Anthropic key as fallback for integrations
+- System-level LLM key as fallback for integrations (SYSTEM_LLM_PROVIDER selects: openai, scaleway, or anthropic)
+- Web search: Anthropic/OpenAI natively; other providers fall back to OpenAI
 
 ### Memory System
 - Entity-centric blobs with vector embeddings (384-dim, sentence-transformers)
