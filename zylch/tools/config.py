@@ -136,9 +136,12 @@ class ToolConfig:
 
         # System-level fallback if user has no key configured
         # (useful for integrations like MrCall where operator provides the key)
-        if not config.anthropic_api_key and settings.anthropic_api_key:
-            config.llm_provider = "anthropic"
-            config.anthropic_api_key = settings.anthropic_api_key
+        if not config.anthropic_api_key:
+            from zylch.llm.providers import get_system_llm_credentials
+            sys_provider, sys_key = get_system_llm_credentials()
+            if sys_key:
+                config.llm_provider = sys_provider
+                config.anthropic_api_key = sys_key  # field name is legacy, stores any provider's key
 
         # Pipedrive
         pipedrive_token = storage.get_pipedrive_key(owner_id)

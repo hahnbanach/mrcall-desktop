@@ -87,10 +87,12 @@ def _get_llm_credentials(owner_id: str, storage: SupabaseStorage):
         if creds and creds.get('api_key'):
             return creds['api_key'], provider
 
-    # Fallback to system-level key (for dashboard users who don't /connect anthropic)
-    if settings.anthropic_api_key:
-        logger.info(f"[training] Using system-level Anthropic API key for owner={owner_id}")
-        return settings.anthropic_api_key, 'anthropic'
+    # Fallback to system-level key (for dashboard users who don't have BYOK)
+    from zylch.llm.providers import get_system_llm_credentials
+    sys_provider, sys_key = get_system_llm_credentials()
+    if sys_key:
+        logger.info(f"[training] Using system-level {sys_provider} API key for owner={owner_id}")
+        return sys_key, sys_provider
 
     raise HTTPException(
         status_code=400,
