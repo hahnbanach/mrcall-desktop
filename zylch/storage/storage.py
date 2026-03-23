@@ -2095,9 +2095,10 @@ class Storage:
                     .first()
                 if row:
                     return row.agent_prompt
+                logger.debug(f"Agent prompt not found: owner={owner_id}, type={agent_type}")
                 return None
         except Exception as e:
-            logger.warning(f"Failed to get agent prompt: {e}")
+            logger.warning(f"Failed to get agent prompt (owner={owner_id}, type={agent_type}): {e}")
             return None
 
 
