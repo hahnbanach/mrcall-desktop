@@ -1,7 +1,8 @@
 """MrCall Agent - Unified multi-tool agent for MrCall configuration.
 
 This is a TRUE AGENT with multiple tools that can:
-- Configure welcome message (configure_welcome_message)
+- Configure inbound welcome message (configure_welcome_inbound)
+- Configure outbound welcome message (configure_welcome_outbound)
 - Configure booking settings (configure_booking)
 - Show current configuration (get_current_config)
 - Answer questions (respond_text)
@@ -26,7 +27,7 @@ def _build_changes_schema(feature_name: str) -> dict:
     Uses MrCallConfiguratorTrainer.FEATURES as the single source of truth.
 
     Args:
-        feature_name: Feature key (e.g., 'welcome_message', 'booking')
+        feature_name: Feature key (e.g., 'welcome_inbound', 'booking')
 
     Returns:
         JSON schema dict with properties for each valid variable
@@ -48,12 +49,23 @@ logger = logging.getLogger(__name__)
 # Uses _build_changes_schema to constrain variable names to valid options
 MRCALL_AGENT_TOOLS = [
     {
-        "name": "configure_welcome_message",
-        "description": "Modify the welcome message / greeting settings. Use this when user wants to CHANGE, UPDATE, or MODIFY how the assistant answers - including making it more formal, informal, adding/removing greetings, etc. You must provide the COMPLETE new prompt text with your modifications.",
+        "name": "configure_welcome_inbound",
+        "description": "Modify the inbound welcome message / greeting. Use this when user wants to CHANGE, UPDATE, or MODIFY how the assistant answers incoming calls — including making it more formal, informal, adding/removing greetings, etc. You must provide the COMPLETE new prompt text with your modifications.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "changes": _build_changes_schema("welcome_message")
+                "changes": _build_changes_schema("welcome_inbound")
+            },
+            "required": ["changes"]
+        }
+    },
+    {
+        "name": "configure_welcome_outbound",
+        "description": "Modify the outbound welcome message. Use this when user wants to CHANGE, UPDATE, or MODIFY how the assistant starts outgoing calls.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "changes": _build_changes_schema("welcome_outbound")
             },
             "required": ["changes"]
         }
@@ -143,7 +155,7 @@ MRCALL_AGENT_TOOLS = [
             "properties": {
                 "feature": {
                     "type": "string",
-                    "enum": ["welcome_message", "booking", "caller_followup", "conversation", "knowledge_base", "notifications_business", "runtime_data", "call_transfer", "all"],
+                    "enum": ["welcome_inbound", "welcome_outbound", "booking", "caller_followup", "conversation", "knowledge_base", "notifications_business", "runtime_data", "call_transfer", "all"],
                     "description": "Which feature to show config for"
                 }
             },
@@ -178,7 +190,8 @@ class MrCallAgent(SpecializedAgent):
     3. Lets the LLM choose which tool to use based on user intent
 
     Tools available:
-    - configure_welcome_message: Update greeting settings
+    - configure_welcome_inbound: Update inbound greeting settings
+    - configure_welcome_outbound: Update outbound greeting settings
     - configure_booking: Update booking settings
     - get_current_config: Show current settings
     - respond_text: Answer questions
@@ -344,10 +357,15 @@ Choose the appropriate tool based on what the user wants. Remember:
                     logger.debug(f"[MrCallAgent] Tool input: {block.input}")
 
                     # Process based on tool
-                    if block.name == 'configure_welcome_message':
-                        logger.info("[MrCallAgent] Calling _process_configure for welcome_message")
+                    if block.name == 'configure_welcome_inbound':
+                        logger.info("[MrCallAgent] Calling _process_configure for welcome_inbound")
                         result['result'] = await self._process_configure(
-                            block.input, 'welcome_message'
+                            block.input, 'welcome_inbound'
+                        )
+                    elif block.name == 'configure_welcome_outbound':
+                        logger.info("[MrCallAgent] Calling _process_configure for welcome_outbound")
+                        result['result'] = await self._process_configure(
+                            block.input, 'welcome_outbound'
                         )
                     elif block.name == 'configure_booking':
                         logger.info("[MrCallAgent] Calling _process_configure for booking")
