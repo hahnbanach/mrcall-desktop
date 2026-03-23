@@ -1,13 +1,12 @@
-version: '3.8'
-
 services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: zylch-postgres
+    env_file:
+      - .env.docker
     environment:
       POSTGRES_DB: zylch
       POSTGRES_USER: zylch
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zylch_dev}
     ports:
       - "5432:5432"
     volumes:
@@ -29,42 +28,11 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    env_file:
+      - .env.docker
     environment:
-      # PostgreSQL
+      # Paths (container-specific, not in .env.docker)
       - DATABASE_URL=postgresql://zylch:${POSTGRES_PASSWORD:-zylch_dev}@postgres:5432/zylch
-
-      # Anthropic
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-
-      # Firebase (server-side validation)
-      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/credentials/firebase-service-account.json
-      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
-
-      # StarChat
-      - STARCHAT_API_URL=${STARCHAT_API_URL}
-      - STARCHAT_API_KEY=${STARCHAT_API_KEY}
-      - STARCHAT_USERNAME=${STARCHAT_USERNAME}
-      - STARCHAT_PASSWORD=${STARCHAT_PASSWORD}
-      - STARCHAT_BUSINESS_ID=${STARCHAT_BUSINESS_ID}
-
-      # SendGrid
-      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
-      - SENDGRID_FROM_EMAIL=${SENDGRID_FROM_EMAIL}
-
-      # Vonage SMS
-      - VONAGE_API_KEY=${VONAGE_API_KEY}
-      - VONAGE_API_SECRET=${VONAGE_API_SECRET}
-      - VONAGE_FROM_NUMBER=${VONAGE_FROM_NUMBER}
-
-      # Google OAuth
-      - GOOGLE_CREDENTIALS_PATH=/app/credentials/google_oauth.json
-      - GOOGLE_TOKEN_PATH=/app/credentials/google_tokens/
-
-      # CORS (for dashboard integration)
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:3000}
-
-      # Webhook
-      - WEBHOOK_PUBLIC_URL=${WEBHOOK_PUBLIC_URL}
 
     volumes:
       # Mount credentials (read-only)
