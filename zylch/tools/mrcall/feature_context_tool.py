@@ -35,7 +35,7 @@ class GetMrCallFeatureContextTool(Tool):
                 "Use this BEFORE attempting to modify MrCall settings. "
                 "Returns detailed information about the current configuration, "
                 "what can be changed, and what cannot. "
-                "Available features: welcome_message (how the assistant answers the phone). "
+                "Available features: welcome_inbound (inbound greeting), welcome_outbound (outbound greeting), booking, conversation, etc. "
                 "If the context hasn't been analyzed yet, this will analyze it first."
             ),
         )
@@ -44,12 +44,12 @@ class GetMrCallFeatureContextTool(Tool):
 
     async def execute(
         self,
-        feature: str = "welcome_message",
+        feature: str = "welcome_inbound",
     ) -> ToolResult:
         """Load context for a MrCall feature.
 
         Args:
-            feature: Feature name. Currently supported: "welcome_message"
+            feature: Feature name (e.g., "welcome_inbound", "welcome_outbound", "booking")
 
         Returns:
             ToolResult with context, was_generated flag, and feature name
@@ -133,10 +133,10 @@ class GetMrCallFeatureContextTool(Tool):
                         "type": "string",
                         "description": (
                             "The MrCall feature to get context for. "
-                            "Use 'welcome_message' for how the assistant answers calls."
+                            "Use 'welcome_inbound' for inbound greeting, 'welcome_outbound' for outbound."
                         ),
                         "enum": available_features,
-                        "default": "welcome_message",
+                        "default": "welcome_inbound",
                     },
                 },
                 "required": [],

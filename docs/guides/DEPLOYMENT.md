@@ -3,7 +3,7 @@ description: |
   Scaleway Kubernetes deployment with GitLab CI/CD. ARM64 nodes (COPARM1/BASIC2),
   self-hosted GitLab Runner on Scaleway for native builds, auto-shutdown after 4h idle.
   Two environments: test (starchat-test, in-cluster postgres) and production
-  (starchat-production, Scaleway Managed PostgreSQL). Internal API only (no public ingress).
+  (starchat-production, Scaleway Managed PostgreSQL). HTTPS via nginx ingress + cert-manager.
 ---
 
 # Zylch Deployment - Scaleway Kubernetes
@@ -20,7 +20,8 @@ Zylch runs on **Scaleway Kubernetes** with **ARM64 nodes**, built via **GitLab C
 | **Registry** | GitLab Container Registry (`registry.gitlab.com/hahnbanach/zylch`) |
 | **Database (test)** | In-cluster PostgreSQL 16 + pgvector (container) |
 | **Database (prod)** | Scaleway Managed PostgreSQL 16 (`zylch-db`, db-dev-s, pgvector 0.8) |
-| **Network** | Internal ClusterIP only (accessed by dashboard within same cluster) |
+| **Network** | ClusterIP + nginx Ingress (HTTPS via cert-manager/Let's Encrypt) |
+| **CORS** | nginx ingress annotations + FastAPI CORSMiddleware (defense-in-depth) |
 
 ## Architecture
 
@@ -158,6 +159,7 @@ zylch-deploy/
 │   ├── namespace.yaml
 │   ├── deployment-zylch.yaml        ← env vars from zylch-secrets
 │   ├── deployment-postgres.yaml     ← in-cluster postgres + pgvector
+│   ├── ingress-zylch.yaml            ← nginx ingress + CORS + TLS
 │   ├── service-zylch.yaml           ← ClusterIP :8000
 │   ├── service-postgres.yaml        ← ClusterIP :5432
 │   ├── configmap-postgres-init.yaml ← uuid-ossp + vector extensions
@@ -231,6 +233,33 @@ cp secrets.env.template secrets.env
 # Edit secrets.env with real values
 ./create-secrets.sh
 ```
+
+## Ingress & CORS
+
+Each environment has an nginx ingress (`ingress-zylch.yaml`) that terminates TLS and handles CORS.
+
+| Environment | Host | Ingress file |
+|-------------|------|-------------|
+| **Test** | `zylch-test.mrcall.ai` | `~/hb/zylch-deploy/test/ingress-zylch.yaml` |
+| **Production** | `zylch.mrcall.ai` | `~/hb/zylch-deploy/production/ingress-zylch.yaml` |
+
+CORS is configured at **two layers** (defense-in-depth):
+
+1. **nginx ingress annotations** — handles CORS headers on ALL responses, including nginx-generated error responses (502/503/504). This is critical because when the pod is slow/unresponsive, nginx returns errors that bypass FastAPI middleware.
+2. **FastAPI CORSMiddleware** (`zylch/api/main.py`) — handles CORS on application responses. Origins read from `CORS_ALLOWED_ORIGINS` env var (K8s secret).
+
+Key ingress annotations:
+```yaml
+nginx.ingress.kubernetes.io/enable-cors: "true"
+nginx.ingress.kubernetes.io/cors-allow-origin: "https://dashboard-test.mrcall.ai,..."
+nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+nginx.ingress.kubernetes.io/proxy-read-timeout: "300"    # 5min for LLM calls
+nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+```
+
+**When updating allowed origins**, update BOTH:
+- The ingress YAML (`cors-allow-origin` annotation) → `kubectl apply`
+- The K8s secret (`CORS_ALLOWED_ORIGINS`) → `./create-secrets.sh`
 
 ## Database
 

@@ -2,20 +2,13 @@
 
 Pre-alpha AI assistant for email, calendar, CRM, and telephony management. Python/FastAPI/PostgreSQL.
 
-## Documentation Index
+## Documentation
 
-| Document | Summary |
-|----------|---------|
-| [docs/architecture.md](docs/architecture.md) | System map, data flow, infrastructure, cross-cutting concerns |
-| [docs/system-rules.md](docs/system-rules.md) | Tech stack, coding standards, dependency rules, imperatives |
-| [docs/active-context.md](docs/active-context.md) | What works, what's in progress, next steps, known issues |
-| [docs/quality-grades.md](docs/quality-grades.md) | Per-module test coverage, docs completeness, conformance |
-| [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | Code style, MrCall integration rules, patterns |
-| [docs/features/](docs/features/) | Feature documentation (email, memory, tasks, MrCall, etc.) |
-| [docs/agents/](docs/agents/) | Agent architecture and per-agent docs |
-| [docs/guides/](docs/guides/) | Setup guides (Gmail OAuth, deployment, CLI) |
-| [docs/execution-plans/](docs/execution-plans/) | Active implementation plans |
-| [docs/harness-backlog.md](docs/harness-backlog.md) | Enforcement gaps and tooling debt |
+The directory ./docs/ is continuosly updated through the commands /doc-*. 
+
+Whenever you have a question, check docs/README.md in order to understand how the documentation is organized.
+
+After context compaction, run /doc-intrasession before resuming work!
 
 ## Quick Reference
 
