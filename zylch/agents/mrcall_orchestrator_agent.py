@@ -160,7 +160,9 @@ class MrCallOrchestratorAgent:
         # Auto-train if needed
         trained = await self._ensure_trained()
         if not trained:
-            return "**Error:** Failed to prepare configuration. Please check the logs or run `/agent mrcall train` manually."
+            return ("❌ **Training required**\n\n"
+                    "Your MrCall assistant hasn't been trained yet. "
+                    "Please train it first from the Dashboard training button.")
 
         # Get business name for welcome message
         business_name = "your assistant"
@@ -390,51 +392,44 @@ Action: respond_to_user("What would you like the new greeting to be? For example
         return str(agent_result)
 
     async def _ensure_trained(self) -> bool:
-        """Ensure MrCallAgent has trained prompt. Auto-train if missing.
+        """Ensure MrCallAgent has trained prompt. Fast-rebuild if missing.
+
+        If the unified prompt is missing, attempts a fast Layer 2 rebuild
+        (loads sub-prompts from DB, no LLM calls). Never does full training
+        inline — that would block the HTTP request for 7+ minutes.
 
         Returns:
-            True if prompt is available (existed or was trained successfully)
+            True if prompt is available (existed or was rebuilt successfully)
         """
-        # Check if prompt exists
         prompt_key = f"mrcall_{self.business_id}"
         existing = self.storage.get_agent_prompt(self.owner_id, prompt_key)
 
         if existing:
-            logger.info("[MrCallOrchestrator] MrCall agent prompt already trained")
+            logger.info(f"[MrCallOrchestrator] Trained prompt found: key={prompt_key}")
             return True
 
-        # Auto-train
-        logger.info("[MrCallOrchestrator] Auto-training MrCall agent...")
+        # Unified prompt missing — try fast rebuild from sub-prompts (Layer 2 only, no LLM calls)
+        logger.warning(f"[MrCallOrchestrator] No unified prompt for key={prompt_key}, owner={self.owner_id}. Attempting fast rebuild...")
         try:
-            from zylch.agents.trainers import MrCallConfiguratorTrainer, MrCallAgentTrainer
+            from zylch.agents.trainers import MrCallAgentTrainer
 
-            # Train all features (Layer 1)
-            configurator = MrCallConfiguratorTrainer(
-                storage=self.storage,
-                starchat_client=self.starchat,
-                owner_id=self.owner_id,
-                api_key=self.api_key,
-                provider=self.provider,
-            )
-            await configurator.train_all(self.business_id)
-
-            # Build unified prompt (Layer 2)
             trainer = MrCallAgentTrainer(
                 storage=self.storage,
                 owner_id=self.owner_id,
                 api_key=self.api_key,
-                user_email="",  # Not needed for build
+                user_email="",
                 provider=self.provider,
                 starchat_client=self.starchat,
             )
             prompt, metadata = await trainer.build_prompt(self.business_id)
-
-            # Store unified prompt
             self.storage.store_agent_prompt(self.owner_id, prompt_key, prompt, metadata)
-
-            logger.info("[MrCallOrchestrator] MrCall agent trained successfully")
+            logger.info(f"[MrCallOrchestrator] Fast rebuild succeeded: {len(metadata.get('features_included', []))} features")
             return True
 
+        except ValueError as e:
+            # No sub-prompts exist — user hasn't trained yet
+            logger.warning(f"[MrCallOrchestrator] Fast rebuild failed (no sub-prompts): {e}")
+            return False
         except Exception as e:
-            logger.error(f"[MrCallOrchestrator] Auto-training failed: {e}", exc_info=True)
+            logger.error(f"[MrCallOrchestrator] Fast rebuild failed: {e}", exc_info=True)
             return False
