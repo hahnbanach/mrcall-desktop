@@ -3679,6 +3679,26 @@ Usage:
                 stale_features = diff_info["stale_features"]
 
                 if not stale_features:
+                    # Verify unified prompt exists — it may have been lost
+                    unified_key = f"mrcall_{business_id}"
+                    if not storage.get_agent_prompt(owner_id, unified_key):
+                        logger.warning(f"[/agent mrcall train] Snapshot up-to-date but unified prompt missing. Rebuilding...")
+                        agent_trainer = MrCallAgentTrainer(
+                            storage=storage, owner_id=owner_id,
+                            api_key=api_key, user_email=user_email or '',
+                            provider=llm_provider, starchat_client=starchat,
+                        )
+                        try:
+                            prompt, metadata = await agent_trainer.build_prompt(business_id)
+                            storage.store_agent_prompt(owner_id, unified_key, prompt, metadata)
+                            logger.info(f"[/agent mrcall train] Unified prompt rebuilt successfully")
+                        except Exception as e:
+                            logger.error(f"[/agent mrcall train] Failed to rebuild unified prompt: {e}")
+                            # Fall through to full retrain
+                            features_to_train = list(MrCallConfiguratorTrainer.FEATURES.keys())
+                            stale_features = set(features_to_train)
+
+                if not stale_features:
                     if is_dashboard:
                         import random
                         _DASHBOARD_UPTODATE_MESSAGES = [
