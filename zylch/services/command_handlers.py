@@ -826,7 +826,7 @@ In config mode, use natural language:
 • `/agent mrcall train` - Manually train agent
 • `/agent mrcall run "..."` - Single-turn configuration
 
-**Features:** welcome_message, booking (more coming)
+**Features:** welcome_inbound, welcome_outbound, booking (more coming)
 
 **Setup:**
 1. Run `/connect mrcall` to authenticate with MrCall
@@ -1131,7 +1131,7 @@ Your Zylch is now connected to this MrCall assistant!
                 return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
 
             # Parse feature argument
-            feature_name = positional[1] if len(positional) > 1 else "welcome_message"
+            feature_name = positional[1] if len(positional) > 1 else "welcome_inbound"
             agent_type = f"mrcall_{business_id}_{feature_name}"
 
             # Get stored sub-prompt
@@ -1170,7 +1170,7 @@ Run `/agent mrcall train` to generate configuration context for all features."""
 
 **Example:**
 ```
-/mrcall config welcome_message "use formal tone (lei/Sie), don't ask for name"
+/mrcall config welcome_inbound "use formal tone (lei/Sie), don't ask for name"
 ```
 
 **Supported features:** {', '.join(SUPPORTED_FEATURES)}"""
@@ -1190,7 +1190,7 @@ Run `/agent mrcall train` to generate configuration context for all features."""
 
 **Example:**
 ```
-/mrcall config welcome_message "use formal tone, don't ask for name"
+/mrcall config welcome_inbound "use formal tone, don't ask for name"
 ```"""
 
             # Dashboard detection for firebase_token
@@ -2910,7 +2910,7 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
 • `/agent mrcall show` - Show current agent prompt
 • `/agent mrcall reset` - Delete agent prompt
 
-  Available features: welcome_message, booking, caller_followup, conversation, knowledge_base, notifications_business, runtime_data, call_transfer
+  Available features: welcome_inbound, welcome_outbound, booking, caller_followup, conversation, knowledge_base, notifications_business, runtime_data, call_transfer
 
 **Channels:** `email` (includes calendar), `mrcall` (phone calls), `all`
 
@@ -3989,7 +3989,8 @@ Connect your LLM provider:
 
         # Format response based on tool used
         if tool_used in (
-            'configure_welcome_message',
+            'configure_welcome_inbound',
+            'configure_welcome_outbound',
             'configure_booking',
             'configure_caller_followup',
             'configure_conversation',

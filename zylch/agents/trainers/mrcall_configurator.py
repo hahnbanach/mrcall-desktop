@@ -323,7 +323,7 @@ OUTPUT ONLY THE SUB-PROMPT TEXT."""
 # Meta-prompt for generating conversation sub-prompts
 CONVERSATION_META_PROMPT = """You are analyzing the conversation flow configuration for a MrCall AI phone assistant.
 
-Your task: Generate a self-contained sub-prompt that teaches another LLM how to configure CONVERSATION_INSTRUCTIONS — the single source of truth for what the assistant does after the welcome greeting.
+Your task: Generate a self-contained sub-prompt that teaches another LLM how to configure CONVERSATION_PROMPT — the single source of truth for what the assistant does after the welcome greeting.
 
 ## VARIABLE METADATA FROM STARCHAT
 
@@ -331,13 +331,13 @@ Your task: Generate a self-contained sub-prompt that teaches another LLM how to 
 
 ## CONVERSATION VARIABLES AVAILABLE IN PROMPTS
 
-These variables can be used inside CONVERSATION_INSTRUCTIONS using %%var%% syntax:
+These variables can be used inside CONVERSATION_PROMPT using %%var%% syntax:
 
 {conversation_variables_context}
 
 ## CRITICAL: READ-BEFORE-WRITE RULE
 
-BEFORE proposing any changes to CONVERSATION_INSTRUCTIONS, the configurator MUST check INBOUND_WELCOME_MESSAGE_PROMPT to avoid duplication. If the greeting already asks for the caller's name, do NOT add "ask for name" to CONVERSATION_INSTRUCTIONS.
+BEFORE proposing any changes to CONVERSATION_PROMPT, the configurator MUST check INBOUND_WELCOME_MESSAGE_PROMPT to avoid duplication. If the greeting already asks for the caller's name, do NOT add "ask for name" to CONVERSATION_PROMPT.
 
 The 4 FIRST_NAME coordination scenarios:
 | Welcome asks name? | FIRST_NAME known? | What happens |
@@ -349,7 +349,7 @@ The 4 FIRST_NAME coordination scenarios:
 
 ## VALUE FORMAT
 
-CONVERSATION_INSTRUCTIONS is freeform text in two optional parts:
+CONVERSATION_PROMPT is freeform text in two optional parts:
 
 **Part 1: Variable declarations (optional)**
 ```
@@ -369,24 +369,24 @@ Always include a hangup instruction at the end.
 ## LEGACY FURTHER_QUESTIONS MIGRATION
 
 If FURTHER_QUESTIONS is non-empty (not `[]`), the configurator MUST migrate it:
-1. Convert each [question, instruction] pair to natural language in CONVERSATION_INSTRUCTIONS
+1. Convert each [question, instruction] pair to natural language in CONVERSATION_PROMPT
 2. Set FURTHER_QUESTIONS to "[]" in a separate API call
 
 Example conversion:
 - BEFORE: `["How many guests?", "If more than 10, inform about deposit."]`
-- AFTER in CONVERSATION_INSTRUCTIONS: `Ask how many people will be dining.\nIf more than 10, inform them that large groups require a deposit.`
+- AFTER in CONVERSATION_PROMPT: `Ask how many people will be dining.\nIf more than 10, inform them that large groups require a deposit.`
 
 ## COMMON USER INTENTS → VARIABLE MAPPINGS
 
 **"Add a question about [topic]"** →
-  Append to CONVERSATION_INSTRUCTIONS: "Ask [question about topic]. [Handle response]."
+  Append to CONVERSATION_PROMPT: "Ask [question about topic]. [Handle response]."
 
 **"Use the caller's name"** →
   Add `STORED_NAME=%%crm.contact.variables.FIRST_NAME=not available%%` at the top
   Add: "If STORED_NAME is 'not available', ask for their name. Otherwise greet by name."
 
 **"Ask for email address"** →
-  Add to CONVERSATION_INSTRUCTIONS: "Ask for the caller's email address."
+  Add to CONVERSATION_PROMPT: "Ask for the caller's email address."
   (Also check if EMAIL_ADDRESS is in ASSISTANT_TOOL_VARIABLE_EXTRACTION so it gets saved)
 
 **"End call after collecting info"** →
@@ -405,14 +405,14 @@ Describe in plain language what the assistant currently does step by step after 
 Note if FURTHER_QUESTIONS is non-empty (migration needed).
 
 ### SECTION 2: AVAILABLE VARIABLES
-Table of %%...%% variables that can be used in CONVERSATION_INSTRUCTIONS.
+Table of %%...%% variables that can be used in CONVERSATION_PROMPT.
 Include the full syntax (e.g., `%%crm.contact.variables.FIRST_NAME=not available%%`) and what it means.
 
 ### SECTION 3: COORDINATION WITH WELCOME MESSAGE
-What does the welcome message currently cover? What should NOT be duplicated in CONVERSATION_INSTRUCTIONS?
+What does the welcome message currently cover? What should NOT be duplicated in CONVERSATION_PROMPT?
 
 ### SECTION 4: HOW TO MODIFY
-Rules for editing CONVERSATION_INSTRUCTIONS:
+Rules for editing CONVERSATION_PROMPT:
 - Adding a question: append natural language
 - Using a variable: add declaration at top
 - Always end with hangup logic
@@ -420,7 +420,7 @@ Rules for editing CONVERSATION_INSTRUCTIONS:
 - If FURTHER_QUESTIONS is non-empty: migrate before modifying
 
 ### SECTION 5: ALL CURRENT VALUES
-- CONVERSATION_INSTRUCTIONS: (full current value in a code block)
+- CONVERSATION_PROMPT: (full current value in a code block)
 - FURTHER_QUESTIONS: (current value — if non-empty, flag migration needed)
 
 ---
@@ -862,7 +862,7 @@ OUTPUT ONLY THE SUB-PROMPT TEXT."""
 class MrCallConfiguratorTrainer:
     """Generates feature-specific sub-prompts from MrCall configuration.
 
-    Each feature (welcome_message, booking, etc.) has its own sub-prompt that:
+    Each feature (welcome_inbound, welcome_outbound, booking, etc.) has its own sub-prompt that:
     - Documents available variables
     - Describes current behavior
     - Lists what can be changed
@@ -873,12 +873,31 @@ class MrCallConfiguratorTrainer:
 
     # Feature definitions - maps feature name to variable(s) and meta-prompt
     FEATURES = {
-        "welcome_message": {
-            "variables": ["OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT"],
-            "description": "How the assistant answers the phone",  # for devs
-            "display_name": "How the assistant answers the phone",  # for users
+        "welcome_inbound": {
+            "variables": [
+                "ENABLE_INBOUND_WELCOME_MESSAGE_PROMPT",
+                "INBOUND_WELCOME_MESSAGE_PROMPT",
+                "TEMPORARY_MESSAGE",
+                "TALK_AND_HANGUP_OPEN",
+                "TALK_AND_HANGUP_CLOSED",
+                "TALK_AND_HANGUP_OPEN_MESSAGE",
+                "TALK_AND_HANGUP_CLOSED_MESSAGE",
+            ],
+            "description": "Welcome greeting for inbound calls",
+            "display_name": "How the assistant answers inbound calls",
             "meta_prompt": WELCOME_MESSAGE_META_PROMPT,
-            "dynamic_context": True,  # Uses _build_variables_context for metadata
+            "dynamic_context": True,
+        },
+        "welcome_outbound": {
+            "variables": [
+                "ENABLE_OUTBOUND_WELCOME_MESSAGE_PROMPT",
+                "OUTBOUND_WELCOME_MESSAGE_PROMPT",
+                "OUTBOUND_WELCOME_MESSAGE_TEXT",
+            ],
+            "description": "Welcome greeting for outbound calls",
+            "display_name": "How the assistant starts outbound calls",
+            "meta_prompt": WELCOME_MESSAGE_META_PROMPT,
+            "dynamic_context": True,
         },
         "booking": {
             "variables": [
@@ -935,7 +954,8 @@ class MrCallConfiguratorTrainer:
         },
         "conversation": {
             "variables": [
-                "CONVERSATION_INSTRUCTIONS",
+                "ENABLE_CONVERSATION_PROMPT",
+                "CONVERSATION_PROMPT",
                 "FURTHER_QUESTIONS",
             ],
             "description": "What the assistant does after the welcome greeting",
@@ -1285,7 +1305,7 @@ class MrCallConfiguratorTrainer:
         """Generate sub-prompt for a specific feature.
 
         Args:
-            feature_name: Feature to train (e.g., "welcome_message")
+            feature_name: Feature to train (e.g., "welcome_inbound")
             business_id: MrCall business ID
 
         Returns:
@@ -1414,7 +1434,7 @@ class MrCallConfiguratorTrainer:
         """Get stored sub-prompt for a feature (if exists).
 
         Args:
-            feature_name: Feature name (e.g., "welcome_message")
+            feature_name: Feature name (e.g., "welcome_inbound")
             business_id: MrCall business ID
 
         Returns:
