@@ -1,10 +1,14 @@
-# Zylch AI - Multi-Channel Sales Intelligence System
+# CLAUDE.md
 
-Pre-alpha AI assistant for email, calendar, CRM, and telephony management. Python/FastAPI/PostgreSQL.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Zylch AI — pre-alpha multi-channel sales intelligence system. Python 3.11+ / FastAPI / PostgreSQL with pgvector. Firebase Auth for multi-tenant isolation (every query filters by `owner_id`).
 
 ## Documentation
 
-The directory ./docs/ is continuosly updated through the commands /doc-*. 
+The directory ./docs/ is continuosly updated through the commands /doc-*.
 
 Whenever you have a question, check docs/README.md in order to understand how the documentation is organized.
 
@@ -24,12 +28,55 @@ python -m pytest tests/test_agent.py -v       # Run specific test
 
 # Lint & Format
 black --check zylch/ tests/                   # Check formatting
+black zylch/ tests/                           # Auto-format
 ruff check zylch/ tests/                      # Lint
+ruff check --fix zylch/ tests/                # Auto-fix lint issues
 
 # Deploy (via GitLab CI)
 # Push to `dev` branch → auto-deploy to starchat-test
 # Push to `production` branch → auto-deploy to starchat-production
 ```
+
+## Architecture
+
+### Request Flow
+```
+Client (CLI/Dashboard/API)
+  → POST /api/chat/message (Firebase JWT)
+  → firebase_auth middleware → extracts owner_id
+  → chat_service.process_message()
+  → command_matcher: slash commands → command_handlers.py, else → LLM
+  → LLM (via LLMClient/LiteLLM) may call tools
+  → tools execute (gmail, calendar, CRM, etc.)
+  → response returned
+```
+
+### Key Layers
+
+- **`zylch/api/`** — FastAPI app factory (`main.py`) + route modules in `routes/` (auth, chat, sync, commands, mrcall, webhooks, etc.)
+- **`zylch/services/`** — Stateless business logic: `chat_service.py` (LLM orchestration), `command_handlers.py` (slash command dispatch), `sync_service.py` (email+calendar sync), `webhook_processor.py`
+- **`zylch/storage/`** — SQLAlchemy ORM: `models.py` (29+ models), `database.py` (engine/session), `supabase_client.py` (storage facade, legacy name — it's pure SQLAlchemy)
+- **`zylch/tools/`** — Claude tool definitions (callable by LLM). Each tool inherits from `base.py` (`Tool`, `ToolResult`). Registry in `factory.py` (`ToolFactory` + `SessionState`). Subdir `mrcall/` for MrCall config tools.
+- **`zylch/agents/`** — LLM-powered processors. `trainers/` subdirectory holds agent training (generates optimized prompts from user data, stored in `agent_prompts` table)
+- **`zylch/memory/`** — Entity-centric memory with 384-dim vector embeddings (sentence-transformers), hybrid search (pgvector cosine + PostgreSQL FTS), LLM reconsolidation
+- **`zylch/llm/`** — `LLMClient` wraps LiteLLM for multi-provider support (OpenAI, Scaleway/Mistral, Anthropic). Provider config in `providers.py`
+
+### Credentials Model (BYOK)
+Users provide their own API keys via `/connect` commands → encrypted in `oauth_tokens` table (Fernet). System-level LLM key as fallback, selected by `SYSTEM_LLM_PROVIDER` env var.
+
+### Configuration
+All config via `zylch/config.py` — Pydantic `Settings` class loading from `.env`. Key vars: `DATABASE_URL`, `SYSTEM_LLM_PROVIDER`, `LOG_LEVEL`, Google OAuth creds, Firebase creds.
+
+### Database Migrations
+Alembic in `alembic/` directory. DB URL read from Settings in `alembic/env.py`. PostgreSQL with pgvector + uuid-ossp extensions.
+
+### Deployment
+Scaleway Kubernetes (ARM64 nodes). GitLab CI builds native ARM64 Docker images on self-hosted runner. Two namespaces: `starchat-test` (dev branch) and `starchat-production` (production branch). Deploy configs at `~/hb/zylch-deploy/`.
+
+### Related Repositories
+- `~/hb/zylch-cli` — Python/Textual CLI client (primary user interface)
+- `~/hb/mrcall-dashboard` — Vue 3/PrimeVue dashboard for MrCall business config
+- `frontend/` — dormant Vue 3 prototype, not under active development
 
 ## Critical Rules
 
@@ -41,3 +88,4 @@ ruff check zylch/ tests/                      # Lint
 - **FILES < 500 LINES**: Keep modules small and focused.
 - **NO HARDCODED SECRETS**: Use environment variables via Pydantic Settings.
 - **POSTGRESQL ONLY**: No local filesystem for data storage.
+- **Line length**: 100 chars (black + ruff configured in pyproject.toml).
