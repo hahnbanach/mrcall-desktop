@@ -607,7 +607,7 @@ Say \"send it\" to send, or tell me what to change."""
         tool_used = result.get('tool_used', 'unknown')
         agent_result = result.get('result', {})
 
-        if tool_used in ['configure_welcome_message', 'configure_booking']:
+        if tool_used in ['configure_welcome_inbound', 'configure_welcome_outbound', 'configure_booking']:
             if agent_result.get('success'):
                 updated = agent_result.get('updated', [])
                 return f"✅ Configuration updated:\n" + "\n".join([f"- {u}" for u in updated])

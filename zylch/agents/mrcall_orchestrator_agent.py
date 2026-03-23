@@ -354,7 +354,7 @@ Action: respond_to_user("What would you like the new greeting to be? For example
         if tool_used == 'respond_text':
             return agent_result.get('response', '')
 
-        if tool_used in ['configure_welcome_message', 'configure_booking']:
+        if tool_used in ['configure_welcome_inbound', 'configure_welcome_outbound', 'configure_booking']:
             if agent_result.get('success'):
                 updated = agent_result.get('updated', [])
                 feature = agent_result.get('feature', 'settings')

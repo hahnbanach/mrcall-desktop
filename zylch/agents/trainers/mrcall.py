@@ -1,6 +1,6 @@
 """MrCall Agent Trainer - Trains unified MrCall configuration agent.
 
-Combines all feature sub-prompts (welcome_message, booking, etc.) into
+Combines all feature sub-prompts (welcome_inbound, welcome_outbound, booking, etc.) into
 a single unified agent prompt with tool selection guidance.
 
 The unified agent can then handle any MrCall configuration request by
@@ -38,15 +38,17 @@ multiple configuration tools, each for a different feature.
 
 ## AVAILABLE TOOLS
 
-1. **configure_welcome_message** - Modify how the assistant answers the phone
-2. **configure_booking** - Manage appointment booking settings
+1. **configure_welcome_inbound** - Modify how the assistant answers inbound calls
+2. **configure_welcome_outbound** - Modify how the assistant starts outbound calls
+3. **configure_booking** - Manage appointment booking settings
 3. **get_current_config** - Show current configuration for any feature
 4. **respond_text** - Answer questions or explain settings
 
 ## WHEN TO USE EACH TOOL
 
-- "change the greeting" → configure_welcome_message
-- "update welcome message" → configure_welcome_message
+- "change the greeting" → configure_welcome_inbound
+- "update welcome message" → configure_welcome_inbound
+- "change outbound greeting" → configure_welcome_outbound
 - "enable booking" → configure_booking
 - "set 30 minute appointments" → configure_booking
 - "disable booking" → configure_booking
@@ -80,7 +82,7 @@ class MrCallAgentTrainer(BaseAgentTrainer):
     """Trains unified MrCall agent by combining all feature sub-prompts.
 
     This trainer:
-    1. Loads all existing feature sub-prompts (welcome_message, booking, etc.)
+    1. Loads all existing feature sub-prompts (welcome_inbound, welcome_outbound, booking, etc.)
     2. Combines them into a single unified prompt
     3. Adds tool selection guidance so the agent knows which tool to use
 
