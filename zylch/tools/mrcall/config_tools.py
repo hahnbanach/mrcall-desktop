@@ -105,25 +105,6 @@ class GetAssistantCatalogTool(Tool):
         filter_category: str
     ) -> Dict[str, Any]:
         """Build catalog from schema and current values."""
-        # Key variables for each category
-        category_map = {
-            "welcome": [
-                "OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT",
-                "OSCAR_OUTBOUND_WELCOME_MESSAGE_PROMPT",
-                "WELCOME_BIZ_OPENING",
-                "OSCAR_INBOUND_TOGGLE_INITIAL_MESSAGE_WITH_PROMPT",
-                "SET_SMART_GREETINGS",
-                "SAY_CONVERSATION_NICKNAME",
-            ],
-            "conversation": [
-                "OSCAR_INBOUND_BASE_INSTRUCTION_PROMPT",
-                "OSCAR_INBOUND_CLOSING_PROMPT",
-                "OSCAR_OUTBOUND_BASE_INSTRUCTION_PROMPT",
-                "MAX_TURNS_BEFORE_FALLBACK",
-                "ENABLE_CONVERSATION_SUMMARY",
-            ],
-        }
-
         modifiable = []
         read_only = []
 
@@ -135,9 +116,10 @@ class GetAssistantCatalogTool(Tool):
 
                     # Check if this is a variable definition
                     if isinstance(value, dict) and "type" in value:
-                        # Apply category filter
+                        # Apply category filter using VARIABLE_TO_FEATURE
+                        # (derived from MrCallConfiguratorTrainer.FEATURES)
                         if filter_category != "all":
-                            if full_key not in category_map.get(filter_category, []):
+                            if VARIABLE_TO_FEATURE.get(full_key) != filter_category:
                                 continue
 
                         var_info = {
@@ -146,7 +128,7 @@ class GetAssistantCatalogTool(Tool):
                             "description": value.get("description_multilang", {}).get("it-IT", ""),
                             "human_name": value.get("human_name_multilang", {}).get("it-IT", full_key),
                             "current_value": current_values.get(full_key),
-                            "modifiable": value.get("modifiable", False) and value.get("advanced", False),
+                            "modifiable": value.get("modifiable", False),
                         }
 
                         if var_info["modifiable"]:
@@ -175,8 +157,8 @@ class GetAssistantCatalogTool(Tool):
                 "properties": {
                     "filter_category": {
                         "type": "string",
-                        "description": "Filter variables by category",
-                        "enum": ["welcome", "conversation", "all"],
+                        "description": "Filter variables by feature category",
+                        "enum": ["all"] + list(MrCallConfiguratorTrainer.FEATURES.keys()),
                         "default": "all"
                     }
                 },
@@ -224,7 +206,7 @@ class ConfigureAssistantTool(Tool):
         """Configure an assistant variable.
 
         Args:
-            variable_name: Variable to configure (e.g., OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT)
+            variable_name: Variable to configure (e.g., INBOUND_WELCOME_MESSAGE_PROMPT)
             request: Natural language description of desired change
             confirm_apply: Set to true to apply after preview. Default false (dry-run).
         """
@@ -292,11 +274,6 @@ class ConfigureAssistantTool(Tool):
                 "old_length": len(current_value),
                 "new_length": len(new_value),
                 "variable_validation": validation,
-                "admin_rules_applied": admin_rules,
-                "similar_patterns_found": [
-                    {"context": p.get("context"), "confidence": p.get("confidence")}
-                    for p in (similar_patterns or [])
-                ],
             }
 
             # If not confirming, return preview
@@ -401,7 +378,7 @@ class ConfigureAssistantTool(Tool):
                 "properties": {
                     "variable_name": {
                         "type": "string",
-                        "description": "Variable to configure (e.g., OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT)"
+                        "description": "Variable to configure (e.g., INBOUND_WELCOME_MESSAGE_PROMPT)"
                     },
                     "request": {
                         "type": "string",
