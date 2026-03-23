@@ -122,6 +122,18 @@ class JobExecutor:
                     job_id, owner_id, channel, api_key, llm_provider,
                     user_email, job_params
                 )
+            elif job_type == "email_train":
+                job_params = job.get("params", {})
+                await self._execute_email_train(
+                    job_id, owner_id, api_key, llm_provider,
+                    job_params.get("user_email", user_email)
+                )
+            elif job_type == "memory_train":
+                job_params = job.get("params", {})
+                await self._execute_memory_train(
+                    job_id, owner_id, channel, api_key, llm_provider,
+                    job_params.get("user_email", user_email)
+                )
             else:
                 raise ValueError(f"Unknown job type: {job_type}")
 
@@ -621,6 +633,73 @@ class JobExecutor:
         self.storage.create_notification(
             owner_id,
             "MrCall training complete. Your assistant has been updated.",
+            "info"
+        )
+
+    async def _execute_email_train(
+        self,
+        job_id: str,
+        owner_id: str,
+        api_key: str,
+        llm_provider: str,
+        user_email: str,
+    ) -> None:
+        """Execute email agent training in thread pool."""
+        storage = self.storage
+
+        def _sync_train() -> dict:
+            from zylch.services.command_handlers import _handle_emailer_train
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result_msg = loop.run_until_complete(
+                    _handle_emailer_train(storage, owner_id, api_key, llm_provider, user_email)
+                )
+            finally:
+                loop.close()
+            return {"message": result_msg}
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(_executor, _sync_train)
+
+        self.storage.complete_background_job(job_id, result)
+        self.storage.create_notification(
+            owner_id,
+            "Email agent training complete. Your writing style has been learned.",
+            "info"
+        )
+
+    async def _execute_memory_train(
+        self,
+        job_id: str,
+        owner_id: str,
+        channel: str,
+        api_key: str,
+        llm_provider: str,
+        user_email: str,
+    ) -> None:
+        """Execute memory agent training in thread pool."""
+        storage = self.storage
+
+        def _sync_train() -> dict:
+            from zylch.services.command_handlers import _handle_memory_train
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result_msg = loop.run_until_complete(
+                    _handle_memory_train(storage, owner_id, channel, api_key, llm_provider, user_email)
+                )
+            finally:
+                loop.close()
+            return {"message": result_msg}
+
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(_executor, _sync_train)
+
+        self.storage.complete_background_job(job_id, result)
+        self.storage.create_notification(
+            owner_id,
+            f"Memory training complete ({channel}).",
             "info"
         )
 

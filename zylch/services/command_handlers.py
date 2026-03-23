@@ -2988,7 +2988,24 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
         # =====================
         if domain == 'memory':
             if action == 'train':
-                return await _handle_memory_train(storage, owner_id, channel, api_key, llm_provider, user_email)
+                # Run as background job
+                job = storage.create_background_job(
+                    owner_id=owner_id,
+                    job_type='memory_train',
+                    channel=channel,
+                    params={"user_email": user_email or "", "channel": channel},
+                )
+                if job["status"] in ("pending", "running"):
+                    if job["status"] == "pending":
+                        import asyncio
+                        from zylch.services.job_executor import JobExecutor
+                        executor = JobExecutor(storage)
+                        asyncio.create_task(executor.execute_job(
+                            job['id'], owner_id, api_key, llm_provider, user_email
+                        ))
+                        logger.info(f"[/agent memory train] Scheduled background job {job['id']} for channel={channel}")
+                    return f"🚀 **Memory training started** ({channel})\n\nYou'll be notified when complete."
+                return "❌ Failed to create training job."
 
             elif action == 'run':
                 return await _handle_memory_run(storage, owner_id, channel, api_key, llm_provider)
@@ -3020,7 +3037,24 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
         # =====================
         elif domain == 'email':
             if action == 'train':
-                return await _handle_emailer_train(storage, owner_id, api_key, llm_provider, user_email)
+                # Run as background job
+                job = storage.create_background_job(
+                    owner_id=owner_id,
+                    job_type='email_train',
+                    channel='email',
+                    params={"user_email": user_email or ""},
+                )
+                if job["status"] in ("pending", "running"):
+                    if job["status"] == "pending":
+                        import asyncio
+                        from zylch.services.job_executor import JobExecutor
+                        executor = JobExecutor(storage)
+                        asyncio.create_task(executor.execute_job(
+                            job['id'], owner_id, api_key, llm_provider, user_email
+                        ))
+                        logger.info(f"[/agent email train] Scheduled background job {job['id']}")
+                    return "🚀 **Email training started**\n\nAnalyzing your writing style in the background. You'll be notified when complete."
+                return "❌ Failed to create training job."
 
             elif action == 'run':
                 instructions = ' '.join(args[2:]) if len(args) > 2 else ''
@@ -3042,7 +3076,44 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
                 force = '--force' in remaining
                 remaining = [a for a in remaining if a != '--force']
                 feature = remaining[0] if remaining else None
-                return await _handle_mrcall_agent_train(storage, owner_id, api_key, llm_provider, user_email, feature=feature, context=context, force=force)
+
+                # Validate feature early
+                if feature and feature not in MrCallConfiguratorTrainer.FEATURES:
+                    available = list(MrCallConfiguratorTrainer.FEATURES.keys())
+                    return f"❌ **Unknown feature:** `{feature}`\n\nAvailable: {', '.join(available)}"
+
+                business_id = storage.get_mrcall_link(owner_id)
+                if not business_id:
+                    return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <ID>` first."
+
+                firebase_token = context.get("firebase_token", "") if context else ""
+
+                # Run as background job (training takes 5-8 min, would 504 inline)
+                job = storage.create_background_job(
+                    owner_id=owner_id,
+                    job_type='mrcall_train',
+                    channel='mrcall',
+                    business_id=business_id,
+                    params={
+                        "force": force,
+                        "features": [feature] if feature else None,
+                        "business_id": business_id,
+                        "firebase_token": firebase_token,
+                    }
+                )
+
+                if job["status"] in ("pending", "running"):
+                    if job["status"] == "pending":
+                        import asyncio
+                        from zylch.services.job_executor import JobExecutor
+                        executor = JobExecutor(storage)
+                        asyncio.create_task(executor.execute_job(
+                            job['id'], owner_id, api_key, llm_provider, user_email
+                        ))
+                        logger.info(f"[/agent mrcall train] Scheduled background job {job['id']}")
+                    return "🚀 **Training started**\n\nYou'll be notified when it completes."
+
+                return "❌ Failed to create training job."
 
             elif action == 'run':
                 instructions = ' '.join(args[2:]) if len(args) > 2 else ''
