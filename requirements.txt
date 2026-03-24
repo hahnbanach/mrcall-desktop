@@ -4,7 +4,7 @@
 # Core AI & API
 anthropic>=0.39.0
 openai>=1.50.0   # For Responses API web search (also a LiteLLM transitive dep)
-litellm>=1.50.0  # Unified LLM interface for multi-provider support (Anthropic, OpenAI, Mistral)
+aisuite>=0.1.14  # Unified LLM interface for multi-provider support (Anthropic, OpenAI, Mistral)
 httpx>=0.25.0
 pydantic>=2.5.0
 pydantic-settings>=2.0.0

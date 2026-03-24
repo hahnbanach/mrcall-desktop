@@ -6,10 +6,10 @@ import re
 import shlex
 import time
 
-from litellm.exceptions import (
-    AuthenticationError,
-    RateLimitError,
-    APIConnectionError,
+from zylch.llm.exceptions import (
+    LLMLLMAuthenticationError,
+    LLMLLMRateLimitError,
+    LLMConnectionError,
 )
 
 from zylch.tools import ToolFactory, ToolConfig
@@ -589,7 +589,7 @@ class ChatService:
                 "session_id": session_id if session_id else None
             }
 
-        except AuthenticationError as e:
+        except LLMAuthenticationError as e:
             # Invalid API key
             logger.error(f"Authentication error: {e}")
             execution_time_ms = (time.time() - start_time) * 1000
@@ -606,7 +606,7 @@ class ChatService:
                 "session_id": session_id if session_id else None
             }
 
-        except RateLimitError as e:
+        except LLMRateLimitError as e:
             # Rate limit exceeded
             logger.error(f"Rate limit error: {e}")
             execution_time_ms = (time.time() - start_time) * 1000
@@ -623,7 +623,7 @@ class ChatService:
                 "session_id": session_id if session_id else None
             }
 
-        except APIConnectionError as e:
+        except LLMConnectionError as e:
             # Network/connection issues
             logger.error(f"API connection error: {e}")
             execution_time_ms = (time.time() - start_time) * 1000
