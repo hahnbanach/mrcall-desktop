@@ -7,8 +7,8 @@ import shlex
 import time
 
 from zylch.llm.exceptions import (
-    LLMLLMAuthenticationError,
-    LLMLLMRateLimitError,
+    LLMAuthenticationError,
+    LLMRateLimitError,
     LLMConnectionError,
 )
 
