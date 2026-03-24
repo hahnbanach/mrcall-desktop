@@ -495,7 +495,65 @@ Choose the appropriate tool based on what the user wants. Remember:
             'feature': feature
         }
         logger.info(f"[MrCallAgent] _process_configure final result: {final_result}")
+
+        # Generate human-friendly summary via a second LLM call
+        if final_result['success'] and updated:
+            final_result['response_text'] = await self._summarize_changes(
+                feature, changes
+            )
+
         return final_result
+
+    async def _summarize_changes(
+        self, feature: str, changes: Dict[str, str]
+    ) -> str:
+        """Generate a human-friendly summary of configuration changes.
+
+        Makes a lightweight LLM call to translate raw variable changes
+        into a message the user can understand.
+
+        Args:
+            feature: Feature name (e.g. 'welcome_inbound')
+            changes: Dict of variable_name -> new_value
+
+        Returns:
+            Human-readable summary string
+        """
+        feature_display = feature.replace('_', ' ').title()
+
+        # Build a concise description of what changed
+        changes_desc = "\n".join(
+            f"- {var_name}: {value}" for var_name, value in changes.items()
+        )
+
+        prompt = f"""You just updated the "{feature_display}" configuration for a MrCall AI phone assistant.
+
+The following variables were changed:
+{changes_desc}
+
+Write a SHORT, friendly confirmation message (2-4 sentences max) for the business owner explaining what was changed in plain language. Do NOT show variable names or technical details. Just explain the effect on how their assistant will behave.
+
+Examples of good responses:
+- "Done! Your assistant will now greet callers with a more formal tone, introducing itself as the reception of Mario's Restaurant."
+- "Got it! Booking is now enabled with 30-minute appointment slots, available Monday through Friday from 9 AM to 5 PM."
+- "Updated! After each call, callers will receive a WhatsApp message thanking them and providing your business address."
+
+Write ONLY the confirmation message, nothing else."""
+
+        try:
+            response = await self.llm.create_message(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=300
+            )
+            for block in response.content:
+                if hasattr(block, 'text'):
+                    logger.info(f"[MrCallAgent] Summary generated: {block.text}")
+                    return block.text
+        except Exception as e:
+            logger.warning(f"[MrCallAgent] Summary generation failed: {e}")
+
+        # Fallback: simple confirmation
+        return f"{feature_display} updated successfully."
 
     async def _process_get_config(self, tool_input: Dict[str, Any]) -> Dict[str, Any]:
         """Process get_current_config tool by fetching current values.
