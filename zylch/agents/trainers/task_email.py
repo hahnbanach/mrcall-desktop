@@ -40,12 +40,16 @@ Your goal: Generate a prompt that an AI agent will use to analyze individual eve
 
 ---
 
-Analyze the above material to understand:
-1. How quickly does this user typically respond to emails? (Look at time gaps between received and sent)
-2. Does the user send automatic responses? If so, do not consider them as actual answers. 
-3. What patterns indicate they ignore something? (Cold outreach, newsletters, certain domains)
-4. Do they use commitment phrases like "I'll call you", "let me check", "I'll send you"?
-5. What commitments did they make that they followed up on vs forgot?
+Analyze the above material DEEPLY to understand this specific user's patterns:
+
+1. **Response timing**: How quickly does this user typically respond? Look at time gaps between received and sent emails. What's their "normal" response time? What's unusually slow for them?
+2. **Auto-responses**: Does the user use automatic replies (e.g., "your request has been taken in charge")? These are NOT real answers — the thread is still open.
+3. **Ignore patterns**: What does this user consistently ignore? Cold outreach, newsletters, marketing, certain domains? Be specific about which senders/domains.
+4. **Commitment tracking**: Do they use phrases like "I'll call you", "let me check", "I'll send you"? Which commitments did they follow through on vs forget?
+5. **Recurring questions (FAQ)**: Are there questions that multiple contacts ask about the same topic? Identify these patterns — they should get template-based draft responses, not urgent tasks.
+6. **Complaint patterns**: How does this user handle complaints? Is a customer complaint an emergency or routine business? Analyze their actual behavior.
+7. **Marketing vs real email**: What marketing/promotional emails slip into the inbox? Which senders are always promotional?
+8. **Meeting follow-up patterns**: After calls/meetings, does this user send recap emails? What types of meetings lead to follow-up actions?
 
 Then generate a SELF-CONTAINED prompt that will be used to analyze ONE event at a time.
 
@@ -55,29 +59,56 @@ The generated prompt must:
    Based on the above analysis, embed specific knowledge about this user:
    - Their typical response time to important contacts
    - VIP contact patterns or specific contacts (if identifiable)
-   - Noise/ignore signals specific to this user
+   - Noise/ignore signals specific to this user (specific senders, domains, subject patterns)
    - Commitment phrases this user tends to use
+   - FAQ topics: recurring questions that appear across multiple contacts (list them explicitly!)
+   - Marketing senders that should ALWAYS be filtered out
 
-2. **DECISION CRITERIA**
+2. **URGENCY WITH TIME DECAY**
+   Urgency is NOT static — it decays over time:
+   - Something truly urgent gets handled quickly. If it's been weeks and nobody acted, it probably wasn't urgent.
+   - A 3-month-old unanswered email is NOT "high urgency" — it's either resolved through other channels or no longer relevant.
+   - Recent items (< 3 days) can be high urgency. Older items should decay:
+     * < 3 days old → can be high/medium/low based on content
+     * 3-7 days old → maximum medium urgency
+     * 1-4 weeks old → maximum low urgency
+     * > 1 month old → almost certainly NO_ACTION (unless there's evidence of ongoing active conversation)
+   - Customer complaints are NORMAL BUSINESS — they are rarely truly urgent. A complaint becomes urgent only if it risks losing a customer who has been loyal and paying for a long time.
+
+3. **FAQ DETECTION & DRAFT RESPONSE**
+   When the agent recognizes a question that matches a known FAQ pattern:
+   - The suggested_action should include: "DRAFT: [template-based response]"
+   - The draft should be based on how the user has responded to similar questions before
+   - Example: `ACTION: low | DRAFT: Respond with standard pricing info | This is a pricing inquiry, similar to 12 previous ones. Suggested response based on past replies: "..."`
+
+4. **DECISION CRITERIA**
    The prompt should instruct the agent to consider:
-   - Is there an unanswered question directed at the user? (Do not take automatic reply as answers!)
-   - Did the user make a commitment that needs follow-up? If yes, it needs a task
-   - Did the user answer without commitment to follow-up? DEFINITELY not an open task!
+   - Is there an unanswered question directed at the user? (Auto-replies are NOT answers!)
+   - Did the user make a commitment that needs follow-up?
+   - Did the user answer without commitment to follow-up? → NOT an open task
    - Is this from someone the user typically responds to quickly?
    - Has unusual time passed without response (based on this user's pattern)?
    - Is there a deadline or time-sensitive element?
+   - Is this a recurring question (FAQ)? → Suggest draft response, lower urgency
+   - Is this marketing/promotional? → NO_ACTION
+   - Is this a routine complaint? → low urgency unless risk of customer churn
 
-3. **OUTPUT FORMAT**
+5. **OUTPUT FORMAT**
    For each event analyzed, output exactly ONE of:
    - `ACTION: [urgency] | [suggested action] | [brief reason]`
    - `NO_ACTION: [reason]`
 
    Where urgency is: high, medium, or low
 
-   Examples:
-   - `ACTION: high | Reply to proposal | John asked a direct question 3 days ago, user typically responds within 24h`
+   When a draft response is appropriate, include it in suggested_action:
+   - `ACTION: low | DRAFT: "Buongiorno, grazie per la richiesta. I nostri prezzi sono..." | FAQ: pricing inquiry, similar to past responses to 8 contacts`
+
+   Other examples:
+   - `ACTION: high | Reply to proposal | John asked a direct question 2 days ago, user typically responds within 24h`
    - `ACTION: medium | Follow up on call promise | User said "I'll call you this week" 5 days ago`
+   - `ACTION: low | DRAFT: "Mi scusi per il disagio..." | Routine complaint about service, same pattern as 5 previous complaints`
    - `NO_ACTION: Newsletter from marketing platform, user ignores these`
+   - `NO_ACTION: Email is 6 weeks old, if it were urgent it would have been handled by now`
 
 The generated prompt will receive these template variables:
 - {{event_type}} - "email" | "calendar" | "mrcall"
@@ -85,31 +116,35 @@ The generated prompt will receive these template variables:
 - {{blob_context}} - Memory blob for this contact (if exists), or "(no prior context)"
 - {{user_email}} - User's email address (to identify their own messages)
 - {{calendar_context}} - Upcoming and recent meetings with this contact (if any)
+- {{today}} - Today's date (for calculating age of emails)
 
 **CRITICAL RULES FOR THE GENERATED PROMPT:**
 1. NEVER suggest action for emails FROM {{user_email}} - these are the user's own sent messages
-2. NEVER list {{user_email}} as a contact to follow up with - the user doesn't follow up with themselves
+2. NEVER list {{user_email}} as a contact to follow up with
 3. When {{event_data}} shows from_email matches {{user_email}}, output NO_ACTION
 
 **CALENDAR CONTEXT RULES:**
 When {{calendar_context}} is provided, consider:
-1. **Upcoming meeting exists** → Don't create "schedule call" or "set up meeting" tasks - a meeting is already planned
-2. **Recent meeting happened (past 7 days)** → Consider if follow-up is needed based on meeting type:
-   - "Proposal Review", "Sales Demo" → likely needs follow-up
-   - "Quick sync", "1:1", "Team standup" → likely no follow-up needed
-3. **Email + Meeting combination** → If someone emails "let's discuss" but you already have a meeting with them, output NO_ACTION for scheduling
+1. **Upcoming meeting exists** → Don't create "schedule call" or "set up meeting" tasks
+2. **Recent meeting happened (past 7 days)** → Suggest sending a recap email if no recap was sent yet:
+   - `ACTION: medium | Send meeting recap to attendees | Meeting "Project Review" was 2 days ago, no follow-up email sent`
+   - After recap email is sent → create follow-up tasks for commitments made in the meeting
+3. **Email + Meeting combination** → If someone emails "let's discuss" but you already have a meeting, output NO_ACTION for scheduling
 
 **EXECUTIVE ASSISTANT MINDSET:**
-The agent acts as a real human assistant to an executive:
-- The executive's time is valuable - don't create noise
-- Provide enough context to understand AND act, not just a one-liner
-- The suggested_action should be specific enough that the executive knows exactly what to do
-- The reason should explain WHY this matters now
+The agent acts as a real human assistant:
+- The user's time is valuable — don't create noise
+- Provide enough context to understand AND act
+- The suggested_action should be specific enough that the user knows exactly what to do
+- For FAQ items, suggest a DRAFT response — this saves the most time
+- The reason should explain WHY this matters now (or why it doesn't)
+- When in doubt, output NO_ACTION — false positives waste time
 
 **OUTPUT QUALITY:**
 - suggested_action must be non-empty and actionable
 - reason must provide sufficient context (2-3 sentences if needed)
 - If you can't determine a clear action, output NO_ACTION
+- DRAFT responses should sound like the user's own writing style
 
 OUTPUT ONLY THE PROMPT TEXT. No explanations, no markdown code blocks. Just the prompt itself."""
 
