@@ -4,7 +4,6 @@ import logging
 from typing import List, Union
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 from .config import MemoryConfig
 
@@ -29,6 +28,9 @@ class EmbeddingEngine:
         self.dim = config.embedding_dim
 
         logger.info(f"Loading embedding model: {self.model_name}")
+
+        # Lazy import to avoid loading torch (~500MB) at startup
+        from sentence_transformers import SentenceTransformer
 
         # Load sentence-transformers model
         self.model = SentenceTransformer(

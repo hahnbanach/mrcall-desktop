@@ -138,6 +138,53 @@ Client (CLI/Dashboard/API)
   → prompts stored in agent_prompts table
 ```
 
+### Why MrCall Tools Are Code, Not Skill Files
+
+MrCall's 11 tools (`configure_welcome_inbound`, `get_current_config`, `respond_text`, etc.)
+are Python functions inside `mrcall_agent.py`, **not** declarative skill files (`.md` prompts).
+
+This is deliberate — unlike prompt-based skills (e.g., OpenClaw `.openclaw/skills/`), MrCall
+tools require capabilities that skill files cannot provide:
+
+| Requirement | Why skill files can't do it |
+|---|---|
+| **StarChat API calls** | `_process_configure` calls `starchat.update_business_variable()` — authenticated HTTP to an external service |
+| **Business validation** | Checks variable names belong to the correct feature, rejects invalid ones, rolls back on error |
+| **dry_run mode** | Validates and summarizes changes without applying — branching logic, not just prompt text |
+| **Dynamic training** | Meta-prompts read *current* variable values from StarChat at training time — the prompt itself is generated, not static |
+
+Skill files work well for tasks that are "follow these instructions using generic tools (read, edit, bash)."
+MrCall tools are **typed API integrations with business logic** — they need code.
+
+A skill-based layer *above* the tools could make sense in the future (e.g., "copy config from business A to B"),
+but it would orchestrate the existing tools, not replace them.
+
+### Future: MCP Integration (Planned)
+
+The current tool architecture is internal Python code. Two MCP-based extensions are planned:
+
+```
+MCP clients (Claude Code, Cursor, Windsurf...)
+    ↓ consume
+Zylch MCP Server (wraps existing REST API)        ← Direction 1
+    ↓ is
+Zylch Backend (FastAPI, MrCallAgent, Python tools)
+    ↓ consumes
+External MCP Servers (custom CRM, client DB...)    ← Direction 2
+```
+
+**Direction 1 — Zylch as MCP Server**: Expose Zylch's REST API (`/api/chat/message`,
+`/api/mrcall/apply-changes`, `/api/sync/emails`, etc.) as an MCP server. Any MCP-compatible
+agent could then use Zylch as a tool: "ask Zylch for Mario Rossi's urgent tasks", "draft a
+reply using Zylch data". The MCP server would handle auth (Firebase JWT) and map MCP tool
+calls to existing API endpoints. Zero client-side code needed.
+
+**Direction 2 — Zylch as MCP Consumer**: Today every integration (Pipedrive, Gmail, SendGrid)
+is hand-written Python in `tools/`. If Zylch supported MCP as a *consumer*, a client could
+plug in their own system (custom CRM, internal DB, proprietary ERP) by providing an MCP server.
+Zylch would discover and call those tools at runtime — plugin architecture without touching
+Zylch code. This turns the current closed tool set into an open, extensible one.
+
 ## Database Schema (Key Tables)
 
 | Table | Purpose | Key Columns |
