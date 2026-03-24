@@ -4089,12 +4089,13 @@ Connect your LLM provider:
             'configure_call_transfer',
         ):
             if tool_result.get('success'):
-                updated = tool_result.get('updated', [])
+                # Use human-friendly summary if available
+                response_text = tool_result.get('response_text')
+                if response_text:
+                    return f"✅ {response_text}"
+                # Fallback
                 feature = tool_result.get('feature', 'unknown')
-                return f"""✅ **{feature.replace('_', ' ').title()} Updated**
-
-**Changes applied:**
-{chr(10).join(f'• {u}' for u in updated)}"""
+                return f"✅ **{feature.replace('_', ' ').title()}** updated successfully."
             else:
                 errors = tool_result.get('errors', ['Unknown error'])
                 return f"""❌ **Configuration Failed**

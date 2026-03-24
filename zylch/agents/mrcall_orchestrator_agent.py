@@ -356,19 +356,23 @@ Action: respond_to_user("What would you like the new greeting to be? For example
         if tool_used == 'respond_text':
             return agent_result.get('response', '')
 
-        if tool_used in ['configure_welcome_inbound', 'configure_welcome_outbound', 'configure_booking']:
+        if tool_used and tool_used.startswith('configure_'):
             if agent_result.get('success'):
-                updated = agent_result.get('updated', [])
+                # Use human-friendly summary if available
+                response_text = agent_result.get('response_text')
+                if response_text:
+                    return f"✅ {response_text}"
+                # Fallback
                 feature = agent_result.get('feature', 'settings')
                 feature_display = feature.replace('_', ' ').title()
-                if updated:
-                    return f"✅ **{feature_display}** updated successfully.\n\nChanges applied:\n" + "\n".join(f"- {u}" for u in updated)
-                else:
-                    return f"✅ **{feature_display}** updated successfully."
+                return f"✅ **{feature_display}** updated successfully."
             else:
                 errors = agent_result.get('errors', [])
+                error_msg = agent_result.get('error', '')
                 if errors:
                     return f"⚠️ Some changes failed:\n" + "\n".join(f"- {e}" for e in errors)
+                if error_msg:
+                    return f"⚠️ {error_msg}"
                 return "⚠️ Configuration update failed. Please try again."
 
         if tool_used == 'get_current_config':
