@@ -34,11 +34,8 @@ pgvector>=0.3.0
 croniter>=1.4.0  # Cron expression parsing for recurring jobs
 
 # ML/Vector Search (zylch_memory dependencies)
-# Use CPU-only torch to avoid 3GB+ NVIDIA CUDA libraries
---extra-index-url https://download.pytorch.org/whl/cpu
-torch>=2.0.0
 numpy>=1.24.0
-sentence-transformers>=2.2.0
+sentence-transformers[onnx]>=3.0.0
 scikit-learn>=1.3.0
 hnswlib>=0.7.0
 
