@@ -27,15 +27,14 @@ class EmbeddingEngine:
         self.model_name = config.embedding_model
         self.dim = config.embedding_dim
 
-        logger.info(f"Loading embedding model: {self.model_name}")
+        logger.info(f"Loading embedding model: {self.model_name} (ONNX backend)")
 
-        # Lazy import to avoid loading torch (~500MB) at startup
         from sentence_transformers import SentenceTransformer
 
-        # Load sentence-transformers model
+        # Use ONNX backend — no torch dependency, ~10x smaller footprint
         self.model = SentenceTransformer(
             self.model_name,
-            device=config.embedding_device  # None = auto-detect
+            backend="onnx",
         )
 
         # Verify dimensionality
