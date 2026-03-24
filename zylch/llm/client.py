@@ -366,7 +366,16 @@ class LLMClient:
 
         logger.debug(f"aisuite request: model={aisuite_model}, messages={len(full_messages)}, tools={len(openai_tools) if openai_tools else 0}")
 
-        response = self._client.chat.completions.create(**request_kwargs)
+        # Call provider directly to avoid aisuite's MCP config processing bug
+        # (is_mcp_config not defined when mcp package not installed)
+        provider_key, model_name = aisuite_model.split(":", 1)
+        from aisuite.provider import ProviderFactory
+        if provider_key not in self._client.providers:
+            config = self._client.provider_configs.get(provider_key, {})
+            self._client.providers[provider_key] = ProviderFactory.create_provider(provider_key, config)
+        provider = self._client.providers[provider_key]
+        del request_kwargs["model"]
+        response = provider.chat_completions_create(model_name, full_messages, **{k: v for k, v in request_kwargs.items() if k != "messages"})
 
         return LLMResponse(response)
 
