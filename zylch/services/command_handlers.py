@@ -4066,8 +4066,12 @@ Connect your LLM provider:
             starchat_client=starchat,
         )
 
+        # Detect dashboard source for dry_run
+        is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
+        dry_run = is_dashboard
+
         # Run the agent
-        result = await agent.run(instructions=instructions)
+        result = await agent.run(instructions=instructions, dry_run=dry_run)
 
         # Check for errors
         if result.get('error'):
@@ -4076,18 +4080,12 @@ Connect your LLM provider:
         tool_used = result.get('tool_used')
         tool_result = result.get('result', {})
 
+        # Store pending_changes in context for chat_service to pick up
+        if tool_result and tool_result.get('pending_changes') and context is not None:
+            context['_pending_changes'] = tool_result['pending_changes']
+
         # Format response based on tool used
-        if tool_used in (
-            'configure_welcome_inbound',
-            'configure_welcome_outbound',
-            'configure_booking',
-            'configure_caller_followup',
-            'configure_conversation',
-            'configure_knowledge_base',
-            'configure_notifications_business',
-            'configure_runtime_data',
-            'configure_call_transfer',
-        ):
+        if tool_used and tool_used.startswith('configure_'):
             if tool_result.get('success'):
                 # Use human-friendly summary if available
                 response_text = tool_result.get('response_text')

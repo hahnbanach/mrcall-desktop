@@ -479,3 +479,73 @@ async def reset_variables_to_snapshot(
         reset_variables=reset_names,
         message=f"Reset {len(reset_names)} variable(s) to their trained values.",
     )
+
+
+# =============================================================================
+# Apply Pending Changes
+# =============================================================================
+
+class PendingChange(BaseModel):
+    variable_name: str
+    new_value: str
+
+class ApplyChangesRequest(BaseModel):
+    business_id: str
+    changes: List[PendingChange]
+
+class ApplyChangesResponse(BaseModel):
+    success: bool
+    applied: int = 0
+    errors: List[str] = []
+
+
+@router.post("/apply-changes", response_model=ApplyChangesResponse)
+async def apply_changes(
+    body: ApplyChangesRequest,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """Apply pending configuration changes to StarChat.
+
+    Called by the dashboard Save button to commit staged changes.
+    """
+    owner_id = get_user_id_from_token(user)
+    logger.info(f"[apply-changes] owner={owner_id}, business={body.business_id}, changes={len(body.changes)}")
+
+    authorization = request.headers.get("authorization", "")
+    firebase_token = authorization.replace("Bearer ", "") if authorization.startswith("Bearer ") else authorization
+
+    from zylch.tools.starchat import StarChatClient
+    starchat = StarChatClient(
+        base_url=settings.mrcall_base_url.rstrip('/'),
+        auth_type="firebase",
+        jwt_token=firebase_token,
+        realm=settings.mrcall_realm,
+        owner_id=owner_id,
+        verify_ssl=settings.starchat_verify_ssl,
+    )
+
+    applied = 0
+    errors = []
+
+    for change in body.changes:
+        try:
+            result = await starchat.update_business_variable(
+                body.business_id,
+                change.variable_name,
+                change.new_value,
+            )
+            if result is not None:
+                applied += 1
+                logger.info(f"[apply-changes] Applied {change.variable_name}")
+            else:
+                errors.append(f"Failed to apply {change.variable_name}")
+        except Exception as e:
+            errors.append(f"{change.variable_name}: {str(e)}")
+            logger.error(f"[apply-changes] Error applying {change.variable_name}: {e}")
+
+    return ApplyChangesResponse(
+        success=len(errors) == 0,
+        applied=applied,
+        errors=errors,
+    )

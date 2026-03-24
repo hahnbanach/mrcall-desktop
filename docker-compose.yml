@@ -29,7 +29,7 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - .env.docker
+      - .env.mrcall
     environment:
       # Paths (container-specific, not in .env.docker)
       - DATABASE_URL=postgresql://zylch:${POSTGRES_PASSWORD:-zylch_dev}@postgres:5432/zylch

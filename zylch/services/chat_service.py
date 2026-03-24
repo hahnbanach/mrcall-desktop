@@ -477,14 +477,20 @@ class ChatService:
                         # Default: no args
                         response_text = await handler()
 
+                    metadata = {
+                        "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                        "command": cmd,
+                        "instant": True
+                    }
+                    # Extract pending_changes stored by _handle_mrcall_agent_run
+                    pending_changes = context.pop('_pending_changes', None) if context else None
+                    if pending_changes:
+                        metadata["pending_changes"] = pending_changes
+
                     return {
                         "response": self._prepend_notification(response_text, notification_banner),
                         "tool_calls": [],
-                        "metadata": {
-                            "execution_time_ms": round((time.time() - start_time) * 1000, 2),
-                            "command": cmd,
-                            "instant": True
-                        },
+                        "metadata": metadata,
                         "session_id": session_id
                     }
 
