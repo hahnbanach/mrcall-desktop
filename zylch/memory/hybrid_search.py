@@ -108,7 +108,7 @@ class HybridSearchEngine:
                     SELECT * FROM hybrid_search_blobs(
                         :p_owner_id,
                         :p_query,
-                        :p_query_embedding::vector(384),
+                        CAST(:p_query_embedding AS vector(384)),
                         :p_namespace,
                         :p_fts_weight,
                         :p_limit,
