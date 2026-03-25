@@ -2974,12 +2974,12 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
         llm_provider, api_key = get_active_llm_provider(owner_id)
         user_email = get_email(owner_id)
 
-        # System-level fallback for MrCall domain (dashboard users don't have BYOK)
-        if domain == 'mrcall' and not api_key:
+        # System-level fallback (users without BYOK keys use system key)
+        if not api_key:
             from zylch.llm.providers import get_system_llm_credentials
             llm_provider, api_key = get_system_llm_credentials()
             if api_key:
-                logger.info(f"[/agent mrcall] Using system-level {llm_provider} API key for owner={owner_id}")
+                logger.info(f"[/agent {domain}] Using system-level {llm_provider} API key for owner={owner_id}")
 
         # Build agent_type for DB storage (e.g., 'memory_email', 'task_calendar')
         def get_agent_type(domain: str, channel: str) -> str:
