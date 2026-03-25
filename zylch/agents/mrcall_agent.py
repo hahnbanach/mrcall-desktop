@@ -1,20 +1,20 @@
 """MrCall Agent - Unified multi-tool agent for MrCall configuration.
 
 This is a TRUE AGENT with multiple tools that can:
-- Configure inbound welcome message (configure_welcome_inbound)
-- Configure outbound welcome message (configure_welcome_outbound)
-- Configure booking settings (configure_booking)
+- Configure 9 features (welcome, booking, knowledge base, transfer, etc.)
 - Show current configuration (get_current_config)
 - Answer questions (respond_text)
 
-The trained prompt instructs the agent when to use each tool based on
-the user's request.
+Architecture (post-refactor):
+- Runtime templates replace train-time LLM-generated sub-prompts
+- Live StarChat values fetched on every run() call (no stale data)
+- Conversation history support for multi-turn context
 
 Inherits from SpecializedAgent for common functionality (init, prompt loading, etc.)
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from zylch.agents.base_agent import SpecializedAgent
 from zylch.storage.supabase_client import SupabaseStorage
@@ -229,106 +229,158 @@ class MrCallAgent(SpecializedAgent):
 
         logger.info(f"MrCallAgent initialized for owner={owner_id}, business={self.business_id}")
 
-    def _get_trained_prompt(self) -> Optional[str]:
-        """Override to use dynamic prompt key based on business_id.
+    async def _build_runtime_prompt(self) -> str:
+        """Build system prompt with LIVE values from StarChat.
+
+        Fetches current business config and variable schema, then fills
+        runtime templates with live data. No train step required.
 
         Returns:
-            The trained unified prompt, or None if not trained
+            Complete system prompt string with all feature knowledge + current values
+
+        Raises:
+            ValueError: If business not found or StarChat unavailable
         """
-        if not self._prompt_loaded:
-            if not self.business_id:
-                logger.warning("No MrCall assistant linked")
-                self._trained_prompt = None
-            else:
-                # Dynamic key: mrcall_{business_id}
-                self._trained_prompt = self.storage.get_agent_prompt(
-                    self.owner_id,
-                    f"mrcall_{self.business_id}"
-                )
+        from zylch.agents.mrcall_templates import FEATURE_TEMPLATES, UNIFIED_RUNTIME_TEMPLATE
+        from zylch.agents.mrcall_context import (
+            build_variables_context,
+            build_conversation_variables_context,
+            fetch_and_flatten_schema,
+        )
 
-            self._prompt_loaded = True
+        if not self.starchat:
+            raise ValueError("StarChat client not available")
 
-            if self._trained_prompt:
-                logger.info("Loaded trained MrCall agent prompt")
-            else:
-                logger.debug("No trained MrCall agent prompt found")
+        # Single API call: fetch business config with all current variable values
+        business = await self.starchat.get_business_config(self.business_id)
+        if not business:
+            raise ValueError(f"Business not found: {self.business_id}")
+        logger.debug(
+            f"[MrCallAgent] Fetched business config: "
+            f"template={business.get('template')}, "
+            f"vars_count={len(business.get('variables', {}))}"
+        )
 
-        return self._trained_prompt
+        # Single API call: fetch variable schema (types, descriptions, defaults)
+        schema = await fetch_and_flatten_schema(self.starchat, business)
+        logger.debug(f"[MrCallAgent] Fetched variable schema: {len(schema)} variables")
+
+        # Build conversation variables context once (shared across features)
+        conv_vars_ctx = await build_conversation_variables_context(
+            self.starchat, self.business_id, business=business
+        )
+
+        # Fill each feature template with live values
+        feature_sections = []
+        for feature_name, template in FEATURE_TEMPLATES.items():
+            variables = MrCallConfiguratorTrainer.FEATURES.get(
+                feature_name, {}
+            ).get("variables", [])
+
+            vars_ctx = await build_variables_context(
+                self.starchat,
+                self.business_id,
+                variables,
+                business=business,
+                schema=schema,
+            )
+
+            filled = template.format(
+                variables_context=vars_ctx,
+                conversation_variables_context=conv_vars_ctx,
+            )
+            display_name = MrCallConfiguratorTrainer.FEATURES.get(
+                feature_name, {}
+            ).get("display_name", feature_name)
+            feature_sections.append(
+                f"### {feature_name.upper()}\n**{display_name}**\n\n{filled}"
+            )
+
+        # Combine into unified prompt
+        system_prompt = UNIFIED_RUNTIME_TEMPLATE.format(
+            feature_sections="\n\n".join(feature_sections)
+        )
+        logger.info(
+            f"[MrCallAgent] Built runtime prompt: {len(system_prompt)} chars, "
+            f"{len(feature_sections)} features"
+        )
+        return system_prompt
 
     async def _gather_context(self, instructions: str, **kwargs) -> str:
-        """Override - MrCall doesn't need hybrid search context.
-
-        The trained prompt contains all the feature knowledge.
-        """
+        """Override - MrCall uses _build_runtime_prompt() instead."""
         return ""
 
-    async def run(self, instructions: str, dry_run: bool = False, **kwargs) -> Dict[str, Any]:
-        """Execute agent with given instructions.
+    async def run(
+        self,
+        instructions: str,
+        dry_run: bool = False,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Execute agent with given instructions and live StarChat values.
 
-        Overrides SpecializedAgent.run() to add MrCall-specific checks and prompt format.
+        Builds a runtime prompt with LIVE variable values (no train step needed)
+        and supports multi-turn conversation history.
 
         Args:
             instructions: What the user wants to do
-            dry_run: If True, validate and summarize changes but don't apply to StarChat
+            dry_run: If True, validate and summarize changes but don't apply
+            conversation_history: Previous messages for multi-turn context
 
         Returns:
-            Dict with:
-            - tool_used: Name of the tool the agent chose
-            - tool_input: Input the agent provided to the tool
-            - result: Processed result
-            - error: Error message if something went wrong
+            Dict with tool_used, tool_input, result, error
         """
-        # MrCall-specific: Check for linked assistant
         if not self.business_id:
             return {
                 'error': 'No MrCall assistant linked. Run `/mrcall list` then `/mrcall link N` first.'
             }
 
-        # Load trained prompt (uses overridden _get_trained_prompt)
-        trained_prompt = self._get_trained_prompt()
-        if not trained_prompt:
-            return {
-                'error': 'Agent not trained. Run `/agent mrcall train` first.'
-            }
+        # Build system prompt with LIVE StarChat values
+        try:
+            system_prompt = await self._build_runtime_prompt()
+        except ValueError as e:
+            logger.error(f"[MrCallAgent] Failed to build runtime prompt: {e}")
+            return {'error': str(e)}
 
-        # Build full prompt with MrCall-specific instructions
-        prompt = f"""{trained_prompt}
+        # Build messages list with conversation history
+        messages: List[Dict[str, str]] = []
 
----
+        if conversation_history:
+            # Include recent history (last 10 messages to control prompt size)
+            recent = conversation_history[-10:]
+            messages.extend(recent)
+            logger.debug(
+                f"[MrCallAgent] Including {len(recent)} messages from conversation history"
+            )
 
-INSTRUCTIONS: {instructions}
+        # Current user instruction
+        messages.append({"role": "user", "content": instructions})
 
-Choose the appropriate tool based on what the user wants. Remember:
-- ALL values must be strings
-- JSON values must be escaped strings like "{{\\"key\\": \\"value\\"}}"
-- When enabling booking, set multiple variables together
-"""
+        logger.debug(f"[MrCallAgent] System prompt: {len(system_prompt)} chars")
+        logger.info(
+            f"[MrCallAgent] Calling LLM with {len(self.TOOLS)} tools, "
+            f"{len(messages)} messages"
+        )
 
-        logger.debug(f"[MrCallAgent] Sending prompt ({len(prompt)} chars)")
-        logger.info(f"[MrCallAgent] Calling LLM with {len(self.TOOLS)} tools")
-
-        # Call LLM with tools (uses inherited self.llm from SpecializedAgent)
+        # Call LLM with system prompt (feature knowledge) + messages (conversation)
         try:
             response = await self.llm.create_message(
-                messages=[{"role": "user", "content": prompt}],
+                system=system_prompt,
+                messages=messages,
                 tools=self.TOOLS,
-                max_tokens=2000
+                max_tokens=2000,
             )
-            logger.info(f"[MrCallAgent] LLM response received: stop_reason={response.stop_reason}")
-            logger.debug(f"[MrCallAgent] LLM response content blocks: {len(response.content)}")
+            logger.info(f"[MrCallAgent] LLM response: stop_reason={response.stop_reason}")
             for i, block in enumerate(response.content):
                 if hasattr(block, 'name'):
-                    logger.info(f"[MrCallAgent] Content block {i}: tool_use name={block.name}")
-                    logger.debug(f"[MrCallAgent] Content block {i}: tool_input={block.input}")
+                    logger.info(f"[MrCallAgent] Block {i}: tool_use name={block.name}")
+                    logger.debug(f"[MrCallAgent] Block {i}: tool_input={block.input}")
                 elif hasattr(block, 'text'):
-                    logger.debug(f"[MrCallAgent] Content block {i}: text={block.text[:200]}...")
-                else:
-                    logger.debug(f"[MrCallAgent] Content block {i}: type={type(block)}")
+                    logger.debug(f"[MrCallAgent] Block {i}: text={block.text}")
         except Exception as e:
             logger.error(f"[MrCallAgent] LLM call failed: {e}", exc_info=True)
             return {'error': f'LLM call failed: {str(e)}'}
 
-        # Handle tool response (MrCall-specific processing)
         return await self._handle_tool_response(response, dry_run=dry_run)
 
     async def _handle_tool_response(self, response, dry_run: bool = False) -> Dict[str, Any]:

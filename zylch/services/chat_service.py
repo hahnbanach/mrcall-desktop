@@ -453,7 +453,10 @@ class ChatService:
                         # /memory, /email, /train, /agent need config with BYOK credentials
                         config = ToolConfig.from_settings_with_owner(owner_id)
                         if cmd == '/agent':
-                            # /agent mrcall needs context for dashboard detection
+                            # /agent mrcall needs context + conversation history
+                            if context is None:
+                                context = {}
+                            context['_conversation_history'] = conversation_history
                             response_text = await handler(args, config, owner_id, context)
                         else:
                             response_text = await handler(args, config, owner_id)
