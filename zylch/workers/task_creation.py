@@ -406,6 +406,10 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
                 "{{calendar_context}}", calendar_context
             ).replace(
                 "{calendar_context}", calendar_context
+            ).replace(
+                "{{today}}", datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            ).replace(
+                "{today}", datetime.now(timezone.utc).strftime("%Y-%m-%d")
             )
 
             # Append existing task context if provided (in case trained prompt doesn't have placeholder)
