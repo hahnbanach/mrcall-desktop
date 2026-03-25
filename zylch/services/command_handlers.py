@@ -2375,6 +2375,10 @@ Then run `/tasks` again."""
         from zylch.api.token_storage import get_active_llm_provider
         llm_provider, api_key = get_active_llm_provider(owner_id)
         if not api_key or not llm_provider:
+            from zylch.llm.providers import get_system_llm_credentials
+            llm_provider, api_key = get_system_llm_credentials()
+
+        if not api_key or not llm_provider:
             return """❌ **LLM API key required**
 
 Connect your LLM provider:
