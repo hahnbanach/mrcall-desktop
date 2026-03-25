@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional, Set
 
 import numpy as np
 from sqlalchemy import (
-    Boolean, CheckConstraint, Column, Date, DateTime, Float, ForeignKey,
+    Boolean, CheckConstraint, Column, Computed, Date, DateTime, Float, ForeignKey,
     Integer, Numeric, Text, UniqueConstraint, text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
@@ -91,11 +91,11 @@ class Email(DictMixin, Base):
     references = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=text("now()"))
     updated_at = Column(DateTime(timezone=True), server_default=text("now()"))
-    fts_document = Column(TSVECTOR)  # server-managed generated column
+    fts_document = Column(TSVECTOR, Computed("''", persisted=True))  # GENERATED ALWAYS — real expr in migration
     read_events = Column(JSONB, server_default=text("'[]'::jsonb"))
     memory_processed_at = Column(DateTime(timezone=True))
     embedding = Column(Vector(384) if Vector else Text)  # pgvector VECTOR(384)
-    tsv = Column(TSVECTOR)  # server-managed generated column
+    tsv = Column(TSVECTOR, Computed("''", persisted=True))  # GENERATED ALWAYS — real expr in migration
     task_processed_at = Column(DateTime(timezone=True))
     is_auto_reply = Column(Boolean, server_default=text("false"))
 
@@ -149,7 +149,7 @@ class Blob(DictMixin, Base):
     events = Column(JSONB, server_default=text("'[]'::jsonb"))
     created_at = Column(DateTime(timezone=True), server_default=text("now()"))
     updated_at = Column(DateTime(timezone=True), server_default=text("now()"))
-    tsv = Column(TSVECTOR)  # GENERATED ALWAYS — created in Alembic migration
+    tsv = Column(TSVECTOR, Computed("''", persisted=True))  # GENERATED ALWAYS — real expr in migration
 
 
 class BlobSentence(DictMixin, Base):
