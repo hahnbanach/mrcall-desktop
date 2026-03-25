@@ -942,6 +942,19 @@ async def oauth_initiate(callback_url: str, request: Request):
                 showStatus('Error: ' + error.message, 'error');
             }});
 
+            // Check URL for force parameter — sign out first to show account picker
+            const urlParams = new URLSearchParams(window.location.search);
+            const forceLogin = urlParams.get('force') === 'true';
+            if (forceLogin) {{
+                console.log('Force login requested — signing out first');
+                auth.signOut();
+                // Remove force param to avoid loop
+                urlParams.delete('force');
+                const cleanUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+                window.history.replaceState(null, '', cleanUrl);
+                return;  // onAuthStateChanged will fire again with user=null
+            }}
+
             // Check if already signed in — auto-redirect with existing session
             auth.onAuthStateChanged(async (user) => {{
                 if (user) {{
