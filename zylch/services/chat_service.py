@@ -6,10 +6,10 @@ import re
 import shlex
 import time
 
-from litellm.exceptions import (
-    AuthenticationError,
-    RateLimitError,
-    APIConnectionError,
+from zylch.llm.exceptions import (
+    LLMAuthenticationError,
+    LLMRateLimitError,
+    LLMConnectionError,
 )
 
 from zylch.tools import ToolFactory, ToolConfig
@@ -453,7 +453,10 @@ class ChatService:
                         # /memory, /email, /train, /agent need config with BYOK credentials
                         config = ToolConfig.from_settings_with_owner(owner_id)
                         if cmd == '/agent':
-                            # /agent mrcall needs context for dashboard detection
+                            # /agent mrcall needs context + conversation history
+                            if context is None:
+                                context = {}
+                            context['_conversation_history'] = conversation_history
                             response_text = await handler(args, config, owner_id, context)
                         else:
                             response_text = await handler(args, config, owner_id)
@@ -477,14 +480,20 @@ class ChatService:
                         # Default: no args
                         response_text = await handler()
 
+                    metadata = {
+                        "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                        "command": cmd,
+                        "instant": True
+                    }
+                    # Extract pending_changes stored by _handle_mrcall_agent_run
+                    pending_changes = context.pop('_pending_changes', None) if context else None
+                    if pending_changes:
+                        metadata["pending_changes"] = pending_changes
+
                     return {
                         "response": self._prepend_notification(response_text, notification_banner),
                         "tool_calls": [],
-                        "metadata": {
-                            "execution_time_ms": round((time.time() - start_time) * 1000, 2),
-                            "command": cmd,
-                            "instant": True
-                        },
+                        "metadata": metadata,
                         "session_id": session_id
                     }
 
@@ -583,7 +592,7 @@ class ChatService:
                 "session_id": session_id if session_id else None
             }
 
-        except AuthenticationError as e:
+        except LLMAuthenticationError as e:
             # Invalid API key
             logger.error(f"Authentication error: {e}")
             execution_time_ms = (time.time() - start_time) * 1000
@@ -600,7 +609,7 @@ class ChatService:
                 "session_id": session_id if session_id else None
             }
 
-        except RateLimitError as e:
+        except LLMRateLimitError as e:
             # Rate limit exceeded
             logger.error(f"Rate limit error: {e}")
             execution_time_ms = (time.time() - start_time) * 1000
@@ -617,7 +626,7 @@ class ChatService:
                 "session_id": session_id if session_id else None
             }
 
-        except APIConnectionError as e:
+        except LLMConnectionError as e:
             # Network/connection issues
             logger.error(f"API connection error: {e}")
             execution_time_ms = (time.time() - start_time) * 1000

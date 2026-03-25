@@ -137,16 +137,29 @@ Examples:
 
 The goal is to capture HOW the user responds so the assistant can draft similar messages for future inquiries of the same type.
 
+**CRITICAL FOR TEMPLATES:** The #ABOUT section MUST contain enough detail to actually draft a response. Include:
+- The key information points the user always includes (prices, links, instructions, etc.)
+- The exact tone and formality level
+- The language used (Italian, English, etc.)
+- Any standard phrases the user reuses verbatim
+- The typical length and structure (short reply vs detailed explanation)
+
+A good TEMPLATE lets the assistant write a draft that the user only needs to lightly edit before sending. A bad TEMPLATE is too vague to be useful.
+
+**TEMPLATE FREQUENCY MATTERS:** If the user responds to the same type of inquiry 5+ times in the analyzed emails, that TEMPLATE is extremely valuable. Count occurrences in #HISTORY.
+
 #HISTORY
 Record each instance where this response pattern was used:
 - 2025-01-08: Sent to customer A regarding complaints about...
-- 2025-01-07: Sent to customer B regarding same issue   
+- 2025-01-07: Sent to customer B regarding same issue
+- (Count: used 7 times in analyzed period)
 ```
 
 5. **IMPORTANCE ASSESSMENT**
-   - SKIP automated emails, newsletters, marketing
+   - SKIP automated emails, newsletters, marketing — these are noise
    - Extract from: customer communications, business discussions, personal relationships
    - Judge by email tone and content
+   - PRIORITIZE TEMPLATE extraction — templates that appear multiple times are the highest-value entities because they directly save user time
 
 The generated prompt will receive these template variables:
 - {{from_email}} - Sender's email

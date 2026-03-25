@@ -2375,6 +2375,10 @@ Then run `/tasks` again."""
         from zylch.api.token_storage import get_active_llm_provider
         llm_provider, api_key = get_active_llm_provider(owner_id)
         if not api_key or not llm_provider:
+            from zylch.llm.providers import get_system_llm_credentials
+            llm_provider, api_key = get_system_llm_credentials()
+
+        if not api_key or not llm_provider:
             return """❌ **LLM API key required**
 
 Connect your LLM provider:
@@ -2970,12 +2974,12 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
         llm_provider, api_key = get_active_llm_provider(owner_id)
         user_email = get_email(owner_id)
 
-        # System-level fallback for MrCall domain (dashboard users don't have BYOK)
-        if domain == 'mrcall' and not api_key:
+        # System-level fallback (users without BYOK keys use system key)
+        if not api_key:
             from zylch.llm.providers import get_system_llm_credentials
             llm_provider, api_key = get_system_llm_credentials()
             if api_key:
-                logger.info(f"[/agent mrcall] Using system-level {llm_provider} API key for owner={owner_id}")
+                logger.info(f"[/agent {domain}] Using system-level {llm_provider} API key for owner={owner_id}")
 
         # Build agent_type for DB storage (e.g., 'memory_email', 'task_calendar')
         def get_agent_type(domain: str, channel: str) -> str:
@@ -2986,7 +2990,24 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
         # =====================
         if domain == 'memory':
             if action == 'train':
-                return await _handle_memory_train(storage, owner_id, channel, api_key, llm_provider, user_email)
+                # Run as background job
+                job = storage.create_background_job(
+                    owner_id=owner_id,
+                    job_type='memory_train',
+                    channel=channel,
+                    params={"user_email": user_email or "", "channel": channel},
+                )
+                if job["status"] in ("pending", "running"):
+                    if job["status"] == "pending":
+                        import asyncio
+                        from zylch.services.job_executor import JobExecutor
+                        executor = JobExecutor(storage)
+                        asyncio.create_task(executor.execute_job(
+                            job['id'], owner_id, api_key, llm_provider, user_email
+                        ))
+                        logger.info(f"[/agent memory train] Scheduled background job {job['id']} for channel={channel}")
+                    return f"🚀 **Memory training started** ({channel})\n\nYou'll be notified when complete."
+                return "❌ Failed to create training job."
 
             elif action == 'run':
                 return await _handle_memory_run(storage, owner_id, channel, api_key, llm_provider)
@@ -3018,7 +3039,24 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
         # =====================
         elif domain == 'email':
             if action == 'train':
-                return await _handle_emailer_train(storage, owner_id, api_key, llm_provider, user_email)
+                # Run as background job
+                job = storage.create_background_job(
+                    owner_id=owner_id,
+                    job_type='email_train',
+                    channel='email',
+                    params={"user_email": user_email or ""},
+                )
+                if job["status"] in ("pending", "running"):
+                    if job["status"] == "pending":
+                        import asyncio
+                        from zylch.services.job_executor import JobExecutor
+                        executor = JobExecutor(storage)
+                        asyncio.create_task(executor.execute_job(
+                            job['id'], owner_id, api_key, llm_provider, user_email
+                        ))
+                        logger.info(f"[/agent email train] Scheduled background job {job['id']}")
+                    return "🚀 **Email training started**\n\nAnalyzing your writing style in the background. You'll be notified when complete."
+                return "❌ Failed to create training job."
 
             elif action == 'run':
                 instructions = ' '.join(args[2:]) if len(args) > 2 else ''
@@ -3040,7 +3078,44 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
                 force = '--force' in remaining
                 remaining = [a for a in remaining if a != '--force']
                 feature = remaining[0] if remaining else None
-                return await _handle_mrcall_agent_train(storage, owner_id, api_key, llm_provider, user_email, feature=feature, context=context, force=force)
+
+                # Validate feature early
+                if feature and feature not in MrCallConfiguratorTrainer.FEATURES:
+                    available = list(MrCallConfiguratorTrainer.FEATURES.keys())
+                    return f"❌ **Unknown feature:** `{feature}`\n\nAvailable: {', '.join(available)}"
+
+                business_id = storage.get_mrcall_link(owner_id)
+                if not business_id:
+                    return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <ID>` first."
+
+                firebase_token = context.get("firebase_token", "") if context else ""
+
+                # Run as background job (training takes 5-8 min, would 504 inline)
+                job = storage.create_background_job(
+                    owner_id=owner_id,
+                    job_type='mrcall_train',
+                    channel='mrcall',
+                    business_id=business_id,
+                    params={
+                        "force": force,
+                        "features": [feature] if feature else None,
+                        "business_id": business_id,
+                        "firebase_token": firebase_token,
+                    }
+                )
+
+                if job["status"] in ("pending", "running"):
+                    if job["status"] == "pending":
+                        import asyncio
+                        from zylch.services.job_executor import JobExecutor
+                        executor = JobExecutor(storage)
+                        asyncio.create_task(executor.execute_job(
+                            job['id'], owner_id, api_key, llm_provider, user_email
+                        ))
+                        logger.info(f"[/agent mrcall train] Scheduled background job {job['id']}")
+                    return "🚀 **Training started**\n\nYou'll be notified when it completes."
+
+                return "❌ Failed to create training job."
 
             elif action == 'run':
                 instructions = ' '.join(args[2:]) if len(args) > 2 else ''
@@ -3995,8 +4070,19 @@ Connect your LLM provider:
             starchat_client=starchat,
         )
 
-        # Run the agent
-        result = await agent.run(instructions=instructions)
+        # Detect dashboard source for dry_run
+        is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
+        dry_run = is_dashboard
+
+        # Extract conversation history for multi-turn context
+        conversation_history = context.get('_conversation_history') if context else None
+
+        # Run the agent with live values + conversation history
+        result = await agent.run(
+            instructions=instructions,
+            dry_run=dry_run,
+            conversation_history=conversation_history,
+        )
 
         # Check for errors
         if result.get('error'):
@@ -4005,25 +4091,20 @@ Connect your LLM provider:
         tool_used = result.get('tool_used')
         tool_result = result.get('result', {})
 
-        # Format response based on tool used
-        if tool_used in (
-            'configure_welcome_inbound',
-            'configure_welcome_outbound',
-            'configure_booking',
-            'configure_caller_followup',
-            'configure_conversation',
-            'configure_knowledge_base',
-            'configure_notifications_business',
-            'configure_runtime_data',
-            'configure_call_transfer',
-        ):
-            if tool_result.get('success'):
-                updated = tool_result.get('updated', [])
-                feature = tool_result.get('feature', 'unknown')
-                return f"""✅ **{feature.replace('_', ' ').title()} Updated**
+        # Store pending_changes in context for chat_service to pick up
+        if tool_result and tool_result.get('pending_changes') and context is not None:
+            context['_pending_changes'] = tool_result['pending_changes']
 
-**Changes applied:**
-{chr(10).join(f'• {u}' for u in updated)}"""
+        # Format response based on tool used
+        if tool_used and tool_used.startswith('configure_'):
+            if tool_result.get('success'):
+                # Use human-friendly summary if available
+                response_text = tool_result.get('response_text')
+                if response_text:
+                    return f"✅ {response_text}"
+                # Fallback
+                feature = tool_result.get('feature', 'unknown')
+                return f"✅ **{feature.replace('_', ' ').title()}** updated successfully."
             else:
                 errors = tool_result.get('errors', ['Unknown error'])
                 return f"""❌ **Configuration Failed**

@@ -12,14 +12,6 @@ PROVIDER_MODELS: Dict[str, str] = {
     "scaleway": settings.scaleway_model,
 }
 
-# LiteLLM model prefixes
-LITELLM_MODEL_PREFIXES: Dict[str, str] = {
-    "anthropic": "anthropic",
-    "openai": "openai",
-    "mistral": "mistral",
-    "scaleway": "scaleway",
-}
-
 # Feature availability per provider
 PROVIDER_FEATURES: Dict[str, Dict[str, bool]] = {
     "anthropic": {
@@ -87,21 +79,22 @@ def get_provider_info(provider: str) -> Dict[str, Any]:
     }
 
 
-def get_litellm_model(provider: str) -> str:
-    """Get the full LiteLLM model string for a provider.
+def get_model_string(provider: str) -> str:
+    """Get the full model string for a provider (aisuite format: provider:model).
 
     Args:
-        provider: Provider name (anthropic, openai, mistral)
+        provider: Provider name (anthropic, openai, mistral, scaleway)
 
     Returns:
-        LiteLLM model string (e.g., "anthropic/claude-opus-4-6-20260205")
+        Model string (e.g., "anthropic:claude-sonnet-4-20250514")
     """
     if provider not in PROVIDER_MODELS:
         raise ValueError(f"Unknown provider: {provider}")
 
-    prefix = LITELLM_MODEL_PREFIXES[provider]
+    from .client import AISUITE_PROVIDER_KEYS
+    aisuite_key = AISUITE_PROVIDER_KEYS.get(provider, provider)
     model = PROVIDER_MODELS[provider]
-    return f"{prefix}/{model}"
+    return f"{aisuite_key}:{model}"
 
 
 def format_provider_info_message(provider: str) -> str:

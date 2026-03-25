@@ -1,21 +1,21 @@
-"""Unified LLM client using LiteLLM for multi-provider support.
+"""Unified LLM client using aisuite for multi-provider support.
 
-This module provides a drop-in replacement for direct Anthropic SDK usage,
-supporting Anthropic, OpenAI, and Mistral through a unified interface.
+This module provides a consistent interface for making LLM calls across
+different providers (Anthropic, OpenAI, Mistral) while maintaining backward
+compatibility with existing code that expects Anthropic response format.
 """
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
-from litellm import acompletion, completion
+import aisuite
 
 from .providers import (
-    LITELLM_MODEL_PREFIXES,
     PROVIDER_FEATURES,
     PROVIDER_MODELS,
-    get_litellm_model,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,44 +42,52 @@ class TextBlock:
 
 
 class LLMResponse:
-    """Adapter that provides Anthropic-compatible response interface for LiteLLM responses.
+    """Adapter that provides Anthropic-compatible response interface.
 
-    LiteLLM returns OpenAI-format responses. This adapter translates them to
+    aisuite returns OpenAI-format responses. This adapter translates them to
     Anthropic format so existing code doesn't need to change.
-
-    OpenAI format:
-    - response.choices[0].message.content
-    - response.choices[0].message.tool_calls
-    - response.choices[0].finish_reason == "tool_calls"
-
-    Anthropic format (what we expose):
-    - response.content (list of TextBlock/ToolUseBlock)
-    - response.stop_reason == "tool_use" or "end_turn"
-    - block.type, block.name, block.input, block.id
     """
 
-    def __init__(self, litellm_response: Any):
-        self._raw = litellm_response
+    def __init__(self, aisuite_response: Any):
+        self._raw = aisuite_response
         self._content: List[Union[TextBlock, ToolUseBlock]] = []
         self._stop_reason: str = "end_turn"
         self._parse_response()
 
     def _parse_response(self):
-        """Parse LiteLLM/OpenAI response into Anthropic-compatible format."""
-        if not self._raw.choices:
+        """Parse response into Anthropic-compatible format.
+
+        Handles both:
+        - OpenAI format (choices[0].message with tool_calls)
+        - Anthropic native format (content list with tool_use blocks, stop_reason)
+        """
+        # Anthropic native format: has .content as list and .stop_reason
+        if hasattr(self._raw, 'stop_reason') and hasattr(self._raw, 'content') and isinstance(self._raw.content, list):
+            for block in self._raw.content:
+                if hasattr(block, 'type'):
+                    if block.type == 'text':
+                        self._content.append(TextBlock(text=block.text))
+                    elif block.type == 'tool_use':
+                        self._content.append(ToolUseBlock(
+                            id=block.id,
+                            name=block.name,
+                            input=block.input if isinstance(block.input, dict) else {},
+                        ))
+            self._stop_reason = self._raw.stop_reason or "end_turn"
+            return
+
+        # OpenAI format: has .choices[0].message
+        if not hasattr(self._raw, 'choices') or not self._raw.choices:
             return
 
         choice = self._raw.choices[0]
         message = choice.message
 
-        # Parse text content
         if message.content:
             self._content.append(TextBlock(text=message.content))
 
-        # Parse tool calls
-        if message.tool_calls:
+        if hasattr(message, 'tool_calls') and message.tool_calls:
             for tool_call in message.tool_calls:
-                # Parse arguments - they come as JSON string
                 try:
                     args = json.loads(tool_call.function.arguments)
                 except (json.JSONDecodeError, TypeError):
@@ -99,32 +107,38 @@ class LLMResponse:
 
     @property
     def content(self) -> List[Union[TextBlock, ToolUseBlock]]:
-        """Get response content as list of blocks (Anthropic format)."""
         return self._content
 
     @property
     def stop_reason(self) -> str:
-        """Get stop reason in Anthropic format ('tool_use', 'end_turn', etc.)."""
         return self._stop_reason
 
     @property
     def model(self) -> str:
-        """Get the model that generated the response."""
         return self._raw.model
 
     @property
     def usage(self) -> Dict[str, int]:
-        """Get token usage information."""
         if hasattr(self._raw, 'usage') and self._raw.usage:
+            usage = self._raw.usage
             return {
-                "input_tokens": self._raw.usage.prompt_tokens,
-                "output_tokens": self._raw.usage.completion_tokens,
+                "input_tokens": getattr(usage, 'input_tokens', 0) or getattr(usage, 'prompt_tokens', 0),
+                "output_tokens": getattr(usage, 'output_tokens', 0) or getattr(usage, 'completion_tokens', 0),
             }
         return {"input_tokens": 0, "output_tokens": 0}
 
 
+# aisuite provider key mapping
+AISUITE_PROVIDER_KEYS = {
+    "anthropic": "anthropic",
+    "openai": "openai",
+    "mistral": "mistral",
+    "scaleway": "mistral",  # Scaleway uses Mistral models
+}
+
+
 class LLMClient:
-    """Unified LLM client using LiteLLM.
+    """Unified LLM client using aisuite.
 
     Provides a consistent interface for making LLM calls across different providers
     (Anthropic, OpenAI, Mistral) while maintaining backward compatibility with
@@ -136,7 +150,6 @@ class LLMClient:
             messages=[{"role": "user", "content": "Hello"}],
             max_tokens=1000,
         )
-        # Response has Anthropic-compatible interface
         print(response.content[0].text)
     """
 
@@ -146,13 +159,6 @@ class LLMClient:
         provider: str,
         model: Optional[str] = None,
     ):
-        """Initialize LLM client.
-
-        Args:
-            api_key: API key for the provider
-            provider: Provider name (anthropic, openai, mistral)
-            model: Optional model override. If not provided, uses PROVIDER_MODELS default.
-        """
         if provider not in PROVIDER_MODELS:
             raise ValueError(
                 f"Unknown provider: {provider}. "
@@ -164,50 +170,38 @@ class LLMClient:
         self.model = model or PROVIDER_MODELS[provider]
         self.features = PROVIDER_FEATURES.get(provider, {})
 
+        # Build aisuite provider config with API key
+        aisuite_key = AISUITE_PROVIDER_KEYS.get(provider, provider)
+        provider_configs = {aisuite_key: {"api_key": api_key}}
+
+        # For Scaleway, set the base URL for Mistral-compatible API
+        if provider == "scaleway":
+            provider_configs[aisuite_key]["base_url"] = "https://api.scaleway.ai/v1"
+
+        self._client = aisuite.Client(provider_configs=provider_configs)
+
         logger.info(f"Initialized LLMClient with provider={provider}, model={self.model}")
 
-    def _get_litellm_model(self, model: Optional[str] = None) -> str:
-        """Get LiteLLM-formatted model string.
-
-        Args:
-            model: Optional model name override
-
-        Returns:
-            LiteLLM model string (e.g., "anthropic/claude-opus-4-6-20260205")
-        """
+    def _get_aisuite_model(self, model: Optional[str] = None) -> str:
+        """Get aisuite-formatted model string (provider:model)."""
         model_name = model or self.model
-
-        # If already has prefix, use as-is
-        if "/" in model_name:
+        if ":" in model_name:
             return model_name
-
-        # Add provider prefix
-        prefix = LITELLM_MODEL_PREFIXES.get(self.provider, self.provider)
-        return f"{prefix}/{model_name}"
+        aisuite_key = AISUITE_PROVIDER_KEYS.get(self.provider, self.provider)
+        return f"{aisuite_key}:{model_name}"
 
     def _convert_tools_to_openai_format(
         self, tools: Optional[List[Dict[str, Any]]]
     ) -> Optional[List[Dict[str, Any]]]:
-        """Convert Anthropic tool format to OpenAI format if needed.
-
-        Anthropic format:
-            {"name": "...", "description": "...", "input_schema": {...}}
-
-        OpenAI format:
-            {"type": "function", "function": {"name": "...", "description": "...", "parameters": {...}}}
-
-        LiteLLM handles this conversion, but we ensure consistency.
-        """
+        """Convert Anthropic tool format to OpenAI format if needed."""
         if not tools:
             return None
 
         openai_tools = []
         for tool in tools:
-            # Check if already in OpenAI format
             if "type" in tool and tool["type"] == "function":
                 openai_tools.append(tool)
             else:
-                # Convert from Anthropic format
                 openai_tools.append({
                     "type": "function",
                     "function": {
@@ -222,18 +216,7 @@ class LLMClient:
     def _convert_tool_choice(
         self, tool_choice: Optional[Dict[str, Any]]
     ) -> Optional[Union[str, Dict[str, Any]]]:
-        """Convert Anthropic tool_choice format to OpenAI format.
-
-        Anthropic format:
-            {"type": "tool", "name": "my_tool"}  # Force specific tool
-            {"type": "auto"}  # Let model decide
-            {"type": "any"}  # Model must use a tool
-
-        OpenAI format:
-            {"type": "function", "function": {"name": "my_tool"}}
-            "auto"
-            "required"
-        """
+        """Convert Anthropic tool_choice format to OpenAI format."""
         if not tool_choice:
             return None
 
@@ -255,14 +238,11 @@ class LLMClient:
     def _convert_messages_to_openai_format(
         self, messages: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """Convert Anthropic-style messages to OpenAI format for LiteLLM.
+        """Convert Anthropic-style messages to OpenAI format.
 
         Handles:
-        - Assistant messages with tool_use blocks → assistant with tool_calls
-        - User messages with tool_result blocks → tool role messages
-
-        This is necessary because core.py stores conversation history in Anthropic format,
-        but LiteLLM expects OpenAI format.
+        - Assistant messages with tool_use blocks -> assistant with tool_calls
+        - User messages with tool_result blocks -> tool role messages
         """
         converted = []
         for msg in messages:
@@ -273,10 +253,8 @@ class LLMClient:
             if role == "user" and isinstance(content, list):
                 tool_results = [c for c in content if isinstance(c, dict) and c.get("type") == "tool_result"]
                 if tool_results:
-                    # Convert each tool_result to a separate tool message
                     for result in tool_results:
                         result_content = result.get("content", "")
-                        # Handle case where content might be a list (e.g., with images)
                         if isinstance(result_content, list):
                             result_content = json.dumps(result_content)
                         converted.append({
@@ -303,7 +281,7 @@ class LLMClient:
                             })
                         elif block.get("type") == "text":
                             text_parts.append(block.get("text", ""))
-                    elif hasattr(block, "type"):  # ToolUseBlock or TextBlock dataclass
+                    elif hasattr(block, "type"):
                         if block.type == "tool_use":
                             tool_calls.append({
                                 "id": block.id,
@@ -322,7 +300,7 @@ class LLMClient:
                 if tool_calls:
                     assistant_msg["tool_calls"] = tool_calls
                     if "content" not in assistant_msg:
-                        assistant_msg["content"] = None  # OpenAI requires content field
+                        assistant_msg["content"] = None
                 converted.append(assistant_msg)
                 continue
 
@@ -344,61 +322,23 @@ class LLMClient:
     ) -> LLMResponse:
         """Create a message with optional tool calling.
 
-        Args:
-            messages: List of message dicts ({"role": "user", "content": "..."})
-            system: Optional system prompt
-            tools: Optional list of tool definitions (Anthropic or OpenAI format)
-            tool_choice: Optional tool choice config (Anthropic format supported)
-            max_tokens: Maximum tokens in response
-            temperature: Sampling temperature
-            model: Optional model override
-            **kwargs: Additional arguments passed to LiteLLM
-
         Returns:
             LLMResponse with Anthropic-compatible interface
         """
-        litellm_model = self._get_litellm_model(model)
-
-        # Convert messages from Anthropic format to OpenAI format
-        # This handles tool_use blocks and tool_result blocks in conversation history
-        full_messages = self._convert_messages_to_openai_format(messages)
-        if system:
-            full_messages = [{"role": "system", "content": system}] + full_messages
-
-        # Convert tools to OpenAI format
-        openai_tools = self._convert_tools_to_openai_format(tools)
-
-        # Convert tool_choice to OpenAI format
-        openai_tool_choice = self._convert_tool_choice(tool_choice)
-
-        # Build request kwargs
-        request_kwargs = {
-            "model": litellm_model,
-            "messages": full_messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "api_key": self.api_key,
-        }
-
-        if openai_tools:
-            request_kwargs["tools"] = openai_tools
-        if openai_tool_choice:
-            request_kwargs["tool_choice"] = openai_tool_choice
-
-        # Add any extra kwargs (but filter out Anthropic-specific ones for non-Anthropic providers)
-        anthropic_only_kwargs = {"cache_control"}
-        for key, value in kwargs.items():
-            if key in anthropic_only_kwargs and self.provider != "anthropic":
-                logger.debug(f"Skipping Anthropic-only kwarg '{key}' for provider {self.provider}")
-                continue
-            request_kwargs[key] = value
-
-        logger.debug(f"LiteLLM request: model={litellm_model}, messages={len(full_messages)}, tools={len(openai_tools) if openai_tools else 0}")
-
-        # Make the async request
-        response = await acompletion(**request_kwargs)
-
-        return LLMResponse(response)
+        # aisuite is synchronous — run in executor to avoid blocking
+        return await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: self.create_message_sync(
+                messages=messages,
+                system=system,
+                tools=tools,
+                tool_choice=tool_choice,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                model=model,
+                **kwargs
+            )
+        )
 
     def create_message_sync(
         self,
@@ -411,58 +351,63 @@ class LLMClient:
         model: Optional[str] = None,
         **kwargs
     ) -> LLMResponse:
-        """Synchronous version of create_message.
+        """Synchronous version of create_message."""
+        aisuite_model = self._get_aisuite_model(model)
 
-        Same arguments as create_message but runs synchronously.
-        """
-        litellm_model = self._get_litellm_model(model)
-
-        # Convert messages from Anthropic format to OpenAI format
+        # Convert messages
         full_messages = self._convert_messages_to_openai_format(messages)
         if system:
             full_messages = [{"role": "system", "content": system}] + full_messages
 
-        # Convert tools to OpenAI format
-        openai_tools = self._convert_tools_to_openai_format(tools)
-
-        # Convert tool_choice to OpenAI format
-        openai_tool_choice = self._convert_tool_choice(tool_choice)
-
         # Build request kwargs
         request_kwargs = {
-            "model": litellm_model,
+            "model": aisuite_model,
             "messages": full_messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
-            "api_key": self.api_key,
         }
 
+        # aisuite providers convert tools from OpenAI format to their native format internally.
+        # Tools must ALWAYS be in OpenAI format — aisuite handles conversion to provider-native.
+        openai_tools = self._convert_tools_to_openai_format(tools)
         if openai_tools:
             request_kwargs["tools"] = openai_tools
-        if openai_tool_choice:
-            request_kwargs["tool_choice"] = openai_tool_choice
 
-        # Add any extra kwargs
+        # tool_choice: aisuite passes it directly to the provider SDK (no conversion).
+        # Anthropic SDK expects {"type": "tool", "name": "..."} — pass as-is.
+        # OpenAI SDK expects {"type": "function", "function": {"name": "..."}} — convert.
+        if tool_choice:
+            if self.provider == "anthropic":
+                request_kwargs["tool_choice"] = tool_choice
+            else:
+                openai_tool_choice = self._convert_tool_choice(tool_choice)
+                if openai_tool_choice:
+                    request_kwargs["tool_choice"] = openai_tool_choice
+
+        # Filter out Anthropic-specific kwargs for non-Anthropic providers
         anthropic_only_kwargs = {"cache_control"}
         for key, value in kwargs.items():
             if key in anthropic_only_kwargs and self.provider != "anthropic":
+                logger.debug(f"Skipping Anthropic-only kwarg '{key}' for provider {self.provider}")
                 continue
             request_kwargs[key] = value
 
-        logger.debug(f"LiteLLM sync request: model={litellm_model}")
+        num_tools = len(request_kwargs.get("tools", []))
+        logger.debug(f"aisuite request: model={aisuite_model}, messages={len(full_messages)}, tools={num_tools}")
 
-        # Make the sync request
-        response = completion(**request_kwargs)
+        # Call provider directly to avoid aisuite's MCP config processing bug
+        # (is_mcp_config not defined when mcp package not installed)
+        provider_key, model_name = aisuite_model.split(":", 1)
+        from aisuite.provider import ProviderFactory
+        if provider_key not in self._client.providers:
+            config = self._client.provider_configs.get(provider_key, {})
+            self._client.providers[provider_key] = ProviderFactory.create_provider(provider_key, config)
+        provider = self._client.providers[provider_key]
+        del request_kwargs["model"]
+        response = provider.chat_completions_create(model_name, full_messages, **{k: v for k, v in request_kwargs.items() if k != "messages"})
 
         return LLMResponse(response)
 
     def supports_feature(self, feature: str) -> bool:
-        """Check if the current provider supports a feature.
-
-        Args:
-            feature: Feature name (tool_calling, web_search, prompt_caching, vision)
-
-        Returns:
-            True if feature is supported
-        """
+        """Check if the current provider supports a feature."""
         return self.features.get(feature, False)
