@@ -55,18 +55,37 @@ class LLMResponse:
         self._parse_response()
 
     def _parse_response(self):
-        """Parse aisuite/OpenAI response into Anthropic-compatible format."""
-        if not self._raw.choices:
+        """Parse response into Anthropic-compatible format.
+
+        Handles both:
+        - OpenAI format (choices[0].message with tool_calls)
+        - Anthropic native format (content list with tool_use blocks, stop_reason)
+        """
+        # Anthropic native format: has .content as list and .stop_reason
+        if hasattr(self._raw, 'stop_reason') and hasattr(self._raw, 'content') and isinstance(self._raw.content, list):
+            for block in self._raw.content:
+                if hasattr(block, 'type'):
+                    if block.type == 'text':
+                        self._content.append(TextBlock(text=block.text))
+                    elif block.type == 'tool_use':
+                        self._content.append(ToolUseBlock(
+                            id=block.id,
+                            name=block.name,
+                            input=block.input if isinstance(block.input, dict) else {},
+                        ))
+            self._stop_reason = self._raw.stop_reason or "end_turn"
+            return
+
+        # OpenAI format: has .choices[0].message
+        if not hasattr(self._raw, 'choices') or not self._raw.choices:
             return
 
         choice = self._raw.choices[0]
         message = choice.message
 
-        # Parse text content
         if message.content:
             self._content.append(TextBlock(text=message.content))
 
-        # Parse tool calls
         if hasattr(message, 'tool_calls') and message.tool_calls:
             for tool_call in message.tool_calls:
                 try:
@@ -101,9 +120,10 @@ class LLMResponse:
     @property
     def usage(self) -> Dict[str, int]:
         if hasattr(self._raw, 'usage') and self._raw.usage:
+            usage = self._raw.usage
             return {
-                "input_tokens": self._raw.usage.prompt_tokens,
-                "output_tokens": self._raw.usage.completion_tokens,
+                "input_tokens": getattr(usage, 'input_tokens', 0) or getattr(usage, 'prompt_tokens', 0),
+                "output_tokens": getattr(usage, 'output_tokens', 0) or getattr(usage, 'completion_tokens', 0),
             }
         return {"input_tokens": 0, "output_tokens": 0}
 
@@ -339,10 +359,6 @@ class LLMClient:
         if system:
             full_messages = [{"role": "system", "content": system}] + full_messages
 
-        # Convert tools
-        openai_tools = self._convert_tools_to_openai_format(tools)
-        openai_tool_choice = self._convert_tool_choice(tool_choice)
-
         # Build request kwargs
         request_kwargs = {
             "model": aisuite_model,
@@ -351,10 +367,22 @@ class LLMClient:
             "temperature": temperature,
         }
 
-        if openai_tools:
-            request_kwargs["tools"] = openai_tools
-        if openai_tool_choice:
-            request_kwargs["tool_choice"] = openai_tool_choice
+        # Tools and tool_choice format depends on provider
+        # aisuite providers pass kwargs directly to their SDK, so we must match the provider's format
+        if self.provider == "anthropic":
+            # Anthropic SDK uses its own format (tools as-is, tool_choice as-is)
+            if tools:
+                request_kwargs["tools"] = tools
+            if tool_choice:
+                request_kwargs["tool_choice"] = tool_choice
+        else:
+            # OpenAI-compatible providers need OpenAI format
+            openai_tools = self._convert_tools_to_openai_format(tools)
+            openai_tool_choice = self._convert_tool_choice(tool_choice)
+            if openai_tools:
+                request_kwargs["tools"] = openai_tools
+            if openai_tool_choice:
+                request_kwargs["tool_choice"] = openai_tool_choice
 
         # Filter out Anthropic-specific kwargs for non-Anthropic providers
         anthropic_only_kwargs = {"cache_control"}
