@@ -165,7 +165,7 @@ class Storage:
             for i in range(0, len(records), chunk_size):
                 chunk = records[i:i + chunk_size]
                 stmt = pg_insert(Email).values(chunk)
-                update_cols = {c.name: c for c in stmt.excluded if c.name not in ('owner_id', 'gmail_id')}
+                update_cols = {c.name: c for c in stmt.excluded if c.name not in ('owner_id', 'gmail_id', 'tsv', 'fts_document')}
                 stmt = stmt.on_conflict_do_update(
                     index_elements=['owner_id', 'gmail_id'],
                     set_=update_cols,
@@ -280,7 +280,7 @@ class Storage:
             result = session.execute(
                 text(
                     "SELECT * FROM hybrid_search_emails("
-                    ":p_owner_id, :p_query, :p_query_embedding::vector(384), "
+                    ":p_owner_id, :p_query, CAST(:p_query_embedding AS vector(384)), "
                     ":p_fts_weight, :p_limit, :p_exact_pattern)"
                 ),
                 {

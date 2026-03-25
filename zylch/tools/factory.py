@@ -194,6 +194,9 @@ class ToolFactory:
 
         # Initialize external service clients
         try:
+            from zylch.storage.supabase_client import SupabaseStorage
+            supabase_storage = SupabaseStorage()
+
             # StarChat client - DISABLED pending OAuth2.0 implementation
             # Credentials will be per-user via /connect starchat (OAuth2.0)
             # For now, StarChat features are disabled

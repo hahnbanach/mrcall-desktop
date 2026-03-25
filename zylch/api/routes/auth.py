@@ -750,17 +750,18 @@ async def oauth_initiate(callback_url: str, request: Request):
                     }} else {{
                         // Use MSAL to silently acquire Microsoft Graph token
                         console.log('Firebase did not provide token, using MSAL...');
+                        const msalScopes = [
+                            "https://graph.microsoft.com/Mail.Read",
+                            "https://graph.microsoft.com/Mail.Send",
+                            "https://graph.microsoft.com/Mail.ReadWrite",
+                            "https://graph.microsoft.com/Calendars.Read",
+                            "https://graph.microsoft.com/Calendars.ReadWrite",
+                            "https://graph.microsoft.com/User.Read"
+                        ];
                         try {{
                             const silentRequest = {{
-                                scopes: [
-                                    "https://graph.microsoft.com/Mail.Read",
-                                    "https://graph.microsoft.com/Mail.Send",
-                                    "https://graph.microsoft.com/Mail.ReadWrite",
-                                    "https://graph.microsoft.com/Calendars.Read",
-                                    "https://graph.microsoft.com/Calendars.ReadWrite",
-                                    "https://graph.microsoft.com/User.Read"
-                                ],
-                                loginHint: email  // Use email as login hint for silent auth
+                                scopes: msalScopes,
+                                loginHint: email
                             }};
 
                             const msalResponse = await msalInstance.acquireTokenSilent(silentRequest);
@@ -770,11 +771,10 @@ async def oauth_initiate(callback_url: str, request: Request):
                             console.error('MSAL silent acquisition failed:', msalError);
                             // Fallback: try interactive acquisition
                             try {{
-                                const interactiveRequest = {{
-                                    scopes: silentRequest.scopes,
+                                const msalResponse = await msalInstance.acquireTokenPopup({{
+                                    scopes: msalScopes,
                                     loginHint: email
-                                }};
-                                const msalResponse = await msalInstance.acquireTokenPopup(interactiveRequest);
+                                }});
                                 graphToken = msalResponse.accessToken;
                                 console.log('Got Graph token from MSAL interactive acquisition');
                             }} catch (interactiveError) {{
@@ -942,11 +942,70 @@ async def oauth_initiate(callback_url: str, request: Request):
                 showStatus('Error: ' + error.message, 'error');
             }});
 
-            // Check if already signed in
+            // Check URL for force parameter — sign out first to show account picker
+            const urlParams = new URLSearchParams(window.location.search);
+            const forceLogin = urlParams.get('force') === 'true';
+            if (forceLogin) {{
+                console.log('Force login requested — signing out first');
+                // Remove force param to avoid loop
+                urlParams.delete('force');
+                const cleanUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+                window.history.replaceState(null, '', cleanUrl);
+                auth.signOut().then(() => {{
+                    console.log('Signed out, ready for fresh login');
+                }});
+            }}
+
+            // Check if already signed in — auto-redirect with existing session
             auth.onAuthStateChanged(async (user) => {{
-                if (user) {{
+                if (user && !forceLogin) {{
                     console.log('Already signed in:', user.email);
-                    // Don't auto-redirect - wait for redirect result to handle credential
+                    try {{
+                        const token = await user.getIdToken();
+                        const refreshToken = user.refreshToken;
+                        const email = user.email;
+                        const uid = user.uid;
+
+                        // Call /api/auth/login to save tokens server-side
+                        const loginResponse = await fetch('/api/auth/login', {{
+                            method: 'POST',
+                            headers: {{ 'Content-Type': 'application/json' }},
+                            body: JSON.stringify({{
+                                firebase_token: token,
+                                graph_token: null
+                            }})
+                        }});
+
+                        if (!loginResponse.ok) {{
+                            console.error('Auto-login failed:', loginResponse.statusText);
+                            return;
+                        }}
+
+                        // Check alpha tester allowlist
+                        const checkResponse = await fetch('/api/auth/check-allowlist?email=' + encodeURIComponent(email));
+                        const allowlistData = await checkResponse.json();
+                        const isAllowed = allowlistData.allowed;
+
+                        // Redirect to callback
+                        const params = new URLSearchParams({{
+                            token: token,
+                            refresh_token: refreshToken,
+                            owner_id: uid,
+                            email: email,
+                            allowed: isAllowed ? 'true' : 'false'
+                        }});
+
+                        const savedCallbackUrl = sessionStorage.getItem('zylch_callback_url') || callbackUrl;
+                        sessionStorage.removeItem('zylch_callback_url');
+                        const redirectUrl = savedCallbackUrl + '?' + params.toString();
+
+                        showStatus('Already signed in. Redirecting...', 'success');
+                        setTimeout(() => {{
+                            window.location.href = redirectUrl;
+                        }}, 500);
+                    }} catch (error) {{
+                        console.error('Auto-redirect error:', error);
+                    }}
                 }}
             }});
         </script>

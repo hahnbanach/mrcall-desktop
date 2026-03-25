@@ -19,6 +19,7 @@ COPY data/ ./data/
 COPY alembic/ ./alembic/
 COPY alembic.ini .
 COPY pyproject.toml .
+COPY entrypoint.sh .
 
 # Create non-root user for security
 RUN useradd -m -u 1000 zylch && \
@@ -41,4 +42,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
 # Default command: run migrations then start API server
-CMD alembic upgrade head && uvicorn zylch.api.main:app --host 0.0.0.0 --port ${PORT}
+CMD ["bash", "entrypoint.sh"]

@@ -3,3 +3,4 @@
 # Add authorized users below:
 mario.alemi@mrcall.ai
 angelo.leto@mrcall.ai
+support@mrcall.ai

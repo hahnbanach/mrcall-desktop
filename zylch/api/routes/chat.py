@@ -222,16 +222,14 @@ async def get_history(
         # Get session
         if session_id:
             session = session_manager.get_session(session_id)
-            if not session:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Session {session_id} not found"
-                )
-            # Verify session belongs to user
-            if session.user_id != user_id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Access denied to this session"
+            if not session or session.user_id != user_id:
+                # Session doesn't exist yet or belongs to different user — return empty history.
+                # Dashboard calls this on mount BEFORE /mrcall open creates the session.
+                return GetHistoryResponse(
+                    success=True,
+                    session_id=session_id,
+                    messages=[],
+                    total_messages=0
                 )
         else:
             # Get latest session for user

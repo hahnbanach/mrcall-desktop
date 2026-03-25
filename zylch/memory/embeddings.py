@@ -4,7 +4,6 @@ import logging
 from typing import List, Union
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 from .config import MemoryConfig
 
@@ -28,12 +27,14 @@ class EmbeddingEngine:
         self.model_name = config.embedding_model
         self.dim = config.embedding_dim
 
-        logger.info(f"Loading embedding model: {self.model_name}")
+        logger.info(f"Loading embedding model: {self.model_name} (ONNX backend)")
 
-        # Load sentence-transformers model
+        from sentence_transformers import SentenceTransformer
+
+        # Use ONNX backend — no torch dependency, ~10x smaller footprint
         self.model = SentenceTransformer(
             self.model_name,
-            device=config.embedding_device  # None = auto-detect
+            backend="onnx",
         )
 
         # Verify dimensionality

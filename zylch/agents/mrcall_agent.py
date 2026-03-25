@@ -1,20 +1,20 @@
 """MrCall Agent - Unified multi-tool agent for MrCall configuration.
 
 This is a TRUE AGENT with multiple tools that can:
-- Configure inbound welcome message (configure_welcome_inbound)
-- Configure outbound welcome message (configure_welcome_outbound)
-- Configure booking settings (configure_booking)
+- Configure 9 features (welcome, booking, knowledge base, transfer, etc.)
 - Show current configuration (get_current_config)
 - Answer questions (respond_text)
 
-The trained prompt instructs the agent when to use each tool based on
-the user's request.
+Architecture (post-refactor):
+- Runtime templates replace train-time LLM-generated sub-prompts
+- Live StarChat values fetched on every run() call (no stale data)
+- Conversation history support for multi-turn context
 
 Inherits from SpecializedAgent for common functionality (init, prompt loading, etc.)
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from zylch.agents.base_agent import SpecializedAgent
 from zylch.storage.supabase_client import SupabaseStorage
@@ -229,112 +229,181 @@ class MrCallAgent(SpecializedAgent):
 
         logger.info(f"MrCallAgent initialized for owner={owner_id}, business={self.business_id}")
 
-    def _get_trained_prompt(self) -> Optional[str]:
-        """Override to use dynamic prompt key based on business_id.
+    async def _build_runtime_prompt(self) -> str:
+        """Build system prompt with LIVE values from StarChat.
+
+        Fetches current business config and variable schema, then fills
+        runtime templates with live data. No train step required.
 
         Returns:
-            The trained unified prompt, or None if not trained
+            Complete system prompt string with all feature knowledge + current values
+
+        Raises:
+            ValueError: If business not found or StarChat unavailable
         """
-        if not self._prompt_loaded:
-            if not self.business_id:
-                logger.warning("No MrCall assistant linked")
-                self._trained_prompt = None
-            else:
-                # Dynamic key: mrcall_{business_id}
-                self._trained_prompt = self.storage.get_agent_prompt(
-                    self.owner_id,
-                    f"mrcall_{self.business_id}"
-                )
+        from zylch.agents.mrcall_templates import FEATURE_TEMPLATES, UNIFIED_RUNTIME_TEMPLATE
+        from zylch.agents.mrcall_context import (
+            build_variables_context,
+            build_conversation_variables_context,
+            fetch_and_flatten_schema,
+        )
 
-            self._prompt_loaded = True
+        if not self.starchat:
+            raise ValueError("StarChat client not available")
 
-            if self._trained_prompt:
-                logger.info("Loaded trained MrCall agent prompt")
-            else:
-                logger.debug("No trained MrCall agent prompt found")
+        # Single API call: fetch business config with all current variable values
+        business = await self.starchat.get_business_config(self.business_id)
+        if not business:
+            raise ValueError(f"Business not found: {self.business_id}")
+        logger.debug(
+            f"[MrCallAgent] Fetched business config: "
+            f"template={business.get('template')}, "
+            f"vars_count={len(business.get('variables', {}))}"
+        )
 
-        return self._trained_prompt
+        # Single API call: fetch variable schema (types, descriptions, defaults)
+        schema = await fetch_and_flatten_schema(self.starchat, business)
+        logger.debug(f"[MrCallAgent] Fetched variable schema: {len(schema)} variables")
+
+        # Build conversation variables context once (shared across features)
+        conv_vars_ctx = await build_conversation_variables_context(
+            self.starchat, self.business_id, business=business
+        )
+
+        # Fill each feature template with live values
+        feature_sections = []
+        for feature_name, template in FEATURE_TEMPLATES.items():
+            variables = MrCallConfiguratorTrainer.FEATURES.get(
+                feature_name, {}
+            ).get("variables", [])
+
+            vars_ctx = await build_variables_context(
+                self.starchat,
+                self.business_id,
+                variables,
+                business=business,
+                schema=schema,
+            )
+
+            filled = template.format(
+                variables_context=vars_ctx,
+                conversation_variables_context=conv_vars_ctx,
+            )
+            display_name = MrCallConfiguratorTrainer.FEATURES.get(
+                feature_name, {}
+            ).get("display_name", feature_name)
+            feature_sections.append(
+                f"### {feature_name.upper()}\n**{display_name}**\n\n{filled}"
+            )
+
+        # Combine into unified prompt
+        system_prompt = UNIFIED_RUNTIME_TEMPLATE.format(
+            feature_sections="\n\n".join(feature_sections)
+        )
+
+        # Inject config memory (past configuration decisions)
+        from zylch.agents.mrcall_memory import load_config_memory
+        config_memory = load_config_memory(self.owner_id, self.business_id)
+        if config_memory:
+            system_prompt += (
+                "\n\n## PREVIOUS CONFIGURATION DECISIONS\n\n"
+                "The following changes were made in previous sessions. "
+                "Use this context to understand the business's setup:\n\n"
+                f"{config_memory}\n"
+            )
+            logger.info(
+                f"[MrCallAgent] Injected config memory: {len(config_memory)} chars"
+            )
+
+        logger.info(
+            f"[MrCallAgent] Built runtime prompt: {len(system_prompt)} chars, "
+            f"{len(feature_sections)} features"
+        )
+        return system_prompt
 
     async def _gather_context(self, instructions: str, **kwargs) -> str:
-        """Override - MrCall doesn't need hybrid search context.
-
-        The trained prompt contains all the feature knowledge.
-        """
+        """Override - MrCall uses _build_runtime_prompt() instead."""
         return ""
 
-    async def run(self, instructions: str, **kwargs) -> Dict[str, Any]:
-        """Execute agent with given instructions.
+    async def run(
+        self,
+        instructions: str,
+        dry_run: bool = False,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Execute agent with given instructions and live StarChat values.
 
-        Overrides SpecializedAgent.run() to add MrCall-specific checks and prompt format.
+        Builds a runtime prompt with LIVE variable values (no train step needed)
+        and supports multi-turn conversation history.
 
         Args:
             instructions: What the user wants to do
+            dry_run: If True, validate and summarize changes but don't apply
+            conversation_history: Previous messages for multi-turn context
 
         Returns:
-            Dict with:
-            - tool_used: Name of the tool the agent chose
-            - tool_input: Input the agent provided to the tool
-            - result: Processed result
-            - error: Error message if something went wrong
+            Dict with tool_used, tool_input, result, error
         """
-        # MrCall-specific: Check for linked assistant
         if not self.business_id:
             return {
                 'error': 'No MrCall assistant linked. Run `/mrcall list` then `/mrcall link N` first.'
             }
 
-        # Load trained prompt (uses overridden _get_trained_prompt)
-        trained_prompt = self._get_trained_prompt()
-        if not trained_prompt:
-            return {
-                'error': 'Agent not trained. Run `/agent mrcall train` first.'
-            }
+        # Build system prompt with LIVE StarChat values
+        try:
+            system_prompt = await self._build_runtime_prompt()
+        except ValueError as e:
+            logger.error(f"[MrCallAgent] Failed to build runtime prompt: {e}")
+            return {'error': str(e)}
 
-        # Build full prompt with MrCall-specific instructions
-        prompt = f"""{trained_prompt}
+        # Build messages list with conversation history
+        messages: List[Dict[str, str]] = []
 
----
+        if conversation_history:
+            # Include recent history (last 10 messages to control prompt size)
+            recent = conversation_history[-10:]
+            messages.extend(recent)
+            logger.debug(
+                f"[MrCallAgent] Including {len(recent)} messages from conversation history"
+            )
 
-INSTRUCTIONS: {instructions}
+        # Current user instruction
+        messages.append({"role": "user", "content": instructions})
 
-Choose the appropriate tool based on what the user wants. Remember:
-- ALL values must be strings
-- JSON values must be escaped strings like "{{\\"key\\": \\"value\\"}}"
-- When enabling booking, set multiple variables together
-"""
+        logger.debug(f"[MrCallAgent] System prompt: {len(system_prompt)} chars")
+        logger.info(
+            f"[MrCallAgent] Calling LLM with {len(self.TOOLS)} tools, "
+            f"{len(messages)} messages"
+        )
 
-        logger.debug(f"[MrCallAgent] Sending prompt ({len(prompt)} chars)")
-        logger.info(f"[MrCallAgent] Calling LLM with {len(self.TOOLS)} tools")
-
-        # Call LLM with tools (uses inherited self.llm from SpecializedAgent)
+        # Call LLM with system prompt (feature knowledge) + messages (conversation)
         try:
             response = await self.llm.create_message(
-                messages=[{"role": "user", "content": prompt}],
+                system=system_prompt,
+                messages=messages,
                 tools=self.TOOLS,
-                max_tokens=2000
+                max_tokens=2000,
             )
-            logger.info(f"[MrCallAgent] LLM response received: stop_reason={response.stop_reason}")
-            logger.debug(f"[MrCallAgent] LLM response content blocks: {len(response.content)}")
+            logger.info(f"[MrCallAgent] LLM response: stop_reason={response.stop_reason}")
             for i, block in enumerate(response.content):
                 if hasattr(block, 'name'):
-                    logger.info(f"[MrCallAgent] Content block {i}: tool_use name={block.name}")
-                    logger.debug(f"[MrCallAgent] Content block {i}: tool_input={block.input}")
+                    logger.info(f"[MrCallAgent] Block {i}: tool_use name={block.name}")
+                    logger.debug(f"[MrCallAgent] Block {i}: tool_input={block.input}")
                 elif hasattr(block, 'text'):
-                    logger.debug(f"[MrCallAgent] Content block {i}: text={block.text[:200]}...")
-                else:
-                    logger.debug(f"[MrCallAgent] Content block {i}: type={type(block)}")
+                    logger.debug(f"[MrCallAgent] Block {i}: text={block.text}")
         except Exception as e:
             logger.error(f"[MrCallAgent] LLM call failed: {e}", exc_info=True)
             return {'error': f'LLM call failed: {str(e)}'}
 
-        # Handle tool response (MrCall-specific processing)
-        return await self._handle_tool_response(response)
+        return await self._handle_tool_response(response, dry_run=dry_run)
 
-    async def _handle_tool_response(self, response) -> Dict[str, Any]:
+    async def _handle_tool_response(self, response, dry_run: bool = False) -> Dict[str, Any]:
         """Handle the LLM's tool response.
 
         Args:
             response: LLMResponse from create_message
+            dry_run: If True, don't apply configure changes to StarChat
 
         Returns:
             Dict with tool_used, tool_input, and processed result
@@ -357,50 +426,11 @@ Choose the appropriate tool based on what the user wants. Remember:
                     logger.debug(f"[MrCallAgent] Tool input: {block.input}")
 
                     # Process based on tool
-                    if block.name == 'configure_welcome_inbound':
-                        logger.info("[MrCallAgent] Calling _process_configure for welcome_inbound")
+                    if block.name.startswith('configure_'):
+                        feature = block.name.replace('configure_', '')
+                        logger.info(f"[MrCallAgent] Calling _process_configure for {feature}")
                         result['result'] = await self._process_configure(
-                            block.input, 'welcome_inbound'
-                        )
-                    elif block.name == 'configure_welcome_outbound':
-                        logger.info("[MrCallAgent] Calling _process_configure for welcome_outbound")
-                        result['result'] = await self._process_configure(
-                            block.input, 'welcome_outbound'
-                        )
-                    elif block.name == 'configure_booking':
-                        logger.info("[MrCallAgent] Calling _process_configure for booking")
-                        result['result'] = await self._process_configure(
-                            block.input, 'booking'
-                        )
-                    elif block.name == 'configure_caller_followup':
-                        logger.info("[MrCallAgent] Calling _process_configure for caller_followup")
-                        result['result'] = await self._process_configure(
-                            block.input, 'caller_followup'
-                        )
-                    elif block.name == 'configure_conversation':
-                        logger.info("[MrCallAgent] Calling _process_configure for conversation")
-                        result['result'] = await self._process_configure(
-                            block.input, 'conversation'
-                        )
-                    elif block.name == 'configure_knowledge_base':
-                        logger.info("[MrCallAgent] Calling _process_configure for knowledge_base")
-                        result['result'] = await self._process_configure(
-                            block.input, 'knowledge_base'
-                        )
-                    elif block.name == 'configure_notifications_business':
-                        logger.info("[MrCallAgent] Calling _process_configure for notifications_business")
-                        result['result'] = await self._process_configure(
-                            block.input, 'notifications_business'
-                        )
-                    elif block.name == 'configure_runtime_data':
-                        logger.info("[MrCallAgent] Calling _process_configure for runtime_data")
-                        result['result'] = await self._process_configure(
-                            block.input, 'runtime_data'
-                        )
-                    elif block.name == 'configure_call_transfer':
-                        logger.info("[MrCallAgent] Calling _process_configure for call_transfer")
-                        result['result'] = await self._process_configure(
-                            block.input, 'call_transfer'
+                            block.input, feature, dry_run=dry_run
                         )
                     elif block.name == 'get_current_config':
                         logger.info("[MrCallAgent] Calling _process_get_config")
@@ -429,18 +459,20 @@ Choose the appropriate tool based on what the user wants. Remember:
     async def _process_configure(
         self,
         tool_input: Dict[str, Any],
-        feature: str
+        feature: str,
+        dry_run: bool = False
     ) -> Dict[str, Any]:
         """Process configure_* tool by updating variables via StarChat.
 
         Args:
             tool_input: Tool input with 'changes' dict
             feature: Feature name for validation
+            dry_run: If True, validate and summarize but don't call StarChat
 
         Returns:
             Dict with success status and updated variables
         """
-        logger.info(f"[MrCallAgent] _process_configure: feature={feature}, tool_input={tool_input}")
+        logger.info(f"[MrCallAgent] _process_configure: feature={feature}, dry_run={dry_run}, tool_input={tool_input}")
 
         changes = tool_input.get('changes', {})
         logger.info(f"[MrCallAgent] Changes to apply: {list(changes.keys())}")
@@ -449,7 +481,7 @@ Choose the appropriate tool based on what the user wants. Remember:
             logger.warning("[MrCallAgent] No changes specified in tool_input")
             return {'success': False, 'error': 'No changes specified'}
 
-        if not self.starchat:
+        if not dry_run and not self.starchat:
             logger.error("[MrCallAgent] StarChat client not available")
             return {'success': False, 'error': 'StarChat client not available'}
 
@@ -464,6 +496,23 @@ Choose the appropriate tool based on what the user wants. Remember:
                 'success': False,
                 'error': f'Invalid variables for {feature}: {invalid_vars}'
             }
+
+        # Dry run: return pending changes without calling StarChat
+        if dry_run:
+            pending = [
+                {"variable_name": var, "new_value": val, "feature": feature}
+                for var, val in changes.items()
+            ]
+            logger.info(f"[MrCallAgent] dry_run: {len(pending)} pending changes for {feature}")
+            final_result = {
+                'success': True,
+                'dry_run': True,
+                'pending_changes': pending,
+                'feature': feature
+            }
+            # Still generate human-friendly summary
+            final_result['response_text'] = await self._summarize_changes(feature, changes)
+            return final_result
 
         # Update each variable via StarChat
         updated = []
@@ -495,7 +544,68 @@ Choose the appropriate tool based on what the user wants. Remember:
             'feature': feature
         }
         logger.info(f"[MrCallAgent] _process_configure final result: {final_result}")
+
+        # Generate human-friendly summary via a second LLM call
+        if final_result['success'] and updated:
+            summary = await self._summarize_changes(feature, changes)
+            final_result['response_text'] = summary
+
+            # Persist configuration decision as entity memory
+            from zylch.agents.mrcall_memory import save_config_memory
+            save_config_memory(self.owner_id, self.business_id, feature, summary)
+
         return final_result
+
+    async def _summarize_changes(
+        self, feature: str, changes: Dict[str, str]
+    ) -> str:
+        """Generate a human-friendly summary of configuration changes.
+
+        Makes a lightweight LLM call to translate raw variable changes
+        into a message the user can understand.
+
+        Args:
+            feature: Feature name (e.g. 'welcome_inbound')
+            changes: Dict of variable_name -> new_value
+
+        Returns:
+            Human-readable summary string
+        """
+        feature_display = feature.replace('_', ' ').title()
+
+        # Build a concise description of what changed
+        changes_desc = "\n".join(
+            f"- {var_name}: {value}" for var_name, value in changes.items()
+        )
+
+        prompt = f"""You just updated the "{feature_display}" configuration for a MrCall AI phone assistant.
+
+The following variables were changed:
+{changes_desc}
+
+Write a SHORT, friendly confirmation message (2-4 sentences max) for the business owner explaining what was changed in plain language. Do NOT show variable names or technical details. Just explain the effect on how their assistant will behave.
+
+Examples of good responses:
+- "Done! Your assistant will now greet callers with a more formal tone, introducing itself as the reception of Mario's Restaurant."
+- "Got it! Booking is now enabled with 30-minute appointment slots, available Monday through Friday from 9 AM to 5 PM."
+- "Updated! After each call, callers will receive a WhatsApp message thanking them and providing your business address."
+
+Write ONLY the confirmation message, nothing else."""
+
+        try:
+            response = await self.llm.create_message(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=300
+            )
+            for block in response.content:
+                if hasattr(block, 'text'):
+                    logger.info(f"[MrCallAgent] Summary generated: {block.text}")
+                    return block.text
+        except Exception as e:
+            logger.warning(f"[MrCallAgent] Summary generation failed: {e}")
+
+        # Fallback: simple confirmation
+        return f"{feature_display} updated successfully."
 
     async def _process_get_config(self, tool_input: Dict[str, Any]) -> Dict[str, Any]:
         """Process get_current_config tool by fetching current values.

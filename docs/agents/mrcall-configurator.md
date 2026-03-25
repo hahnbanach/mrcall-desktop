@@ -48,11 +48,13 @@ The MrCall Configurator uses a **two-tier architecture** to configure AI phone a
 ┌─────────────────────────────────────────────────────────────┐
 │                    /agent mrcall run                         │
 │                                                              │
-│  MrCallAgent loads unified prompt and runs with 4 tools:     │
-│  - configure_welcome_message                                 │
-│  - configure_booking                                         │
-│  - get_current_config                                        │
-│  - respond_text                                              │
+│  MrCallAgent loads unified prompt and runs with 11 tools:    │
+│  - configure_welcome_inbound / configure_welcome_outbound    │
+│  - configure_booking / configure_caller_followup             │
+│  - configure_conversation / configure_knowledge_base         │
+│  - configure_notifications_business / configure_runtime_data │
+│  - configure_call_transfer                                   │
+│  - get_current_config / respond_text                         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -71,25 +73,20 @@ Each feature is defined ONCE in `MrCallConfiguratorTrainer.FEATURES`:
 
 ```python
 FEATURES = {
-    "welcome_message": {
-        "variables": ["OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT"],
-        "description": "How the assistant answers the phone",
-        "display_name": "Come risponde al telefono l'assistente",
+    "welcome_inbound": {
+        "variables": ["ENABLE_INBOUND_WELCOME_MESSAGE_PROMPT", "INBOUND_WELCOME_MESSAGE_PROMPT", ...],
+        "description": "How the assistant answers incoming calls",
         "meta_prompt": WELCOME_MESSAGE_META_PROMPT,
         "dynamic_context": True,
     },
     "booking": {
-        "variables": [
-            "START_BOOKING_PROCESS",
-            "BOOKING_HOURS",
-            "BOOKING_EVENTS_MINUTES",
-            # ... 17 variables total
-        ],
+        "variables": ["START_BOOKING_PROCESS", "BOOKING_HOURS", "BOOKING_EVENTS_MINUTES", ...],
         "description": "Appointment booking behavior",
-        "display_name": "How your MrCall assistant manages booking requests",
         "meta_prompt": BOOKING_META_PROMPT,
         "dynamic_context": True,
     },
+    # + welcome_outbound, caller_followup, conversation, knowledge_base,
+    #   notifications_business, runtime_data, call_transfer
 }
 ```
 
@@ -105,14 +102,40 @@ Both context builders accept an optional pre-fetched `business` dict — `train_
 
 ## Tool Selection
 
-The unified agent has 4 tools with distinct purposes:
+The unified agent has 11 tools — 9 configure tools (one per feature), plus 2 utility tools:
 
 | Tool | When to Use | Example |
 |------|-------------|---------|
-| `configure_welcome_message` | User wants to CHANGE greeting | "make the greeting more formal" |
-| `configure_booking` | User wants to CHANGE booking | "enable 30-min appointments" |
-| `get_current_config` | User asks to SEE raw settings | "show my current settings" |
-| `respond_text` | User asks YES/NO or interpretive questions | "is booking enabled?" |
+| `configure_welcome_inbound` | Change inbound greeting | "make the greeting more formal" |
+| `configure_welcome_outbound` | Change outbound greeting | "change the outgoing call intro" |
+| `configure_booking` | Change booking settings | "enable 30-min appointments" |
+| `configure_caller_followup` | Change post-call messages | "send WhatsApp after calls" |
+| `configure_conversation` | Change conversation flow | "ask for caller's email" |
+| `configure_knowledge_base` | Change Q&A knowledge | "add info about parking" |
+| `configure_notifications_business` | Change notifications | "send email after missed calls" |
+| `configure_runtime_data` | Change API integrations | "connect CRM lookup" |
+| `configure_call_transfer` | Change call forwarding | "forward sales calls to +39..." |
+| `get_current_config` | Show raw settings | "show my current settings" |
+| `respond_text` | Answer interpretive questions | "is booking enabled?" |
+
+## Dry Run & Save Button (Dashboard)
+
+When invoked from the MrCall dashboard, `configure_*` tools run in **dry_run mode**:
+
+1. LLM determines the changes (validates variables, generates summary)
+2. Changes are NOT applied to StarChat — returned as `pending_changes` in API metadata
+3. Dashboard accumulates pending changes in frontend memory
+4. **Save button** appears in the sidebar with a count badge
+5. User clicks Save → `POST /api/mrcall/apply-changes` → StarChat updated in batch
+6. **Discard** clears pending changes without applying
+
+This gives users a chance to review before changes go live. CLI (`/agent mrcall run`) still applies immediately (no dry_run).
+
+### Key endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/mrcall/apply-changes` | POST | Apply pending changes to StarChat (body: `{business_id, changes: [{variable_name, new_value}]}`) |
 
 ### Important: Interpretive vs. Display Questions
 
