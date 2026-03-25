@@ -367,22 +367,22 @@ class LLMClient:
             "temperature": temperature,
         }
 
-        # Tools and tool_choice format depends on provider
-        # aisuite providers pass kwargs directly to their SDK, so we must match the provider's format
-        if self.provider == "anthropic":
-            # Anthropic SDK uses its own format (tools as-is, tool_choice as-is)
-            if tools:
-                request_kwargs["tools"] = tools
-            if tool_choice:
+        # aisuite providers convert tools from OpenAI format to their native format internally.
+        # Tools must ALWAYS be in OpenAI format — aisuite handles conversion to provider-native.
+        openai_tools = self._convert_tools_to_openai_format(tools)
+        if openai_tools:
+            request_kwargs["tools"] = openai_tools
+
+        # tool_choice: aisuite passes it directly to the provider SDK (no conversion).
+        # Anthropic SDK expects {"type": "tool", "name": "..."} — pass as-is.
+        # OpenAI SDK expects {"type": "function", "function": {"name": "..."}} — convert.
+        if tool_choice:
+            if self.provider == "anthropic":
                 request_kwargs["tool_choice"] = tool_choice
-        else:
-            # OpenAI-compatible providers need OpenAI format
-            openai_tools = self._convert_tools_to_openai_format(tools)
-            openai_tool_choice = self._convert_tool_choice(tool_choice)
-            if openai_tools:
-                request_kwargs["tools"] = openai_tools
-            if openai_tool_choice:
-                request_kwargs["tool_choice"] = openai_tool_choice
+            else:
+                openai_tool_choice = self._convert_tool_choice(tool_choice)
+                if openai_tool_choice:
+                    request_kwargs["tool_choice"] = openai_tool_choice
 
         # Filter out Anthropic-specific kwargs for non-Anthropic providers
         anthropic_only_kwargs = {"cache_control"}
