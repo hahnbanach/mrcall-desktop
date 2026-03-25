@@ -280,7 +280,7 @@ class Storage:
             result = session.execute(
                 text(
                     "SELECT * FROM hybrid_search_emails("
-                    ":p_owner_id, :p_query, :p_query_embedding::vector(384), "
+                    ":p_owner_id, :p_query, CAST(:p_query_embedding AS vector(384)), "
                     ":p_fts_weight, :p_limit, :p_exact_pattern)"
                 ),
                 {
