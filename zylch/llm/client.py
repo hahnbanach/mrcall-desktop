@@ -392,7 +392,8 @@ class LLMClient:
                 continue
             request_kwargs[key] = value
 
-        logger.debug(f"aisuite request: model={aisuite_model}, messages={len(full_messages)}, tools={len(openai_tools) if openai_tools else 0}")
+        num_tools = len(request_kwargs.get("tools", []))
+        logger.debug(f"aisuite request: model={aisuite_model}, messages={len(full_messages)}, tools={num_tools}")
 
         # Call provider directly to avoid aisuite's MCP config processing bug
         # (is_mcp_config not defined when mcp package not installed)
