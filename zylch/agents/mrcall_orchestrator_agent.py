@@ -149,20 +149,13 @@ class MrCallOrchestratorAgent:
         return self._mrcall_agent
 
     async def enter_session(self) -> str:
-        """Enter MrCall config mode. Auto-train if needed.
+        """Enter MrCall config mode. Verifies StarChat connectivity.
 
         Returns:
             Welcome message or error string
         """
         if not self.business_id:
             return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
-
-        # Auto-train if needed
-        trained = await self._ensure_trained()
-        if not trained:
-            return ("❌ **Training required**\n\n"
-                    "Your MrCall assistant hasn't been trained yet. "
-                    "Please train it first from the Dashboard training button.")
 
         # Get business name for welcome message
         business_name = "your assistant"
@@ -312,6 +305,8 @@ Action: respond_to_user("What would you like the new greeting to be? For example
     async def _handle_delegate(self, tool_input: Dict[str, Any]) -> str:
         """Delegate command to MrCallAgent and format result.
 
+        Passes conversation_history so the executor has full context.
+
         Args:
             tool_input: Dict with 'command' key
 
@@ -321,18 +316,18 @@ Action: respond_to_user("What would you like the new greeting to be? For example
         command = tool_input.get("command", "")
         logger.info(f"[MrCallOrchestrator] Delegating to MrCallAgent: {command}")
 
-        # Get executor
         agent = self._get_mrcall_agent()
 
-        # Execute
         try:
-            result = await agent.run(instructions=command)
+            result = await agent.run(
+                instructions=command,
+                conversation_history=self.conversation_history,
+            )
             logger.debug(f"[MrCallOrchestrator] MrCallAgent result: {result}")
         except Exception as e:
             logger.error(f"[MrCallOrchestrator] MrCallAgent execution failed: {e}", exc_info=True)
             return f"❌ Failed to execute command: {str(e)}"
 
-        # Format result
         return self._format_result(result)
 
     def _format_result(self, result: Dict[str, Any]) -> str:
@@ -395,45 +390,5 @@ Action: respond_to_user("What would you like the new greeting to be? For example
         # Fallback: return raw result
         return str(agent_result)
 
-    async def _ensure_trained(self) -> bool:
-        """Ensure MrCallAgent has trained prompt. Fast-rebuild if missing.
-
-        If the unified prompt is missing, attempts a fast Layer 2 rebuild
-        (loads sub-prompts from DB, no LLM calls). Never does full training
-        inline — that would block the HTTP request for 7+ minutes.
-
-        Returns:
-            True if prompt is available (existed or was rebuilt successfully)
-        """
-        prompt_key = f"mrcall_{self.business_id}"
-        existing = self.storage.get_agent_prompt(self.owner_id, prompt_key)
-
-        if existing:
-            logger.info(f"[MrCallOrchestrator] Trained prompt found: key={prompt_key}")
-            return True
-
-        # Unified prompt missing — try fast rebuild from sub-prompts (Layer 2 only, no LLM calls)
-        logger.warning(f"[MrCallOrchestrator] No unified prompt for key={prompt_key}, owner={self.owner_id}. Attempting fast rebuild...")
-        try:
-            from zylch.agents.trainers import MrCallAgentTrainer
-
-            trainer = MrCallAgentTrainer(
-                storage=self.storage,
-                owner_id=self.owner_id,
-                api_key=self.api_key,
-                user_email="",
-                provider=self.provider,
-                starchat_client=self.starchat,
-            )
-            prompt, metadata = await trainer.build_prompt(self.business_id)
-            self.storage.store_agent_prompt(self.owner_id, prompt_key, prompt, metadata)
-            logger.info(f"[MrCallOrchestrator] Fast rebuild succeeded: {len(metadata.get('features_included', []))} features")
-            return True
-
-        except ValueError as e:
-            # No sub-prompts exist — user hasn't trained yet
-            logger.warning(f"[MrCallOrchestrator] Fast rebuild failed (no sub-prompts): {e}")
-            return False
-        except Exception as e:
-            logger.error(f"[MrCallOrchestrator] Fast rebuild failed: {e}", exc_info=True)
-            return False
+    # _ensure_trained() removed — MrCallAgent now builds runtime prompts
+    # with live StarChat values, no train step required.

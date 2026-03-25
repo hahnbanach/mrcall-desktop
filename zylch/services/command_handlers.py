@@ -4074,8 +4074,15 @@ Connect your LLM provider:
         is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
         dry_run = is_dashboard
 
-        # Run the agent
-        result = await agent.run(instructions=instructions, dry_run=dry_run)
+        # Extract conversation history for multi-turn context
+        conversation_history = context.get('_conversation_history') if context else None
+
+        # Run the agent with live values + conversation history
+        result = await agent.run(
+            instructions=instructions,
+            dry_run=dry_run,
+            conversation_history=conversation_history,
+        )
 
         # Check for errors
         if result.get('error'):
