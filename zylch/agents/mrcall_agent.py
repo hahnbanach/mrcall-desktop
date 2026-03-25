@@ -300,6 +300,21 @@ class MrCallAgent(SpecializedAgent):
         system_prompt = UNIFIED_RUNTIME_TEMPLATE.format(
             feature_sections="\n\n".join(feature_sections)
         )
+
+        # Inject config memory (past configuration decisions)
+        from zylch.agents.mrcall_memory import load_config_memory
+        config_memory = load_config_memory(self.owner_id, self.business_id)
+        if config_memory:
+            system_prompt += (
+                "\n\n## PREVIOUS CONFIGURATION DECISIONS\n\n"
+                "The following changes were made in previous sessions. "
+                "Use this context to understand the business's setup:\n\n"
+                f"{config_memory}\n"
+            )
+            logger.info(
+                f"[MrCallAgent] Injected config memory: {len(config_memory)} chars"
+            )
+
         logger.info(
             f"[MrCallAgent] Built runtime prompt: {len(system_prompt)} chars, "
             f"{len(feature_sections)} features"
@@ -532,9 +547,12 @@ class MrCallAgent(SpecializedAgent):
 
         # Generate human-friendly summary via a second LLM call
         if final_result['success'] and updated:
-            final_result['response_text'] = await self._summarize_changes(
-                feature, changes
-            )
+            summary = await self._summarize_changes(feature, changes)
+            final_result['response_text'] = summary
+
+            # Persist configuration decision as entity memory
+            from zylch.agents.mrcall_memory import save_config_memory
+            save_config_memory(self.owner_id, self.business_id, feature, summary)
 
         return final_result
 
