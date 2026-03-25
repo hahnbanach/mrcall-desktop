@@ -52,7 +52,7 @@ TASK_DECISION_TOOL = {
                 "description": "Why this needs attention - provide enough context for the executive to understand without reading the email"
             }
         },
-        "required": ["action_required", "task_action"]
+        "required": ["action_required", "task_action", "suggested_action", "reason", "urgency"]
     }
 }
 
