@@ -876,7 +876,7 @@ In config mode, use natural language:
             try:
                 url = f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/{settings.mrcall_realm}/crm/business/search"
                 logger.info(f"handle_mrcall list: Fetching from {url}")
-                async with httpx.AsyncClient(timeout=30.0) as http_client:
+                async with httpx.AsyncClient(timeout=30.0, verify=settings.starchat_verify_ssl) as http_client:
                     response = await http_client.post(
                         url,
                         headers={"auth": access_token, "Content-Type": "application/json"},
@@ -1070,7 +1070,7 @@ In config mode, use natural language:
 
             # Fetch businesses to validate the ID exists
             try:
-                async with httpx.AsyncClient(timeout=30.0) as http_client:
+                async with httpx.AsyncClient(timeout=30.0, verify=settings.starchat_verify_ssl) as http_client:
                     response = await http_client.post(
                         f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business/search",
                         headers={"auth": access_token, "Content-Type": "application/json"},
@@ -4110,31 +4110,6 @@ Connect your LLM provider:
                 return f"""❌ **Configuration Failed**
 
 {chr(10).join(f'• {e}' for e in errors)}"""
-
-        elif tool_used == 'get_current_config':
-            if 'error' in tool_result:
-                return f"❌ {tool_result['error']}"
-
-            config = tool_result.get('config', {})
-            feature = tool_result.get('feature')
-
-            if feature:
-                # Single feature
-                lines = [f"**{feature.replace('_', ' ').title()} Configuration:**", ""]
-                for var, val in config.items():
-                    # Show full value in code block (NEVER truncate user-facing output)
-                    lines.append(f"• `{var}` = \n\n```\n{val}\n```\n")
-                return chr(10).join(lines)
-            else:
-                # All features
-                lines = ["**Current Configuration:**", ""]
-                for feat_name, feat_config in config.items():
-                    lines.append(f"### {feat_name.replace('_', ' ').title()}")
-                    for var, val in feat_config.items():
-                        # Show full value in code block (NEVER truncate user-facing output)
-                        lines.append(f"• `{var}` = \n\n```\n{val}\n```\n")
-                    lines.append("")
-                return chr(10).join(lines)
 
         elif tool_used == 'respond_text':
             response = tool_result.get('response', '')
