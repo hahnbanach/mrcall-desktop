@@ -519,7 +519,6 @@ class MrCallAgent(SpecializedAgent):
 
         # Build Anthropic client + tools
         # Always use system-level Anthropic key (not user's BYOK or Scaleway key)
-        # because we're calling the Anthropic API directly for native features
         from zylch.config import settings as app_settings
         api_key = app_settings.anthropic_api_key
         if not api_key:
@@ -636,7 +635,6 @@ class MrCallAgent(SpecializedAgent):
         import asyncio
 
         # Always use system-level Anthropic key (not user's BYOK or Scaleway key)
-        # because we're calling the Anthropic API directly for native features
         from zylch.config import settings as app_settings
         api_key = app_settings.anthropic_api_key
         if not api_key:
