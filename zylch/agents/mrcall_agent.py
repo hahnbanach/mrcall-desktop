@@ -160,23 +160,11 @@ MRCALL_AGENT_TOOLS = [
             "required": ["response"]
         }
     },
-    {
-        "name": "web_search",
-        "description": "Search the web for information about a business, product, or service. Use this when the user mentions a website URL, asks to look up a business, or when you need external information to configure the assistant (e.g., 'configura per supergomme.net' — search the website to learn about the business).",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query (e.g., 'supergomme.net servizi gommista napoli')"
-                }
-            },
-            "required": ["query"]
-        }
-    }
 ]
 
 # Anthropic native web search tool (server-side, uses Brave Search)
+# NOT included in MRCALL_AGENT_TOOLS — added separately in _call_anthropic()
+# because it uses a different schema format ("type" instead of "name"+"input_schema")
 ANTHROPIC_WEB_SEARCH_TOOL = {
     "type": "web_search_20250305",
     "name": "web_search",
