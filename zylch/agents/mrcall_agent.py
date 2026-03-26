@@ -564,6 +564,9 @@ class MrCallAgent(SpecializedAgent):
         thread.start()
 
         text_started = False
+        current_tool_name = None
+        respond_text_json = ""  # Accumulate JSON for respond_text tool
+        respond_text_streaming = False  # True once we're past the JSON prefix
         try:
             while True:
                 try:
@@ -577,11 +580,51 @@ class MrCallAgent(SpecializedAgent):
                     break
 
                 event_type = getattr(event, 'type', '')
-                if event_type == 'content_block_delta':
+
+                # Track which tool is being called
+                if event_type == 'content_block_start':
+                    cb = getattr(event, 'content_block', None)
+                    if cb and hasattr(cb, 'name'):
+                        current_tool_name = cb.name
+                        logger.debug(f"[stream] Tool started: {current_tool_name}")
+
+                elif event_type == 'content_block_delta':
                     delta = getattr(event, 'delta', None)
-                    if delta and hasattr(delta, 'text'):
+                    if not delta:
+                        continue
+
+                    # Direct text delta (non-tool response or web search result)
+                    if hasattr(delta, 'text'):
                         text_started = True
                         yield {"type": "text_delta", "text": delta.text}
+
+                    # Tool input JSON delta — stream respond_text incrementally
+                    elif hasattr(delta, 'partial_json') and current_tool_name == 'respond_text':
+                        chunk = delta.partial_json
+                        respond_text_json += chunk
+
+                        if not respond_text_streaming:
+                            # Wait until we're past the JSON prefix {"response": "
+                            prefix_end = respond_text_json.find('"response": "')
+                            if prefix_end >= 0:
+                                # Start streaming from after the prefix
+                                text_start = prefix_end + len('"response": "')
+                                initial_text = respond_text_json[text_start:]
+                                # Remove trailing "} if present (end of JSON)
+                                if initial_text.endswith('"}'):
+                                    initial_text = initial_text[:-2]
+                                if initial_text:
+                                    text_started = True
+                                    yield {"type": "text_delta", "text": initial_text}
+                                respond_text_streaming = True
+                        else:
+                            # Already streaming — send chunk directly
+                            # Remove trailing "} at very end of JSON
+                            text_started = True
+                            yield {"type": "text_delta", "text": chunk}
+
+                elif event_type == 'content_block_stop':
+                    current_tool_name = None
 
             if error_holder:
                 yield {"type": "error", "message": str(error_holder[0])}
@@ -590,7 +633,7 @@ class MrCallAgent(SpecializedAgent):
             thread.join(timeout=5)
             final_message = final_holder[0]
 
-            # Process tool calls from final message
+            # Process tool calls from final message (configure_* tools need post-processing)
             if final_message and final_message.stop_reason == "tool_use":
                 for block in final_message.content:
                     if hasattr(block, 'input'):
@@ -600,10 +643,10 @@ class MrCallAgent(SpecializedAgent):
                                 block.input, feature, dry_run=dry_run
                             )
                             yield {"type": "tool_result", "tool_used": block.name, "result": result}
-                        elif block.name == 'respond_text':
-                            yield {"type": "text_delta", "text": block.input.get('response', '')}
+                        # respond_text already streamed above — skip
                         break
             elif not text_started and final_message:
+                # Fallback: no text was streamed, extract from final message
                 for block in final_message.content:
                     if hasattr(block, 'text') and block.text:
                         yield {"type": "text_delta", "text": block.text}
