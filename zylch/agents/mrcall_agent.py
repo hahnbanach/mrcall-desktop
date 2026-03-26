@@ -279,9 +279,21 @@ class MrCallAgent(SpecializedAgent):
                 f"### {feature_name.upper()}\n**{display_name}**\n\n{filled}"
             )
 
+        # Extract business identity for prompt
+        business_name = (
+            business.get("nickname")
+            or business.get("name")
+            or business.get("companyName")
+            or "Unknown Business"
+        )
+        business_language = business.get("languageCountry", "unknown")
+
         # Combine into unified prompt
         system_prompt = UNIFIED_RUNTIME_TEMPLATE.format(
-            feature_sections="\n\n".join(feature_sections)
+            business_name=business_name,
+            business_id=self.business_id,
+            business_language=business_language,
+            feature_sections="\n\n".join(feature_sections),
         )
 
         # Inject config memory (past configuration decisions)
