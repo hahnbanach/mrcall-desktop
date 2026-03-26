@@ -518,7 +518,12 @@ class MrCallAgent(SpecializedAgent):
             messages.append({"role": "user", "content": instructions})
 
         # Build Anthropic client + tools
-        api_key = self.llm.api_key
+        # Always use system-level Anthropic key (not user's BYOK or Scaleway key)
+        # because we're calling the Anthropic API directly for native features
+        from zylch.config import settings as app_settings
+        api_key = app_settings.anthropic_api_key
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY not configured — required for MrCall agent")
         raw_model = self.llm.model
         model = raw_model.split(":", 1)[-1] if ":" in raw_model else raw_model
         client = anthropic.Anthropic(api_key=api_key)
@@ -630,7 +635,12 @@ class MrCallAgent(SpecializedAgent):
         import anthropic
         import asyncio
 
-        api_key = self.llm.api_key
+        # Always use system-level Anthropic key (not user's BYOK or Scaleway key)
+        # because we're calling the Anthropic API directly for native features
+        from zylch.config import settings as app_settings
+        api_key = app_settings.anthropic_api_key
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY not configured — required for MrCall agent")
         # self.llm.model may be "anthropic:claude-sonnet-..." or just "claude-sonnet-..."
         raw_model = self.llm.model
         model = raw_model.split(":", 1)[-1] if ":" in raw_model else raw_model
