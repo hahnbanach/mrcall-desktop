@@ -400,7 +400,7 @@ class SyncService:
             # Retry logic for 401 (token refresh)
             from zylch.api.token_storage import refresh_mrcall_token
             
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=60.0, verify=settings.starchat_verify_ssl) as client:
                 for attempt in range(2):
                     try:
                         response = await client.post(url, headers=headers, json=request_body)
