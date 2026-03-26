@@ -13,7 +13,7 @@ Inherits from SpecializedAgent for common functionality (init, prompt loading, e
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from zylch.agents.base_agent import SpecializedAgent
 from zylch.storage.supabase_client import SupabaseStorage
@@ -455,6 +455,161 @@ class MrCallAgent(SpecializedAgent):
 
         result = await self._handle_tool_response(response, dry_run=dry_run)
         return result
+
+    async def run_stream(
+        self,
+        instructions: str,
+        dry_run: bool = False,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+        attachments: Optional[List[Dict[str, Any]]] = None,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Stream agent response as SSE-compatible events.
+
+        Same as run() but yields incremental chunks.
+
+        Yields:
+            Dicts: text_delta, tool_result, metadata, error, done
+        """
+        import anthropic
+        import asyncio
+        import queue
+        import threading
+
+        if not self.business_id:
+            yield {"type": "error", "message": "No MrCall assistant linked."}
+            return
+
+        try:
+            system_prompt = await self._build_runtime_prompt()
+        except ValueError as e:
+            yield {"type": "error", "message": str(e)}
+            return
+
+        # Build messages (same logic as run())
+        messages: List[Dict[str, Any]] = []
+        if conversation_history:
+            messages.extend(conversation_history[-10:])
+
+        if attachments:
+            content_blocks = []
+            for att in attachments:
+                media_type = att.get("media_type", "")
+                if media_type.startswith("image/"):
+                    content_blocks.append({
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": media_type, "data": att["data"]}
+                    })
+                elif media_type == "application/pdf":
+                    content_blocks.append({
+                        "type": "document",
+                        "source": {"type": "base64", "media_type": "application/pdf", "data": att["data"]}
+                    })
+                else:
+                    import base64
+                    try:
+                        decoded = base64.b64decode(att["data"]).decode("utf-8", errors="replace")
+                        content_blocks.append({"type": "text", "text": f"[Attached file: {att.get('name', 'file')}]\n{decoded}"})
+                    except Exception:
+                        content_blocks.append({"type": "text", "text": f"[Attached file: {att.get('name', 'file')}] (could not decode)"})
+            if instructions.strip():
+                content_blocks.append({"type": "text", "text": instructions})
+            messages.append({"role": "user", "content": content_blocks})
+        else:
+            messages.append({"role": "user", "content": instructions})
+
+        # Build Anthropic client + tools
+        api_key = self.llm.api_key
+        raw_model = self.llm.model
+        model = raw_model.split(":", 1)[-1] if ":" in raw_model else raw_model
+        client = anthropic.Anthropic(api_key=api_key)
+
+        tools = []
+        for tool in self.TOOLS:
+            tools.append({
+                "name": tool["name"],
+                "description": tool["description"],
+                "input_schema": tool["input_schema"],
+            })
+        tools.append(ANTHROPIC_WEB_SEARCH_TOOL)
+
+        logger.info(f"[MrCallAgent.stream] Starting: model={model}, messages={len(messages)}")
+
+        # Stream from Anthropic in a worker thread
+        chunk_queue: queue.Queue = queue.Queue()
+        error_holder: List[Exception] = []
+        final_holder: list = [None]
+
+        def _stream_worker():
+            try:
+                with client.messages.stream(
+                    model=model,
+                    max_tokens=4096,
+                    system=system_prompt,
+                    messages=messages,
+                    tools=tools,
+                ) as stream:
+                    for event in stream:
+                        chunk_queue.put(event)
+                    final_holder[0] = stream.get_final_message()
+            except Exception as e:
+                error_holder.append(e)
+            finally:
+                chunk_queue.put(None)
+
+        thread = threading.Thread(target=_stream_worker, daemon=True)
+        thread.start()
+
+        text_started = False
+        try:
+            while True:
+                try:
+                    event = await asyncio.get_event_loop().run_in_executor(
+                        None, lambda: chunk_queue.get(timeout=0.1)
+                    )
+                except queue.Empty:
+                    continue
+
+                if event is None:
+                    break
+
+                event_type = getattr(event, 'type', '')
+                if event_type == 'content_block_delta':
+                    delta = getattr(event, 'delta', None)
+                    if delta and hasattr(delta, 'text'):
+                        text_started = True
+                        yield {"type": "text_delta", "text": delta.text}
+
+            if error_holder:
+                yield {"type": "error", "message": str(error_holder[0])}
+                return
+
+            thread.join(timeout=5)
+            final_message = final_holder[0]
+
+            # Process tool calls from final message
+            if final_message and final_message.stop_reason == "tool_use":
+                for block in final_message.content:
+                    if hasattr(block, 'input'):
+                        if block.name.startswith('configure_'):
+                            feature = block.name.replace('configure_', '')
+                            result = await self._process_configure(
+                                block.input, feature, dry_run=dry_run
+                            )
+                            yield {"type": "tool_result", "tool_used": block.name, "result": result}
+                        elif block.name == 'respond_text':
+                            yield {"type": "text_delta", "text": block.input.get('response', '')}
+                        break
+            elif not text_started and final_message:
+                for block in final_message.content:
+                    if hasattr(block, 'text') and block.text:
+                        yield {"type": "text_delta", "text": block.text}
+
+        except Exception as e:
+            logger.error(f"[MrCallAgent.stream] Failed: {e}", exc_info=True)
+            yield {"type": "error", "message": f"Stream failed: {str(e)}"}
+            return
+
+        yield {"type": "done"}
 
     async def _call_anthropic(
         self,
