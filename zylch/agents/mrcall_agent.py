@@ -12,7 +12,6 @@ Architecture (post-refactor):
 Inherits from SpecializedAgent for common functionality (init, prompt loading, etc.)
 """
 
-import json as json_module
 import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
@@ -461,29 +460,25 @@ class MrCallAgent(SpecializedAgent):
         self,
         instructions: str,
         dry_run: bool = False,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
         attachments: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Stream agent response as SSE-compatible events.
 
-        Same as run() but yields incremental chunks instead of waiting for full response.
+        Same as run() but yields incremental chunks.
 
         Yields:
-            Dicts with type field:
-            - {"type": "text_delta", "text": "..."} — incremental text
-            - {"type": "tool_result", "tool_used": "...", "result": {...}} — tool output
-            - {"type": "metadata", ...} — pending_changes, execution info
-            - {"type": "error", "message": "..."} — error
-            - {"type": "done"} — stream complete
+            Dicts: text_delta, tool_result, metadata, error, done
         """
         import anthropic
         import asyncio
+        import queue
+        import threading
 
         if not self.business_id:
             yield {"type": "error", "message": "No MrCall assistant linked."}
             return
 
-        # Build system prompt with LIVE StarChat values
         try:
             system_prompt = await self._build_runtime_prompt()
         except ValueError as e:
@@ -516,13 +511,13 @@ class MrCallAgent(SpecializedAgent):
                         content_blocks.append({"type": "text", "text": f"[Attached file: {att.get('name', 'file')}]\n{decoded}"})
                     except Exception:
                         content_blocks.append({"type": "text", "text": f"[Attached file: {att.get('name', 'file')}] (could not decode)"})
-                if instructions.strip():
-                    content_blocks.append({"type": "text", "text": instructions})
-                messages.append({"role": "user", "content": content_blocks})
+            if instructions.strip():
+                content_blocks.append({"type": "text", "text": instructions})
+            messages.append({"role": "user", "content": content_blocks})
         else:
             messages.append({"role": "user", "content": instructions})
 
-        # Build tools
+        # Build Anthropic client + tools
         api_key = self.llm.api_key
         raw_model = self.llm.model
         model = raw_model.split(":", 1)[-1] if ":" in raw_model else raw_model
@@ -537,43 +532,36 @@ class MrCallAgent(SpecializedAgent):
             })
         tools.append(ANTHROPIC_WEB_SEARCH_TOOL)
 
-        logger.info(f"[MrCallAgent.stream] Starting stream: model={model}, messages={len(messages)}")
+        logger.info(f"[MrCallAgent.stream] Starting: model={model}, messages={len(messages)}")
 
-        # Stream from Anthropic
+        # Stream from Anthropic in a worker thread
+        chunk_queue: queue.Queue = queue.Queue()
+        error_holder: List[Exception] = []
+        final_holder: list = [None]
+
+        def _stream_worker():
+            try:
+                with client.messages.stream(
+                    model=model,
+                    max_tokens=4096,
+                    system=system_prompt,
+                    messages=messages,
+                    tools=tools,
+                ) as stream:
+                    for event in stream:
+                        chunk_queue.put(event)
+                    final_holder[0] = stream.get_final_message()
+            except Exception as e:
+                error_holder.append(e)
+            finally:
+                chunk_queue.put(None)
+
+        thread = threading.Thread(target=_stream_worker, daemon=True)
+        thread.start()
+
+        text_started = False
         try:
-            # Run streaming in executor since SDK is synchronous
-            import queue
-            import threading
-
-            chunk_queue: queue.Queue = queue.Queue()
-            error_holder: List[Exception] = []
-
-            def _stream_worker():
-                try:
-                    with client.messages.stream(
-                        model=model,
-                        max_tokens=4096,
-                        system=system_prompt,
-                        messages=messages,
-                        tools=tools,
-                    ) as stream:
-                        for event in stream:
-                            chunk_queue.put(event)
-                        # Get final message for tool processing
-                        final = stream.get_final_message()
-                        chunk_queue.put(("__final__", final))
-                except Exception as e:
-                    error_holder.append(e)
-                finally:
-                    chunk_queue.put(None)  # sentinel
-
-            thread = threading.Thread(target=_stream_worker, daemon=True)
-            thread.start()
-
-            # Process events from the queue
-            text_started = False
             while True:
-                # Non-blocking get with small sleep to stay async-friendly
                 try:
                     event = await asyncio.get_event_loop().run_in_executor(
                         None, lambda: chunk_queue.get(timeout=0.1)
@@ -582,15 +570,9 @@ class MrCallAgent(SpecializedAgent):
                     continue
 
                 if event is None:
-                    break  # Stream complete
+                    break
 
-                # Final message for tool processing
-                if isinstance(event, tuple) and event[0] == "__final__":
-                    final_message = event[1]
-                    continue
-
-                # Stream text deltas
-                event_type = getattr(event, 'type', str(event))
+                event_type = getattr(event, 'type', '')
                 if event_type == 'content_block_delta':
                     delta = getattr(event, 'delta', None)
                     if delta and hasattr(delta, 'text'):
@@ -602,33 +584,28 @@ class MrCallAgent(SpecializedAgent):
                 return
 
             thread.join(timeout=5)
+            final_message = final_holder[0]
 
             # Process tool calls from final message
             if final_message and final_message.stop_reason == "tool_use":
                 for block in final_message.content:
                     if hasattr(block, 'input'):
-                        tool_name = block.name
-                        tool_input = block.input
-
-                        if tool_name.startswith('configure_'):
-                            feature = tool_name.replace('configure_', '')
+                        if block.name.startswith('configure_'):
+                            feature = block.name.replace('configure_', '')
                             result = await self._process_configure(
-                                tool_input, feature, dry_run=dry_run
+                                block.input, feature, dry_run=dry_run
                             )
-                            yield {"type": "tool_result", "tool_used": tool_name, "result": result}
-                        elif tool_name == 'respond_text':
-                            # respond_text via tool — emit as text
-                            yield {"type": "text_delta", "text": tool_input.get('response', '')}
+                            yield {"type": "tool_result", "tool_used": block.name, "result": result}
+                        elif block.name == 'respond_text':
+                            yield {"type": "text_delta", "text": block.input.get('response', '')}
                         break
-            elif not text_started:
-                # No text was streamed and no tool — check for text in final message
-                if final_message:
-                    for block in final_message.content:
-                        if hasattr(block, 'text') and block.text:
-                            yield {"type": "text_delta", "text": block.text}
+            elif not text_started and final_message:
+                for block in final_message.content:
+                    if hasattr(block, 'text') and block.text:
+                        yield {"type": "text_delta", "text": block.text}
 
         except Exception as e:
-            logger.error(f"[MrCallAgent.stream] Stream failed: {e}", exc_info=True)
+            logger.error(f"[MrCallAgent.stream] Failed: {e}", exc_info=True)
             yield {"type": "error", "message": f"Stream failed: {str(e)}"}
             return
 
