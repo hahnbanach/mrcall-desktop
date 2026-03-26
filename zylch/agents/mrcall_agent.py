@@ -176,6 +176,13 @@ MRCALL_AGENT_TOOLS = [
     }
 ]
 
+# Anthropic native web search tool (server-side, uses Brave Search)
+ANTHROPIC_WEB_SEARCH_TOOL = {
+    "type": "web_search_20250305",
+    "name": "web_search",
+    "max_uses": 5,
+}
+
 
 class MrCallAgent(SpecializedAgent):
     """Unified MrCall configuration agent with multiple tools.
@@ -379,25 +386,30 @@ class MrCallAgent(SpecializedAgent):
                 f"[MrCallAgent] Including {len(recent)} messages from conversation history"
             )
 
-        # Current user instruction — with attachments as multimodal content blocks
+        # Current user instruction — with attachments as Anthropic native content blocks
         if attachments:
             content_blocks = []
             for att in attachments:
                 media_type = att.get("media_type", "")
                 if media_type.startswith("image/"):
-                    # Image: inline as image_url (OpenAI format, aisuite converts)
+                    # Image: Anthropic native format
                     content_blocks.append({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{media_type};base64,{att['data']}"
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": att["data"],
                         }
                     })
                 elif media_type == "application/pdf":
-                    # PDF: extract as text description (aisuite doesn't support native PDF)
+                    # PDF: Anthropic native format (supported since 2025)
                     content_blocks.append({
-                        "type": "text",
-                        "text": f"[Attached PDF: {att.get('name', 'document.pdf')}]\n"
-                                f"(PDF content is base64-encoded, {len(att['data'])} chars)"
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": att["data"],
+                        }
                     })
                 else:
                     # Text/CSV/other: decode and include as text
@@ -432,13 +444,15 @@ class MrCallAgent(SpecializedAgent):
             f"{len(messages)} messages"
         )
 
-        # Call LLM with system prompt (feature knowledge) + messages (conversation)
+        # Call Anthropic API directly (not via aisuite) to support:
+        # - Native web_search_20250305 server tool
+        # - Native PDF/image content blocks
+        # MrCall always uses Anthropic, so no provider abstraction needed.
         try:
-            response = await self.llm.create_message(
-                system=system_prompt,
+            response = await self._call_anthropic(
+                system_prompt=system_prompt,
                 messages=messages,
-                tools=self.TOOLS,
-                max_tokens=2000,
+                max_tokens=4096,
             )
             logger.info(f"[MrCallAgent] LLM response: stop_reason={response.stop_reason}")
             for i, block in enumerate(response.content):
@@ -452,124 +466,63 @@ class MrCallAgent(SpecializedAgent):
             return {'error': f'LLM call failed: {str(e)}'}
 
         result = await self._handle_tool_response(response, dry_run=dry_run)
-
-        # Handle web_search multi-turn: feed search results back to LLM
-        if result.get('_web_search_response') and result.get('_web_search_result'):
-            search_text = result['_web_search_result'].get('content', 'No results found.')
-            logger.info(
-                f"[MrCallAgent] Web search returned {len(search_text)} chars, "
-                "making follow-up LLM call"
-            )
-
-            # Build tool_result message for the search
-            first_response = result['_web_search_response']
-            tool_use_id = None
-            for block in first_response.content:
-                if hasattr(block, 'name') and block.name == 'web_search':
-                    tool_use_id = block.id
-                    break
-
-            # Append assistant response + tool result + continue
-            messages.append({
-                "role": "assistant",
-                "content": [
-                    {"type": "tool_use", "id": tool_use_id, "name": "web_search",
-                     "input": first_response.content[0].input if hasattr(first_response.content[0], 'input') else {}}
-                ]
-            })
-            messages.append({
-                "role": "user",
-                "content": [
-                    {"type": "tool_result", "tool_use_id": tool_use_id,
-                     "content": search_text[:8000]}  # Cap to avoid huge prompts
-                ]
-            })
-
-            try:
-                response2 = await self.llm.create_message(
-                    system=system_prompt,
-                    messages=messages,
-                    tools=self.TOOLS,
-                    max_tokens=4000,
-                )
-                logger.info(f"[MrCallAgent] Follow-up LLM response: stop_reason={response2.stop_reason}")
-                result = await self._handle_tool_response(response2, dry_run=dry_run)
-            except Exception as e:
-                logger.error(f"[MrCallAgent] Follow-up LLM call failed: {e}")
-                # Return search results as text fallback
-                result = {
-                    'tool_used': 'respond_text',
-                    'tool_input': {},
-                    'result': {'response': f"Ho trovato queste informazioni:\n\n{search_text[:3000]}"}
-                }
-
-            # Clean up internal keys
-            result.pop('_web_search_response', None)
-            result.pop('_web_search_result', None)
-
         return result
 
-    async def _execute_web_search(self, query: str) -> Dict[str, Any]:
-        """Execute a web search using httpx and return results as text.
+    async def _call_anthropic(
+        self,
+        system_prompt: str,
+        messages: List[Dict[str, Any]],
+        max_tokens: int = 4096,
+    ):
+        """Call Anthropic API directly with native web search + configure tools.
 
-        Uses a simple web scraping approach: fetch the URL if it looks like one,
-        or use a search engine for queries.
+        Uses anthropic SDK directly (not aisuite) to support:
+        - web_search_20250305 server tool (Brave Search, handled by Anthropic)
+        - Native PDF/image content blocks
+        - Proper multi-turn with server tool results
+
+        Returns:
+            Anthropic Message response (native SDK object)
         """
-        import httpx
-        from html.parser import HTMLParser
+        import anthropic
+        import asyncio
 
-        class TextExtractor(HTMLParser):
-            def __init__(self):
-                super().__init__()
-                self.text = []
-                self._skip = False
+        api_key = self.llm.api_key
+        # self.llm.model may be "anthropic:claude-sonnet-..." or just "claude-sonnet-..."
+        raw_model = self.llm.model
+        model = raw_model.split(":", 1)[-1] if ":" in raw_model else raw_model
 
-            def handle_starttag(self, tag, attrs):
-                if tag in ('script', 'style', 'nav', 'footer', 'header'):
-                    self._skip = True
+        client = anthropic.Anthropic(api_key=api_key)
 
-            def handle_endtag(self, tag):
-                if tag in ('script', 'style', 'nav', 'footer', 'header'):
-                    self._skip = False
+        # Build tools: our configure/respond tools + Anthropic's native web search
+        tools = []
+        for tool in self.TOOLS:
+            tools.append({
+                "name": tool["name"],
+                "description": tool["description"],
+                "input_schema": tool["input_schema"],
+            })
+        # Add native web search (server-side, no DuckDuckGo scraping)
+        tools.append(ANTHROPIC_WEB_SEARCH_TOOL)
 
-            def handle_data(self, data):
-                if not self._skip:
-                    text = data.strip()
-                    if text:
-                        self.text.append(text)
+        logger.info(
+            f"[MrCallAgent] Calling Anthropic directly: model={model}, "
+            f"tools={len(tools)} ({len(self.TOOLS)} custom + 1 web_search), "
+            f"messages={len(messages)}"
+        )
 
-        try:
-            # If query looks like a URL, fetch it directly
-            url = query.strip()
-            if not url.startswith('http'):
-                if '.' in url and ' ' not in url:
-                    url = f"https://{url}"
-                else:
-                    # Use DuckDuckGo HTML search as fallback
-                    url = f"https://html.duckduckgo.com/html/?q={query}"
+        # Anthropic SDK is synchronous — run in executor
+        def _call():
+            return client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                system=system_prompt,
+                messages=messages,
+                tools=tools,
+            )
 
-            async with httpx.AsyncClient(
-                timeout=15.0, follow_redirects=True,
-                headers={"User-Agent": "Mozilla/5.0 (compatible; MrCallBot/1.0)"}
-            ) as client:
-                resp = await client.get(url)
-                resp.raise_for_status()
-
-            # Extract text from HTML
-            extractor = TextExtractor()
-            extractor.feed(resp.text)
-            content = "\n".join(extractor.text)
-
-            # Trim to reasonable size
-            if len(content) > 8000:
-                content = content[:8000] + "\n\n[...contenuto troncato...]"
-
-            logger.info(f"[MrCallAgent] web_search fetched {len(content)} chars from {url}")
-            return {"content": content, "url": url}
-
-        except Exception as e:
-            logger.error(f"[MrCallAgent] web_search failed: {e}")
-            return {"content": f"Ricerca fallita: {str(e)}", "url": query}
+        response = await asyncio.get_event_loop().run_in_executor(None, _call)
+        return response
 
     async def _handle_tool_response(self, response, dry_run: bool = False) -> Dict[str, Any]:
         """Handle the LLM's tool response.
@@ -610,28 +563,26 @@ class MrCallAgent(SpecializedAgent):
                         result['result'] = {
                             'response': block.input.get('response', '')
                         }
-                    elif block.name == 'web_search':
-                        logger.info(f"[MrCallAgent] web_search: query={block.input.get('query')}")
-                        search_result = await self._execute_web_search(
-                            block.input.get('query', '')
-                        )
-                        result['tool_used'] = 'web_search'
-                        result['result'] = search_result
-                        # Signal that we need a follow-up LLM call
-                        result['_web_search_response'] = response
-                        result['_web_search_result'] = search_result
                     else:
                         logger.warning(f"[MrCallAgent] Unknown tool: {block.name}")
                     break
         else:
-            # No tool called - extract text response as fallback
-            logger.info("[MrCallAgent] No tool_use, extracting text response")
+            # No custom tool called — extract all text blocks.
+            # With native web search, Anthropic may return:
+            #   [web_search_tool_use, web_search_tool_result, text]
+            # We collect all text blocks into the response.
+            logger.info("[MrCallAgent] No custom tool_use, extracting text response")
+            text_parts = []
             for block in response.content:
-                if hasattr(block, 'text'):
-                    result['tool_used'] = 'respond_text'
-                    result['result'] = {'response': block.text}
-                    logger.debug(f"[MrCallAgent] Text fallback: {block.text[:200]}...")
-                    break
+                if hasattr(block, 'text') and block.text:
+                    text_parts.append(block.text)
+            if text_parts:
+                result['tool_used'] = 'respond_text'
+                result['result'] = {'response': "\n\n".join(text_parts)}
+                logger.debug(
+                    f"[MrCallAgent] Text response from {len(text_parts)} blocks, "
+                    f"total {sum(len(t) for t in text_parts)} chars"
+                )
 
         logger.info(f"[MrCallAgent] _handle_tool_response result: tool_used={result['tool_used']}, has_result={result['result'] is not None}, error={result.get('error')}")
         return result
