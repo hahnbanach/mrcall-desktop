@@ -34,8 +34,7 @@ multiple configuration tools, each for a different feature.
 7. **configure_notifications_business** — Notifications sent to the business owner
 8. **configure_runtime_data** — External API integrations (CRM, webhooks)
 9. **configure_call_transfer** — Call transfer/forwarding rules
-10. **get_current_config** — Show current configuration for any feature
-11. **respond_text** — Answer questions or explain settings
+10. **respond_text** — Answer questions, explain settings, or describe current behavior
 
 ## WHEN TO USE EACH TOOL
 
@@ -49,8 +48,8 @@ multiple configuration tools, each for a different feature.
 - "email me after calls" / "SMS notifications" → configure_notifications_business
 - "look up caller in CRM" / "webhook after call" → configure_runtime_data
 - "transfer to operator" / "forward calls" → configure_call_transfer
-- "what are my settings?" / "show config" → get_current_config
-- "how does X work?" / "explain" → respond_text
+- "what are my settings?" / "how does X work?" / "explain" → respond_text
+- "is booking enabled?" / "how does it greet callers?" → respond_text
 
 ## CRITICAL RULES
 

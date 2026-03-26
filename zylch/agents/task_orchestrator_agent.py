@@ -615,10 +615,6 @@ Say \"send it\" to send, or tell me what to change."""
                 errors = agent_result.get('errors', ['Unknown error'])
                 return f"❌ Failed to update:\n" + "\n".join([f"- {e}" for e in errors])
 
-        elif tool_used == 'get_current_config':
-            config = agent_result.get('config', {})
-            return f"Current configuration:\n```\n{config}\n```"
-
         elif tool_used == 'respond_text':
             return agent_result.get('response', 'No response from agent.')
 

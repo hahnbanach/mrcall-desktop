@@ -1,6 +1,6 @@
 ---
 description: |
-  Current state of Zylch development as of 2026-03-19. What works, what's in progress,
+  Current state of Zylch development as of 2026-03-26. What works, what's in progress,
   immediate next steps, and known issues.
 ---
 
@@ -15,6 +15,7 @@ description: |
 - Firebase Auth for multi-tenant authentication
 - Scaleway Kubernetes deployment (ARM64)
 - GitLab CI/CD with self-hosted ARM runner
+- Daily Docker cleanup cron on runner (prevents disk-full build failures)
 
 ### Email Intelligence
 - Gmail sync (OAuth 2.0, incremental via history_id)
@@ -46,10 +47,13 @@ description: |
 - Web search (contact enrichment)
 
 ### MrCall Configuration
-- MrCall agent + orchestrator for assistant configuration
+- MrCall agent with **live variable loading** (no more stale trained prompts)
 - Feature-level variable management via StarChat API
-- Training system with selective retraining
-- Sandbox mode for isolated configuration sessions
+- **Conversation memory** across `/agent mrcall run` calls within a session
+- **Config memory**: configuration decisions persisted as entity blobs (namespace `{owner_id}:mrcall:{business_id}`)
+- **Fixed templates** per feature (no LLM-generated meta-prompts for structure)
+- Dry-run mode for dashboard with Save/Discard workflow
+- Training system retained for Layer 2 (unified agent prompt assembly)
 
 ### User Interfaces
 - CLI at `~/hb/zylch-cli` (Python/Textual, thin client)
@@ -59,62 +63,53 @@ description: |
 
 ### Documentation Harness
 - `CLAUDE.md` structured as concise index (~50 lines) with pointers to all docs
-- `docs/ARCHITECTURE.md` based on code ground truth (215 lines)
+- `docs/ARCHITECTURE.md` based on code ground truth
 - `docs/active-context.md` tracks current project state
 - `docs/quality-grades.md` per-module quality assessment
-- `docs/execution-plans/` directory for workstream tracking
 
-## Completed This Session (2026-03-19)
+## Completed (Session 2026-03-26)
 
-### StarChat Variable Rename & Cleanup (~/hb/starchat, branch v9.16)
-- Debugged `category_map` in `zylch/tools/mrcall/config_tools.py` — identified wrong variable names (`OSCAR_INBOUND_WELCOME_MESSAGE_PROMPT` does not exist, correct name is `INBOUND_WELCOME_MESSAGE_PROMPT`), missing welcome variables, and a modifiable logic bug (line 149 requires both `modifiable` AND `advanced`)
-- Investigated the StarChat variable system via `~/hb/starchat/docs/business-variables-guide.md` and `assistant-configuration-guide.md`
-- Analyzed decision table Scala code (`setInitialMessageOrInstructions.sc`) to understand welcome message generation flow (AI prompt vs templated parts)
-- Supported variable renames in starchat (committed as `8a24fe18a`):
-  - `OSCAR_INBOUND_TOGGLE_INITIAL_MESSAGE_WITH_PROMPT` -> `ENABLE_INBOUND_WELCOME_MESSAGE_PROMPT`
-  - `OSCAR_OUTBOUND_TOGGLE_INITIAL_MESSAGE_WITH_PROMPT` -> `ENABLE_OUTBOUND_WELCOME_MESSAGE_PROMPT`
-  - `OSCAR_OUTBOUND_WELCOME_MESSAGE_TEXT` -> `OUTBOUND_WELCOME_MESSAGE_TEXT`
-  - `SHOW_CONVERSATION_INSTRUCTIONS` -> `ENABLE_CONVERSATION_PROMPT`
-  - `CONVERSATION_INSTRUCTIONS` -> `CONVERSATION_PROMPT`
-  - Plus WhatsApp and contact variable renames
-- Diagnosed CSV upload FK constraint error (`__PERSONALIZE_ANSWERS__` missing from `business_variable.csv`) from starchat pod logs
-- Created `~/hb/starchat/scripts/migrations/rename-variables-test.sql` — SQL migration for renaming JSONB keys in `business.variables` and `contact.variables`
-- Created `~/hb/starchat/docs/operational/kubernetes-logs.md` — guide for accessing pod logs
-- Updated `~/hb/starchat/docs/README.md` — added kubernetes-logs entry
+### MrCall Agent Refactor — Live Values + Conversation Memory
 
-### Zylch (this repo)
-- No code changes this session. Analysis only — `category_map` fix not yet applied
+**Problem**: The configurator agent suffered from three bugs: (1) regressions when modifying variables (reverting to stale trained values), (2) lost context between `/agent mrcall run` calls, (3) losing earlier changes when making new ones. Root cause: values were baked into trained prompts at `/agent mrcall train` time and never refreshed.
 
-## Uncommitted Changes (Zylch)
+**Solution** (commits `2dc1ec2`, `20a827c`):
 
-- None (clean working tree on `main`)
+- **Live StarChat values at runtime**: `mrcall_context.py` fetches current variable values from StarChat before every LLM call. Templates in `mrcall_templates.py` provide fixed structure/format per feature. No more LLM-generated meta-prompts for feature structure.
+- **Conversation memory**: `mrcall_agent.py` maintains `conversation_history` list across multiple `run()` calls within a session. Each exchange (user message + agent response + tool results) is appended and injected into subsequent prompts. Solves "sì grazie" → context loss.
+- **Config memory** (`mrcall_memory.py`): After each successful `configure_*`, a summary of the decision is stored as an entity blob (namespace `{owner_id}:mrcall:{business_id}`). On next session, these are loaded as context so the agent knows prior configuration decisions.
 
-## Uncommitted Changes (StarChat ~/hb/starchat, branch v9.16)
+**New files**:
+| File | Purpose |
+|------|---------|
+| `zylch/agents/mrcall_context.py` | Live StarChat variable fetching + prompt assembly |
+| `zylch/agents/mrcall_templates.py` | Fixed feature templates (replacing LLM-generated meta-prompts) |
+| `zylch/agents/mrcall_memory.py` | Config memory persistence via blob storage |
 
-- Additional decision table Scala renames (CONVERSATION_PROMPT, RECURRENT_CALLER, etc.)
-- Deleted `decision-tables/variables/get-logs.sh`
-- CSV upload not yet successful (FK constraint on `__PERSONALIZE_ANSWERS__` needs fixing first)
+**Modified files**: `mrcall_agent.py` (conversation history, live context injection), `mrcall_orchestrator_agent.py` (pass-through of conversation state), `command_handlers.py` (session-level agent reuse), `trainers/mrcall_configurator.py` (simplified, templates moved out), `trainers/mrcall.py` (updated Layer 2 assembly).
 
-## Completed (Session 2026-03-24)
+### Infrastructure
+- Daily Docker cleanup cron on GitLab runner (`0 3 * * *` — `docker system prune -af && docker builder prune -af`)
 
-- **Human-friendly configure responses**: After a `configure_*` tool call, a second LLM call generates a plain-language summary instead of showing raw variable names/values. Updated: `mrcall_agent.py` (`_summarize_changes`), `mrcall_orchestrator_agent.py` (`_format_result`), `command_handlers.py` (`_handle_mrcall_agent_run`)
-- **Dry-run mode for dashboard**: When invoked from the MrCall dashboard, configure tools validate and summarize but don't apply changes to StarChat. Changes returned as `pending_changes` in API response metadata
-- **Save/Discard button**: Dashboard accumulates pending changes in frontend memory. Save button appears in sidebar with count badge. Clicking Save calls `POST /api/mrcall/apply-changes` to batch-apply all changes. Discard clears without applying
-- **New endpoint**: `POST /api/mrcall/apply-changes` — receives `{business_id, changes: [{variable_name, new_value}]}`, applies to StarChat
-- **Refactored configure dispatch**: Simplified 9 repetitive if/elif blocks in `_handle_tool_response` into single `block.name.startswith('configure_')` check
-- **Fixed provider for local testing**: `SYSTEM_LLM_PROVIDER=scaleway` needs working Scaleway Generative API. For local dev, temporarily switch to `anthropic` in `.env.mrcall`
+## Deployed State
+
+- **Production** (`production` branch): deployed successfully (commit `3fd8a03`)
+- **Test** (`dev` branch): deployed (commit `20a827c`), pod running (`zylch-849f875b45-t2ngr`)
+- Two stale error pods on test (`zylch-566b64c44d-xtn62`, `zylch-849f875b45-46fcs`) — safe to delete
 
 ## What Is In Progress
 
-- **MrCall variable cleanup**: `category_map` in `config_tools.py` needs fixing with correct variable names after starchat renames land
+- **MrCall variable cleanup**: `category_map` in `config_tools.py` still has wrong variable names (pre-rename)
 - Background job system (job_executor, locking)
 
 ## Immediate Next Steps
 
-- Fix `__PERSONALIZE_ANSWERS__` FK mismatch in starchat CSVs, re-run upload script
-- Run `rename-variables-test.sql` migration against mrcall-test DB
+- Clean up stale pods on starchat-test: `kubectl delete pod zylch-566b64c44d-xtn62 zylch-849f875b45-46fcs -n starchat-test`
+- Test the refactored agent end-to-end with a real customer configuration (Super Gomme use case)
 - Fix `category_map` in `zylch/tools/mrcall/config_tools.py` with correct post-rename variable names
 - Fix modifiable logic bug on `config_tools.py:149` (`and` should likely not require `advanced`)
+- Fix `__PERSONALIZE_ANSWERS__` FK mismatch in starchat CSVs
+- Run `rename-variables-test.sql` migration against mrcall-test DB
 - Billing system (Stripe subscriptions) - Phase H
 - WhatsApp integration (awaiting StarChat endpoint)
 - Microsoft Calendar feature parity

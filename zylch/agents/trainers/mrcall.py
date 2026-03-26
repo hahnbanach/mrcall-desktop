@@ -41,8 +41,7 @@ multiple configuration tools, each for a different feature.
 1. **configure_welcome_inbound** - Modify how the assistant answers inbound calls
 2. **configure_welcome_outbound** - Modify how the assistant starts outbound calls
 3. **configure_booking** - Manage appointment booking settings
-3. **get_current_config** - Show current configuration for any feature
-4. **respond_text** - Answer questions or explain settings
+3. **respond_text** - Answer questions, explain settings, or describe current behavior
 
 ## WHEN TO USE EACH TOOL
 
@@ -52,8 +51,8 @@ multiple configuration tools, each for a different feature.
 - "enable booking" → configure_booking
 - "set 30 minute appointments" → configure_booking
 - "disable booking" → configure_booking
-- "what are my current settings?" → get_current_config
-- "show booking config" → get_current_config
+- "what are my current settings?" → respond_text
+- "show booking config" → respond_text
 - "how does booking work?" → respond_text
 - "explain the variables" → respond_text
 - "is booking enabled?" → respond_text

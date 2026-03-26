@@ -370,23 +370,6 @@ Action: respond_to_user("What would you like the new greeting to be? For example
                     return f"⚠️ {error_msg}"
                 return "⚠️ Configuration update failed. Please try again."
 
-        if tool_used == 'get_current_config':
-            config = agent_result.get('config', {})
-            if not config:
-                return "No configuration found."
-
-            # Format config nicely
-            lines = ["**Current Configuration:**", ""]
-            for feature, values in config.items():
-                lines.append(f"**{feature.replace('_', ' ').title()}:**")
-                for key, val in values.items():
-                    # Show full values, don't truncate
-                    display_val = str(val)
-                    lines.append(f"  - `{key}`: {display_val}")
-                lines.append("")  # Empty line between features
-
-            return "\n".join(lines)
-
         # Fallback: return raw result
         return str(agent_result)
 
