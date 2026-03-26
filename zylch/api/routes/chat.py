@@ -30,6 +30,14 @@ def get_chat_service() -> ChatService:
     return _chat_service
 
 
+class AttachmentItem(BaseModel):
+    """A file attachment sent with a message."""
+
+    name: str = Field(description="Original filename")
+    media_type: str = Field(description="MIME type (e.g., application/pdf, image/png)")
+    data: str = Field(description="Base64-encoded file content")
+
+
 class SendMessageRequest(BaseModel):
     """Request model for sending a message."""
 
@@ -37,11 +45,15 @@ class SendMessageRequest(BaseModel):
         ...,
         description="User message/command to send to Zylch AI",
         min_length=1,
-        max_length=5000
+        max_length=50000
     )
     session_id: Optional[str] = Field(
         None,
         description="Optional session ID to continue conversation"
+    )
+    attachments: Optional[List[AttachmentItem]] = Field(
+        None,
+        description="Optional file attachments (base64-encoded)"
     )
 
 
@@ -138,6 +150,18 @@ async def send_message(
         # Extract raw Firebase token for StarChat passthrough
         raw_firebase_token = authorization.replace("Bearer ", "") if authorization.startswith("Bearer ") else authorization
 
+        # Build attachments list for ChatService
+        attachments_data = None
+        if request.attachments:
+            attachments_data = [
+                {"name": att.name, "media_type": att.media_type, "data": att.data}
+                for att in request.attachments
+            ]
+            logger.info(
+                f"Message includes {len(attachments_data)} attachments: "
+                f"{[a['name'] for a in attachments_data]}"
+            )
+
         # Process message through ChatService
         chat_service = get_chat_service()
         result = await chat_service.process_message(
@@ -149,7 +173,8 @@ async def send_message(
                 "source": x_client_source if x_client_source else "dashboard",
                 "user_id": user_id,
                 "email": user_email,
-                "firebase_token": raw_firebase_token
+                "firebase_token": raw_firebase_token,
+                "attachments": attachments_data,
             }
         )
 
