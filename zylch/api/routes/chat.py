@@ -1,8 +1,10 @@
 """Chat API routes for dashboard integration with Firebase authentication."""
 
+import json
 import logging
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token, get_user_email_from_token
@@ -213,6 +215,182 @@ async def send_message(
             status_code=500,
             detail=f"Error processing message: {str(e)}"
         )
+
+
+@router.post("/message/stream")
+async def send_message_stream(
+    request: SendMessageRequest,
+    user: dict = Depends(get_current_user),
+    authorization: str = Header(...),
+    x_client_source: Optional[str] = Header(None, alias="X-Client-Source")
+):
+    """Stream a message response as Server-Sent Events (SSE).
+
+    Same as /message but returns incremental text chunks via SSE.
+    Only streams for MrCall configurator (/agent mrcall run).
+    Other commands fall back to single-event response.
+    """
+    from zylch.agents.mrcall_agent import MrCallAgent
+    from zylch.tools.starchat import StarChatClient
+    from zylch.config import settings
+    from zylch.storage.supabase_client import SupabaseStorage
+
+    try:
+        user_id = get_user_id_from_token(user)
+        user_email = get_user_email_from_token(user)
+        raw_firebase_token = (
+            authorization.replace("Bearer ", "")
+            if authorization.startswith("Bearer ")
+            else authorization
+        )
+        source = x_client_source if x_client_source else "dashboard"
+        is_dashboard = source in ("dashboard", "mrcall_dashboard")
+
+        # Session management
+        session_manager = get_session_manager()
+        session = session_manager.get_or_create_session(
+            user_id=user_id, session_id=request.session_id
+        )
+        session_manager.add_message(
+            session_id=session.session_id, role="user", content=request.message
+        )
+        history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in session.get_history(limit=50)
+        ]
+
+        # Parse /agent mrcall run "..." instructions
+        message = request.message.strip()
+        instructions = ""
+        if message.startswith("/agent mrcall run"):
+            rest = message[len("/agent mrcall run"):].strip()
+            if rest.startswith('"') and rest.endswith('"'):
+                instructions = rest[1:-1]
+            elif rest.startswith("'") and rest.endswith("'"):
+                instructions = rest[1:-1]
+            else:
+                instructions = rest
+
+        if not instructions:
+            # Not an MrCall run command — fall back to non-streaming
+            chat_service = get_chat_service()
+            attachments_data = [
+                {"name": a.name, "media_type": a.media_type, "data": a.data}
+                for a in request.attachments
+            ] if request.attachments else None
+            result = await chat_service.process_message(
+                user_message=request.message,
+                user_id=user_id,
+                conversation_history=history[:-1],
+                session_id=session.session_id,
+                context={
+                    "source": source, "user_id": user_id, "email": user_email,
+                    "firebase_token": raw_firebase_token,
+                    "attachments": attachments_data,
+                }
+            )
+            response_text = result.get("response", "")
+            session_manager.add_message(
+                session_id=session.session_id, role="assistant", content=response_text
+            )
+
+            async def _fallback_stream():
+                yield f"data: {json.dumps({'type': 'text_delta', 'text': response_text})}\n\n"
+                if result.get("metadata"):
+                    yield f"data: {json.dumps({'type': 'metadata', **result['metadata']})}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'session_id': session.session_id})}\n\n"
+
+            return StreamingResponse(_fallback_stream(), media_type="text/event-stream")
+
+        # --- MrCall streaming path ---
+        storage = SupabaseStorage()
+
+        # Get LLM credentials (user-level, then system fallback)
+        from zylch.api.token_storage import get_active_llm_provider
+        llm_provider, api_key = get_active_llm_provider(user_id)
+        if not api_key:
+            from zylch.llm.providers import get_system_llm_credentials
+            llm_provider, api_key = get_system_llm_credentials()
+
+        if not api_key:
+            raise HTTPException(status_code=500, detail="No LLM API key configured")
+
+        # Create StarChat client
+        starchat = StarChatClient(
+            base_url=settings.mrcall_base_url.rstrip('/'),
+            auth_type="firebase",
+            jwt_token=raw_firebase_token,
+            realm=settings.mrcall_realm,
+            owner_id=user_id,
+            verify_ssl=settings.starchat_verify_ssl,
+        )
+
+        # Create MrCall agent
+        agent = MrCallAgent(
+            storage=storage,
+            owner_id=user_id,
+            api_key=api_key,
+            provider=llm_provider,
+            starchat_client=starchat,
+        )
+
+        dry_run = is_dashboard
+        attachments_data = [
+            {"name": a.name, "media_type": a.media_type, "data": a.data}
+            for a in request.attachments
+        ] if request.attachments else None
+
+        async def _sse_stream():
+            full_text = []
+            try:
+                async for chunk in agent.run_stream(
+                    instructions=instructions,
+                    dry_run=dry_run,
+                    conversation_history=history[:-1],
+                    attachments=attachments_data,
+                ):
+                    chunk_type = chunk.get("type")
+                    yield f"data: {json.dumps(chunk)}\n\n"
+
+                    if chunk_type == "text_delta":
+                        full_text.append(chunk.get("text", ""))
+                    elif chunk_type == "tool_result":
+                        result = chunk.get("result", {})
+                        if result.get("pending_changes"):
+                            yield f"data: {json.dumps({'type': 'metadata', 'pending_changes': result['pending_changes']})}\n\n"
+                        if result.get("response_text"):
+                            full_text.append(result["response_text"])
+
+            except Exception as e:
+                logger.error(f"SSE stream error: {e}", exc_info=True)
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+            # Save to session history
+            response_text = "".join(full_text)
+            if response_text:
+                session_manager.add_message(
+                    session_id=session.session_id,
+                    role="assistant",
+                    content=response_text,
+                )
+
+            yield f"data: {json.dumps({'type': 'done', 'session_id': session.session_id})}\n\n"
+
+        return StreamingResponse(
+            _sse_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Stream setup error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/history", response_model=GetHistoryResponse)
