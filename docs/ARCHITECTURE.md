@@ -62,7 +62,10 @@ zylch/
 ├── agents/               # AI agents (LLM-powered processors)
 │   ├── base_agent.py     # Base agent class
 │   ├── emailer_agent.py  # Email composition with memory context
-│   ├── mrcall_agent.py   # MrCall configuration agent
+│   ├── mrcall_agent.py   # MrCall configuration agent (conversation history, live context)
+│   ├── mrcall_context.py # Live StarChat variable fetching + prompt assembly
+│   ├── mrcall_templates.py # Fixed feature templates (welcome, booking, transfer, etc.)
+│   ├── mrcall_memory.py  # Config memory persistence via blob storage
 │   ├── mrcall_orchestrator_agent.py # MrCall multi-step orchestration
 │   ├── task_orchestrator_agent.py   # Task detection orchestration
 │   └── trainers/         # Agent training subsystem
@@ -70,8 +73,8 @@ zylch/
 │       ├── emailer.py            # Emailer agent trainer
 │       ├── task_email.py         # Task-from-email trainer
 │       ├── memory_email.py       # Memory-from-email trainer
-│       ├── mrcall.py             # MrCall agent trainer
-│       ├── mrcall_configurator.py # MrCall config trainer
+│       ├── mrcall.py             # MrCall agent trainer (Layer 2 assembly)
+│       ├── mrcall_configurator.py # MrCall config trainer (simplified, templates extracted)
 │       └── memory_mrcall.py      # Memory-from-MrCall trainer
 │
 ├── memory/               # Entity memory system (cross-cutting)

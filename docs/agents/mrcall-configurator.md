@@ -1,60 +1,58 @@
 ---
 description: |
-  Two-tier architecture for configuring MrCall AI phone assistants. Layer 1 (ConfiguratorTrainer):
-  for each feature, fetches current variable values from StarChat, applies meta-prompt template,
-  generates feature sub-prompt via LLM. Layer 2 (AgentTrainer): combines all sub-prompts into a
-  unified agent with tool selection. Trained via /agent mrcall train.
+  MrCall configurator architecture: live variable loading at runtime (no stale trained prompts),
+  conversation memory across run calls, config memory persisted as entity blobs.
+  Layer 2 (AgentTrainer) still assembles unified agent prompt. Trained via /agent mrcall train.
 ---
 
 # MrCall Configurator Agent
 
-Manages MrCall assistant configuration through a two-tier sub-prompt architecture.
+Manages MrCall assistant configuration with live variable loading and conversation memory.
 
 ## Overview
 
-The MrCall Configurator uses a **two-tier architecture** to configure AI phone assistants:
+The MrCall Configurator uses **live runtime context** (not pre-trained prompts) for feature knowledge:
 
-1. **Layer 1 (ConfiguratorTrainer)**: Generates feature-specific sub-prompts from current MrCall config
-2. **Layer 2 (AgentTrainer)**: Combines sub-prompts into a unified agent with tool selection
+1. **Fixed templates** (`mrcall_templates.py`): Structure/format per feature — stable, no LLM generation needed
+2. **Live values** (`mrcall_context.py`): Current StarChat variables fetched before every LLM call
+3. **Conversation memory** (`mrcall_agent.py`): Message history preserved across `run()` calls in a session
+4. **Config memory** (`mrcall_memory.py`): Configuration decisions persisted as entity blobs across sessions
+5. **Layer 2 (AgentTrainer)**: Combines templates into a unified agent with tool selection instructions
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    /agent mrcall train                       │
+│                    /agent mrcall run "..."                    │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│           MrCallConfiguratorTrainer (Layer 1)                │
+│              MrCallContext (mrcall_context.py)                │
 │                                                              │
-│  For each feature in FEATURES dict:                          │
-│    1. Fetch current variable values from StarChat            │
-│    2. Apply meta-prompt template                             │
-│    3. Generate feature sub-prompt via LLM                    │
-│    4. Store as: mrcall_{business_id}_{feature}               │
+│  1. Fetch LIVE variable values from StarChat API             │
+│  2. Apply fixed templates from mrcall_templates.py           │
+│  3. Load config memory blobs (prior decisions)               │
+│  4. Assemble runtime prompt with fresh data                  │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│             MrCallAgentTrainer (Layer 2)                     │
+│              MrCallAgent (mrcall_agent.py)                    │
 │                                                              │
-│  1. Load all feature sub-prompts                             │
-│  2. Combine with UNIFIED_META_PROMPT (tool selection)        │
-│  3. Store unified agent as: mrcall_{business_id}             │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
+│  1. Inject conversation_history (prior run() exchanges)      │
+│  2. LLM selects tool from 11 available tools                 │
+│  3. Tool executes (validate, summarize, apply or dry_run)    │
+│  4. Append exchange to conversation_history                  │
+│  5. Store config decision in memory (mrcall_memory.py)       │
+└─────────────────────────────────────────────────────────────┘
+
 ┌─────────────────────────────────────────────────────────────┐
-│                    /agent mrcall run                         │
+│                    /agent mrcall train                        │
 │                                                              │
-│  MrCallAgent loads unified prompt and runs with 11 tools:    │
-│  - configure_welcome_inbound / configure_welcome_outbound    │
-│  - configure_booking / configure_caller_followup             │
-│  - configure_conversation / configure_knowledge_base         │
-│  - configure_notifications_business / configure_runtime_data │
-│  - configure_call_transfer                                   │
-│  - get_current_config / respond_text                         │
+│  Layer 2 only: assembles unified agent prompt from           │
+│  fixed templates + tool selection instructions.              │
+│  No longer generates per-feature sub-prompts via LLM.        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -62,10 +60,13 @@ The MrCall Configurator uses a **two-tier architecture** to configure AI phone a
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| ConfiguratorTrainer | `zylch/agents/trainers/mrcall_configurator.py` | Layer 1: Generates feature sub-prompts |
-| AgentTrainer | `zylch/agents/trainers/mrcall.py` | Layer 2: Combines into unified agent |
-| Agent | `zylch/agents/mrcall_agent.py` | Runs unified agent with tools |
-| Command Handler | `zylch/services/command_handlers.py` | CLI command routing |
+| Context Builder | `zylch/agents/mrcall_context.py` | Live StarChat variable fetching + prompt assembly |
+| Feature Templates | `zylch/agents/mrcall_templates.py` | Fixed structure/format templates per feature |
+| Config Memory | `zylch/agents/mrcall_memory.py` | Persist configuration decisions as entity blobs |
+| Agent | `zylch/agents/mrcall_agent.py` | Runs agent with tools + conversation history |
+| AgentTrainer | `zylch/agents/trainers/mrcall.py` | Layer 2: Combines templates into unified agent |
+| ConfiguratorTrainer | `zylch/agents/trainers/mrcall_configurator.py` | Simplified: template management, FEATURES dict |
+| Command Handler | `zylch/services/command_handlers.py` | CLI command routing, session-level agent reuse |
 
 ## Feature Definition
 
@@ -211,17 +212,21 @@ Without `business:write`, variable updates will fail. Users must re-run `/connec
 
 ## Storage Pattern
 
+### Agent Prompts (agent_prompts table)
+
 | Key Pattern | Content |
 |-------------|---------|
-| `mrcall_{business_id}` | Unified agent prompt |
-| `mrcall_{business_id}_{feature}` | Feature sub-prompt |
+| `mrcall_{business_id}` | Unified agent prompt (Layer 2 output) |
+| `mrcall_{business_id}_{feature}` | Feature sub-prompt (legacy, may be unused now) |
 | `mrcall_{business_id}_snapshot` | Training snapshot (variable values at last training) |
 
-Example:
-- `mrcall_abc123` → Unified agent
-- `mrcall_abc123_welcome_message` → Welcome message sub-prompt
-- `mrcall_abc123_booking` → Booking sub-prompt
-- `mrcall_abc123_snapshot` → Last-trained variable values (JSON)
+### Config Memory (blobs table)
+
+| Namespace | Content |
+|-----------|---------|
+| `{owner_id}:mrcall:{business_id}` | Configuration decisions — summaries of what was configured and why |
+
+Config memory blobs are created after each successful `configure_*` call. They persist across sessions and are loaded as context for subsequent conversations, giving the agent knowledge of prior configuration decisions without re-reading all variables.
 
 ## Training Optimization (Selective Retraining)
 

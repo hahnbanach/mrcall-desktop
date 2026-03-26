@@ -2,8 +2,7 @@
 
 This is a TRUE AGENT with multiple tools that can:
 - Configure 9 features (welcome, booking, knowledge base, transfer, etc.)
-- Show current configuration (get_current_config)
-- Answer questions (respond_text)
+- Answer questions and explain settings (respond_text)
 
 Architecture (post-refactor):
 - Runtime templates replace train-time LLM-generated sub-prompts
@@ -148,23 +147,8 @@ MRCALL_AGENT_TOOLS = [
         }
     },
     {
-        "name": "get_current_config",
-        "description": "Show current configuration for a feature. ONLY use when the user explicitly asks to SEE, VIEW, or DISPLAY their current settings WITHOUT making changes. Do NOT use this for modification requests.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "feature": {
-                    "type": "string",
-                    "enum": ["welcome_inbound", "welcome_outbound", "booking", "caller_followup", "conversation", "knowledge_base", "notifications_business", "runtime_data", "call_transfer", "all"],
-                    "description": "Which feature to show config for"
-                }
-            },
-            "required": ["feature"]
-        }
-    },
-    {
         "name": "respond_text",
-        "description": "Answer questions, explain settings, or interpret current configuration. Use for: YES/NO questions ('is booking enabled?', 'does it answer formally?'), behavioral questions ('how does it greet callers?'), and any request to INTERPRET or EXPLAIN settings rather than just show raw values.",
+        "description": "Answer ANY question about the current configuration: 'how does it greet callers?', 'is booking enabled?', 'what are my settings?', 'does it answer formally?'. Always explain in human-friendly language, never show raw variable names or template syntax.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -193,8 +177,7 @@ class MrCallAgent(SpecializedAgent):
     - configure_welcome_inbound: Update inbound greeting settings
     - configure_welcome_outbound: Update outbound greeting settings
     - configure_booking: Update booking settings
-    - get_current_config: Show current settings
-    - respond_text: Answer questions
+    - respond_text: Answer questions and explain current settings
 
     Usage:
         agent = MrCallAgent(storage, owner_id, api_key, provider, starchat)
@@ -432,9 +415,6 @@ class MrCallAgent(SpecializedAgent):
                         result['result'] = await self._process_configure(
                             block.input, feature, dry_run=dry_run
                         )
-                    elif block.name == 'get_current_config':
-                        logger.info("[MrCallAgent] Calling _process_get_config")
-                        result['result'] = await self._process_get_config(block.input)
                     elif block.name == 'respond_text':
                         logger.info("[MrCallAgent] respond_text tool used")
                         result['result'] = {
@@ -607,51 +587,6 @@ Write ONLY the confirmation message, nothing else."""
         # Fallback: simple confirmation
         return f"{feature_display} updated successfully."
 
-    async def _process_get_config(self, tool_input: Dict[str, Any]) -> Dict[str, Any]:
-        """Process get_current_config tool by fetching current values.
-
-        Args:
-            tool_input: Tool input with 'feature' selection
-
-        Returns:
-            Dict with current configuration values
-        """
-        feature = tool_input.get('feature', 'all')
-        logger.debug(f"[MrCallAgent] _process_get_config: feature={feature}, business_id={self.business_id}")
-
-        if not self.starchat:
-            logger.debug(f"[MrCallAgent] _process_get_config: StarChat client not available")
-            return {'error': 'StarChat client not available'}
-
-        try:
-            # Get business config
-            logger.debug(f"[MrCallAgent] _process_get_config: get_business_config(business_id={self.business_id})")
-            business = await self.starchat.get_business_config(self.business_id)
-            current_values = business.get('variables', {})
-            logger.debug(f"[MrCallAgent] _process_get_config: template={business.get('template')}, vars_count={len(current_values)}")
-
-            if feature == 'all':
-                # Return all feature variables
-                config = {}
-                for feat_name, feat_data in MrCallConfiguratorTrainer.FEATURES.items():
-                    config[feat_name] = {}
-                    for var in feat_data['variables']:
-                        if var in current_values:
-                            config[feat_name][var] = current_values[var]
-                return {'config': config}
-            else:
-                # Return single feature variables
-                feat_data = MrCallConfiguratorTrainer.FEATURES.get(feature)
-                if not feat_data:
-                    return {'error': f'Unknown feature: {feature}'}
-
-                config = {}
-                for var in feat_data['variables']:
-                    if var in current_values:
-                        config[var] = current_values[var]
-
-                return {'feature': feature, 'config': config}
-
-        except Exception as e:
-            logger.error(f"Error getting config: {e}")
-            return {'error': str(e)}
+    # _process_get_config removed — raw variable dumps are not user-friendly.
+    # Users who need raw values use StarChat directly.
+    # "how does it greet callers?" etc. goes through respond_text.
