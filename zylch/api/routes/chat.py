@@ -227,26 +227,22 @@ async def send_message_stream(
     """Stream a message response as Server-Sent Events (SSE).
 
     Same as /message but returns incremental text chunks via SSE.
-    Only used for MrCall configurator (/agent mrcall run) — other commands
-    fall back to the regular /message endpoint behavior.
-
-    SSE event types:
-    - text_delta: {"text": "..."} — incremental text chunk
-    - tool_result: {"tool_used": "...", "result": {...}} — configure result
-    - metadata: {"pending_changes": [...]} — changes to apply
-    - error: {"message": "..."} — error occurred
-    - done: {} — stream complete
+    Only streams for MrCall configurator (/agent mrcall run).
+    Other commands fall back to single-event response.
     """
     from zylch.agents.mrcall_agent import MrCallAgent
     from zylch.tools.starchat import StarChatClient
     from zylch.config import settings
     from zylch.storage.supabase_client import SupabaseStorage
-    from zylch.api.token_storage import get_active_llm_provider
 
     try:
         user_id = get_user_id_from_token(user)
         user_email = get_user_email_from_token(user)
-        raw_firebase_token = authorization.replace("Bearer ", "") if authorization.startswith("Bearer ") else authorization
+        raw_firebase_token = (
+            authorization.replace("Bearer ", "")
+            if authorization.startswith("Bearer ")
+            else authorization
+        )
         source = x_client_source if x_client_source else "dashboard"
         is_dashboard = source in ("dashboard", "mrcall_dashboard")
 
@@ -268,7 +264,6 @@ async def send_message_stream(
         instructions = ""
         if message.startswith("/agent mrcall run"):
             rest = message[len("/agent mrcall run"):].strip()
-            # Strip surrounding quotes
             if rest.startswith('"') and rest.endswith('"'):
                 instructions = rest[1:-1]
             elif rest.startswith("'") and rest.endswith("'"):
@@ -278,7 +273,6 @@ async def send_message_stream(
 
         if not instructions:
             # Not an MrCall run command — fall back to non-streaming
-            # Return a single SSE event with the full response
             chat_service = get_chat_service()
             attachments_data = [
                 {"name": a.name, "media_type": a.media_type, "data": a.data}
@@ -291,7 +285,8 @@ async def send_message_stream(
                 session_id=session.session_id,
                 context={
                     "source": source, "user_id": user_id, "email": user_email,
-                    "firebase_token": raw_firebase_token, "attachments": attachments_data,
+                    "firebase_token": raw_firebase_token,
+                    "attachments": attachments_data,
                 }
             )
             response_text = result.get("response", "")
@@ -309,12 +304,16 @@ async def send_message_stream(
 
         # --- MrCall streaming path ---
         storage = SupabaseStorage()
+
+        # Get LLM credentials (user-level, then system fallback)
+        from zylch.api.token_storage import get_active_llm_provider
         llm_provider, api_key = get_active_llm_provider(user_id)
         if not api_key:
-            from zylch.config import settings as cfg
-            if cfg.system_llm_provider and cfg.system_llm_api_key:
-                llm_provider = cfg.system_llm_provider
-                api_key = cfg.system_llm_api_key
+            from zylch.llm.providers import get_system_llm_credentials
+            llm_provider, api_key = get_system_llm_credentials()
+
+        if not api_key:
+            raise HTTPException(status_code=500, detail="No LLM API key configured")
 
         # Create StarChat client
         starchat = StarChatClient(
@@ -353,7 +352,6 @@ async def send_message_stream(
                     chunk_type = chunk.get("type")
                     yield f"data: {json.dumps(chunk)}\n\n"
 
-                    # Collect text for session history
                     if chunk_type == "text_delta":
                         full_text.append(chunk.get("text", ""))
                     elif chunk_type == "tool_result":
@@ -367,11 +365,13 @@ async def send_message_stream(
                 logger.error(f"SSE stream error: {e}", exc_info=True)
                 yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
-            # Save assistant response to session
+            # Save to session history
             response_text = "".join(full_text)
             if response_text:
                 session_manager.add_message(
-                    session_id=session.session_id, role="assistant", content=response_text
+                    session_id=session.session_id,
+                    role="assistant",
+                    content=response_text,
                 )
 
             yield f"data: {json.dumps({'type': 'done', 'session_id': session.session_id})}\n\n"
@@ -382,8 +382,8 @@ async def send_message_stream(
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",  # Disable nginx buffering
-            }
+                "X-Accel-Buffering": "no",
+            },
         )
 
     except HTTPException:
