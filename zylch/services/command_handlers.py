@@ -4077,11 +4077,15 @@ Connect your LLM provider:
         # Extract conversation history for multi-turn context
         conversation_history = context.get('_conversation_history') if context else None
 
+        # Extract attachments (file uploads from dashboard)
+        attachments = context.get('attachments') if context else None
+
         # Run the agent with live values + conversation history
         result = await agent.run(
             instructions=instructions,
             dry_run=dry_run,
             conversation_history=conversation_history,
+            attachments=attachments,
         )
 
         # Check for errors

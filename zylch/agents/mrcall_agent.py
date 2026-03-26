@@ -159,6 +159,20 @@ MRCALL_AGENT_TOOLS = [
             },
             "required": ["response"]
         }
+    },
+    {
+        "name": "web_search",
+        "description": "Search the web for information about a business, product, or service. Use this when the user mentions a website URL, asks to look up a business, or when you need external information to configure the assistant (e.g., 'configura per supergomme.net' — search the website to learn about the business).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query (e.g., 'supergomme.net servizi gommista napoli')"
+                }
+            },
+            "required": ["query"]
+        }
     }
 ]
 
@@ -325,6 +339,7 @@ class MrCallAgent(SpecializedAgent):
         instructions: str,
         dry_run: bool = False,
         conversation_history: Optional[List[Dict[str, str]]] = None,
+        attachments: Optional[List[Dict[str, Any]]] = None,
         **kwargs,
     ) -> Dict[str, Any]:
         """Execute agent with given instructions and live StarChat values.
@@ -336,6 +351,7 @@ class MrCallAgent(SpecializedAgent):
             instructions: What the user wants to do
             dry_run: If True, validate and summarize changes but don't apply
             conversation_history: Previous messages for multi-turn context
+            attachments: File attachments [{name, media_type, data (base64)}]
 
         Returns:
             Dict with tool_used, tool_input, result, error
@@ -363,8 +379,52 @@ class MrCallAgent(SpecializedAgent):
                 f"[MrCallAgent] Including {len(recent)} messages from conversation history"
             )
 
-        # Current user instruction
-        messages.append({"role": "user", "content": instructions})
+        # Current user instruction — with attachments as multimodal content blocks
+        if attachments:
+            content_blocks = []
+            for att in attachments:
+                media_type = att.get("media_type", "")
+                if media_type.startswith("image/"):
+                    # Image: inline as image_url (OpenAI format, aisuite converts)
+                    content_blocks.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{media_type};base64,{att['data']}"
+                        }
+                    })
+                elif media_type == "application/pdf":
+                    # PDF: extract as text description (aisuite doesn't support native PDF)
+                    content_blocks.append({
+                        "type": "text",
+                        "text": f"[Attached PDF: {att.get('name', 'document.pdf')}]\n"
+                                f"(PDF content is base64-encoded, {len(att['data'])} chars)"
+                    })
+                else:
+                    # Text/CSV/other: decode and include as text
+                    import base64
+                    try:
+                        decoded = base64.b64decode(att["data"]).decode("utf-8", errors="replace")
+                        content_blocks.append({
+                            "type": "text",
+                            "text": f"[Attached file: {att.get('name', 'file')}]\n{decoded}"
+                        })
+                    except Exception:
+                        content_blocks.append({
+                            "type": "text",
+                            "text": f"[Attached file: {att.get('name', 'file')}] (could not decode)"
+                        })
+
+            # Add user text last
+            if instructions.strip():
+                content_blocks.append({"type": "text", "text": instructions})
+
+            messages.append({"role": "user", "content": content_blocks})
+            logger.info(
+                f"[MrCallAgent] User message with {len(attachments)} attachments, "
+                f"{len(content_blocks)} content blocks"
+            )
+        else:
+            messages.append({"role": "user", "content": instructions})
 
         logger.debug(f"[MrCallAgent] System prompt: {len(system_prompt)} chars")
         logger.info(
@@ -391,7 +451,125 @@ class MrCallAgent(SpecializedAgent):
             logger.error(f"[MrCallAgent] LLM call failed: {e}", exc_info=True)
             return {'error': f'LLM call failed: {str(e)}'}
 
-        return await self._handle_tool_response(response, dry_run=dry_run)
+        result = await self._handle_tool_response(response, dry_run=dry_run)
+
+        # Handle web_search multi-turn: feed search results back to LLM
+        if result.get('_web_search_response') and result.get('_web_search_result'):
+            search_text = result['_web_search_result'].get('content', 'No results found.')
+            logger.info(
+                f"[MrCallAgent] Web search returned {len(search_text)} chars, "
+                "making follow-up LLM call"
+            )
+
+            # Build tool_result message for the search
+            first_response = result['_web_search_response']
+            tool_use_id = None
+            for block in first_response.content:
+                if hasattr(block, 'name') and block.name == 'web_search':
+                    tool_use_id = block.id
+                    break
+
+            # Append assistant response + tool result + continue
+            messages.append({
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": tool_use_id, "name": "web_search",
+                     "input": first_response.content[0].input if hasattr(first_response.content[0], 'input') else {}}
+                ]
+            })
+            messages.append({
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": tool_use_id,
+                     "content": search_text[:8000]}  # Cap to avoid huge prompts
+                ]
+            })
+
+            try:
+                response2 = await self.llm.create_message(
+                    system=system_prompt,
+                    messages=messages,
+                    tools=self.TOOLS,
+                    max_tokens=4000,
+                )
+                logger.info(f"[MrCallAgent] Follow-up LLM response: stop_reason={response2.stop_reason}")
+                result = await self._handle_tool_response(response2, dry_run=dry_run)
+            except Exception as e:
+                logger.error(f"[MrCallAgent] Follow-up LLM call failed: {e}")
+                # Return search results as text fallback
+                result = {
+                    'tool_used': 'respond_text',
+                    'tool_input': {},
+                    'result': {'response': f"Ho trovato queste informazioni:\n\n{search_text[:3000]}"}
+                }
+
+            # Clean up internal keys
+            result.pop('_web_search_response', None)
+            result.pop('_web_search_result', None)
+
+        return result
+
+    async def _execute_web_search(self, query: str) -> Dict[str, Any]:
+        """Execute a web search using httpx and return results as text.
+
+        Uses a simple web scraping approach: fetch the URL if it looks like one,
+        or use a search engine for queries.
+        """
+        import httpx
+        from html.parser import HTMLParser
+
+        class TextExtractor(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.text = []
+                self._skip = False
+
+            def handle_starttag(self, tag, attrs):
+                if tag in ('script', 'style', 'nav', 'footer', 'header'):
+                    self._skip = True
+
+            def handle_endtag(self, tag):
+                if tag in ('script', 'style', 'nav', 'footer', 'header'):
+                    self._skip = False
+
+            def handle_data(self, data):
+                if not self._skip:
+                    text = data.strip()
+                    if text:
+                        self.text.append(text)
+
+        try:
+            # If query looks like a URL, fetch it directly
+            url = query.strip()
+            if not url.startswith('http'):
+                if '.' in url and ' ' not in url:
+                    url = f"https://{url}"
+                else:
+                    # Use DuckDuckGo HTML search as fallback
+                    url = f"https://html.duckduckgo.com/html/?q={query}"
+
+            async with httpx.AsyncClient(
+                timeout=15.0, follow_redirects=True,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; MrCallBot/1.0)"}
+            ) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+
+            # Extract text from HTML
+            extractor = TextExtractor()
+            extractor.feed(resp.text)
+            content = "\n".join(extractor.text)
+
+            # Trim to reasonable size
+            if len(content) > 8000:
+                content = content[:8000] + "\n\n[...contenuto troncato...]"
+
+            logger.info(f"[MrCallAgent] web_search fetched {len(content)} chars from {url}")
+            return {"content": content, "url": url}
+
+        except Exception as e:
+            logger.error(f"[MrCallAgent] web_search failed: {e}")
+            return {"content": f"Ricerca fallita: {str(e)}", "url": query}
 
     async def _handle_tool_response(self, response, dry_run: bool = False) -> Dict[str, Any]:
         """Handle the LLM's tool response.
@@ -432,6 +610,16 @@ class MrCallAgent(SpecializedAgent):
                         result['result'] = {
                             'response': block.input.get('response', '')
                         }
+                    elif block.name == 'web_search':
+                        logger.info(f"[MrCallAgent] web_search: query={block.input.get('query')}")
+                        search_result = await self._execute_web_search(
+                            block.input.get('query', '')
+                        )
+                        result['tool_used'] = 'web_search'
+                        result['result'] = search_result
+                        # Signal that we need a follow-up LLM call
+                        result['_web_search_response'] = response
+                        result['_web_search_result'] = search_result
                     else:
                         logger.warning(f"[MrCallAgent] Unknown tool: {block.name}")
                     break
