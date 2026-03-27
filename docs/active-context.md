@@ -1,6 +1,6 @@
 ---
 description: |
-  Current state of Zylch development as of 2026-03-26 evening. What works, what's in progress,
+  Current state of Zylch development as of 2026-03-27. What works, what's in progress,
   immediate next steps, and known issues.
 ---
 
@@ -9,8 +9,8 @@ description: |
 ## What Is Built and Working
 
 ### Core Infrastructure
-- PostgreSQL storage layer with 29+ SQLAlchemy ORM models
-- Alembic migration system
+- PostgreSQL storage layer with 29+ SQLAlchemy ORM models + `error_logs` table
+- Alembic migration system (2 migrations: initial schema + error_logs)
 - FastAPI HTTP API at `api.zylchai.com`
 - Firebase Auth for multi-tenant authentication
 - Scaleway Kubernetes deployment (ARM64)
@@ -59,16 +59,24 @@ description: |
 - **Fixed templates** per feature (no LLM-generated meta-prompts for structure)
 - Dry-run mode for dashboard with Save/Discard workflow
 - **File attachments** support (images, PDFs, text — Anthropic native format)
-- **SSE streaming endpoint** (`/api/chat/message/stream`) — backend ready, dashboard integration in progress
+- **SSE streaming** (`/api/chat/message/stream`) — incremental text delivery with `text_replace` for clean final output
+- **Always uses `app_settings.anthropic_model`** — independent of `SYSTEM_LLM_PROVIDER` (production uses OpenAI for chat but Anthropic for MrCall)
+- **Retry with backoff** — 3 attempts with exponential backoff (2s, 4s, 8s) for transient Anthropic errors (429, 500, 529)
+- **Haiku error humanizer** — user-friendly error messages via Claude Haiku on failure
+- **Error logging** — `error_logs` table with business_id, session_id, request_id, Haiku message
+- **Fallback message** — after 3 retries exhausted, shows support@mrcall.ai with session ID
 - SSL verify bypass for StarChat self-signed certs on test environment
 
 ### User Interfaces
 - CLI at `~/hb/zylch-cli` (Python/Textual, thin client)
 - MrCall Dashboard at `~/hb/mrcall-dashboard` (Vue 3/PrimeVue)
-  - v1.52 merged into test-env and production-env
+  - v1.52 merged into test-env, beta-env, production-env
   - Textarea input (replacing single-line InputText)
   - File upload button with preview
   - Training requirement removed from ConfigureAI flow
+  - Streaming with `reactive()` for proper Vue reactivity
+  - `text_replace` callback for clean final text after streaming
+  - Typing indicator hidden during active streaming
 - FastAPI REST API (primary backend)
 - `frontend/` directory is dormant (Vue 3 prototype, not active)
 
@@ -120,44 +128,57 @@ description: |
 - Daily Docker cleanup cron on GitLab runner
 - Cron on runner: `0 3 * * * docker system prune -af && docker builder prune -af`
 
+## Completed (Session 2026-03-27 — Streaming + Error Resilience)
+
+### MrCall Agent — Streaming + Error Handling
+
+1. **Incremental streaming** (`5519367`): `run_stream()` intercepts `input_json_delta` events for `respond_text` tool, decoding JSON string escapes on the fly
+2. **text_replace** (`74224b0`): At `content_block_stop`, parses complete JSON via `json.loads` and emits properly decoded text to replace streaming artifacts (`\"` → `"`, `\\n` → `\n`)
+3. **Retry + error handling** (`5d8af65`): New `mrcall_error_handler.py` with `is_retryable()`, `humanize_error()` (Haiku), `log_error()` (DB), `parse_error_details()`. New `error_logs` table (migration 0002). `FINAL_FALLBACK_MESSAGE` with support@mrcall.ai
+4. **Model fix** (`a8adf18`): Always use `app_settings.anthropic_model` (not `self.llm.model` which is `gpt-4.1` when `SYSTEM_LLM_PROVIDER=openai` in production)
+
+### Dashboard (mrcall-dashboard)
+- `reactive()` for assistant message — fixes streaming messages disappearing after first chunk
+- `onTextReplace` callback in `Zylch.js` + `ZylchChat.vue`
+- Typing indicator hidden during active streaming
+- Merge conflicts resolved on beta-env (ZylchChat.vue, Zylch.js)
+
+### Infrastructure
+- Alembic migration 0002: `error_logs` table
+- Railway confirmed: runs `alembic upgrade head` automatically (`railway.json` startCommand)
+- Planning principles hook in global `~/.claude/settings.json` (UserPromptSubmit, keyword-filtered)
+
 ## Deployed State
 
 - **Railway standalone** (`main` branch → GitHub `malemi/zylch`): auto-deploy, latest commit `fc8852e`. api.zylchai.com
-- **Scaleway production** (`production` branch → GitLab): deployed with changes through `d8ed1c8`
-- **Scaleway test** (`dev` branch → GitLab): deployed with changes through `d8ed1c8`
+- **Scaleway production** (`production` branch → GitLab): pending push (8 commits ahead on main including streaming + retry)
+- **Scaleway test** (`dev` branch → GitLab): pending push
 - Railway test account: `support@mrcall.ai` / `REDACTED-FIREBASE-UID`
 - Scaleway test user: `mario.alemi+19mar2026@gmail.com` / `mlWH0BnYVHSz0qwDY0xFliUkJIl2`
 - Scaleway test business: `738535bd-6a76-3ad1-b0d8-606c02a3df95` (Tiscali Store Cagliari)
 
 ## What Is In Progress
 
-### SSE Streaming — Dashboard Integration
-Backend streaming works but dashboard needs to consume SSE stream:
-- `ZylchChat.vue` needs `EventSource` or fetch-with-reader for `/api/chat/message/stream`
-- Handle progressive text rendering, streaming state, error mid-stream
-- Web search streaming partially broken: text starts showing ("Cer...") but stream dies — likely Anthropic web_search_tool_result blocks not handled in stream event processing
-
-### Known Streaming Issue
-When web search is used + streaming, the stream appears to break after initial text. Probable cause: `run_stream()` iterates `stream.text_stream` which may not yield text during the web search server-side phase, or the stream format includes non-text events that need special handling.
+Nothing actively in progress — all items from session 2026-03-27 completed.
 
 ## Immediate Next Steps
 
-1. **Fix streaming + web search interaction** — test locally with `docker compose up`
-2. **Dashboard SSE integration** — consume stream in ZylchChat.vue
-3. **Test end-to-end**: web search → knowledge base configuration → streaming response
-4. **Push to production** only after local validation
-5. Fix `category_map` in `zylch/tools/mrcall/config_tools.py` with correct post-rename variable names
-6. Fix modifiable logic bug on `config_tools.py:149`
+1. **Push to dev + production** — user doing this manually
+2. **Verify streaming + web search end-to-end on deployed environments**
+3. **Config memory for conversation intent** — currently only saves executed changes, not proposed configurations (edge case: user proposes booking hours, page reload loses context)
+4. Fix `category_map` in `zylch/tools/mrcall/config_tools.py` with correct post-rename variable names
+5. Fix modifiable logic bug on `config_tools.py:149`
 
 ## Known Issues and Tech Debt
 
 - `config_tools.py:109-125` `category_map` has wrong variable names (pre-rename names, missing variables)
 - `config_tools.py:149` modifiable logic is wrong: requires both `modifiable` and `advanced` flags true
+- MrCall agent hardcoded to Anthropic — cannot use other providers due to `web_search_20250305` dependency
 - `SupabaseStorage` class name is misleading (pure SQLAlchemy, legacy name)
 - `docs/agents/README.md` lists agents that don't match actual source files
 - `frontend/` Vue 3 prototype is dormant but still in repo
 - `tools/factory.py` is 2000+ lines (exceeds 500-line rule)
+- `.env.development` in mrcall-dashboard changed to point to test-env-0 (was angelo.ngrok.io)
 - No external telemetry or monitoring (pre-alpha)
 - Single replica deployment (no HA)
-- Test + production share same PostgreSQL instance (different namespaces)
-- Git branch topology is messy: main, dev, production all slightly diverged — need alignment
+- Git branch topology: main, dev, production slightly diverged — need alignment
