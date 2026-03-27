@@ -702,11 +702,17 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
             if not target_task:
                 logger.warning(f"[TASK] LLM specified target_task_id={target_task_id} but not found in existing tasks")
 
-        # Validate task quality for create/update
+        # Validate task quality for create/update — use reason as fallback
         if task_action in ('create', 'update'):
             suggested = result.get('suggested_action', '').strip()
             if not suggested or len(suggested) < 5:
-                logger.warning(f"[TASK] Skipping task with empty/short suggested_action: {suggested}")
+                reason = result.get('reason', '').strip()
+                if reason and len(reason) >= 10:
+                    result['suggested_action'] = reason
+                    suggested = reason
+                    logger.info(f"[TASK] Using reason as suggested_action fallback")
+                else:
+                    logger.warning(f"[TASK] Skipping task with empty suggested_action and no reason fallback")
                 return None
 
         if task_action == 'close' and target_task:
