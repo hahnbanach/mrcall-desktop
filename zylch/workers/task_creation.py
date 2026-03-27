@@ -439,7 +439,7 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
         try:
             response = await self.client.create_message(
                 messages=[{"role": "user", "content": formatted_prompt}],
-                max_tokens=200,
+                max_tokens=500,
                 tools=[TASK_DECISION_TOOL],
                 tool_choice={"type": "tool", "name": "task_decision"}
             )
