@@ -523,8 +523,8 @@ class MrCallAgent(SpecializedAgent):
         api_key = app_settings.anthropic_api_key
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY not configured — required for MrCall agent")
-        raw_model = self.llm.model
-        model = raw_model.split(":", 1)[-1] if ":" in raw_model else raw_model
+        # Always use Anthropic model (not the aisuite provider model which could be gpt-4.1)
+        model = app_settings.anthropic_model
         client = anthropic.Anthropic(api_key=api_key)
 
         tools = []
@@ -743,8 +743,8 @@ class MrCallAgent(SpecializedAgent):
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY not configured — required for MrCall agent")
         # self.llm.model may be "anthropic:claude-sonnet-..." or just "claude-sonnet-..."
-        raw_model = self.llm.model
-        model = raw_model.split(":", 1)[-1] if ":" in raw_model else raw_model
+        # Always use Anthropic model (not the aisuite provider model which could be gpt-4.1)
+        model = app_settings.anthropic_model
 
         client = anthropic.Anthropic(api_key=api_key)
 
