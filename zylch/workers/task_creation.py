@@ -126,6 +126,16 @@ class TaskWorker:
 
         return False
 
+    def _is_auto_reply(self, email_dict: Dict) -> bool:
+        """Check if an email is an auto-reply (not a real human response)."""
+        body = (email_dict.get('body_plain') or email_dict.get('snippet') or '').lower()
+        auto_phrases = [
+            'la tua richiesta è stata presa in carico',
+            'your request has been taken up',
+            'ciao mrcaller! grazie mille del tuo messaggio',
+        ]
+        return any(phrase in body for phrase in auto_phrases)
+
     def _get_task_prompt(self) -> Optional[str]:
         """Get task detection prompt from storage."""
         if not self._task_prompt_loaded:
@@ -608,6 +618,21 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
             logger.info(f"[TASK] Skipping user's own email: {contact_email}")
             self._mark_processed(event_type, item_id)
             return None
+
+        # Check if support already replied AFTER this email in the same thread
+        if event_type == "email" and item.get('thread_id'):
+            thread_emails = self.storage.get_thread_emails(self.owner_id, item['thread_id'])
+            item_timestamp = item.get('date_timestamp', 0)
+            has_reply_after = any(
+                e.get('date_timestamp', 0) > item_timestamp
+                and self._is_user_email(e.get('from_email', ''))
+                and not self._is_auto_reply(e)
+                for e in thread_emails
+            )
+            if has_reply_after:
+                logger.info(f"[TASK] Skipping {contact_email} — support replied after this email in thread {item['thread_id']}")
+                self._mark_processed(event_type, item_id)
+                return None
 
         # Get ALL existing open tasks for this contact (for context)
         existing_tasks = self.storage.get_tasks_by_contact(self.owner_id, contact_email) if contact_email else []
