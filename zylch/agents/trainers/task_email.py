@@ -65,15 +65,9 @@ The generated prompt must:
    - Marketing senders that should ALWAYS be filtered out
 
 2. **URGENCY WITH TIME DECAY**
-   Urgency is NOT static — it decays over time:
-   - Something truly urgent gets handled quickly. If it's been weeks and nobody acted, it probably wasn't urgent.
-   - A 3-month-old unanswered email is NOT "high urgency" — it's either resolved through other channels or no longer relevant.
-   - Recent items (< 3 days) can be high urgency. Older items should decay:
-     * < 3 days old → can be high/medium/low based on content
-     * 3-7 days old → maximum medium urgency
-     * 1-4 weeks old → maximum low urgency
-     * > 1 month old → almost certainly NO_ACTION (unless there's evidence of ongoing active conversation)
-   - Customer complaints are NORMAL BUSINESS — they are rarely truly urgent. A complaint becomes urgent only if it risks losing a customer who has been loyal and paying for a long time.
+   Urgency decays over time. The only hard rule: emails older than 2 weeks cannot be "high" urgency.
+   Everything else is up to context — a 5-day-old unanswered customer question is still a valid task.
+   - Customer complaints are NORMAL BUSINESS — not emergencies unless there's churn risk.
 
 3. **FAQ DETECTION & DRAFT RESPONSE**
    When the agent recognizes a question that matches a known FAQ pattern:
