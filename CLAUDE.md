@@ -46,7 +46,7 @@ Client (CLI/Dashboard/API)
   → firebase_auth middleware → extracts owner_id
   → chat_service.process_message()
   → command_matcher: slash commands → command_handlers.py, else → LLM
-  → LLM (via LLMClient/LiteLLM) may call tools
+  → LLM (via LLMClient/aisuite) may call tools
   → tools execute (gmail, calendar, CRM, etc.)
   → response returned
 ```
@@ -59,7 +59,7 @@ Client (CLI/Dashboard/API)
 - **`zylch/tools/`** — Claude tool definitions (callable by LLM). Each tool inherits from `base.py` (`Tool`, `ToolResult`). Registry in `factory.py` (`ToolFactory` + `SessionState`). Subdir `mrcall/` for MrCall config tools.
 - **`zylch/agents/`** — LLM-powered processors. `trainers/` subdirectory holds agent training (generates optimized prompts from user data, stored in `agent_prompts` table)
 - **`zylch/memory/`** — Entity-centric memory with 384-dim vector embeddings (sentence-transformers), hybrid search (pgvector cosine + PostgreSQL FTS), LLM reconsolidation
-- **`zylch/llm/`** — `LLMClient` wraps LiteLLM for multi-provider support (OpenAI, Scaleway/Mistral, Anthropic). Provider config in `providers.py`
+- **`zylch/llm/`** — `LLMClient` wraps aisuite for multi-provider support (OpenAI, Scaleway/Mistral, Anthropic). MrCall agent calls Anthropic SDK directly for native web search + streaming. Provider config in `providers.py`, exceptions in `exceptions.py`
 
 ### Credentials Model (BYOK)
 Users provide their own API keys via `/connect` commands → encrypted in `oauth_tokens` table (Fernet). System-level LLM key as fallback, selected by `SYSTEM_LLM_PROVIDER` env var.
