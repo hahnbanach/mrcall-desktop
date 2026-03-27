@@ -536,34 +536,56 @@ class MrCallAgent(SpecializedAgent):
             })
         tools.append(ANTHROPIC_WEB_SEARCH_TOOL)
 
+        from zylch.agents.mrcall_error_handler import (
+            is_retryable, humanize_error, log_error, parse_error_details,
+            MAX_RETRIES, BACKOFF_BASE, FINAL_FALLBACK_MESSAGE,
+        )
+
         logger.info(f"[MrCallAgent.stream] Starting: model={model}, messages={len(messages)}")
 
-        # Stream from Anthropic in a worker thread
+        # Stream from Anthropic in a worker thread with retry
         chunk_queue: queue.Queue = queue.Queue()
         error_holder: List[Exception] = []
         final_holder: list = [None]
+        retry_count_holder: list = [0]
 
         def _stream_worker():
-            try:
-                with client.messages.stream(
-                    model=model,
-                    max_tokens=4096,
-                    system=system_prompt,
-                    messages=messages,
-                    tools=tools,
-                ) as stream:
-                    for event in stream:
-                        chunk_queue.put(event)
-                    final_holder[0] = stream.get_final_message()
-            except Exception as e:
-                error_holder.append(e)
-            finally:
-                chunk_queue.put(None)
+            for attempt in range(MAX_RETRIES + 1):
+                try:
+                    with client.messages.stream(
+                        model=model,
+                        max_tokens=4096,
+                        system=system_prompt,
+                        messages=messages,
+                        tools=tools,
+                    ) as stream:
+                        for event in stream:
+                            chunk_queue.put(event)
+                        final_holder[0] = stream.get_final_message()
+                    return  # Success — exit retry loop
+                except Exception as e:
+                    retry_count_holder[0] = attempt + 1
+                    if attempt < MAX_RETRIES and is_retryable(e):
+                        wait = BACKOFF_BASE * (2 ** attempt)
+                        logger.warning(
+                            f"[MrCallAgent.stream] Retryable error (attempt {attempt + 1}/{MAX_RETRIES}), "
+                            f"waiting {wait}s: {e}"
+                        )
+                        import time
+                        time.sleep(wait)
+                        continue
+                    else:
+                        error_holder.append(e)
+                        break
+            chunk_queue.put(None)
 
         thread = threading.Thread(target=_stream_worker, daemon=True)
         thread.start()
 
         text_started = False
+        current_tool_name = None
+        respond_text_json = ""  # Accumulate JSON for respond_text tool
+        respond_text_streaming = False  # True once we're past the JSON prefix
         try:
             while True:
                 try:
@@ -577,20 +599,101 @@ class MrCallAgent(SpecializedAgent):
                     break
 
                 event_type = getattr(event, 'type', '')
-                if event_type == 'content_block_delta':
+
+                # Track which tool is being called
+                if event_type == 'content_block_start':
+                    cb = getattr(event, 'content_block', None)
+                    if cb and hasattr(cb, 'name'):
+                        current_tool_name = cb.name
+                        logger.debug(f"[stream] Tool started: {current_tool_name}")
+
+                elif event_type == 'content_block_delta':
                     delta = getattr(event, 'delta', None)
-                    if delta and hasattr(delta, 'text'):
+                    if not delta:
+                        continue
+
+                    # Direct text delta (non-tool response or web search result)
+                    if hasattr(delta, 'text'):
                         text_started = True
                         yield {"type": "text_delta", "text": delta.text}
 
+                    # Tool input JSON delta — stream respond_text incrementally
+                    # The LLM builds JSON like {"response": "text here..."}.
+                    # partial_json chunks are raw JSON fragments with escapes
+                    # (\" for ", \\n for \n, etc). We decode them on the fly.
+                    elif hasattr(delta, 'partial_json') and current_tool_name == 'respond_text':
+                        chunk = delta.partial_json
+                        respond_text_json += chunk
+
+                        if not respond_text_streaming:
+                            # Wait for the opening of the response value
+                            # Format: {"response": "...text..."}
+                            marker = '"response": "'
+                            pos = respond_text_json.find(marker)
+                            if pos >= 0:
+                                respond_text_streaming = True
+                                # Emit any text after the marker in this chunk
+                                after = respond_text_json[pos + len(marker):]
+                                if after:
+                                    decoded = after.replace('\\"', '"').replace('\\n', '\n').replace('\\t', '\t').replace('\\\\', '\\')
+                                    if decoded:
+                                        text_started = True
+                                        yield {"type": "text_delta", "text": decoded}
+                        else:
+                            # Decode JSON string escapes in the chunk
+                            decoded = chunk.replace('\\"', '"').replace('\\n', '\n').replace('\\t', '\t').replace('\\\\', '\\')
+                            text_started = True
+                            yield {"type": "text_delta", "text": decoded}
+
+                elif event_type == 'content_block_stop':
+                    # For respond_text, the accumulated JSON may have trailing "}
+                    # Parse the complete JSON and verify we got the right text
+                    if respond_text_streaming and respond_text_json:
+                        try:
+                            import json as json_mod
+                            parsed = json_mod.loads(respond_text_json)
+                            # The properly decoded text — replaces any streaming artifacts
+                            proper_text = parsed.get('response', '')
+                            if proper_text:
+                                # Emit a "replace" event so frontend uses the clean version
+                                yield {"type": "text_replace", "text": proper_text}
+                        except Exception:
+                            pass  # Streaming chunks were good enough
+                        respond_text_json = ""
+                        respond_text_streaming = False
+                    current_tool_name = None
+
             if error_holder:
-                yield {"type": "error", "message": str(error_holder[0])}
+                err = error_holder[0]
+                retries = retry_count_holder[0]
+                logger.error(
+                    f"[MrCallAgent.stream] Failed after {retries} attempts: {err}"
+                )
+
+                # Log error to database
+                await log_error(
+                    error=err,
+                    owner_id=self.owner_id,
+                    business_id=self.business_id,
+                    session_id=getattr(self, '_session_id', None),
+                    context={"model": model, "retries": retries},
+                )
+
+                # Generate user-friendly message via Haiku
+                if retries >= MAX_RETRIES:
+                    # All retries exhausted — show final fallback with support email
+                    user_msg = FINAL_FALLBACK_MESSAGE
+                else:
+                    user_msg = await humanize_error(err, api_key)
+
+                yield {"type": "text_delta", "text": user_msg}
+                yield {"type": "done"}
                 return
 
             thread.join(timeout=5)
             final_message = final_holder[0]
 
-            # Process tool calls from final message
+            # Process tool calls from final message (configure_* tools need post-processing)
             if final_message and final_message.stop_reason == "tool_use":
                 for block in final_message.content:
                     if hasattr(block, 'input'):
@@ -600,10 +703,10 @@ class MrCallAgent(SpecializedAgent):
                                 block.input, feature, dry_run=dry_run
                             )
                             yield {"type": "tool_result", "tool_used": block.name, "result": result}
-                        elif block.name == 'respond_text':
-                            yield {"type": "text_delta", "text": block.input.get('response', '')}
+                        # respond_text already streamed above — skip
                         break
             elif not text_started and final_message:
+                # Fallback: no text was streamed, extract from final message
                 for block in final_message.content:
                     if hasattr(block, 'text') and block.text:
                         yield {"type": "text_delta", "text": block.text}

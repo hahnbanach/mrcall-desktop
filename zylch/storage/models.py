@@ -792,3 +792,20 @@ class Contact(DictMixin, Base):
     metadata_ = Column("metadata", JSONB, server_default=text("'{}'::jsonb"))
     created_at = Column(DateTime(timezone=True), server_default=text("now()"))
     updated_at = Column(DateTime(timezone=True), server_default=text("now()"))
+
+
+class ErrorLog(Base):
+    """Log of API errors for debugging and monitoring."""
+    __tablename__ = "error_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    owner_id = Column(Text, nullable=False, index=True)
+    business_id = Column(Text, index=True)
+    session_id = Column(Text, index=True)
+    error_type = Column(Text, nullable=False)  # e.g. "overloaded_error", "authentication_error"
+    error_code = Column(Integer)  # HTTP status code (529, 500, etc.)
+    error_message = Column(Text, nullable=False)  # Full original error message
+    user_message = Column(Text)  # Haiku-generated user-friendly message
+    request_id = Column(Text)  # Anthropic request_id for support
+    context = Column(JSONB, server_default=text("'{}'::jsonb"))  # Extra context (model, retry count, etc.)
+    created_at = Column(DateTime(timezone=True), server_default=text("now()"))
