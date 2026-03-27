@@ -294,7 +294,7 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
                     result['email_date'] = email.get('date', '')
                     result['sources'] = {
                         'emails': [email_id],
-                        'blobs': [blob_id] if blob_id else [],
+                        'blobs': [str(blob_id)] if blob_id else [],
                         'calendar_events': []
                     }
                     self.storage.store_task_item(self.owner_id, result)
@@ -345,7 +345,7 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
                 # Track all data sources used to create this task
                 result['sources'] = {
                     'calendar_events': [event_id],
-                    'blobs': [blob_id] if blob_id else []
+                    'blobs': [str(blob_id)] if blob_id else []
                 }
                 self.storage.store_task_item(self.owner_id, result)
                 action_count += 1
@@ -439,7 +439,7 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
         try:
             response = await self.client.create_message(
                 messages=[{"role": "user", "content": formatted_prompt}],
-                max_tokens=200,
+                max_tokens=500,
                 tools=[TASK_DECISION_TOOL],
                 tool_choice={"type": "tool", "name": "task_decision"}
             )
@@ -747,9 +747,9 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
                 'contact_name': item.get('from_name', '') if event_type == 'email' else item.get('summary', ''),
                 'email_date': item.get('date', ''),
                 'sources': {
-                    'emails': [item_id] if event_type == 'email' else [],
-                    'calendar_events': [item_id] if event_type == 'calendar' else [],
-                    'blobs': [blob_id] if blob_id else []
+                    'emails': [str(item_id)] if event_type == 'email' else [],
+                    'calendar_events': [str(item_id)] if event_type == 'calendar' else [],
+                    'blobs': [str(blob_id)] if blob_id else []
                 }
             }
             self.storage.store_task_item(self.owner_id, task_result)
