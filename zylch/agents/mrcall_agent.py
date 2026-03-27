@@ -536,29 +536,48 @@ class MrCallAgent(SpecializedAgent):
             })
         tools.append(ANTHROPIC_WEB_SEARCH_TOOL)
 
+        from zylch.agents.mrcall_error_handler import (
+            is_retryable, humanize_error, log_error, parse_error_details,
+            MAX_RETRIES, BACKOFF_BASE, FINAL_FALLBACK_MESSAGE,
+        )
+
         logger.info(f"[MrCallAgent.stream] Starting: model={model}, messages={len(messages)}")
 
-        # Stream from Anthropic in a worker thread
+        # Stream from Anthropic in a worker thread with retry
         chunk_queue: queue.Queue = queue.Queue()
         error_holder: List[Exception] = []
         final_holder: list = [None]
+        retry_count_holder: list = [0]
 
         def _stream_worker():
-            try:
-                with client.messages.stream(
-                    model=model,
-                    max_tokens=4096,
-                    system=system_prompt,
-                    messages=messages,
-                    tools=tools,
-                ) as stream:
-                    for event in stream:
-                        chunk_queue.put(event)
-                    final_holder[0] = stream.get_final_message()
-            except Exception as e:
-                error_holder.append(e)
-            finally:
-                chunk_queue.put(None)
+            for attempt in range(MAX_RETRIES + 1):
+                try:
+                    with client.messages.stream(
+                        model=model,
+                        max_tokens=4096,
+                        system=system_prompt,
+                        messages=messages,
+                        tools=tools,
+                    ) as stream:
+                        for event in stream:
+                            chunk_queue.put(event)
+                        final_holder[0] = stream.get_final_message()
+                    return  # Success — exit retry loop
+                except Exception as e:
+                    retry_count_holder[0] = attempt + 1
+                    if attempt < MAX_RETRIES and is_retryable(e):
+                        wait = BACKOFF_BASE * (2 ** attempt)
+                        logger.warning(
+                            f"[MrCallAgent.stream] Retryable error (attempt {attempt + 1}/{MAX_RETRIES}), "
+                            f"waiting {wait}s: {e}"
+                        )
+                        import time
+                        time.sleep(wait)
+                        continue
+                    else:
+                        error_holder.append(e)
+                        break
+            chunk_queue.put(None)
 
         thread = threading.Thread(target=_stream_worker, daemon=True)
         thread.start()
@@ -645,7 +664,30 @@ class MrCallAgent(SpecializedAgent):
                     current_tool_name = None
 
             if error_holder:
-                yield {"type": "error", "message": str(error_holder[0])}
+                err = error_holder[0]
+                retries = retry_count_holder[0]
+                logger.error(
+                    f"[MrCallAgent.stream] Failed after {retries} attempts: {err}"
+                )
+
+                # Log error to database
+                await log_error(
+                    error=err,
+                    owner_id=self.owner_id,
+                    business_id=self.business_id,
+                    session_id=getattr(self, '_session_id', None),
+                    context={"model": model, "retries": retries},
+                )
+
+                # Generate user-friendly message via Haiku
+                if retries >= MAX_RETRIES:
+                    # All retries exhausted — show final fallback with support email
+                    user_msg = FINAL_FALLBACK_MESSAGE
+                else:
+                    user_msg = await humanize_error(err, api_key)
+
+                yield {"type": "text_delta", "text": user_msg}
+                yield {"type": "done"}
                 return
 
             thread.join(timeout=5)
