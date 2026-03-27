@@ -599,31 +599,49 @@ class MrCallAgent(SpecializedAgent):
                         yield {"type": "text_delta", "text": delta.text}
 
                     # Tool input JSON delta — stream respond_text incrementally
+                    # The LLM builds JSON like {"response": "text here..."}.
+                    # partial_json chunks are raw JSON fragments with escapes
+                    # (\" for ", \\n for \n, etc). We decode them on the fly.
                     elif hasattr(delta, 'partial_json') and current_tool_name == 'respond_text':
                         chunk = delta.partial_json
                         respond_text_json += chunk
 
                         if not respond_text_streaming:
-                            # Wait until we're past the JSON prefix {"response": "
-                            prefix_end = respond_text_json.find('"response": "')
-                            if prefix_end >= 0:
-                                # Start streaming from after the prefix
-                                text_start = prefix_end + len('"response": "')
-                                initial_text = respond_text_json[text_start:]
-                                # Remove trailing "} if present (end of JSON)
-                                if initial_text.endswith('"}'):
-                                    initial_text = initial_text[:-2]
-                                if initial_text:
-                                    text_started = True
-                                    yield {"type": "text_delta", "text": initial_text}
+                            # Wait for the opening of the response value
+                            # Format: {"response": "...text..."}
+                            marker = '"response": "'
+                            pos = respond_text_json.find(marker)
+                            if pos >= 0:
                                 respond_text_streaming = True
+                                # Emit any text after the marker in this chunk
+                                after = respond_text_json[pos + len(marker):]
+                                if after:
+                                    decoded = after.replace('\\"', '"').replace('\\n', '\n').replace('\\t', '\t').replace('\\\\', '\\')
+                                    if decoded:
+                                        text_started = True
+                                        yield {"type": "text_delta", "text": decoded}
                         else:
-                            # Already streaming — send chunk directly
-                            # Remove trailing "} at very end of JSON
+                            # Decode JSON string escapes in the chunk
+                            decoded = chunk.replace('\\"', '"').replace('\\n', '\n').replace('\\t', '\t').replace('\\\\', '\\')
                             text_started = True
-                            yield {"type": "text_delta", "text": chunk}
+                            yield {"type": "text_delta", "text": decoded}
 
                 elif event_type == 'content_block_stop':
+                    # For respond_text, the accumulated JSON may have trailing "}
+                    # Parse the complete JSON and verify we got the right text
+                    if respond_text_streaming and respond_text_json:
+                        try:
+                            import json as json_mod
+                            parsed = json_mod.loads(respond_text_json)
+                            # The properly decoded text — replaces any streaming artifacts
+                            proper_text = parsed.get('response', '')
+                            if proper_text:
+                                # Emit a "replace" event so frontend uses the clean version
+                                yield {"type": "text_replace", "text": proper_text}
+                        except Exception:
+                            pass  # Streaming chunks were good enough
+                        respond_text_json = ""
+                        respond_text_streaming = False
                     current_tool_name = None
 
             if error_holder:
