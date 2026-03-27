@@ -16,10 +16,10 @@ description: |
 | Database | PostgreSQL (Scaleway Managed) | 16, with pgvector + uuid-ossp |
 | Migrations | Alembic | 1.13+ |
 | Auth | Firebase Admin SDK | 6.0+ |
-| AI/LLM | LiteLLM (multi-provider: OpenAI, Scaleway/Mistral, Anthropic) + OpenAI SDK | litellm 1.50+, openai 1.50+ |
+| AI/LLM | aisuite (multi-provider: OpenAI, Scaleway/Mistral, Anthropic) + Anthropic SDK (direct, for MrCall) | aisuite 0.1.14+, anthropic 0.39+ |
 | Vector Search | pgvector (384-dim) + HNSW | 0.3+ |
 | Full-Text Search | PostgreSQL tsvector/FTS | built-in |
-| Embeddings | sentence-transformers (CPU-only torch) | 2.2+ |
+| Embeddings | sentence-transformers (ONNX backend, no torch) | 3.0+ |
 | HTTP Client | httpx | 0.25+ |
 | Config | Pydantic Settings | 2.0+ |
 | Email | Google Gmail API, Microsoft Graph API | - |
@@ -82,7 +82,7 @@ description: |
 ### Agent Pattern
 - Agents inherit from `BaseAgent` in `zylch/agents/base_agent.py`
 - Trainers in `zylch/agents/trainers/` handle learning from user data
-- Agents use `LLMClient` (LiteLLM wrapper) for model calls
+- Agents use `LLMClient` (aisuite wrapper) for model calls. MrCall agent uses Anthropic SDK directly for web search + streaming
 - Storage via `SupabaseStorage` (SQLAlchemy-based, name is legacy)
 - Structured output via `tool_use` for reliable JSON
 
