@@ -255,6 +255,7 @@ class MrCallAgent(SpecializedAgent):
 
         # Single API call: fetch variable schema (types, descriptions, defaults)
         schema = await fetch_and_flatten_schema(self.starchat, business)
+        self._cached_schema = schema  # Cache for _process_configure() validation
         logger.debug(f"[MrCallAgent] Fetched variable schema: {len(schema)} variables")
 
         # Build conversation variables context once (shared across features)
@@ -886,12 +887,28 @@ class MrCallAgent(SpecializedAgent):
                 'error': f'Invalid variables for {feature}: {invalid_vars}'
             }
 
-        # Dry run: return pending changes without calling StarChat
+        # Dry run: validate + return pending changes without calling StarChat
         if dry_run:
-            pending = [
-                {"variable_name": var, "new_value": val, "feature": feature}
-                for var, val in changes.items()
-            ]
+            from zylch.agents.mrcall_variable_validator import validate_variable_value
+            schema = getattr(self, '_cached_schema', {})
+
+            pending = []
+            validation_errors = []
+            for var, val in changes.items():
+                valid, error_msg = validate_variable_value(var, val, schema)
+                if not valid:
+                    validation_errors.append(f"{var}: {error_msg}")
+                else:
+                    pending.append({"variable_name": var, "new_value": val, "feature": feature})
+
+            if validation_errors:
+                logger.warning(f"[MrCallAgent] dry_run validation errors: {validation_errors}")
+                return {
+                    'success': False,
+                    'error': "Invalid values:\n" + "\n".join(validation_errors),
+                    'dry_run': True,
+                }
+
             logger.info(f"[MrCallAgent] dry_run: {len(pending)} pending changes for {feature}")
             final_result = {
                 'success': True,
@@ -907,8 +924,20 @@ class MrCallAgent(SpecializedAgent):
         updated = []
         errors = []
 
+        # Validate values against schema types before writing
+        from zylch.agents.mrcall_variable_validator import validate_variable_value
+        schema = getattr(self, '_cached_schema', {})
+
         for var_name, new_value in changes.items():
             logger.info(f"[MrCallAgent] Updating {var_name} to: {new_value[:100]}{'...' if len(new_value) > 100 else ''}")
+
+            # Type validation — reject invalid values before they reach StarChat
+            valid, error_msg = validate_variable_value(var_name, new_value, schema)
+            if not valid:
+                logger.warning(f"[MrCallAgent] Validation failed for {var_name}: {error_msg}")
+                errors.append(f"{var_name}: {error_msg}")
+                continue
+
             try:
                 result = await self.starchat.update_business_variable(
                     self.business_id,
