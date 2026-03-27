@@ -77,6 +77,28 @@ description: |
 - `docs/ARCHITECTURE.md` based on code ground truth
 - `docs/active-context.md` tracks current project state
 
+## Completed (Session 2026-03-24/25 — Railway Standalone Deploy + aisuite Migration)
+
+### Railway Standalone Deployment (api.zylchai.com)
+1. **PostgreSQL on Railway** (Postgres-FmCF): 30 tables via Alembic, pgvector enabled
+2. **litellm → aisuite migration**: litellm quarantined on PyPI (malware in 1.82.7-1.82.8). Replaced with aisuite (Andrew Ng's multi-provider lib). New `zylch/llm/exceptions.py` for provider-agnostic exceptions.
+3. **torch → ONNX**: `sentence-transformers[onnx]>=3.0.0` replaces `torch>=2.0.0`. ONNX backend in `embeddings.py`. App RSS ~240MB (was ~650MB).
+4. **entrypoint.sh**: Alembic migrations + uvicorn startup. `railway.json` uses `sh -c` for `$PORT` expansion.
+5. **Fixes deployed**: `supabase_storage` NameError, `tsv`/`fts_document` GENERATED ALWAYS in upsert, aisuite MCP bug bypass, tool_choice format (native for Anthropic, OpenAI for others), `openai_tools` undefined, `suggested_action` required in task_decision tool, `::vector` → `CAST AS vector` in hybrid search, `Computed` columns for tsv/fts_document in ORM models
+6. **Email sync working**: 164 messages synced, auto-reply detection, ONNX embeddings
+7. **Task training**: 9 FAQ patterns extracted automatically (service reactivation, pricing, dashboard access, etc.)
+8. **Memory training + run**: PERSON/COMPANY/TEMPLATE extraction working. Templates include response patterns for FAQ detection.
+9. **Force login**: `?force=true` param on OAuth page signs out existing session to show account picker
+10. **System LLM key fallback**: All agent domains (not just mrcall) fall back to system Anthropic key when user has no BYOK
+
+### Railway Config
+- `API_SERVER_URL=https://api.zylchai.com`
+- `FIREBASE_PROJECT_ID=zylch-test-9a895` (standalone Firebase app)
+- `DATABASE_URL` → Railway Postgres-FmCF
+- `SYSTEM_LLM_PROVIDER=anthropic`, `ANTHROPIC_API_KEY` set
+- GitHub auto-deploy from `malemi/zylch` main branch (HTTPS token)
+- Test account: `support@mrcall.ai` / `EWy1peBy8WdiV1AED2e1Qv0hdcM2`
+
 ## Completed (Session 2026-03-26 evening)
 
 ### MrCall Agent — Direct Anthropic API + Web Search + Streaming
@@ -100,10 +122,12 @@ description: |
 
 ## Deployed State
 
-- **Production** (`production` branch): deployed with all changes through `d8ed1c8`
-- **Test** (`dev` branch): deployed with all changes through `d8ed1c8`
-- Test user: `mario.alemi+19mar2026@gmail.com` / `mlWH0BnYVHSz0qwDY0xFliUkJIl2`
-- Test business: `738535bd-6a76-3ad1-b0d8-606c02a3df95` (Tiscali Store Cagliari)
+- **Railway standalone** (`main` branch → GitHub `malemi/zylch`): auto-deploy, latest commit `fc8852e`. api.zylchai.com
+- **Scaleway production** (`production` branch → GitLab): deployed with changes through `d8ed1c8`
+- **Scaleway test** (`dev` branch → GitLab): deployed with changes through `d8ed1c8`
+- Railway test account: `support@mrcall.ai` / `EWy1peBy8WdiV1AED2e1Qv0hdcM2`
+- Scaleway test user: `mario.alemi+19mar2026@gmail.com` / `mlWH0BnYVHSz0qwDY0xFliUkJIl2`
+- Scaleway test business: `738535bd-6a76-3ad1-b0d8-606c02a3df95` (Tiscali Store Cagliari)
 
 ## What Is In Progress
 
