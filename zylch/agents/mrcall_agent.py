@@ -550,34 +550,38 @@ class MrCallAgent(SpecializedAgent):
         retry_count_holder: list = [0]
 
         def _stream_worker():
-            for attempt in range(MAX_RETRIES + 1):
-                try:
-                    with client.messages.stream(
-                        model=model,
-                        max_tokens=4096,
-                        system=system_prompt,
-                        messages=messages,
-                        tools=tools,
-                    ) as stream:
-                        for event in stream:
-                            chunk_queue.put(event)
-                        final_holder[0] = stream.get_final_message()
-                    return  # Success — exit retry loop
-                except Exception as e:
-                    retry_count_holder[0] = attempt + 1
-                    if attempt < MAX_RETRIES and is_retryable(e):
-                        wait = BACKOFF_BASE * (2 ** attempt)
-                        logger.warning(
-                            f"[MrCallAgent.stream] Retryable error (attempt {attempt + 1}/{MAX_RETRIES}), "
-                            f"waiting {wait}s: {e}"
-                        )
-                        import time
-                        time.sleep(wait)
-                        continue
-                    else:
-                        error_holder.append(e)
-                        break
-            chunk_queue.put(None)
+            try:
+                for attempt in range(MAX_RETRIES + 1):
+                    try:
+                        with client.messages.stream(
+                            model=model,
+                            max_tokens=4096,
+                            system=system_prompt,
+                            messages=messages,
+                            tools=tools,
+                        ) as stream:
+                            for event in stream:
+                                chunk_queue.put(event)
+                            final_holder[0] = stream.get_final_message()
+                        return  # Success — exit retry loop
+                    except Exception as e:
+                        retry_count_holder[0] = attempt + 1
+                        if attempt < MAX_RETRIES and is_retryable(e):
+                            wait = BACKOFF_BASE * (2 ** attempt)
+                            logger.warning(
+                                f"[MrCallAgent.stream] Retryable error (attempt {attempt + 1}/{MAX_RETRIES}), "
+                                f"waiting {wait}s: {e}"
+                            )
+                            import time
+                            time.sleep(wait)
+                            continue
+                        else:
+                            error_holder.append(e)
+                            break
+            finally:
+                # ALWAYS signal the consumer to stop — without this,
+                # the while-True loop waits forever and the spinner never stops
+                chunk_queue.put(None)
 
         thread = threading.Thread(target=_stream_worker, daemon=True)
         thread.start()
