@@ -6,6 +6,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Zylch AI — pre-alpha multi-channel sales intelligence system. Python 3.11+ / FastAPI / PostgreSQL with pgvector. Firebase Auth for multi-tenant isolation (every query filters by `owner_id`).
 
+### Dual Role
+
+Zylch ha oggi due funzioni distinte:
+
+1. **Assistente alla vendita**: connette email (Gmail/Outlook), calendario (Google/Microsoft), CRM (Pipedrive/StarChat), e in futuro WhatsApp per fornire intelligenza commerciale multi-canale
+2. **Configuratore MrCall** (via chat): permette di configurare gli assistenti telefonici MrCall tramite interfaccia conversazionale (dry-run + batch apply)
+
+### Inter-Service Dependencies
+
+- **Zylch → StarChat** (`tools/starchat.py` via httpx): lettura/scrittura variabili business, contatti, conversazioni. Base URL: env `MRCALL_BASE_URL` (default `https://test-env-0.scw.hbsrv.net`). Auth: OAuth token o Firebase JWT in header `auth`.
+- **Dashboard → Zylch** (solo AI): chat streaming (`POST /api/chat/message/stream` SSE), training (`/api/mrcall/training/*`), apply changes (`POST /api/mrcall/apply-changes`). La dashboard chiama StarChat direttamente per tutto il CRUD business.
+- **Zylch → Servizi esterni**: Gmail, Google Calendar, Outlook, Pipedrive, SendGrid, Vonage (SMS), LLM providers (Anthropic/OpenAI/LiteLLM).
+
+### Two Configurator Systems
+
+StarChat contiene un **framework agentico nativo in Scala** (sviluppato dal CTO Angelo Leto) con il proprio configuratore, multi-agent orchestrator, tool registry, memory, e workflow engine. Sia Zylch che StarChat operano sulle stesse variabili business di StarChat. Vedi `~/hb/docs/dependency-map.md` per il confronto dettagliato.
+
 ## Documentation
 
 The directory ./docs/ is continuosly updated through the commands /doc-*.
