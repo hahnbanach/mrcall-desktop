@@ -65,20 +65,17 @@ Zylch AI is a single-agent AI assistant that helps sales professionals manage em
 - **Campaign Management**: Mass emails via SendGrid, SMS via Vonage (future)
 - **Web Search**: Contact enrichment via Anthropic API
 
-## Installation
+## Running Locally
 
 ```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
+# MrCall Configurator (Firebase talkmeapp, local DB)
+docker compose up -d --build zylch-api
 
-# Install dependencies
-pip install -e .
-
-# Set up Gmail OAuth
-# Follow: https://developers.google.com/gmail/api/quickstart/python
-# Place credentials in: credentials/google_oauth.json
+# Standalone Sales Agent (Firebase zylch-test, Railway DB)
+ZYLCH_MODE=standalone docker compose up -d --build zylch-api
 ```
+
+See **[Environments & Deployment](docs/guides/environments.md)** for all environments (local, Railway, Scaleway), configuration, and deploy methods.
 
 ## Configuration
 
