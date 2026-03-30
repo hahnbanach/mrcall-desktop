@@ -932,12 +932,9 @@ What would you like to do?"""
 
             # Get or create StarChat client
             if not ToolFactory._starchat_client:
-                if has_oauth:
-                    # Standard OAuth flow
-                    from zylch.tools.starchat import create_starchat_client
-                    ToolFactory._starchat_client = await create_starchat_client(owner_id)
-                elif is_dashboard and firebase_token:
+                if is_dashboard and firebase_token:
                     # Dashboard flow: use Firebase token directly as StarChat auth
+                    # Priority over OAuth because Firebase gives full read+write
                     from zylch.config import settings
                     from zylch.tools.starchat import StarChatClient
                     logger.info(f"[/mrcall open] Creating StarChat client with Firebase token for dashboard user owner={owner_id}")
@@ -949,6 +946,10 @@ What would you like to do?"""
                         owner_id=owner_id,
                         verify_ssl=settings.starchat_verify_ssl,
                     )
+                elif has_oauth:
+                    # CLI/non-dashboard flow: use OAuth
+                    from zylch.tools.starchat import create_starchat_client
+                    ToolFactory._starchat_client = await create_starchat_client(owner_id)
 
             # Create orchestrator
             from zylch.agents.mrcall_orchestrator_agent import MrCallOrchestratorAgent
