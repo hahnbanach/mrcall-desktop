@@ -34,6 +34,10 @@ def validate_variable_value(
 
     var_type = var_schema.get("type", "string").lower()
 
+    # Variable-specific validators (override schema type)
+    if var_name == "ASSISTANT_TOOL_VARIABLE_EXTRACTION":
+        return _validate_extraction_vars(var_name, value)
+
     try:
         if var_type == "tuples":
             return _validate_tuples(var_name, value)
@@ -89,6 +93,52 @@ def _validate_tuples(var_name: str, value: str) -> Tuple[bool, Optional[str]]:
             return False, (
                 f"{var_name}[{i}] has empty strings. "
                 f"Both topic and answer must be non-empty."
+            )
+
+    return True, None
+
+
+def _validate_extraction_vars(var_name: str, value: str) -> Tuple[bool, Optional[str]]:
+    """Validate ASSISTANT_TOOL_VARIABLE_EXTRACTION format.
+
+    Must be a JSON array of 4-element string arrays:
+    [["VAR_NAME", "description", "persistent", "forget_after"], ...]
+    """
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as e:
+        return False, (
+            f"{var_name} must be valid JSON. Parse error: {e}. "
+            f'Expected: [["NAME","description","true/false","true/false"], ...]'
+        )
+
+    if not isinstance(parsed, list):
+        return False, (
+            f"{var_name} must be a JSON array of arrays, "
+            f"got {type(parsed).__name__}"
+        )
+
+    for i, item in enumerate(parsed):
+        if not isinstance(item, list):
+            return False, (
+                f"{var_name}[{i}] must be an array, "
+                f"got {type(item).__name__}. "
+                f"If you have triple-nested brackets [[[...]]], remove the outer layer."
+            )
+        if len(item) != 4:
+            return False, (
+                f"{var_name}[{i}] must have exactly 4 elements "
+                f'["NAME","description","persistent","forget"], got {len(item)}'
+            )
+        if not all(isinstance(e, str) for e in item):
+            return False, (
+                f"{var_name}[{i}] all elements must be strings. "
+                f"Got types: {[type(e).__name__ for e in item]}"
+            )
+        if item[2] not in ("true", "false") or item[3] not in ("true", "false"):
+            return False, (
+                f'{var_name}[{i}] elements 3 and 4 must be "true" or "false". '
+                f"Got: [{item[2]!r}, {item[3]!r}]"
             )
 
     return True, None
