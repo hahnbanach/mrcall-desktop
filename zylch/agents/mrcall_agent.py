@@ -437,25 +437,74 @@ class MrCallAgent(SpecializedAgent):
         # - Native web_search_20250305 server tool
         # - Native PDF/image content blocks
         # MrCall always uses Anthropic, so no provider abstraction needed.
-        try:
-            response = await self._call_anthropic(
-                system_prompt=system_prompt,
-                messages=messages,
-                max_tokens=4096,
-            )
-            logger.info(f"[MrCallAgent] LLM response: stop_reason={response.stop_reason}")
-            for i, block in enumerate(response.content):
-                if hasattr(block, 'name'):
-                    logger.info(f"[MrCallAgent] Block {i}: tool_use name={block.name}")
-                    logger.debug(f"[MrCallAgent] Block {i}: tool_input={block.input}")
-                elif hasattr(block, 'text'):
-                    logger.debug(f"[MrCallAgent] Block {i}: text={block.text}")
-        except Exception as e:
-            logger.error(f"[MrCallAgent] LLM call failed: {e}", exc_info=True)
-            return {'error': f'LLM call failed: {str(e)}'}
+        #
+        # Agentic loop: process tool calls, feed results back, let LLM
+        # call more tools until it produces a final text response.
+        MAX_TURNS = 5
+        accumulated_result = None
 
-        result = await self._handle_tool_response(response, dry_run=dry_run)
-        return result
+        for turn in range(MAX_TURNS):
+            try:
+                response = await self._call_anthropic(
+                    system_prompt=system_prompt,
+                    messages=messages,
+                    max_tokens=4096,
+                )
+                logger.info(f"[MrCallAgent] Turn {turn}: stop_reason={response.stop_reason}")
+                for i, block in enumerate(response.content):
+                    if hasattr(block, 'name'):
+                        logger.info(f"[MrCallAgent] Block {i}: tool_use name={block.name}")
+                        logger.debug(f"[MrCallAgent] Block {i}: tool_input={block.input}")
+                    elif hasattr(block, 'text'):
+                        logger.debug(f"[MrCallAgent] Block {i}: text={block.text}")
+            except Exception as e:
+                logger.error(f"[MrCallAgent] LLM call failed: {e}", exc_info=True)
+                return {'error': f'LLM call failed: {str(e)}'}
+
+            if response.stop_reason != "tool_use":
+                # Final response — no more tools to call
+                result = await self._handle_tool_response(response, dry_run=dry_run)
+                if accumulated_result and result.get('tool_used') == 'respond_text':
+                    # Merge final text with accumulated tool results
+                    accumulated_result['result']['response_text'] = result['result'].get('response', '')
+                    return accumulated_result
+                return result
+
+            # Process tool calls and build tool_result messages for next turn
+            turn_result = await self._handle_tool_response(response, dry_run=dry_run)
+
+            # Accumulate results across turns
+            if accumulated_result is None:
+                accumulated_result = turn_result
+            elif turn_result.get('result'):
+                if accumulated_result.get('result') and isinstance(accumulated_result['result'], dict):
+                    prev_updated = accumulated_result['result'].get('updated', [])
+                    new_updated = turn_result['result'].get('updated', [])
+                    accumulated_result['result']['updated'] = prev_updated + new_updated
+                    accumulated_result['tool_used'] = 'multiple_configure'
+                    accumulated_result['result']['feature'] = 'multiple'
+
+            # Build tool_result messages for the next LLM turn
+            # Append assistant response + tool results to messages
+            messages.append({"role": "assistant", "content": response.content})
+            tool_results = []
+            for block in response.content:
+                if hasattr(block, 'id') and hasattr(block, 'name'):
+                    result_data = turn_result.get('result') or {}
+                    result_summary = str(result_data.get('updated', 'Done') if isinstance(result_data, dict) else 'Done')
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result_summary
+                    })
+            if tool_results:
+                messages.append({"role": "user", "content": tool_results})
+
+            logger.info(f"[MrCallAgent] Turn {turn} complete, continuing loop")
+
+        # Max turns reached
+        logger.warning(f"[MrCallAgent] Max turns ({MAX_TURNS}) reached")
+        return accumulated_result or {'error': 'Max configuration turns reached'}
 
     async def run_stream(
         self,
@@ -709,7 +758,6 @@ class MrCallAgent(SpecializedAgent):
                             )
                             yield {"type": "tool_result", "tool_used": block.name, "result": result}
                         # respond_text already streamed above — skip
-                        break
             elif not text_started and final_message:
                 # Fallback: no text was streamed, extract from final message
                 for block in final_message.content:
@@ -814,9 +862,13 @@ class MrCallAgent(SpecializedAgent):
                     if block.name.startswith('configure_'):
                         feature = block.name.replace('configure_', '')
                         logger.info(f"[MrCallAgent] Calling _process_configure for {feature}")
-                        result['result'] = await self._process_configure(
+                        configure_result = await self._process_configure(
                             block.input, feature, dry_run=dry_run
                         )
+                        result['tool_used'] = block.name
+                        result['tool_input'] = block.input
+                        result['result'] = configure_result
+                        break  # Process first configure_ tool, loop handles subsequent turns
                     elif block.name == 'respond_text':
                         logger.info("[MrCallAgent] respond_text tool used")
                         result['result'] = {
@@ -824,7 +876,6 @@ class MrCallAgent(SpecializedAgent):
                         }
                     else:
                         logger.warning(f"[MrCallAgent] Unknown tool: {block.name}")
-                    break
         else:
             # No custom tool called — extract all text blocks.
             # With native web search, Anthropic may return:

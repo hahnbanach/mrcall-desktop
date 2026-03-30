@@ -75,6 +75,11 @@ When the user asks about current behavior (e.g., "how does the assistant respond
 5. BOOKING_CALENDAR_ID is auto-set via OAuth — never modify it
 6. For array-type variables (KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS, TRANSFER_CALL_OSCAR):
    READ the current value first, then APPEND/MODIFY, do NOT replace the entire array
+7. When a request spans MULTIPLE features (e.g. knowledge base AND conversation flow),
+   call MULTIPLE configure_ tools in the SAME response. Each tool handles its own
+   feature's variables. For example: a request about "troubleshooting procedure" needs
+   BOTH configure_knowledge_base (for the Q&A/data reference) AND configure_conversation
+   (for the active conversation flow that guides the caller through the steps).
 
 ## LANGUAGE
 
