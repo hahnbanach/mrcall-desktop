@@ -80,6 +80,12 @@ When the user asks about current behavior (e.g., "how does the assistant respond
    feature's variables. For example: a request about "troubleshooting procedure" needs
    BOTH configure_knowledge_base (for the Q&A/data reference) AND configure_conversation
    (for the active conversation flow that guides the caller through the steps).
+8. DATA CONSISTENCY: When the user adds, updates, or removes data (clients, products,
+   procedures, etc.), update ALL variables that reference that data — not just one.
+   For example, if the user adds a new client with printers, update BOTH:
+   - KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS (so Q&A answers include the new client's data)
+   - CONVERSATION_PROMPT (so the conversation flow lists the new client's printers)
+   Always check existing values of ALL related variables and keep them in sync.
 
 ## LANGUAGE
 
