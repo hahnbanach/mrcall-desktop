@@ -865,10 +865,18 @@ class MrCallAgent(SpecializedAgent):
                         configure_result = await self._process_configure(
                             block.input, feature, dry_run=dry_run
                         )
-                        result['tool_used'] = block.name
-                        result['tool_input'] = block.input
-                        result['result'] = configure_result
-                        break  # Process first configure_ tool, loop handles subsequent turns
+                        # Accumulate results — multiple configure_ tools in same response
+                        if result['result'] is None:
+                            result['tool_used'] = block.name
+                            result['tool_input'] = block.input
+                            result['result'] = configure_result
+                        else:
+                            # Merge with previous results
+                            prev_updated = result['result'].get('updated', [])
+                            new_updated = configure_result.get('updated', [])
+                            result['result']['updated'] = prev_updated + new_updated
+                            result['tool_used'] = 'multiple_configure'
+                        # Continue loop to process all configure_ tools in this response
                     elif block.name == 'respond_text':
                         logger.info("[MrCallAgent] respond_text tool used")
                         result['result'] = {

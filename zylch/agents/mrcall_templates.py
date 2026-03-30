@@ -240,20 +240,47 @@ If the greeting already asks for the caller's name, do NOT add "ask for name" he
 CONVERSATION_PROMPT is freeform text in two MANDATORY parts:
 
 **Part 1: Variable declarations** (REQUIRED — must appear at the top):
-Declare ALL contact variables the assistant needs to read or check during the conversation.
-Use the template syntax to inject runtime values. Without these declarations, the assistant
-has NO access to stored contact data.
+Declare contact variables using template syntax to inject runtime values from previous calls.
 
 ```
-BUSINESS_NAME=%%crm.contact.variables.BUSINESS_NAME=non conosciuto%%
 FIRST_NAME=%%crm.contact.variables.FIRST_NAME=sconosciuto%%
 RECURRENT_CALLER=%%crm.contact.variables.RECURRENT_CALLER=false%%
 CONVERSATION_HISTORY=%%crm.contact.variables.CONVERSATION_HISTORY=non disponibile%%
 ```
 
 The `=default%%` part sets the fallback value when the variable is not yet stored.
-ALWAYS declare every variable from ASSISTANT_TOOL_VARIABLE_EXTRACTION that the conversation
-logic references (e.g. BUSINESS_NAME, FIRST_NAME, RECURRENT_CALLER, CONVERSATION_HISTORY).
+
+CRITICAL — FIRST-CALL vs RETURNING-CALL BEHAVIOR:
+Template variables (%%crm.contact.variables.X%%) are resolved BEFORE the conversation starts,
+using values stored from PREVIOUS calls. They are NOT updated during the current call.
+
+This means: if BUSINESS_NAME is collected during the WELCOME MESSAGE of the FIRST call,
+it will NOT be available in the CONVERSATION_PROMPT of that same call — it shows the default.
+It will only be available from the SECOND call onwards.
+
+Therefore, for variables that are collected during the welcome message:
+- Do NOT rely on %%crm.contact.variables.X%% for first-call logic
+- Instead, write the conversation instructions assuming the assistant already heard
+  the information during the welcome (it's the same GPT session)
+- Use %%crm.contact.variables.X%% ONLY for returning-caller shortcuts
+
+Example — WRONG (breaks on first call):
+```
+BUSINESS_NAME=%%crm.contact.variables.BUSINESS_NAME=non conosciuto%%
+If BUSINESS_NAME is "non conosciuto", ask for it.
+```
+(On first call, even if the welcome asks and gets the company name, here it will still be "non conosciuto")
+
+Example — CORRECT:
+```
+RECURRENT_CALLER=%%crm.contact.variables.RECURRENT_CALLER=false%%
+BUSINESS_NAME=%%crm.contact.variables.BUSINESS_NAME=non conosciuto%%
+
+If RECURRENT_CALLER is true and BUSINESS_NAME is known: skip asking, use it directly.
+If RECURRENT_CALLER is false OR BUSINESS_NAME is "non conosciuto":
+  The welcome message should have already asked for the company name.
+  If the caller already said it, use that. If not, ask now.
+```
 
 **Part 2: Behavioral instructions** (natural language):
 Step-by-step procedures the assistant follows DURING the call. This is where ALL procedural
