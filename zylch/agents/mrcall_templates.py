@@ -259,12 +259,36 @@ If FURTHER_QUESTIONS is non-empty (not `[]`), migrate it:
 1. Convert each [question, instruction] pair to natural language in CONVERSATION_PROMPT
 2. Set FURTHER_QUESTIONS to "[]"
 
+### EXTRACTION VARIABLES (ASSISTANT_TOOL_VARIABLE_EXTRACTION)
+
+This variable controls which pieces of information the AI extracts from calls and saves
+to contact records. Format is a JSON array of arrays:
+
+```
+[["VAR_NAME", "Description", "persistent", "forget_after_extraction"], ...]
+```
+
+Each entry: `["NAME", "description text", "true"/"false", "true"/"false"]`
+- **persistent** (`true`/`false`): if `true`, the value persists across calls (e.g. company name)
+- **forget_after_extraction** (`true`/`false`): if `true`, reset after each call (e.g. booking date)
+
+Example — adding BUSINESS_NAME:
+```json
+[["FIRST_NAME","Caller's first name","false","false"],["BUSINESS_NAME","Company name","true","false"]]
+```
+
+CRITICAL FORMAT RULES:
+- The value MUST be a flat JSON array of arrays: `[[...],[...]]` — NOT `[[[...]]]`
+- When adding a new variable, READ the current value first, parse it, APPEND the new entry, then write back
+- Do NOT wrap the array in an extra layer of brackets
+
 ### COMMON INTENTS
 - "Add a question about X" → append to CONVERSATION_PROMPT
 - "Use caller's name" → add STORED_NAME declaration + name logic
 - "Ask for email" → add to CONVERSATION_PROMPT
 - "End call after collecting info" → add hangup logic at end
 - "Handle returning callers" → use RECURRENT_CALLER variable
+- "Extract/save X from calls" → add entry to ASSISTANT_TOOL_VARIABLE_EXTRACTION
 """
 
 
