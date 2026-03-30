@@ -957,6 +957,7 @@ class MrCallConfiguratorTrainer:
                 "ENABLE_CONVERSATION_PROMPT",
                 "CONVERSATION_PROMPT",
                 "FURTHER_QUESTIONS",
+                "ASSISTANT_TOOL_VARIABLE_EXTRACTION",
             ],
             "description": "What the assistant does after the welcome greeting",
             "display_name": "Conversation flow and questions the assistant asks",
