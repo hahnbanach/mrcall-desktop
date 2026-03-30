@@ -967,7 +967,6 @@ class MrCallConfiguratorTrainer:
         "knowledge_base": {
             "variables": [
                 "KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS",
-                "OSCAR2_KNOWLEDGE_BASE",
             ],
             "description": "Q&A pairs and instructions for answering caller questions",
             "display_name": "Knowledge base Q&A for answering caller questions",

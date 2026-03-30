@@ -237,22 +237,42 @@ If the greeting already asks for the caller's name, do NOT add "ask for name" he
 | Yes | Yes ("Anna") | Welcome skips asking — conversation uses it |
 
 ### VALUE FORMAT
-CONVERSATION_PROMPT is freeform text in two optional parts:
+CONVERSATION_PROMPT is freeform text in two MANDATORY parts:
 
-**Part 1: Variable declarations** (optional):
+**Part 1: Variable declarations** (REQUIRED — must appear at the top):
+Declare ALL contact variables the assistant needs to read or check during the conversation.
+Use the template syntax to inject runtime values. Without these declarations, the assistant
+has NO access to stored contact data.
+
 ```
-STORED_NAME=%%crm.contact.variables.FIRST_NAME=not available%%
-BUSINESS_OPEN=%%public:BUSINESS_OPEN=true%%
+BUSINESS_NAME=%%crm.contact.variables.BUSINESS_NAME=non conosciuto%%
+FIRST_NAME=%%crm.contact.variables.FIRST_NAME=sconosciuto%%
+RECURRENT_CALLER=%%crm.contact.variables.RECURRENT_CALLER=false%%
+CONVERSATION_HISTORY=%%crm.contact.variables.CONVERSATION_HISTORY=non disponibile%%
 ```
+
+The `=default%%` part sets the fallback value when the variable is not yet stored.
+ALWAYS declare every variable from ASSISTANT_TOOL_VARIABLE_EXTRACTION that the conversation
+logic references (e.g. BUSINESS_NAME, FIRST_NAME, RECURRENT_CALLER, CONVERSATION_HISTORY).
 
 **Part 2: Behavioral instructions** (natural language):
+Step-by-step procedures the assistant follows DURING the call. This is where ALL procedural
+logic goes — identification flows, diagnostic steps, escalation rules, ticket opening, etc.
+
 ```
-If STORED_NAME is "not available", ask the caller for their name.
-Ask what brings them in today.
-When done, ask if there's anything else, then hang up.
+If BUSINESS_NAME is "non conosciuto", ask the caller which company they are calling for.
+If FIRST_NAME is "sconosciuto", ask the caller's name.
+Then ask which printer has the problem.
+Ask: is it turned on? Try a reset (30 seconds off). Is it resolved?
+If not resolved, open a support ticket.
 ```
 
-Always include a hangup instruction at the end.
+IMPORTANT: Procedural instructions (step 1, step 2, step 3...) belong HERE in
+CONVERSATION_PROMPT, NOT in OSCAR2_KNOWLEDGE_BASE. The knowledge base contains
+only reference data (who the clients are, what printers they have). The conversation
+prompt tells the assistant WHAT TO DO with that data.
+
+Always include a hangup/goodbye instruction at the end.
 
 ### LEGACY MIGRATION
 If FURTHER_QUESTIONS is non-empty (not `[]`), migrate it:
@@ -304,18 +324,19 @@ KNOWLEDGE_BASE_RUNTIME_TEMPLATE = """## KNOWLEDGE BASE CONFIGURATION
 ### CONVERSATION VARIABLES
 {conversation_variables_context}
 
-### TWO-COMPONENT STRUCTURE
+### KNOWLEDGE BASE STRUCTURE
 
-**1. OSCAR2_KNOWLEDGE_BASE** (verbatim plain text)
-Admin-level instructions at the TOP of the knowledge base section.
-Controls: tone, expertise level, off-topic handling, fallback behavior.
-Example: "You are an expert dental assistant. For uncovered questions, say you'll pass to a dentist."
+OSCAR2_KNOWLEDGE_BASE is an admin-only variable — do NOT modify it.
 
-**2. KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS** (JSON array of tuples)
+You can ONLY modify **KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS** (JSON array of tuples):
 Structured Q&A pairs: `[["topic or keywords", "answer instructions"], ...]`
 Each pair renders as: "IF THE CALLER ASKS ABOUT: {{topic}} → {{answer}}"
 
-Modifying one does NOT affect the other.
+The answer instructions should reference procedures defined in CONVERSATION_PROMPT
+(e.g. "Follow the troubleshooting procedure in the conversation flow").
+
+For factual reference data (client lists, product catalogs, printer models, etc.),
+put them in the CONVERSATION_PROMPT or in Q&A answer instructions — NOT in OSCAR2_KNOWLEDGE_BASE.
 
 ### AUTO-GENERATED ENTRIES (DO NOT ADD)
 These are always auto-generated at runtime — never add them manually:
@@ -336,10 +357,10 @@ When user says "add Q&A about X":
 
 ### COMMON INTENTS
 - "Add Q&A about X" → append to KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS
-- "Set general behavior" → update OSCAR2_KNOWLEDGE_BASE
 - "Remove Q&A about X" → read, filter out matching pair, write back
 - "Clear all Q&A" → KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS = "[]"
-- "Make assistant more expert" → update OSCAR2_KNOWLEDGE_BASE with expertise framing
+- "Set general behavior / tone / expertise" → use CONVERSATION_PROMPT (NOT OSCAR2_KNOWLEDGE_BASE)
+- "Add reference data (clients, products)" → put in CONVERSATION_PROMPT or Q&A answer text
 """
 
 
