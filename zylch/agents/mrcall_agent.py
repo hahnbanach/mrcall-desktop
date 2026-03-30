@@ -918,6 +918,23 @@ class MrCallAgent(SpecializedAgent):
         changes = tool_input.get('changes', {})
         logger.info(f"[MrCallAgent] Changes to apply: {list(changes.keys())}")
 
+        # Normalize ASSISTANT_TOOL_VARIABLE_EXTRACTION format
+        # LLM sometimes wraps in extra brackets: [[[...]]] instead of [[...]]
+        if 'ASSISTANT_TOOL_VARIABLE_EXTRACTION' in changes:
+            import json as json_mod
+            atve_val = changes['ASSISTANT_TOOL_VARIABLE_EXTRACTION']
+            try:
+                parsed = json_mod.loads(atve_val) if isinstance(atve_val, str) else atve_val
+                # Unwrap extra nesting: [[[a,b],[c,d]]] → [[a,b],[c,d]]
+                while (isinstance(parsed, list) and len(parsed) == 1
+                       and isinstance(parsed[0], list)
+                       and isinstance(parsed[0][0], list)):
+                    parsed = parsed[0]
+                changes['ASSISTANT_TOOL_VARIABLE_EXTRACTION'] = json_mod.dumps(parsed)
+                logger.info(f"[MrCallAgent] Normalized ATVE: {len(parsed)} entries")
+            except (json_mod.JSONDecodeError, IndexError, TypeError) as e:
+                logger.warning(f"[MrCallAgent] Could not normalize ATVE: {e}")
+
         if not changes:
             logger.warning("[MrCallAgent] No changes specified in tool_input")
             return {'success': False, 'error': 'No changes specified'}
