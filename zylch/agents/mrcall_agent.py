@@ -368,8 +368,7 @@ class MrCallAgent(SpecializedAgent):
         messages: List[Dict[str, str]] = []
 
         if conversation_history:
-            # Include recent history (last 10 messages to control prompt size)
-            recent = conversation_history[-10:]
+            recent = self._compress_history(conversation_history)
             messages.extend(recent)
             logger.debug(
                 f"[MrCallAgent] Including {len(recent)} messages from conversation history"
@@ -433,78 +432,95 @@ class MrCallAgent(SpecializedAgent):
             f"{len(messages)} messages"
         )
 
-        # Call Anthropic API directly (not via aisuite) to support:
-        # - Native web_search_20250305 server tool
-        # - Native PDF/image content blocks
-        # MrCall always uses Anthropic, so no provider abstraction needed.
-        #
-        # Agentic loop: process tool calls, feed results back, let LLM
-        # call more tools until it produces a final text response.
-        MAX_TURNS = 5
-        accumulated_result = None
+        # Agentic loop: call LLM → execute tools → feed results back → repeat
+        # Terminates naturally when LLM produces text without tool calls.
+        # Pattern from Claude Code: while(tool_use) with post-tool-use reminders.
+        completed_actions: List[Dict[str, Any]] = []
 
-        for turn in range(MAX_TURNS):
+        while True:
+            # Safety valve: prevent runaway loops
+            if len(messages) > 40:
+                logger.warning("[MrCallAgent] Safety limit reached (40+ messages)")
+                break
+
             try:
                 response = await self._call_anthropic(
                     system_prompt=system_prompt,
                     messages=messages,
                     max_tokens=4096,
                 )
-                logger.info(f"[MrCallAgent] Turn {turn}: stop_reason={response.stop_reason}")
-                for i, block in enumerate(response.content):
-                    if hasattr(block, 'name'):
-                        logger.info(f"[MrCallAgent] Block {i}: tool_use name={block.name}")
-                        logger.debug(f"[MrCallAgent] Block {i}: tool_input={block.input}")
-                    elif hasattr(block, 'text'):
-                        logger.debug(f"[MrCallAgent] Block {i}: text={block.text}")
+                logger.info(f"[MrCallAgent] Loop: stop_reason={response.stop_reason}, blocks={len(response.content)}")
             except Exception as e:
                 logger.error(f"[MrCallAgent] LLM call failed: {e}", exc_info=True)
                 return {'error': f'LLM call failed: {str(e)}'}
 
+            # Terminal: no tool calls → extract text and return
             if response.stop_reason != "tool_use":
-                # Final response — no more tools to call
-                result = await self._handle_tool_response(response, dry_run=dry_run)
-                if accumulated_result and result.get('tool_used') == 'respond_text':
+                text_result = self._extract_text_response(response)
+                if completed_actions:
                     # Merge final text with accumulated tool results
-                    accumulated_result['result']['response_text'] = result['result'].get('response', '')
-                    return accumulated_result
-                return result
+                    merged = completed_actions[-1].copy()
+                    if text_result.get('result'):
+                        merged['result'] = merged.get('result', {})
+                        if isinstance(merged['result'], dict):
+                            merged['result']['response_text'] = text_result['result'].get('response', '')
+                    # Collect all updated vars across actions
+                    all_updated = []
+                    for action in completed_actions:
+                        r = action.get('result', {})
+                        if isinstance(r, dict):
+                            all_updated.extend(r.get('updated', []))
+                    if all_updated and isinstance(merged.get('result'), dict):
+                        merged['result']['updated'] = all_updated
+                        merged['tool_used'] = 'multiple_configure' if len(completed_actions) > 1 else merged.get('tool_used')
+                    return merged
+                return text_result
 
-            # Process tool calls and build tool_result messages for next turn
-            turn_result = await self._handle_tool_response(response, dry_run=dry_run)
-
-            # Accumulate results across turns
-            if accumulated_result is None:
-                accumulated_result = turn_result
-            elif turn_result.get('result'):
-                if accumulated_result.get('result') and isinstance(accumulated_result['result'], dict):
-                    prev_updated = accumulated_result['result'].get('updated', [])
-                    new_updated = turn_result['result'].get('updated', [])
-                    accumulated_result['result']['updated'] = prev_updated + new_updated
-                    accumulated_result['tool_used'] = 'multiple_configure'
-                    accumulated_result['result']['feature'] = 'multiple'
-
-            # Build tool_result messages for the next LLM turn
-            # Append assistant response + tool results to messages
+            # Process ALL tool_use blocks in this response
             messages.append({"role": "assistant", "content": response.content})
-            tool_results = []
+            tool_results_for_llm = []
+
             for block in response.content:
-                if hasattr(block, 'id') and hasattr(block, 'name'):
-                    result_data = turn_result.get('result') or {}
-                    result_summary = str(result_data.get('updated', 'Done') if isinstance(result_data, dict) else 'Done')
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result_summary
-                    })
-            if tool_results:
-                messages.append({"role": "user", "content": tool_results})
+                if not (hasattr(block, 'id') and hasattr(block, 'name') and hasattr(block, 'input')):
+                    continue
 
-            logger.info(f"[MrCallAgent] Turn {turn} complete, continuing loop")
+                logger.info(f"[MrCallAgent] Executing: {block.name}")
+                action_result = await self._execute_tool(block.name, block.input, dry_run)
+                completed_actions.append(action_result)
 
-        # Max turns reached
-        logger.warning(f"[MrCallAgent] Max turns ({MAX_TURNS}) reached")
-        return accumulated_result or {'error': 'Max configuration turns reached'}
+                # Format result summary for LLM feedback
+                r = action_result.get('result', {})
+                if isinstance(r, dict):
+                    summary = str(r.get('updated', r.get('response', 'Done')))
+                else:
+                    summary = 'Done'
+
+                tool_results_for_llm.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": summary[:500],  # Cap to avoid bloating context
+                })
+
+            # Feed results + progress reminder back to LLM
+            progress = self._build_progress_reminder(completed_actions)
+            if progress:
+                tool_results_for_llm.append({"type": "text", "text": progress})
+
+            messages.append({"role": "user", "content": tool_results_for_llm})
+            logger.info(f"[MrCallAgent] Turn complete, {len(completed_actions)} actions so far")
+
+        # Safety limit reached — return what we have
+        if completed_actions:
+            result = completed_actions[-1].copy()
+            all_updated = []
+            for a in completed_actions:
+                r = a.get('result', {})
+                if isinstance(r, dict):
+                    all_updated.extend(r.get('updated', []))
+            if isinstance(result.get('result'), dict):
+                result['result']['updated'] = all_updated
+            return result
+        return {'error': 'Configuration loop terminated without results'}
 
     async def run_stream(
         self,
@@ -538,7 +554,7 @@ class MrCallAgent(SpecializedAgent):
         # Build messages (same logic as run())
         messages: List[Dict[str, Any]] = []
         if conversation_history:
-            messages.extend(conversation_history[-10:])
+            messages.extend(self._compress_history(conversation_history))
 
         if attachments:
             content_blocks = []
@@ -831,79 +847,102 @@ class MrCallAgent(SpecializedAgent):
         response = await asyncio.get_event_loop().run_in_executor(None, _call)
         return response
 
-    async def _handle_tool_response(self, response, dry_run: bool = False) -> Dict[str, Any]:
-        """Handle the LLM's tool response.
+    async def _execute_tool(
+        self, name: str, tool_input: Dict[str, Any], dry_run: bool = False
+    ) -> Dict[str, Any]:
+        """Execute a single tool call and return result.
 
         Args:
-            response: LLMResponse from create_message
-            dry_run: If True, don't apply configure changes to StarChat
+            name: Tool name (e.g., configure_knowledge_base, respond_text)
+            tool_input: Tool input dict from LLM
+            dry_run: If True, don't apply changes to StarChat
 
         Returns:
-            Dict with tool_used, tool_input, and processed result
+            Dict with tool_used, result, and optional error
         """
-        logger.info(f"[MrCallAgent] _handle_tool_response: stop_reason={response.stop_reason}")
+        logger.info(f"[MrCallAgent] Executing tool: {name}")
+        logger.debug(f"[MrCallAgent] Tool input: {tool_input}")
 
-        result = {
-            'tool_used': None,
-            'tool_input': {},
-            'result': None,
-            'error': None
-        }
-
-        if response.stop_reason == "tool_use":
-            for block in response.content:
-                if hasattr(block, 'input'):  # ToolUseBlock
-                    result['tool_used'] = block.name
-                    result['tool_input'] = block.input
-                    logger.info(f"[MrCallAgent] Processing tool: {block.name}")
-                    logger.debug(f"[MrCallAgent] Tool input: {block.input}")
-
-                    # Process based on tool
-                    if block.name.startswith('configure_'):
-                        feature = block.name.replace('configure_', '')
-                        logger.info(f"[MrCallAgent] Calling _process_configure for {feature}")
-                        configure_result = await self._process_configure(
-                            block.input, feature, dry_run=dry_run
-                        )
-                        # Accumulate results — multiple configure_ tools in same response
-                        if result['result'] is None:
-                            result['tool_used'] = block.name
-                            result['tool_input'] = block.input
-                            result['result'] = configure_result
-                        else:
-                            # Merge with previous results
-                            prev_updated = result['result'].get('updated', [])
-                            new_updated = configure_result.get('updated', [])
-                            result['result']['updated'] = prev_updated + new_updated
-                            result['tool_used'] = 'multiple_configure'
-                        # Continue loop to process all configure_ tools in this response
-                    elif block.name == 'respond_text':
-                        logger.info("[MrCallAgent] respond_text tool used")
-                        result['result'] = {
-                            'response': block.input.get('response', '')
-                        }
-                    else:
-                        logger.warning(f"[MrCallAgent] Unknown tool: {block.name}")
+        if name.startswith('configure_'):
+            feature = name.replace('configure_', '')
+            result = await self._process_configure(tool_input, feature, dry_run=dry_run)
+            return {'tool_used': name, 'result': result}
+        elif name == 'respond_text':
+            return {'tool_used': name, 'result': {'response': tool_input.get('response', '')}}
         else:
-            # No custom tool called — extract all text blocks.
-            # With native web search, Anthropic may return:
-            #   [web_search_tool_use, web_search_tool_result, text]
-            # We collect all text blocks into the response.
-            logger.info("[MrCallAgent] No custom tool_use, extracting text response")
-            text_parts = []
-            for block in response.content:
-                if hasattr(block, 'text') and block.text:
-                    text_parts.append(block.text)
-            if text_parts:
-                result['tool_used'] = 'respond_text'
-                result['result'] = {'response': "\n\n".join(text_parts)}
-                logger.debug(
-                    f"[MrCallAgent] Text response from {len(text_parts)} blocks, "
-                    f"total {sum(len(t) for t in text_parts)} chars"
-                )
+            logger.warning(f"[MrCallAgent] Unknown tool: {name}")
+            return {'tool_used': name, 'result': None, 'error': f'Unknown tool: {name}'}
 
-        logger.info(f"[MrCallAgent] _handle_tool_response result: tool_used={result['tool_used']}, has_result={result['result'] is not None}, error={result.get('error')}")
-        return result
+    def _extract_text_response(self, response) -> Dict[str, Any]:
+        """Extract text from a non-tool-use response.
+
+        Handles web_search responses that mix tool_use + tool_result + text blocks.
+        """
+        text_parts = []
+        for block in response.content:
+            if hasattr(block, 'text') and block.text:
+                text_parts.append(block.text)
+        if text_parts:
+            return {
+                'tool_used': 'respond_text',
+                'result': {'response': "\n\n".join(text_parts)},
+            }
+        return {'tool_used': None, 'result': None}
+
+    def _compress_history(self, history: list, keep_recent: int = 8) -> list:
+        """Smart context compression: keep recent messages + older tool results.
+
+        Instead of naive truncation, preserves configuration context by keeping
+        messages that contain tool results (which represent actual config actions).
+        """
+        if len(history) <= keep_recent:
+            return history
+
+        recent = history[-keep_recent:]
+        older = history[:-keep_recent]
+
+        # From older messages, keep only tool_result messages (config actions)
+        important = [
+            msg for msg in older
+            if isinstance(msg.get("content"), list)  # tool_result messages are lists
+        ]
+
+        compressed = important + recent
+        # Hard cap to prevent context overflow
+        if len(compressed) > 20:
+            compressed = compressed[-20:]
+
+        logger.debug(
+            f"[MrCallAgent] Compressed history: {len(history)} → {len(compressed)} "
+            f"({len(important)} important + {len(recent)} recent)"
+        )
+        return compressed
+
+    def _build_progress_reminder(self, completed: List[Dict[str, Any]]) -> str:
+        """Build a compact progress reminder injected after tool results.
+
+        Mirrors Claude Code's post-tool-use system reminders.
+        """
+        if not completed:
+            return ""
+
+        # Show last 5 completed actions, count older ones
+        recent = completed[-5:]
+        older_count = len(completed) - len(recent)
+
+        lines = ["<config-progress>", "Completed:"]
+        if older_count > 0:
+            lines.append(f"  ...and {older_count} earlier changes")
+        for item in recent:
+            tool = item.get('tool_used', '?')
+            success = item.get('result', {}).get('success', '?') if isinstance(item.get('result'), dict) else '?'
+            lines.append(f"  - {tool}: {'success' if success else 'failed'}")
+
+        lines.append("")
+        lines.append("If the user's request involves additional features not yet configured, call them now.")
+        lines.append("Do NOT ask the user for confirmation — proceed with remaining tools.")
+        lines.append("</config-progress>")
+        return "\n".join(lines)
 
     async def _process_configure(
         self,
