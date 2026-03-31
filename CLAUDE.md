@@ -10,8 +10,8 @@ Zylch AI — pre-alpha multi-channel sales intelligence system. Python 3.11+ / F
 
 Zylch ha oggi due funzioni distinte:
 
-1. **Assistente alla vendita** (`ZYLCH_MODE=standalone`): connette email (Gmail/Outlook), calendario (Google/Microsoft), CRM (Pipedrive/StarChat), e in futuro WhatsApp per intelligenza commerciale multi-canale. Firebase `zylch-test`, `.env.standalone`.
-2. **Configuratore MrCall** (`ZYLCH_MODE=mrcall`, default): configura gli assistenti telefonici MrCall via chat con agentic loop. Firebase `talkmeapp`, `.env.mrcall`.
+1. **Assistente alla vendita** (`ZYLCH_MODE=standalone`): connette email (Gmail/Outlook), calendario (Google/Microsoft), CRM (Pipedrive/StarChat), e in futuro WhatsApp per intelligenza commerciale multi-canale. Firebase `zylch-test-9a895`, `.env.standalone`.
+2. **Configuratore MrCall** (`ZYLCH_MODE=mrcall`, default): configura gli assistenti telefonici MrCall via chat con agentic loop. Firebase `talkmeapp-e696c`, `.env.mrcall`.
 
 Vedi `docs/guides/environments.md` per tutti gli ambienti, file .env e comandi di avvio.
 
