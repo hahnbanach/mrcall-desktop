@@ -1681,8 +1681,24 @@ class Storage:
         message: str,
         notification_type: str = 'warning'
     ) -> Dict[str, Any]:
-        """Create a notification for a user."""
+        """Create a notification for a user.
+
+        Deduplicates: if an identical unread notification already
+        exists for this owner, returns it instead of inserting.
+        """
         with get_session() as session:
+            existing = session.query(UserNotification).filter(
+                UserNotification.owner_id == owner_id,
+                UserNotification.message == message,
+                UserNotification.read == False,
+            ).first()
+            if existing:
+                logger.debug(
+                    f"Notification dedup: identical unread "
+                    f"exists for {owner_id}"
+                )
+                return existing.to_dict()
+
             notif = UserNotification(
                 owner_id=owner_id,
                 message=message,
@@ -1691,7 +1707,10 @@ class Storage:
             )
             session.add(notif)
             session.flush()
-            logger.info(f"Created {notification_type} notification for user {owner_id}")
+            logger.info(
+                f"Created {notification_type} notification "
+                f"for user {owner_id}"
+            )
             return notif.to_dict()
 
 
