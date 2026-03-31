@@ -10,6 +10,7 @@ Configuration:
 import asyncio
 import logging
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional
 
@@ -17,7 +18,32 @@ logger = logging.getLogger(__name__)
 
 # Configurable via env var
 MAX_WORKERS = int(os.environ.get("BACKGROUND_JOB_WORKERS", "4"))
-_executor = ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="bg_job")
+_executor = ThreadPoolExecutor(
+    max_workers=MAX_WORKERS, thread_name_prefix="bg_job"
+)
+
+# Regex to strip UUIDs so dedup matching works across jobs
+_UUID_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}"
+    r"-[0-9a-f]{4}-[0-9a-f]{12}",
+    re.IGNORECASE,
+)
+
+
+def _normalize_error(raw: str) -> str:
+    """Return a canonical, dedup-friendly error message.
+
+    - Known patterns get a fixed human-readable string.
+    - UUIDs are stripped so different job IDs don't break dedup.
+    """
+    if "API key required" in raw or "api key required" in raw.lower():
+        return (
+            "Background jobs require an API key. "
+            "Run `/connect` to configure."
+        )
+    # Strip job-specific UUIDs for generic errors
+    cleaned = _UUID_RE.sub("<id>", raw)
+    return f"Background job failed: {cleaned}"
 
 logger.info(f"Background job executor initialized with {MAX_WORKERS} workers")
 
@@ -140,9 +166,13 @@ class JobExecutor:
         except Exception as e:
             logger.exception(f"Job {job_id} failed: {e}")
             self.storage.fail_background_job(job_id, str(e))
+            error_msg = _normalize_error(str(e))
+            logger.debug(
+                f"[job_executor] normalized error: {error_msg}"
+            )
             self.storage.create_notification(
                 owner_id,
-                f"Background job failed: {e}",
+                error_msg,
                 "error"
             )
 
@@ -892,19 +922,55 @@ class JobExecutor:
         storage = self.storage
 
         # Check if memory agent is trained
-        has_memory_agent = storage.get_agent_prompt(owner_id, 'memory_email') is not None
+        has_memory_agent = (
+            storage.get_agent_prompt(owner_id, 'memory_email') is not None
+        )
+        has_task_agent = (
+            storage.get_agent_prompt(owner_id, 'task_email') is not None
+        )
 
         if not has_memory_agent:
-            logger.info(f"[SYNC-CHAIN] No trained memory agent for {owner_id}, skipping")
+            logger.debug(
+                f"[SYNC-CHAIN] No trained memory agent for"
+                f" {owner_id}, skipping memory processing"
+            )
             # Even without memory agent, try task processing directly
-            has_task_agent = storage.get_agent_prompt(owner_id, 'task_email') is not None
             if has_task_agent:
-                await self._chain_task_processing(owner_id, api_key, llm_provider, user_email)
+                await self._chain_task_processing(
+                    owner_id, api_key, llm_provider, user_email
+                )
+            else:
+                logger.debug(
+                    f"[SYNC-CHAIN] Neither memory nor task agent"
+                    f" trained for {owner_id}, notifying user"
+                )
+                storage.create_notification(
+                    owner_id,
+                    "New emails synced but task detection is not"
+                    " configured. Run `/agent task train email`"
+                    " to enable automatic task creation.",
+                    "info",
+                )
+            return
+
+        # Check API key before starting LLM-dependent processing
+        if not api_key:
+            logger.debug(
+                f"[SYNC-CHAIN] Agents trained but no API key"
+                f" for {owner_id}, skipping processing"
+            )
+            storage.create_notification(
+                owner_id,
+                "New emails synced but task processing"
+                " skipped — no API key. Run `/connect"
+                " anthropic` to configure.",
+                "warning",
+            )
             return
 
         unprocessed_emails = storage.get_unprocessed_emails(owner_id)
         if unprocessed_emails:
-            # Pass chain_task=true so memory job will trigger task processing when done
+            # Pass chain_task=true so memory job will trigger task processing
             job = storage.create_background_job(
                 owner_id=owner_id,
                 job_type="memory_process",

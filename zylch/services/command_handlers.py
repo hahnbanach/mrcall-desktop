@@ -477,14 +477,36 @@ Please wait for the current sync to complete."""
 
             logger.info(f"[/sync] Scheduled background job {job['id']} (force={force})")
 
-            force_note = "\n**Mode:** Force reprocess (all emails will be re-analyzed)" if force else ""
+            force_note = (
+                "\n**Mode:** Force reprocess"
+                " (all emails will be re-analyzed)"
+                if force
+                else ""
+            )
+
+            # Check if task agent is trained for hint
+            task_prompt = storage.get_agent_prompt(
+                owner_id, 'task_email'
+            )
+            task_hint = ""
+            if not task_prompt:
+                logger.debug(
+                    f"[/sync] No task agent trained for"
+                    f" {owner_id}, adding training hint"
+                )
+                task_hint = (
+                    "\n\n**Tip:** Run"
+                    " `/agent task train email` to"
+                    " auto-detect tasks from new emails."
+                )
+
             return f"""🚀 **Sync started in background**
 
 Job ID: `{job['id']}`{force_note}
 
 Your sync is running in the background. You'll be notified when complete.
 
-**Tip:** Continue using Zylch - the sync won't block you!"""
+**Tip:** Continue using Zylch - the sync won't block you!{task_hint}"""
 
         # Job exists but not pending/running (shouldn't happen due to unique index)
         return f"Job status: {job['status']}"
@@ -2100,17 +2122,167 @@ Message ID: `{sent_id if sent_id else 'N/A'}`"""
                 session.query(EmailModel).filter(EmailModel.owner_id == owner_id).delete()
             return "✅ All emails deleted."
 
-        # --- SEARCH EMAILS (DEPRECATED - use /agent email run) ---
+        # --- SEARCH EMAILS (PostgreSQL FTS) ---
         if subcommand == 'search':
-            return """⚠️ **`/email search` is deprecated**
+            from sqlalchemy import text
 
-Use the email agent instead:
-• `/agent email run "cerca info su Mario"`
-• `/agent email run "what do we know about Acme Corp?"`
+            # Parse args: query text, --limit N, --days N, --from <sender>
+            query_parts = []
+            limit = 10
+            days = None
+            from_filter = None
+            i = 0
+            while i < len(sub_args):
+                if sub_args[i] == '--limit' and i + 1 < len(sub_args):
+                    limit = min(int(sub_args[i + 1]), 50)
+                    i += 2
+                elif sub_args[i] == '--days' and i + 1 < len(sub_args):
+                    days = int(sub_args[i + 1])
+                    i += 2
+                elif sub_args[i] == '--from' and i + 1 < len(sub_args):
+                    from_filter = sub_args[i + 1]
+                    i += 2
+                else:
+                    query_parts.append(sub_args[i])
+                    i += 1
 
-The email agent searches your memory blobs and can also fetch original emails.
+            query = ' '.join(query_parts).strip()
+            if not query:
+                return (
+                    "❌ Missing search query\n\n"
+                    "Usage: `/email search <query> "
+                    "[--from sender] [--days N] [--limit N]`"
+                )
 
-Alternatively, just ask in chat: "cerca le email di Mario" and the assistant will help you."""
+            logger.debug(
+                f"[/email search] query={query}, "
+                f"days={days}, from={from_filter}, limit={limit}"
+            )
+
+            # Build SQL with FTS on fts_document column
+            where_clauses = [
+                "owner_id = :owner_id",
+                "fts_document @@ plainto_tsquery('english', :query)",
+            ]
+            params: dict = {
+                "owner_id": owner_id,
+                "query": query,
+                "limit": limit,
+            }
+
+            if days:
+                where_clauses.append(
+                    "date > now() - make_interval(days => :days)"
+                )
+                params["days"] = days
+
+            if from_filter:
+                where_clauses.append(
+                    "from_email ILIKE :from_pattern"
+                )
+                params["from_pattern"] = f"%{from_filter}%"
+
+            where_sql = " AND ".join(where_clauses)
+            sql = text(
+                f"SELECT date, from_email, from_name, "
+                f"subject, snippet "
+                f"FROM emails "
+                f"WHERE {where_sql} "
+                f"ORDER BY date DESC "
+                f"LIMIT :limit"
+            )
+
+            with get_session() as session:
+                result = session.execute(sql, params)
+                rows = result.fetchall()
+
+            # ILIKE fallback when FTS returns nothing
+            # (covers person name searches like "sorvillo")
+            if not rows:
+                fallback_clauses = [
+                    "owner_id = :owner_id",
+                    "(from_email ILIKE :name_pattern "
+                    "OR from_name ILIKE :name_pattern)",
+                ]
+                fallback_params: dict = {
+                    "owner_id": owner_id,
+                    "name_pattern": f"%{query}%",
+                    "limit": limit,
+                }
+                if days:
+                    fallback_clauses.append(
+                        "date > now() - make_interval("
+                        "days => :days)"
+                    )
+                    fallback_params["days"] = days
+                if from_filter:
+                    fallback_clauses.append(
+                        "from_email ILIKE :from_pattern"
+                    )
+                    fallback_params["from_pattern"] = (
+                        f"%{from_filter}%"
+                    )
+
+                fallback_where = " AND ".join(fallback_clauses)
+                fallback_sql = text(
+                    f"SELECT date, from_email, from_name, "
+                    f"subject, snippet "
+                    f"FROM emails "
+                    f"WHERE {fallback_where} "
+                    f"ORDER BY date DESC "
+                    f"LIMIT :limit"
+                )
+                with get_session() as session:
+                    result = session.execute(
+                        fallback_sql, fallback_params
+                    )
+                    rows = result.fetchall()
+
+            logger.debug(
+                f"[/email search] query={query}, "
+                f"results={len(rows)}"
+            )
+
+            if not rows:
+                return (
+                    f"📧 No emails found for "
+                    f"**\"{query}\"**"
+                )
+
+            # Format results
+            lines = [
+                f"**📧 Search Results** ({len(rows)} found)\n"
+            ]
+            for idx, row in enumerate(rows, 1):
+                date_val = row[0]
+                from_email = row[1] or ""
+                from_name = row[2] or ""
+                subject = row[3] or "(no subject)"
+                snippet = row[4] or ""
+
+                # Format date
+                if hasattr(date_val, 'strftime'):
+                    date_str = date_val.strftime("%Y-%m-%d %H:%M")
+                else:
+                    date_str = str(date_val)[:16] if date_val else ""
+
+                # Truncate snippet for display
+                snip = (
+                    snippet[:120] + "..."
+                    if len(snippet) > 120
+                    else snippet
+                )
+
+                sender = from_name or from_email
+                if from_name and from_email:
+                    sender = f"{from_name} <{from_email}>"
+
+                lines.append(
+                    f"{idx}. **{subject}** — {sender}\n"
+                    f"   {date_str} | {snip}"
+                )
+
+            return "\n\n".join(lines)
 
         # Unknown subcommand - show error + help
         return f"❌ Unknown subcommand: `{subcommand}`\n\n{help_text}"
