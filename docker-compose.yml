@@ -1,14 +1,13 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: zylch-postgres
     env_file:
       - .env.docker
     environment:
       POSTGRES_DB: zylch
       POSTGRES_USER: zylch
     ports:
-      - "5432:5432"
+      - "${HOST_PG_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -22,12 +21,11 @@ services:
 
   zylch-api:
     build: .
-    container_name: zylch-api
     depends_on:
       postgres:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "${HOST_API_PORT:-8000}:8000"
     env_file:
       - .env.shared
       - .env.${ZYLCH_MODE:-mrcall}

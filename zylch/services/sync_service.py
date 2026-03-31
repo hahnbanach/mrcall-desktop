@@ -100,7 +100,7 @@ class SyncService:
         """Sync emails (provider-agnostic: Gmail or Outlook).
 
         This method ONLY fetches emails from provider into archive.
-        AI analysis is done separately via /gaps command.
+        AI analysis is done separately via /tasks command.
 
         NOTE: Currently only Gmail is supported for email archiving.
         Outlook email sync will be added in a future update.

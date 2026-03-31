@@ -37,6 +37,10 @@ class ChatService:
     mode via /mrcall open [ID], messages are routed to MrCallOrchestratorAgent.
     """
 
+    # Track users who already got auto-sync this session to avoid
+    # re-triggering on every message.
+    _auto_sync_triggered: set = set()
+
     def __init__(self):
         """Initialize chat service.
 
@@ -181,6 +185,15 @@ class ChatService:
                 )
         except Exception as e:
             logger.warning(f"Failed to check notifications: {e}")
+
+        # Auto-sync: if last email sync was >24h ago, trigger background
+        try:
+            if user_id not in ChatService._auto_sync_triggered:
+                notification_banner = self._check_auto_sync(
+                    user_id, notification_banner
+                )
+        except Exception as e:
+            logger.warning(f"[AUTO-SYNC] Check failed: {e}")
 
         try:
             # Set sandbox mode based on source (MrCall Dashboard users)
@@ -705,6 +718,111 @@ class ChatService:
             icon = icons.get(n.get('notification_type', 'info'), 'ℹ️')
             lines.append(f"{icon} {n['message']}")
         return "\n".join(lines)
+
+    def _check_auto_sync(
+        self,
+        owner_id: str,
+        notification_banner: Optional[str],
+    ) -> Optional[str]:
+        """Trigger background sync if last email sync was >24h ago.
+
+        Marks the user so this check runs at most once per session.
+
+        Args:
+            owner_id: User identifier
+            notification_banner: Current banner (may be None)
+
+        Returns:
+            Updated notification_banner (original or with sync note)
+        """
+        from datetime import datetime, timedelta, timezone
+        from zylch.storage.models import OAuthToken
+
+        with get_session() as session:
+            token = (
+                session.query(OAuthToken)
+                .filter(
+                    OAuthToken.owner_id == owner_id,
+                    OAuthToken.provider.in_(
+                        ["google", "microsoft"]
+                    ),
+                    OAuthToken.connection_status == "connected",
+                )
+                .first()
+            )
+
+        if not token:
+            # No connected email provider -- nothing to sync
+            ChatService._auto_sync_triggered.add(owner_id)
+            return notification_banner
+
+        threshold = datetime.now(timezone.utc) - timedelta(hours=24)
+        if token.last_sync and token.last_sync >= threshold:
+            # Recent enough -- skip
+            ChatService._auto_sync_triggered.add(owner_id)
+            return notification_banner
+
+        # Stale or never synced -- trigger background job
+        logger.info(
+            f"[AUTO-SYNC] Triggering for owner_id={owner_id}, "
+            f"provider={token.provider}, "
+            f"last_sync={token.last_sync}"
+        )
+
+        try:
+            from zylch.services.job_executor import JobExecutor
+            from zylch.api.token_storage import (
+                get_active_llm_provider,
+            )
+            import asyncio
+
+            storage = SupabaseStorage.get_instance()
+            job = storage.create_background_job(
+                owner_id=owner_id,
+                job_type="sync",
+                channel="all",
+                params={"days_back": 30, "force": False},
+            )
+
+            if job["status"] == "pending":
+                llm_provider, api_key = get_active_llm_provider(
+                    owner_id
+                )
+                executor = JobExecutor(storage)
+                asyncio.create_task(
+                    executor.execute_job(
+                        job["id"],
+                        owner_id,
+                        api_key or "",
+                        llm_provider or "",
+                    )
+                )
+                logger.info(
+                    f"[AUTO-SYNC] Background job {job['id']} "
+                    f"scheduled for owner_id={owner_id}"
+                )
+                sync_note = (
+                    "🔄 Auto-syncing emails in the background "
+                    "(last sync was >24h ago)."
+                )
+                if notification_banner:
+                    notification_banner = (
+                        f"{notification_banner}\n{sync_note}"
+                    )
+                else:
+                    notification_banner = sync_note
+            elif job["status"] == "running":
+                logger.info(
+                    f"[AUTO-SYNC] Sync already running "
+                    f"for owner_id={owner_id}"
+                )
+        except Exception as e:
+            logger.warning(
+                f"[AUTO-SYNC] Failed to create job: {e}"
+            )
+
+        ChatService._auto_sync_triggered.add(owner_id)
+        return notification_banner
 
     def _prepend_notification(self, response: str, notification_banner: Optional[str]) -> str:
         """Prepend notification banner to response if present.
