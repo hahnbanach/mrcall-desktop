@@ -2350,7 +2350,9 @@ class Storage:
                 task.sources = merged_sources
 
                 # Update if new urgency is higher
-                urgency_order = {'high': 3, 'medium': 2, 'low': 1}
+                urgency_order = {
+                    'critical': 4, 'high': 3, 'medium': 2, 'low': 1,
+                }
                 if urgency_order.get(new_urgency, 0) > urgency_order.get(existing_urgency, 0):
                     task.urgency = new_urgency
                     task.suggested_action = new_action
@@ -2453,9 +2455,11 @@ class Storage:
 
                 tasks = [r.to_dict() for r in rows]
 
-                # Sort by urgency priority: high -> medium -> low
-                # Python stable sort preserves analyzed_at desc order within each urgency
-                urgency_order = {'high': 0, 'medium': 1, 'low': 2}
+                # Sort by urgency: critical -> high -> medium -> low
+                # Stable sort preserves analyzed_at desc within each urgency
+                urgency_order = {
+                    'critical': -1, 'high': 0, 'medium': 1, 'low': 2,
+                }
                 tasks.sort(key=lambda t: urgency_order.get(t.get('urgency'), 9))
 
                 return tasks

@@ -80,6 +80,8 @@ The prompt must include:
    - Extract PERSON for each individual mentioned (sender, recipients, people referenced), if any WITH THE EXCEPTION OF THE USER_PERSON: don't extract entity about the USER_PERSON
    - Extract COMPANY for each organization mentioned, if any WITH THE EXCEPTION OF THE USER_COMPANY: don't extract entity about the USER_COMPANY
    - Extract TEMPLATES for the main topic of conversations in the communication. Remember: TEMPLATES are generic entities, do not quote other companies in a TEMPLATES's #ABOUT section!
+   - For EVERY external sender in the email, create or update a PERSON entity.
+  Even if the email is routine, record what you learn about the person.
    - Keep #ABOUT section minimal
    - Put the narrative in #HISTORY
    - Reference people/companies by name in #HISTORY, don't duplicate info
@@ -159,7 +161,14 @@ Record each instance where this response pattern was used:
    - SKIP automated emails, newsletters, marketing — these are noise
    - Extract from: customer communications, business discussions, personal relationships
    - Judge by email tone and content
-   - PRIORITIZE TEMPLATE extraction — templates that appear multiple times are the highest-value entities because they directly save user time
+   - PRIORITIZE PERSON and COMPANY extraction -- every non-trivial contact
+  should have a PERSON entity with their role, company, and relationship
+  history. TEMPLATEs are also valuable but secondary to relationship data.
+- For PERSON entities: always include what you can infer about who they are,
+  what company they represent, and the nature of their relationship with
+  the user (customer, prospect, partner, vendor, colleague).
+- For TEMPLATE entities: only extract when the user has sent substantially
+  similar responses to 3+ different contacts on the same topic.
 
 The generated prompt will receive these template variables:
 - {{from_email}} - Sender's email

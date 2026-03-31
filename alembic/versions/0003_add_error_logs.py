@@ -3,7 +3,7 @@
 Logs transient errors (Anthropic 529, etc.) with business context,
 Haiku-generated user messages, and request IDs for debugging.
 
-Revision ID: 0002
+Revision ID: 0003
 Revises: 0001
 Create Date: 2026-03-27
 """
@@ -12,8 +12,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
-revision = "0002"
-down_revision = "0001"
+revision = "0003"
+down_revision = "0002"
 branch_labels = None
 depends_on = None
 

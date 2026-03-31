@@ -38,8 +38,16 @@ TASK_DECISION_TOOL = {
             },
             "urgency": {
                 "type": "string",
-                "enum": ["high", "medium", "low"],
-                "description": "high=urgent/blocking, medium=needs attention this week, low=when time permits"
+                "enum": ["critical", "high", "medium", "low"],
+                "description": (
+                    "critical=angry customer, payment dispute, "
+                    "churn risk, explicit deadline today; "
+                    "high=unanswered direct question >48h, "
+                    "broken commitment, escalation; "
+                    "medium=needs attention this week, "
+                    "routine follow-up; "
+                    "low=when time permits, informational"
+                ),
             },
             "suggested_action": {
                 "type": "string",

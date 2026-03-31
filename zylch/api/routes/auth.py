@@ -1042,6 +1042,7 @@ def _get_storage() -> SupabaseStorage:
 
 @router.get("/google/authorize")
 async def google_oauth_authorize(
+    request: Request,
     user: dict = Depends(get_current_user),
     cli_callback: Optional[str] = None
 ):
@@ -1098,8 +1099,9 @@ async def google_oauth_authorize(
     # Build authorization URL
     redirect_uri = settings.google_oauth_redirect_uri
     if not redirect_uri:
-        # Default to API server URL + callback path
-        redirect_uri = f"{settings.api_server_url}/api/auth/google/callback"
+        base_url = str(request.base_url).rstrip("/")
+        redirect_uri = f"{base_url}/api/auth/google/callback"
+    logger.debug(f"[OAUTH] redirect_uri={redirect_uri}")
 
     params = {
         'client_id': settings.google_client_id,
@@ -1116,7 +1118,6 @@ async def google_oauth_authorize(
 
     logger.info(f"Generated Google OAuth URL for user {owner_id} (cli_callback: {cli_callback})")
     logger.info(f"OAuth redirect_uri: {redirect_uri}")
-    logger.info(f"Settings: google_oauth_redirect_uri={settings.google_oauth_redirect_uri}, api_server_url={settings.api_server_url}")
 
     return {
         "auth_url": auth_url,
@@ -1126,6 +1127,7 @@ async def google_oauth_authorize(
 
 @router.get("/google/callback")
 async def google_oauth_callback(
+    request: Request,
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None
@@ -1169,7 +1171,9 @@ async def google_oauth_callback(
     # Exchange code for tokens
     redirect_uri = settings.google_oauth_redirect_uri
     if not redirect_uri:
-        redirect_uri = f"{settings.api_server_url}/api/auth/google/callback"
+        base_url = str(request.base_url).rstrip("/")
+        redirect_uri = f"{base_url}/api/auth/google/callback"
+    logger.debug(f"[OAUTH] redirect_uri={redirect_uri}")
 
     token_url = "https://oauth2.googleapis.com/token"
     token_data = {

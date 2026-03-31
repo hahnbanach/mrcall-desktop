@@ -26,7 +26,7 @@ async def get_command_help(cmd: Optional[str] = None):
     """Get detailed help for a specific command or all commands.
 
     Args:
-        cmd: Command name (e.g., '/gaps' or 'gaps'). If not provided, returns all help.
+        cmd: Command name (e.g., '/tasks' or 'tasks'). If not provided, returns all help.
     """
     if cmd is None:
         # Return all help

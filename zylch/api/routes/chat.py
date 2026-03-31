@@ -109,7 +109,7 @@ async def send_message(
     - Requires Firebase ID token in 'auth' header
 
     **Request Body:**
-    - message: User's message or command (e.g., "/sync", "/gaps", "help")
+    - message: User's message or command (e.g., "/sync", "/tasks", "help")
     - session_id: Optional session ID to continue conversation
 
     **Response:**

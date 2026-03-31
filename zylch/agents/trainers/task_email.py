@@ -64,10 +64,22 @@ The generated prompt must:
    - FAQ topics: recurring questions that appear across multiple contacts (list them explicitly!)
    - Marketing senders that should ALWAYS be filtered out
 
-2. **URGENCY WITH TIME DECAY**
-   Urgency decays over time. The only hard rule: emails older than 2 weeks cannot be "high" urgency.
-   Everything else is up to context — a 5-day-old unanswered customer question is still a valid task.
-   - Customer complaints are NORMAL BUSINESS — not emergencies unless there's churn risk.
+2. **URGENCY LEVELS (USE ALL FOUR)**
+   - CRITICAL: angry/frustrated customer, payment dispute, risk of churn,
+     explicit deadline today or past-due. These are rare but must stand out.
+   - HIGH: direct question unanswered >48h, broken promise/commitment,
+     escalation from previous lower-urgency item, VIP contact waiting.
+   - MEDIUM: routine follow-up needed this week, new inquiry, standard
+     support question.
+   - LOW: informational, nice-to-have follow-up, when time permits.
+
+   Time decay: emails older than 2 weeks cannot be CRITICAL.
+   But a 5-day-old unanswered customer question is still HIGH.
+
+   IMPORTANT: Do NOT default to MEDIUM. Actively evaluate sentiment,
+   time elapsed, and business impact. If the customer uses angry language
+   ("furious", "unacceptable", "cancel", "disappointed"), that is at
+   minimum HIGH, possibly CRITICAL.
 
 3. **FAQ DETECTION & DRAFT RESPONSE**
    When the agent recognizes a question that matches a known FAQ pattern:
@@ -92,12 +104,13 @@ The generated prompt must:
    - `ACTION: [urgency] | [suggested action] | [brief reason]`
    - `NO_ACTION: [reason]`
 
-   Where urgency is: high, medium, or low
+   Where urgency is: critical, high, medium, or low
 
    When a draft response is appropriate, include it in suggested_action:
    - `ACTION: low | DRAFT: "Buongiorno, grazie per la richiesta. I nostri prezzi sono..." | FAQ: pricing inquiry, similar to past responses to 8 contacts`
 
    Other examples:
+   - `ACTION: critical | Reply ASAP to angry customer | Customer threatening to cancel, uses "unacceptable" and "disappointed", payment dispute open`
    - `ACTION: high | Reply to proposal | John asked a direct question 2 days ago, user typically responds within 24h`
    - `ACTION: medium | Follow up on call promise | User said "I'll call you this week" 5 days ago`
    - `ACTION: low | DRAFT: "Mi scusi per il disagio..." | Routine complaint about service, same pattern as 5 previous complaints`

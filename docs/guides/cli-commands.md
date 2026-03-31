@@ -1,6 +1,6 @@
 ---
 description: |
-  Complete slash commands reference: /sync (data), /gaps (relationships), /memory and /trigger
+  Complete slash commands reference: /sync (data), /memory and /trigger
   (memory + automation), /connect and /mrcall (integrations), /share and /revoke (sharing).
   Features semantic command matching via local embeddings (no Claude API calls) - natural language
   like "synchronize with the past 2 days" auto-routes to /sync 2. All commands support --help.
@@ -14,7 +14,7 @@ Zylch provides a comprehensive set of slash commands for managing your emails, c
 
 **Key Features**:
 - **Semantic command matching**: Natural language like "synchronize with the past 2 days" automatically routes to `/sync 2`
-- Slash commands for specific operations (`/sync`, `/gaps`, `/memory`)
+- Slash commands for specific operations (`/sync`, `/tasks`, `/memory`)
 - All commands support `--help` flag for detailed usage
 - No Claude API calls for command routing (uses local embeddings)
 
@@ -362,67 +362,6 @@ Use /jobs --cancel <id> to cancel.
 **Semantic Triggers**: "jobs", "scheduled jobs", "my reminders", "upcoming reminders", "what's scheduled"
 
 ---
-
-### `/gaps [days]`
-
-**Summary**: Analyze email threads for unanswered conversations
-
-**Description**: Analyzes `task_items` to detect relationship gaps - emails requiring action, meetings needing follow-up, or contacts going silent.
-
-**Arguments**:
-- `days` - Number of days to analyze (default: 7)
-
-**Examples**:
-```bash
-# Analyze last 7 days (default)
-/gaps
-
-# Analyze last 1 day
-/gaps 1
-
-# Analyze last 30 days
-/gaps 30
-
-```
-
-**Output**:
-```
-⚠️ Relationship Gaps (23 total)
-
-🔴 High Priority (Score 8-10):
-• John Smith - Re: Q4 Budget Review
-  Last message: Dec 5 (3 days ago)
-  Waiting for: Your budget approval
-
-• Sarah Chen - Partnership Discussion
-  Last message: Dec 4 (4 days ago)
-  Waiting for: Contract review
-
-🟡 Medium Priority (Score 5-7):
-• Mike Johnson - Meeting Follow-up
-  Last message: Dec 1 (1 week ago)
-  Waiting for: Schedule next sync
-
-🟢 Low Priority (Score 3-4):
-• Lisa Brown - Newsletter Feedback
-  Last message: Nov 28 (10 days ago)
-  Waiting for: Your feedback
-
-⚠️ Note: Gaps older than 30 days may be stale. Run /sync to refresh.
-```
-
-**Task Types Detected**:
-- **answer** - Someone asked you a question
-- **reminder** - You promised to do something
-- **follow_up** - Meeting or conversation needs follow-up
-- **waiting** - Someone is waiting for your response
-
-**Scoring** (relationship_score 0-10):
-- 8-10: High priority (recent, important contacts)
-- 5-7: Medium priority (moderate urgency)
-- 3-4: Low priority (older conversations)
-
-**Note**: Must run `/sync` first to fetch emails, then `/agent task process` to detect tasks.
 
 ---
 
@@ -1430,7 +1369,7 @@ Next steps:
                     📋 COMMAND REFERENCE
 ═══════════════════════════════════════════════════════════════════
 
-📧 Data:     /sync  /stats  /calendar  /tasks  /gaps
+📧 Data:     /sync  /stats  /calendar  /tasks
 🧠 Memory:   /memory search|process|store|stats|--reset
 🤖 Agents:   /agent memory|task train|process|show|reset
 ⚡ Triggers: /trigger --add|--list|--remove|--toggle
@@ -1520,8 +1459,8 @@ Shows technical implementation guide for adding new MrCall features:
 # 1. Sync latest data
 /sync
 
-# 2. Check relationship gaps
-/gaps
+# 2. Check tasks and relationship gaps
+/tasks
 
 # 3. Review emails (natural language)
 "Summarize emails from today"
@@ -1587,7 +1526,6 @@ You don't always need slash commands. Zylch understands natural language:
 
 Instead of:
 ❌ /cache emails
-❌ /gaps 1
 ```
 
 ### Use `--help` Flag
@@ -1607,9 +1545,9 @@ Run multiple commands in sequence:
 ```bash
 /sync
 # Wait for completion
-/gaps
+/tasks
 # Review output
-"Summarize high priority gaps"
+"Summarize high priority tasks"
 ```
 
 ### Check Before Reset
@@ -1737,7 +1675,6 @@ const handleMessage = async (message) => {
 |---------|----------------|-------|
 | `/help` | <10ms | Static text |
 | `/sync` | 2-10s | Depends on email count |
-| `/gaps` | <100ms | Queries task_items |
 | `/memory --list` | <50ms | SQLite query |
 | `/trigger --add` | <100ms | Supabase insert |
 | `/cache` | <10ms | File read |
@@ -1782,27 +1719,6 @@ const handleMessage = async (message) => {
 ```
 
 ---
-
-### Gaps Not Showing
-
-**Symptom**: `/gaps` returns "No gaps found"
-
-**Common Causes**:
-1. No tasks detected yet → Run `/agent task process` after sync
-2. All conversations closed → Correct behavior
-3. No action_required tasks → Check task_items table
-
-**Fix**:
-```bash
-# Check sync status
-/sync --status
-
-# Process emails into tasks
-/agent task process email
-
-# Then retry
-/gaps
-```
 
 ---
 
