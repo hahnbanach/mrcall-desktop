@@ -754,7 +754,7 @@ Output:
 
 ### MrCall/StarChat Integration
 
-MrCall integration enables AI-powered configuration of your phone assistant. The system uses a **two-tier architecture**:
+MrCall integration enables AI-powered configuration of your phone assistant. `chat_service.py` calls `MrCallAgent` directly — no orchestrator layer. The agent uses an **agentic while(tool_use) loop** that terminates naturally when the LLM stops calling tools (safety valve at 40 messages). Training is handled by:
 1. **ConfiguratorTrainer**: Generates feature-specific sub-prompts from current config
 2. **AgentTrainer**: Combines sub-prompts into unified agent with tool selection
 

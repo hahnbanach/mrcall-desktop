@@ -33,7 +33,7 @@ Indice completo della documentazione Zylch. Se cerchi qualcosa, parti da qui.
 | File | Contenuto |
 |------|-----------|
 | [agents/README.md](agents/README.md) | Overview sistema agenti |
-| [agents/mrcall-configurator.md](agents/mrcall-configurator.md) | Configuratore MrCall: two-tier, 11 tools, dry_run, training |
+| [agents/mrcall-configurator.md](agents/mrcall-configurator.md) | Configuratore MrCall: agentic loop, 11 tools, dry_run, training |
 | [agents/emailer-agent.md](agents/emailer-agent.md) | Agente composizione email |
 | [agents/task-agent.md](agents/task-agent.md) | Agente gestione task |
 | [agents/memory-agent.md](agents/memory-agent.md) | Agente memoria |

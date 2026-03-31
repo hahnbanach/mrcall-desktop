@@ -66,7 +66,6 @@ zylch/
 │   ├── mrcall_context.py # Live StarChat variable fetching + prompt assembly
 │   ├── mrcall_templates.py # Fixed feature templates (welcome, booking, transfer, etc.)
 │   ├── mrcall_memory.py  # Config memory persistence via blob storage
-│   ├── mrcall_orchestrator_agent.py # MrCall multi-step orchestration
 │   ├── task_orchestrator_agent.py   # Task detection orchestration
 │   └── trainers/         # Agent training subsystem
 │       ├── base.py               # Base trainer class
@@ -134,10 +133,11 @@ Client (CLI/Dashboard/API)
 
 ### MrCall Configuration
 ```
-/mrcall open → enters sandbox mode
-  → mrcall_orchestrator_agent manages conversation
+/agent mrcall run "..." or dashboard chat
+  → chat_service calls MrCallAgent directly
+  → agentic while(tool_use) loop (terminates when LLM stops calling tools, safety valve at 40 messages)
   → config_tools read/write MrCall variables via StarChat API
-  → trainers generate optimized prompts from user data
+  → post-tool-use <config-progress> injection tracks completed/remaining work
   → prompts stored in agent_prompts table
 ```
 

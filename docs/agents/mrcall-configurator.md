@@ -1,6 +1,7 @@
 ---
 description: |
   MrCall configurator architecture: live variable loading at runtime (no stale trained prompts),
+  agentic while(tool_use) loop with post-tool-use state injection, context compression,
   conversation memory across run calls, config memory persisted as entity blobs.
   Layer 2 (AgentTrainer) still assembles unified agent prompt. Trained via /agent mrcall train.
 ---
@@ -21,9 +22,11 @@ The MrCall Configurator uses **live runtime context** (not pre-trained prompts) 
 
 ## Architecture
 
+`chat_service.py` calls `MrCallAgent` directly — no orchestrator layer.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    /agent mrcall run "..."                    │
+│          /agent mrcall run "..." or dashboard chat            │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            ▼
@@ -40,11 +43,18 @@ The MrCall Configurator uses **live runtime context** (not pre-trained prompts) 
 ┌─────────────────────────────────────────────────────────────┐
 │              MrCallAgent (mrcall_agent.py)                    │
 │                                                              │
+│  Agentic while(tool_use) loop:                               │
 │  1. Inject conversation_history (prior run() exchanges)      │
-│  2. LLM selects tool from 11 available tools                 │
+│  2. LLM selects tool(s) from 11 available tools              │
 │  3. Tool executes (validate, summarize, apply or dry_run)    │
-│  4. Append exchange to conversation_history                  │
-│  5. Store config decision in memory (mrcall_memory.py)       │
+│  4. <config-progress> reminder injected after each tool call │
+│     (shows completed actions, prompts remaining work)        │
+│  5. Loop continues until LLM stops calling tools             │
+│     (safety valve at 40 messages)                            │
+│  6. _compress_history() manages context window               │
+│     (keeps recent msgs + older tool_result messages)         │
+│  7. Append exchange to conversation_history                  │
+│  8. Store config decision in memory (mrcall_memory.py)       │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -86,8 +96,9 @@ FEATURES = {
         "meta_prompt": BOOKING_META_PROMPT,
         "dynamic_context": True,
     },
-    # + welcome_outbound, caller_followup, conversation, knowledge_base,
-    #   notifications_business, runtime_data, call_transfer
+    # + welcome_outbound, caller_followup, conversation (includes ASSISTANT_TOOL_VARIABLE_EXTRACTION),
+    #   knowledge_base (KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS + CONVERSATION_PROMPT only,
+    #   OSCAR2_KNOWLEDGE_BASE is admin-only), notifications_business, runtime_data, call_transfer
 }
 ```
 
@@ -100,6 +111,26 @@ This is the **single source of truth** - other files derive mappings via import.
 2. **`_build_conversation_variables_context()`** parses `ASSISTANT_TOOL_VARIABLE_EXTRACTION` from the business config to discover which caller-extracted variables are available (e.g., FIRST_NAME, EMAIL_ADDRESS, BOOKING_DATE). Combines these with static `public:*` variables (date/time, business status) and exportable aliases (CALLER_NUMBER, RECURRENT_CONTACT, OUTBOUND_CALL). Injected via `{conversation_variables_context}` placeholder.
 
 Both context builders accept an optional pre-fetched `business` dict — `train_feature()` fetches it once and passes it to both. New meta-prompts should include both `{variables_context}` and `{conversation_variables_context}` placeholders. There is no separate path for single-variable vs multi-variable features.
+
+### Configurable Variables
+
+Zylch can only modify these knowledge/conversation variables:
+- `KNOWLEDGE_BASE_ANSWER_INSTRUCTIONS` — instructions for answering from the knowledge base
+- `CONVERSATION_PROMPT` — the main conversation prompt
+- `ASSISTANT_TOOL_VARIABLE_EXTRACTION` — defines variables extracted from callers during conversation, with dedicated validator and format documentation
+
+`OSCAR2_KNOWLEDGE_BASE` is **admin-only** and cannot be modified through the configurator.
+
+### Multi-Feature Planning
+
+The template instructs the LLM to:
+1. **Plan before executing** — analyze which features need changes
+2. **Call multiple tools per response** — batch related changes
+3. **Maintain data consistency across features** — e.g., booking variables stay coherent
+
+### First-Call vs Returning-Call Variables
+
+`%%crm.contact.variables.X%%` placeholders are resolved **before** the conversation starts (from previous calls), not updated during the current call. The template documents this distinction clearly.
 
 ## Tool Selection
 
