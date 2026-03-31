@@ -982,9 +982,10 @@ What would you like to do?"""
         owner_id: str,
         context: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Process a message while in MrCall config mode.
+        """Process a message in MrCall config mode.
 
-        Routes the message to MrCallOrchestratorAgent.
+        Routes directly to MrCallAgent (no orchestrator indirection).
+        Manages conversation history here.
 
         Args:
             user_message: User's message
@@ -992,35 +993,54 @@ What would you like to do?"""
             context: Optional context dict
 
         Returns:
-            Response from MrCallOrchestratorAgent
+            Response from MrCallAgent
         """
         try:
-            # If orchestrator doesn't exist, recreate it
-            if self._mrcall_orchestrator is None:
-                logger.warning("[MrCallConfigMode] Orchestrator was None, recreating...")
-                from zylch.agents.mrcall_orchestrator_agent import MrCallOrchestratorAgent
-                from zylch.api.token_storage import get_active_llm_provider
+            # Lazy-init conversation history
+            if not hasattr(self, '_mrcall_history'):
+                self._mrcall_history = []
 
-                # Get LLM credentials
+            # Get or create MrCallAgent directly (skip orchestrator)
+            if not hasattr(self, '_mrcall_agent') or self._mrcall_agent is None:
+                logger.info("[MrCallConfigMode] Creating MrCallAgent directly")
+                from zylch.api.token_storage import get_active_llm_provider
+                from zylch.agents.mrcall_agent import MrCallAgent
+
                 llm_provider, api_key = get_active_llm_provider(owner_id)
+                if not api_key:
+                    from zylch.llm.providers import get_system_llm_credentials
+                    llm_provider, api_key = get_system_llm_credentials()
                 if not api_key or not llm_provider:
                     return "❌ LLM API key required. Run `/connect anthropic` to set up."
 
-                self._mrcall_orchestrator = MrCallOrchestratorAgent(
-                    session_state=ToolFactory._session_state,
+                self._mrcall_agent = MrCallAgent(
+                    storage=self.storage,
                     owner_id=owner_id,
                     api_key=api_key,
                     provider=llm_provider,
-                    storage=self.storage,
-                    starchat_client=ToolFactory._starchat_client
+                    starchat_client=ToolFactory._starchat_client,
                 )
 
-            # Process message through orchestrator
-            response = await self._mrcall_orchestrator.process_message(
-                user_message=user_message,
-                context=context
+            # Track conversation history
+            self._mrcall_history.append({"role": "user", "content": user_message})
+
+            # Run agent directly with conversation history
+            result = await self._mrcall_agent.run(
+                instructions=user_message,
+                conversation_history=self._mrcall_history,
             )
 
+            # Extract response text
+            r = result.get('result', {})
+            if isinstance(r, dict):
+                response = r.get('response_text', '') or r.get('response', '')
+            else:
+                response = str(r) if r else "No result returned."
+
+            if result.get('error'):
+                response = f"❌ {result['error']}"
+
+            self._mrcall_history.append({"role": "assistant", "content": response})
             return response
 
         except Exception as e:
