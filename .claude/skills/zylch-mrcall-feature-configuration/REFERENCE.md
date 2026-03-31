@@ -131,42 +131,38 @@ In `command_handlers.py`, update the help text description of features:
 
 ---
 
-## Meta-Prompt Requirements
+## Runtime Template Requirements
 
-For single-variable features:
-1. Must use `{current_value}` placeholder
+All features use `{variables_context}` and `{conversation_variables_context}` placeholders.
+Set `"dynamic_context": True` in FEATURES entry (all current features use this).
+No training step — templates are static, values are fetched live from StarChat.
 
-For multi-variable features:
-1. Must use `{variables_context}` placeholder
-2. Set `"dynamic_context": True` in FEATURES entry
-3. Consider implementing `_build_variables_context()` in trainer for metadata fetching
+**Important restrictions:**
+- OSCAR2_KNOWLEDGE_BASE is admin-only — do NOT add it to any feature's variables list
+- ASSISTANT_TOOL_VARIABLE_EXTRACTION belongs to the `conversation` feature
 
 ---
 
 ## Testing New Feature
 
 ```bash
-# 1. Train all features + build unified agent (ONE COMMAND)
-/agent mrcall train
-# → "✅ Agent trained (features: welcome_message, booking)"
+# 1. Enter config mode
+/mrcall open <business_id>
 
-# 2. Or train just the new feature
-/agent mrcall train booking
-# → "✅ Feature 'booking' trained, agent updated"
+# 2. Ask the agent to configure (auto-detects feature from intent)
+User: "enable booking with 30-min appointments"
+User: "add Q&A about printer support"
+User: "what are my current settings?"
 
-# 3. Run the agent (auto-detects feature from intent)
-/agent mrcall run "enable booking with 30-min appointments"
-/agent mrcall run "change the welcome message to say Good morning"
-/agent mrcall run "what are my current settings?"
-
-# 4. Show unified agent prompt
-/agent mrcall show
-
-# 5. Show feature-specific sub-prompt
-/mrcall show booking
+# 3. The agent runs the agentic loop:
+#    - Calls configure_<feature> tools
+#    - Injects <config-progress> reminders between turns
+#    - Continues until all features are configured
+#    - Returns unified summary
 ```
 
 The agent automatically detects which feature to configure based on user intent.
+For multi-feature requests, it plans and calls multiple tools across turns.
 
 ---
 
@@ -200,9 +196,9 @@ When you add a new feature, the unified agent automatically picks it up:
 
 | File | Purpose |
 |------|---------|
-| `zylch/agents/trainers/mrcall_configurator.py` | Feature sub-prompt training (FEATURES dict is the source of truth) |
-| `zylch/agents/trainers/mrcall.py` | Unified agent trainer - combines all feature sub-prompts |
-| `zylch/agents/mrcall_agent.py` | Unified agent runner with multi-tool support |
+| `zylch/agents/trainers/mrcall_configurator.py` | FEATURES dict (source of truth for variable→feature mapping) |
+| `zylch/agents/mrcall_agent.py` | Agent with agentic loop, 10 configure tools, context compression |
+| `zylch/agents/mrcall_templates.py` | Runtime templates with planning rules and interaction guidelines |
 
 ### Storage Keys
 

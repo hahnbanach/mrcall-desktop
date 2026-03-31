@@ -7,35 +7,33 @@ description: Guide for adding new MrCall feature configurations. Use when adding
 
 ## Architecture Overview
 
-### Two-Tier Training Architecture
+### Direct Agent Architecture (No Orchestrator)
 
 ```
-MrCallConfiguratorTrainer (Layer 1)
+User message (via dashboard or CLI)
     │
-    │ Generates feature sub-prompts from current MrCall config
-    │ Each feature = one sub-prompt (welcome_message, booking, etc.)
+    │ chat_service calls MrCallAgent.run() directly
     ↓
-MrCallAgentTrainer (Layer 2)
+MrCallAgent (agentic loop)
     │
-    │ Combines ALL sub-prompts into unified agent
-    │ Adds tool selection guidance (meta-prompt)
-    ↓
-MrCallAgent
-    │
-    │ Runs with 4 tools, auto-selects based on user intent
+    │ while(tool_use) loop — terminates when LLM stops calling tools
+    │ 10 configure tools + respond_text + web_search
+    │ Post-tool-use <config-progress> injection between turns
+    │ Context compression for long sessions
     ↓
 StarChat API (updates variables)
 ```
 
-### Single Command Training
+### Runtime Prompts (No Training Step)
 
 ```
-/agent mrcall train              → Trains ALL features + builds unified agent
-/agent mrcall train <feature>    → Trains specific feature + rebuilds agent
-/agent mrcall run "..."          → Agent chooses tool based on user intent
+/mrcall open <business_id>      → Enter config mode
+User: "configure X"             → Agent builds runtime prompt with LIVE values
+                                   from StarChat, executes tools, feeds results back
+/mrcall exit                    → Exit config mode
 ```
 
-**One command does everything.** No separate training steps.
+**No training step.** Templates are static, values are fetched live on every run.
 
 ### Single Source of Truth
 
