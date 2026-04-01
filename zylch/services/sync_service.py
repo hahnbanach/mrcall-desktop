@@ -18,7 +18,7 @@ from zylch.storage.models import PipedriveDeal
 
 # Avoid circular imports
 if TYPE_CHECKING:
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class SyncService:
         anthropic_api_key: Optional[str] = None,
         llm_provider: Optional[str] = None,
         owner_id: Optional[str] = None,
-        supabase_storage: Optional['SupabaseStorage'] = None
+        supabase_storage: Optional['Storage'] = None
     ):
         """Initialize sync service.
 
@@ -45,7 +45,7 @@ class SyncService:
             anthropic_api_key: LLM API key (BYOK - from Supabase, required)
             llm_provider: LLM provider (anthropic, openai, mistral)
             owner_id: Firebase UID for multi-tenant Supabase storage
-            supabase_storage: SupabaseStorage instance for cloud storage
+            supabase_storage: Storage instance for cloud storage
         """
         self.email_client = email_client
         self.calendar_client = calendar_client

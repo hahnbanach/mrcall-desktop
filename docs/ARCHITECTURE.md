@@ -32,8 +32,7 @@ zylch/
 ├── storage/              # Data access layer
 │   ├── database.py       # SQLAlchemy engine + session factory
 │   ├── models.py         # 29+ ORM models (all tables)
-│   ├── supabase_client.py # Storage facade (legacy name, pure SQLAlchemy)
-│   └── storage.py        # Additional storage utilities
+│   └── storage.py        # Storage class (PostgreSQL via SQLAlchemy)
 │
 ├── tools/                # Claude tool definitions (callable by LLM)
 │   ├── base.py           # Tool, ToolResult, ToolStatus base classes

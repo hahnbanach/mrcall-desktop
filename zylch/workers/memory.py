@@ -13,7 +13,7 @@ from typing import Dict, List, Optional
 
 from zylch.config import settings
 from zylch.llm import LLMClient
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.memory import BlobStorage, HybridSearchEngine, LLMMergeService, EmbeddingEngine, MemoryConfig
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ class MemoryWorker:
 
     def __init__(
         self,
-        storage: SupabaseStorage,
+        storage: Storage,
         owner_id: str,
         api_key: str,
         provider: str
@@ -40,7 +40,7 @@ class MemoryWorker:
         """Initialize MemoryWorker.
 
         Args:
-            storage: SupabaseStorage instance
+            storage: Storage instance
             owner_id: Firebase UID for namespace
             api_key: API key for the LLM provider
             provider: LLM provider (anthropic, openai, mistral)

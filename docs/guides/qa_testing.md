@@ -499,11 +499,11 @@ source venv/bin/activate
 python -c "
 import asyncio
 from zylch.workers.memory_worker import MemoryWorker
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch_memory.zylch_memory import ZylchMemory
 
 async def run():
-    storage = SupabaseStorage.get_instance()
+    storage = Storage.get_instance()
     memory = ZylchMemory()
     worker = MemoryWorker(storage, memory)
 

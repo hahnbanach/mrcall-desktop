@@ -1,8 +1,7 @@
 """SQLAlchemy storage backend for Zylch AI.
 
-Replaces SupabaseStorage with direct PostgreSQL access via SQLAlchemy ORM.
+Direct PostgreSQL access via SQLAlchemy ORM.
 All queries scoped by owner_id for multi-tenant data isolation.
-Method signatures are identical to the original SupabaseStorage class.
 """
 
 import json

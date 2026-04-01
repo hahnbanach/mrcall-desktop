@@ -391,7 +391,7 @@ class TestMrCallTokenStorage:
 
     @pytest.fixture
     def mock_supabase(self):
-        """Mock SupabaseStorage."""
+        """Mock Storage."""
         with patch('zylch.api.token_storage._get_supabase') as mock:
             storage = MagicMock()
             mock.return_value = storage

@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from zylch.llm import LLMClient, PROVIDER_MODELS
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -1020,7 +1020,7 @@ class MrCallConfiguratorTrainer:
 
     def __init__(
         self,
-        storage: SupabaseStorage,
+        storage: Storage,
         starchat_client,
         owner_id: str,
         api_key: str,
@@ -1029,7 +1029,7 @@ class MrCallConfiguratorTrainer:
         """Initialize MrCallConfiguratorTrainer.
 
         Args:
-            storage: SupabaseStorage instance for storing sub-prompts
+            storage: Storage instance for storing sub-prompts
             starchat_client: StarChatClient for fetching MrCall config
             owner_id: Firebase UID
             api_key: LLM API key

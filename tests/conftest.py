@@ -7,7 +7,7 @@ from typing import Dict, Any, List
 from unittest.mock import Mock, MagicMock
 
 from zylch.config import settings
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 
 
 @pytest.fixture(scope="session")
@@ -26,10 +26,10 @@ def test_owner_id():
 
 @pytest.fixture
 def storage():
-    """Get SupabaseStorage instance for tests."""
+    """Get Storage instance for tests."""
     if not settings.supabase_url or not settings.supabase_service_role_key:
         pytest.skip("Supabase not configured")
-    return SupabaseStorage.get_instance()
+    return Storage.get_instance()
 
 
 @pytest.fixture

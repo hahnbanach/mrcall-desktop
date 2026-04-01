@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional
 
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -23,18 +23,18 @@ class EmailArchiveManager:
         self,
         gmail_client,
         owner_id: str,
-        supabase_storage: Optional[SupabaseStorage] = None
+        supabase_storage: Optional[Storage] = None
     ):
         """Initialize archive manager.
 
         Args:
             gmail_client: GmailClient instance for fetching emails
             owner_id: User's Firebase UID (required)
-            supabase_storage: Optional SupabaseStorage instance (uses singleton if not provided)
+            supabase_storage: Optional Storage instance (uses singleton if not provided)
         """
         self.gmail = gmail_client
         self.owner_id = owner_id
-        self.supabase = supabase_storage or SupabaseStorage.get_instance()
+        self.supabase = supabase_storage or Storage.get_instance()
         self._authenticated = False
 
         # NOTE: Gmail authentication is now LAZY - only when actually needed

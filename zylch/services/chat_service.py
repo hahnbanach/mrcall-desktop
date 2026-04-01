@@ -16,7 +16,7 @@ from zylch.tools import ToolFactory, ToolConfig
 from zylch.assistant.core import ZylchAIAgent
 from zylch.config import settings
 from sqlalchemy import Text as SAText, cast as sa_cast
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.storage.database import get_session
 from zylch.storage.models import TaskItem
 
@@ -49,7 +49,7 @@ class ChatService:
         """
         self.agent = None  # Lazy initialization
         self._initialized = False
-        self.storage = SupabaseStorage.get_instance()
+        self.storage = Storage.get_instance()
         self._command_matcher = None  # Lazy init for semantic command matching
         self._task_orchestrator = None  # Lazy init for task mode
         self._mrcall_orchestrator = None  # Lazy init for MrCall config mode
@@ -776,7 +776,7 @@ class ChatService:
             )
             import asyncio
 
-            storage = SupabaseStorage.get_instance()
+            storage = Storage.get_instance()
             job = storage.create_background_job(
                 owner_id=owner_id,
                 job_type="sync",

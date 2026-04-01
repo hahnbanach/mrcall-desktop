@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token, get_user_email_from_token
 from zylch.config import settings
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.storage.database import get_session
 from zylch.storage.models import BackgroundJob
 
@@ -64,17 +64,17 @@ class StartTrainingResponse(BaseModel):
 # Dependency Injection
 # =============================================================================
 
-_storage: Optional[SupabaseStorage] = None
+_storage: Optional[Storage] = None
 
 
-def get_storage() -> SupabaseStorage:
+def get_storage() -> Storage:
     global _storage
     if _storage is None:
-        _storage = SupabaseStorage.get_instance()
+        _storage = Storage.get_instance()
     return _storage
 
 
-def _get_llm_credentials(owner_id: str, storage: SupabaseStorage):
+def _get_llm_credentials(owner_id: str, storage: Storage):
     """Get the user's LLM provider credentials.
 
     Tries anthropic, openai, mistral in order.

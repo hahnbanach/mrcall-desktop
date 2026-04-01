@@ -30,7 +30,7 @@ from datetime import datetime
 # Add parent directory to path
 sys.path.insert(0, '/Users/mal/hb/zylch')
 
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.utils.encryption import encrypt, decrypt
 
 logging.basicConfig(
@@ -180,7 +180,7 @@ def build_unified_credentials(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return credentials
 
 
-def migrate_rows(storage: SupabaseStorage, rows: List[Dict[str, Any]], dry_run: bool = False) -> tuple:
+def migrate_rows(storage: Storage, rows: List[Dict[str, Any]], dry_run: bool = False) -> tuple:
     """Migrate a batch of rows."""
     migrated_count = 0
     skipped_count = 0
@@ -250,7 +250,7 @@ def main():
 
     try:
         # Initialize storage
-        storage = SupabaseStorage()
+        storage = Storage()
 
         # Count total rows to migrate
         result = storage.client.table('oauth_tokens')\

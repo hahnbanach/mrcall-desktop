@@ -123,7 +123,7 @@ async def log_error(
 ) -> None:
     """Log error to the error_logs database table."""
     try:
-        from zylch.storage.supabase_client import get_engine
+        from zylch.storage.database import get_engine
         from zylch.storage.models import ErrorLog
         from sqlalchemy.orm import Session
 

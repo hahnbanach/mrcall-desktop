@@ -184,7 +184,7 @@ CREATE INDEX idx_sharing_status ON sharing_auth(status);
 | File | Purpose |
 |------|---------|
 | `zylch/services/command_handlers.py` | `/share`, `/revoke`, `/sharing` handlers |
-| `zylch/storage/supabase_client.py` | Database operations |
+| `zylch/storage/storage.py` | Database operations |
 | `zylch/sharing/` | Core sharing logic (if exists) |
 
 ### Key Functions
@@ -194,7 +194,7 @@ CREATE INDEX idx_sharing_status ON sharing_auth(status);
 - `handle_revoke(args, owner_id, user_email)` - Revoke sharing
 - `handle_sharing(args, owner_id, user_email)` - Show status / authorize
 
-**Storage** (`supabase_client.py`):
+**Storage** (`storage.py`):
 - `register_share_recipient(owner_id, sender_email, recipient_email)` - Create share
 - `revoke_sharing(owner_id, recipient_email)` - Set status to revoked
 - `authorize_sender(recipient_email, sender_email)` - Accept share

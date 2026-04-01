@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 from zylch.llm import LLMClient
 
 if TYPE_CHECKING:
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class EmailSyncManager:
         provider: str,
         days_back: int = 30,
         owner_id: str = "",
-        supabase_storage: Optional['SupabaseStorage'] = None,
+        supabase_storage: Optional['Storage'] = None,
     ):
         """Initialize email sync manager.
 
@@ -77,7 +77,7 @@ class EmailSyncManager:
             provider: LLM provider (anthropic, openai, mistral)
             days_back: Days back for intelligence window (default: 30)
             owner_id: User's Firebase UID (required)
-            supabase_storage: SupabaseStorage instance (required)
+            supabase_storage: Storage instance (required)
         """
         if not owner_id or not supabase_storage:
             raise ValueError("owner_id and supabase_storage are required")

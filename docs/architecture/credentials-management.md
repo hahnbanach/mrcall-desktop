@@ -96,7 +96,7 @@ All credentials are now stored in a single JSONB column for flexibility and ease
 
 ### Storage Methods
 
-**`zylch/storage/supabase_client.py`**:
+**`zylch/storage/storage.py`**:
 
 ```python
 # Store credentials (encrypts automatically)
@@ -226,7 +226,7 @@ if is_encryption_enabled():
 
 Each integration provider (Google, Anthropic, Pipedrive, Vonage, WhatsApp, Slack) previously required:
 - New database columns (ALTER TABLE migrations)
-- New save/get functions in `supabase_client.py`
+- New save/get functions in `storage.py`
 - Hardcoded credential checking in `registry.py`
 - Updated CLI autocomplete logic
 
@@ -325,7 +325,7 @@ CREATE TABLE integration_providers (
 
 ### Generic Storage Methods
 
-**Save credentials** (`supabase_client.py`):
+**Save credentials** (`storage.py`):
 
 ```python
 def save_provider_credentials(
@@ -356,7 +356,7 @@ def save_provider_credentials(
     oauth_tokens.credentials = encrypt(json.dumps(all_credentials))
 ```
 
-**Get credentials** (`supabase_client.py`):
+**Get credentials** (`storage.py`):
 
 ```python
 def get_provider_credentials(
@@ -390,8 +390,8 @@ POST /api/connections/provider/{provider_key}/credentials
 
 **Before (Legacy Approach)**:
 1. Write SQL migration: `ALTER TABLE oauth_tokens ADD COLUMN whatsapp_phone_id TEXT, whatsapp_access_token TEXT, whatsapp_business_id TEXT;`
-2. Add `save_whatsapp_credentials()` to `supabase_client.py`
-3. Add `get_whatsapp_credentials()` to `supabase_client.py`
+2. Add `save_whatsapp_credentials()` to `storage.py`
+3. Add `get_whatsapp_credentials()` to `storage.py`
 4. Update `registry.py` credential checking logic
 5. Update CLI autocomplete
 6. Deploy new code
@@ -438,7 +438,7 @@ That's it! No code changes, no migrations, no deployment needed. The universal A
 - `zylch/integrations/migrations/002_unified_credentials.sql` - Adds `credentials` JSONB column
 
 **Backend Storage**:
-- `zylch/storage/supabase_client.py` - `save_provider_credentials()`, `get_provider_credentials()`
+- `zylch/storage/storage.py` - `save_provider_credentials()`, `get_provider_credentials()`
 - `zylch/integrations/registry.py` - `get_user_connections()` (dynamic credential checking)
 
 **Backend APIs**:
@@ -552,7 +552,7 @@ The CLI implements a secure OAuth 2.0 flow with local callback server and CSRF p
 **Files**:
 - `zylch-cli/zylch_cli/cli.py`: CLI OAuth flow (`_connect_google()`, `_connect_service()`)
 - `zylch/api/routes/auth.py`: Backend OAuth endpoints (`google_oauth_authorize`, `google_oauth_callback`)
-- `zylch/storage/supabase_client.py`: State management (`store_oauth_state()`, `get_oauth_state()`)
+- `zylch/storage/storage.py`: State management (`store_oauth_state()`, `get_oauth_state()`)
 - `scripts/create_oauth_states_table.sql`: Database schema for CSRF protection
 
 ## Token Auto-Refresh
@@ -625,7 +625,7 @@ def refresh_firebase_token(self) -> bool:
 **Important**: The backend uses Supabase's **service role key**, which **bypasses RLS entirely**.
 
 ```python
-# From supabase_client.py
+# From storage.py
 # Use service_role key for backend (bypasses RLS, we enforce owner_id manually)
 ```
 

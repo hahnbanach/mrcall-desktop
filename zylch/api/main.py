@@ -85,8 +85,8 @@ async def startup_event():
 
     # Background jobs cleanup
     try:
-        from zylch.storage.supabase_client import SupabaseStorage
-        storage = SupabaseStorage.get_instance()
+        from zylch.storage import Storage
+        storage = Storage.get_instance()
 
         # Reset jobs stuck in "running" for >2 hours
         reset_count = storage.reset_stale_background_jobs(timeout_hours=2)

@@ -103,9 +103,9 @@ Tests use a dedicated test owner: `test_owner_von_neumann`
 Tests automatically clean up after themselves (optional). To manually clean up test data:
 
 ```python
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 
-storage = SupabaseStorage.get_instance()
+storage = Storage.get_instance()
 test_owner_id = "test_owner_von_neumann"
 
 # Clean up emails
@@ -122,7 +122,7 @@ storage.client.table('identifier_map').delete().eq('owner_id', test_owner_id).ex
 
 ### Shared Fixtures (from `conftest.py`)
 
-- **storage** - SupabaseStorage instance
+- **storage** - Storage instance
 - **test_owner_id** - Test user ID (`test_owner_von_neumann`)
 - **test_email_data** - Factory for creating test emails
 - **test_contact_data** - Sample contact data (5 contacts)
@@ -191,8 +191,8 @@ async def test_long_running():
 ### Database Connection Issues
 Check Supabase service is running and credentials are correct:
 ```python
-from zylch.storage.supabase_client import SupabaseStorage
-storage = SupabaseStorage.get_instance()
+from zylch.storage import Storage
+storage = Storage.get_instance()
 # Should not raise exception
 ```
 

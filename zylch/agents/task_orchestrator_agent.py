@@ -21,7 +21,7 @@ from zylch.agents.base import BaseConversationalAgent
 from zylch.agents.emailer_agent import EmailerAgent, EMAIL_AGENT_TOOLS
 from zylch.agents.mrcall_agent import MrCallAgent, MRCALL_AGENT_TOOLS
 from zylch.llm import LLMClient
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.storage.database import get_session
 from zylch.storage.models import Draft
 from zylch.tools.factory import SessionState
@@ -126,7 +126,7 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
         owner_id: str,
         api_key: str,
         provider: str = "anthropic",
-        storage: Optional[SupabaseStorage] = None,
+        storage: Optional[Storage] = None,
         starchat_client=None,
     ):
         """Initialize TaskOrchestratorAgent.
@@ -136,14 +136,14 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
             owner_id: Firebase UID
             api_key: LLM API key
             provider: LLM provider (anthropic, openai, mistral)
-            storage: SupabaseStorage instance
+            storage: Storage instance
             starchat_client: Optional StarChat client for MrCall operations
         """
         self.session_state = session_state
         self.owner_id = owner_id
         self.api_key = api_key
         self.provider = provider
-        self.storage = storage or SupabaseStorage.get_instance()
+        self.storage = storage or Storage.get_instance()
         self.starchat_client = starchat_client
 
         # LLM client for orchestration decisions
@@ -410,7 +410,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
         Returns:
             Success/error message for the user
         """
-        from zylch.storage.supabase_client import SupabaseStorage
+        from zylch.storage import Storage
         from zylch.api.token_storage import get_provider, get_email, get_graph_token
 
         # 1. Get draft_id from session state (or try to find latest draft)
@@ -425,7 +425,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
         if not draft_id:
             logger.debug("[TaskOrchestrator] No draft_id in memory, checking DB for recent drafts")
             try:
-                supabase = SupabaseStorage.get_instance()
+                supabase = Storage.get_instance()
                 drafts = supabase.list_drafts(self.owner_id, status='draft')
                 if drafts:
                     # Get the most recent draft

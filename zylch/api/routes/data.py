@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.storage.database import get_session
 from zylch.storage.models import CalendarEvent, Contact
 
@@ -27,9 +27,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def get_storage() -> SupabaseStorage:
-    """Get SupabaseStorage singleton instance."""
-    return SupabaseStorage.get_instance()
+def get_storage() -> Storage:
+    """Get Storage singleton instance."""
+    return Storage.get_instance()
 
 
 # Request/Response Models
@@ -550,7 +550,7 @@ async def get_storage_stats(user: dict = Depends(get_current_user)):
         # Get storage for email stats
         storage = get_storage()
 
-        # Get email stats (already implemented in SupabaseStorage)
+        # Get email stats (already implemented in Storage)
         email_stats = storage.get_email_stats(owner_id)
 
         # Get calendar count via ORM

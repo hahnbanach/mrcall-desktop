@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from zylch.llm import LLMClient, PROVIDER_MODELS
 
 if TYPE_CHECKING:
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class CalendarSyncManager:
         days_forward: int = 30,
         my_emails: Optional[List[str]] = None,
         owner_id: str = "",
-        supabase_storage: Optional['SupabaseStorage'] = None,
+        supabase_storage: Optional['Storage'] = None,
     ):
         """Initialize calendar sync manager.
 
@@ -40,7 +40,7 @@ class CalendarSyncManager:
             days_forward: Days in future to sync (default: 30)
             my_emails: List of my email addresses (for identifying external attendees)
             owner_id: User's Firebase UID (required)
-            supabase_storage: SupabaseStorage instance (required)
+            supabase_storage: Storage instance (required)
         """
         if not owner_id or not supabase_storage:
             raise ValueError("owner_id and supabase_storage are required")

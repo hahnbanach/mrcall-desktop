@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from zylch.llm import LLMClient
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ class TaskWorker:
 
     def __init__(
         self,
-        storage: SupabaseStorage,
+        storage: Storage,
         owner_id: str,
         api_key: str,
         provider: str,
@@ -78,7 +78,7 @@ class TaskWorker:
         """Initialize TaskWorker.
 
         Args:
-            storage: SupabaseStorage instance
+            storage: Storage instance
             owner_id: Firebase UID
             api_key: API key for the LLM provider
             user_email: User's email address

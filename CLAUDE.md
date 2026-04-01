@@ -78,7 +78,7 @@ Client (CLI/Dashboard/API)
 
 - **`zylch/api/`** — FastAPI app factory (`main.py`) + route modules in `routes/` (auth, chat, sync, commands, mrcall, webhooks, etc.)
 - **`zylch/services/`** — Stateless business logic: `chat_service.py` (LLM orchestration), `command_handlers.py` (slash command dispatch), `sync_service.py` (email+calendar sync), `webhook_processor.py`
-- **`zylch/storage/`** — SQLAlchemy ORM: `models.py` (29+ models), `database.py` (engine/session), `supabase_client.py` (storage facade, legacy name — it's pure SQLAlchemy)
+- **`zylch/storage/`** — SQLAlchemy ORM: `models.py` (29+ models), `database.py` (engine/session), `storage.py` (Storage class, PostgreSQL via SQLAlchemy)
 - **`zylch/tools/`** — Claude tool definitions (callable by LLM). Each tool inherits from `base.py` (`Tool`, `ToolResult`). Registry in `factory.py` (`ToolFactory` + `SessionState`). Subdir `mrcall/` for MrCall config tools.
 - **`zylch/agents/`** — LLM-powered processors. `trainers/` subdirectory holds agent training (generates optimized prompts from user data, stored in `agent_prompts` table)
 - **`zylch/memory/`** — Entity-centric memory with 384-dim vector embeddings (fastembed, ONNX-only, no PyTorch), hybrid search (pgvector cosine + PostgreSQL FTS), LLM reconsolidation

@@ -1032,12 +1032,12 @@ GOOGLE_SCOPES = [
 ]
 
 # OAuth state storage - use Supabase for multi-instance support
-# Import SupabaseStorage for persistent state storage
-from zylch.storage.supabase_client import SupabaseStorage
+# Import Storage for persistent state storage
+from zylch.storage import Storage
 
-def _get_storage() -> SupabaseStorage:
-    """Get SupabaseStorage singleton."""
-    return SupabaseStorage.get_instance()
+def _get_storage() -> Storage:
+    """Get Storage singleton."""
+    return Storage.get_instance()
 
 
 @router.get("/google/authorize")

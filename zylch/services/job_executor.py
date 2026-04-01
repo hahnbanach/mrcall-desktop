@@ -49,13 +49,13 @@ def _normalize_error(raw: str) -> str:
 logger.info(f"Background job executor initialized with {MAX_WORKERS} workers")
 
 
-def _should_stop_job(storage: 'SupabaseStorage', job_id: str, owner_id: str) -> bool:
+def _should_stop_job(storage: 'Storage', job_id: str, owner_id: str) -> bool:
     """Check if job was stopped (status changed from running).
 
     Call this periodically in worker loops to detect user-initiated stop.
 
     Args:
-        storage: SupabaseStorage instance
+        storage: Storage instance
         job_id: Background job UUID
         owner_id: Firebase UID (required for security check)
 
@@ -77,14 +77,14 @@ def _should_stop_job(storage: 'SupabaseStorage', job_id: str, owner_id: str) -> 
 class JobExecutor:
     """Executes background jobs in thread pool."""
 
-    def __init__(self, storage: 'SupabaseStorage'):
+    def __init__(self, storage: 'Storage'):
         """Initialize executor.
 
         Args:
-            storage: SupabaseStorage instance for DB operations
+            storage: Storage instance for DB operations
         """
-        from zylch.storage.supabase_client import SupabaseStorage
-        self.storage: SupabaseStorage = storage
+        from zylch.storage import Storage
+        self.storage: Storage = storage
 
     async def execute_job(
         self,

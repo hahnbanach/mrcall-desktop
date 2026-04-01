@@ -48,7 +48,7 @@ class StarChatClient:
             timeout: Request timeout in seconds
             verify_ssl: Whether to verify SSL certificates
             owner_id: Firebase UID (for OAuth token refresh)
-            supabase_storage: SupabaseStorage instance (for OAuth token refresh)
+            supabase_storage: Storage instance (for OAuth token refresh)
         """
         self.base_url = base_url.rstrip("/")
         self.auth_type = auth_type
@@ -963,7 +963,7 @@ async def create_starchat_client(owner_id: str, supabase_storage: Optional[Any] 
 
     Args:
         owner_id: Firebase UID
-        supabase_storage: SupabaseStorage instance (optional, will create if not provided)
+        supabase_storage: Storage instance (optional, will create if not provided)
 
     Returns:
         StarChatClient configured with best available auth method
@@ -976,8 +976,8 @@ async def create_starchat_client(owner_id: str, supabase_storage: Optional[Any] 
 
     # Get or create Supabase storage
     if not supabase_storage:
-        from zylch.storage.supabase_client import SupabaseStorage
-        supabase_storage = SupabaseStorage()
+        from zylch.storage import Storage
+        supabase_storage = Storage()
 
     # Try OAuth first (preferred method)
     try:

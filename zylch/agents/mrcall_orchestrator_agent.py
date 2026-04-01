@@ -24,7 +24,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from zylch.llm import LLMClient
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.tools.factory import SessionState
 
 logger = logging.getLogger(__name__)
@@ -104,7 +104,7 @@ class MrCallOrchestratorAgent:
         owner_id: str,
         api_key: str,
         provider: str,
-        storage: SupabaseStorage,
+        storage: Storage,
         starchat_client,
     ):
         """Initialize the orchestrator.
@@ -114,7 +114,7 @@ class MrCallOrchestratorAgent:
             owner_id: Firebase UID
             api_key: LLM API key
             provider: LLM provider (anthropic, openai, mistral)
-            storage: SupabaseStorage instance
+            storage: Storage instance
             starchat_client: StarChat client for API calls
         """
         self.session_state = session_state

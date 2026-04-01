@@ -12,7 +12,7 @@ description: |
 |--------|:---:|:---:|:---:|---|
 | **api/routes/** | Medium | Low | High | Missing API docs for most endpoints |
 | **services/** | Medium | Medium | High | Auto-sync + notification dedup added; QA report exists |
-| **storage/** | Low | Medium | High | supabase_client.py name is misleading |
+| **storage/** | Low | Medium | High | storage.py name is misleading |
 | **tools/** | Medium | Medium | High | factory.py is 2000+ lines (exceeds 500 limit) |
 | **agents/** | Low | High | High | No tests for conversation memory or config memory |
 | **agents/trainers/** | Low | Low | High | Task trainer now incremental (auto after sync); no tests |
@@ -85,6 +85,6 @@ description: |
 
 ### Non-Conforming
 - `tools/factory.py` exceeds 500-line limit significantly
-- `SupabaseStorage` class name doesn't match implementation (SQLAlchemy)
+- `Storage` class name doesn't match implementation (SQLAlchemy)
 - Some docs reference files/paths that don't exist in code
 - `frontend/` dormant code still in repo
