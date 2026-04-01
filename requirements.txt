@@ -1,49 +1,14 @@
-# Auto-generated from pyproject.toml + full dependency scan
-# Python dependencies for Zylch project
+# Zylch standalone dependencies
+# Should match pyproject.toml [project.dependencies]
 
-# Core AI & API
-anthropic>=0.39.0
-openai>=1.50.0   # For Responses API web search (also a LiteLLM transitive dep)
-aisuite>=0.1.14  # Unified LLM interface for multi-provider support (Anthropic, OpenAI, Mistral)
-httpx>=0.25.0
-pydantic>=2.5.0
-pydantic-settings>=2.0.0
-prompt-toolkit>=3.0.50
+click>=8.1.0
 python-dotenv>=1.0.0
-
-# Web Framework
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-
-# Google APIs
-google-auth-oauthlib>=1.2.0
-google-api-python-client>=2.108.0
-
-# Communications
-vonage>=3.0.0
-sendgrid>=6.11.0
-
-# Database (SQLite built into Python, no extra driver needed)
 sqlalchemy>=2.0.0
-
-# Scheduling
-croniter>=1.4.0  # Cron expression parsing for recurring jobs
-
-# ML/Vector Search (zylch_memory dependencies)
 numpy>=1.24.0
 fastembed>=0.4.0
-scikit-learn>=1.3.0
-hnswlib>=0.7.0
-
-# HTTP
-requests>=2.31.0
-
-# HTML parsing
-beautifulsoup4>=4.12.0
-
-# Encryption
+httpx>=0.25.0
+aisuite>=0.1.14
+anthropic>=0.39.0
+openai>=1.0.0
 cryptography>=41.0.0
-ecdsa>=0.19.1
-
-# Logging
-colorlog>=6.8.0
+apscheduler>=3.10.0
