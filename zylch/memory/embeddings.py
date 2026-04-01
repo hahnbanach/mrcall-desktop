@@ -1,4 +1,4 @@
-"""Embedding generation using sentence-transformers."""
+"""Embedding generation using fastembed (ONNX backend)."""
 
 import logging
 from typing import List, Union
@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingEngine:
-    """Generates semantic embeddings for text using sentence-transformers.
+    """Generates semantic embeddings for text using fastembed.
 
-    Uses caching to avoid recomputing embeddings for the same text.
+    Uses ONNX runtime under the hood for fast CPU inference.
     Supports batch processing for efficiency.
     """
 
@@ -27,29 +27,35 @@ class EmbeddingEngine:
         self.model_name = config.embedding_model
         self.dim = config.embedding_dim
 
-        logger.info(f"Loading embedding model: {self.model_name} (ONNX backend)")
+        logger.info(
+            f"Loading embedding model: {self.model_name} "
+            f"(fastembed/ONNX backend)"
+        )
 
-        from sentence_transformers import SentenceTransformer
+        from fastembed import TextEmbedding
 
-        # Use ONNX backend — no torch dependency, ~10x smaller footprint
-        self.model = SentenceTransformer(
-            self.model_name,
-            backend="onnx",
+        self.model = TextEmbedding(
+            model_name=self.model_name,
         )
 
         # Verify dimensionality
-        test_embedding = self.model.encode("test")
+        test_embedding = list(self.model.embed(["test"]))[0]
         actual_dim = len(test_embedding)
+        logger.debug(
+            f"[EmbeddingEngine] dimensionality check: "
+            f"expected={self.dim}, actual={actual_dim}"
+        )
         if actual_dim != self.dim:
             logger.warning(
-                f"Model {self.model_name} produces {actual_dim}-dim embeddings, "
+                f"Model {self.model_name} produces "
+                f"{actual_dim}-dim embeddings, "
                 f"config expects {self.dim}. Updating config."
             )
             self.dim = actual_dim
 
         logger.info(
             f"Embedding engine ready: model={self.model_name}, "
-            f"dim={self.dim}, device={self.model.device}"
+            f"dim={self.dim}"
         )
 
     def encode(self, text: Union[str, List[str]]) -> np.ndarray:
@@ -59,27 +65,34 @@ class EmbeddingEngine:
             text: Single text string or list of strings
 
         Returns:
-            Embedding array: shape (dim,) for single text or (n, dim) for batch
+            Embedding array: shape (dim,) for single text
+            or (n, dim) for batch
         """
         if isinstance(text, str):
-            # Single text
-            embedding = self.model.encode(
-                text,
-                convert_to_numpy=True,
-                show_progress_bar=False
+            logger.debug(
+                f"[EmbeddingEngine] encode single text "
+                f"(len={len(text)})"
             )
-            return embedding.astype(np.float32)
+            embedding = list(self.model.embed([text]))[0]
+            return np.array(embedding, dtype=np.float32)
         else:
-            # Batch
-            embeddings = self.model.encode(
-                text,
-                batch_size=self.config.batch_size,
-                convert_to_numpy=True,
-                show_progress_bar=len(text) > 100  # Show progress for large batches
+            logger.debug(
+                f"[EmbeddingEngine] encode batch "
+                f"(n={len(text)})"
             )
-            return embeddings.astype(np.float32)
+            embeddings = list(
+                self.model.embed(
+                    text,
+                    batch_size=self.config.batch_size,
+                )
+            )
+            return np.array(embeddings, dtype=np.float32)
 
-    def similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+    def similarity(
+        self,
+        embedding1: np.ndarray,
+        embedding2: np.ndarray,
+    ) -> float:
         """Compute cosine similarity between two embeddings.
 
         Args:
@@ -87,9 +100,9 @@ class EmbeddingEngine:
             embedding2: Second embedding vector
 
         Returns:
-            Cosine similarity in range [-1, 1] (1 = identical, -1 = opposite)
+            Cosine similarity in range [-1, 1]
+            (1 = identical, -1 = opposite)
         """
-        # Cosine similarity: dot(a, b) / (norm(a) * norm(b))
         dot_product = np.dot(embedding1, embedding2)
         norm1 = np.linalg.norm(embedding1)
         norm2 = np.linalg.norm(embedding2)
@@ -99,7 +112,11 @@ class EmbeddingEngine:
 
         return float(dot_product / (norm1 * norm2))
 
-    def distance(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+    def distance(
+        self,
+        embedding1: np.ndarray,
+        embedding2: np.ndarray,
+    ) -> float:
         """Compute cosine distance between two embeddings.
 
         Args:
@@ -107,9 +124,9 @@ class EmbeddingEngine:
             embedding2: Second embedding vector
 
         Returns:
-            Cosine distance in range [0, 2] (0 = identical, 2 = opposite)
+            Cosine distance in range [0, 2]
+            (0 = identical, 2 = opposite)
         """
-        # Cosine distance: 1 - similarity
         return 1.0 - self.similarity(embedding1, embedding2)
 
     def serialize(self, embedding: np.ndarray) -> bytes:

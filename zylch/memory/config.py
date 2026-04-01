@@ -1,7 +1,6 @@
 """Configuration for Memory system."""
 
 from pathlib import Path
-from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -26,16 +25,12 @@ class MemoryConfig(BaseSettings):
 
     # Embedding model
     embedding_model: str = Field(
-        default="all-MiniLM-L6-v2",
-        description="Sentence-transformers model name"
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        description="Fastembed model name"
     )
     embedding_dim: int = Field(
         default=384,
         description="Embedding vector dimensionality"
-    )
-    embedding_device: Optional[str] = Field(
-        default=None,
-        description="Device for embedding model (None = auto, 'cpu', 'cuda')"
     )
 
     # HNSW index parameters
