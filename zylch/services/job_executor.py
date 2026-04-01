@@ -12,6 +12,7 @@ import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -355,6 +356,16 @@ class JobExecutor:
         """
         storage = self.storage
 
+        # Refresh task prompt before spawning the thread
+        has_prompt = await self._refresh_task_prompt(
+            owner_id, api_key, llm_provider, user_email
+        )
+        if not has_prompt:
+            raise ValueError(
+                "Could not generate task detection prompt."
+                " Check LLM API key and email data."
+            )
+
         def _sync_process() -> Dict[str, Any]:
             """Sync code that runs in thread pool."""
             from zylch.workers import TaskWorker
@@ -366,13 +377,6 @@ class JobExecutor:
                 provider=llm_provider,
                 user_email=user_email
             )
-
-            # Check if user has task prompt
-            if not worker.has_task_prompt():
-                raise ValueError(
-                    "No personalized task detection agent found. "
-                    "Run `/agent task train` first."
-                )
 
             email_count = 0
             calendar_count = 0
@@ -898,6 +902,109 @@ class JobExecutor:
             owner_id, api_key, llm_provider, user_email
         )
 
+    async def _refresh_task_prompt(
+        self,
+        owner_id: str,
+        api_key: str,
+        llm_provider: str,
+        user_email: str,
+    ) -> bool:
+        """Refresh task prompt before task processing.
+
+        Runs incremental update if a prompt exists, or full
+        generation if none exists yet.
+
+        Returns True if a valid prompt exists after refresh.
+        """
+        storage = self.storage
+
+        def _sync_refresh() -> bool:
+            from zylch.agents.trainers.task_email import (
+                EmailTaskAgentTrainer,
+            )
+
+            existing_prompt = storage.get_agent_prompt(
+                owner_id, "task_email"
+            )
+            logger.debug(
+                f"[_refresh_task_prompt] owner={owner_id},"
+                f" existing_prompt="
+                f"{'present' if existing_prompt else 'absent'}"
+            )
+
+            # Resolve updated_at from prompt metadata
+            updated_at = None
+            if existing_prompt:
+                meta = storage.get_agent_prompt_metadata(
+                    owner_id, "task_email"
+                )
+                if meta and meta.get("updated_at"):
+                    updated_at = datetime.fromisoformat(
+                        meta["updated_at"]
+                    )
+                    if updated_at.tzinfo is None:
+                        updated_at = updated_at.replace(
+                            tzinfo=timezone.utc
+                        )
+                logger.debug(
+                    f"[_refresh_task_prompt]"
+                    f" updated_at={updated_at}"
+                )
+
+            trainer = EmailTaskAgentTrainer(
+                storage=storage,
+                owner_id=owner_id,
+                api_key=api_key,
+                user_email=user_email,
+                provider=llm_provider,
+            )
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                new_prompt, meta = loop.run_until_complete(
+                    trainer.build_task_prompt_incremental(
+                        existing_prompt=existing_prompt,
+                        emails_since=updated_at,
+                    )
+                )
+            finally:
+                loop.close()
+
+            if new_prompt is not None:
+                storage.store_agent_prompt(
+                    owner_id, "task_email", new_prompt, meta
+                )
+                logger.info(
+                    f"[_refresh_task_prompt] Stored"
+                    f" updated prompt for {owner_id}"
+                    f" (action={meta.get('action', '?')})"
+                )
+
+            # Return True if any prompt exists now
+            has_prompt = (
+                new_prompt is not None
+                or existing_prompt is not None
+            )
+            logger.debug(
+                f"[_refresh_task_prompt]"
+                f" has_prompt={has_prompt}"
+            )
+            return has_prompt
+
+        try:
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                _executor, _sync_refresh
+            )
+        except Exception as e:
+            logger.error(
+                f"[_refresh_task_prompt] Failed for"
+                f" {owner_id}: {e}",
+                exc_info=True,
+            )
+            return False
+
     async def _chain_processing_after_sync(
         self,
         owner_id: str,
@@ -923,10 +1030,9 @@ class JobExecutor:
 
         # Check if memory agent is trained
         has_memory_agent = (
-            storage.get_agent_prompt(owner_id, 'memory_email') is not None
-        )
-        has_task_agent = (
-            storage.get_agent_prompt(owner_id, 'task_email') is not None
+            storage.get_agent_prompt(
+                owner_id, 'memory_email'
+            ) is not None
         )
 
         if not has_memory_agent:
@@ -934,23 +1040,10 @@ class JobExecutor:
                 f"[SYNC-CHAIN] No trained memory agent for"
                 f" {owner_id}, skipping memory processing"
             )
-            # Even without memory agent, try task processing directly
-            if has_task_agent:
-                await self._chain_task_processing(
-                    owner_id, api_key, llm_provider, user_email
-                )
-            else:
-                logger.debug(
-                    f"[SYNC-CHAIN] Neither memory nor task agent"
-                    f" trained for {owner_id}, notifying user"
-                )
-                storage.create_notification(
-                    owner_id,
-                    "New emails synced but task detection is not"
-                    " configured. Run `/agent task train email`"
-                    " to enable automatic task creation.",
-                    "info",
-                )
+            # Even without memory agent, try task processing
+            await self._chain_task_processing(
+                owner_id, api_key, llm_provider, user_email
+            )
             return
 
         # Check API key before starting LLM-dependent processing
@@ -1004,13 +1097,29 @@ class JobExecutor:
             user_email: User's email address
         """
         storage = self.storage
-        has_task_agent = storage.get_agent_prompt(owner_id, 'task_email') is not None
 
-        if not has_task_agent:
-            logger.info(f"[SYNC-CHAIN] No trained task agent for {owner_id}, skipping task chain")
+        # Refresh (or generate) task prompt before processing
+        if not api_key:
+            logger.debug(
+                f"[SYNC-CHAIN] No API key for {owner_id},"
+                f" skipping task prompt refresh"
+            )
             return
 
-        unprocessed_task_emails = storage.get_unprocessed_emails_for_task(owner_id)
+        has_prompt = await self._refresh_task_prompt(
+            owner_id, api_key, llm_provider, user_email
+        )
+        if not has_prompt:
+            logger.info(
+                f"[SYNC-CHAIN] No task prompt available"
+                f" for {owner_id} after refresh,"
+                f" skipping task chain"
+            )
+            return
+
+        unprocessed_task_emails = (
+            storage.get_unprocessed_emails_for_task(owner_id)
+        )
         if unprocessed_task_emails:
             job = storage.create_background_job(
                 owner_id=owner_id,

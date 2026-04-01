@@ -484,29 +484,13 @@ Please wait for the current sync to complete."""
                 else ""
             )
 
-            # Check if task agent is trained for hint
-            task_prompt = storage.get_agent_prompt(
-                owner_id, 'task_email'
-            )
-            task_hint = ""
-            if not task_prompt:
-                logger.debug(
-                    f"[/sync] No task agent trained for"
-                    f" {owner_id}, adding training hint"
-                )
-                task_hint = (
-                    "\n\n**Tip:** Run"
-                    " `/agent task train email` to"
-                    " auto-detect tasks from new emails."
-                )
-
             return f"""🚀 **Sync started in background**
 
 Job ID: `{job['id']}`{force_note}
 
 Your sync is running in the background. You'll be notified when complete.
 
-**Tip:** Continue using Zylch - the sync won't block you!{task_hint}"""
+**Tip:** Continue using Zylch - the sync won't block you!"""
 
         # Job exists but not pending/running (shouldn't happen due to unique index)
         return f"Job status: {job['status']}"
@@ -2478,11 +2462,10 @@ Shows items needing your action, analyzed by AI.
 
 **Setup:**
 1. `/sync` - Fetch emails and calendar
-2. `/agent train tasks` - Train task detection agent
-3. `/tasks` - View actionable items
+2. `/tasks` - View actionable items
 
 **Related:**
-- `/agent train tasks` - Train/retrain task detection
+- `/agent task train email` - Force-regenerate detection prompt
 - `/agent show tasks` - View trained agent"""
 
     # --help option (check first)
@@ -2524,24 +2507,6 @@ Run `/tasks` to see items needing action."""
 - {ts_counts.get('calendar_events', 0)} calendar events reset
 
 Run `/agent task process` to recreate all tasks."""
-
-        # Check if task agent is trained
-        task_prompt = storage.get_agent_prompt(owner_id, 'task_email')
-        if not task_prompt:
-            return """⚠️ **Task agent not trained yet**
-
-Train your personalized task detection agent first:
-
-```
-/agent train tasks
-```
-
-This analyzes your email patterns to understand:
-- How quickly you respond to different contacts
-- What types of emails you ignore
-- VIP contacts who need quick responses
-
-Then run `/tasks` again."""
 
         # Get LLM provider and API key
         from zylch.api.token_storage import get_active_llm_provider
@@ -3067,7 +3032,7 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
 • `/agent memory reset email` - Delete agent
 
 **Task Agents** (detect actionable items):
-• `/agent task train email` - Create task detection agent (calendar-aware)
+• `/agent task train email` - Force-regenerate task detection prompt (auto-runs after sync)
 • `/agent task process email` - Analyze emails + calendar with context
 • `/agent task show email` - Show current agent prompt
 • `/agent task reset email` - Delete agent prompt (keeps task items)
@@ -3448,10 +3413,10 @@ Job ID: `{job['id']}`
 # =====================
 
 async def _handle_task_train(storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str) -> str:
-    """Train task detection agent for specified channel (background job).
+    """Force-regenerate task detection prompt (manual override).
 
-    Creates a background job that runs in a thread pool, returning immediately.
-    The user is notified via user_notifications when the job completes.
+    Normally the task prompt is auto-generated after each sync.
+    This command forces a full regeneration as a background job.
     """
     import asyncio
     from zylch.services.job_executor import JobExecutor
@@ -3532,13 +3497,13 @@ async def _handle_task_run(storage, owner_id: str, channel: str, api_key: str, l
 Connect your LLM provider:
 `/connect anthropic` or `/connect openai` or `/connect mistral`"""
 
-    # Check for custom agent before starting job
+    # Log if no task prompt exists (auto-generated after sync)
     if channel in ['email', 'all']:
         if not storage.get_agent_prompt(owner_id, 'task_email'):
-            return """⚠️ **No task agent found for email**
-
-Train your task agent first:
-`/agent task train email`"""
+            logger.debug(
+                f"[/agent task run] No task prompt for"
+                f" {owner_id}, will use default detection"
+            )
 
     # Create background job (returns existing if duplicate)
     job = storage.create_background_job(
@@ -3591,7 +3556,8 @@ async def _handle_task_reset(storage, owner_id: str, channel: str) -> str:
 
 Your `task {channel}` agent has been deleted.
 
-Recreate with: `/agent task train {channel}`
+The prompt will be auto-regenerated on next sync, or run \
+`/agent task train {channel}` to force it.
 
 💡 To reset the actual task items, run `/tasks reset`"""
     else:
@@ -4569,13 +4535,12 @@ def _tutorial_getting_started() -> str:
 │      /sync --days 30                                        │
 │      (Fetches emails + calendar, calendar +14 days future)  │
 │                                                             │
-│  4️⃣  TRAIN YOUR AGENTS                                     │
+│  4️⃣  TRAIN MEMORY AGENT                                    │
 │      /agent memory train email    (learns your style)       │
-│      /agent task train email      (learns your priorities)  │
 │                                                             │
 │  5️⃣  PROCESS YOUR DATA (email auto-includes calendar)      │
 │      /agent memory run email      (extracts facts)          │
-│      /agent task process email    (detects tasks)           │
+│      /tasks                       (view detected tasks)     │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -4896,10 +4861,10 @@ Zylch helps you track actionable items from your emails and calendar.
 
 ## 1. Detecting Tasks
 
-Tasks are automatically detected when you process your data:
+Task detection runs automatically after each sync. You can also
+trigger it manually:
 
 ```
-/agent task train email    (Train detection model)
 /agent task process email  (Analyze recent emails)
 ```
 
