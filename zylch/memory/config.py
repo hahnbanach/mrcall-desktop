@@ -18,10 +18,6 @@ class MemoryConfig(BaseSettings):
         default=Path(".swarm/memory.db"),
         description="SQLite database file path"
     )
-    index_dir: Path = Field(
-        default=Path(".swarm/indices"),
-        description="Directory for HNSW index files"
-    )
 
     # Embedding model
     embedding_model: str = Field(
@@ -31,24 +27,6 @@ class MemoryConfig(BaseSettings):
     embedding_dim: int = Field(
         default=384,
         description="Embedding vector dimensionality"
-    )
-
-    # HNSW index parameters
-    hnsw_max_elements: int = Field(
-        default=100000,
-        description="Maximum elements per HNSW index"
-    )
-    hnsw_ef_construction: int = Field(
-        default=200,
-        description="ef_construction parameter (higher = better accuracy, slower build)"
-    )
-    hnsw_M: int = Field(
-        default=16,
-        description="M parameter (connections per node, higher = better accuracy, more memory)"
-    )
-    hnsw_ef_search: int = Field(
-        default=50,
-        description="ef parameter for search (higher = better recall, slower query)"
     )
 
     # Confidence learning
@@ -68,7 +46,10 @@ class MemoryConfig(BaseSettings):
     # Memory reconsolidation
     similarity_threshold: float = Field(
         default=0.85,
-        description="Cosine similarity threshold to consider two memories as 'the same' (0.85 = conservative)"
+        description=(
+            "Cosine similarity threshold to consider "
+            "two memories as 'the same' (0.85 = conservative)"
+        )
     )
     confidence_boost_on_update: float = Field(
         default=0.1,
