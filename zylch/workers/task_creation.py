@@ -7,9 +7,8 @@ to analyze each event and determine if user action is needed.
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
-from zylch.config import settings
 from zylch.llm import LLMClient
 from zylch.storage.supabase_client import SupabaseStorage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
@@ -65,11 +64,6 @@ TASK_DECISION_TOOL = {
 }
 
 
-def get_my_emails() -> Set[str]:
-    """Get set of user's own email addresses (lowercase)."""
-    return set(e.strip().lower() for e in settings.my_emails.split(',') if e.strip())
-
-
 class TaskWorker:
     """Analyzes events using trained prompt and identifies actionable items."""
 
@@ -121,17 +115,21 @@ class TaskWorker:
 
         # Check 1: Exact match with self.user_email
         if self.user_email and email_lower == self.user_email:
+            logger.debug(
+                f"[TASK] _is_user_email({email}) -> True (exact match)"
+            )
             return True
 
-        # Check 2: In settings.my_emails
-        user_emails = get_my_emails()
-        if email_lower in user_emails:
-            return True
-
-        # Check 3: Same domain as user
+        # Check 2: Same domain as user
         if self.user_domain and self.user_domain in email_lower:
+            logger.debug(
+                f"[TASK] _is_user_email({email}) -> True (domain match)"
+            )
             return True
 
+        logger.debug(
+            f"[TASK] _is_user_email({email}) -> False"
+        )
         return False
 
     def _is_auto_reply(self, email_dict: Dict) -> bool:
@@ -180,7 +178,10 @@ class TaskWorker:
 
     async def _analyze_recent_events(self) -> None:
         """Analyze recent events one-by-one using trained prompt."""
-        user_emails = get_my_emails()
+        user_emails = {self.user_email} if self.user_email else set()
+        logger.debug(
+            f"[TASK] _analyze_recent_events user_emails={user_emails}"
+        )
 
         # Load trained prompt (contains baked-in behavioral patterns)
         prompt = self._get_task_prompt()

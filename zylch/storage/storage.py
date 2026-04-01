@@ -186,6 +186,36 @@ class Storage:
                 .all()
             return [r.to_dict() for r in rows]
 
+    def get_emails_since(
+        self,
+        owner_id: str,
+        since: datetime,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Get emails received after a given timestamp.
+
+        Used by incremental prompt generation to only analyze
+        new emails since last prompt update.
+        """
+        since_ts = since.timestamp()
+        with get_session() as session:
+            rows = (
+                session.query(Email)
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.date_timestamp > since_ts,
+                )
+                .order_by(Email.date_timestamp.desc())
+                .limit(limit)
+                .all()
+            )
+            results = [r.to_dict() for r in rows]
+            logger.debug(
+                f"[get_emails_since] owner={owner_id},"
+                f" since={since}, found={len(results)}"
+            )
+            return results
+
     def get_thread_emails(self, owner_id: str, thread_id: str) -> List[Dict[str, Any]]:
         """Get all emails in a thread."""
         with get_session() as session:

@@ -156,6 +156,31 @@ The agent acts as a real human assistant:
 OUTPUT ONLY THE PROMPT TEXT. No explanations, no markdown code blocks. Just the prompt itself."""
 
 
+TASK_AGENT_UPDATE_PROMPT = """You are reviewing new emails \
+to decide if a task detection prompt needs updating.
+
+=== CURRENT PROMPT ===
+{existing_prompt}
+
+=== NEW EMAILS SINCE LAST UPDATE ({new_email_count}) ===
+{new_threads}
+
+Analyze the new emails. Does the existing prompt need \
+changes? Consider:
+1. New contact patterns not captured
+2. New ignore/noise patterns
+3. Language shifts
+4. New FAQ topics
+5. Changed response timing patterns
+
+If the prompt is still accurate, respond with exactly:
+NO_CHANGES_NEEDED
+
+If updates are needed, output the COMPLETE updated prompt \
+(not a diff). Include all existing patterns plus new ones.
+OUTPUT ONLY THE PROMPT TEXT or NO_CHANGES_NEEDED."""
+
+
 class EmailTaskAgentTrainer:
     """Builds personalized task detection prompt by analyzing user email patterns."""
 
@@ -378,3 +403,179 @@ Body: {body}
         prompt_content = response.content[0].text.strip()
         logger.info(f"Generated task prompt ({len(prompt_content)} chars)")
         return prompt_content
+
+    async def build_task_prompt_incremental(
+        self,
+        existing_prompt: Optional[str],
+        emails_since: Optional[datetime],
+    ) -> Tuple[Optional[str], Dict[str, Any]]:
+        """Build prompt incrementally from new emails only.
+
+        If no existing prompt, delegates to full build_task_prompt().
+        If existing prompt provided, checks new emails and decides
+        whether the prompt needs updating.
+
+        Args:
+            existing_prompt: Current prompt text, or None for full build
+            emails_since: Only consider emails after this timestamp
+
+        Returns:
+            Tuple of (updated_prompt_or_None, metadata).
+            prompt is None when no update is needed.
+        """
+        logger.debug(
+            f"[build_task_prompt_incremental] owner={self.owner_id},"
+            f" existing_prompt={'present' if existing_prompt else 'absent'},"
+            f" emails_since={emails_since}"
+        )
+
+        # No existing prompt — do a full generation
+        if existing_prompt is None:
+            logger.info(
+                "[build_task_prompt_incremental]"
+                " No existing prompt, delegating to full build"
+            )
+            prompt, meta = await self.build_task_prompt()
+            meta["action"] = "full_build"
+            return prompt, meta
+
+        # Get new emails since the given timestamp
+        threads = self._get_recent_threads_since(
+            since=emails_since or datetime.min.replace(
+                tzinfo=timezone.utc
+            ),
+            limit=self.search_limit,
+        )
+
+        if not threads:
+            logger.info(
+                "[build_task_prompt_incremental]"
+                " No new emails, skipping update"
+            )
+            return None, {"skipped": "no_new_emails"}
+
+        new_email_count = sum(
+            len(t.get("emails", [])) for t in threads
+        )
+        logger.info(
+            f"[build_task_prompt_incremental]"
+            f" {len(threads)} new threads"
+            f" ({new_email_count} emails) to evaluate"
+        )
+
+        threads_text = self._format_threads(threads)
+
+        update_prompt = TASK_AGENT_UPDATE_PROMPT.format(
+            existing_prompt=existing_prompt,
+            new_email_count=new_email_count,
+            new_threads=threads_text,
+        )
+
+        logger.debug(
+            f"[build_task_prompt_incremental]"
+            f" Update prompt size: {len(update_prompt)} chars"
+            f" (~{len(update_prompt) // 4} tokens)"
+        )
+
+        response = self.client.create_message_sync(
+            model=self.model,
+            max_tokens=4000,
+            messages=[{"role": "user", "content": update_prompt}],
+        )
+
+        result_text = response.content[0].text.strip()
+        logger.debug(
+            f"[build_task_prompt_incremental]"
+            f" LLM response length={len(result_text)}"
+        )
+
+        if "NO_CHANGES_NEEDED" in result_text:
+            logger.info(
+                "[build_task_prompt_incremental]"
+                " LLM says no changes needed"
+            )
+            return None, {"skipped": "no_changes_needed"}
+
+        logger.info(
+            f"[build_task_prompt_incremental]"
+            f" Prompt updated ({len(result_text)} chars)"
+        )
+        return result_text, {
+            "action": "updated",
+            "new_threads_analyzed": len(threads),
+            "new_email_count": new_email_count,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _get_recent_threads_since(
+        self,
+        since: datetime,
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """Get recent email threads with emails after a given date.
+
+        Uses the same thread grouping logic as _get_recent_threads()
+        but filtered to only include emails received after `since`.
+
+        Args:
+            since: Only include emails after this timestamp
+            limit: Max number of threads to return
+
+        Returns:
+            List of thread dicts with 'thread_id', 'emails',
+            'most_recent' keys.
+        """
+        logger.debug(
+            f"[_get_recent_threads_since] owner={self.owner_id},"
+            f" since={since}, limit={limit}"
+        )
+
+        emails = self.storage.get_emails_since(
+            self.owner_id, since, limit=limit * 3
+        )
+        logger.debug(
+            f"[_get_recent_threads_since]"
+            f" Fetched {len(emails)} emails since {since}"
+        )
+
+        # Group by thread_id
+        threads: Dict[str, List[Dict]] = {}
+        for email in emails:
+            tid = email.get(
+                "thread_id", email.get("id", "")
+            )
+            if tid:
+                if tid not in threads:
+                    threads[tid] = []
+                threads[tid].append(email)
+
+        # Sort emails within each thread by date
+        for tid in threads:
+            threads[tid].sort(
+                key=lambda e: e.get("date_timestamp", 0)
+            )
+
+        # Sort threads by most recent email
+        thread_list = []
+        for tid, thread_emails in threads.items():
+            if thread_emails:
+                most_recent = max(
+                    e.get("date_timestamp", 0)
+                    for e in thread_emails
+                )
+                thread_list.append({
+                    "thread_id": tid,
+                    "emails": thread_emails,
+                    "most_recent": most_recent,
+                })
+
+        thread_list.sort(
+            key=lambda t: t["most_recent"], reverse=True
+        )
+
+        result = thread_list[:limit]
+        logger.debug(
+            f"[_get_recent_threads_since]"
+            f" Grouped into {len(result)} threads"
+        )
+        return result
