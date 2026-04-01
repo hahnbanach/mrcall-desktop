@@ -79,7 +79,7 @@ Client (CLI/Dashboard/API)
 - **`zylch/api/`** — FastAPI app factory (`main.py`) + route modules in `routes/` (auth, chat, sync, commands, mrcall, webhooks, etc.)
 - **`zylch/services/`** — Stateless business logic: `chat_service.py` (LLM orchestration), `command_handlers.py` (slash command dispatch), `sync_service.py` (email+calendar sync), `webhook_processor.py`
 - **`zylch/storage/`** — SQLAlchemy ORM: `models.py` (29+ models), `database.py` (engine/session), `storage.py` (Storage class, PostgreSQL via SQLAlchemy)
-- **`zylch/tools/`** — Claude tool definitions (callable by LLM). Each tool inherits from `base.py` (`Tool`, `ToolResult`). Registry in `factory.py` (`ToolFactory` + `SessionState`). Subdir `mrcall/` for MrCall config tools.
+- **`zylch/tools/`** — Claude tool definitions (callable by LLM). Each tool inherits from `base.py` (`Tool`, `ToolResult`). Registry in `factory.py` (`ToolFactory`). `SessionState` in `session_state.py`. Tool classes split into `gmail_tools.py`, `email_sync_tools.py`, `contact_tools.py`, `crm_tools.py`. Subdir `mrcall/` for MrCall config tools.
 - **`zylch/agents/`** — LLM-powered processors. `trainers/` subdirectory holds agent training (generates optimized prompts from user data, stored in `agent_prompts` table)
 - **`zylch/memory/`** — Entity-centric memory with 384-dim vector embeddings (fastembed, ONNX-only, no PyTorch), hybrid search (pgvector cosine + PostgreSQL FTS), LLM reconsolidation
 - **`zylch/llm/`** — `LLMClient` wraps aisuite for multi-provider support (OpenAI, Scaleway/Mistral, Anthropic). MrCall agent calls Anthropic SDK directly for native web search + streaming. Provider config in `providers.py`, exceptions in `exceptions.py`

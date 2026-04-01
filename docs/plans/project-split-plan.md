@@ -36,25 +36,29 @@ Scalabilità:    Uvicorn workers + background job queue
 
 **Cosa tiene da zylch/**:
 - `agents/mrcall_agent.py`, `mrcall_context.py`, `mrcall_templates.py`
-- `agents/mrcall_memory.py`
+- `agents/mrcall_memory.py`, `mrcall_error_handler.py`
 - `agents/trainers/mrcall_configurator.py`
 - `tools/mrcall/` (config_tools, feature_context, variable_utils)
-- `tools/starchat.py`
+- `tools/starchat.py`, `tools/base.py`, `tools/session_state.py`
+- `tools/factory.py` (ToolFactory, ridotto a ~589 righe dopo split)
 - `services/chat_service.py` (streaming SSE)
 - `services/job_executor.py` (background jobs)
-- `storage/` (PostgreSQL, SQLAlchemy, models ridotti)
-- `memory/` (pgvector, embeddings, reconsolidation)
+- `storage/storage.py` (classe `Storage`, ex SupabaseStorage)
+- `storage/database.py`, `storage/models.py` (modelli ridotti)
+- `memory/` (pgvector, fastembed, reconsolidation)
 - `api/routes/chat.py`, `mrcall.py`, `webhooks.py`, `auth.py`
 - `llm/` (Anthropic direct client)
 
 **Cosa elimina**:
+- `tools/gmail_tools.py`, `tools/email_sync_tools.py` (split da factory)
+- `tools/contact_tools.py`, `tools/crm_tools.py` (split da factory)
 - `tools/gmail.py`, `outlook.py`, `gcalendar.py`, `outlook_calendar.py`
 - `tools/pipedrive.py`, `sendgrid.py`, `sms_tools.py`
 - `tools/email_sync.py`, `email_archive.py`, `calendar_sync.py`
 - `agents/emailer_agent.py`, `task_orchestrator_agent.py`
 - `agents/trainers/task_email.py`, `memory_email.py`, `emailer.py`
 - `workers/task_creation.py`
-- `services/sync_service.py`
+- `services/sync_service.py`, `services/command_handlers.py`
 - `api/routes/sync.py`, `connections.py`, `commands.py`
 - `integrations/` (provider registry — MrCall non usa /connect)
 - `frontend/` (dormant)
@@ -82,15 +86,19 @@ Config:         zylch init → scrive .env + .env.example
 ```
 
 **Cosa tiene da zylch/**:
-- `memory/` (embeddings.py refactored per SQLite + in-memory search)
-- `agents/trainers/task_email.py` (incremental prompt, già refactored)
-- `agents/trainers/memory_email.py` (PERSON priority, già refactored)
+- `memory/` (embeddings.py con fastembed, refactored per SQLite + in-memory search)
+- `agents/trainers/task_email.py` (incremental prompt, auto dopo sync)
+- `agents/trainers/memory_email.py` (PERSON priority)
 - `agents/emailer_agent.py`
 - `agents/task_orchestrator_agent.py`
-- `tools/` (gmail→imap, calendar→caldav, pipedrive, sendgrid, sms)
-- `services/command_handlers.py` (slash commands)
-- `services/chat_service.py` (adattato per CLI, no SSE)
-- `workers/task_creation.py` (già refactored, no MY_EMAILS env)
+- `tools/base.py`, `tools/session_state.py`, `tools/factory.py`
+- `tools/gmail_tools.py` → refactored per IMAP
+- `tools/email_sync_tools.py` → refactored per IMAP
+- `tools/contact_tools.py`, `tools/crm_tools.py`
+- `services/command_handlers.py` (slash commands, `/email search` FTS)
+- `services/chat_service.py` (adattato per CLI, auto-sync, no SSE)
+- `workers/task_creation.py` (user_email da oauth_tokens, no MY_EMAILS env)
+- `storage/storage.py` (classe `Storage`, adattata per SQLite)
 - `llm/` (multi-provider via aisuite)
 
 **Cosa elimina**:
@@ -100,9 +108,11 @@ Config:         zylch init → scrive .env + .env.example
 - `agents/trainers/mrcall*.py` (tutto)
 - `api/` (niente FastAPI, niente HTTP server)
 - `storage/models.py` (29 modelli → ~10 per SQLite)
-- `storage/database.py` (SQLAlchemy → sqlite3 o SQLAlchemy-sqlite)
+- `storage/database.py` (SQLAlchemy PostgreSQL → SQLAlchemy SQLite)
+- `storage/supabase_client.py` (già eliminato, era shim)
 - Firebase auth (tutto)
 - Docker/K8s configs
+- `integrations/` (standalone non usa provider registry)
 
 **Cosa aggiunge**:
 - `zylch init` — onboarding interattivo (scrive .env)

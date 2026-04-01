@@ -2,9 +2,9 @@
 
 Enforcement gaps, missing tooling, and documentation debt identified during development.
 
-- [ ] `tools/factory.py` exceeds 500-line limit (2000+ lines) — needs splitting
+- [x] `tools/factory.py` exceeds 500-line limit (2000+ lines) — needs splitting
   Discovered: 2026-03-17 doc-migration session
-  Impact: Violates project's own modular design rule, makes navigation and testing harder
+  Resolved: 2026-04-01 — split into 6 modules (session_state, gmail_tools, email_sync_tools, contact_tools, crm_tools, factory)
 
 - [ ] `docs/agents/README.md` references non-existent files (`memory_agent.py`) and wrong class names (`Storage` as Supabase)
   Discovered: 2026-03-17 doc-migration session
