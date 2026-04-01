@@ -1,50 +1,32 @@
 # Harness Backlog
 
-Enforcement gaps, missing tooling, and documentation debt identified during development.
+Enforcement gaps, missing tooling, and documentation debt.
 
-- [x] `tools/factory.py` exceeds 500-line limit (2000+ lines) — needs splitting
-  Discovered: 2026-03-17 doc-migration session
-  Resolved: 2026-04-01 — split into 6 modules (session_state, gmail_tools, email_sync_tools, contact_tools, crm_tools, factory)
+## Resolved
 
-- [ ] `docs/agents/README.md` references non-existent files (`memory_agent.py`) and wrong class names (`Storage` as Supabase)
-  Discovered: 2026-03-17 doc-migration session
-  Impact: Misleads developers about agent architecture; new contributors would look for wrong files
+- [x] `tools/factory.py` exceeds 500-line limit → split into 6 modules (2026-04-01)
+- [x] `SupabaseStorage` misleading name → renamed to `Storage` (2026-04-01)
+- [x] `ScheduledJob` and `ThreadAnalysis` unused models → removed in SQLite migration (2026-04-01)
+- [x] `integration_providers` SQL migrations redundant → removed with Alembic (2026-04-01)
+- [x] ONNX_WEIGHTS_NAME import error → resolved by switching to fastembed (2026-04-01)
+
+## Open
 
 - [ ] No linter or CI check enforcing the 500-line file limit
-  Discovered: 2026-03-17 doc-migration session
-  Impact: Large files accumulate silently (factory.py is 4x the limit)
+  Discovered: 2026-03-17
+  Impact: Large files accumulate silently (gmail_tools.py is 874 lines)
 
-- [ ] No OpenAPI/Swagger export or API endpoint documentation
-  Discovered: 2026-03-17 doc-migration session
-  Impact: API consumers (CLI, Dashboard) have no reference; FastAPI auto-generates /docs but it's not exported/versioned
+- [ ] `tests/` directory entirely stale — references old SaaS architecture
+  Discovered: 2026-04-01 standalone transformation
+  Impact: No test coverage at all; regressions undetectable
 
-- [ ] No tests for agent trainers (`zylch/agents/trainers/`)
-  Discovered: 2026-03-17 doc-migration session
-  Impact: Training logic changes could break silently; trainers are critical for MrCall configuration quality
+- [ ] No end-to-end test for `zylch init` → `zylch sync` → `zylch tasks`
+  Discovered: 2026-04-01 standalone transformation
+  Impact: Full flow untested with real IMAP + LLM
 
-- [ ] `ScheduledJob` and `ThreadAnalysis` ORM models appear unused — candidate for cleanup
-  Discovered: 2026-03-17 doc-migration session
-  Impact: Dead code in models.py adds confusion; corresponding DB tables waste schema space
-
-- [ ] `config_tools.py` `category_map` uses wrong/outdated variable names and is missing welcome variables
-  Discovered: 2026-03-19 variable rename session
-  Impact: `get_assistant_catalog` with `filter_category="welcome"` returns no results or wrong variables
-
-- [ ] `config_tools.py:149` modifiable logic requires both `modifiable` AND `advanced` — most variables incorrectly show as read-only
-  Discovered: 2026-03-19 variable rename session
-  Impact: Users cannot modify variables through the catalog tool even when they should be modifiable
-
-- [ ] No integration test for MrCall agent conversation memory (multi-turn run() calls)
-  Discovered: 2026-03-26 live-values refactor session
-  Impact: Regressions in conversation continuity would go undetected; this was the root cause of the "sì grazie" context loss bug
-
-- [ ] No test for config memory blob persistence (mrcall_memory.py)
-  Discovered: 2026-03-26 live-values refactor session
-  Impact: Config decisions could fail to persist silently, causing the agent to "forget" across sessions
-
-- [ ] No end-to-end test for incremental task prompt generation
+- [ ] No test for incremental task prompt generation
   Discovered: 2026-04-01 QA session
-  Impact: Prompt reconsolidation logic (NO_CHANGES_NEEDED vs update) untested; could silently break task detection
+  Impact: Prompt reconsolidation logic untested
 
 - [ ] No test for notification dedup in storage.create_notification()
   Discovered: 2026-04-01 QA session
@@ -52,12 +34,20 @@ Enforcement gaps, missing tooling, and documentation debt identified during deve
 
 - [ ] No test for auto-sync trigger in chat_service.py
   Discovered: 2026-04-01 QA session
-  Impact: Auto-sync could fail silently or trigger on every message instead of once per session
+  Impact: Auto-sync could fail silently or trigger every message
 
-- [ ] `integration_providers` SQL migrations in `zylch/integrations/migrations/` are redundant with Alembic 0004
-  Discovered: 2026-04-01 QA session
-  Impact: Two sources of truth for provider seed data; could diverge over time
+- [ ] Stale modules: `zylch/intelligence/`, `zylch/ml/`, `zylch/router/`, `zylch/webhook/`
+  Discovered: 2026-04-01 standalone transformation
+  Impact: Dead code, confusing for new contributors
 
-- [ ] ONNX_WEIGHTS_NAME import error in container (optimum package)
-  Discovered: 2026-04-01 QA session
-  Impact: Warning in logs on `/tasks` command; may affect embedding generation in edge cases
+- [ ] `command_handlers.py` still has SaaS-era `/connect` stubs
+  Discovered: 2026-04-01 standalone transformation
+  Impact: User sees broken UI for provider connections
+
+- [ ] `chat_service.py` still references MrCall routing paths
+  Discovered: 2026-04-01 standalone transformation
+  Impact: Dead code paths, potential runtime errors
+
+- [ ] `docs/` has many stale files referencing old SaaS architecture
+  Discovered: 2026-04-01 standalone transformation
+  Impact: Misleading documentation for new contributors
