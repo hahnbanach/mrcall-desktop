@@ -36,8 +36,13 @@ zylch/
 │
 ├── tools/                # Claude tool definitions (callable by LLM)
 │   ├── base.py           # Tool, ToolResult, ToolStatus base classes
-│   ├── factory.py        # ToolFactory + SessionState (tool registry)
-│   ├── gmail.py          # Gmail read/send/draft tools
+│   ├── session_state.py  # SessionState (runtime context for tools)
+│   ├── factory.py        # ToolFactory (tool registry, ~589 lines)
+│   ├── gmail_tools.py    # 7 Gmail/draft tool classes (split from factory)
+│   ├── email_sync_tools.py # 4 email sync tool classes (split from factory)
+│   ├── contact_tools.py  # 4 contact/task/memory tools (split from factory)
+│   ├── crm_tools.py      # 3 Pipedrive + compose tools (split from factory)
+│   ├── gmail.py          # Gmail API client
 │   ├── outlook.py        # Outlook email tools (Graph API)
 │   ├── gcalendar.py      # Google Calendar tools
 │   ├── outlook_calendar.py # Outlook Calendar tools

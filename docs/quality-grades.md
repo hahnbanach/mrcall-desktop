@@ -12,8 +12,8 @@ description: |
 |--------|:---:|:---:|:---:|---|
 | **api/routes/** | Medium | Low | High | Missing API docs for most endpoints |
 | **services/** | Medium | Medium | High | Auto-sync + notification dedup added; QA report exists |
-| **storage/** | Low | Medium | High | storage.py name is misleading |
-| **tools/** | Medium | Medium | High | factory.py is 2000+ lines (exceeds 500 limit) |
+| **storage/** | Low | Medium | High | SupabaseStorage renamed to Storage; shim removed |
+| **tools/** | Medium | Medium | High | Split into 6 modules; gmail_tools.py (874) and contact_tools.py (617) above 500 guideline |
 | **agents/** | Low | High | High | No tests for conversation memory or config memory |
 | **agents/trainers/** | Low | Low | High | Task trainer now incremental (auto after sync); no tests |
 | **memory/** | Medium | High | High | Swapped to fastembed (no PyTorch); good entity-memory docs |
@@ -84,7 +84,10 @@ description: |
 - Config via Pydantic Settings
 
 ### Non-Conforming
-- `tools/factory.py` exceeds 500-line limit significantly
-- `Storage` class name doesn't match implementation (SQLAlchemy)
+- `gmail_tools.py` (874 lines) and `contact_tools.py` (617 lines) above 500-line guideline
 - Some docs reference files/paths that don't exist in code
 - `frontend/` dormant code still in repo
+
+### Recently Resolved
+- ~~`tools/factory.py` exceeds 500-line limit~~ → split into 6 modules (2026-04-01)
+- ~~`SupabaseStorage` misleading name~~ → renamed to `Storage`, shim deleted (2026-04-01)
