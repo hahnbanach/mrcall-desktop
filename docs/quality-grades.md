@@ -11,12 +11,12 @@ description: |
 | Module | Test Coverage | Docs | Arch Conformance | Known Gaps |
 |--------|:---:|:---:|:---:|---|
 | **api/routes/** | Medium | Low | High | Missing API docs for most endpoints |
-| **services/** | Medium | Low | High | chat_service is the largest, could split |
+| **services/** | Medium | Medium | High | Auto-sync + notification dedup added; QA report exists |
 | **storage/** | Low | Medium | High | supabase_client.py name is misleading |
 | **tools/** | Medium | Medium | High | factory.py is 2000+ lines (exceeds 500 limit) |
 | **agents/** | Low | High | High | No tests for conversation memory or config memory |
-| **agents/trainers/** | Low | Low | High | No tests for trainers; simplified after live-values refactor |
-| **memory/** | Medium | High | High | Good entity-memory docs exist |
+| **agents/trainers/** | Low | Low | High | Task trainer now incremental (auto after sync); no tests |
+| **memory/** | Medium | High | High | Swapped to fastembed (no PyTorch); good entity-memory docs |
 | **llm/** | Low | Low | High | No tests for LLM client |
 | **skills/** | None | Low | Medium | Unclear if actively used |
 | **sharing/** | Low | Low | Medium | Feature marked "coming soon" |
@@ -68,8 +68,8 @@ description: |
 
 ### Missing Documentation
 - API endpoint reference (no OpenAPI export or manual docs)
-- CLI command reference (marked "coming soon")
-- Agent training system
+- CLI command reference (updated, /gaps removed)
+- Agent training system (task training now automatic)
 - LLM client configuration
 - Skills system
 - Background job system

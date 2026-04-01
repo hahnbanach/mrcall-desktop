@@ -41,3 +41,23 @@ Enforcement gaps, missing tooling, and documentation debt identified during deve
 - [ ] No test for config memory blob persistence (mrcall_memory.py)
   Discovered: 2026-03-26 live-values refactor session
   Impact: Config decisions could fail to persist silently, causing the agent to "forget" across sessions
+
+- [ ] No end-to-end test for incremental task prompt generation
+  Discovered: 2026-04-01 QA session
+  Impact: Prompt reconsolidation logic (NO_CHANGES_NEEDED vs update) untested; could silently break task detection
+
+- [ ] No test for notification dedup in storage.create_notification()
+  Discovered: 2026-04-01 QA session
+  Impact: Duplicate banners could return if dedup logic regresses
+
+- [ ] No test for auto-sync trigger in chat_service.py
+  Discovered: 2026-04-01 QA session
+  Impact: Auto-sync could fail silently or trigger on every message instead of once per session
+
+- [ ] `integration_providers` SQL migrations in `zylch/integrations/migrations/` are redundant with Alembic 0004
+  Discovered: 2026-04-01 QA session
+  Impact: Two sources of truth for provider seed data; could diverge over time
+
+- [ ] ONNX_WEIGHTS_NAME import error in container (optimum package)
+  Discovered: 2026-04-01 QA session
+  Impact: Warning in logs on `/tasks` command; may affect embedding generation in edge cases

@@ -70,7 +70,7 @@ zylch/
 │   └── trainers/         # Agent training subsystem
 │       ├── base.py               # Base trainer class
 │       ├── emailer.py            # Emailer agent trainer
-│       ├── task_email.py         # Task-from-email trainer
+│       ├── task_email.py         # Task prompt generation (incremental, auto after sync)
 │       ├── memory_email.py       # Memory-from-email trainer
 │       ├── mrcall.py             # MrCall agent trainer (Layer 2 assembly)
 │       ├── mrcall_configurator.py # MrCall config trainer (simplified, templates extracted)
@@ -78,7 +78,7 @@ zylch/
 │
 ├── memory/               # Entity memory system (cross-cutting)
 │   ├── blob_storage.py   # Blob CRUD (entity memory units)
-│   ├── embeddings.py     # Embedding generation (sentence-transformers)
+│   ├── embeddings.py     # Embedding generation (fastembed)
 │   ├── hybrid_search.py  # Combined vector + FTS search
 │   ├── llm_merge.py      # LLM-powered memory reconsolidation
 │   ├── pattern_detection.py # Behavioral pattern extraction
@@ -264,7 +264,7 @@ Deploy configs: ~/hb/zylch-deploy/{test,production}/
 - Web search: Anthropic/OpenAI natively; other providers fall back to OpenAI
 
 ### Memory System
-- Entity-centric blobs with vector embeddings (384-dim, sentence-transformers)
+- Entity-centric blobs with vector embeddings (384-dim, fastembed)
 - Hybrid search: pgvector cosine similarity + PostgreSQL FTS
 - LLM-powered reconsolidation (merge conflicting memories)
 - Namespace: `{owner}:{entity_type}:{entity_id}`
