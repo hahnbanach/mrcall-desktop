@@ -1,6 +1,6 @@
 """Background job executor using thread pool.
 
-Runs blocking code (LLM calls, sync DB) without blocking the FastAPI event loop.
+Runs blocking code (LLM calls, sync DB) without blocking the event loop.
 Uses ThreadPoolExecutor to offload long-running operations.
 
 Configuration:
