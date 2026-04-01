@@ -213,10 +213,50 @@ class Settings(BaseSettings):
         description="Enable alpha testers allowlist check"
     )
 
+    # IMAP/SMTP Email (standalone mode)
+    email_address: str = Field(
+        default="",
+        description=(
+            "Email address for IMAP/SMTP access"
+        ),
+    )
+    email_password: str = Field(
+        default="",
+        description=(
+            "App password for IMAP/SMTP"
+            " (NOT account password)"
+        ),
+    )
+    imap_host: str = Field(
+        default="",
+        description=(
+            "IMAP server hostname"
+            " (auto-detected from email domain)"
+        ),
+    )
+    imap_port: int = Field(
+        default=993,
+        description="IMAP server port (default 993)",
+    )
+    smtp_host: str = Field(
+        default="",
+        description=(
+            "SMTP server hostname"
+            " (auto-detected from email domain)"
+        ),
+    )
+    smtp_port: int = Field(
+        default=587,
+        description="SMTP server port (default 587)",
+    )
+
     # Email Archive
     email_archive_batch_size: int = Field(
         default=10,
-        description="Number of emails to fetch per batch during archive sync"
+        description=(
+            "Emails to fetch per batch"
+            " during archive sync"
+        ),
     )
 
     def get_alpha_testers(self) -> set:

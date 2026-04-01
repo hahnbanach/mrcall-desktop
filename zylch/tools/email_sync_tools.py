@@ -1,4 +1,7 @@
-"""Email sync tools for batch synchronization and search."""
+"""Email sync tools for batch synchronization and search.
+
+Uses IMAP (via IMAPClient) instead of Gmail/Outlook OAuth APIs.
+"""
 
 import logging
 from typing import Optional
@@ -9,13 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 class SyncEmailsTool(Tool):
-    """Sync emails from Gmail and cache with intelligent analysis."""
+    """Sync emails via IMAP and cache with analysis."""
 
     def __init__(self, email_sync_manager):
         super().__init__(
             name="sync_emails",
             description=(
-                "Synchronize emails from Gmail, analyze them"
+                "Synchronize emails via IMAP, analyze"
                 " with AI, and cache for quick access"
             ),
         )
@@ -62,12 +65,12 @@ class SyncEmailsTool(Tool):
         return {
             "name": self.name,
             "description": (
-                "Sync emails from Gmail in BATCH mode"
+                "Sync emails via IMAP in BATCH mode"
                 " (long operation, ~15-30 minutes). Analyzes"
                 " with AI (summary, open/closed status, required"
                 " actions) and saves to local cache. First sync:"
                 " fixed 30 days (1 month). NOTE: In the future"
-                " we'll use Gmail real-time notifications."
+                " we'll use IMAP IDLE for real-time."
             ),
             "input_schema": {
                 "type": "object",
@@ -95,7 +98,7 @@ class SyncEmailsTool(Tool):
 
 
 class SearchEmailsTool(Tool):
-    """Search emails using Supabase hybrid search (FTS + semantic)."""
+    """Search emails using hybrid search (FTS + semantic)."""
 
     def __init__(self, email_sync_manager, storage, owner_id: str):
         super().__init__(

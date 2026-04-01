@@ -1,20 +1,25 @@
-"""SQLAlchemy engine and session management for direct PostgreSQL access.
+"""SQLAlchemy engine and session management for SQLite.
 
 Provides a singleton engine, session factory, and context manager for
 transactional session management. All storage methods use get_session()
-to obtain a session that auto-commits on exit and rolls back on exception.
+to obtain a session that auto-commits on exit and rolls back on
+exception.
+
+Database file: ~/.zylch/zylch.db (created automatically).
 """
 
 import logging
+import os
 from contextlib import contextmanager
 from typing import Generator
 
-from sqlalchemy import create_engine, Engine
+from sqlalchemy import create_engine, event, Engine
 from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 
-from zylch.config import settings
-
 logger = logging.getLogger(__name__)
+
+DB_DIR = os.path.expanduser("~/.zylch")
+DB_PATH = os.path.join(DB_DIR, "zylch.db")
 
 
 class Base(DeclarativeBase):
@@ -30,26 +35,27 @@ _session_factory: sessionmaker | None = None
 def get_engine() -> Engine:
     """Get or create the singleton SQLAlchemy engine.
 
-    Uses settings.database_url with connection pooling optimized for
-    a FastAPI backend running in threadpool mode.
+    Creates ~/.zylch/ directory if it doesn't exist.
+    Configures WAL journal mode and foreign keys for SQLite.
     """
     global _engine
     if _engine is None:
-        if not settings.database_url:
-            raise ValueError(
-                "DATABASE_URL not configured. "
-                "Set DATABASE_URL=postgresql://user:pass@host:5432/zylch"
-            )
+        os.makedirs(DB_DIR, exist_ok=True)
+        db_url = f"sqlite:///{DB_PATH}"
 
         _engine = create_engine(
-            settings.database_url,
-            pool_size=10,
-            max_overflow=20,
-            pool_pre_ping=True,     # detect stale connections (Railway/Docker)
-            pool_recycle=1800,      # recycle connections every 30 min
-            echo=(settings.log_level.upper() == "DEBUG"),
+            db_url,
+            echo=False,
         )
-        logger.info(f"SQLAlchemy engine created for {_mask_url(settings.database_url)}")
+
+        @event.listens_for(_engine, "connect")
+        def _set_sqlite_pragma(dbapi_conn, connection_record):
+            cursor = dbapi_conn.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
+        logger.info(f"SQLAlchemy engine created for sqlite:///{DB_PATH}")
 
     return _engine
 
@@ -60,7 +66,7 @@ def get_session_factory() -> sessionmaker:
     if _session_factory is None:
         _session_factory = sessionmaker(
             bind=get_engine(),
-            expire_on_commit=False,  # allow to_dict() on detached objects
+            expire_on_commit=False,
         )
     return _session_factory
 
@@ -89,17 +95,12 @@ def get_session() -> Generator[Session, None, None]:
         session.close()
 
 
-def _mask_url(url: str) -> str:
-    """Mask password in database URL for logging."""
-    try:
-        # postgresql://user:PASSWORD@host:port/db → postgresql://user:***@host:port/db
-        if "@" in url and ":" in url.split("@")[0]:
-            prefix, rest = url.split("@", 1)
-            scheme_user, _ = prefix.rsplit(":", 1)
-            return f"{scheme_user}:***@{rest}"
-    except Exception:
-        pass
-    return "***"
+def init_db():
+    """Create all tables if they don't exist."""
+    from zylch.storage.models import Base as _Base  # noqa: F811
+    engine = get_engine()
+    _Base.metadata.create_all(engine)
+    logger.info(f"Database initialized at {DB_PATH}")
 
 
 def dispose_engine() -> None:
