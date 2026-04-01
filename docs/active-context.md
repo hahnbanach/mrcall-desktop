@@ -107,17 +107,13 @@ description: |
 
 ## What Is In Progress
 
-**Project split decision**: MrCall configurator and Zylch standalone should be separate projects:
-- MrCall: SaaS, PostgreSQL, multi-tenant, Scaleway K8s (stays in ~/hb/zylch)
-- Zylch standalone: BYOK, local install, SQLite, mono-utente (this repo)
+Nothing actively in progress — all items completed this session.
+See `docs/plans/project-split-plan.md` for the next major initiative.
 
 ## Immediate Next Steps
 
-1. **Architect the standalone split** — define what stays shared, what diverges
-2. **Replace PostgreSQL with SQLite** for standalone (eliminate DB server requirement)
-3. **Make `pipx install zylch` work** — package as installable CLI tool
-4. **Verify Railway deploy** with fastembed (no PyTorch in production)
-5. **Test incremental task prompt end-to-end** — requires `/connect anthropic` with API key
+1. **Verify Railway deploy** with fastembed (no PyTorch in production)
+2. **Test incremental task prompt end-to-end** — requires `/connect anthropic` with API key
 
 ## Known Issues and Tech Debt
 
