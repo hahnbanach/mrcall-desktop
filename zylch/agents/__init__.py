@@ -9,7 +9,6 @@ For agent trainers, see zylch.agents.trainers.
 
 from .base_agent import SpecializedAgent
 from .emailer_agent import EmailerAgent, EmailContext, EmailContextGatherer
-from .mrcall_agent import MrCallAgent
 
 __all__ = [
     # Base classes
@@ -18,5 +17,4 @@ __all__ = [
     "EmailerAgent",
     "EmailContext",
     "EmailContextGatherer",
-    "MrCallAgent",
 ]

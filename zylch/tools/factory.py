@@ -24,17 +24,11 @@ from zylch.email.imap_client import IMAPClient
 # External service imports (non-OAuth)
 from .starchat import StarChatClient
 from .pipedrive import PipedriveClient
-# VonageClient imported dynamically in SMS tools
 from .email_archive import EmailArchiveManager
 from .email_sync import EmailSyncManager
-from ..memory import EmbeddingEngine
 from ..assistant.models import ModelSelector
 
-from .sms_tools import (
-    SendSMSTool,
-    SendVerificationCodeTool,
-    VerifyCodeTool,
-)
+from .sms_tools import SendSMSTool
 from .call_tools import InitiateCallTool
 
 # Tool classes from split modules
@@ -103,11 +97,9 @@ class ToolFactory:
         ToolFactory._session_state = session_state
 
         try:
-            from zylch.storage.supabase_client import (
-                SupabaseStorage,
-            )
+            from zylch.storage import Storage
 
-            supabase_storage = SupabaseStorage()
+            supabase_storage = Storage()
 
             # StarChat client - DISABLED pending OAuth2.0
             starchat = None
@@ -271,18 +263,12 @@ class ToolFactory:
                 )
             )
 
-        # SMS tools (always available)
-        tools.extend(
-            ToolFactory._create_sms_tools(
-                session_state=session_state,
-                owner_id=config.owner_id,
-                zylch_assistant_id=(
-                    config.zylch_assistant_id
-                ),
-            )
+        # SMS tool (send only - verification removed)
+        tools.append(
+            SendSMSTool(session_state=session_state)
         )
         logger.info(
-            "SMS tools initialized"
+            "SMS tool initialized"
             " (credentials loaded per-user)"
         )
 
@@ -552,28 +538,3 @@ class ToolFactory:
         """
         return []
 
-    @staticmethod
-    def _create_sms_tools(
-        session_state,
-        owner_id: str,
-        zylch_assistant_id: str,
-    ) -> List[Tool]:
-        """Create SMS tools via Vonage."""
-        return [
-            SendSMSTool(
-                session_state=session_state
-            ),
-            SendVerificationCodeTool(
-                session_state=session_state,
-                owner_id=owner_id,
-                zylch_assistant_id=(
-                    zylch_assistant_id
-                ),
-            ),
-            VerifyCodeTool(
-                owner_id=owner_id,
-                zylch_assistant_id=(
-                    zylch_assistant_id
-                ),
-            ),
-        ]

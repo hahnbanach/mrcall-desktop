@@ -768,7 +768,6 @@ Memory will be searchable via hybrid search."""
 **Reset timestamps:**
 • {reset_counts.get('emails', 0)} emails marked as unprocessed
 • {reset_counts.get('calendar_events', 0)} calendar events marked as unprocessed
-• {reset_counts.get('pipedrive_deals', 0)} Pipedrive deals marked as unprocessed
 
 Run `/agent process` to rebuild memory from your synced data."""
 
@@ -1576,7 +1575,32 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
     - /connect reset <provider> - Disconnect a provider
     """
     from zylch.storage import Storage
-    from zylch.integrations.registry import get_available_providers, get_category_emoji, get_connection_status
+
+    def get_category_emoji(category: str) -> str:
+        """Return emoji for provider category."""
+        return {
+            "email": "📧", "calendar": "📅",
+            "crm": "📊", "sms": "📱",
+            "phone": "📞", "llm": "🤖",
+        }.get(category, "🔌")
+
+    def get_available_providers(
+        storage, include_unavailable=False
+    ):
+        """Return list of connectable providers."""
+        # IntegrationProvider table removed; return
+        # hardcoded list for now.
+        return []
+
+    def get_connection_status(
+        storage, owner_id, include_unavailable=False
+    ):
+        """Return connection status dict."""
+        return {
+            "connections": [],
+            "connected_count": 0,
+            "available_count": 0,
+        }
 
     help_text = """**📡 Connections**
 
@@ -1709,62 +1733,18 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
         # Connect to specific provider (subcommand is the provider key)
         provider_key = subcommand
 
-        # Get provider info
-        from zylch.storage.database import get_session
-        from zylch.storage.models import IntegrationProvider
-
-        with get_session() as session:
-            provider_row = session.query(IntegrationProvider).filter(IntegrationProvider.provider_key == provider_key).one_or_none()
-
-        # Debug logging
-        logger.info(f"[/connect] Query for provider_key='{provider_key}'")
-        logger.info(f"[/connect] Result: {provider_row.to_dict() if provider_row else None}")
-
-        if not provider_row:
-            return f"❌ **Error:** Provider '{provider_key}' not found\n\nRun `/connect` to see available providers"
-
-        provider = provider_row.to_dict()
-
-        if not provider['is_available']:
-            return f"⏳ **{provider['display_name']}** is coming soon!\n\nRun `/connect` to see available providers"
-
-        # OAuth provider - return authorization URL
-        # Note: The CLI handles the local OAuth server and browser opening.
-        # The backend just returns the OAuth URL for the CLI to use.
-        if provider['requires_oauth']:
-            oauth_url = provider.get('oauth_url', f'/api/auth/{provider_key}/authorize')
-
-            return f"""**🔗 Connect {provider['display_name']}**
-
-**OAuth Authorization Required**
-
-For API clients, redirect user to:
-```
-{oauth_url}?owner_id={owner_id}
-```
-
-After authorization, tokens will be stored automatically.
-
-Run `/connect` to verify connection."""
-
-        # API key provider - show configuration instructions
-        else:
-            config_fields = provider.get('config_fields', {})
-            fields_list = '\n'.join([f"• `{field}`: {info.get('label', field)}" for field, info in config_fields.items()])
-
-            return f"""**🔧 Configure {provider['display_name']}**
-
-This integration requires manual configuration.
-
-**Required fields:**
-{fields_list}
-
-**Setup:**
-1. Get your credentials from {provider['display_name']}
-2. Store them securely in environment variables or database
-3. Run `/connect` to verify connection
-
-**Documentation:** {provider.get('documentation_url', 'Contact support for setup help')}"""
+        # IntegrationProvider table removed; provider lookup
+        # is not available. Return a helpful message.
+        logger.info(
+            f"[/connect] provider_key='{provider_key}'"
+            " (IntegrationProvider removed)"
+        )
+        return (
+            f"Provider '{provider_key}' lookup is not"
+            " available (IntegrationProvider removed)."
+            "\n\nUse `/connect status` or"
+            " `/connect reset <provider>` instead."
+        )
 
     except Exception as e:
         logger.error(f"Error in /connect command: {e}", exc_info=True)

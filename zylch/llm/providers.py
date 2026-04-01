@@ -4,12 +4,10 @@ from typing import Dict, Any
 
 from zylch.config import settings
 
-# One model per provider — configured via env vars (ANTHROPIC_MODEL, OPENAI_MODEL, MISTRAL_MODEL, SCALEWAY_MODEL)
+# One model per provider — configured via env vars
 PROVIDER_MODELS: Dict[str, str] = {
     "anthropic": settings.anthropic_model,
     "openai": settings.openai_model,
-    "mistral": settings.mistral_model,
-    "scaleway": settings.scaleway_model,
 }
 
 # Feature availability per provider
@@ -26,26 +24,12 @@ PROVIDER_FEATURES: Dict[str, Dict[str, bool]] = {
         "prompt_caching": False, # Anthropic-only feature
         "vision": True,
     },
-    "mistral": {
-        "tool_calling": True,
-        "web_search": False,     # Only via Mistral Agents API (not standard completions)
-        "prompt_caching": False, # Anthropic-only feature
-        "vision": True,          # mistral-large-3 is multimodal
-    },
-    "scaleway": {
-        "tool_calling": True,
-        "web_search": False,     # Scaleway Generative APIs don't support built-in tools
-        "prompt_caching": False,
-        "vision": True,          # Mistral models on Scaleway support vision
-    },
 }
 
 # API key environment variable names (for reference)
 PROVIDER_API_KEY_NAMES: Dict[str, str] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
-    "mistral": "MISTRAL_API_KEY",
-    "scaleway": "SCW_SECRET_KEY",
 }
 
 
@@ -75,7 +59,7 @@ def get_provider_info(provider: str) -> Dict[str, Any]:
         "features": features,
         "available_features": available,
         "unavailable_features": unavailable,
-        "is_eu": provider in ("mistral", "scaleway"),
+        "is_eu": False,
     }
 
 
@@ -152,17 +136,13 @@ def get_system_llm_credentials(
         (provider, api_key) tuple
     """
     provider = settings.system_llm_provider
-    if provider == "openai" and settings.openai_api_key:
-        return "openai", settings.openai_api_key
     if provider == "anthropic" and settings.anthropic_api_key:
         return "anthropic", settings.anthropic_api_key
-    if provider == "scaleway" and settings.scw_secret_key:
-        return "scaleway", settings.scw_secret_key
-    # Try any available key as last resort
-    if settings.openai_api_key:
+    if provider == "openai" and settings.openai_api_key:
         return "openai", settings.openai_api_key
-    if settings.scw_secret_key:
-        return "scaleway", settings.scw_secret_key
+    # Try any available key as last resort
     if settings.anthropic_api_key:
         return "anthropic", settings.anthropic_api_key
+    if settings.openai_api_key:
+        return "openai", settings.openai_api_key
     return fallback_provider, fallback_api_key
