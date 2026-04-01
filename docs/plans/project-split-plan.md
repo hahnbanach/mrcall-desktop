@@ -145,12 +145,14 @@ Poco codice è davvero condiviso. Dove serve, si copia e si diverge:
 
 ## Piano di Esecuzione
 
-### Fase 1: Preparazione (entrambe le sessioni)
-1. Validare questo piano con sessione mrcall-agent
-2. Concordare lista definitiva di file per ciascun repo
-3. Decidere se rinominare repo GitLab o crearne uno nuovo
+### Fase 1: Preparazione — COMPLETATA
+- Piano validato dalla sessione mrcall-agent (2026-04-01)
+- Decisioni prese:
+  - zylch-standalone: solo distribuzione via pipx, niente Railway
+  - mrcall-agent: nuovo progetto in `~/hb/mrcall-agent`
+  - Il repo `hahnbanach/zylch` rimane per lo standalone
 
-### Fase 2: zylch-standalone (questa sessione)
+### Fase 2: zylch-standalone (sessione standalone)
 1. Eliminare tutto il codice MrCall dal repo
 2. Sostituire PostgreSQL con SQLite
 3. Sostituire Gmail OAuth con IMAP client
@@ -162,13 +164,25 @@ Poco codice è davvero condiviso. Dove serve, si copia e si diverge:
 9. Aggiungere cost tracking
 10. Test end-to-end: `pipx install . && zylch init && zylch`
 
-### Fase 3: mrcall-agent (altra sessione)
-1. Eliminare tutto il codice standalone/sales dal repo
-2. Aggiungere IMAP client per accesso email
-3. Separare endpoint pubblici/privati
-4. Aggiungere endpoint privati per StarChat
-5. Pulire modelli DB (rimuovere tabelle standalone)
-6. Test end-to-end con dashboard + StarChat
+### Fase 3: mrcall-agent (sessione mrcall-agent)
+Nuovo progetto in `~/hb/mrcall-agent`. Copia i file necessari da `~/hb/zylch`, poi:
+
+1. **Struttura iniziale**: copiare da zylch solo i file elencati nella sezione
+   "mrcall-agent → Cosa tiene" sopra. Nuovo CLAUDE.md, requirements.txt, Dockerfile.
+2. **Pulire**: rimuovere import di moduli standalone (gmail_tools, contact_tools,
+   email_sync_tools, crm_tools, sync_service, command_handlers standalone).
+3. **Ridurre modelli DB**: rimuovere tabelle standalone (emails, calendar_events,
+   drafts, task_items, email_triage, training_samples, pipedrive_deals, ecc.)
+   Tenere: oauth_tokens, oauth_states, agent_prompts, background_jobs, blobs,
+   blob_sentences, mrcall_conversations, error_logs.
+4. **Ridurre requirements.txt**: rimuovere dipendenze standalone (google-api-python-client,
+   pipedrive, sendgrid, vonage). Tenere: fastapi, uvicorn, anthropic, httpx, fastembed,
+   sqlalchemy, psycopg2, alembic, firebase-admin, cryptography.
+5. **Nuovo docker-compose.yml**: solo postgres + mrcall-agent, porta 8000.
+6. **Nuovo CLAUDE.md**: documentazione specifica mrcall-agent.
+7. **Testare**: docker compose up, /mrcall open, configurare GenColor,
+   verificare variabili su StarChat.
+8. **GitLab/GitHub**: creare repo `hahnbanach/mrcall-agent`, push.
 
 ### Fase 4: Verifica incrociata
 1. Entrambi i progetti buildano e passano i test indipendentemente
@@ -183,16 +197,19 @@ Poco codice è davvero condiviso. Dove serve, si copia e si diverge:
 | Rischio | Mitigazione |
 |---|---|
 | Dimenticare file necessari durante lo split | Grep per import incrociati dopo lo split |
-| Rompere deploy MrCall durante lo split | Fare lo split su branch, testare prima di merge |
-| IMAP meno affidabile di Gmail API | Retry + error handling robusto, logging |
-| CalDAV non supportato da tutti i provider | Fallback: iCal feed (read-only) |
-| GOWA deprecato/abbandonato | whatsmeow è la vera dipendenza, GOWA è sostituibile |
+| Rompere deploy MrCall durante lo split | mrcall-agent è un nuovo progetto, non tocca il repo zylch |
+| Import circolari dopo rimozione moduli | Test di import all'avvio: `python -c "from mrcall_agent.api.main import app"` |
 
 ---
 
+## Domande Risolte
+
+1. **Repo**: mrcall-agent è un nuovo progetto in `~/hb/mrcall-agent`. Il repo `hahnbanach/zylch` rimane per standalone.
+2. **Railway**: solo standalone lo usava, e standalone passa a pipx. Railway dismesso.
+3. **Memoria blobs MrCall**: sì, servono per config memory (decisioni di configurazione passate).
+4. **mrzappa**: da investigare durante lo sviluppo di mrcall-agent.
+
 ## Domande Aperte
 
-1. Il repo GitLab `hahnbanach/zylch` diventa `hahnbanach/mrcall-agent`? O si crea nuovo?
-2. Railway continua a deployare zylch-standalone? O solo distribuzione via PyPI/pipx?
-3. La memoria (blobs) di MrCall include template di risposta email — servono ancora in mrcall-agent?
-4. mrzappa ha un'API REST o serve integrazione diretta in StarChat?
+1. Il package Python di mrcall-agent si chiama `mrcall_agent` o `zylch_mrcall` o altro?
+2. L'immagine Docker di mrcall-agent usa lo stesso registry GitLab o uno nuovo?
