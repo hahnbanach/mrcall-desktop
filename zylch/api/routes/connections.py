@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 
 from zylch.api.firebase_auth import get_current_user
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.storage.database import get_session
 from zylch.storage.models import IntegrationProvider
 from zylch.integrations.registry import (
@@ -90,7 +90,7 @@ async def get_connections_status(
     owner_id = get_user_id_from_token(user)
 
     try:
-        supabase = SupabaseStorage()
+        supabase = Storage()
         status_data = get_connection_status(
             supabase,
             owner_id,
@@ -134,7 +134,7 @@ async def list_providers(
     ```
     """
     try:
-        supabase = SupabaseStorage()
+        supabase = Storage()
         providers = get_available_providers(
             supabase,
             category=category,
@@ -212,7 +212,7 @@ async def get_user_connection_list(owner_id: str):
     ```
     """
     try:
-        supabase = SupabaseStorage()
+        supabase = Storage()
         connections = get_user_connections(supabase, owner_id)
 
         return {"connections": connections}
@@ -294,7 +294,7 @@ async def save_provider_credentials(
     """
     owner_id = user['uid']
     try:
-        supabase = SupabaseStorage()
+        supabase = Storage()
 
         # Verify provider exists via ORM
         with get_session() as session:
@@ -388,7 +388,7 @@ async def get_provider_credentials_endpoint(
     """
     owner_id = user['uid']
     try:
-        supabase = SupabaseStorage()
+        supabase = Storage()
 
         credentials = supabase.get_provider_credentials(
             owner_id=owner_id,
@@ -437,7 +437,7 @@ async def delete_provider_credentials_endpoint(
     """
     owner_id = user['uid']
     try:
-        supabase = SupabaseStorage()
+        supabase = Storage()
 
         # Get provider info for display name via ORM
         with get_session() as session:

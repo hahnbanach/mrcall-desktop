@@ -382,8 +382,8 @@ CREATE TABLE triage_training_samples (
 | `tools/email_sync.py` | varies | `_build_auto_reply_thread_data()` | Thread data without Claude |
 | `ml/anonymizer.py` | 17-255 | `TriageAnonymizer` | PII detection and replacement |
 | `ml/anonymizer.py` | 258-275 | `create_sample_hash()` | SHA256 deduplication hash |
-| `storage/supabase_client.py` | 2197-2229 | `store_training_sample()` | Save training sample |
-| `storage/supabase_client.py` | 2256-2280 | `get_importance_rules()` | Load rules for user |
+| `storage/storage.py` | 2197-2229 | `store_training_sample()` | Save training sample |
+| `storage/storage.py` | 2256-2280 | `get_importance_rules()` | Load rules for user |
 | `api/routes/settings.py` | varies | `importance_rules_*` | CRUD API endpoints |
 
 ## Test Coverage
@@ -502,4 +502,4 @@ tests/
 | `services/email_task_agent_trainer.py` | Task detection with importance rules and auto-reply filtering |
 | `tools/email_sync.py` | Added early-exit for auto-replies, `_build_auto_reply_thread_data()` |
 | `tools/gmail.py` | Extract RFC 3834 headers in `_parse_message()` |
-| `storage/supabase_client.py` | Added `store_training_sample()`, `get_importance_rules()`, `get_contact_by_email()` |
+| `storage/storage.py` | Added `store_training_sample()`, `get_importance_rules()`, `get_contact_by_email()` |

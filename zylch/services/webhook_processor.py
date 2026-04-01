@@ -30,8 +30,8 @@ class WebhookEventStore:
 
     def __init__(self):
         """Initialize event store using Supabase."""
-        from ..storage.supabase_client import SupabaseStorage
-        self._storage = SupabaseStorage.get_instance()
+        from ..storage import Storage
+        self._storage = Storage.get_instance()
         logger.info("Webhook event store initialized with Supabase backend")
 
     def store_event(

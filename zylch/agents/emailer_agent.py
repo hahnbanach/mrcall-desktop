@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from zylch.agents.base_agent import SpecializedAgent
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.storage.database import get_session
 from zylch.storage.models import Blob
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
@@ -157,7 +157,7 @@ class EmailContextGatherer:
 
     def __init__(
         self,
-        storage: SupabaseStorage,
+        storage: Storage,
         search_engine: HybridSearchEngine,
         owner_id: str
     ):
@@ -361,7 +361,7 @@ class EmailerAgent(SpecializedAgent):
 
     def __init__(
         self,
-        storage: SupabaseStorage,
+        storage: Storage,
         owner_id: str,
         api_key: str,
         provider: str = "anthropic"
@@ -369,7 +369,7 @@ class EmailerAgent(SpecializedAgent):
         """Initialize EmailerAgent.
 
         Args:
-            storage: SupabaseStorage instance
+            storage: Storage instance
             owner_id: Firebase UID
             api_key: API key for LLM
             provider: LLM provider (anthropic, openai, mistral)

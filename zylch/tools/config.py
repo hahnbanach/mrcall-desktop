@@ -105,7 +105,7 @@ class ToolConfig:
 
         Args:
             owner_id: Firebase UID for the user
-            storage: Optional SupabaseStorage instance (creates new if not provided)
+            storage: Optional Storage instance (creates new if not provided)
 
         Returns:
             ToolConfig instance with BYOK credentials populated
@@ -116,8 +116,8 @@ class ToolConfig:
 
         # Get storage instance
         if storage is None:
-            from ..storage.supabase_client import SupabaseStorage
-            storage = SupabaseStorage.get_instance()
+            from ..storage import Storage
+            storage = Storage.get_instance()
 
         # Fetch BYOK credentials from Supabase
         # LLM Provider (detect active provider)

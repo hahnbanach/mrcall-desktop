@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from zylch.llm import LLMClient, PROVIDER_MODELS
 from zylch.config import settings
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class SpecializedAgent:
 
     def __init__(
         self,
-        storage: SupabaseStorage,
+        storage: Storage,
         owner_id: str,
         api_key: str,
         provider: str = "anthropic"
@@ -37,7 +37,7 @@ class SpecializedAgent:
         """Initialize base agent with common configuration.
 
         Args:
-            storage: SupabaseStorage instance
+            storage: Storage instance
             owner_id: Firebase UID
             api_key: LLM API key
             provider: LLM provider (anthropic, openai, mistral)

@@ -30,7 +30,7 @@ class TestMrCallHandler:
     @pytest.mark.asyncio
     async def test_mrcall_status_not_connected(self):
         """Test /mrcall with no OAuth credentials."""
-        with patch('zylch.services.command_handlers.SupabaseClient') as mock_client, \
+        with patch('zylch.services.command_handlers.Storage') as mock_client, \
              patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
@@ -42,7 +42,7 @@ class TestMrCallHandler:
     @pytest.mark.asyncio
     async def test_mrcall_status_connected_linked(self):
         """Test /mrcall with OAuth credentials and linked business."""
-        with patch('zylch.services.command_handlers.SupabaseClient') as mock_client, \
+        with patch('zylch.services.command_handlers.Storage') as mock_client, \
              patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
@@ -59,7 +59,7 @@ class TestMrCallHandler:
     @pytest.mark.asyncio
     async def test_mrcall_status_connected_not_linked(self):
         """Test /mrcall with OAuth credentials but no linked business."""
-        with patch('zylch.services.command_handlers.SupabaseClient') as mock_client, \
+        with patch('zylch.services.command_handlers.Storage') as mock_client, \
              patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
@@ -76,7 +76,7 @@ class TestMrCallHandler:
     @pytest.mark.asyncio
     async def test_mrcall_list_not_connected(self):
         """Test /mrcall list without OAuth credentials."""
-        with patch('zylch.services.command_handlers.SupabaseClient'), \
+        with patch('zylch.services.command_handlers.Storage'), \
              patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds:
             mock_creds.return_value = None
 
@@ -87,7 +87,7 @@ class TestMrCallHandler:
     @pytest.mark.asyncio
     async def test_mrcall_list_success(self):
         """Test /mrcall list with OAuth credentials."""
-        with patch('zylch.services.command_handlers.SupabaseClient'), \
+        with patch('zylch.services.command_handlers.Storage'), \
              patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds, \
              patch('httpx.AsyncClient') as mock_httpx:
             mock_creds.return_value = {
@@ -117,7 +117,7 @@ class TestMrCallHandler:
     @pytest.mark.asyncio
     async def test_mrcall_link_success(self):
         """Test /mrcall link N linking."""
-        with patch('zylch.services.command_handlers.SupabaseClient') as mock_client, \
+        with patch('zylch.services.command_handlers.Storage') as mock_client, \
              patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds, \
              patch('httpx.AsyncClient') as mock_httpx:
             mock_instance = Mock()
@@ -149,7 +149,7 @@ class TestMrCallHandler:
     @pytest.mark.asyncio
     async def test_mrcall_unlink(self):
         """Test /mrcall unlink."""
-        with patch('zylch.services.command_handlers.SupabaseClient') as mock_client:
+        with patch('zylch.services.command_handlers.Storage') as mock_client:
             mock_instance = Mock()
             mock_instance.remove_mrcall_link.return_value = True
             mock_client.return_value = mock_instance
@@ -160,7 +160,7 @@ class TestMrCallHandler:
     @pytest.mark.asyncio
     async def test_mrcall_variables_not_linked(self):
         """Test /mrcall variables without linked business."""
-        with patch('zylch.services.command_handlers.SupabaseClient') as mock_client, \
+        with patch('zylch.services.command_handlers.Storage') as mock_client, \
              patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds:
             mock_instance = Mock()
             mock_instance.get_mrcall_link.return_value = None
@@ -173,7 +173,7 @@ class TestMrCallHandler:
     @pytest.mark.asyncio
     async def test_mrcall_variables_get(self):
         """Test /mrcall variables get with linked business."""
-        with patch('zylch.services.command_handlers.SupabaseClient'), \
+        with patch('zylch.services.command_handlers.Storage'), \
              patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds, \
              patch('zylch.tools.starchat.create_starchat_client') as mock_create:
             mock_creds.return_value = {
@@ -196,7 +196,7 @@ class TestMrCallHandler:
     @pytest.mark.asyncio
     async def test_mrcall_variables_set(self):
         """Test /mrcall variables set."""
-        with patch('zylch.services.command_handlers.SupabaseClient'), \
+        with patch('zylch.services.command_handlers.Storage'), \
              patch('zylch.services.command_handlers.get_mrcall_credentials') as mock_creds, \
              patch('zylch.tools.starchat.create_starchat_client') as mock_create:
             mock_creds.return_value = {
@@ -226,7 +226,7 @@ class TestShareHandler:
     @pytest.mark.asyncio
     async def test_share_invalid_email(self):
         """Test /share with invalid email."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage'):
+        with patch('zylch.storage.storage.Storage'):
             result = await handle_share(['not-an-email'], 'test_owner', 'test@example.com')
             assert 'Error' in result
             assert 'Invalid email' in result
@@ -234,7 +234,7 @@ class TestShareHandler:
     @pytest.mark.asyncio
     async def test_share_self(self):
         """Test /share with own email."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage'):
+        with patch('zylch.storage.storage.Storage'):
             result = await handle_share(['test@example.com'], 'test_owner', 'test@example.com')
             assert 'Error' in result
             assert "can't share with yourself" in result.lower()
@@ -242,7 +242,7 @@ class TestShareHandler:
     @pytest.mark.asyncio
     async def test_share_no_user_email(self):
         """Test /share without user email context."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage'):
+        with patch('zylch.storage.storage.Storage'):
             result = await handle_share(['other@example.com'], 'test_owner', None)
             assert 'Error' in result
             assert 'email is not available' in result
@@ -250,7 +250,7 @@ class TestShareHandler:
     @pytest.mark.asyncio
     async def test_share_success(self):
         """Test /share with valid email."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
+        with patch('zylch.storage.storage.Storage') as mock_client:
             mock_instance = Mock()
             mock_instance.register_share_recipient.return_value = {'status': 'pending'}
             mock_client.return_value = mock_instance
@@ -272,7 +272,7 @@ class TestRevokeHandler:
     @pytest.mark.asyncio
     async def test_revoke_invalid_email(self):
         """Test /revoke with invalid email."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage'):
+        with patch('zylch.storage.storage.Storage'):
             result = await handle_revoke(['not-an-email'], 'test_owner', 'test@example.com')
             assert 'Error' in result
             assert 'Invalid email' in result
@@ -280,7 +280,7 @@ class TestRevokeHandler:
     @pytest.mark.asyncio
     async def test_revoke_success(self):
         """Test /revoke with valid email."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
+        with patch('zylch.storage.storage.Storage') as mock_client:
             mock_instance = Mock()
             mock_instance.revoke_sharing.return_value = True
             mock_client.return_value = mock_instance
@@ -291,7 +291,7 @@ class TestRevokeHandler:
     @pytest.mark.asyncio
     async def test_revoke_not_found(self):
         """Test /revoke when no sharing exists."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
+        with patch('zylch.storage.storage.Storage') as mock_client:
             mock_instance = Mock()
             mock_instance.revoke_sharing.return_value = False
             mock_client.return_value = mock_instance
@@ -313,7 +313,7 @@ class TestSharingHandler:
     @pytest.mark.asyncio
     async def test_sharing_empty(self):
         """Test /sharing with no connections."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
+        with patch('zylch.storage.storage.Storage') as mock_client:
             mock_instance = Mock()
             mock_instance.get_sharing_status.return_value = None
             mock_client.return_value = mock_instance
@@ -324,7 +324,7 @@ class TestSharingHandler:
     @pytest.mark.asyncio
     async def test_sharing_with_connections(self):
         """Test /sharing with existing connections."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
+        with patch('zylch.storage.storage.Storage') as mock_client:
             mock_instance = Mock()
             mock_instance.get_sharing_status.return_value = {
                 'outgoing': [
@@ -345,7 +345,7 @@ class TestSharingHandler:
     @pytest.mark.asyncio
     async def test_sharing_authorize(self):
         """Test /sharing --authorize."""
-        with patch('zylch.storage.supabase_client.SupabaseStorage') as mock_client:
+        with patch('zylch.storage.storage.Storage') as mock_client:
             mock_instance = Mock()
             mock_instance.authorize_sender.return_value = True
             mock_client.return_value = mock_instance

@@ -42,8 +42,8 @@ class SharingAuthorizationManager:
                      All storage uses SQLAlchemy + PostgreSQL.
         """
         # Keep storage reference for non-client methods that may still be needed
-        from ..storage.supabase_client import SupabaseStorage
-        self._storage = SupabaseStorage.get_instance()
+        from ..storage import Storage
+        self._storage = Storage.get_instance()
         logger.info("Sharing authorization manager initialized with SQLAlchemy backend")
 
     # ==================== User Management ====================
@@ -159,7 +159,7 @@ class SharingAuthorizationManager:
                         row.status = 'pending'
 
                 else:
-                    # Create new authorization using SupabaseStorage
+                    # Create new authorization using Storage
                     sender = self.get_user_by_email(sender_email)
                     sender_id = sender.get('owner_id') if sender else 'unknown'
                     self._storage.register_share_recipient(sender_id, sender_email.lower(), recipient_email.lower())

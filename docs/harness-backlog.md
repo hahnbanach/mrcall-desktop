@@ -6,7 +6,7 @@ Enforcement gaps, missing tooling, and documentation debt identified during deve
   Discovered: 2026-03-17 doc-migration session
   Impact: Violates project's own modular design rule, makes navigation and testing harder
 
-- [ ] `docs/agents/README.md` references non-existent files (`memory_agent.py`) and wrong class names (`SupabaseStorage` as Supabase)
+- [ ] `docs/agents/README.md` references non-existent files (`memory_agent.py`) and wrong class names (`Storage` as Supabase)
   Discovered: 2026-03-17 doc-migration session
   Impact: Misleads developers about agent architecture; new contributors would look for wrong files
 

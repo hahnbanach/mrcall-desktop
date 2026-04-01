@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from zylch.config import settings
 from zylch.llm import LLMClient, PROVIDER_MODELS
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.storage.database import get_session
 from zylch.storage.models import Blob
 
@@ -25,7 +25,7 @@ class BaseAgentTrainer:
 
     def __init__(
         self,
-        storage: SupabaseStorage,
+        storage: Storage,
         owner_id: str,
         api_key: str,
         user_email: str,
@@ -34,7 +34,7 @@ class BaseAgentTrainer:
         """Initialize base trainer with common configuration.
 
         Args:
-            storage: SupabaseStorage instance
+            storage: Storage instance
             owner_id: Firebase UID
             api_key: LLM API key
             user_email: User's email address (for identifying sent vs received)

@@ -61,7 +61,7 @@ Inline (sync OK)
 
 - `zylch/services/command_handlers.py` - All command handlers
 - `zylch/services/job_executor.py` - Background job execution
-- `zylch/storage/supabase_client.py` - `create_background_job()`, `SupabaseStorage.get_instance()`
+- `zylch/storage/storage.py` - `create_background_job()`, `Storage.get_instance()`
 - `zylch/api/token_storage.py` - `get_active_llm_provider(owner_id)`, `get_mrcall_credentials(owner_id)`
 - `zylch/tools/mrcall/llm_helper.py` - `modify_prompt_with_llm()` for LLM-based modifications
 - `zylch/tools/starchat.py` - `create_starchat_client()` for MrCall API

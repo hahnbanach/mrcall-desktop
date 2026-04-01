@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.storage.database import get_session
 from zylch.storage.models import ImportanceRule
 
@@ -360,7 +360,7 @@ async def submit_triage_feedback(
     """
     try:
         owner_id = get_user_id_from_token(user)
-        supabase = SupabaseStorage()
+        supabase = Storage()
 
         sample = {
             'owner_id': owner_id,

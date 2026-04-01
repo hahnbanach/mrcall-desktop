@@ -83,7 +83,7 @@ description: |
 - Agents inherit from `BaseAgent` in `zylch/agents/base_agent.py`
 - Trainers in `zylch/agents/trainers/` handle learning from user data
 - Agents use `LLMClient` (aisuite wrapper) for model calls. MrCall agent uses Anthropic SDK directly for web search + streaming
-- Storage via `SupabaseStorage` (SQLAlchemy-based, name is legacy)
+- Storage via `Storage` (SQLAlchemy-based, name is legacy)
 - Structured output via `tool_use` for reliable JSON
 
 ## Dependency Rules

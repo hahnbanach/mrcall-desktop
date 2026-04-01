@@ -15,7 +15,7 @@ import logging
 from typing import Any, Dict, List, Tuple
 
 from zylch.agents.trainers.base import BaseAgentTrainer
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ class EmailerAgentTrainer(BaseAgentTrainer):
 
     def __init__(
         self,
-        storage: SupabaseStorage,
+        storage: Storage,
         owner_id: str,
         api_key: str,
         user_email: str,
@@ -118,7 +118,7 @@ class EmailerAgentTrainer(BaseAgentTrainer):
         """Initialize EmailerAgentTrainer.
 
         Args:
-            storage: SupabaseStorage instance
+            storage: Storage instance
             owner_id: Firebase UID
             api_key: LLM API key
             user_email: User's email address (for identifying sent emails)

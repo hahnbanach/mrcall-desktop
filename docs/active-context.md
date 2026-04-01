@@ -119,7 +119,7 @@ See `docs/plans/project-split-plan.md` for the next major initiative.
 
 - `config_tools.py:109-125` `category_map` has wrong variable names (pre-rename)
 - `config_tools.py:149` modifiable logic bug (`and` should not require `advanced`)
-- `SupabaseStorage` class name is misleading (pure SQLAlchemy, legacy name)
+- `Storage` class name is misleading (pure SQLAlchemy, legacy name)
 - `tools/factory.py` is 2000+ lines (exceeds 500-line rule)
 - MrCall agent hardcoded to Anthropic — cannot use other providers
 - ONNX import warning in container (`cannot import name 'ONNX_WEIGHTS_NAME'`)

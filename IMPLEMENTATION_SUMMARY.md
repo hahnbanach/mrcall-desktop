@@ -51,7 +51,7 @@ The system is now integrated into Zylch's intelligence system, providing read tr
 - Cache-control headers
 
 ### 3. Storage Layer (Supabase Client)
-**File**: `zylch/storage/supabase_client.py`
+**File**: `zylch/storage/storage.py`
 
 ✅ Added methods:
 - `create_sendgrid_message_mapping()` - Create SendGrid → Zylch mapping

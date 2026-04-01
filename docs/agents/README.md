@@ -23,21 +23,21 @@ Backend agents that process data and generate content using LLM.
 All agents share common patterns:
 
 - **LLM Access**: Use `LLMClient` (LiteLLM wrapper) for model calls
-- **Data Storage**: Access `SupabaseStorage` for persistence
+- **Data Storage**: Access `Storage` for persistence
 - **Tool Exposure**: Registered via `ToolFactory` for Claude to call
 - **Structured Output**: Use `tool_use` for reliable JSON output
 
 ```
 User Request → Tool (factory.py) → Agent → LLMClient → Response
                                      ↓
-                              SupabaseStorage
+                              Storage
 ```
 
 ## Common Dependencies
 
 ```python
 from zylch.llm import LLMClient
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine
 ```
 

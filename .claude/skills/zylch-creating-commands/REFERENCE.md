@@ -7,13 +7,13 @@ Use for fast operations: DB lookups, status checks, help text.
 ```python
 async def handle_mycommand(args: List[str], config, owner_id: str) -> str:
     """Handle /mycommand - fast operation."""
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
 
     # Parse args
     if '--help' in args:
         return """**Usage:** `/mycommand [options]`"""
 
-    storage = SupabaseStorage.get_instance()
+    storage = Storage.get_instance()
     result = storage.get_something(owner_id)
 
     return f"✅ Result: {result}"
@@ -34,8 +34,8 @@ async def handle_mycommand(args: List[str], config, owner_id: str) -> str:
     def _blocking_work():
         # All sync/blocking code goes here
         # This runs in a separate thread, not blocking the event loop
-        from zylch.storage.supabase_client import SupabaseStorage
-        storage = SupabaseStorage.get_instance()
+        from zylch.storage import Storage
+        storage = Storage.get_instance()
         return expensive_operation(storage)
 
     loop = asyncio.get_event_loop()
@@ -55,18 +55,18 @@ When using `run_in_executor`, ALL external dependencies must be imported **INSID
 **Always do this:**
 ```python
 def _blocking_work():
-    from zylch.storage.supabase_client import SupabaseStorage  # ✅ Inside
+    from zylch.storage import Storage  # ✅ Inside
     from zylch.api.token_storage import get_mrcall_credentials  # ✅ Inside
-    storage = SupabaseStorage.get_instance()
+    storage = Storage.get_instance()
 ```
 
 **Never do this:**
 ```python
 async def handle_xxx(...):
-    from zylch.storage.supabase_client import SupabaseStorage  # ❌ Outside
+    from zylch.storage import Storage  # ❌ Outside
 
     def _blocking_work():
-        storage = SupabaseStorage.get_instance()  # NameError!
+        storage = Storage.get_instance()  # NameError!
 ```
 
 ## Template 3: Background Job (>5s)
@@ -76,7 +76,7 @@ Use for long operations: LLM batch processing, sync, imports.
 ```python
 async def handle_mycommand(args: List[str], config, owner_id: str) -> str:
     """Handle /mycommand - long operation with background job."""
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
     from zylch.services.job_executor import JobExecutor
     from zylch.api.token_storage import get_active_llm_provider
     import asyncio
@@ -85,7 +85,7 @@ async def handle_mycommand(args: List[str], config, owner_id: str) -> str:
     if '--help' in args:
         return """**Usage:** `/mycommand [options]`"""
 
-    storage = SupabaseStorage.get_instance()
+    storage = Storage.get_instance()
 
     # Get LLM credentials if command needs LLM
     llm_provider, api_key = get_active_llm_provider(owner_id)

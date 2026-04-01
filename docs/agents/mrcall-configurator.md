@@ -309,7 +309,7 @@ After each training, variable values are saved as a **snapshot** in `agent_promp
 
 | File | What |
 |------|------|
-| `zylch/storage/supabase_client.py` | `get_training_snapshot()`, `store_training_snapshot()` |
+| `zylch/storage/storage.py` | `get_training_snapshot()`, `store_training_snapshot()` |
 | `zylch/agents/trainers/mrcall_configurator.py` | `diff_snapshot()`, `build_snapshot_from_business()` classmethods |
 | `zylch/services/command_handlers.py` | Updated `_handle_mrcall_agent_train()` with selective logic + `--force` |
 | `zylch/api/routes/mrcall.py` | Training status + start endpoints |

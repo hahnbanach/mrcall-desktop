@@ -26,7 +26,7 @@ KEY FILES:
 - services/command_handlers.py: Slash command handling
 - agent/prompts.py: System prompts, persona
 - tools/*.py: Email, calendar, contacts integrations
-- storage/supabase_client.py: Database operations
+- storage/storage.py: Database operations
 
 REMEMBER:
 - All business logic lives HERE (not in CLI or frontend)

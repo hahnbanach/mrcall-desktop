@@ -47,7 +47,7 @@ class MemoryWorker:
 
 ```python
 from zylch.llm import LLMClient
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.memory import BlobStorage, HybridSearchEngine, LLMMergeService, EmbeddingEngine
 ```
 

@@ -233,7 +233,7 @@ async def send_message_stream(
     from zylch.agents.mrcall_agent import MrCallAgent
     from zylch.tools.starchat import StarChatClient
     from zylch.config import settings
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
 
     try:
         user_id = get_user_id_from_token(user)
@@ -303,7 +303,7 @@ async def send_message_stream(
             return StreamingResponse(_fallback_stream(), media_type="text/event-stream")
 
         # --- MrCall streaming path ---
-        storage = SupabaseStorage()
+        storage = Storage()
 
         # Get LLM credentials (user-level, then system fallback)
         from zylch.api.token_storage import get_active_llm_provider

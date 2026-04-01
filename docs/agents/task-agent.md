@@ -318,7 +318,7 @@ Separate from memory processing:
 |------|---------|
 | `zylch/agents/task_agent.py` | TaskWorker with `_get_calendar_context()` and `analyze_item_sync()` |
 | `zylch/agents/task_agent_email_trainer.py` | Prompt generation with calendar awareness |
-| `zylch/storage/supabase_client.py` | Task and calendar storage methods |
+| `zylch/storage/storage.py` | Task and calendar storage methods |
 | `zylch/services/command_handlers.py` | `/tasks` command handler, `format_task_items()` |
 | `zylch/services/job_executor.py` | Background job with calendar cache pre-computation |
 | `zylch/storage/migrations/022_calendar_attendee_search.sql` | RPC function + GIN index for attendee search |

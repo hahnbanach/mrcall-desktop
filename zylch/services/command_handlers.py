@@ -210,7 +210,7 @@ async def handle_help() -> str:
 async def handle_sync(args: List[str], config, owner_id: str) -> str:
     """Handle /sync command - now using background job system."""
     from zylch.api.token_storage import get_provider
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
     from zylch.services.sync_service import SyncService  # Used for mrcall subcommand
 
     help_text = """**🔄 Sync**
@@ -325,7 +325,7 @@ Then run `/sync --days N` to rebuild memory from re-synced emails."""
         logger.info(f"[/sync] MrCall sync for owner_id={owner_id}")
         try:
             from zylch.api.token_storage import get_mrcall_credentials
-            supabase = SupabaseStorage()
+            supabase = Storage()
 
             # Parse --days option
             days_back = 30
@@ -440,7 +440,7 @@ Your MrCall is linked to business `{business_id}` but OAuth credentials are miss
         from zylch.services.job_executor import JobExecutor
         import asyncio
 
-        storage = SupabaseStorage.get_instance()
+        storage = Storage.get_instance()
 
         # Create job (returns existing if duplicate pending/running)
         job = storage.create_background_job(
@@ -530,13 +530,13 @@ Use `/agent process` to extract facts from synced data:
     if not args:
         return help_text
 
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
     from zylch.storage.database import get_session
     from zylch.memory import BlobStorage, HybridSearchEngine, EmbeddingEngine, MemoryConfig, LLMMergeService
 
     try:
         # Initialize services
-        storage = SupabaseStorage.get_instance()
+        storage = Storage.get_instance()
         mem_config = MemoryConfig()
         embedding_engine = EmbeddingEngine(mem_config)
         blob_storage = BlobStorage(get_session, embedding_engine)
@@ -790,7 +790,7 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None, 
         user_email: User's email (optional)
         context: Request context containing source, firebase_token, etc.
     """
-    from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
+    from zylch.storage import Storage
     from zylch.api.token_storage import get_mrcall_credentials
     import httpx
     from zylch.config import settings
@@ -848,7 +848,7 @@ In config mode, use natural language:
     subcommand = positional[0].lower() if positional else None
 
     try:
-        client = SupabaseClient()
+        client = Storage()
 
         # Subcommand: unlink
         if subcommand == 'unlink':
@@ -1426,7 +1426,7 @@ Run `/mrcall list` to see your assistants, then `/mrcall link <business_id>` to 
 async def handle_share(args: List[str], owner_id: str, user_email: str = None) -> str:
     """Handle /share command - data sharing."""
     import re
-    from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
+    from zylch.storage import Storage
 
     help_text = """**🔗 Data Sharing**
 
@@ -1459,7 +1459,7 @@ Registers a recipient to receive shared data from you.
         return help_text
 
     try:
-        client = SupabaseClient()
+        client = Storage()
 
         recipient_email = args[0].lower()
 
@@ -1512,7 +1512,7 @@ Use `/revoke {recipient_email}` to cancel this sharing."""
 async def handle_revoke(args: List[str], owner_id: str, user_email: str = None) -> str:
     """Handle /revoke command - revoke sharing access."""
     import re
-    from zylch.storage.supabase_client import SupabaseStorage as SupabaseClient
+    from zylch.storage import Storage
 
     help_text = """**❌ Revoke Sharing**
 
@@ -1533,7 +1533,7 @@ They will no longer receive updates from you."""
         return help_text
 
     try:
-        client = SupabaseClient()
+        client = Storage()
 
         recipient_email = args[0].lower()
 
@@ -1575,7 +1575,7 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
     - /connect status - Show connection status
     - /connect reset <provider> - Disconnect a provider
     """
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
     from zylch.integrations.registry import get_available_providers, get_category_emoji, get_connection_status
 
     help_text = """**📡 Connections**
@@ -1615,7 +1615,7 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
     subcommand = positional[0].lower() if positional else None
 
     try:
-        supabase = SupabaseStorage()
+        supabase = Storage()
 
         # Subcommand: status
         if subcommand == 'status':
@@ -2444,7 +2444,7 @@ Run `/sync` to fetch calendar events."""
 
 async def handle_tasks(args: List[str], owner_id: str) -> str:
     """Handle /tasks command - list items needing action using LLM analysis."""
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
     from zylch.workers import TaskWorker
     from zylch.api.token_storage import get_email
 
@@ -2473,7 +2473,7 @@ Shows items needing your action, analyzed by AI.
         return help_text
 
     try:
-        storage = SupabaseStorage.get_instance()
+        storage = Storage.get_instance()
 
         # Handle subcommands
         if args and args[0] == 'status':
@@ -2583,7 +2583,7 @@ def _load_blob_context(storage, owner_id: str, blob_ids: list) -> str:
     """Load blob content from sources for task detail display.
 
     Args:
-        storage: SupabaseStorage instance
+        storage: Storage instance
         owner_id: Firebase UID
         blob_ids: List of blob UUIDs from task sources
 
@@ -2622,8 +2622,8 @@ async def handle_task_close(task_num: int, owner_id: str) -> str:
     Returns:
         Confirmation message or error
     """
-    from zylch.storage.supabase_client import SupabaseStorage
-    storage = SupabaseStorage.get_instance()
+    from zylch.storage import Storage
+    storage = Storage.get_instance()
 
     # Get all tasks (same order as displayed in /tasks)
     tasks = storage.get_task_items(owner_id, action_required=True)
@@ -2666,9 +2666,9 @@ async def get_task_by_number(task_num: int, owner_id: str) -> dict | None:
     Returns:
         Task dict if found, None otherwise
     """
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
 
-    storage = SupabaseStorage.get_instance()
+    storage = Storage.get_instance()
 
     # Get all tasks (same order as displayed in /tasks)
     tasks = storage.get_task_items(owner_id, action_required=True)
@@ -2697,7 +2697,7 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
     Returns:
         Formatted task detail or error message
     """
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
 
     logger.debug(f"[TASK_DETAIL] Requested task #{task_num} for owner {owner_id}")
 
@@ -2706,7 +2706,7 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
         if not task:
             return f"Task #{task_num} not found. Run `/tasks refresh` first."
 
-        storage = SupabaseStorage.get_instance()
+        storage = Storage.get_instance()
         event_type = task.get('event_type')
         event_id = task.get('event_id')
         sources = task.get('sources', {})
@@ -2822,7 +2822,7 @@ async def handle_task_detail(task_num: int, owner_id: str) -> str:
 
 async def handle_jobs(args: List[str], owner_id: str) -> str:
     """Handle /jobs command - list background jobs."""
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
 
     help_text = """**📋 Background Jobs**
 
@@ -2857,7 +2857,7 @@ Shows your running/pending background jobs.
     subcommand = positional[0].lower() if positional else None
 
     try:
-        storage = SupabaseStorage.get_instance()
+        storage = Storage.get_instance()
 
         # Subcommand: cancel
         if subcommand == 'cancel':
@@ -3018,7 +3018,7 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
         owner_id: User's Firebase UID
         context: Request context (for dashboard detection)
     """
-    from zylch.storage.supabase_client import SupabaseStorage
+    from zylch.storage import Storage
     from zylch.api.token_storage import get_email
 
     help_text = """**🤖 Manage AI Agents**
@@ -3072,7 +3072,7 @@ async def handle_agent(args: List[str], config: ToolConfig, owner_id: str, conte
         return help_text
 
     try:
-        storage = SupabaseStorage.get_instance()
+        storage = Storage.get_instance()
 
         domain = args[0].lower()  # 'memory', 'task', 'email', 'mrcall'
         action = args[1].lower()  # 'train', 'run', 'show', 'reset'

@@ -370,7 +370,7 @@ WHERE messages.owner_id = $1
 | `zylch/agents/task_agent.py` | Add read tracking context | Query read events during task detection |
 | `zylch/api/routes/webhooks.py` | SendGrid webhook handler | Receive open events |
 | `zylch/api/routes/tracking.py` | Tracking pixel endpoint | Serve 1x1 GIF |
-| `zylch/storage/supabase_client.py` | Add methods | Read tracking queries |
+| `zylch/storage/storage.py` | Add methods | Read tracking queries |
 
 ---
 

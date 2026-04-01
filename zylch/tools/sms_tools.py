@@ -175,8 +175,8 @@ class SendVerificationCodeTool(Tool):
         
         # Store in Supabase
         try:
-            from zylch.storage.supabase_client import SupabaseStorage
-            storage = SupabaseStorage.get_instance()
+            from zylch.storage import Storage
+            storage = Storage.get_instance()
             storage.create_verification_code(
                 owner_id=self.owner_id,
                 phone_number=phone_number,
@@ -263,8 +263,8 @@ class VerifyCodeTool(Tool):
             ToolResult indicating if verification was successful
         """
         try:
-            from zylch.storage.supabase_client import SupabaseStorage
-            storage = SupabaseStorage.get_instance()
+            from zylch.storage import Storage
+            storage = Storage.get_instance()
             is_valid = storage.verify_code(
                 owner_id=self.owner_id,
                 phone_number=phone_number,

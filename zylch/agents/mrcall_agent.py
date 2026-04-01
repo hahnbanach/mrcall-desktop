@@ -16,7 +16,7 @@ import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from zylch.agents.base_agent import SpecializedAgent
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 from zylch.agents.trainers import MrCallConfiguratorTrainer
 
 
@@ -198,7 +198,7 @@ class MrCallAgent(SpecializedAgent):
 
     def __init__(
         self,
-        storage: SupabaseStorage,
+        storage: Storage,
         owner_id: str,
         api_key: str,
         provider: str = "anthropic",
@@ -207,7 +207,7 @@ class MrCallAgent(SpecializedAgent):
         """Initialize MrCallAgent.
 
         Args:
-            storage: SupabaseStorage instance
+            storage: Storage instance
             owner_id: Firebase UID
             api_key: LLM API key
             provider: LLM provider (anthropic, openai, mistral)

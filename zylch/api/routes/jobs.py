@@ -13,7 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
 from zylch.api.firebase_auth import get_current_user, get_user_id_from_token, get_user_email_from_token
-from zylch.storage.supabase_client import SupabaseStorage
+from zylch.storage import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -57,14 +57,14 @@ class CancelJobResponse(BaseModel):
 # =============================================================================
 
 # Shared Supabase storage instance
-_storage: Optional[SupabaseStorage] = None
+_storage: Optional[Storage] = None
 
 
-def get_storage() -> SupabaseStorage:
+def get_storage() -> Storage:
     """Get shared Supabase storage instance."""
     global _storage
     if _storage is None:
-        _storage = SupabaseStorage.get_instance()
+        _storage = Storage.get_instance()
     return _storage
 
 
