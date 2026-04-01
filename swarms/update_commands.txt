@@ -1,3 +1,0 @@
-* Make sure all requests coming from the UI starting with "/" are interpreted as commands
-* make sure all commands are registered in the semantic analyzer, so that if someone says "I want help" -> "/help" is triggered without going to Claude
-* make sure all commands are updated. for instance, /help is not
