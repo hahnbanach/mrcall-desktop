@@ -1,10 +1,11 @@
 """Blob storage with sentence-level embeddings using SQLAlchemy."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from datetime import datetime, timezone
 import uuid
 
+import numpy as np
 from sqlalchemy import func
 
 from .text_processing import split_sentences
@@ -17,9 +18,23 @@ logger = logging.getLogger(__name__)
 class BlobStorage:
     """Storage for entity blobs with sentence-level embeddings."""
 
-    def __init__(self, get_session, embedding_engine: EmbeddingEngine):
+    def __init__(
+        self,
+        get_session,
+        embedding_engine: EmbeddingEngine,
+        on_mutation: Optional[Callable[[], None]] = None,
+    ):
         self._get_session = get_session
         self.embeddings = embedding_engine
+        self._on_mutation = on_mutation
+
+    def _notify_mutation(self):
+        """Notify listeners that blob data changed."""
+        if self._on_mutation:
+            logger.debug(
+                "[BlobStorage] notifying mutation callback"
+            )
+            self._on_mutation()
 
     def store_blob(
         self,
@@ -50,30 +65,41 @@ class BlobStorage:
             })
 
         with self._get_session() as session:
-            # Insert blob
+            # Insert blob (embedding as bytes for SQLite BLOB)
             blob = Blob(
                 id=uuid.UUID(blob_id),
                 owner_id=owner_id,
                 namespace=namespace,
                 content=content,
-                embedding=blob_embedding.tolist(),
+                embedding=blob_embedding.tobytes(),
                 events=events,
             )
             session.add(blob)
             session.flush()
 
-            # Insert sentences
+            # Insert sentences (embeddings as bytes)
             for i, sent in enumerate(sentences):
-                emb = sentence_embeddings[i] if len(sentence_embeddings) > i else self.embeddings.encode(sent)
+                emb = (
+                    sentence_embeddings[i]
+                    if len(sentence_embeddings) > i
+                    else self.embeddings.encode(sent)
+                )
+                emb_bytes = (
+                    emb.tobytes()
+                    if hasattr(emb, 'tobytes')
+                    else np.array(emb, dtype=np.float32)
+                    .tobytes()
+                )
                 sentence = BlobSentence(
                     blob_id=uuid.UUID(blob_id),
                     owner_id=owner_id,
                     sentence_text=sent,
-                    embedding=emb.tolist() if hasattr(emb, 'tolist') else list(emb),
+                    embedding=emb_bytes,
                 )
                 session.add(sentence)
 
             session.flush()
+            self._notify_mutation()
             return blob.to_dict()
 
     def update_blob(
@@ -112,9 +138,9 @@ class BlobStorage:
                     "description": event_description
                 })
 
-            # Update blob fields
+            # Update blob fields (embedding as bytes)
             blob.content = content
-            blob.embedding = blob_embedding.tolist()
+            blob.embedding = blob_embedding.tobytes()
             blob.events = events
 
             # Delete old sentences
@@ -122,18 +148,34 @@ class BlobStorage:
                 .filter(BlobSentence.blob_id == blob_id)\
                 .delete(synchronize_session=False)
 
-            # Insert new sentences
+            # Insert new sentences (embeddings as bytes)
             for i, sent in enumerate(sentences):
-                emb = sentence_embeddings[i] if len(sentence_embeddings) > i else self.embeddings.encode(sent)
+                emb = (
+                    sentence_embeddings[i]
+                    if len(sentence_embeddings) > i
+                    else self.embeddings.encode(sent)
+                )
+                emb_bytes = (
+                    emb.tobytes()
+                    if hasattr(emb, 'tobytes')
+                    else np.array(emb, dtype=np.float32)
+                    .tobytes()
+                )
+                bid = (
+                    uuid.UUID(blob_id)
+                    if isinstance(blob_id, str)
+                    else blob_id
+                )
                 sentence = BlobSentence(
-                    blob_id=uuid.UUID(blob_id) if isinstance(blob_id, str) else blob_id,
+                    blob_id=bid,
                     owner_id=owner_id,
                     sentence_text=sent,
-                    embedding=emb.tolist() if hasattr(emb, 'tolist') else list(emb),
+                    embedding=emb_bytes,
                 )
                 session.add(sentence)
 
             session.flush()
+            self._notify_mutation()
             return blob.to_dict()
 
     def get_blob(self, blob_id: str, owner_id: str) -> Optional[Dict[str, Any]]:
@@ -148,8 +190,13 @@ class BlobStorage:
         """Delete blob (sentences cascade automatically via FK)."""
         with self._get_session() as session:
             count = session.query(Blob)\
-                .filter(Blob.id == blob_id, Blob.owner_id == owner_id)\
+                .filter(
+                    Blob.id == blob_id,
+                    Blob.owner_id == owner_id,
+                )\
                 .delete(synchronize_session=False)
+            if count > 0:
+                self._notify_mutation()
             return count > 0
 
     def get_stats(self, owner_id: str) -> Dict[str, Any]:
