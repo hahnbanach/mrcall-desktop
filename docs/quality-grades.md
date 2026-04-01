@@ -1,7 +1,7 @@
 ---
 description: |
-  Quality assessment of each major Zylch module: test coverage, documentation,
-  architectural conformance, and known gaps.
+  Quality assessment of Zylch standalone modules after transformation
+  from SaaS to local CLI tool.
 ---
 
 # Quality Grades
@@ -10,84 +10,46 @@ description: |
 
 | Module | Test Coverage | Docs | Arch Conformance | Known Gaps |
 |--------|:---:|:---:|:---:|---|
-| **api/routes/** | Medium | Low | High | Missing API docs for most endpoints |
-| **services/** | Medium | Medium | High | Auto-sync + notification dedup added; QA report exists |
-| **storage/** | Low | Medium | High | SupabaseStorage renamed to Storage; shim removed |
-| **tools/** | Medium | Medium | High | Split into 6 modules; gmail_tools.py (874) and contact_tools.py (617) above 500 guideline |
-| **agents/** | Low | High | High | No tests for conversation memory or config memory |
-| **agents/trainers/** | Low | Low | High | Task trainer now incremental (auto after sync); no tests |
-| **memory/** | Medium | High | High | Swapped to fastembed (no PyTorch); good entity-memory docs |
-| **llm/** | Low | Low | High | No tests for LLM client |
-| **skills/** | None | Low | Medium | Unclear if actively used |
-| **sharing/** | Low | Low | Medium | Feature marked "coming soon" |
-| **workers/** | Low | Low | Medium | - |
-| **config.py** | None | Medium | High | Well-structured Pydantic Settings |
+| **cli/** | None | Low | High | New module, no tests yet |
+| **email/** | None | Low | High | New IMAP client, no tests |
+| **services/** | Low | Medium | Medium | SaaS remnants in chat_service, command_handlers |
+| **storage/** | Low | Medium | High | SQLite migration complete, no tests for upserts |
+| **tools/** | None | Medium | High | gmail_tools.py (874 lines) above guideline |
+| **agents/** | None | Low | High | No tests for incremental prompt |
+| **agents/trainers/** | None | Low | High | Task trainer incremental, untested |
+| **memory/** | None | Medium | High | In-memory vector search, untested |
+| **llm/** | None | Low | High | Simplified to 2 providers |
+| **workers/** | None | Low | Medium | Pipedrive code removed |
+| **utils/** | Low | Low | High | Encryption + auto-reply detector |
+| **config.py** | None | Medium | High | Clean standalone config |
 
-## Test Coverage Detail
+## Stale Modules (Candidates for Deletion)
 
-### Files with Tests
-- `tests/test_command_handlers.py` - Command routing
-- `tests/test_hybrid_search.py` - Memory hybrid search
-- `tests/test_agent.py` - Agent base functionality
-- `tests/test_sharing.py` - Sharing authorization
-- `tests/test_tool_factory.py` - Tool registration
-- `tests/test_auto_reply_detector.py` - Email auto-reply detection
-- `tests/test_webhooks.py` - Webhook processing
-- `tests/test_api_routes.py` - API route tests
-- `tests/test_llm_merge.py` - Memory reconsolidation
-- `tests/test_mrcall_oauth.py` - MrCall OAuth flow
-- `tests/test_sandbox_service.py` - Sandbox execution
-- `tests/test_mrcall_integration.py` - MrCall integration
-- `tests/test_email_archive_backend.py` - Email archive
-- `tests/test_text_processing.py` - Text utilities
-- `tests/workers/test_memory_worker.py` - Memory worker
+| Module | Status | Action |
+|--------|--------|--------|
+| `zylch/intelligence/` | Empty `__init__.py` only | Delete |
+| `zylch/ml/` | `anonymizer.py` — unclear if used | Investigate |
+| `zylch/router/` | `intent_classifier.py` — may be used by command_matcher | Investigate |
+| `zylch/webhook/` | Empty `__init__.py` only | Delete |
+| `zylch/api/` | Compatibility shim only | Keep for now |
 
-### Modules with No Tests
-- `llm/client.py`, `llm/providers.py`
-- `skills/*`
-- `integrations/*`
-- `router/*`
-- Most individual tools (gmail.py, gcalendar.py, etc.)
-- Agent trainers
+## Test Status
 
-## Documentation Completeness
-
-### Well-Documented
-- Entity Memory System (`docs/features/entity-memory-system.md`)
-- Email Archive (`docs/features/email-archive.md`)
-- Multi-Tenant Architecture (`docs/features/multi-tenant-architecture.md`)
-- MrCall Integration (`docs/features/mrcall-integration.md`)
-- Architecture overview (`docs/ARCHITECTURE.md`)
-- Deployment (`docs/guides/DEPLOYMENT.md`)
-- Gmail OAuth (`docs/guides/gmail-oauth.md`)
-
-### Partially Documented
-- Calendar Integration (`docs/features/calendar-integration.md`)
-- Relationship Intelligence (`docs/features/relationship-intelligence.md`)
-- Triggers & Automation (doc exists, feature "coming soon")
-
-### Missing Documentation
-- API endpoint reference (no OpenAPI export or manual docs)
-- CLI command reference (updated, /gaps removed)
-- Agent training system (task training now automatic)
-- LLM client configuration
-- Skills system
-- Background job system
+**No tests currently pass.** The `tests/` directory references the old SaaS architecture and needs a complete rewrite for standalone.
 
 ## Architectural Conformance
 
 ### Conforming
-- Storage layer consistently uses SQLAlchemy ORM
-- All models have owner_id for multi-tenant isolation
-- API routes use FastAPI routers with Firebase auth
+- Storage uses SQLAlchemy ORM with SQLite
+- CLI uses click with subcommands
 - Tools follow base class pattern
 - Config via Pydantic Settings
+- Embeddings via fastembed (no PyTorch)
+- Memory search via numpy (no pgvector)
 
 ### Non-Conforming
-- `gmail_tools.py` (874 lines) and `contact_tools.py` (617 lines) above 500-line guideline
-- Some docs reference files/paths that don't exist in code
-- `frontend/` dormant code still in repo
-
-### Recently Resolved
-- ~~`tools/factory.py` exceeds 500-line limit~~ → split into 6 modules (2026-04-01)
-- ~~`SupabaseStorage` misleading name~~ → renamed to `Storage`, shim deleted (2026-04-01)
+- `gmail_tools.py` (874 lines) above 500-line guideline
+- `command_handlers.py` still has SaaS-era `/connect` stubs
+- `chat_service.py` still references MrCall routing paths
+- `api/token_storage.py` is a compatibility shim (tech debt)
+- `tests/` directory entirely stale
