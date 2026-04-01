@@ -1,6 +1,7 @@
-"""Email archive manager with Gmail API integration.
+"""Email archive manager with IMAP integration.
 
-All storage uses Supabase (NO local filesystem per ARCHITECTURE.md).
+Uses IMAPClient (replaces Gmail API). All storage uses
+Supabase (NO local filesystem per ARCHITECTURE.md).
 """
 
 import logging
@@ -23,32 +24,47 @@ class EmailArchiveManager:
         self,
         gmail_client,
         owner_id: str,
-        supabase_storage: Optional[Storage] = None
+        supabase_storage: Optional[Storage] = None,
     ):
         """Initialize archive manager.
 
         Args:
-            gmail_client: GmailClient instance for fetching emails
-            owner_id: User's Firebase UID (required)
-            supabase_storage: Optional Storage instance (uses singleton if not provided)
+            gmail_client: IMAPClient instance for email
+            owner_id: User ID (required)
+            supabase_storage: Optional Storage instance
         """
         self.gmail = gmail_client
         self.owner_id = owner_id
-        self.supabase = supabase_storage or Storage.get_instance()
-        self._authenticated = False
+        self.supabase = (
+            supabase_storage or Storage.get_instance()
+        )
+        self._connected = False
 
-        # NOTE: Gmail authentication is now LAZY - only when actually needed
-        # This allows the agent to initialize without valid Gmail credentials
+        logger.info(
+            f"EmailArchiveManager initialized"
+            f" for owner {owner_id}"
+        )
 
-        logger.info(f"EmailArchiveManager using Supabase for owner {owner_id}")
+    def _ensure_connected(self) -> None:
+        """Ensure IMAP client is connected (lazy)."""
+        if not self._connected:
+            # IMAPClient auto-reconnects via
+            # _ensure_connected(), but we call
+            # connect() if not yet done
+            if hasattr(self.gmail, '_conn'):
+                if self.gmail._conn is None:
+                    self.gmail.connect()
+            else:
+                # Legacy GmailClient compat
+                if not self.gmail.service:
+                    self.gmail.authenticate()
+            self._connected = True
 
-    def _ensure_authenticated(self) -> None:
-        """Ensure Gmail client is authenticated (lazy authentication)."""
-        if not self._authenticated and not self.gmail.service:
-            self.gmail.authenticate()
-            self._authenticated = True
-
-    def incremental_sync(self, days_back: Optional[int] = None, force_full: bool = False) -> Dict[str, Any]:
+    def incremental_sync(
+        self,
+        days_back: Optional[int] = None,
+        force_full: bool = False,
+    ) -> Dict[str, Any]:
         """Sync emails from Gmail based on actual data in DB.
 
         Derives sync state from emails table - no separate sync_state needed.
@@ -62,10 +78,13 @@ class EmailArchiveManager:
         """
         from zylch.config import settings
 
-        logger.info(f"🔄 Starting email sync (days_back={days_back})...")
+        logger.info(
+            f"Starting email sync"
+            f" (days_back={days_back})..."
+        )
 
         # Ensure Gmail is authenticated (lazy)
-        self._ensure_authenticated()
+        self._ensure_connected()
 
         # Calculate target date
         now = datetime.now(timezone.utc)
@@ -83,18 +102,31 @@ class EmailArchiveManager:
         elif target_date < oldest_email_date:
             # Need older emails - sync from target_date
             sync_from = target_date
-            logger.info(f"Extending coverage from {oldest_email_date.strftime('%Y-%m-%d')} back to {sync_from.strftime('%Y-%m-%d')}")
+            logger.info(
+                f"Extending coverage from"
+                f" {oldest_email_date.strftime('%Y-%m-%d')}"
+                f" back to"
+                f" {sync_from.strftime('%Y-%m-%d')}"
+            )
         else:
             # Already have coverage - sync from oldest to catch any gaps
             sync_from = oldest_email_date
             logger.info(f"Syncing from oldest email date: {sync_from.strftime('%Y-%m-%d')}")
 
         try:
-            # Fetch email IDs from Gmail using date query
-            query = f"after:{sync_from.strftime('%Y/%m/%d')}"
-            logger.info(f"Searching Gmail for message IDs: {query}")
-            message_ids = self.gmail.list_message_ids(query=query, max_results=5000)
-            logger.info(f"Found {len(message_ids)} message IDs in Gmail")
+            # Fetch email IDs via IMAP date query
+            query = (
+                f"after:{sync_from.strftime('%Y/%m/%d')}"
+            )
+            logger.info(
+                f"Searching for message IDs: {query}"
+            )
+            message_ids = self.gmail.list_message_ids(
+                query=query, max_results=5000
+            )
+            logger.info(
+                f"Found {len(message_ids)} message IDs"
+            )
 
             if not message_ids:
                 return {
@@ -103,12 +135,30 @@ class EmailArchiveManager:
                     'messages_deleted': 0
                 }
 
-            # Get existing email IDs from Supabase to filter out duplicates
-            existing_emails = self.supabase.get_emails(self.owner_id, limit=len(message_ids) + 1000)
-            existing_ids = {email['gmail_id'] for email in existing_emails}
+            # Get existing email IDs to filter dupes
+            existing_emails = self.supabase.get_emails(
+                self.owner_id,
+                limit=len(message_ids) + 1000,
+            )
+            # Support both gmail_id and message_id
+            existing_ids = set()
+            for em in existing_emails:
+                if em.get("gmail_id"):
+                    existing_ids.add(em["gmail_id"])
+                if em.get("message_id_header"):
+                    existing_ids.add(
+                        em["message_id_header"]
+                    )
 
-            new_message_ids = [msg_id for msg_id in message_ids if msg_id not in existing_ids]
-            logger.info(f"Found {len(new_message_ids)} new messages to sync")
+            new_message_ids = [
+                msg_id
+                for msg_id in message_ids
+                if msg_id not in existing_ids
+            ]
+            logger.info(
+                f"Found {len(new_message_ids)}"
+                f" new messages to sync"
+            )
 
             if not new_message_ids:
                 return {
@@ -119,27 +169,58 @@ class EmailArchiveManager:
                 }
 
             # Fetch full messages for the new IDs
-            messages = self.gmail.get_batch(new_message_ids, format='full')
-            logger.info(f"Fetched {len(messages)} full messages from Gmail")
+            messages = self.gmail.get_batch(
+                new_message_ids, format="full"
+            )
+            logger.info(
+                f"Fetched {len(messages)}"
+                f" full messages"
+            )
 
             # Convert and store messages in batches
             batch_size = settings.email_archive_batch_size
             total_stored = 0
 
-            for i in range(0, len(messages), batch_size):
-                batch = messages[i:i + batch_size]
+            for i in range(
+                0, len(messages), batch_size
+            ):
+                batch = messages[i : i + batch_size]
                 try:
-                    archive_messages = [self._convert_message(msg) for msg in batch]
-                    stored = self.supabase.store_emails_batch(self.owner_id, archive_messages)
+                    archive_messages = [
+                        self._convert_message(msg)
+                        for msg in batch
+                    ]
+                    stored = (
+                        self.supabase.store_emails_batch(
+                            self.owner_id,
+                            archive_messages,
+                        )
+                    )
                     total_stored += stored
 
-                    if (i + batch_size) % 500 == 0 or (i + batch_size) >= len(messages):
-                        logger.info(f"Progress: {min(i + batch_size, len(messages))}/{len(messages)} messages processed")
+                    end = min(
+                        i + batch_size, len(messages)
+                    )
+                    if (
+                        end % 500 == 0
+                        or end >= len(messages)
+                    ):
+                        logger.info(
+                            f"Progress: {end}"
+                            f"/{len(messages)}"
+                            f" processed"
+                        )
 
                 except Exception as e:
-                    logger.error(f"Error storing batch at offset {i}: {e}")
+                    logger.error(
+                        f"Error storing batch"
+                        f" at offset {i}: {e}"
+                    )
 
-            logger.info(f"✅ Email sync complete: {total_stored} messages stored")
+            logger.info(
+                f"Email sync complete:"
+                f" {total_stored} messages stored"
+            )
 
             return {
                 'success': True,
@@ -182,91 +263,148 @@ class EmailArchiveManager:
 
         return ', '.join(emails)
 
-    def _convert_message(self, gmail_msg: Dict[str, Any]) -> Dict[str, Any]:
-        """Convert Gmail message format to archive format.
+    def _convert_message(
+        self, msg: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Convert email message to archive format.
+
+        Works with both IMAPClient and legacy GmailClient
+        message formats.
 
         Args:
-            gmail_msg: Message from GmailClient.search_messages()
+            msg: Message from IMAPClient or GmailClient
 
         Returns:
             Message in archive format
         """
-        # Parse date to timestamp and ISO format
         date_timestamp = None
         date_iso = None
 
         # 1. Try Date header first
-        if gmail_msg.get('date'):
+        if msg.get("date"):
             try:
-                dt = parsedate_to_datetime(gmail_msg['date'])
+                dt = parsedate_to_datetime(
+                    msg["date"]
+                )
                 date_timestamp = int(dt.timestamp())
                 date_iso = dt.isoformat()
             except Exception as e:
-                logger.warning(f"Failed to parse Date header '{gmail_msg['date']}' for message {gmail_msg.get('id')}: {e}")
+                logger.warning(
+                    f"Failed to parse Date header"
+                    f" '{msg['date']}': {e}"
+                )
 
-        # 2. Fallback to internal_date (from Gmail API)
-        if date_iso is None and gmail_msg.get('internal_date'):
+        # 2. Fallback to internal_date (Gmail API)
+        if (
+            date_iso is None
+            and msg.get("internal_date")
+        ):
             try:
-                # internalDate is ms since epoch
-                ts = int(gmail_msg['internal_date']) / 1000
-                dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+                ts = (
+                    int(msg["internal_date"]) / 1000
+                )
+                dt = datetime.fromtimestamp(
+                    ts, tz=timezone.utc
+                )
                 date_timestamp = int(ts)
                 date_iso = dt.isoformat()
             except Exception as e:
-                logger.warning(f"Failed to parse internal_date '{gmail_msg['internal_date']}': {e}")
+                logger.warning(
+                    f"Failed to parse"
+                    f" internal_date: {e}"
+                )
 
-        # 3. Final fallback to current time (to satisfy NOT NULL constraint)
+        # 3. Final fallback to current time
         if date_iso is None:
             now = datetime.now(timezone.utc)
             date_timestamp = int(now.timestamp())
             date_iso = now.isoformat()
-            logger.warning(f"Using current time for message {gmail_msg.get('id')} as no date could be parsed")
+            msg_id = msg.get(
+                "message_id", msg.get("id", "?")
+            )
+            logger.warning(
+                f"Using current time for msg"
+                f" {msg_id} (no date parsed)"
+            )
 
-        # Extract email from "Name <email>" format
-        from_email = None
-        from_name = None
-        if gmail_msg.get('from'):
-            from_str = gmail_msg['from']
-            if '<' in from_str and '>' in from_str:
-                # Format: "Name <email>"
-                parts = from_str.split('<')
+        # Extract from email/name
+        from_email = msg.get("from_email")
+        from_name = msg.get("from_name")
+        if not from_email and msg.get("from"):
+            from_str = msg["from"]
+            if "<" in from_str and ">" in from_str:
+                parts = from_str.split("<")
                 from_name = parts[0].strip()
-                from_email = parts[1].split('>')[0].strip()
+                from_email = (
+                    parts[1].split(">")[0].strip()
+                )
             else:
-                # Just email
                 from_email = from_str.strip()
 
-        # Detect auto-reply based on headers and from email
-        from zylch.utils.auto_reply_detector import detect_auto_reply
+        # Detect auto-reply
+        from zylch.utils.auto_reply_detector import (
+            detect_auto_reply,
+        )
+
         auto_reply_headers = {
-            'Auto-Submitted': gmail_msg.get('auto_submitted'),
-            'X-Autoreply': gmail_msg.get('x_autoreply'),
-            'Precedence': gmail_msg.get('precedence'),
-            'X-Auto-Response-Suppress': gmail_msg.get('x_auto_response_suppress'),
+            "Auto-Submitted": msg.get(
+                "auto_submitted"
+            ),
+            "X-Autoreply": msg.get("x_autoreply"),
+            "Precedence": msg.get("precedence"),
+            "X-Auto-Response-Suppress": msg.get(
+                "x_auto_response_suppress"
+            ),
         }
-        is_auto_reply = detect_auto_reply(auto_reply_headers, from_email)
+        is_auto_reply = detect_auto_reply(
+            auto_reply_headers, from_email
+        )
+
+        # Use message_id as ID (IMAP) or id (Gmail)
+        msg_id = msg.get(
+            "message_id", msg.get("id", "")
+        )
+
+        # Body: IMAP provides body_plain/body_html,
+        # Gmail provides body
+        body_plain = msg.get(
+            "body_plain", msg.get("body", "")
+        )
+        body_html = msg.get("body_html")
 
         return {
-            'id': gmail_msg['id'],
-            'thread_id': gmail_msg['thread_id'],
-            'from_email': from_email,
-            'from_name': from_name,
-            'to_email': self._extract_emails_from_header(gmail_msg.get('to', '')),
-            'cc_email': self._extract_emails_from_header(gmail_msg.get('cc', '')),
-            'subject': gmail_msg.get('subject', ''),
-            'date': date_iso,
-            'date_timestamp': date_timestamp,
-            'snippet': gmail_msg.get('snippet', ''),
-            'body_plain': gmail_msg.get('body', ''),
-            'body_html': None,  # Not extracted yet
-            'labels': gmail_msg.get('labels', []),
-            'message_id_header': gmail_msg.get('message_id', ''),
-            'in_reply_to': gmail_msg.get('in_reply_to', ''),
-            'references': gmail_msg.get('references', ''),
-            'is_auto_reply': is_auto_reply,
+            "id": msg_id,
+            "thread_id": msg.get("thread_id", ""),
+            "from_email": from_email,
+            "from_name": from_name,
+            "to_email": self._extract_emails_from_header(
+                msg.get("to", "")
+            ),
+            "cc_email": self._extract_emails_from_header(
+                msg.get("cc", "")
+            ),
+            "subject": msg.get("subject", ""),
+            "date": date_iso,
+            "date_timestamp": date_timestamp,
+            "snippet": msg.get("snippet", ""),
+            "body_plain": body_plain,
+            "body_html": body_html,
+            "labels": msg.get("labels", []),
+            "message_id_header": msg.get(
+                "message_id", ""
+            ),
+            "in_reply_to": msg.get(
+                "in_reply_to", ""
+            ),
+            "references": msg.get("references", ""),
+            "is_auto_reply": is_auto_reply,
         }
 
-    def get_thread_messages(self, thread_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_thread_messages(
+        self,
+        thread_id: str,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """Get all messages in a thread from archive.
 
         Args:

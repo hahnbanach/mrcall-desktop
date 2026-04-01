@@ -1,7 +1,6 @@
-"""SQLAlchemy storage backend for Zylch AI.
+"""SQLAlchemy storage backend for Zylch standalone (SQLite).
 
-Direct PostgreSQL access via SQLAlchemy ORM.
-All queries scoped by owner_id for multi-tenant data isolation.
+All queries scoped by owner_id for data isolation.
 """
 
 import json
@@ -10,17 +9,15 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func, text, and_, or_
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from zylch.config import settings
 from .database import get_session
 from .models import (
     Email, CalendarEvent, Blob, BlobSentence, OAuthToken, OAuthState,
     Trigger, TriggerEvent, SharingAuth, Draft, TaskItem, BackgroundJob,
-    AgentPrompt, PipedriveDeal, UserNotification, EmailReadEvent,
-    SendgridMessageMapping, MrcallConversation, VerificationCode,
-    EmailTriage, TrainingSample, ImportanceRule, IntegrationProvider,
-    TriageTrainingSample, Contact,
+    AgentPrompt, UserNotification, EmailReadEvent,
+    SendgridMessageMapping, MrcallConversation,
+    Contact,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,21 +58,18 @@ def _generate_email_embedding(email: Dict[str, Any]) -> Optional[List[float]]:
 
 
 class Storage:
-    """Multi-tenant storage backend using direct PostgreSQL via SQLAlchemy.
+    """Storage backend using SQLite via SQLAlchemy.
 
-    All queries are scoped by owner_id (Firebase UID) for data isolation.
+    All queries are scoped by owner_id for data isolation.
     """
 
     _instance: Optional['Storage'] = None
 
     def __init__(self):
-        """Initialize storage (validates DATABASE_URL is set)."""
-        if not settings.database_url:
-            raise ValueError(
-                "DATABASE_URL not configured. "
-                "Set DATABASE_URL=postgresql://user:pass@host:5432/zylch"
-            )
-        logger.info("Storage initialized (SQLAlchemy)")
+        """Initialize storage (ensures DB tables exist)."""
+        from .database import init_db
+        init_db()
+        logger.info("Storage initialized (SQLite)")
 
     @classmethod
     def get_instance(cls) -> 'Storage':
@@ -116,14 +110,21 @@ class Storage:
             data['embedding'] = embedding
 
         with get_session() as session:
-            stmt = pg_insert(Email).values(**data)
+            stmt = sqlite_insert(Email).values(**data)
             stmt = stmt.on_conflict_do_update(
                 index_elements=['owner_id', 'gmail_id'],
-                set_={k: v for k, v in data.items() if k not in ('owner_id', 'gmail_id')},
+                set_={
+                    k: v for k, v in data.items()
+                    if k not in ('owner_id', 'gmail_id')
+                },
             )
-            result = session.execute(stmt.returning(Email.__table__))
-            row = result.fetchone()
-            return dict(row._mapping) if row else {}
+            session.execute(stmt)
+            # Re-fetch the upserted row
+            row = session.query(Email).filter(
+                Email.owner_id == data['owner_id'],
+                Email.gmail_id == data['gmail_id'],
+            ).first()
+            return row.to_dict() if row else {}
 
     def store_emails_batch(self, owner_id: str, emails: List[Dict[str, Any]], chunk_size: int = 50) -> int:
         """Store multiple emails in batch with embeddings, chunked to avoid timeouts."""
@@ -163,8 +164,14 @@ class Storage:
         with get_session() as session:
             for i in range(0, len(records), chunk_size):
                 chunk = records[i:i + chunk_size]
-                stmt = pg_insert(Email).values(chunk)
-                update_cols = {c.name: c for c in stmt.excluded if c.name not in ('owner_id', 'gmail_id', 'tsv', 'fts_document')}
+                stmt = sqlite_insert(Email).values(chunk)
+                update_cols = {
+                    c.name: c
+                    for c in stmt.excluded
+                    if c.name not in (
+                        'owner_id', 'gmail_id',
+                    )
+                }
                 stmt = stmt.on_conflict_do_update(
                     index_elements=['owner_id', 'gmail_id'],
                     set_=update_cols,
@@ -272,56 +279,39 @@ class Storage:
         owner_id: str,
         query: str,
         limit: int = 20,
-        alpha: float = 0.5
+        alpha: float = 0.5,
     ) -> List[Dict[str, Any]]:
-        """Hybrid search emails (FTS + semantic + exact pattern)."""
-        engine = _get_embedding_engine()
-        if engine is None:
-            logger.warning("Embeddings unavailable, falling back to FTS-only search")
-            with get_session() as session:
-                result = session.execute(
-                    text("SELECT * FROM search_emails(:search_query, :user_id, :result_limit)"),
-                    {'search_query': query, 'user_id': owner_id, 'result_limit': limit}
-                )
-                return [dict(r._mapping) for r in result]
+        """Search emails using LIKE (SQLite fallback).
 
-        try:
-            query_embedding = engine.encode(query).tolist()
-        except Exception as e:
-            logger.warning(f"Failed to encode query, falling back to FTS: {e}")
-            with get_session() as session:
-                result = session.execute(
-                    text("SELECT * FROM search_emails(:search_query, :user_id, :result_limit)"),
-                    {'search_query': query, 'user_id': owner_id, 'result_limit': limit}
-                )
-                return [dict(r._mapping) for r in result]
-
-        exact_pattern = None
-        try:
-            from zylch.memory import detect_pattern
-            pattern = detect_pattern(query)
-            if pattern:
-                exact_pattern = pattern.value
-        except ImportError as e:
-            logger.warning(f"Pattern detection module not available: {e}")
-
+        FTS5 and vector search will be added in Stream E.
+        """
+        logger.debug(
+            f"[search_emails] owner={owner_id} "
+            f"query={query} limit={limit}"
+        )
+        like_pattern = f"%{query}%"
         with get_session() as session:
-            result = session.execute(
-                text(
-                    "SELECT * FROM hybrid_search_emails("
-                    ":p_owner_id, :p_query, CAST(:p_query_embedding AS vector(384)), "
-                    ":p_fts_weight, :p_limit, :p_exact_pattern)"
-                ),
-                {
-                    'p_owner_id': owner_id,
-                    'p_query': query,
-                    'p_query_embedding': str(query_embedding),
-                    'p_fts_weight': alpha,
-                    'p_limit': limit,
-                    'p_exact_pattern': exact_pattern,
-                }
+            rows = (
+                session.query(Email)
+                .filter(
+                    Email.owner_id == owner_id,
+                    or_(
+                        Email.subject.ilike(like_pattern),
+                        Email.body_plain.ilike(like_pattern),
+                        Email.from_email.ilike(like_pattern),
+                        Email.from_name.ilike(like_pattern),
+                        Email.snippet.ilike(like_pattern),
+                    ),
+                )
+                .order_by(Email.date_timestamp.desc())
+                .limit(limit)
+                .all()
             )
-            return [dict(r._mapping) for r in result]
+            results = [r.to_dict() for r in rows]
+            logger.debug(
+                f"[search_emails] found={len(results)}"
+            )
+            return results
 
     def delete_email(self, owner_id: str, gmail_id: str) -> bool:
         """Delete an email."""
@@ -470,14 +460,25 @@ class Storage:
         }
 
         with get_session() as session:
-            stmt = pg_insert(CalendarEvent).values(**data)
+            stmt = sqlite_insert(CalendarEvent).values(**data)
             stmt = stmt.on_conflict_do_update(
-                index_elements=['owner_id', 'google_event_id'],
-                set_={k: v for k, v in data.items() if k not in ('owner_id', 'google_event_id')},
+                index_elements=[
+                    'owner_id', 'google_event_id',
+                ],
+                set_={
+                    k: v for k, v in data.items()
+                    if k not in (
+                        'owner_id', 'google_event_id',
+                    )
+                },
             )
-            result = session.execute(stmt.returning(CalendarEvent.__table__))
-            row = result.fetchone()
-            return dict(row._mapping) if row else {}
+            session.execute(stmt)
+            row = session.query(CalendarEvent).filter(
+                CalendarEvent.owner_id == data['owner_id'],
+                CalendarEvent.google_event_id
+                == data['google_event_id'],
+            ).first()
+            return row.to_dict() if row else {}
 
     def get_calendar_events(
         self,
@@ -508,26 +509,10 @@ class Storage:
         start_time = now - timedelta(days=days_back)
         end_time = now + timedelta(days=days_forward)
 
-        try:
-            with get_session() as session:
-                result = session.execute(
-                    text(
-                        "SELECT * FROM get_events_by_attendee("
-                        ":p_owner_id, :p_attendee_email, :p_start_time, :p_end_time)"
-                    ),
-                    {
-                        'p_owner_id': owner_id,
-                        'p_attendee_email': attendee_email.lower(),
-                        'p_start_time': start_time,
-                        'p_end_time': end_time,
-                    }
-                )
-                return [dict(r._mapping) for r in result]
-        except Exception as e:
-            logger.warning(f"RPC get_events_by_attendee failed, falling back to Python filter: {e}")
-            return self._get_calendar_events_by_attendee_fallback(
-                owner_id, attendee_email, start_time, end_time
-            )
+        # SQLite: use Python-side filtering (no stored procs)
+        return self._get_calendar_events_by_attendee_fallback(
+            owner_id, attendee_email, start_time, end_time,
+        )
 
     def _get_calendar_events_by_attendee_fallback(
         self,
@@ -587,10 +572,18 @@ class Storage:
             })
 
         with get_session() as session:
-            stmt = pg_insert(CalendarEvent).values(records)
-            update_cols = {c.name: c for c in stmt.excluded if c.name not in ('owner_id', 'google_event_id')}
+            stmt = sqlite_insert(CalendarEvent).values(records)
+            update_cols = {
+                c.name: c
+                for c in stmt.excluded
+                if c.name not in (
+                    'owner_id', 'google_event_id',
+                )
+            }
             stmt = stmt.on_conflict_do_update(
-                index_elements=['owner_id', 'google_event_id'],
+                index_elements=[
+                    'owner_id', 'google_event_id',
+                ],
                 set_=update_cols,
             )
             result = session.execute(stmt)
@@ -653,15 +646,24 @@ class Storage:
             logger.info(f"Storing credentials in unified JSONB for provider {provider}")
 
         with get_session() as session:
-            stmt = pg_insert(OAuthToken).values(**data)
+            stmt = sqlite_insert(OAuthToken).values(**data)
             stmt = stmt.on_conflict_do_update(
                 index_elements=['owner_id', 'provider'],
-                set_={k: v for k, v in data.items() if k not in ('owner_id', 'provider')},
+                set_={
+                    k: v for k, v in data.items()
+                    if k not in ('owner_id', 'provider')
+                },
             )
-            result = session.execute(stmt.returning(OAuthToken.__table__))
-            row = result.fetchone()
-            logger.info(f"Stored OAuth token for owner {owner_id} provider {provider}")
-            return dict(row._mapping) if row else {}
+            session.execute(stmt)
+            row = session.query(OAuthToken).filter(
+                OAuthToken.owner_id == data['owner_id'],
+                OAuthToken.provider == data['provider'],
+            ).first()
+            logger.info(
+                f"Stored OAuth token for owner "
+                f"{owner_id} provider {provider}"
+            )
+            return row.to_dict() if row else {}
 
     def get_oauth_token(self, owner_id: str, provider: str) -> Optional[Dict[str, Any]]:
         """Get OAuth token for a user."""
@@ -799,7 +801,7 @@ class Storage:
         return None
 
     # ==========================================
-    # UNIFIED CREDENTIALS STORAGE (JSONB)
+    # UNIFIED CREDENTIALS STORAGE (JSON)
     # ==========================================
 
     def save_provider_credentials(
@@ -808,32 +810,27 @@ class Storage:
         provider_key: str,
         credentials_dict: Dict[str, Any],
         metadata_dict: Optional[Dict[str, Any]] = None,
-        email: Optional[str] = None
+        email: Optional[str] = None,
     ) -> bool:
-        """Save credentials for any provider using unified JSONB storage."""
+        """Save credentials for any provider (encrypted)."""
         from zylch.utils.encryption import encrypt
 
         token_row = self.get_oauth_token(owner_id, provider_key)
         if token_row and token_row.get('credentials'):
             from zylch.utils.encryption import decrypt
-            existing_creds = json.loads(decrypt(token_row['credentials']))
+            existing_creds = json.loads(
+                decrypt(token_row['credentials'])
+            )
         else:
             existing_creds = {}
 
-        # Get provider config to determine which fields need encryption
-        with get_session() as session:
-            provider_row = session.query(IntegrationProvider)\
-                .filter(IntegrationProvider.provider_key == provider_key)\
-                .first()
-            config_fields = provider_row.config_fields or {} if provider_row else {}
-
-        # Encrypt sensitive fields based on config
+        # Encrypt all credential fields by default
         encrypted_credentials = {}
         for field_name, field_value in credentials_dict.items():
-            field_config = config_fields.get(field_name, {})
-            should_encrypt = field_config.get('encrypted', True)
-            if should_encrypt and field_value:
-                encrypted_credentials[field_name] = f"encrypted:{encrypt(str(field_value))}"
+            if field_value:
+                encrypted_credentials[field_name] = (
+                    f"encrypted:{encrypt(str(field_value))}"
+                )
             else:
                 encrypted_credentials[field_name] = field_value
 
@@ -841,9 +838,13 @@ class Storage:
         if metadata_dict:
             if 'metadata' not in existing_creds:
                 existing_creds['metadata'] = {}
-            existing_creds['metadata'][provider_key] = metadata_dict
+            existing_creds['metadata'][provider_key] = (
+                metadata_dict
+            )
 
-        credentials_json = encrypt(json.dumps(existing_creds))
+        credentials_json = encrypt(
+            json.dumps(existing_creds)
+        )
 
         data = {
             'owner_id': owner_id,
@@ -854,14 +855,20 @@ class Storage:
         }
 
         with get_session() as session:
-            stmt = pg_insert(OAuthToken).values(**data)
+            stmt = sqlite_insert(OAuthToken).values(**data)
             stmt = stmt.on_conflict_do_update(
                 index_elements=['owner_id', 'provider'],
-                set_={k: v for k, v in data.items() if k not in ('owner_id', 'provider')},
+                set_={
+                    k: v for k, v in data.items()
+                    if k not in ('owner_id', 'provider')
+                },
             )
             session.execute(stmt)
 
-        logger.info(f"Saved credentials for provider {provider_key} for owner {owner_id}")
+        logger.info(
+            f"Saved credentials for provider "
+            f"{provider_key} for owner {owner_id}"
+        )
         return True
 
     def get_provider_credentials(
@@ -991,18 +998,27 @@ class Storage:
             'status': 'pending',
         }
         with get_session() as session:
-            stmt = pg_insert(SharingAuth).values(**data)
+            stmt = sqlite_insert(SharingAuth).values(**data)
             stmt = stmt.on_conflict_do_update(
-                index_elements=['sender_id', 'recipient_email'],
+                index_elements=[
+                    'sender_id', 'recipient_email',
+                ],
                 set_={
                     'sender_email': data['sender_email'],
                     'status': data['status'],
                 },
             )
-            result = session.execute(stmt.returning(SharingAuth.__table__))
-            row = result.fetchone()
-            logger.info(f"Registered share recipient {recipient_email} for sender {sender_id}")
-            return dict(row._mapping) if row else {}
+            session.execute(stmt)
+            row = session.query(SharingAuth).filter(
+                SharingAuth.sender_id == sender_id,
+                SharingAuth.recipient_email
+                == recipient_email,
+            ).first()
+            logger.info(
+                f"Registered share recipient "
+                f"{recipient_email} for sender {sender_id}"
+            )
+            return row.to_dict() if row else {}
 
 
     def revoke_sharing(self, sender_id: str, recipient_email: str) -> bool:
@@ -1095,16 +1111,20 @@ class Storage:
         try:
             logger.info(f"Storing OAuth state: {state} for owner {owner_id}")
             with get_session() as session:
-                stmt = pg_insert(OAuthState).values(**data)
+                stmt = sqlite_insert(OAuthState).values(**data)
                 stmt = stmt.on_conflict_do_update(
                     index_elements=['state'],
                     set_={
                         'owner_id': stmt.excluded.owner_id,
                         'email': stmt.excluded.email,
-                        'cli_callback': stmt.excluded.cli_callback,
+                        'cli_callback': (
+                            stmt.excluded.cli_callback
+                        ),
                         'provider': stmt.excluded.provider,
                         'metadata': stmt.excluded.metadata,
-                        'expires_at': stmt.excluded.expires_at,
+                        'expires_at': (
+                            stmt.excluded.expires_at
+                        ),
                     },
                 )
                 session.execute(stmt)
@@ -1122,7 +1142,6 @@ class Storage:
             with get_session() as session:
                 row = session.query(OAuthState)\
                     .filter(OAuthState.state == state)\
-                    .with_for_update()\
                     .first()
 
                 if not row:
@@ -1199,13 +1218,19 @@ class Storage:
             'updated_at': datetime.now(timezone.utc),
         }
         with get_session() as session:
-            stmt = pg_insert(OAuthToken).values(**data)
+            stmt = sqlite_insert(OAuthToken).values(**data)
             stmt = stmt.on_conflict_do_update(
                 index_elements=['owner_id', 'provider'],
-                set_={k: v for k, v in data.items() if k not in ('owner_id', 'provider')},
+                set_={
+                    k: v for k, v in data.items()
+                    if k not in ('owner_id', 'provider')
+                },
             )
             session.execute(stmt)
-        logger.info(f"Linked MrCall business {mrcall_business_id} for owner {owner_id}")
+        logger.info(
+            f"Linked MrCall business "
+            f"{mrcall_business_id} for owner {owner_id}"
+        )
         return True
 
 
@@ -1510,15 +1535,6 @@ class Storage:
                 .update({'memory_processed_at': None}, synchronize_session=False)
             counts['calendar_events'] = c
 
-            # Reset pipedrive deals
-            try:
-                c = session.query(PipedriveDeal)\
-                    .filter(PipedriveDeal.owner_id == owner_id, PipedriveDeal.memory_processed_at.isnot(None))\
-                    .update({'memory_processed_at': None}, synchronize_session=False)
-                counts['pipedrive_deals'] = c
-            except Exception:
-                counts['pipedrive_deals'] = 0  # Table may not exist yet
-
         return counts
 
 
@@ -1645,62 +1661,6 @@ class Storage:
 
 
     # ==========================================
-    # PIPEDRIVE DEALS
-    # ==========================================
-
-    def get_unprocessed_pipedrive_deals(self, owner_id: str) -> List[Dict[str, Any]]:
-        """Get all pipedrive deals not yet processed by Memory Agent."""
-        with get_session() as session:
-            rows = session.query(
-                    PipedriveDeal.id, PipedriveDeal.deal_id, PipedriveDeal.title,
-                    PipedriveDeal.person_name, PipedriveDeal.org_name,
-                    PipedriveDeal.value, PipedriveDeal.currency,
-                    PipedriveDeal.status, PipedriveDeal.stage_name,
-                    PipedriveDeal.deal_data,
-                )\
-                .filter(
-                    PipedriveDeal.owner_id == owner_id,
-                    PipedriveDeal.memory_processed_at.is_(None),
-                )\
-                .order_by(PipedriveDeal.updated_at.desc())\
-                .all()
-            return [
-                {
-                    'id': str(r.id),
-                    'deal_id': r.deal_id,
-                    'title': r.title,
-                    'person_name': r.person_name,
-                    'org_name': r.org_name,
-                    'value': float(r.value) if r.value is not None else None,
-                    'currency': r.currency,
-                    'status': r.status,
-                    'stage_name': r.stage_name,
-                    'deal_data': r.deal_data,
-                }
-                for r in rows
-            ]
-
-
-    def mark_pipedrive_deal_processed(self, owner_id: str, deal_id: str) -> None:
-        """Mark a pipedrive deal as processed by Memory Agent."""
-        with get_session() as session:
-            session.query(PipedriveDeal)\
-                .filter(PipedriveDeal.owner_id == owner_id, PipedriveDeal.id == deal_id)\
-                .update({'memory_processed_at': datetime.now(timezone.utc)})
-
-
-    def mark_pipedrive_deals_processed(self, owner_id: str, deal_ids: List[str]) -> None:
-        """Mark multiple pipedrive deals as processed by Memory Agent."""
-        if not deal_ids:
-            return
-        with get_session() as session:
-            session.query(PipedriveDeal)\
-                .filter(PipedriveDeal.owner_id == owner_id, PipedriveDeal.id.in_(deal_ids))\
-                .update({'memory_processed_at': datetime.now(timezone.utc)},
-                        synchronize_session=False)
-
-
-    # ==========================================
     # USER NOTIFICATIONS
     # ==========================================
 
@@ -1771,140 +1731,6 @@ class Storage:
             return count > 0
 
 
-    # ==========================================
-    # EMAIL TRIAGE
-    # ==========================================
-
-    def store_triage_verdict(
-        self,
-        owner_id: str,
-        thread_id: str,
-        verdict: dict
-    ) -> Dict[str, Any]:
-        """Store email triage verdict for a thread (upsert on owner_id+thread_id)."""
-        classification = verdict.get('classification', {})
-        data = {
-            'owner_id': owner_id,
-            'thread_id': thread_id,
-            'needs_human_attention': verdict.get('needs_human_attention', False),
-            'reason': verdict.get('reason'),
-            'triage_category': verdict.get('triage_category', 'low'),
-            'is_real_customer': classification.get('is_real_customer'),
-            'is_actionable': classification.get('is_actionable'),
-            'is_time_sensitive': classification.get('is_time_sensitive'),
-            'is_resolved': classification.get('is_resolved'),
-            'is_cold_outreach': classification.get('is_cold_outreach'),
-            'is_automated': classification.get('is_automated'),
-            'suggested_action': verdict.get('suggested_action'),
-            'deadline_detected': verdict.get('deadline_detected'),
-            'updated_at': datetime.now(timezone.utc),
-        }
-
-        with get_session() as session:
-            stmt = pg_insert(EmailTriage).values(**data)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=['owner_id', 'thread_id'],
-                set_={k: v for k, v in data.items() if k not in ('owner_id', 'thread_id')},
-            )
-            result = session.execute(stmt.returning(EmailTriage.__table__))
-            row = result.fetchone()
-            logger.info(f"Stored triage verdict for thread {thread_id}: {verdict.get('triage_category')}")
-            return dict(row._mapping) if row else {}
-
-
-    def get_triage_verdict(self, owner_id: str, thread_id: str) -> Optional[Dict[str, Any]]:
-        """Get triage verdict for a specific thread."""
-        with get_session() as session:
-            row = session.query(EmailTriage)\
-                .filter(EmailTriage.owner_id == owner_id, EmailTriage.thread_id == thread_id)\
-                .first()
-            return row.to_dict() if row else None
-
-
-    def get_threads_needing_attention(
-        self,
-        owner_id: str,
-        category: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """Get threads that need human attention, optionally filtered by category."""
-        with get_session() as session:
-            query = session.query(EmailTriage)\
-                .filter(
-                    EmailTriage.owner_id == owner_id,
-                    EmailTriage.needs_human_attention == True,
-                )
-
-            if category:
-                query = query.filter(EmailTriage.triage_category == category)
-            else:
-                # Exclude noise by default when no category specified
-                query = query.filter(EmailTriage.triage_category != 'noise')
-
-            rows = query\
-                .order_by(
-                    EmailTriage.triage_category.asc(),
-                    EmailTriage.deadline_detected.asc(),
-                    EmailTriage.created_at.desc(),
-                )\
-                .all()
-            return [r.to_dict() for r in rows]
-
-
-    def store_training_sample(self, sample: dict) -> Dict[str, Any]:
-        """Store a training sample for triage model improvement."""
-        with get_session() as session:
-            ts = TriageTrainingSample(
-                owner_id=sample.get('owner_id'),
-                thread_id=sample.get('thread_id'),
-                email_data=sample.get('email_data', {}),
-                predicted_verdict=sample.get('predicted_verdict', {}),
-                actual_verdict=sample.get('actual_verdict'),
-                feedback_type=sample.get('feedback_type', 'correction'),
-                used_for_training=False,
-            )
-            session.add(ts)
-            session.flush()
-            logger.info(
-                f"Stored training sample for thread {sample.get('thread_id')} "
-                f"({sample.get('feedback_type')})"
-            )
-            return ts.to_dict()
-
-    # ==========================================
-    # TRAINING SAMPLES & RULES
-    # ==========================================
-
-    def get_training_samples(
-        self,
-        unused_only: bool = True,
-        limit: int = 1000,
-    ) -> List[Dict[str, Any]]:
-        """Get triage training samples for model fine-tuning."""
-        with get_session() as session:
-            query = session.query(TriageTrainingSample)
-            if unused_only:
-                query = query.filter(TriageTrainingSample.used_for_training == False)  # noqa: E712
-            rows = query.order_by(TriageTrainingSample.created_at.asc())\
-                .limit(limit)\
-                .all()
-            return [r.to_dict() for r in rows]
-
-
-    def get_importance_rules(
-        self,
-        owner_id: str,
-        enabled_only: bool = True,
-    ) -> List[Dict[str, Any]]:
-        """Get importance rules for a user, sorted by priority descending."""
-        with get_session() as session:
-            query = session.query(ImportanceRule)\
-                .filter(ImportanceRule.owner_id == owner_id)
-            if enabled_only:
-                query = query.filter(ImportanceRule.enabled == True)  # noqa: E712
-            rows = query.order_by(ImportanceRule.priority.desc()).all()
-            return [r.to_dict() for r in rows]
-
-
     def get_contact_by_email(
         self,
         owner_id: str,
@@ -1945,10 +1771,15 @@ class Storage:
         }
         try:
             with get_session() as session:
-                stmt = pg_insert(SendgridMessageMapping).values(**data)
+                stmt = sqlite_insert(
+                    SendgridMessageMapping
+                ).values(**data)
                 stmt = stmt.on_conflict_do_update(
                     index_elements=['sendgrid_message_id'],
-                    set_={k: v for k, v in data.items() if k != 'sendgrid_message_id'},
+                    set_={
+                        k: v for k, v in data.items()
+                        if k != 'sendgrid_message_id'
+                    },
                 )
                 session.execute(stmt)
                 logger.debug(f"Created SendGrid message mapping: {sendgrid_message_id} -> {message_id}")
@@ -1993,7 +1824,6 @@ class Storage:
                         EmailReadEvent.sendgrid_message_id == sendgrid_message_id,
                         EmailReadEvent.recipient_email == recipient_email,
                     )\
-                    .with_for_update()\
                     .first()
 
                 if existing:
@@ -2049,7 +1879,6 @@ class Storage:
             with get_session() as session:
                 existing = session.query(EmailReadEvent)\
                     .filter(EmailReadEvent.tracking_id == tracking_id)\
-                    .with_for_update()\
                     .first()
 
                 if existing:
@@ -2089,7 +1918,6 @@ class Storage:
             with get_session() as session:
                 email = session.query(Email)\
                     .filter(Email.id == message_id)\
-                    .with_for_update()\
                     .first()
 
                 if not email:
@@ -2166,19 +1994,29 @@ class Storage:
             'updated_at': datetime.now(timezone.utc),
         }
         with get_session() as session:
-            stmt = pg_insert(AgentPrompt).values(**data)
+            stmt = sqlite_insert(AgentPrompt).values(**data)
             stmt = stmt.on_conflict_do_update(
                 index_elements=['owner_id', 'agent_type'],
                 set_={
-                    'agent_prompt': stmt.excluded.agent_prompt,
+                    'agent_prompt': (
+                        stmt.excluded.agent_prompt
+                    ),
                     'metadata': stmt.excluded.metadata,
-                    'updated_at': stmt.excluded.updated_at,
+                    'updated_at': (
+                        stmt.excluded.updated_at
+                    ),
                 },
             )
-            result = session.execute(stmt.returning(AgentPrompt.__table__))
-            row = result.fetchone()
-            logger.info(f"Stored agent prompt: {owner_id}/{agent_type}")
-            return dict(row._mapping) if row else {}
+            session.execute(stmt)
+            row = session.query(AgentPrompt).filter(
+                AgentPrompt.owner_id == owner_id,
+                AgentPrompt.agent_type == agent_type,
+            ).first()
+            logger.info(
+                f"Stored agent prompt: "
+                f"{owner_id}/{agent_type}"
+            )
+            return row.to_dict() if row else {}
 
 
     def delete_agent_prompt(self, owner_id: str, agent_type: str) -> bool:
@@ -2304,10 +2142,19 @@ class Storage:
                 'sources': item.get('sources', {}),
             }
             with get_session() as session:
-                stmt = pg_insert(TaskItem).values(**data)
+                stmt = sqlite_insert(TaskItem).values(**data)
                 stmt = stmt.on_conflict_do_update(
-                    index_elements=['owner_id', 'event_type', 'event_id'],
-                    set_={k: v for k, v in data.items() if k not in ('owner_id', 'event_type', 'event_id')},
+                    index_elements=[
+                        'owner_id', 'event_type', 'event_id',
+                    ],
+                    set_={
+                        k: v for k, v in data.items()
+                        if k not in (
+                            'owner_id',
+                            'event_type',
+                            'event_id',
+                        )
+                    },
                 )
                 session.execute(stmt)
             return True
@@ -2373,7 +2220,6 @@ class Storage:
             with get_session() as session:
                 task = session.query(TaskItem)\
                     .filter(TaskItem.id == task_id)\
-                    .with_for_update()\
                     .one_or_none()
 
                 if not task:
@@ -2441,7 +2287,6 @@ class Storage:
             with get_session() as session:
                 task = session.query(TaskItem)\
                     .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)\
-                    .with_for_update()\
                     .one_or_none()
 
                 if not task:
@@ -2875,7 +2720,6 @@ class Storage:
                     BackgroundJob.status == 'running',
                     BackgroundJob.started_at < cutoff,
                 )\
-                .with_for_update()\
                 .all()
 
             if not stale_jobs:
@@ -2960,10 +2804,15 @@ class Storage:
             'updated_at': datetime.now(timezone.utc),
         }
         with get_session() as session:
-            stmt = pg_insert(MrcallConversation).values(**data)
+            stmt = sqlite_insert(
+                MrcallConversation
+            ).values(**data)
             stmt = stmt.on_conflict_do_update(
                 index_elements=['id'],
-                set_={k: v for k, v in data.items() if k != 'id'},
+                set_={
+                    k: v for k, v in data.items()
+                    if k != 'id'
+                },
             )
             session.execute(stmt)
             return data
@@ -3040,61 +2889,3 @@ class Storage:
                 .scalar() or 0
 
 
-    # ==========================================
-    # VERIFICATION CODES
-    # ==========================================
-
-    def create_verification_code(
-        self,
-        owner_id: str,
-        phone_number: str,
-        code: str,
-        context: Optional[str] = None,
-        expires_in_minutes: int = 15,
-    ) -> Dict[str, Any]:
-        """Create a verification code."""
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_in_minutes)
-
-        with get_session() as session:
-            vc = VerificationCode(
-                owner_id=owner_id,
-                phone_number=phone_number,
-                code=code,
-                context=context,
-                expires_at=expires_at,
-                verified=False,
-            )
-            session.add(vc)
-            session.flush()
-            return vc.to_dict()
-
-
-    def verify_code(
-        self,
-        owner_id: str,
-        phone_number: str,
-        code: str,
-    ) -> bool:
-        """Verify a code. Returns True if valid and verified."""
-        now = datetime.now(timezone.utc)
-
-        with get_session() as session:
-            row = session.query(VerificationCode)\
-                .filter(
-                    VerificationCode.owner_id == owner_id,
-                    VerificationCode.phone_number == phone_number,
-                    VerificationCode.code == code,
-                    VerificationCode.verified == False,  # noqa: E712
-                    VerificationCode.expires_at > now,
-                )\
-                .order_by(VerificationCode.created_at.desc())\
-                .with_for_update()\
-                .first()
-
-            if not row:
-                return False
-
-            row.verified = True
-            row.verified_at = now
-            session.flush()
-            return True

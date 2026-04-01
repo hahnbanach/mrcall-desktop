@@ -1,4 +1,10 @@
-"""Gmail and draft email tools."""
+"""Gmail and draft email tools.
+
+Refactored for IMAP/SMTP (no Gmail/Outlook OAuth API).
+GmailSearchTool uses IMAPClient.search().
+SendDraftTool uses IMAPClient.send_message() via SMTP.
+CreateDraftTool and ListDraftsTool use Storage (DB drafts).
+"""
 
 import logging
 import subprocess
@@ -11,22 +17,25 @@ logger = logging.getLogger(__name__)
 
 
 class GmailSearchTool(Tool):
-    """Gmail search tool for contact enrichment."""
+    """Email search tool for contact enrichment.
+
+    Uses IMAPClient instead of Gmail API.
+    """
 
     def __init__(
         self,
-        gmail_client,
+        imap_client,
         owner_id: str = "owner_default",
         zylch_assistant_id: str = "default_assistant",
     ):
         super().__init__(
             name="search_provider_emails",
             description=(
-                "Search email provider for emails from or to a contact"
-                " to understand relationship"
+                "Search email provider for emails from or to"
+                " a contact to understand relationship"
             ),
         )
-        self.gmail = gmail_client
+        self.imap = imap_client
         self.owner_id = owner_id
         self.zylch_assistant_id = zylch_assistant_id
 
@@ -34,10 +43,14 @@ class GmailSearchTool(Tool):
         """Check if value looks like an email address."""
         import re
 
-        return bool(re.match(r"^[^@]+@[^@]+\.[^@]+$", value.strip()))
+        return bool(
+            re.match(r"^[^@]+@[^@]+\.[^@]+$", value.strip())
+        )
 
-    def _extract_email_from_header(self, header: str) -> tuple:
-        """Extract email and name from 'Name <email>' header."""
+    def _extract_email_from_header(
+        self, header: str
+    ) -> tuple:
+        """Extract email and name from header."""
         import re
 
         match = re.search(r"([^<]*)<([^>]+)>", header)
@@ -52,15 +65,19 @@ class GmailSearchTool(Tool):
     def _find_emails_by_name(
         self, name: str, max_search: int = 50
     ) -> list:
-        """Search Gmail for emails containing this name."""
-        messages = self.gmail.search_messages(name, max_search)
+        """Search emails for contacts matching name."""
+        messages = self.imap.search_messages(
+            name, max_search
+        )
 
-        contacts = {}  # email -> name
+        contacts = {}
         name_lower = name.lower()
 
         for msg in messages:
-            from_email, from_name = self._extract_email_from_header(
-                msg.get("from", "")
+            from_email, from_name = (
+                self._extract_email_from_header(
+                    msg.get("from", "")
+                )
             )
             if (
                 from_email
@@ -71,8 +88,10 @@ class GmailSearchTool(Tool):
 
             to_field = msg.get("to", "")
             for part in to_field.split(","):
-                to_email, to_name = self._extract_email_from_header(
-                    part.strip()
+                to_email, to_name = (
+                    self._extract_email_from_header(
+                        part.strip()
+                    )
                 )
                 if (
                     to_email
@@ -93,19 +112,21 @@ class GmailSearchTool(Tool):
         search_all_history: bool = False,
         selected_emails: str = None,
     ):
-        """Search Gmail for emails with a contact.
+        """Search emails for exchanges with a contact.
 
         Args:
             contact: Email address OR name to search for
             max_results: Maximum results (default 20)
             search_all_history: If True, search from 2020
-            selected_emails: Comma-separated indices when multiple found
+            selected_emails: Comma-separated indices
         """
         from datetime import datetime, timedelta
 
         try:
             if not self._is_email(contact):
-                found_contacts = self._find_emails_by_name(contact)
+                found_contacts = self._find_emails_by_name(
+                    contact
+                )
 
                 if not found_contacts:
                     return ToolResult(
@@ -115,19 +136,22 @@ class GmailSearchTool(Tool):
                             "found_emails": [],
                         },
                         error=(
-                            f"No contact found with name '{contact}'"
-                            " in emails."
+                            f"No contact found with name"
+                            f" '{contact}' in emails."
                         ),
                     )
 
                 if len(found_contacts) == 1:
-                    c = found_contacts[0]
-                    emails_to_search = [c["email"]]
+                    emails_to_search = [
+                        found_contacts[0]["email"]
+                    ]
                 elif selected_emails:
                     try:
                         indices = [
                             int(i.strip()) - 1
-                            for i in selected_emails.split(",")
+                            for i in selected_emails.split(
+                                ","
+                            )
                         ]
                         emails_to_search = [
                             found_contacts[i]["email"]
@@ -139,15 +163,19 @@ class GmailSearchTool(Tool):
                             status=ToolStatus.ERROR,
                             data=None,
                             error=(
-                                f"Indici non validi: {selected_emails}."
-                                f" Usa numeri da 1 a"
+                                f"Invalid indices:"
+                                f" {selected_emails}."
+                                f" Use 1 to"
                                 f" {len(found_contacts)}."
                             ),
                         )
                 else:
                     options = "\n".join([
-                        f"  {i+1}) {c['name']} <{c['email']}>"
-                        for i, c in enumerate(found_contacts)
+                        f"  {i+1}) {c['name']}"
+                        f" <{c['email']}>"
+                        for i, c in enumerate(
+                            found_contacts
+                        )
                     ])
                     return ToolResult(
                         status=ToolStatus.SUCCESS,
@@ -157,48 +185,57 @@ class GmailSearchTool(Tool):
                             "needs_selection": True,
                         },
                         message=(
-                            f"Found {len(found_contacts)} emails"
-                            f" associated with '{contact}':\n"
-                            f"{options}\n\nWhich one to use?"
-                            " (e.g., '1' or '1,3' for multiple)"
+                            f"Found {len(found_contacts)}"
+                            f" emails for '{contact}':\n"
+                            f"{options}\n\nWhich one?"
                         ),
                     )
             else:
                 emails_to_search = [contact]
 
             all_messages = []
-            for email in emails_to_search:
-                base_query = f"from:{email} OR to:{email}"
+            for addr in emails_to_search:
+                # Build IMAP-compatible query
+                query = (
+                    f"from:{addr} OR to:{addr}"
+                )
 
                 if search_all_history:
+                    query += " after:2020/01/01"
                     date_from = "2020-01-01"
-                    query = f"{base_query} after:2020/01/01"
                     warning = (
-                        "WARNING: Full history search (from 2020)."
-                        " This operation may cost many tokens!"
+                        "WARNING: Full history search"
+                        " (from 2020). Expensive!"
                     )
                 else:
                     one_year_ago = (
-                        datetime.now() - timedelta(days=365)
+                        datetime.now()
+                        - timedelta(days=365)
                     )
-                    date_from = one_year_ago.strftime("%Y-%m-%d")
-                    query = (
-                        f"{base_query}"
-                        f" after:{one_year_ago.strftime('%Y/%m/%d')}"
+                    date_from = one_year_ago.strftime(
+                        "%Y-%m-%d"
+                    )
+                    query += (
+                        " after:"
+                        + one_year_ago.strftime(
+                            "%Y/%m/%d"
+                        )
                     )
                     warning = None
 
-                messages = self.gmail.search_messages(
+                messages = self.imap.search_messages(
                     query, max_results
                 )
                 all_messages.extend(messages)
 
+            # Deduplicate by message_id
             seen_ids = set()
             unique_messages = []
             for msg in all_messages:
                 msg_id = msg.get(
-                    "id",
-                    msg.get("subject", "") + msg.get("date", ""),
+                    "message_id",
+                    msg.get("subject", "")
+                    + msg.get("date", ""),
                 )
                 if msg_id not in seen_ids:
                     seen_ids.add(msg_id)
@@ -215,33 +252,44 @@ class GmailSearchTool(Tool):
                 ),
                 "messages": [
                     {
-                        "from": msg["from"],
-                        "to": msg["to"],
-                        "subject": msg["subject"],
-                        "date": msg["date"],
-                        "snippet": msg["snippet"],
+                        "from": msg.get("from", ""),
+                        "to": msg.get("to", ""),
+                        "subject": msg.get(
+                            "subject", ""
+                        ),
+                        "date": msg.get("date", ""),
+                        "snippet": msg.get(
+                            "snippet", ""
+                        ),
                     }
                     for msg in unique_messages
                 ],
             }
 
-            date_to = datetime.now().strftime("%Y-%m-%d")
+            date_to = datetime.now().strftime(
+                "%Y-%m-%d"
+            )
             message = (
-                f"Found {len(unique_messages)} email exchanges"
+                f"Found {len(unique_messages)} email"
+                f" exchanges"
                 f" (from {date_from} to {date_to})"
             )
             if len(emails_to_search) > 1:
                 message += (
-                    f" [searched {len(emails_to_search)}"
-                    " email addresses]"
+                    f" [searched"
+                    f" {len(emails_to_search)}"
+                    " addresses]"
                 )
             if warning:
                 message = f"{warning}\n{message}"
-            if not search_all_history and len(unique_messages) == 0:
+            if (
+                not search_all_history
+                and len(unique_messages) == 0
+            ):
                 message += (
                     "\nNo results in last year."
-                    " Use search_all_history=true to search"
-                    " from 2020 (more expensive)."
+                    " Use search_all_history=true"
+                    " to search from 2020."
                 )
 
             return ToolResult(
@@ -250,20 +298,26 @@ class GmailSearchTool(Tool):
                 message=message,
             )
         except Exception as e:
+            logger.error(
+                f"[search_provider_emails] Error: {e}"
+            )
             return ToolResult(
-                status=ToolStatus.ERROR, data=None, error=str(e)
+                status=ToolStatus.ERROR,
+                data=None,
+                error=str(e),
             )
 
     def get_schema(self):
         return {
             "name": self.name,
             "description": (
-                "Search Gmail history for emails from or to a contact."
-                " Can accept email address OR name. If name is"
-                " provided, will find associated emails first."
+                "Search email history for emails from"
+                " or to a contact. Can accept email"
+                " address OR name. If name is provided,"
+                " will find associated emails first."
                 " By default searches last year only."
-                " Use search_all_history=true to search from 2020"
-                " (WARNING: expensive)."
+                " Use search_all_history=true to search"
+                " from 2020 (WARNING: expensive)."
             ),
             "input_schema": {
                 "type": "object",
@@ -271,30 +325,31 @@ class GmailSearchTool(Tool):
                     "contact": {
                         "type": "string",
                         "description": (
-                            "Email address OR person name"
-                            " to search for"
+                            "Email address OR person"
+                            " name to search for"
                         ),
                     },
                     "max_results": {
                         "type": "integer",
                         "description": (
-                            "Maximum results (default 20)"
+                            "Maximum results"
+                            " (default 20)"
                         ),
                         "default": 20,
                     },
                     "search_all_history": {
                         "type": "boolean",
                         "description": (
-                            "If true, search from 2020 instead of"
-                            " last year. WARNING: expensive!"
+                            "If true, search from 2020."
+                            " WARNING: expensive!"
                         ),
                         "default": False,
                     },
                     "selected_emails": {
                         "type": "string",
                         "description": (
-                            "When multiple emails found for a name,"
-                            " specify which to use (e.g. '1' or '1,3')"
+                            "When multiple emails found,"
+                            " specify which (e.g. '1')"
                         ),
                     },
                 },
@@ -304,14 +359,14 @@ class GmailSearchTool(Tool):
 
 
 class CreateDraftTool(Tool):
-    """Create a draft email in Supabase."""
+    """Create a draft email in database."""
 
     def __init__(self, storage, owner_id: str):
         super().__init__(
             name="create_draft",
             description=(
-                "Create a draft email that the user can review"
-                " and send later"
+                "Create a draft email that the user can"
+                " review and send later"
             ),
         )
         self.storage = storage
@@ -349,24 +404,30 @@ class CreateDraftTool(Tool):
                 return ToolResult(
                     status=ToolStatus.ERROR,
                     data=None,
-                    error="Failed to create draft in database",
+                    error=(
+                        "Failed to create draft"
+                        " in database"
+                    ),
                 )
 
             thread_info = (
-                " (in reply to thread)" if in_reply_to else ""
+                " (in reply to thread)"
+                if in_reply_to
+                else ""
             )
             return ToolResult(
                 status=ToolStatus.SUCCESS,
                 data={"draft_id": draft.get("id")},
                 message=(
-                    f"Draft created successfully{thread_info}!\n"
+                    f"Draft created{thread_info}!\n"
                     f"To: {to}\n"
                     f"Subject: {subject}\n\n"
                     f"Message body:\n"
                     f"{'─' * 70}\n"
                     f"{body}\n"
                     f"{'─' * 70}\n\n"
-                    f"Draft saved. Say 'send it' when ready to send."
+                    f"Draft saved. Say 'send it'"
+                    f" when ready."
                 ),
             )
         except Exception as e:
@@ -381,46 +442,50 @@ class CreateDraftTool(Tool):
         return {
             "name": self.name,
             "description": (
-                "Create a draft email. The draft is saved locally"
-                " and can be sent later. If this is a REPLY to an"
-                " existing email, provide the in_reply_to and"
-                " references headers from the original message."
+                "Create a draft email. The draft is saved"
+                " locally and can be sent later. If this"
+                " is a REPLY, provide in_reply_to and"
+                " references from the original message."
             ),
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "to": {
                         "type": "string",
-                        "description": "Recipient email address",
+                        "description": (
+                            "Recipient email address"
+                        ),
                     },
                     "subject": {
                         "type": "string",
-                        "description": "Email subject line",
+                        "description": (
+                            "Email subject line"
+                        ),
                     },
                     "body": {
                         "type": "string",
                         "description": (
-                            "Email body text (can include formatting)"
+                            "Email body text"
                         ),
                     },
                     "in_reply_to": {
                         "type": "string",
                         "description": (
-                            "Message-ID of the email being replied to"
+                            "Message-ID of email being"
+                            " replied to"
                         ),
                     },
                     "references": {
                         "type": "string",
                         "description": (
-                            "References header from the original"
-                            " message (for replies)"
+                            "References header from"
+                            " original message"
                         ),
                     },
                     "thread_id": {
                         "type": "string",
                         "description": (
-                            "Gmail thread ID (for replies to keep"
-                            " in conversation)"
+                            "Thread ID for replies"
                         ),
                     },
                 },
@@ -430,7 +495,7 @@ class CreateDraftTool(Tool):
 
 
 class ListDraftsTool(Tool):
-    """List all drafts from Supabase."""
+    """List all drafts from database."""
 
     def __init__(self, storage, owner_id: str):
         super().__init__(
@@ -442,7 +507,9 @@ class ListDraftsTool(Tool):
 
     async def execute(self):
         try:
-            drafts = self.storage.list_drafts(self.owner_id)
+            drafts = self.storage.list_drafts(
+                self.owner_id
+            )
 
             if not drafts:
                 return ToolResult(
@@ -453,7 +520,9 @@ class ListDraftsTool(Tool):
 
             draft_details = []
             for draft in drafts:
-                to_addresses = draft.get("to_addresses", [])
+                to_addresses = draft.get(
+                    "to_addresses", []
+                )
                 to_str = (
                     ", ".join(to_addresses)
                     if to_addresses
@@ -463,40 +532,53 @@ class ListDraftsTool(Tool):
                 draft_details.append({
                     "id": draft["id"],
                     "to": to_str,
-                    "subject": draft.get("subject", "(no subject)"),
+                    "subject": draft.get(
+                        "subject", "(no subject)"
+                    ),
                     "body_preview": body,
-                    "created_at": draft.get("created_at"),
+                    "created_at": draft.get(
+                        "created_at"
+                    ),
                 })
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
                 data={"drafts": draft_details},
                 message=(
-                    f"Found {len(draft_details)} drafts:\n\n"
+                    f"Found {len(draft_details)} drafts:"
+                    "\n\n"
                     + "\n".join([
-                        f"**Draft {i+1}** (ID: {d['id']})\n"
+                        f"**Draft {i+1}**"
+                        f" (ID: {d['id']})\n"
                         f"To: {d['to']}\n"
                         f"Subject: {d['subject']}\n"
                         f"Preview: {d['body_preview']}\n"
-                        for i, d in enumerate(draft_details)
+                        for i, d in enumerate(
+                            draft_details
+                        )
                     ])
                 ),
             )
 
         except Exception as e:
-            logger.error(f"Failed to list drafts: {e}")
+            logger.error(
+                f"Failed to list drafts: {e}"
+            )
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
-                error=f"Error retrieving drafts: {str(e)}",
+                error=(
+                    f"Error retrieving drafts:"
+                    f" {str(e)}"
+                ),
             )
 
     def get_schema(self):
         return {
             "name": self.name,
             "description": (
-                "List all draft emails. Returns draft IDs,"
-                " recipients, subjects, and previews."
+                "List all draft emails. Returns draft"
+                " IDs, recipients, subjects, previews."
             ),
             "input_schema": {
                 "type": "object",
@@ -509,52 +591,79 @@ class ListDraftsTool(Tool):
 class EditDraftTool(Tool):
     """Edit a draft interactively with nano editor."""
 
-    def __init__(self, gmail_client):
+    def __init__(self, storage, owner_id: str):
         super().__init__(
             name="edit_draft",
             description=(
-                "Open a draft in nano editor for manual editing"
+                "Open a draft in nano editor"
+                " for manual editing"
             ),
         )
-        self.gmail = gmail_client
+        self.storage = storage
+        self.owner_id = owner_id
 
     async def execute(self, draft_id: str):
         try:
-            draft = self.gmail.get_draft(draft_id)
+            draft = self.storage.get_draft(
+                self.owner_id, draft_id
+            )
+            if not draft:
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error=f"Draft not found: {draft_id}",
+                )
+
+            to_addresses = draft.get(
+                "to_addresses", []
+            )
+            to_str = (
+                ", ".join(to_addresses)
+                if to_addresses
+                else "Unknown"
+            )
 
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".txt", delete=False
             ) as f:
                 temp_path = f.name
-                f.write("# DRAFT METADATA (DO NOT EDIT)\n")
-                f.write(f"# To: {draft['to']}\n")
-                f.write(f"# Subject: {draft['subject']}\n")
-                f.write("#\n")
-                f.write("# Edit the message body below:\n")
                 f.write(
-                    "# ==========================================\n\n"
+                    "# DRAFT METADATA (DO NOT EDIT)\n"
                 )
-                f.write(draft["body"])
+                f.write(f"# To: {to_str}\n")
+                f.write(
+                    f"# Subject:"
+                    f" {draft.get('subject', '')}\n"
+                )
+                f.write("#\n")
+                f.write(
+                    "# Edit the message body below:\n"
+                )
+                f.write(
+                    "# =========================="
+                    "================\n\n"
+                )
+                f.write(draft.get("body", ""))
 
-            subprocess.run(["nano", temp_path], check=True)
+            subprocess.run(
+                ["nano", temp_path], check=True
+            )
 
             with open(temp_path, "r") as f:
                 content = f.read()
 
             lines = content.split("\n")
-            body_lines = []
-            for line in lines:
-                if line.startswith("#"):
-                    continue
-                body_lines.append(line)
-
+            body_lines = [
+                line
+                for line in lines
+                if not line.startswith("#")
+            ]
             body = "\n".join(body_lines).strip()
 
-            self.gmail.update_draft(
-                draft_id=draft_id,
-                to=None,
-                subject=None,
-                body=body,
+            self.storage.update_draft(
+                self.owner_id,
+                draft_id,
+                {"body": body},
             )
 
             import os
@@ -565,9 +674,10 @@ class EditDraftTool(Tool):
                 status=ToolStatus.SUCCESS,
                 data={"draft_id": draft_id},
                 message=(
-                    f"Draft manually edited and saved!\n"
-                    f"To: {draft['to']}\n"
-                    f"Subject: {draft['subject']}"
+                    f"Draft edited and saved!\n"
+                    f"To: {to_str}\n"
+                    f"Subject:"
+                    f" {draft.get('subject', '')}"
                 ),
             )
 
@@ -575,31 +685,36 @@ class EditDraftTool(Tool):
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
-                error="Editing cancellato dall'utente",
+                error="Editing cancelled by user",
             )
         except Exception as e:
-            logger.error(f"Failed to edit draft: {e}")
+            logger.error(
+                f"Failed to edit draft: {e}"
+            )
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
-                error=f"Error editing draft: {str(e)}",
+                error=(
+                    f"Error editing draft: {str(e)}"
+                ),
             )
 
     def get_schema(self):
         return {
             "name": self.name,
             "description": (
-                "Open a Gmail draft in nano text editor for manual"
-                " editing by the user. The draft content will be"
-                " opened in nano, user can modify it, and changes"
-                " will be saved back to Gmail when nano is closed."
+                "Open a draft in nano text editor for"
+                " manual editing. Changes are saved"
+                " back when nano is closed."
             ),
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "draft_id": {
                         "type": "string",
-                        "description": "Gmail draft ID to edit",
+                        "description": (
+                            "Draft ID to edit"
+                        ),
                     },
                 },
                 "required": ["draft_id"],
@@ -608,16 +723,18 @@ class EditDraftTool(Tool):
 
 
 class UpdateDraftTool(Tool):
-    """Update an existing draft."""
+    """Update an existing draft in database."""
 
-    def __init__(self, gmail_client):
+    def __init__(self, storage, owner_id: str):
         super().__init__(
             name="update_draft",
             description=(
-                "Update an existing draft with new content"
+                "Update an existing draft"
+                " with new content"
             ),
         )
-        self.gmail = gmail_client
+        self.storage = storage
+        self.owner_id = owner_id
 
     async def execute(
         self,
@@ -627,11 +744,19 @@ class UpdateDraftTool(Tool):
         body: str = None,
     ):
         try:
-            updated_draft = self.gmail.update_draft(
-                draft_id=draft_id,
-                to=to,
-                subject=subject,
-                body=body,
+            update_data = {}
+            if to is not None:
+                update_data["to_addresses"] = [
+                    addr.strip()
+                    for addr in to.split(",")
+                ]
+            if subject is not None:
+                update_data["subject"] = subject
+            if body is not None:
+                update_data["body"] = body
+
+            self.storage.update_draft(
+                self.owner_id, draft_id, update_data
             )
 
             updates = []
@@ -644,29 +769,31 @@ class UpdateDraftTool(Tool):
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
-                data={"draft_id": updated_draft.get("id")},
+                data={"draft_id": draft_id},
                 message=(
                     "Draft updated successfully!\n"
                     + "\n".join(updates)
-                    + "\n\nThe updated draft is available"
-                    " in Gmail Drafts folder."
                 ),
             )
         except Exception as e:
-            logger.error(f"Failed to update draft: {e}")
+            logger.error(
+                f"Failed to update draft: {e}"
+            )
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
-                error=f"Error updating draft: {str(e)}",
+                error=(
+                    f"Error updating draft: {str(e)}"
+                ),
             )
 
     def get_schema(self):
         return {
             "name": self.name,
             "description": (
-                "Update an existing Gmail draft. You can update"
-                " the recipient, subject, body, or any combination."
-                " Fields not provided will remain unchanged."
+                "Update an existing draft. You can update"
+                " recipient, subject, body, or any combo."
+                " Fields not provided stay unchanged."
             ),
             "input_schema": {
                 "type": "object",
@@ -674,26 +801,25 @@ class UpdateDraftTool(Tool):
                     "draft_id": {
                         "type": "string",
                         "description": (
-                            "Gmail draft ID (returned when draft"
-                            " was created)"
+                            "Draft ID to update"
                         ),
                     },
                     "to": {
                         "type": "string",
                         "description": (
-                            "New recipient email address (optional)"
+                            "New recipient email"
                         ),
                     },
                     "subject": {
                         "type": "string",
                         "description": (
-                            "New email subject (optional)"
+                            "New email subject"
                         ),
                     },
                     "body": {
                         "type": "string",
                         "description": (
-                            "New email body text (optional)"
+                            "New email body text"
                         ),
                     },
                 },
@@ -703,32 +829,37 @@ class UpdateDraftTool(Tool):
 
 
 class SendDraftTool(Tool):
-    """Send a draft from Supabase via Gmail/Outlook API."""
+    """Send a draft via SMTP (using IMAPClient)."""
 
-    def __init__(self, gmail_client, storage, owner_id: str):
+    def __init__(
+        self, imap_client, storage, owner_id: str
+    ):
         super().__init__(
             name="send_draft",
             description=(
-                "Send a draft email. When user says 'send it',"
-                " 'inviala', 'spedisci', call this tool."
-                " If no draft_id provided, sends the most"
-                " recent draft."
+                "Send a draft email. When user says"
+                " 'send it', 'inviala', 'spedisci',"
+                " call this tool. If no draft_id"
+                " provided, sends most recent draft."
             ),
         )
-        self.gmail = gmail_client
+        self.imap = imap_client
         self.storage = storage
         self.owner_id = owner_id
 
     async def execute(self, draft_id: str = None):
         try:
             if not draft_id:
-                drafts = self.storage.list_drafts(self.owner_id)
+                drafts = self.storage.list_drafts(
+                    self.owner_id
+                )
                 if not drafts:
                     return ToolResult(
                         status=ToolStatus.ERROR,
                         data=None,
                         error=(
-                            "No drafts found. Create a draft first."
+                            "No drafts found."
+                            " Create a draft first."
                         ),
                     )
                 draft = drafts[0]
@@ -742,35 +873,48 @@ class SendDraftTool(Tool):
                 return ToolResult(
                     status=ToolStatus.ERROR,
                     data=None,
-                    error=f"Draft not found: {draft_id}",
+                    error=(
+                        f"Draft not found: {draft_id}"
+                    ),
                 )
 
-            to_addresses = draft.get("to_addresses", [])
+            to_addresses = draft.get(
+                "to_addresses", []
+            )
             to = (
-                ", ".join(to_addresses) if to_addresses else None
+                ", ".join(to_addresses)
+                if to_addresses
+                else None
             )
             subject = draft.get("subject", "")
             body = draft.get("body", "")
             in_reply_to = draft.get("in_reply_to")
             references = draft.get("references")
-            thread_id = draft.get("thread_id")
 
             if not to:
                 return ToolResult(
                     status=ToolStatus.ERROR,
                     data=None,
-                    error="Draft has no recipient address",
+                    error=(
+                        "Draft has no recipient address"
+                    ),
                 )
 
-            sent_message = self.gmail.send_message(
+            logger.debug(
+                f"[send_draft] Sending to={to},"
+                f" subject={subject}"
+            )
+
+            sent_message = self.imap.send_message(
                 to=to,
                 subject=subject,
                 body=body,
                 in_reply_to=in_reply_to,
                 references=(
-                    " ".join(references) if references else None
+                    " ".join(references)
+                    if references
+                    else None
                 ),
-                thread_id=thread_id,
             )
 
             self.storage.mark_draft_sent(
@@ -781,16 +925,23 @@ class SendDraftTool(Tool):
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
-                data={"message_id": sent_message.get("id")},
+                data={
+                    "message_id": sent_message.get(
+                        "id"
+                    )
+                },
                 message=(
                     f"Email sent successfully!\n"
                     f"To: {to}\n"
                     f"Subject: {subject}\n\n"
-                    f"Email sent and draft marked as sent."
+                    f"Email sent and draft"
+                    f" marked as sent."
                 ),
             )
         except Exception as e:
-            logger.error(f"Failed to send draft: {e}")
+            logger.error(
+                f"Failed to send draft: {e}"
+            )
             if draft_id:
                 try:
                     self.storage.update_draft(
@@ -806,16 +957,19 @@ class SendDraftTool(Tool):
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
-                error=f"Error sending email: {str(e)}",
+                error=(
+                    f"Error sending email: {str(e)}"
+                ),
             )
 
     def get_schema(self):
         return {
             "name": self.name,
             "description": (
-                "Send a draft email. If no draft_id provided,"
-                " sends the most recent draft. IMPORTANT: Always"
-                " confirm with the user before sending."
+                "Send a draft email. If no draft_id"
+                " provided, sends the most recent draft."
+                " IMPORTANT: Always confirm with user"
+                " before sending."
             ),
             "input_schema": {
                 "type": "object",
@@ -823,52 +977,12 @@ class SendDraftTool(Tool):
                     "draft_id": {
                         "type": "string",
                         "description": (
-                            "Draft ID to send (optional - uses"
-                            " most recent if not provided)"
+                            "Draft ID to send"
+                            " (optional - uses most"
+                            " recent if not provided)"
                         ),
                     },
                 },
-                "required": [],
-            },
-        }
-
-
-class RefreshGoogleAuthTool(Tool):
-    """Refresh Google OAuth authentication."""
-
-    def __init__(self, gmail_client, calendar_client):
-        super().__init__(
-            name="refresh_google_auth",
-            description=(
-                "Refresh Google OAuth permissions for Gmail"
-                " and Calendar"
-            ),
-        )
-        self.gmail = gmail_client
-        self.calendar = calendar_client
-
-    async def execute(self):
-        return ToolResult(
-            status=ToolStatus.ERROR,
-            data=None,
-            error=(
-                "To refresh Google authentication, please use:"
-                " /connect google reset\n"
-                "Then reconnect with: /connect google"
-            ),
-        )
-
-    def get_schema(self):
-        return {
-            "name": self.name,
-            "description": (
-                "Rinnova i permessi Google (Gmail e Calendar)."
-                " Guida l'utente a usare /connect google"
-                " per riautenticarsi."
-            ),
-            "input_schema": {
-                "type": "object",
-                "properties": {},
                 "required": [],
             },
         }

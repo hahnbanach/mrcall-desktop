@@ -1,6 +1,6 @@
-"""Zylch Storage - PostgreSQL storage backend via SQLAlchemy.
+"""Zylch Storage - SQLite storage backend via SQLAlchemy.
 
-All data stored in PostgreSQL (NO local filesystem per ARCHITECTURE.md).
+Database file: ~/.zylch/zylch.db
 """
 
 from .storage import Storage
