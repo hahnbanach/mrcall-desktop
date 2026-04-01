@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "zylch"
@@ -22,6 +22,8 @@ dependencies = [
     "openai>=1.0.0",
     "cryptography>=41.0.0",
     "apscheduler>=3.10.0",
+    "pydantic-settings>=2.0.0",
+    "beautifulsoup4>=4.12.0",
 ]
 
 [project.scripts]

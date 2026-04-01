@@ -275,9 +275,7 @@ class ComposeEmailTool(Tool):
         """Lazily initialize EmailerAgent."""
         if self._agent is None:
             from zylch.agents.emailer_agent import EmailerAgent
-            from zylch.storage.supabase_client import (
-                SupabaseStorage,
-            )
+            from zylch.storage import Storage
 
             owner_id = self.session_state.get_owner_id()
             if not owner_id:
@@ -286,7 +284,7 @@ class ComposeEmailTool(Tool):
                     " Please log in first."
                 )
 
-            storage = SupabaseStorage.get_instance()
+            storage = Storage.get_instance()
             self._agent = EmailerAgent(
                 storage=storage,
                 owner_id=owner_id,
@@ -324,11 +322,9 @@ class ComposeEmailTool(Tool):
             body = result.get("body", "")
 
             owner_id = self.session_state.get_owner_id()
-            from zylch.storage.supabase_client import (
-                SupabaseStorage,
-            )
+            from zylch.storage import Storage
 
-            storage = SupabaseStorage.get_instance()
+            storage = Storage.get_instance()
 
             to_email = (
                 recipient_email
