@@ -30,7 +30,7 @@ logging.basicConfig(
 )
 
 # Silence noisy third-party loggers
-for noisy_logger in ["hpack", "httpcore", "httpx", "h2", "h11", "urllib3", "cachecontrol", "sentence_transformers", "LiteLLM"]:
+for noisy_logger in ["hpack", "httpcore", "httpx", "h2", "h11", "urllib3", "cachecontrol", "fastembed", "LiteLLM"]:
     logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
