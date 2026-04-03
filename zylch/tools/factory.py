@@ -33,6 +33,7 @@ from .whatsapp_tools import (
     GetWhatsAppConversationTool,
     SendWhatsAppMessageTool,
     WhatsAppGapAnalysisTool,
+    GetContactTimelineTool,
 )
 
 # Tool classes from split modules
@@ -261,9 +262,12 @@ class ToolFactory:
                 WhatsAppGapAnalysisTool(
                     session_state=session_state,
                 ),
+                GetContactTimelineTool(
+                    session_state=session_state,
+                ),
             ]
         )
-        logger.info("WhatsApp tools initialized (4)")
+        logger.info("WhatsApp tools initialized (5)")
 
         # Get Tasks tool
         tools.append(GetTasksTool(session_state=session_state))

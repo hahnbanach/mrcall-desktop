@@ -1,7 +1,8 @@
-"""WhatsApp LLM tools — search, conversation, send.
+"""WhatsApp LLM tools — search, conversation, send, timeline.
 
 Analogous to gmail_tools.py for email. Queries local SQLite
 (whatsapp_messages, whatsapp_contacts) and uses neonize for sending.
+Also includes GetContactTimelineTool for unified multi-channel view.
 """
 
 import logging
@@ -625,6 +626,121 @@ class WhatsAppGapAnalysisTool(Tool):
                         "type": "integer",
                         "description": "Days of silence to flag a contact (default: 30)",
                         "default": 30,
+                    },
+                },
+                "required": [],
+            },
+        }
+
+
+class GetContactTimelineTool(Tool):
+    """Unified multi-channel timeline for a contact.
+
+    Merges emails, WhatsApp messages, and MrCall calls
+    into a single chronological view.
+    """
+
+    def __init__(self, session_state=None):
+        super().__init__(
+            name="get_contact_timeline",
+            description=(
+                "Get a unified timeline of ALL interactions with a contact "
+                "across email, WhatsApp, and phone calls. Use when user asks "
+                "'show me everything with X' or 'timeline for X' or wants a "
+                "complete view of a relationship."
+            ),
+        )
+        self.session_state = session_state
+
+    async def execute(
+        self,
+        contact_name: str = "",
+        contact_email: str = "",
+        contact_phone: str = "",
+        days_back: int = 90,
+        limit: int = 50,
+        **kwargs,
+    ) -> ToolResult:
+        """Get unified timeline across all channels.
+
+        Args:
+            contact_name: Contact name to search
+            contact_email: Contact email address
+            contact_phone: Contact phone number
+            days_back: How far back to look
+            limit: Max interactions to return
+        """
+        if not (contact_name or contact_email or contact_phone):
+            return ToolResult(
+                status=ToolStatus.ERROR,
+                data=None,
+                error="Provide at least one of: contact_name, contact_email, contact_phone",
+            )
+
+        try:
+            from zylch.services.unified_conversation import get_unified_timeline
+
+            owner_id = None
+            if self.session_state:
+                owner_id = self.session_state.get_owner_id()
+
+            result = get_unified_timeline(
+                owner_id=owner_id or "",
+                contact_name=contact_name,
+                contact_email=contact_email,
+                contact_phone=contact_phone,
+                days_back=days_back,
+                limit=limit,
+            )
+
+            channels = result.get("channels", {})
+            channel_summary = ", ".join(f"{count} {ch}" for ch, count in channels.items())
+
+            return ToolResult(
+                status=ToolStatus.SUCCESS,
+                data=result,
+                message=(
+                    f"Timeline for {result['contact']}: "
+                    f"{result['total']} interactions ({channel_summary})"
+                ),
+            )
+
+        except Exception as e:
+            logger.error(f"[get_contact_timeline] error: {e}")
+            return ToolResult(
+                status=ToolStatus.ERROR,
+                data=None,
+                error=f"Error getting timeline: {str(e)}",
+            )
+
+    def get_schema(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "contact_name": {
+                        "type": "string",
+                        "description": "Contact name to search for",
+                    },
+                    "contact_email": {
+                        "type": "string",
+                        "description": "Contact email address",
+                    },
+                    "contact_phone": {
+                        "type": "string",
+                        "description": "Contact phone number (e.g. +393281234567)",
+                    },
+                    "days_back": {
+                        "type": "integer",
+                        "description": "Days of history (default: 90)",
+                        "default": 90,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max interactions (default: 50)",
+                        "default": 50,
                     },
                 },
                 "required": [],
