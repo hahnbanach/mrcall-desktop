@@ -38,7 +38,7 @@ description: |
 ### Channels
 - **Email**: IMAP/SMTP (bidirezionale)
 - **MrCall/StarChat**: HTTP client for contacts, calls, SMS (channel, not configurator)
-- **WhatsApp**: planned via GOWA (go-whatsapp-web-multidevice)
+- **WhatsApp**: planned via neonize (whatsmeow Python wrapper, local QR code login)
 - **Calendar**: planned via CalDAV
 
 ### Notifications

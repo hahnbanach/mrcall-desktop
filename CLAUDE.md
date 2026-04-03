@@ -16,7 +16,7 @@ Multi-channel sales intelligence: connects email (IMAP), phone (MrCall/StarChat)
 |---------|----------|--------|
 | Email | IMAP/SMTP | Working |
 | MrCall | StarChat HTTP | Channel adapter (starchat.py) |
-| WhatsApp | GOWA HTTP | Planned |
+| WhatsApp | neonize (whatsmeow) | Planned — local, QR code login |
 | Calendar | CalDAV | Planned |
 
 MrCall is a **channel** (read calls, send SMS, trigger actions). Configuration is delegated to StarChat → mrcall-agent (separate repo at `~/hb/mrcall-agent`).

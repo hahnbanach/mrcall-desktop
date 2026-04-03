@@ -838,25 +838,15 @@ class StarChatClient:
         business_id: str,
         days_back: int = 30
     ) -> List[Dict[str, Any]]:
-        """Get contacts from WhatsApp messages via StarChat API.
+        """DEPRECATED: WhatsApp now uses neonize (local), not StarChat.
 
-        Requires StarChat REST API endpoint for WhatsApp messages.
-        See STARCHAT_REQUESTS.md Request #3 for API specification.
-
-        Args:
-            business_id: Business ID
-            days_back: Number of days to look back for messages
-
-        Returns:
-            List of contacts with WhatsApp context
+        See docs/features/WHATSAPP_INTEGRATION_TODO.md.
+        Remove this stub when zylch/whatsapp/client.py is implemented.
         """
-        logger.info(f"Getting WhatsApp contacts for business: {business_id}")
-
-        # TODO: Implement when StarChat provides REST API endpoint
-        # Proposed endpoint: GET /mrcall/v1/crm/whatsapp/{businessId}/messages
-        # See STARCHAT_REQUESTS.md Request #3 for full specification
-
-        logger.warning("WhatsApp integration requires StarChat REST API endpoint - not yet available")
+        logger.warning(
+            "WhatsApp uses neonize (local connection), not StarChat."
+            " See docs/features/WHATSAPP_INTEGRATION_TODO.md"
+        )
         return []
 
     async def initiate_outbound_call(

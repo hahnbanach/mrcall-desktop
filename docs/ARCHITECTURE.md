@@ -114,7 +114,7 @@ User
 |---------|----------|---------------|
 | Email | IMAP/SMTP | `zylch/email/imap_client.py` |
 | MrCall | StarChat HTTP | `zylch/tools/starchat.py` |
-| WhatsApp | GOWA HTTP | Planned |
+| WhatsApp | neonize (whatsmeow) | Planned — `zylch/whatsapp/client.py` |
 | Calendar | CalDAV | Planned |
 
 ## Storage
