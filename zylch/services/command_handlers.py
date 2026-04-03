@@ -223,6 +223,7 @@ async def handle_sync(args: List[str], config, owner_id: str) -> str:
 • `/sync --days N` - Sync last N days
 • `/sync --days N --force` - Sync last N days and reprocess all
 • `/sync mrcall` - Test MrCall conversation fetch (debug)
+• `/sync whatsapp` - Sync WhatsApp messages and contacts
 
 **Examples:**
 • `/sync` - Quick incremental sync
@@ -230,7 +231,8 @@ async def handle_sync(args: List[str], config, owner_id: str) -> str:
 • `/sync --force` - Force reprocess everything
 • `/sync --days 90 --force` - Sync 90 days and reprocess all
 • `/sync status` - Check last sync time
-• `/sync mrcall` - Fetch latest MrCall conversation"""
+• `/sync mrcall` - Fetch latest MrCall conversation
+• `/sync whatsapp` - Sync WhatsApp (requires /connect whatsapp first)"""
 
     # --help option (check first)
     if '--help' in args:
@@ -413,6 +415,69 @@ Your MrCall is linked to business `{business_id}` but OAuth credentials are miss
         except Exception as e:
             logger.error(f"[/sync] MrCall sync failed: {e}", exc_info=True)
             return f"❌ **MrCall sync failed:** {str(e)}"
+
+    # Subcommand: whatsapp - Sync WhatsApp messages via neonize
+    if subcommand == 'whatsapp':
+        logger.info(f"[/sync] WhatsApp sync for owner_id={owner_id}")
+        try:
+            from zylch.whatsapp.client import WhatsAppClient
+            from zylch.whatsapp.sync import WhatsAppSyncService
+            from zylch.storage import Storage
+
+            wa_client = WhatsAppClient()
+
+            if not wa_client.has_session():
+                return """📱 **WhatsApp Sync**
+
+⚠️ **WhatsApp not connected**
+
+**To connect WhatsApp:**
+1. Run `/connect whatsapp` to scan QR code
+2. Then run `/sync whatsapp` again"""
+
+            storage = Storage.get_instance()
+            sync_service = WhatsAppSyncService(storage, owner_id)
+
+            # Connect (non-blocking) and sync contacts
+            wa_client.on_message(sync_service.handle_message)
+            wa_client.on_history_sync(sync_service.handle_history_sync)
+            wa_client.connect(blocking=False)
+
+            # Wait briefly for connection
+            import time
+            for _ in range(10):
+                if wa_client.is_connected():
+                    break
+                time.sleep(0.5)
+
+            if not wa_client.is_connected():
+                wa_client.disconnect()
+                return """📱 **WhatsApp Sync**
+
+❌ **Could not connect to WhatsApp**
+
+Session may have expired. Try `/connect whatsapp` to re-authenticate."""
+
+            result = sync_service.full_sync(wa_client)
+            wa_client.disconnect()
+
+            return f"""📱 **WhatsApp Sync**
+
+✅ **Sync complete**
+
+• Contacts: {result['contacts']}
+• Messages: {result['messages']}
+
+**Next steps:**
+• Ask about WhatsApp conversations in natural language
+• `/tasks` to see actionable items from WhatsApp"""
+
+        except ImportError as e:
+            logger.error(f"[/sync] WhatsApp import error: {e}")
+            return "❌ **WhatsApp sync requires neonize.** Run: `pip install neonize`"
+        except Exception as e:
+            logger.error(f"[/sync] WhatsApp sync failed: {e}", exc_info=True)
+            return f"❌ **WhatsApp sync failed:** {str(e)}"
 
     # Parse --days and --force options
     days_back = 30
@@ -1620,6 +1685,7 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
 • `pipedrive` - Pipedrive CRM
 • `vonage` - Vonage SMS
 • `sendgrid` - SendGrid Email
+• `whatsapp` - WhatsApp (local QR code)
 
 **Examples:**
 • `/connect mrcall` - Connect MrCall
@@ -1689,6 +1755,14 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
 
             # Note: delete_user_credentials deletes both google and microsoft
             # For microsoft-only deletion, use supabase.delete_oauth_token directly
+            def _delete_whatsapp(oid):
+                from zylch.whatsapp.client import WhatsAppClient
+                wa = WhatsAppClient()
+                if wa.has_session():
+                    wa.logout()
+                    return True
+                return False
+
             delete_funcs = {
                 'google': delete_user_credentials,
                 'microsoft': lambda oid: supabase.delete_oauth_token(oid, 'microsoft'),
@@ -1699,6 +1773,7 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
                 'pipedrive': delete_pipedrive_key,
                 'vonage': delete_vonage_keys,
                 'sendgrid': delete_sendgrid_key,
+                'whatsapp': _delete_whatsapp,
             }
 
             if provider_key not in delete_funcs:
@@ -1732,6 +1807,59 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
 
         # Connect to specific provider (subcommand is the provider key)
         provider_key = subcommand
+
+        # WhatsApp: local QR code connection via neonize
+        if provider_key == 'whatsapp':
+            logger.info(f"[/connect] WhatsApp connection for owner_id={owner_id}")
+            try:
+                from zylch.whatsapp.client import WhatsAppClient
+                import time
+
+                wa_client = WhatsAppClient()
+
+                if wa_client.has_session():
+                    # Try to reconnect with existing session
+                    wa_client.connect(blocking=False)
+                    for _ in range(10):
+                        if wa_client.is_connected():
+                            break
+                        time.sleep(0.5)
+
+                    if wa_client.is_connected():
+                        me = wa_client.get_me()
+                        wa_client.disconnect()
+                        return f"""📱 **WhatsApp Already Connected**
+
+✅ Session active. Ready to sync.
+
+Run `/sync whatsapp` to sync messages and contacts."""
+                    else:
+                        wa_client.disconnect()
+
+                # New connection — show QR code in terminal
+                # neonize displays QR automatically via segno
+                return """📱 **Connect WhatsApp**
+
+**Instructions:**
+1. Open WhatsApp on your phone
+2. Go to Settings → Linked Devices → Link a Device
+3. Scan the QR code that appears in your terminal
+
+**Starting QR code display...**
+
+Run this in your terminal:
+```
+python -c "from zylch.whatsapp.client import WhatsAppClient; c = WhatsAppClient(); c.connect()"
+```
+
+After scanning, your session will be saved locally.
+Then run `/sync whatsapp` to sync messages."""
+
+            except ImportError:
+                return "❌ **WhatsApp requires neonize.** Run: `pip install neonize`"
+            except Exception as e:
+                logger.error(f"[/connect] WhatsApp error: {e}", exc_info=True)
+                return f"❌ **WhatsApp connection failed:** {str(e)}"
 
         # IntegrationProvider table removed; provider lookup
         # is not available. Return a helpful message.
