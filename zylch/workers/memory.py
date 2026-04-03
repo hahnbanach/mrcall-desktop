@@ -8,13 +8,17 @@ then LLM-merges new information with existing knowledge.
 """
 
 import logging
-from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from zylch.config import settings
 from zylch.llm import LLMClient
 from zylch.storage import Storage
-from zylch.memory import BlobStorage, HybridSearchEngine, LLMMergeService, EmbeddingEngine, MemoryConfig
+from zylch.memory import (
+    BlobStorage,
+    HybridSearchEngine,
+    LLMMergeService,
+    EmbeddingEngine,
+    MemoryConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +34,7 @@ class MemoryWorker:
     5. Mark email as processed
     """
 
-    def __init__(
-        self,
-        storage: Storage,
-        owner_id: str,
-        api_key: str,
-        provider: str
-    ):
+    def __init__(self, storage: Storage, owner_id: str, api_key: str, provider: str):
         """Initialize MemoryWorker.
 
         Args:
@@ -60,14 +58,9 @@ class MemoryWorker:
         config = MemoryConfig()
         self.embedding_engine = EmbeddingEngine(config)
         from zylch.storage.database import get_session
-        self.blob_storage = BlobStorage(
-            get_session,
-            self.embedding_engine
-        )
-        self.hybrid_search = HybridSearchEngine(
-            get_session,
-            self.embedding_engine
-        )
+
+        self.blob_storage = BlobStorage(get_session, self.embedding_engine)
+        self.hybrid_search = HybridSearchEngine(get_session, self.embedding_engine)
         self.llm_merge = LLMMergeService(api_key, provider)
 
         # LLM client for fact extraction
@@ -89,7 +82,7 @@ class MemoryWorker:
             The extraction prompt, or None if not configured
         """
         if not self._custom_prompt_loaded:
-            self._custom_prompt = self.storage.get_agent_prompt(self.owner_id, 'memory_email')
+            self._custom_prompt = self.storage.get_agent_prompt(self.owner_id, "memory_email")
             self._custom_prompt_loaded = True
 
             if self._custom_prompt:
@@ -154,7 +147,9 @@ class MemoryWorker:
             event_desc = f"Extracted from email {email_id} ({email.get('date', 'unknown date')})"
 
             for i, entity_content in enumerate(entities):
-                await self._upsert_entity(entity_content, event_desc, email_id, i + 1, len(entities))
+                await self._upsert_entity(
+                    entity_content, event_desc, email_id, i + 1, len(entities)
+                )
 
             # Step 3: Mark email as processed
             self.storage.mark_email_processed(self.owner_id, email_id)
@@ -170,7 +165,7 @@ class MemoryWorker:
         event_desc: str,
         email_id: str,
         entity_num: int,
-        total_entities: int
+        total_entities: int,
     ) -> None:
         """Upsert a single entity blob with reconsolidation.
 
@@ -185,21 +180,20 @@ class MemoryWorker:
 
         # Get top 3 candidates above threshold
         existing_blobs = self.hybrid_search.find_candidates_for_reconsolidation(
-            owner_id=self.owner_id,
-            content=entity_content,
-            namespace=self.namespace,
-            limit=3
+            owner_id=self.owner_id, content=entity_content, namespace=self.namespace, limit=3
         )
 
         upserted = False
 
         for existing in existing_blobs:
             # Try to merge with this candidate
-            logger.debug(f"Trying to merge with blob {existing.blob_id} (score={existing.hybrid_score:.2f})")
+            logger.debug(
+                f"Trying to merge with blob {existing.blob_id} (score={existing.hybrid_score:.2f})"
+            )
             merged_content = self.llm_merge.merge(existing.content, entity_content)
 
             # If LLM says INSERT (entities don't match), try next candidate
-            if 'INSERT' in merged_content.upper() and len(merged_content) < 10:
+            if "INSERT" in merged_content.upper() and len(merged_content) < 10:
                 logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
                 continue
 
@@ -208,9 +202,11 @@ class MemoryWorker:
                 blob_id=existing.blob_id,
                 owner_id=self.owner_id,
                 content=merged_content,
-                event_description=event_desc
+                event_description=event_desc,
             )
-            logger.info(f"Reconsolidated blob {existing.blob_id} with email {email_id} (entity {entity_num}/{total_entities})")
+            logger.info(
+                f"Reconsolidated blob {existing.blob_id} with email {email_id} (entity {entity_num}/{total_entities})"
+            )
             upserted = True
             break
 
@@ -220,9 +216,11 @@ class MemoryWorker:
                 owner_id=self.owner_id,
                 namespace=self.namespace,
                 content=entity_content,
-                event_description=event_desc
+                event_description=event_desc,
             )
-            logger.info(f"Created new blob {blob['id']} from email {email_id} (entity {entity_num}/{total_entities})")
+            logger.info(
+                f"Created new blob {blob['id']} from email {email_id} (entity {entity_num}/{total_entities})"
+            )
 
     async def process_batch(self, emails: List[Dict]) -> int:
         """Process batch of emails.
@@ -277,17 +275,21 @@ class MemoryWorker:
 
             prompt = prompt_template.format(
                 from_email=email.get("from_email", "unknown"),
-                to_email=", ".join(email.get("to_email", [])) if isinstance(email.get("to_email"), list) else email.get("to_email", "unknown"),
+                to_email=(
+                    ", ".join(email.get("to_email", []))
+                    if isinstance(email.get("to_email"), list)
+                    else email.get("to_email", "unknown")
+                ),
                 cc_email=cc_email,
                 subject=email.get("subject", "(no subject)"),
                 date=email.get("date", "unknown"),
                 body=body,
-                contact_email=contact_email
+                contact_email=contact_email,
             )
 
             response = self.client.create_message_sync(
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=1024  # Increased for multiple entities
+                max_tokens=1024,  # Increased for multiple entities
             )
             raw_output = response.content[0].text.strip()
             logging.debug(f"RAW OUTPUT:\n{raw_output}")
@@ -359,9 +361,7 @@ class MemoryWorker:
 
             # Search for existing blob about this meeting/attendees
             existing = self.hybrid_search.find_for_reconsolidation(
-                owner_id=self.owner_id,
-                content=facts,
-                namespace=self.namespace
+                owner_id=self.owner_id, content=facts, namespace=self.namespace
             )
 
             event_desc = f"Extracted from calendar event '{event.get('summary', '')}' ({event.get('start_time', '')})"
@@ -372,7 +372,7 @@ class MemoryWorker:
                     blob_id=existing.blob_id,
                     owner_id=self.owner_id,
                     content=merged_content,
-                    event_description=event_desc
+                    event_description=event_desc,
                 )
                 logger.info(f"Reconsolidated blob {existing.blob_id} with event {event_id}")
             else:
@@ -380,7 +380,7 @@ class MemoryWorker:
                     owner_id=self.owner_id,
                     namespace=self.namespace,
                     content=facts,
-                    event_description=event_desc
+                    event_description=event_desc,
                 )
                 logger.info(f"Created new blob {blob['id']} from event {event_id}")
 
@@ -424,8 +424,7 @@ class MemoryWorker:
             attendees = event.get("attendees", [])
             if isinstance(attendees, list):
                 attendees_str = ", ".join(
-                    a.get("email", "") if isinstance(a, dict) else str(a)
-                    for a in attendees
+                    a.get("email", "") if isinstance(a, dict) else str(a) for a in attendees
                 )
             else:
                 attendees_str = str(attendees)
@@ -451,8 +450,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
 """
 
             response = self.client.create_message_sync(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=512
+                messages=[{"role": "user", "content": prompt}], max_tokens=512
             )
             return response.content[0].text.strip()
 
@@ -472,11 +470,13 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
         Returns:
             The extraction prompt, or None if not configured
         """
-        prompt = self.storage.get_agent_prompt(self.owner_id, 'memory_mrcall')
+        prompt = self.storage.get_agent_prompt(self.owner_id, "memory_mrcall")
         if prompt:
             logger.info("Using user's custom memory_mrcall prompt")
         else:
-            logger.warning("No MrCall prompt found - user must run /agent memory train mrcall first")
+            logger.warning(
+                "No MrCall prompt found - user must run /agent memory train mrcall first"
+            )
         return prompt
 
     async def process_mrcall_conversation(self, conversation: Dict) -> bool:
@@ -502,10 +502,12 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
             logger.debug(f"Extracted {len(entities)} entities from conversation {conv_id}")
 
             # Step 2: Process each entity
-            contact_phone = conversation.get('contact_phone', 'unknown')
-            contact_name = conversation.get('contact_name', 'unknown')
-            call_date = conversation.get('call_started_at', 'unknown')
-            event_desc = f"Extracted from phone call with {contact_name} ({contact_phone}) on {call_date}"
+            contact_phone = conversation.get("contact_phone", "unknown")
+            contact_name = conversation.get("contact_name", "unknown")
+            call_date = conversation.get("call_started_at", "unknown")
+            event_desc = (
+                f"Extracted from phone call with {contact_name} ({contact_phone}) on {call_date}"
+            )
 
             for i, entity_content in enumerate(entities):
                 await self._upsert_mrcall_entity(
@@ -526,7 +528,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
         event_desc: str,
         conv_id: str,
         entity_num: int,
-        total_entities: int
+        total_entities: int,
     ) -> None:
         """Upsert a single entity blob from MrCall with reconsolidation.
 
@@ -541,19 +543,18 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
 
         # Get top 3 candidates above threshold
         existing_blobs = self.hybrid_search.find_candidates_for_reconsolidation(
-            owner_id=self.owner_id,
-            content=entity_content,
-            namespace=self.namespace,
-            limit=3
+            owner_id=self.owner_id, content=entity_content, namespace=self.namespace, limit=3
         )
 
         upserted = False
 
         for existing in existing_blobs:
-            logger.debug(f"Trying to merge with blob {existing.blob_id} (score={existing.hybrid_score:.2f})")
+            logger.debug(
+                f"Trying to merge with blob {existing.blob_id} (score={existing.hybrid_score:.2f})"
+            )
             merged_content = self.llm_merge.merge(existing.content, entity_content)
 
-            if 'INSERT' in merged_content.upper() and len(merged_content) < 10:
+            if "INSERT" in merged_content.upper() and len(merged_content) < 10:
                 logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
                 continue
 
@@ -561,9 +562,11 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
                 blob_id=existing.blob_id,
                 owner_id=self.owner_id,
                 content=merged_content,
-                event_description=event_desc
+                event_description=event_desc,
             )
-            logger.info(f"Reconsolidated blob {existing.blob_id} with conversation {conv_id} (entity {entity_num}/{total_entities})")
+            logger.info(
+                f"Reconsolidated blob {existing.blob_id} with conversation {conv_id} (entity {entity_num}/{total_entities})"
+            )
             upserted = True
             break
 
@@ -572,9 +575,11 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
                 owner_id=self.owner_id,
                 namespace=self.namespace,
                 content=entity_content,
-                event_description=event_desc
+                event_description=event_desc,
             )
-            logger.info(f"Created new blob {blob['id']} from conversation {conv_id} (entity {entity_num}/{total_entities})")
+            logger.info(
+                f"Created new blob {blob['id']} from conversation {conv_id} (entity {entity_num}/{total_entities})"
+            )
 
     async def process_mrcall_batch(self, conversations: List[Dict]) -> int:
         """Process batch of MrCall conversations.
@@ -594,6 +599,95 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
                 processed += 1
 
         logger.info(f"MrCall batch complete: {processed}/{len(conversations)} processed")
+        return processed
+
+    # -- WhatsApp message processing -----------------------------------
+
+    async def process_whatsapp_message(self, message: Dict) -> bool:
+        """Process single WhatsApp message to extract and store entities.
+
+        Args:
+            message: Message dict from whatsapp_messages table
+
+        Returns:
+            True if processed successfully
+        """
+        msg_id = message.get("id", "unknown")
+        try:
+            text = message.get("text", "")
+            if not text or len(text) < 20:
+                # Skip very short messages (e.g. "ok", "si")
+                self.storage.mark_whatsapp_memory_processed(self.owner_id, msg_id)
+                return True
+
+            sender = message.get("sender_name") or message.get("sender_jid", "unknown")
+            is_from_me = message.get("is_from_me", False)
+            timestamp = message.get("timestamp", "unknown")
+
+            direction = "sent to" if is_from_me else "received from"
+            event_desc = f"WhatsApp message {direction} {sender} on {timestamp}"
+
+            # For WhatsApp, we create a simple entity blob per significant message
+            # The LLM will merge with existing blobs for the same person
+            namespace = f"PERSON:{sender}"
+            content = f"WhatsApp ({timestamp}): {text}"
+
+            # Check if blob already exists for this person
+            existing = self.hybrid_search.search(
+                query=sender,
+                owner_id=self.owner_id,
+                namespace_filter="PERSON",
+                top_k=1,
+            )
+
+            if existing:
+                # Merge with existing blob
+                existing_blob = existing[0]
+                merged = await self.merge_service.merge(
+                    existing_content=existing_blob.get("content", ""),
+                    new_content=content,
+                    namespace=namespace,
+                )
+                if merged:
+                    self.blob_storage.update_blob(
+                        blob_id=existing_blob["id"],
+                        content=merged,
+                        event_description=event_desc,
+                    )
+            else:
+                # Create new blob
+                self.blob_storage.create_blob(
+                    owner_id=self.owner_id,
+                    namespace=namespace,
+                    content=content,
+                    event_description=event_desc,
+                )
+
+            self.storage.mark_whatsapp_memory_processed(self.owner_id, msg_id)
+            return True
+
+        except Exception as e:
+            logger.error(f"Error processing WhatsApp message {msg_id}: {e}")
+            return False
+
+    async def process_whatsapp_batch(self, messages: List[Dict]) -> int:
+        """Process batch of WhatsApp messages for memory extraction.
+
+        Args:
+            messages: List of message dicts from whatsapp_messages
+
+        Returns:
+            Number of successfully processed messages
+        """
+        logger.info(f"Processing batch of {len(messages)} WhatsApp messages")
+        processed = 0
+
+        for msg in messages:
+            success = await self.process_whatsapp_message(msg)
+            if success:
+                processed += 1
+
+        logger.info(f"WhatsApp batch complete: {processed}/{len(messages)} processed")
         return processed
 
     def _extract_mrcall_entities(self, conversation: Dict) -> List[str]:
@@ -616,10 +710,10 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
                 return []
 
             # Extract conversation text from body
-            conversation_text = self._extract_conversation_text(conversation.get('body'))
+            conversation_text = self._extract_conversation_text(conversation.get("body"))
 
             # Calculate duration in readable format
-            duration_ms = conversation.get('call_duration_ms', 0)
+            duration_ms = conversation.get("call_duration_ms", 0)
             duration_seconds = duration_ms / 1000 if duration_ms else 0
             duration_str = f"{int(duration_seconds)} seconds"
 
@@ -627,24 +721,23 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
             # Try both {{placeholder}} and {placeholder} formats
             prompt = prompt_template
             replacements = {
-                '{{contact_phone}}': conversation.get('contact_phone', 'unknown'),
-                '{{contact_name}}': conversation.get('contact_name', 'unknown'),
-                '{{call_date}}': conversation.get('call_started_at', 'unknown'),
-                '{{call_duration}}': duration_str,
-                '{{conversation}}': conversation_text,
-                '{contact_phone}': conversation.get('contact_phone', 'unknown'),
-                '{contact_name}': conversation.get('contact_name', 'unknown'),
-                '{call_date}': conversation.get('call_started_at', 'unknown'),
-                '{call_duration}': duration_str,
-                '{conversation}': conversation_text,
+                "{{contact_phone}}": conversation.get("contact_phone", "unknown"),
+                "{{contact_name}}": conversation.get("contact_name", "unknown"),
+                "{{call_date}}": conversation.get("call_started_at", "unknown"),
+                "{{call_duration}}": duration_str,
+                "{{conversation}}": conversation_text,
+                "{contact_phone}": conversation.get("contact_phone", "unknown"),
+                "{contact_name}": conversation.get("contact_name", "unknown"),
+                "{call_date}": conversation.get("call_started_at", "unknown"),
+                "{call_duration}": duration_str,
+                "{conversation}": conversation_text,
             }
 
             for placeholder, value in replacements.items():
                 prompt = prompt.replace(placeholder, str(value))
 
             response = self.client.create_message_sync(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=1024
+                messages=[{"role": "user", "content": prompt}], max_tokens=1024
             )
             raw_output = response.content[0].text.strip()
             logger.debug(f"MrCall RAW OUTPUT:\n{raw_output}")
@@ -676,7 +769,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
 
         if isinstance(body, dict):
             # Try common field names
-            for field in ['conversation', 'transcript', 'transcription', 'messages', 'text']:
+            for field in ["conversation", "transcript", "transcription", "messages", "text"]:
                 if field in body:
                     value = body[field]
                     if isinstance(value, str):
@@ -685,16 +778,16 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
                         lines = []
                         for msg in value:
                             if isinstance(msg, dict):
-                                speaker = msg.get('speaker', msg.get('role', 'Unknown'))
-                                text = msg.get('text', msg.get('content', ''))
+                                speaker = msg.get("speaker", msg.get("role", "Unknown"))
+                                text = msg.get("text", msg.get("content", ""))
                                 if text:
                                     lines.append(f"{speaker}: {text}")
                             elif isinstance(msg, str):
                                 lines.append(msg)
-                        return '\n'.join(lines)
+                        return "\n".join(lines)
 
             # Stringify clean body (without audio markers)
-            clean_body = {k: v for k, v in body.items() if v != '[AUDIO_STRIPPED]'}
+            clean_body = {k: v for k, v in body.items() if v != "[AUDIO_STRIPPED]"}
             if clean_body:
                 return str(clean_body)
 

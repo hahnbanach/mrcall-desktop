@@ -279,7 +279,8 @@ class Trigger(DictMixin, Base):
         CheckConstraint(
             "trigger_type IN ("
             "'session_start', 'email_received', "
-            "'sms_received', 'call_received')",
+            "'sms_received', 'call_received', "
+            "'whatsapp_received')",
             name="triggers_type_check",
         ),
     )
@@ -314,7 +315,9 @@ class TriggerEvent(DictMixin, Base):
 
     __table_args__ = (
         CheckConstraint(
-            "event_type IN (" "'email_received', 'sms_received', " "'call_received')",
+            "event_type IN ("
+            "'email_received', 'sms_received', "
+            "'call_received', 'whatsapp_received')",
             name="trigger_events_type_check",
         ),
         CheckConstraint(
