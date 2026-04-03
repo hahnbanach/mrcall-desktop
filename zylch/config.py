@@ -153,6 +153,16 @@ class Settings(BaseSettings):
         description=("Verify SSL for StarChat API calls"),
     )
 
+    # Telegram bot (optional interface)
+    telegram_bot_token: str = Field(
+        default="",
+        description="Telegram Bot API token from @BotFather",
+    )
+    telegram_allowed_user_id: str = Field(
+        default="",
+        description="Telegram user ID allowed to interact (security). Get via @userinfobot",
+    )
+
 
 # Global settings instance
 settings = Settings()
