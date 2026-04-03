@@ -1,443 +1,397 @@
 ---
 description: |
-  [TODO - High Priority] WhatsApp Business API via StarChat for multi-channel relationship
-  intelligence. Tool structure (_GetWhatsAppContactsTool) and StarChat integration already exist.
-  Blocked on StarChat REST API endpoint for WhatsApp messaging. Target: track WhatsApp
-  conversations, unified gap detection across email/calendar/calls/SMS/WhatsApp.
+  [TODO - High Priority] WhatsApp integration via neonize (whatsmeow Python wrapper).
+  Local connection, no cloud API, no StarChat dependency. QR code login, history sync,
+  real-time messages. Analogous to IMAP for email. Store in SQLite, feed memory + gap analysis.
 ---
 
-# WhatsApp Integration - Future Development
+# WhatsApp Integration — Standalone via neonize
 
 ## Status
-🔴 **HIGH PRIORITY** - Multi-Channel Communication
+🟡 **HIGH PRIORITY** — Ready to implement (no external blockers)
 
-## Business Impact
+## Architecture Decision
 
-**Market Opportunity**:
-- **6.9 billion WhatsApp users worldwide** (2025)
-- **Business users**: 50M+ businesses use WhatsApp Business
-- **Engagement**: 100 billion messages sent daily on WhatsApp
+Zylch is standalone (local CLI, no server). WhatsApp connects **directly** via
+**neonize** — a Python wrapper around whatsmeow (Go). No cloud API, no Meta Business
+account, no StarChat intermediary.
 
-**Why Important**:
-- **Sales intelligence**: Track WhatsApp conversations with leads/clients
-- **Multi-channel view**: Unified intelligence across email, calendar, calls, SMS, WhatsApp
-- **Business relationships**: Many professionals prefer WhatsApp over email
-- **International**: Essential for international business (especially Europe, Latin America, Asia)
+| | Email | WhatsApp |
+|---|---|---|
+| Protocol | IMAP | WhatsApp Web Multi-Device |
+| Library | `imaplib` / `imap_client.py` | **neonize** (whatsmeow) |
+| Auth | App password in `.env` | QR code scan (first run) |
+| Session | Credentials persist in `.env` | Session persists in SQLite file |
+| Initial sync | IMAP SEARCH (history) | `HistorySyncEv` (history blobs) |
+| Ongoing sync | IMAP SEARCH (incremental) | `MessageEv` (real-time events) |
+| Storage | `emails` table | `whatsapp_messages` table |
 
-**Use Cases**:
-- Sales reps tracking WhatsApp conversations with clients
-- Customer support teams managing WhatsApp Business inquiries
-- Executives maintaining relationships via WhatsApp
-- Multi-channel relationship gap detection
+### Why neonize
 
-## Current State
+- **Local**: connects directly to WhatsApp servers, no cloud middleman
+- **Python-native**: clean API, event decorators, protobuf models
+- **Built on whatsmeow**: the most battle-tested WhatsApp Web implementation
+  (powers mautrix-whatsapp bridge used by thousands)
+- **Lightweight**: no browser, no Selenium, no headless Chrome
+- **PyPI**: `pip install neonize` (actively maintained, v0.3.15+)
 
-### What Exists
-- ✅ **Tool structure ready**: `_GetWhatsAppContactsTool` defined in `factory.py`
-- ✅ **StarChat integration**: Contact management system in place
-- ✅ **Multi-channel architecture**: Email, SMS, calls already integrated
-- ✅ **Tool factory pattern**: Easy to add new communication channels
+### Data Flow
 
-### What's Missing
-- ❌ **StarChat WhatsApp API**: REST endpoint not yet available from StarChat
-- ❌ **WhatsApp message sync**: No message retrieval implementation
-- ❌ **WhatsApp conversation threading**: No thread aggregation
-- ❌ **WhatsApp send capability**: Can't send messages via agent
-- ❌ **WhatsApp gap analysis**: No integration with relationship intelligence
+```
+User scans QR code (once)
+  → neonize connects to WhatsApp servers
+  → HistorySyncEv delivers past conversations
+  → MessageEv delivers new messages in real-time
+  → Zylch stores in SQLite (whatsapp_messages, whatsapp_contacts)
+  → Memory extraction + gap analysis (same pipeline as email)
+  → User asks "chi mi ha scritto su WhatsApp?" → Zylch answers
+```
 
-### Blocking Issue
-**CRITICAL**: Waiting for StarChat to provide WhatsApp REST API endpoint.
+## What Exists Today
 
-**Current Status** (from STARCHAT_REQUESTS.md:305):
+### Code (stubs — to be replaced)
+- `GetWhatsAppContactsTool` in `contact_tools.py:513-618` — calls StarChat (wrong)
+- `starchat.get_whatsapp_contacts()` in `starchat.py:836-861` — returns `[]` (wrong)
+- Factory registration in `factory.py` — tool registered but non-functional
+
+These stubs must be **replaced** with neonize-based implementations.
+
+### Documentation (partially outdated)
+- `standalone-transformation.md:964` — correctly says "GOWA runs locally"
+- `project-split-plan.md:80` — correctly says "GOWA locale"
+- `active-context.md:41` — correctly says "planned via GOWA"
+
+**Note**: Previous references to "GOWA" meant go-whatsapp-web-multidevice (the Go
+binary). With neonize we get the same engine (whatsmeow) directly in Python — no
+separate Go binary needed. neonize embeds whatsmeow via CGo/ctypes.
+
+## neonize API Reference
+
+### Authentication (QR code)
+
 ```python
-# TODO: STARCHAT_REQUEST - Quando disponibile, usare StarChat lookup_by_email
-# Waiting for StarChat REST API endpoint for WhatsApp contacts
+from neonize.client import NewClient
+from neonize.events import MessageEv, HistorySyncEv, QREv
+
+client = NewClient("~/.zylch/whatsapp.db")  # session persists here
+
+@client.event(QREv)
+def on_qr(client, event):
+    # Display QR in terminal for user to scan
+    print_qr_to_terminal(event.qr)
+
+client.connect()  # blocks, handles events
 ```
 
-**Required from StarChat**:
-1. `GET /api/whatsapp/contacts` - List WhatsApp contacts
-2. `GET /api/whatsapp/messages?contact_id={id}` - Get message history
-3. `POST /api/whatsapp/send` - Send WhatsApp message
-4. Webhook for real-time message notifications
+After first QR scan, session persists in `~/.zylch/whatsapp.db`. Subsequent
+runs reconnect automatically (like WhatsApp Web staying logged in).
 
-## Planned Features
+### History Sync (initial)
 
-### 1. WhatsApp Contact Sync
-
-**Endpoint**: `GET /api/whatsapp/contacts`
-**Response**:
-```json
-{
-  "contacts": [
-    {
-      "id": "wa_contact_123",
-      "phone_number": "+393281234567",
-      "name": "Mario Alemi",
-      "profile_picture": "https://...",
-      "last_seen": "2025-12-08T10:30:00Z",
-      "business_account": false
-    }
-  ]
-}
+```python
+@client.event(HistorySyncEv)
+def on_history(client, event):
+    # event contains protobuf blobs with past conversations
+    for conversation in event.data.conversations:
+        for message in conversation.messages:
+            store_whatsapp_message(message)
 ```
 
-**Implementation**:
+### Real-time Messages
+
+```python
+@client.event(MessageEv)
+def on_message(client, event):
+    msg = event.message
+    sender = msg.info.source.sender  # JID
+    text = msg.message.conversation or msg.message.extended_text_message.text
+    store_whatsapp_message(msg)
+```
+
+### Contacts
+
+```python
+contacts = client.contact.get_all_contacts()
+# Returns dict of JID → contact info (name, phone, etc.)
+```
+
+### Check WhatsApp Numbers
+
+```python
+results = client.is_on_whatsapp(["+393281234567", "+391234567890"])
+# Returns which numbers are registered on WhatsApp
+```
+
+## Implementation Plan
+
+### Phase 1: WhatsApp Client + QR Login (3-4 days)
+
+**New file**: `zylch/whatsapp/client.py`
+
 ```python
 class WhatsAppClient:
-    def __init__(self):
-        self.starchat_api = StarChatAPI()
+    """Local WhatsApp connection via neonize (whatsmeow)."""
 
-    async def get_contacts(self) -> List[WhatsAppContact]:
-        """Fetch all WhatsApp contacts from StarChat"""
-        response = await self.starchat_api.get('/api/whatsapp/contacts')
-        return [WhatsAppContact(**contact) for contact in response['contacts']]
+    def __init__(self, db_path: str = "~/.zylch/whatsapp.db"):
+        self.client = NewClient(db_path)
+        self._setup_handlers()
+
+    def connect(self, qr_callback=None):
+        """Connect to WhatsApp. Shows QR on first run."""
+
+    def disconnect(self):
+        """Disconnect cleanly."""
+
+    def get_contacts(self) -> list[dict]:
+        """Get all WhatsApp contacts."""
+
+    def is_connected(self) -> bool:
+        """Check connection status."""
 ```
 
-### 2. WhatsApp Message History
+**New file**: `zylch/whatsapp/__init__.py`
 
-**Endpoint**: `GET /api/whatsapp/messages?contact_id={id}&days_back=30`
-**Response**:
-```json
-{
-  "messages": [
-    {
-      "id": "msg_123",
-      "contact_id": "wa_contact_123",
-      "sender": "me",
-      "receiver": "+393281234567",
-      "text": "Ciao Mario, ci sentiamo domani per il call?",
-      "timestamp": "2025-12-07T15:30:00Z",
-      "status": "delivered",
-      "media": []
-    }
-  ]
-}
+**Modify**: `zylch/cli/setup.py` — add WhatsApp to `zylch init` wizard:
+```
+$ zylch init
+...
+📱 WhatsApp (optional): scan QR code to connect
+[QR code displayed in terminal]
+✅ WhatsApp connected as +39 328 123 4567
 ```
 
-**Implementation**:
+**Modify**: `zylch/config.py` — add:
 ```python
-async def get_conversation_history(
-    self,
-    contact_id: str,
-    days_back: int = 30
-) -> List[WhatsAppMessage]:
-    """Fetch WhatsApp conversation history"""
-    response = await self.starchat_api.get(
-        f'/api/whatsapp/messages',
-        params={'contact_id': contact_id, 'days_back': days_back}
+whatsapp_db_path: str = Field(
+    default="~/.zylch/whatsapp.db",
+    description="neonize session database path"
+)
+whatsapp_enabled: bool = Field(
+    default=False,
+    description="Whether WhatsApp is connected"
+)
+```
+
+**Dependency**: add `neonize>=0.3.15` to `pyproject.toml`
+
+### Phase 2: Message Sync + Storage (3-4 days)
+
+**New models** in `zylch/storage/models.py`:
+
+```python
+class WhatsAppMessage(DictMixin, Base):
+    __tablename__ = "whatsapp_messages"
+
+    id = Column(String(36), primary_key=True, default=_new_uuid)
+    owner_id = Column(Text, nullable=False, index=True)
+    message_id = Column(Text, unique=True, nullable=False)  # WhatsApp msg ID
+    chat_jid = Column(Text, nullable=False, index=True)     # conversation JID
+    sender_jid = Column(Text, nullable=False)
+    sender_name = Column(Text)
+    text = Column(Text)
+    timestamp = Column(DateTime, nullable=False, index=True)
+    is_from_me = Column(Boolean, default=False)
+    is_group = Column(Boolean, default=False)
+    media_type = Column(Text)       # text/image/video/audio/document (v2)
+    status = Column(Text)           # sent/delivered/read
+    created_at = Column(DateTime, default=_utcnow)
+    memory_processed_at = Column(DateTime)
+    task_processed_at = Column(DateTime)
+
+
+class WhatsAppContact(DictMixin, Base):
+    __tablename__ = "whatsapp_contacts"
+
+    id = Column(String(36), primary_key=True, default=_new_uuid)
+    owner_id = Column(Text, nullable=False, index=True)
+    jid = Column(Text, nullable=False)              # WhatsApp JID
+    phone_number = Column(Text)
+    name = Column(Text)
+    push_name = Column(Text)                        # WhatsApp display name
+    last_message_at = Column(DateTime)
+    synced_at = Column(DateTime, default=_utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("owner_id", "jid",
+                         name="wa_contact_owner_jid_unique"),
     )
-    return [WhatsAppMessage(**msg) for msg in response['messages']]
 ```
 
-### 3. Send WhatsApp Messages
+**New file**: `zylch/whatsapp/sync.py`
 
-**Endpoint**: `POST /api/whatsapp/send`
-**Request**:
-```json
-{
-  "to": "+393281234567",
-  "text": "Confermo per domani alle 15:00. Ti mando il link Zoom via email.",
-  "reply_to_message_id": "msg_123"  // Optional: reply to specific message
-}
-```
-
-**Implementation**:
 ```python
-async def send_message(
-    self,
-    to: str,
-    text: str,
-    reply_to: Optional[str] = None
-) -> WhatsAppMessage:
-    """Send WhatsApp message via StarChat"""
-    response = await self.starchat_api.post('/api/whatsapp/send', {
-        'to': to,
-        'text': text,
-        'reply_to_message_id': reply_to
-    })
-    return WhatsAppMessage(**response['message'])
+class WhatsAppSyncService:
+    """Sync WhatsApp messages to local SQLite."""
+
+    def __init__(self, wa_client, storage):
+        self.wa = wa_client
+        self.storage = storage
+
+    async def handle_history_sync(self, event):
+        """Process HistorySyncEv — initial history download."""
+
+    async def handle_new_message(self, event):
+        """Process MessageEv — store new incoming/outgoing message."""
+
+    async def sync_contacts(self):
+        """Fetch all contacts from neonize, upsert in whatsapp_contacts."""
+
+    async def full_sync(self):
+        """Connect + sync contacts + process pending history."""
 ```
 
-### 4. WhatsApp Tool for Agent
+**Modify**: `zylch/services/command_handlers.py` — add:
+```
+/sync whatsapp    → WhatsAppSyncService.full_sync()
+/connect whatsapp → show QR code, connect
+```
 
-**Tool Definition**:
+### Phase 3: LLM Tools (2-3 days)
+
+**New file**: `zylch/tools/whatsapp_tools.py`
+
 ```python
-class SendWhatsAppTool(BaseTool):
-    name = "send_whatsapp"
-    description = "Send WhatsApp message to a contact"
+class SearchWhatsAppTool(Tool):
+    """Search WhatsApp messages in local SQLite."""
+    name = "search_whatsapp"
+    # Queries whatsapp_messages table (like GmailSearchTool queries emails)
 
-    async def execute(
-        self,
-        contact_name: str,
-        message: str
-    ) -> str:
-        # 1. Look up contact in StarChat
-        contact = await self.starchat.lookup_contact(contact_name)
+class GetWhatsAppConversationTool(Tool):
+    """Get WhatsApp conversation with a contact."""
+    name = "get_whatsapp_conversation"
+    # Returns messages for a specific chat_jid, ordered by timestamp
 
-        # 2. Get WhatsApp number
-        whatsapp_number = contact.get('whatsapp_phone')
-        if not whatsapp_number:
-            return f"❌ {contact_name} doesn't have WhatsApp number"
-
-        # 3. Send message
-        await self.whatsapp_client.send_message(whatsapp_number, message)
-
-        # 4. Store in memory
-        await self.memory.store_memory(
-            f"whatsapp/{contact_name}",
-            {
-                'last_message': message,
-                'timestamp': datetime.now().isoformat()
-            }
-        )
-
-        return f"✅ WhatsApp message sent to {contact_name}"
+class SendWhatsAppMessageTool(Tool):
+    """Send a WhatsApp message."""
+    name = "send_whatsapp_message"
+    # Uses neonize client.send_message()
 ```
 
-### 5. Multi-Channel Conversation Threading
+**Modify**: `zylch/tools/factory.py` — register new tools, **remove** old
+`GetWhatsAppContactsTool` (StarChat-based).
 
-**Unified Thread View**:
-```python
-async def get_unified_conversation(contact_email: str) -> dict:
-    """Get all communication with a contact across channels"""
-    # Email threads
-    email_threads = await gmail.get_threads_with_contact(contact_email)
+**Remove**: StarChat WhatsApp stubs from `starchat.py` and `contact_tools.py`.
 
-    # WhatsApp messages
-    whatsapp_contact = await starchat.lookup_by_email(contact_email)
-    whatsapp_messages = await whatsapp.get_conversation_history(
-        whatsapp_contact.id
-    )
+### Phase 4: Memory + Gap Analysis (3-4 days)
 
-    # Calendar events
-    calendar_events = await calendar.search_events(contact_email)
+Follow the same pipeline as email:
 
-    # SMS messages
-    sms_messages = await vonage.get_sms_history(
-        whatsapp_contact.phone_number
-    )
+1. **Memory extraction**: process `whatsapp_messages` → `Blob` entities
+   (same as `workers/memory.py` does for emails)
 
-    # Merge and sort by timestamp
-    all_interactions = sorted(
-        email_threads + whatsapp_messages + calendar_events + sms_messages,
-        key=lambda x: x.timestamp
-    )
+2. **Task detection**: process `whatsapp_messages` → `TaskItem`
+   (same as `agents/trainers/task_email.py` does for emails)
 
-    return {
-        'contact': contact_email,
-        'channels': {
-            'email': len(email_threads),
-            'whatsapp': len(whatsapp_messages),
-            'calendar': len(calendar_events),
-            'sms': len(sms_messages)
-        },
-        'timeline': all_interactions
-    }
+3. **Gap analysis**: detect unanswered WhatsApp messages, silent contacts
+   - New task types: `whatsapp_unanswered`, `whatsapp_silent`
+
+4. **Trigger events**: add `whatsapp_received` to `Trigger.trigger_type` and
+   `TriggerEvent.event_type` check constraints
+
+### Phase 5: Unified Multi-Channel View (2-3 days)
+
+Cross-reference contacts by phone number:
+- `Contact` table already has `email` + `phone` fields
+- Auto-populate from WhatsApp sync (phone → name mapping)
+- LLM tool: "mostrami tutte le interazioni con Mario" → query emails +
+  whatsapp_messages + mrcall_conversations by matched contact
+
+## Files Summary
+
+### New files
+| File | Description | Phase |
+|---|---|---|
+| `zylch/whatsapp/__init__.py` | Package init | 1 |
+| `zylch/whatsapp/client.py` | neonize wrapper, QR login, connection mgmt | 1 |
+| `zylch/whatsapp/sync.py` | History sync + message storage | 2 |
+| `zylch/tools/whatsapp_tools.py` | LLM tools (search, conversation, send) | 3 |
+| `tests/test_whatsapp_client.py` | Client tests (with mocked neonize) | 1-2 |
+| `tests/test_whatsapp_tools.py` | Tool tests | 3 |
+
+### Modified files
+| File | Change | Phase |
+|---|---|---|
+| `pyproject.toml` | Add `neonize>=0.3.15` dependency | 1 |
+| `zylch/config.py` | Add `whatsapp_db_path`, `whatsapp_enabled` | 1 |
+| `zylch/storage/models.py` | Add `WhatsAppMessage`, `WhatsAppContact` | 2 |
+| `zylch/cli/setup.py` | Add WhatsApp to init wizard | 1 |
+| `zylch/services/command_handlers.py` | Add `/sync whatsapp`, `/connect whatsapp` | 2 |
+| `zylch/tools/factory.py` | Register new WA tools, remove StarChat stub | 3 |
+
+### Deleted/cleaned
+| File | Change | Phase |
+|---|---|---|
+| `zylch/tools/starchat.py:836-861` | Remove `get_whatsapp_contacts()` stub | 3 |
+| `zylch/tools/contact_tools.py:513-618` | Remove `GetWhatsAppContactsTool` | 3 |
+
+## User Experience
+
+### First setup
+```
+$ zylch init
+📧 Email: user@gmail.com
+🔑 App password: ****
+📱 WhatsApp (optional, press Enter to skip):
+   Scan this QR code with WhatsApp on your phone:
+   ┌─────────────────────┐
+   │ ▄▄▄▄▄ █ ▄▄▄▄▄ █    │
+   │ █   █ █ █   █ █    │
+   │ ...                 │
+   └─────────────────────┘
+   ✅ WhatsApp connected as +39 328 123 4567
 ```
 
-### 6. WhatsApp Gap Analysis
-
-**Extend Relationship Intelligence**:
-```python
-async def analyze_whatsapp_gaps(days_back: int = 7) -> List[Gap]:
-    """Find relationship gaps in WhatsApp conversations"""
-    gaps = []
-
-    # Get all WhatsApp contacts
-    contacts = await whatsapp_client.get_contacts()
-
-    for contact in contacts:
-        # Get conversation history
-        messages = await whatsapp_client.get_conversation_history(
-            contact.id, days_back
-        )
-
-        # Find gaps
-        if last_message_from_contact_awaiting_response(messages):
-            gaps.append({
-                'type': 'whatsapp_unanswered',
-                'contact': contact.name,
-                'last_message': messages[-1].text,
-                'days_waiting': days_since(messages[-1].timestamp),
-                'priority': calculate_priority(contact, messages)
-            })
-
-        # Silent WhatsApp contacts (no messages in 30 days)
-        if contact.has_previous_conversations and days_since_last_message > 30:
-            gaps.append({
-                'type': 'whatsapp_silent',
-                'contact': contact.name,
-                'days_silent': days_since_last_message,
-                'suggestion': 'Send WhatsApp check-in message'
-            })
-
-    return gaps
+### Daily usage
 ```
+$ zylch sync
+📧 Email: 12 new messages synced
+📱 WhatsApp: 34 new messages synced
+📋 Tasks: 3 new tasks generated
 
-## Technical Requirements
+$ zylch
+> /tasks
+1. 🔴 Mario Rossi ti ha scritto su WhatsApp 2 giorni fa (senza risposta)
+2. 🟡 Lucia Bianchi — follow-up email dopo meeting di ieri
+3. 🟢 Revisione proposta per Acme Corp (scadenza venerdì)
 
-### Backend Dependencies
-```bash
-# StarChat SDK (when available)
-pip install starchat-sdk>=1.0.0
+> cosa mi ha detto Mario su WhatsApp?
+Mario Rossi ti ha scritto ieri alle 15:30:
+"Ciao, hai visto la proposta che ti ho mandato? Fammi sapere entro venerdì"
+Non hai ancora risposto.
 
-# Or direct HTTP client
-pip install httpx>=0.24.0
+> scrivi a Mario su WhatsApp "Ciao Mario, la sto guardando, ti dico entro domani"
+✅ WhatsApp inviato a Mario Rossi (+39 328 123 4567)
 ```
-
-### Environment Variables
-```bash
-STARCHAT_API_KEY=sc_...
-STARCHAT_API_URL=https://api.starchat.com/v1
-```
-
-### Database Schema
-```sql
--- Store WhatsApp messages locally (mirror of StarChat data)
-CREATE TABLE whatsapp_messages (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  owner_id TEXT NOT NULL REFERENCES users(id),
-  starchat_message_id TEXT UNIQUE NOT NULL,
-  contact_phone TEXT NOT NULL,
-  contact_name TEXT,
-  sender TEXT NOT NULL, -- 'me' or contact_phone
-  text TEXT NOT NULL,
-  timestamp TIMESTAMP NOT NULL,
-  status TEXT, -- 'sent', 'delivered', 'read'
-  created_at TIMESTAMP DEFAULT NOW(),
-  INDEX idx_owner_contact (owner_id, contact_phone),
-  INDEX idx_timestamp (timestamp DESC)
-);
-
--- WhatsApp contacts cache
-CREATE TABLE whatsapp_contacts (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  owner_id TEXT NOT NULL REFERENCES users(id),
-  starchat_contact_id TEXT UNIQUE NOT NULL,
-  phone_number TEXT NOT NULL,
-  name TEXT,
-  profile_picture TEXT,
-  last_message_at TIMESTAMP,
-  synced_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE(owner_id, phone_number)
-);
-```
-
-## Implementation Phases
-
-### Phase 0: StarChat API Availability (Blocking)
-**Duration**: Waiting on StarChat team
-**Tasks**:
-1. Request WhatsApp API endpoints from StarChat
-2. Get API documentation
-3. Test API in development environment
-4. Confirm webhook availability
-
-### Phase 1: Basic Integration (Week 1)
-**Duration**: 3-5 days
-**Prerequisites**: StarChat WhatsApp API available
-**Tasks**:
-1. Create `WhatsAppClient` class
-2. Implement `get_contacts()` method
-3. Implement `get_conversation_history()` method
-4. Add database tables for local caching
-5. Test contact sync
-
-### Phase 2: Message Sending (Week 1-2)
-**Duration**: 2-3 days
-**Tasks**:
-1. Implement `send_message()` method
-2. Create `SendWhatsAppTool` for agent
-3. Add to tool factory
-4. Test sending messages via agent
-5. Store sent messages in memory
-
-### Phase 3: Multi-Channel Threading (Week 2)
-**Duration**: 3-4 days
-**Tasks**:
-1. Create `get_unified_conversation()` function
-2. Merge email, WhatsApp, calendar, SMS timelines
-3. Add timeline view to dashboard
-4. Test multi-channel correlation
-
-### Phase 4: Gap Analysis (Week 3)
-**Duration**: 3-4 days
-**Tasks**:
-1. Extend `GapService` to include WhatsApp
-2. Implement WhatsApp-specific gap detection
-3. Add WhatsApp gaps to `/tasks` command
-4. Create WhatsApp-triggered automations
-
-### Phase 5: Real-Time Sync (Week 4)
-**Duration**: 2-3 days
-**Prerequisites**: StarChat webhook support
-**Tasks**:
-1. Set up webhook endpoint for WhatsApp messages
-2. Handle real-time message notifications
-3. Update conversation cache on new messages
-4. Trigger gap re-analysis on message arrival
-
-## Success Metrics
-
-### Technical Metrics
-- **Sync Speed**: WhatsApp contacts synced in <5 seconds
-- **Message Latency**: Send WhatsApp message in <2 seconds
-- **Gap Detection Accuracy**: >90% of unanswered WhatsApp messages detected
-
-### Business Metrics
-- **Adoption Rate**: >50% of users connect WhatsApp within first week
-- **Engagement**: Average 10+ WhatsApp messages per user per day
-- **Multi-Channel Value**: Users with WhatsApp have 2x higher retention
-
-### User Experience Metrics
-- **Setup Time**: Connect WhatsApp in <1 minute
-- **User Satisfaction**: >4.5/5 stars for WhatsApp feature
-- **Support Tickets**: <2% of users need help with WhatsApp setup
-
-## Related Documentation
-
-- **Architecture**: `docs/ARCHITECTURE.md` - Multi-channel architecture
-- **Contact Tools**: Tool factory pattern for new channels
-- **Gap Analysis**: `docs/features/relationship-intelligence.md` - Extend gap detection
-- **StarChat Requests**: `STARCHAT_REQUESTS.md` - API requirements
 
 ## Open Questions
 
-1. **WhatsApp Business API**: Does StarChat use WhatsApp Business API or personal WhatsApp?
-   - **Impact**: Business API has different rate limits and features
+| # | Domanda | Proposta |
+|---|---|---|
+| 1 | neonize blocking vs async? | Wrap in thread (neonize client.connect() blocks) |
+| 2 | QR code timeout? | 60s timeout, retry, clear instructions |
+| 3 | Disconnection handling? | Auto-reconnect con backoff, notifica utente |
+| 4 | Media messages (img, video)? | Solo testo in v1, media in v2 |
+| 5 | Gruppi WhatsApp? | Solo chat 1:1 in v1, gruppi in v2 |
+| 6 | Rate limit WhatsApp? | Rispettare limiti whatsmeow, non spammare |
+| 7 | Session invalida (logout da telefono)? | Detect + prompt per re-scan QR |
 
-2. **Message History Limits**: How far back can we retrieve WhatsApp messages?
-   - **Impact**: Affects initial sync and gap analysis accuracy
+## Timeline
 
-3. **Media Support**: Can we retrieve/send images, videos, documents?
-   - **Proposal**: Start with text only, add media in Phase 6
+```
+Phase 1: Client + QR login         ~  4 giorni
+Phase 2: Sync + Storage            ~  4 giorni
+Phase 3: LLM Tools                 ~  3 giorni
+Phase 4: Memory + Gap Analysis     ~  4 giorni
+Phase 5: Unified Multi-Channel     ~  3 giorni
+                                    ─────────
+                                    ~ 18 giorni totale
+```
 
-4. **Group Chats**: Do we support WhatsApp group conversations?
-   - **Proposal**: Personal chats only in v1, groups in v2
+Phases 1-3 are sequential. Phases 4-5 can run in parallel after Phase 3.
 
-5. **WhatsApp Web Sync**: Can we access messages sent from WhatsApp Web?
-   - **Impact**: Ensures complete conversation history
-
-6. **Rate Limits**: What are StarChat's API rate limits for WhatsApp?
-   - **Impact**: Affects sync frequency and real-time updates
+**No external blockers.** Can start immediately.
 
 ---
 
-**Priority**: 🔴 **HIGH - Pending StarChat API**
-
-**Owner**: Backend Team (Mario) + StarChat Integration
-
-**Blocking Dependencies**:
-- StarChat WhatsApp REST API endpoints
-- StarChat API documentation
-- StarChat webhook support (for real-time)
-
-**Next Steps**:
-1. ✅ Request WhatsApp API from StarChat (DONE)
-2. ⏳ Wait for StarChat API availability (IN PROGRESS)
-3. Review API documentation when ready
-4. Implement Phase 1 (Basic Integration)
-
-**Estimated Start Date**: Q1 2026 (pending StarChat)
-
-**Last Updated**: December 2025
+**Priority**: 🟡 **HIGH — Ready to implement**
+**Last Updated**: April 2026
