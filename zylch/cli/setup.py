@@ -283,7 +283,8 @@ def run_init():
 
     lines.append("")
 
-    with open(ENV_PATH, "w") as f:
+    fd = os.open(ENV_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
         f.write("\n".join(lines))
 
     logger.info(f"[init] Config saved to {ENV_PATH}")

@@ -633,30 +633,35 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
             content = f"WhatsApp ({timestamp}): {text}"
 
             # Check if blob already exists for this person
-            existing = self.hybrid_search.search(
-                query=sender,
+            existing_blobs = self.hybrid_search.find_candidates_for_reconsolidation(
                 owner_id=self.owner_id,
-                namespace_filter="PERSON",
-                top_k=1,
+                content=sender,
+                namespace=namespace,
+                limit=1,
             )
 
-            if existing:
+            if existing_blobs:
                 # Merge with existing blob
-                existing_blob = existing[0]
-                merged = await self.merge_service.merge(
-                    existing_content=existing_blob.get("content", ""),
-                    new_content=content,
-                    namespace=namespace,
-                )
-                if merged:
+                existing = existing_blobs[0]
+                merged = self.llm_merge.merge(existing.content, content)
+
+                if merged and not ("INSERT" in merged.upper() and len(merged) < 10):
                     self.blob_storage.update_blob(
-                        blob_id=existing_blob["id"],
+                        blob_id=existing.blob_id,
+                        owner_id=self.owner_id,
                         content=merged,
+                        event_description=event_desc,
+                    )
+                else:
+                    self.blob_storage.store_blob(
+                        owner_id=self.owner_id,
+                        namespace=namespace,
+                        content=content,
                         event_description=event_desc,
                     )
             else:
                 # Create new blob
-                self.blob_storage.create_blob(
+                self.blob_storage.store_blob(
                     owner_id=self.owner_id,
                     namespace=namespace,
                     content=content,

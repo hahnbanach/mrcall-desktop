@@ -5,10 +5,15 @@ for a single contact. Resolves contacts by email, phone, or name.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
+
+
+def _escape_like(value: str) -> str:
+    """Escape SQL LIKE wildcard characters in user input."""
+    return value.replace("%", r"\%").replace("_", r"\_")
 
 
 def get_unified_timeline(
@@ -44,7 +49,7 @@ def get_unified_timeline(
         WhatsAppMessage,
     )
 
-    cutoff = datetime.utcnow() - timedelta(days=days_back)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
     timeline = []
     resolved_email = contact_email
     resolved_phone = contact_phone
@@ -55,11 +60,12 @@ def get_unified_timeline(
 
         # Try to find in contacts table (has both email + phone)
         if contact_name and not (contact_email and contact_phone):
+            esc_name = _escape_like(contact_name)
             contact = (
                 session.query(Contact)
                 .filter(
                     Contact.owner_id == owner_id,
-                    Contact.name.ilike(f"%{contact_name}%"),
+                    Contact.name.ilike(f"%{esc_name}%", escape="\\"),
                 )
                 .first()
             )
@@ -70,12 +76,13 @@ def get_unified_timeline(
 
         # Try WhatsApp contacts for phone resolution
         if contact_name and not resolved_phone:
+            esc_name = _escape_like(contact_name)
             wa_contact = (
                 session.query(WhatsAppContact)
                 .filter(
                     WhatsAppContact.owner_id == owner_id,
-                    WhatsAppContact.name.ilike(f"%{contact_name}%")
-                    | WhatsAppContact.push_name.ilike(f"%{contact_name}%"),
+                    WhatsAppContact.name.ilike(f"%{esc_name}%", escape="\\")
+                    | WhatsAppContact.push_name.ilike(f"%{esc_name}%", escape="\\"),
                 )
                 .first()
             )
@@ -92,8 +99,8 @@ def get_unified_timeline(
                 .filter(
                     Email.owner_id == owner_id,
                     Email.date >= cutoff,
-                    Email.from_email.ilike(f"%{resolved_email}%")
-                    | Email.to_email.ilike(f"%{resolved_email}%"),
+                    Email.from_email.ilike(f"%{_escape_like(resolved_email)}%", escape="\\")
+                    | Email.to_email.ilike(f"%{_escape_like(resolved_email)}%", escape="\\"),
                 )
                 .order_by(Email.date.desc())
                 .limit(limit)
@@ -123,7 +130,7 @@ def get_unified_timeline(
                 .filter(
                     Email.owner_id == owner_id,
                     Email.date >= cutoff,
-                    Email.from_name.ilike(f"%{contact_name}%"),
+                    Email.from_name.ilike(f"%{_escape_like(contact_name)}%", escape="\\"),
                 )
                 .order_by(Email.date.desc())
                 .limit(limit)
@@ -147,12 +154,13 @@ def get_unified_timeline(
             clean = resolved_phone.replace("+", "").replace(" ", "")
             wa_jid = f"{clean}@s.whatsapp.net"
         elif contact_name:
+            esc_name = _escape_like(contact_name)
             wa_contact = (
                 session.query(WhatsAppContact)
                 .filter(
                     WhatsAppContact.owner_id == owner_id,
-                    WhatsAppContact.name.ilike(f"%{contact_name}%")
-                    | WhatsAppContact.push_name.ilike(f"%{contact_name}%"),
+                    WhatsAppContact.name.ilike(f"%{esc_name}%", escape="\\")
+                    | WhatsAppContact.push_name.ilike(f"%{esc_name}%", escape="\\"),
                 )
                 .first()
             )
@@ -191,7 +199,9 @@ def get_unified_timeline(
                 .filter(
                     MrcallConversation.owner_id == owner_id,
                     MrcallConversation.call_started_at >= cutoff,
-                    MrcallConversation.contact_phone.contains(clean_phone),
+                    MrcallConversation.contact_phone.ilike(
+                        f"%{_escape_like(clean_phone)}%", escape="\\"
+                    ),
                 )
                 .order_by(MrcallConversation.call_started_at.desc())
                 .limit(limit)
@@ -217,7 +227,9 @@ def get_unified_timeline(
                 .filter(
                     MrcallConversation.owner_id == owner_id,
                     MrcallConversation.call_started_at >= cutoff,
-                    MrcallConversation.contact_name.ilike(f"%{contact_name}%"),
+                    MrcallConversation.contact_name.ilike(
+                        f"%{_escape_like(contact_name)}%", escape="\\"
+                    ),
                 )
                 .order_by(MrcallConversation.call_started_at.desc())
                 .limit(limit)
