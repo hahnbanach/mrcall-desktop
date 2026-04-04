@@ -104,7 +104,7 @@ class ToolConfig:
         MS Graph) from Supabase and populates them in the config.
 
         Args:
-            owner_id: Firebase UID for the user
+            owner_id: Owner ID for the user
             storage: Optional Storage instance (creates new if not provided)
 
         Returns:

@@ -1,20 +1,17 @@
 """SQLAlchemy ORM models for Zylch standalone (SQLite).
 
-Standalone-only models using SQLite-compatible column types.
-All PostgreSQL-specific types (UUID, JSONB, TSVECTOR, ARRAY, Vector)
-are replaced with SQLite equivalents.
+13 models. SQLite-compatible column types only.
 """
 
 import uuid as _uuid
-from datetime import datetime, date, timezone
-from typing import Any, Dict, Set
+from datetime import datetime, date
+from typing import Any, Dict, Optional, Set
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
     JSON,
@@ -26,10 +23,10 @@ from sqlalchemy import (
 
 from .database import Base
 
+
 # -------------------------------------------------------------------
 # DictMixin — shared to_dict() for all models
 # -------------------------------------------------------------------
-
 
 class DictMixin:
     """Mixin providing to_dict() serialization.
@@ -40,10 +37,15 @@ class DictMixin:
 
     _EXCLUDE_FROM_DICT: Set[str] = {"embedding"}
 
-    def to_dict(self, include_vectors: bool = False) -> Dict[str, Any]:
+    def to_dict(
+        self, include_vectors: bool = False
+    ) -> Dict[str, Any]:
         d: Dict[str, Any] = {}
         for col in self.__table__.columns:
-            if not include_vectors and col.name in self._EXCLUDE_FROM_DICT:
+            if (
+                not include_vectors
+                and col.name in self._EXCLUDE_FROM_DICT
+            ):
                 continue
             val = getattr(self, col.name)
             # Serialize types that aren't JSON-native
@@ -68,21 +70,18 @@ def _new_uuid() -> str:
 
 def _utcnow() -> datetime:
     """Return current UTC datetime for column defaults."""
-    return datetime.now(timezone.utc)
+    return datetime.utcnow()
 
 
 # -------------------------------------------------------------------
 # EMAILS
 # -------------------------------------------------------------------
 
-
 class Email(DictMixin, Base):
     __tablename__ = "emails"
 
     id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
+        String(36), primary_key=True, default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     gmail_id = Column(Text, nullable=False)
@@ -111,8 +110,7 @@ class Email(DictMixin, Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "owner_id",
-            "gmail_id",
+            "owner_id", "gmail_id",
             name="emails_owner_gmail_unique",
         ),
     )
@@ -122,14 +120,11 @@ class Email(DictMixin, Base):
 # CALENDAR EVENTS
 # -------------------------------------------------------------------
 
-
 class CalendarEvent(DictMixin, Base):
     __tablename__ = "calendar_events"
 
     id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
+        String(36), primary_key=True, default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     google_event_id = Column(Text, nullable=False)
@@ -150,8 +145,7 @@ class CalendarEvent(DictMixin, Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "owner_id",
-            "google_event_id",
+            "owner_id", "google_event_id",
             name="calendar_events_owner_gid_unique",
         ),
     )
@@ -161,14 +155,11 @@ class CalendarEvent(DictMixin, Base):
 # BLOBS (entity memory)
 # -------------------------------------------------------------------
 
-
 class Blob(DictMixin, Base):
     __tablename__ = "blobs"
 
     id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
+        String(36), primary_key=True, default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     namespace = Column(Text, nullable=False)
@@ -183,9 +174,7 @@ class BlobSentence(DictMixin, Base):
     __tablename__ = "blob_sentences"
 
     id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
+        String(36), primary_key=True, default=_new_uuid,
     )
     blob_id = Column(
         String(36),
@@ -202,14 +191,11 @@ class BlobSentence(DictMixin, Base):
 # OAUTH TOKENS
 # -------------------------------------------------------------------
 
-
 class OAuthToken(DictMixin, Base):
     __tablename__ = "oauth_tokens"
 
     id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
+        String(36), primary_key=True, default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False)
     provider = Column(Text, nullable=False)
@@ -225,154 +211,23 @@ class OAuthToken(DictMixin, Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "owner_id",
-            "provider",
+            "owner_id", "provider",
             name="oauth_tokens_owner_provider_unique",
         ),
     )
 
 
-# -------------------------------------------------------------------
-# OAUTH STATES
-# -------------------------------------------------------------------
-
-
-class OAuthState(DictMixin, Base):
-    __tablename__ = "oauth_states"
-
-    id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
-    )
-    state = Column(Text, nullable=False, unique=True)
-    owner_id = Column(Text, nullable=False)
-    email = Column(Text)
-    cli_callback = Column(Text)
-    expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=_utcnow)
-    provider = Column(Text, default="google")
-    metadata_ = Column("metadata", JSON)
-
-
-# -------------------------------------------------------------------
-# TRIGGERS
-# -------------------------------------------------------------------
-
-
-class Trigger(DictMixin, Base):
-    __tablename__ = "triggers"
-
-    id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
-    )
-    owner_id = Column(Text, nullable=False, index=True)
-    trigger_type = Column(Text, nullable=False)
-    instruction = Column(Text, nullable=False)
-    active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=_utcnow)
-    updated_at = Column(DateTime, default=_utcnow)
-
-    __table_args__ = (
-        CheckConstraint(
-            "trigger_type IN ("
-            "'session_start', 'email_received', "
-            "'sms_received', 'call_received', "
-            "'whatsapp_received')",
-            name="triggers_type_check",
-        ),
-    )
-
-
-# -------------------------------------------------------------------
-# TRIGGER EVENTS (queue)
-# -------------------------------------------------------------------
-
-
-class TriggerEvent(DictMixin, Base):
-    __tablename__ = "trigger_events"
-
-    id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
-    )
-    owner_id = Column(Text, nullable=False, index=True)
-    event_type = Column(Text, nullable=False)
-    event_data = Column(JSON, nullable=False, default=dict)
-    status = Column(Text, default="pending")
-    trigger_id = Column(
-        String(36),
-        ForeignKey("triggers.id"),
-    )
-    result = Column(JSON)
-    created_at = Column(DateTime, default=_utcnow)
-    processed_at = Column(DateTime)
-    attempts = Column(Integer, default=0)
-    last_error = Column(Text)
-
-    __table_args__ = (
-        CheckConstraint(
-            "event_type IN ("
-            "'email_received', 'sms_received', "
-            "'call_received', 'whatsapp_received')",
-            name="trigger_events_type_check",
-        ),
-        CheckConstraint(
-            "status IN (" "'pending', 'processing', " "'completed', 'failed')",
-            name="trigger_events_status_check",
-        ),
-    )
-
-
-# -------------------------------------------------------------------
-# SHARING
-# -------------------------------------------------------------------
-
-
-class SharingAuth(DictMixin, Base):
-    __tablename__ = "sharing_auth"
-
-    id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
-    )
-    sender_id = Column(Text, nullable=False)
-    sender_email = Column(Text, nullable=False)
-    recipient_email = Column(Text, nullable=False)
-    status = Column(Text, default="pending")
-    pending_intel = Column(JSON, default=list)
-    created_at = Column(DateTime, default=_utcnow)
-    authorized_at = Column(DateTime)
-
-    __table_args__ = (
-        UniqueConstraint(
-            "sender_id",
-            "recipient_email",
-            name="sharing_auth_sender_recipient_unique",
-        ),
-        CheckConstraint(
-            "status IN ('pending', 'authorized', 'revoked')",
-            name="sharing_auth_status_check",
-        ),
-    )
 
 
 # -------------------------------------------------------------------
 # DRAFTS
 # -------------------------------------------------------------------
 
-
 class Draft(DictMixin, Base):
     __tablename__ = "drafts"
 
     id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
+        String(36), primary_key=True, default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     to_addresses = Column(JSON, default=list)
@@ -413,14 +268,11 @@ class Draft(DictMixin, Base):
 # TASK ITEMS
 # -------------------------------------------------------------------
 
-
 class TaskItem(DictMixin, Base):
     __tablename__ = "task_items"
 
     id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
+        String(36), primary_key=True, default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     event_type = Column(Text, nullable=False)
@@ -438,9 +290,7 @@ class TaskItem(DictMixin, Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "owner_id",
-            "event_type",
-            "event_id",
+            "owner_id", "event_type", "event_id",
             name="task_items_owner_event_unique",
         ),
     )
@@ -450,14 +300,11 @@ class TaskItem(DictMixin, Base):
 # BACKGROUND JOBS
 # -------------------------------------------------------------------
 
-
 class BackgroundJob(DictMixin, Base):
     __tablename__ = "background_jobs"
 
     id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
+        String(36), primary_key=True, default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     business_id = Column(Text, nullable=True, index=True)
@@ -481,14 +328,11 @@ class BackgroundJob(DictMixin, Base):
 # AGENT PROMPTS
 # -------------------------------------------------------------------
 
-
 class AgentPrompt(DictMixin, Base):
     __tablename__ = "agent_prompts"
 
     id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
+        String(36), primary_key=True, default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False)
     agent_type = Column(Text, nullable=False)
@@ -499,8 +343,7 @@ class AgentPrompt(DictMixin, Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "owner_id",
-            "agent_type",
+            "owner_id", "agent_type",
             name="agent_prompts_owner_type_unique",
         ),
     )
@@ -510,14 +353,11 @@ class AgentPrompt(DictMixin, Base):
 # USER NOTIFICATIONS
 # -------------------------------------------------------------------
 
-
 class UserNotification(DictMixin, Base):
     __tablename__ = "user_notifications"
 
     id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
+        String(36), primary_key=True, default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     message = Column(Text, nullable=False)
@@ -526,126 +366,11 @@ class UserNotification(DictMixin, Base):
     created_at = Column(DateTime, default=_utcnow)
 
 
-# -------------------------------------------------------------------
-# EMAIL READ EVENTS (tracking)
-# -------------------------------------------------------------------
-
-
-class EmailReadEvent(DictMixin, Base):
-    __tablename__ = "email_read_events"
-
-    id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
-    )
-    tracking_id = Column(Text)
-    sendgrid_message_id = Column(Text)
-    owner_id = Column(Text, nullable=False)
-    message_id = Column(Text, nullable=False)
-    recipient_email = Column(Text, nullable=False)
-    tracking_source = Column(Text, nullable=False)
-    read_count = Column(Integer, default=0)
-    first_read_at = Column(DateTime)
-    last_read_at = Column(DateTime)
-    user_agents = Column(JSON)
-    ip_addresses = Column(JSON)
-    sendgrid_event_data = Column(JSON)
-    created_at = Column(DateTime, default=_utcnow)
-    updated_at = Column(DateTime, default=_utcnow)
-
-    __table_args__ = (
-        CheckConstraint(
-            "tracking_source IN (" "'sendgrid_webhook', 'custom_pixel')",
-            name="email_read_events_source_check",
-        ),
-    )
-
-
-# -------------------------------------------------------------------
-# SENDGRID MESSAGE MAPPING
-# -------------------------------------------------------------------
-
-
-class SendgridMessageMapping(DictMixin, Base):
-    __tablename__ = "sendgrid_message_mapping"
-
-    sendgrid_message_id = Column(Text, primary_key=True)
-    message_id = Column(Text, nullable=False)
-    owner_id = Column(Text, nullable=False)
-    recipient_email = Column(Text, nullable=False)
-    campaign_id = Column(Text)
-    created_at = Column(DateTime, default=_utcnow)
-    expires_at = Column(DateTime)
-
-
-# -------------------------------------------------------------------
-# WHATSAPP MESSAGES (neonize / whatsmeow)
-# -------------------------------------------------------------------
-
-
-class WhatsAppMessage(DictMixin, Base):
-    __tablename__ = "whatsapp_messages"
-    __table_args__ = (UniqueConstraint("owner_id", "message_id", name="uq_wa_owner_message"),)
-
-    id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
-    )
-    owner_id = Column(Text, nullable=False, index=True)
-    message_id = Column(
-        Text,
-        nullable=False,
-    )
-    chat_jid = Column(Text, nullable=False, index=True)
-    sender_jid = Column(Text, nullable=False)
-    sender_name = Column(Text)
-    text = Column(Text)
-    timestamp = Column(DateTime, nullable=False, index=True)
-    is_from_me = Column(Boolean, default=False)
-    is_group = Column(Boolean, default=False)
-    media_type = Column(Text)
-    status = Column(Text)
-    created_at = Column(DateTime, default=_utcnow)
-    memory_processed_at = Column(DateTime)
-    task_processed_at = Column(DateTime)
-
-
-# -------------------------------------------------------------------
-# WHATSAPP CONTACTS (neonize / whatsmeow)
-# -------------------------------------------------------------------
-
-
-class WhatsAppContact(DictMixin, Base):
-    __tablename__ = "whatsapp_contacts"
-
-    id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
-    )
-    owner_id = Column(Text, nullable=False, index=True)
-    jid = Column(Text, nullable=False)
-    phone_number = Column(Text)
-    name = Column(Text)
-    push_name = Column(Text)
-    last_message_at = Column(DateTime)
-    synced_at = Column(DateTime, default=_utcnow)
-
-    __table_args__ = (
-        UniqueConstraint(
-            "owner_id",
-            "jid",
-            name="wa_contact_owner_jid_unique",
-        ),
-    )
 
 
 # -------------------------------------------------------------------
 # MRCALL CONVERSATIONS
 # -------------------------------------------------------------------
-
 
 class MrcallConversation(DictMixin, Base):
     __tablename__ = "mrcall_conversations"
@@ -671,14 +396,11 @@ class MrcallConversation(DictMixin, Base):
 # SYNC STATE
 # -------------------------------------------------------------------
 
-
 class SyncState(DictMixin, Base):
     __tablename__ = "sync_state"
 
     id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
+        String(36), primary_key=True, default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, unique=True)
     history_id = Column(Text)
@@ -688,49 +410,17 @@ class SyncState(DictMixin, Base):
     updated_at = Column(DateTime, default=_utcnow)
 
 
-# -------------------------------------------------------------------
-# PATTERNS (entity behavioral patterns)
-# -------------------------------------------------------------------
-
-
-class Pattern(DictMixin, Base):
-    __tablename__ = "patterns"
-
-    id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
-    )
-    owner_id = Column(Text, nullable=False, index=True)
-    namespace = Column(Text, nullable=False)
-    skill = Column(Text, nullable=False)
-    intent = Column(Text, nullable=False)
-    context = Column(JSON)
-    action = Column(JSON)
-    outcome = Column(Text)
-    contact_id = Column(Text)
-    confidence = Column(Float, default=0.5)
-    times_applied = Column(Integer, default=0)
-    times_successful = Column(Integer, default=0)
-    state = Column(Text, default="active")
-    embedding = Column(LargeBinary)
-    created_at = Column(DateTime, default=_utcnow)
-    updated_at = Column(DateTime, default=_utcnow)
-    last_accessed = Column(DateTime)
 
 
 # -------------------------------------------------------------------
 # CONTACTS
 # -------------------------------------------------------------------
 
-
 class Contact(DictMixin, Base):
     __tablename__ = "contacts"
 
     id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
+        String(36), primary_key=True, default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     email = Column(Text)
@@ -741,28 +431,3 @@ class Contact(DictMixin, Base):
     updated_at = Column(DateTime, default=_utcnow)
 
 
-# -------------------------------------------------------------------
-# ERROR LOGS
-# -------------------------------------------------------------------
-
-
-class ErrorLog(DictMixin, Base):
-    """Log of API errors for debugging and monitoring."""
-
-    __tablename__ = "error_logs"
-
-    id = Column(
-        String(36),
-        primary_key=True,
-        default=_new_uuid,
-    )
-    owner_id = Column(Text, nullable=False, index=True)
-    business_id = Column(Text, index=True)
-    session_id = Column(Text, index=True)
-    error_type = Column(Text, nullable=False)
-    error_code = Column(Integer)
-    error_message = Column(Text, nullable=False)
-    user_message = Column(Text)
-    request_id = Column(Text)
-    context = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=_utcnow)

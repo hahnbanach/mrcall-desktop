@@ -1,5 +1,7 @@
 """Configuration management for Zylch AI."""
 
+import os
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -8,7 +10,14 @@ class Settings(BaseSettings):
     """Zylch AI configuration loaded from .env file."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            ".env",
+            os.environ.get(
+                "ZYLCH_PROFILE_DIR",
+                os.path.expanduser("~/.zylch"),
+            )
+            + "/.env",
+        ),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

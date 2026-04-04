@@ -76,7 +76,7 @@ class EmailSyncManager:
             api_key: API key for the LLM provider
             provider: LLM provider (anthropic, openai, mistral)
             days_back: Days back for intelligence window (default: 30)
-            owner_id: User's Firebase UID (required)
+            owner_id: User's Owner ID (required)
             supabase_storage: Storage instance (required)
         """
         if not owner_id or not supabase_storage:

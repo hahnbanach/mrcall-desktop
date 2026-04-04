@@ -79,7 +79,7 @@ class TaskWorker:
 
         Args:
             storage: Storage instance
-            owner_id: Firebase UID
+            owner_id: Owner ID
             api_key: API key for the LLM provider
             user_email: User's email address
             provider: LLM provider (anthropic, openai, mistral)
@@ -190,6 +190,7 @@ class TaskWorker:
 
         analyzed_count = 0
         action_count = 0
+        consecutive_failures = 0
 
         # Process emails - only unprocessed ones, and only latest per thread
         # Use task_processed_at to track which emails have been analyzed
@@ -263,6 +264,18 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
             # Apply trained prompt with existing task context
             result = await self._analyze_event('email', event_data, blob_context, existing_task_context)
             analyzed_count += 1
+
+            # Fail-fast: stop after 3 consecutive LLM failures (likely bad API key)
+            if result is None:
+                consecutive_failures += 1
+                if consecutive_failures >= 3:
+                    logger.error(
+                        "3 consecutive LLM failures — stopping"
+                        " task analysis (check API key)"
+                    )
+                    break
+            else:
+                consecutive_failures = 0
 
             # Mark as processed regardless of result
             self.storage.mark_email_task_processed(self.owner_id, email_id)
@@ -486,6 +499,9 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
 
         except Exception as e:
             logger.error(f"LLM call failed for {event_type} event: {e}")
+            err_str = str(e).lower()
+            if "401" in err_str or "authentication" in err_str:
+                raise
             return None
 
     def _get_blob_for_contact(self, contact_email: str) -> tuple:

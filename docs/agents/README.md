@@ -1,14 +1,13 @@
 ---
 description: |
-  Index of Zylch backend agents that process data and generate content via LLM. All agents use
-  LLMClient (LiteLLM wrapper) for model calls, Storage (SQLAlchemy) for persistence, ToolFactory for
-  Claude tool exposure, and tool_use for structured JSON output. Flow: User Request -> Tool
-  (factory.py) -> Agent -> LLMClient -> Response, with Storage for persistence.
+  Index of Zylch agents that process data and generate content via LLM.
+  All agents use LLMClient (aisuite wrapper), Storage (SQLAlchemy/SQLite),
+  and tool_use for structured JSON output.
 ---
 
 # Zylch Agents
 
-Backend agents that process data and generate content using LLM.
+Agents that process data and generate content using LLM.
 
 ## Available Agents
 
@@ -16,21 +15,22 @@ Backend agents that process data and generate content using LLM.
 |-------|------|---------|
 | [Emailer Agent](emailer-agent.md) | `zylch/agents/emailer_agent.py` | Compose emails with context from memory |
 | [Memory Agent](memory-agent.md) | `zylch/agents/memory_agent.py` | Extract entities from emails into memory blobs |
-| [Task Agent](task-agent.md) | `zylch/agents/task_agent.py` | Detect tasks from emails and calendar |
+| [Task Agent](task-agent.md) | `zylch/agents/task_agent.py` | Detect tasks from emails |
 
 ## Architecture
 
 All agents share common patterns:
 
-- **LLM Access**: Use `LLMClient` (LiteLLM wrapper) for model calls
-- **Data Storage**: Access `Storage` for persistence
-- **Tool Exposure**: Registered via `ToolFactory` for Claude to call
+- **LLM Access**: Use `LLMClient` (aisuite wrapper, Anthropic/OpenAI)
+- **Data Storage**: Access `Storage` (SQLAlchemy/SQLite)
+- **Tool Exposure**: Registered via `ToolFactory` for LLM tool_use
 - **Structured Output**: Use `tool_use` for reliable JSON output
+- **Trainers**: Prompt generation in `zylch/agents/trainers/`
 
 ```
-User Request → Tool (factory.py) → Agent → LLMClient → Response
-                                     ↓
-                              Storage
+User Request -> Tool (factory.py) -> Agent -> LLMClient -> Response
+                                      |
+                                   Storage (SQLite)
 ```
 
 ## Common Dependencies
@@ -38,11 +38,11 @@ User Request → Tool (factory.py) → Agent → LLMClient → Response
 ```python
 from zylch.llm import LLMClient
 from zylch.storage import Storage
-from zylch.memory import HybridSearchEngine, EmbeddingEngine
+from zylch.memory import BlobStorage, HybridSearchEngine, EmbeddingEngine
 ```
 
-## Related Documentation
+## Related
 
 - [Architecture](../ARCHITECTURE.md) - System context
 - [Entity Memory System](../features/entity-memory-system.md) - Blob storage
-- [Task Management](../features/task-management.md) - Task items table
+- [Task Management](../features/task-management.md) - Task system

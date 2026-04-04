@@ -47,7 +47,7 @@ class StarChatClient:
             realm: Firebase realm/config group
             timeout: Request timeout in seconds
             verify_ssl: Whether to verify SSL certificates
-            owner_id: Firebase UID (for OAuth token refresh)
+            owner_id: Owner ID (for OAuth token refresh)
             supabase_storage: Storage instance (for OAuth token refresh)
         """
         self.base_url = base_url.rstrip("/")
@@ -952,7 +952,7 @@ async def create_starchat_client(owner_id: str, supabase_storage: Optional[Any] 
     2. Basic Auth (fallback to env vars if configured)
 
     Args:
-        owner_id: Firebase UID
+        owner_id: Owner ID
         supabase_storage: Storage instance (optional, will create if not provided)
 
     Returns:

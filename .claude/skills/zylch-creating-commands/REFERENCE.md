@@ -187,7 +187,7 @@ Command handlers use different signatures based on their needs:
 ```python
 async def handle_commandname(
     args: List[str],     # Arguments after command name
-    owner_id: str        # Firebase UID
+    owner_id: str        # User identity (EMAIL_ADDRESS)
 ) -> str:                # Markdown response to user
 ```
 
@@ -196,7 +196,7 @@ async def handle_commandname(
 async def handle_commandname(
     args: List[str],     # Arguments after command name
     config,              # ToolConfig with LLM credentials
-    owner_id: str        # Firebase UID
+    owner_id: str        # User identity (EMAIL_ADDRESS)
 ) -> str:                # Markdown response to user
 ```
 
@@ -204,7 +204,7 @@ async def handle_commandname(
 ```python
 async def handle_commandname(
     args: List[str],     # Arguments after command name
-    owner_id: str,       # Firebase UID
+    owner_id: str,       # User identity (EMAIL_ADDRESS)
     user_email: str      # User's email address
 ) -> str:                # Markdown response to user
 ```

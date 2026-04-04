@@ -39,7 +39,7 @@ class CalendarSyncManager:
             days_back: Days in past to sync (default: 30)
             days_forward: Days in future to sync (default: 30)
             my_emails: List of my email addresses (for identifying external attendees)
-            owner_id: User's Firebase UID (required)
+            owner_id: User's Owner ID (required)
             supabase_storage: Storage instance (required)
         """
         if not owner_id or not supabase_storage:

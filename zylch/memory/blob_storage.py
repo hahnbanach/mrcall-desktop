@@ -67,7 +67,7 @@ class BlobStorage:
         with self._get_session() as session:
             # Insert blob (embedding as bytes for SQLite BLOB)
             blob = Blob(
-                id=uuid.UUID(blob_id),
+                id=blob_id,
                 owner_id=owner_id,
                 namespace=namespace,
                 content=content,
@@ -91,7 +91,7 @@ class BlobStorage:
                     .tobytes()
                 )
                 sentence = BlobSentence(
-                    blob_id=uuid.UUID(blob_id),
+                    blob_id=blob_id,
                     owner_id=owner_id,
                     sentence_text=sent,
                     embedding=emb_bytes,
@@ -162,8 +162,8 @@ class BlobStorage:
                     .tobytes()
                 )
                 bid = (
-                    uuid.UUID(blob_id)
-                    if isinstance(blob_id, str)
+                    str(blob_id)
+                    if not isinstance(blob_id, str)
                     else blob_id
                 )
                 sentence = BlobSentence(
@@ -198,6 +198,28 @@ class BlobStorage:
             if count > 0:
                 self._notify_mutation()
             return count > 0
+
+    def list_blobs(
+        self, owner_id: str, limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """List recent blobs for owner, ordered by updated_at desc."""
+        with self._get_session() as session:
+            rows = session.query(Blob)\
+                .filter(Blob.owner_id == owner_id)\
+                .order_by(Blob.updated_at.desc())\
+                .limit(limit)\
+                .all()
+            return [r.to_dict() for r in rows]
+
+    def delete_all_blobs(self, owner_id: str) -> int:
+        """Delete all blobs (and sentences via cascade) for owner."""
+        with self._get_session() as session:
+            count = session.query(Blob)\
+                .filter(Blob.owner_id == owner_id)\
+                .delete(synchronize_session=False)
+            if count > 0:
+                self._notify_mutation()
+            return count
 
     def get_stats(self, owner_id: str) -> Dict[str, Any]:
         """Get memory statistics for owner."""

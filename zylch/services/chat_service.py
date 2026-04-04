@@ -61,7 +61,7 @@ class ChatService:
         Fetches BYOK credentials (Anthropic, Pipedrive, etc.) from Supabase.
 
         Args:
-            owner_id: Firebase UID for loading per-user credentials
+            owner_id: Owner ID for loading per-user credentials
 
         Raises:
             ValueError: If Anthropic API key is not configured for the user
@@ -843,7 +843,7 @@ class ChatService:
 
         Args:
             task_id_input: Task ID (full or prefix match)
-            owner_id: Firebase UID
+            owner_id: Owner ID
 
         Returns:
             Response message indicating success or failure
@@ -908,7 +908,7 @@ What would you like to do?"""
 
         Args:
             task_id_input: Full task ID or prefix
-            owner_id: Firebase UID
+            owner_id: Owner ID
 
         Returns:
             Task dict or None if not found
@@ -951,7 +951,7 @@ What would you like to do?"""
 
         Args:
             user_message: User's message
-            owner_id: Firebase UID
+            owner_id: Owner ID
             context: Optional context dict
 
         Returns:
@@ -999,7 +999,7 @@ What would you like to do?"""
 
         Args:
             business_id_input: Optional business ID (if None, uses linked business)
-            owner_id: Firebase UID
+            owner_id: Owner ID
             context: Optional request context (source, firebase_token, etc.)
 
         Returns:
@@ -1107,7 +1107,7 @@ What would you like to do?"""
 
         Args:
             user_message: User's message
-            owner_id: Firebase UID
+            owner_id: Owner ID
             context: Optional context dict
 
         Returns:

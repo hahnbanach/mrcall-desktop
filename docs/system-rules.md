@@ -1,7 +1,7 @@
 ---
 description: |
-  Tech stack, coding standards, dependency rules, and imperatives for Zylch development.
-  Python 3.11+, FastAPI, SQLAlchemy ORM, PostgreSQL 16 with pgvector, Firebase Auth.
+  Tech stack, coding standards, dependency rules, and imperatives for Zylch standalone.
+  Python 3.11+, Click CLI, SQLAlchemy ORM, SQLite, IMAP/SMTP, BYOK LLM.
 ---
 
 # System Rules
@@ -11,30 +11,23 @@ description: |
 | Layer | Technology | Version |
 |-------|-----------|---------|
 | Language | Python | 3.11+ |
-| Web Framework | FastAPI | 0.104+ |
+| CLI Framework | Click | 8.1+ |
 | ORM | SQLAlchemy | 2.0+ |
-| Database | PostgreSQL (Scaleway Managed) | 16, with pgvector + uuid-ossp |
-| Migrations | Alembic | 1.13+ |
-| Auth | Firebase Admin SDK | 6.0+ |
-| AI/LLM | aisuite (multi-provider: OpenAI, Scaleway/Mistral, Anthropic) + Anthropic SDK (direct, for MrCall) | aisuite 0.1.14+, anthropic 0.39+ |
-| Vector Search | pgvector (384-dim) + HNSW | 0.3+ |
-| Full-Text Search | PostgreSQL tsvector/FTS | built-in |
-| Embeddings | sentence-transformers (ONNX backend, no torch) | 3.0+ |
+| Database | SQLite (WAL mode) | built-in |
+| Auth | None (mono-user, local) | - |
+| AI/LLM | aisuite (multi-provider: Anthropic, OpenAI) | aisuite 0.1.14+ |
+| Vector Search | numpy cosine similarity (in-memory) | numpy 1.24+ |
+| Embeddings | fastembed (ONNX backend, no PyTorch) | 0.4+ |
 | HTTP Client | httpx | 0.25+ |
 | Config | Pydantic Settings | 2.0+ |
-| Email | Google Gmail API, Microsoft Graph API | - |
-| Calendar | Google Calendar API | - |
-| SMS | Vonage | 3.0+ |
-| Email Campaigns | SendGrid | 6.11+ |
-| CRM | Pipedrive REST API | - |
-| Telephony | StarChat/MrCall API | - |
+| Email | IMAP/SMTP (auto-detect presets) | - |
+| Telephony | StarChat/MrCall HTTP (channel adapter) | - |
 | Scheduling | APScheduler | 3.10+ |
+| Encryption | cryptography (Fernet) | 41.0+ |
+| HTML Parsing | beautifulsoup4 | 4.12+ |
 | Formatter | Black | 23.0+ |
 | Linter | Ruff | 0.1+ |
-| Tests | pytest + pytest-asyncio | 7.0+ |
-| Container | Docker (Python 3.11-slim) | - |
-| CI/CD | GitLab CI, self-hosted ARM64 runner on Scaleway | - |
-| Orchestration | Kubernetes (Scaleway Kapsule, ARM64 nodes) | - |
+| Tests | pytest | 7.0+ |
 
 ## Coding Standards
 
@@ -56,7 +49,7 @@ description: |
 ### Error Handling
 - Catch specific exceptions, not bare `except`
 - Log errors with `logger.error(f"...: {e}")`
-- Return generic error messages to users, log detailed errors server-side
+- Return user-friendly error messages to terminal
 - Use `exc_info=True` for unexpected exceptions
 
 ### Logging (Mandatory)
@@ -66,24 +59,17 @@ description: |
 - NEVER log tokens or secrets — only "present"/"absent"
 - NEVER truncate output in log messages (no `[:8]`, `[:50]`, etc.)
 
-### API Patterns
-- All API routes use FastAPI `APIRouter`
-- Request/response models use Pydantic `BaseModel`
-- Standard response format: `{"success": bool, "data": ..., "message": str}`
-- Firebase Auth middleware for authenticated endpoints
-- CORS configured via `settings.cors_allowed_origins`
-
 ### Tool Pattern
 - Tools inherit from `Tool` base class in `zylch/tools/base.py`
 - Each tool has `name`, `description`, `input_schema`, and `execute()` method
 - Tools are registered via `ToolFactory` in `zylch/tools/factory.py`
-- `SessionState` provides runtime context (owner_id, business_id, modes)
+- `SessionState` provides runtime context
 
 ### Agent Pattern
 - Agents inherit from `BaseAgent` in `zylch/agents/base_agent.py`
-- Trainers in `zylch/agents/trainers/` handle learning from user data
-- Agents use `LLMClient` (aisuite wrapper) for model calls. MrCall agent uses Anthropic SDK directly for web search + streaming
-- Storage via `Storage` (SQLAlchemy-based, name is legacy)
+- Trainers in `zylch/agents/trainers/` handle prompt generation
+- Agents use `LLMClient` (aisuite wrapper) for model calls
+- Storage via `Storage` class (SQLAlchemy-based)
 - Structured output via `tool_use` for reliable JSON
 
 ## Dependency Rules
@@ -95,7 +81,7 @@ Config (config.py)
     -> Tools (tools/)
       -> Agents (agents/)
         -> Services (services/)
-          -> API Routes (api/routes/)
+          -> CLI (cli/)
 ```
 
 ### Import Rules
@@ -103,28 +89,25 @@ Config (config.py)
 - `storage/` imports only from `config`
 - `tools/` imports from `config`, `storage`
 - `agents/` imports from `config`, `storage`, `tools`, `llm`, `memory`
-- `services/` imports from anything except `api/`
-- `api/routes/` imports from `services/`, `storage/`, `config`
+- `services/` imports from anything except `cli/`
+- `cli/` imports from `services/`, `storage/`, `config`
 - `memory/` is a cross-cutting concern, importable by tools and agents
 
 ### Data Storage
-- ALL data in PostgreSQL via SQLAlchemy ORM — NO local filesystem for data
-- Models defined in `zylch/storage/models.py` (29+ models)
-- Schema migrations via Alembic (`alembic/versions/`)
-- OAuth tokens encrypted at rest (Fernet encryption)
-- Multi-tenant isolation via `owner_id` column on every table
+- ALL data in SQLite via SQLAlchemy ORM
+- Models defined in `zylch/storage/models.py` (17 models)
+- Tables created via `Base.metadata.create_all()` (no Alembic)
+- Credentials encrypted at rest (Fernet encryption)
+- Mono-user — no `owner_id` multi-tenant isolation needed
 
 ## Imperatives
 
-1. NEVER store data on local filesystem — PostgreSQL only
+1. NEVER store data on filesystem — SQLite only (except `~/.zylch/.env` for config)
 2. NEVER hardcode secrets — use environment variables via Pydantic Settings
 3. NEVER truncate output in code (no `[:8]`, `[:50]`, `[:100]` slicing for display)
 4. NEVER commit credentials to git
-5. ALWAYS include `owner_id` filtering on every database query (multi-tenant isolation)
-6. ALWAYS use Alembic migrations for schema changes
-7. ALWAYS include debug logging in every new feature
-8. ALWAYS use parameterized queries (SQLAlchemy handles this)
-9. ALWAYS validate user input with Pydantic models at API boundaries
-10. Files MUST stay under 500 lines
-11. MrCall/StarChat endpoints MUST include `realm` parameter in path
-12. Prefer `POST .../search` endpoints over `GET` for MrCall resource retrieval
+5. ALWAYS use `Base.metadata.create_all()` for schema creation (no Alembic)
+6. ALWAYS include debug logging in every new feature
+7. ALWAYS use parameterized queries (SQLAlchemy handles this)
+8. Files MUST stay under 500 lines
+9. MrCall/StarChat is a channel adapter — configuration lives in `mrcall-agent` (separate repo)

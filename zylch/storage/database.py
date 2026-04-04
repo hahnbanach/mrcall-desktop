@@ -18,8 +18,14 @@ from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 
 logger = logging.getLogger(__name__)
 
-DB_DIR = os.path.expanduser("~/.zylch")
-DB_PATH = os.path.join(DB_DIR, "zylch.db")
+def _resolve_db_path() -> str:
+    """Resolve DB path: profile-aware or legacy default."""
+    env_path = os.environ.get("ZYLCH_DB_PATH")
+    if env_path:
+        return env_path
+    return os.path.join(os.path.expanduser("~/.zylch"), "zylch.db")
+
+DB_DIR = os.path.expanduser("~/.zylch")  # legacy compat
 
 
 class Base(DeclarativeBase):
@@ -40,8 +46,9 @@ def get_engine() -> Engine:
     """
     global _engine
     if _engine is None:
-        os.makedirs(DB_DIR, exist_ok=True)
-        db_url = f"sqlite:///{DB_PATH}"
+        db_path = _resolve_db_path()
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        db_url = f"sqlite:///{db_path}"
 
         _engine = create_engine(
             db_url,
@@ -55,7 +62,7 @@ def get_engine() -> Engine:
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
 
-        logger.info(f"SQLAlchemy engine created for sqlite:///{DB_PATH}")
+        logger.info(f"SQLAlchemy engine created for {db_url}")
 
     return _engine
 
@@ -100,7 +107,7 @@ def init_db():
     from zylch.storage.models import Base as _Base  # noqa: F811
     engine = get_engine()
     _Base.metadata.create_all(engine)
-    logger.info(f"Database initialized at {DB_PATH}")
+    logger.info(f"Database initialized at {_resolve_db_path()}")
 
 
 def dispose_engine() -> None:

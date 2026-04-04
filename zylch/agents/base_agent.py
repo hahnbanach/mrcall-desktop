@@ -38,7 +38,7 @@ class SpecializedAgent:
 
         Args:
             storage: Storage instance
-            owner_id: Firebase UID
+            owner_id: Owner ID
             api_key: LLM API key
             provider: LLM provider (anthropic, openai, mistral)
         """

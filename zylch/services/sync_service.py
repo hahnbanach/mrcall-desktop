@@ -106,6 +106,7 @@ class SyncService:
         self,
         days_back: Optional[int] = None,
         force_full: bool = False,
+        on_progress=None,
     ) -> Dict[str, Any]:
         """Sync emails via IMAP into archive.
 
@@ -127,7 +128,8 @@ class SyncService:
 
         archive = await self._ensure_email_archive()
         archive_result = archive.incremental_sync(
-            days_back=days_back, force_full=force_full
+            days_back=days_back, force_full=force_full,
+            on_progress=on_progress,
         )
 
         if not archive_result["success"]:
@@ -585,7 +587,8 @@ class SyncService:
         return result
 
     async def run_full_sync(
-        self, days_back: Optional[int] = None
+        self, days_back: Optional[int] = None,
+        on_progress=None,
     ) -> Dict[str, Any]:
         """Run full sync: emails + Pipedrive + MrCall.
 
@@ -608,8 +611,8 @@ class SyncService:
                 "error": "Not started",
             },
             "pipedrive_sync": {
-                "success": False,
-                "error": "Not started",
+                "success": True,
+                "skipped": True,
             },
             "mrcall_sync": {
                 "success": False,
@@ -622,7 +625,8 @@ class SyncService:
         # Sync emails via IMAP
         try:
             email_result = await self.sync_emails(
-                days_back=days_back
+                days_back=days_back,
+                on_progress=on_progress,
             )
             results["email_sync"] = {
                 "success": True,
@@ -639,28 +643,11 @@ class SyncService:
             )
             results["success"] = False
 
-        # Sync Pipedrive (if connected)
-        try:
-            pipedrive_result = (
-                await self.sync_pipedrive()
-            )
-            results["pipedrive_sync"] = pipedrive_result
-            if not pipedrive_result.get("success"):
-                results["errors"].append(
-                    f"Pipedrive sync:"
-                    f" {pipedrive_result.get('error', 'Unknown')}"
-                )
-        except Exception as e:
-            logger.error(
-                f"Pipedrive sync failed: {e}"
-            )
-            results["pipedrive_sync"] = {
-                "success": False,
-                "error": str(e),
-            }
-            results["errors"].append(
-                f"Pipedrive sync: {str(e)}"
-            )
+        # Pipedrive removed in standalone
+        results["pipedrive_sync"] = {
+            "success": True,
+            "skipped": True,
+        }
 
         # Sync MrCall (if connected)
         try:

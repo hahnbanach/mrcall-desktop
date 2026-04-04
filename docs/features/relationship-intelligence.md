@@ -84,9 +84,9 @@ Zylch AI uses a **Task Detection System** that identifies actionable items from 
 
 ```
 Data Flow:
-├─ sync_emails() → Supabase `emails` table
-├─ sync_calendar() → Supabase `calendar_events` table
-└─ Task Agent (during sync) → Supabase `task_items` table
+├─ sync_emails() → SQLite `emails` table
+├─ sync_calendar() → SQLite `calendar_events` table
+└─ Task Agent (during sync) → SQLite `task_items` table
     ├─ Per-email analysis
     ├─ Task detection via LLM
     └─ Urgency scoring
@@ -98,7 +98,7 @@ Data Flow:
 - Analyzes emails for actionable items
 - Determines urgency (high/medium/low)
 - Generates suggested actions
-- Stores in Supabase `task_items` table
+- Stores in SQLite `task_items` table
 
 ### 2. Task Detection
 Each task contains:
@@ -163,7 +163,7 @@ $ /tasks
 
 ## Data Storage
 
-All data is stored in Supabase with `owner_id` scoping:
+All data is stored in SQLite (mono-user):
 
 | Table | Purpose |
 |-------|---------|
