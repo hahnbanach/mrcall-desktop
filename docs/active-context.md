@@ -1,6 +1,6 @@
 ---
 description: |
-  Current state of Zylch standalone as of 2026-04-01. Fully transformed
+  Current state of Zylch standalone as of 2026-04-04. Fully transformed
   from shared SaaS codebase to local CLI tool. SQLite, IMAP, no server.
 ---
 
@@ -10,8 +10,8 @@ description: |
 
 ### Core
 - **CLI**: `zylch` command via click (init, sync, tasks, status, interactive chat)
-- **Storage**: SQLite at `~/.zylch/zylch.db`, 17 ORM models, WAL mode
-- **Config**: Pydantic Settings from `~/.zylch/.env`, `zylch init` wizard
+- **Storage**: SQLite at `~/.zylch/zylch.db`, 19 ORM models, WAL mode
+- **Config**: Pydantic Settings from `~/.zylch/.env`, `zylch init` 5-step wizard (LLM → Email → WhatsApp → Telegram → MrCall)
 - **LLM**: BYOK multi-provider (Anthropic preferred, OpenAI supported) via aisuite
 - **No server**: direct function calls, no FastAPI, no HTTP
 
@@ -37,7 +37,7 @@ description: |
 
 ### Channels
 - **Email**: IMAP/SMTP (bidirectional)
-- **MrCall/StarChat**: HTTP client for contacts, calls, SMS (channel, not configurator)
+- **MrCall/StarChat**: HTTP client for contacts, calls, SMS + OAuth2 PKCE connection flow
 - **WhatsApp**: neonize (whatsmeow) — local QR login, sync, search, send, gap analysis
 - **Calendar**: planned via CalDAV
 
@@ -58,8 +58,17 @@ description: |
 ### Telegram bot (implemented)
 - `zylch/telegram/bot.py`: bridges Telegram → ChatService (same engine as REPL)
 - Long-polling (no webhook/server needed), secured by `TELEGRAM_ALLOWED_USER_ID`
+- Default-deny when `TELEGRAM_ALLOWED_USER_ID` not set
 - Markdown → Telegram HTML conversion, message splitting (>4096 chars)
 - Config: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_ID` in `~/.zylch/.env`
+
+### MrCall OAuth2 (implemented)
+- `zylch/tools/mrcall/oauth.py`: OAuth2 authorization code flow with PKCE
+- Local HTTP callback server on port 19274, browser-based consent
+- Token exchange + encrypted storage in SQLite `oauth_tokens` table
+- Token refresh support via `refresh_mrcall_token()`
+- Step 5 in `zylch init` wizard, re-run support (shows existing connection)
+- Config: `MRCALL_CLIENT_ID`, `MRCALL_CLIENT_SECRET` in `~/.zylch/.env`
 
 ### Notifications
 - Deduplication (identical unread not re-created)
@@ -90,6 +99,15 @@ description: |
 - **GitHub (origin/main)**: all commits pushed
 - **Local**: `pip install -e .` works, `zylch --help` and `zylch status` verified
 
+## Completed This Session (2026-04-03 / 2026-04-04)
+
+### WhatsApp + Telegram + MrCall OAuth (PR #2)
+- WhatsApp channel: neonize client, sync, 5 LLM tools, memory pipeline, unified timeline
+- Telegram bot: ChatService bridge, long-polling, markdown→HTML, default-deny auth
+- MrCall OAuth2: PKCE flow, local callback server, token storage/refresh
+- `zylch init` rewritten as 5-step multi-channel wizard
+- Code review: 14 issues found and fixed (broken memory worker, datetime bugs, security)
+
 ## What Is In Progress
 
 Nothing — all streams completed.
@@ -98,15 +116,15 @@ Nothing — all streams completed.
 
 1. **Test WhatsApp end-to-end**: QR login → sync → search → send
 2. **Test Telegram bot**: token setup → message routing → command handling
-3. **Test `zylch init` + `zylch sync`** with real email (IMAP + app password)
-4. **Clean remaining stale code**: `zylch/intelligence/`, `zylch/ml/`, `zylch/router/`, `zylch/webhook/` — likely stale
-5. **Add CalDAV** calendar support
+3. **Test MrCall OAuth**: client_id setup → browser consent → token storage
+4. **Test `zylch init`** full 5-step wizard with real credentials
+5. **Clean remaining stale code**: `zylch/intelligence/`, `zylch/ml/`, `zylch/router/`, `zylch/webhook/` — likely stale
+6. **Add CalDAV** calendar support
 
 ## Known Issues
 
-- `command_handlers.py` still has SaaS remnants (connect flow stubs)
-- `chat_service.py` still references MrCall routing paths
 - `zylch/intelligence/`, `zylch/ml/`, `zylch/router/`, `zylch/webhook/` may be dead code
 - `tests/` directory references old architecture (needs rewrite)
 - No end-to-end test of full flow (init → sync → tasks)
 - `gmail_tools.py` (874 lines) above 500-line guideline
+- `README.md` and `docs/guides/integrations.md` have SaaS-era content that needs cleanup

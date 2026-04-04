@@ -1,512 +1,244 @@
 ---
 description: |
-  Unified connections system for managing external services. Available: Google (Gmail + Calendar),
-  Microsoft (Outlook + Calendar), Pipedrive CRM, MrCall (phone + SMS), Vonage SMS, SendGrid
-  (campaigns). Coming soon: WhatsApp, Slack, Teams. All use BYOK model - users connect via
-  /connect command, credentials stored per-user in Supabase with Fernet encryption.
+  Zylch integrations guide for standalone CLI. Channels: Email (IMAP),
+  WhatsApp (neonize QR), MrCall (OAuth2), Telegram (bot). All configured
+  via zylch init wizard or ~/.zylch/.env.
 ---
 
 # Zylch Integrations Guide
 
-**Last Updated**: December 2025
+**Last Updated**: April 2026
 
 ## Overview
 
-Zylch provides a unified connections system for managing external service integrations. This guide covers how to view, connect, and manage integrations across email, CRM, messaging, telephony, and other services.
+Zylch connects to external services via local protocols — no server, no API
+endpoints, no cloud middleware. All credentials are stored in `~/.zylch/.env`
+(secrets) and `~/.zylch/zylch.db` (OAuth tokens). The `zylch init` wizard
+walks through setup for all channels.
 
 ---
 
 ## Available Integrations
 
-### 📧 Email & Calendar
+### Channels (data sources)
 
-| Provider | Category | Status | Auth Type |
-|----------|----------|--------|-----------|
-| **Google** (Gmail & Calendar) | Email | ✅ Available | OAuth 2.0 |
-| **Microsoft** (Outlook & Calendar) | Email | ✅ Available | OAuth 2.0 |
+| Channel | Protocol | Auth | Status |
+|---------|----------|------|--------|
+| **Email** | IMAP/SMTP | App password | Working |
+| **WhatsApp** | neonize (whatsmeow) | QR code (local) | Working |
+| **MrCall** | StarChat HTTP + OAuth2 | OAuth2 PKCE | Working |
+| **Calendar** | CalDAV | TBD | Planned |
 
-### 💼 CRM & Sales
+### Interfaces (how you interact with Zylch)
 
-| Provider | Category | Status | Auth Type |
-|----------|----------|--------|-----------|
-| **Pipedrive** | CRM | ✅ Available | API Key |
-
-### 💬 Messaging
-
-| Provider | Category | Status | Auth Type |
-|----------|----------|--------|-----------|
-| **WhatsApp** (neonize) | Messaging | ✅ Available | QR code (local) |
-| **Telegram** (bot) | Interface | ✅ Available | Bot token (@BotFather) |
-| **Slack** | Messaging | ⏳ Coming Soon | OAuth 2.0 |
-| **Microsoft Teams** | Messaging | ⏳ Coming Soon | OAuth 2.0 |
-
-### 📞 Telephony & SMS
-
-| Provider | Category | Status | Auth Type |
-|----------|----------|--------|-----------|
-| **MrCall** (Phone & SMS) | Telephony | ✅ Available | API Key |
-| **Vonage SMS** | Messaging | ✅ Available | API Key |
-
-### 🎥 Video Conferencing
-
-| Provider | Category | Status | Auth Type |
-|----------|----------|--------|-----------|
-| **Zoom** | Video | ⏳ Coming Soon | OAuth 2.0 |
-
-### 🤖 AI Services
-
-| Provider | Category | Status | Auth Type |
-|----------|----------|--------|-----------|
-| **Anthropic API (BYOK)** | AI | ✅ Available | API Key |
+| Interface | Protocol | Auth | Status |
+|-----------|----------|------|--------|
+| **CLI REPL** | Terminal | None (local) | Working |
+| **Telegram bot** | Bot API (polling) | Bot token + user ID | Working |
 
 ---
 
-## Using the `/connections` Command
+## Setup via `zylch init`
 
-### View All Connections
+The interactive wizard configures all channels in 5 steps:
 
-```bash
-> /connections
+```
+$ zylch init
+
+Step 1/5: LLM Provider
+  → ANTHROPIC_API_KEY, SYSTEM_LLM_PROVIDER
+
+Step 2/5: Email (IMAP)
+  → EMAIL_ADDRESS, EMAIL_PASSWORD, IMAP/SMTP servers
+  → Auto-detects servers for Gmail, Outlook, Yahoo, iCloud
+
+Step 3/5: WhatsApp
+  → Shows QR code inline, scan with WhatsApp on phone
+  → Session stored in ~/.zylch/whatsapp.db
+
+Step 4/5: Telegram
+  → TELEGRAM_BOT_TOKEN (from @BotFather)
+  → TELEGRAM_ALLOWED_USER_ID (your Telegram user ID)
+
+Step 5/5: MrCall
+  → MRCALL_CLIENT_ID, MRCALL_CLIENT_SECRET
+  → Opens browser for OAuth2 consent
+  → Tokens stored in oauth_tokens table
 ```
 
-**Output:**
-```
-📡 Your Connections
-
-✅ Connected:
-1. 📧 Google (Gmail & Calendar) - user@gmail.com (synced 2 hours ago)
-2. 📞 MrCall (Phone & SMS) - Business ID: 3002475397
-
-❌ Available (Not Connected):
-3. 📧 Microsoft (Outlook & Calendar) - Connect: /connections --connect microsoft
-4. 💼 Pipedrive CRM - Requires configuration
-5. 💬 Vonage SMS - Requires configuration
-
-⏳ Coming Soon:
-6. 💬 WhatsApp Business
-7. 💬 Slack
-8. 💬 Microsoft Teams
-9. 🎥 Zoom
-
-Summary: 2 connected, 3 available, 4 coming soon
-
-Use /connections --connect <provider> to connect
-```
-
-### Connect a Provider
-
-```bash
-> /connections --connect google
-```
-
-**For OAuth providers (Google, Microsoft):**
-```
-🔗 Connect Google (Gmail & Calendar)
-
-OAuth URL: /api/auth/google/authorize
-
-For API clients:
-Redirect user to this endpoint to initiate OAuth flow:
-```
-/api/auth/google/authorize?owner_id=YOUR_OWNER_ID
-```
-
-After authorization, user will be redirected back with tokens stored.
-```
-
-**For API key providers (Pipedrive, Vonage):**
-```
-🔧 Configure Pipedrive CRM
-
-This integration requires manual configuration.
-
-Required fields:
-• api_token: API Token
-
-Setup:
-1. Get your credentials from Pipedrive CRM
-2. Store them securely in environment variables or database
-3. Run /connections to verify connection
-
-Documentation: Contact support for setup help
-```
+Re-running `zylch init` shows current values and asks for confirmation
+before overwriting. Channels already connected can be skipped.
 
 ---
 
-## API Integration
-
-### Get Connection Status
-
-**Endpoint**: `GET /api/connections/status`
-
-**Query Parameters**:
-- `owner_id` (required): User's Firebase UID
-- `include_unavailable` (optional): Include "coming soon" providers (default: false)
-
-**Example Request**:
-```bash
-curl "http://localhost:8000/api/connections/status?owner_id=user123&include_unavailable=true"
-```
-
-**Example Response**:
-```json
-{
-  "connections": [
-    {
-      "provider_key": "google",
-      "display_name": "Google (Gmail & Calendar)",
-      "category": "email",
-      "description": "Access Gmail emails and Google Calendar events",
-      "icon_url": null,
-      "requires_oauth": true,
-      "oauth_url": "/api/auth/google/authorize",
-      "is_available": true,
-      "status": "connected",
-      "connected_email": "user@gmail.com",
-      "last_sync": "2025-12-10T10:00:00Z",
-      "connected_at": "2025-12-01T00:00:00Z"
-    },
-    {
-      "provider_key": "microsoft",
-      "display_name": "Microsoft (Outlook & Calendar)",
-      "category": "email",
-      "status": "disconnected",
-      "requires_oauth": true,
-      "oauth_url": "/api/auth/microsoft-login",
-      "is_available": true
-    },
-    {
-      "provider_key": "whatsapp",
-      "display_name": "WhatsApp Business",
-      "category": "messaging",
-      "status": "coming_soon",
-      "is_available": false
-    }
-  ],
-  "total": 10,
-  "connected_count": 1,
-  "available_count": 5
-}
-```
-
-### List Available Providers
-
-**Endpoint**: `GET /api/connections/providers`
-
-**Query Parameters**:
-- `category` (optional): Filter by category (email, crm, messaging, telephony, video, ai)
-- `include_unavailable` (optional): Include "coming soon" providers (default: false)
-
-**Example Request**:
-```bash
-curl "http://localhost:8000/api/connections/providers?category=email"
-```
-
-**Example Response**:
-```json
-{
-  "providers": [
-    {
-      "provider_key": "google",
-      "display_name": "Google (Gmail & Calendar)",
-      "category": "email",
-      "description": "Access Gmail emails and Google Calendar events",
-      "requires_oauth": true,
-      "oauth_url": "/api/auth/google/authorize",
-      "is_available": true,
-      "config_fields": null
-    },
-    {
-      "provider_key": "microsoft",
-      "display_name": "Microsoft (Outlook & Calendar)",
-      "category": "email",
-      "description": "Access Outlook emails and Microsoft Calendar events",
-      "requires_oauth": true,
-      "oauth_url": "/api/auth/microsoft-login",
-      "is_available": true,
-      "config_fields": null
-    }
-  ]
-}
-```
-
-### Get Provider Details
-
-**Endpoint**: `GET /api/connections/providers/{provider_key}`
-
-**Example Request**:
-```bash
-curl "http://localhost:8000/api/connections/providers/google"
-```
-
-**Example Response**:
-```json
-{
-  "provider_key": "google",
-  "display_name": "Google (Gmail & Calendar)",
-  "category": "email",
-  "description": "Access Gmail emails and Google Calendar events",
-  "requires_oauth": true,
-  "oauth_url": "/api/auth/google/authorize",
-  "is_available": true,
-  "documentation_url": null,
-  "icon_url": null,
-  "config_fields": null,
-  "created_at": "2025-12-10T00:00:00Z",
-  "updated_at": "2025-12-10T00:00:00Z"
-}
-```
-
----
-
-## OAuth Connection Flow
-
-### Google (Gmail & Calendar)
-
-1. **User initiates connection**: Frontend redirects to `/api/auth/google/authorize`
-2. **Google OAuth consent**: User authorizes Zylch to access Gmail and Calendar
-3. **Callback**: Google redirects to `/api/auth/google/callback` with auth code
-4. **Token storage**: Backend exchanges code for tokens and stores in `oauth_tokens` table
-5. **Verification**: User runs `/connections` to verify connection
-
-### Microsoft (Outlook & Calendar)
-
-1. **User initiates connection**: Frontend redirects to `/api/auth/microsoft-login`
-2. **Microsoft OAuth consent**: User authorizes Zylch to access Outlook and Calendar
-3. **Token exchange**: Backend exchanges code for Graph API tokens
-4. **Token storage**: Tokens stored in `oauth_tokens` table
-5. **Verification**: User runs `/connections` to verify connection
-
----
-
-## API Key Configuration
-
-### Pipedrive CRM (BYOK)
-
-**Credentials are NOT stored in .env** - each user provides their own via `/connect pipedrive`.
-
-**Via CLI:**
-```bash
-> /connect pipedrive
-# Enter your Pipedrive API token when prompted
-# Token is stored encrypted in Supabase per-user
-```
-
-**Via API:**
-```python
-# POST /api/connections/provider/pipedrive/credentials
-{
-    "credentials": {"api_token": "your_api_token_here"}
-}
-```
-
-### MrCall/StarChat
-
-**Environment Variables**:
-```bash
-STARCHAT_API_URL=https://api.starchat.com
-STARCHAT_API_KEY=your_api_key
-STARCHAT_BUSINESS_ID=3002475397
-```
-
-**Or via CLI**:
-```bash
-> /mrcall 3002475397
-```
-
-### Vonage SMS (BYOK)
-
-**Credentials are NOT stored in .env** - each user provides their own via `/connect vonage`.
-
-**Via CLI:**
-```bash
-> /connect vonage
-# Enter your Vonage API key, secret, and from number when prompted
-# Credentials are stored encrypted in Supabase per-user
-```
-
-**Via API:**
-```python
-# POST /api/connections/provider/vonage/credentials
-{
-    "credentials": {
-        "api_key": "your_api_key",
-        "api_secret": "your_api_secret",
-        "from_number": "+15551234567"
-    }
-}
-```
-
----
-
-## Database Schema
-
-### `integration_providers` Table
-
-Master registry of all available integrations:
-
-```sql
-CREATE TABLE integration_providers (
-    id UUID PRIMARY KEY,
-    provider_key TEXT UNIQUE NOT NULL,        -- 'google', 'microsoft', 'pipedrive'
-    display_name TEXT NOT NULL,               -- 'Google (Gmail & Calendar)'
-    category TEXT NOT NULL,                   -- 'email', 'crm', 'messaging', etc.
-    icon_url TEXT,
-    description TEXT,
-    requires_oauth BOOLEAN DEFAULT true,      -- true = OAuth, false = API key
-    oauth_url TEXT,                           -- OAuth endpoint
-    config_fields JSONB,                      -- Required API key fields
-    is_available BOOLEAN DEFAULT true,        -- false = "coming soon"
-    documentation_url TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-### `oauth_tokens` Table (Extended)
-
-User connections with tracking:
-
-```sql
-ALTER TABLE oauth_tokens ADD COLUMN connection_status TEXT DEFAULT 'connected';
-ALTER TABLE oauth_tokens ADD COLUMN last_sync TIMESTAMPTZ;
-ALTER TABLE oauth_tokens ADD COLUMN error_message TEXT;
-ALTER TABLE oauth_tokens ADD COLUMN display_name TEXT;
-```
-
----
-
-## Adding New Integrations
-
-### Step 1: Add Provider to Database
-
-```sql
-INSERT INTO integration_providers (
-    provider_key,
-    display_name,
-    category,
-    requires_oauth,
-    oauth_url,
-    is_available,
-    description
-) VALUES (
-    'whatsapp',
-    'WhatsApp Business',
-    'messaging',
-    true,
-    '/api/auth/whatsapp/authorize',
-    false,  -- Coming soon
-    'Send and receive WhatsApp messages via Business API'
-);
-```
-
-### Step 2: Implement OAuth Endpoint (if OAuth-based)
-
-Create `/api/auth/whatsapp/authorize` and `/api/auth/whatsapp/callback` endpoints.
-
-### Step 3: Create Client
-
-Create client in `/Users/mal/hb/zylch/zylch/tools/whatsapp.py`:
-
-```python
-class WhatsAppClient:
-    def __init__(self, access_token: str):
-        self.access_token = access_token
-
-    def send_message(self, to: str, message: str):
-        # Implementation
-        pass
-```
-
-### Step 4: Update Availability
-
-```sql
-UPDATE integration_providers SET is_available = true WHERE provider_key = 'whatsapp';
-```
-
----
-
-## Frontend Integration
-
-### React Example
-
-```jsx
-import { useState, useEffect } from 'react';
-
-function ConnectionsPage({ ownerId }) {
-  const [connections, setConnections] = useState([]);
-
-  useEffect(() => {
-    fetch(`/api/connections/status?owner_id=${ownerId}`)
-      .then(res => res.json())
-      .then(data => setConnections(data.connections));
-  }, [ownerId]);
-
-  const connectProvider = async (providerKey) => {
-    const response = await fetch(`/api/connections/providers/${providerKey}`);
-    const provider = await response.json();
-
-    if (provider.requires_oauth) {
-      // Redirect to OAuth URL
-      window.location.href = `${provider.oauth_url}?owner_id=${ownerId}`;
-    } else {
-      // Show API key config form
-      showConfigModal(provider);
-    }
-  };
-
-  return (
-    <div>
-      <h1>Your Connections</h1>
-      {connections.map(conn => (
-        <div key={conn.provider_key}>
-          <h3>{conn.display_name}</h3>
-          <p>Status: {conn.status}</p>
-          {conn.status === 'disconnected' && (
-            <button onClick={() => connectProvider(conn.provider_key)}>
-              Connect
-            </button>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-```
-
----
-
-## Troubleshooting
-
-### Connection Not Showing
-
-**Issue**: Ran OAuth but connection not showing in `/connections`
-
-**Solution**:
-1. Check `oauth_tokens` table:
-   ```sql
-   SELECT * FROM oauth_tokens WHERE owner_id = 'YOUR_ID';
+## Email (IMAP/SMTP)
+
+### How to connect
+
+1. Run `zylch init` or manually set in `~/.zylch/.env`:
+   ```bash
+   EMAIL_ADDRESS=you@gmail.com
+   EMAIL_PASSWORD=your-app-password
+   IMAP_SERVER=imap.gmail.com
+   IMAP_PORT=993
+   SMTP_SERVER=smtp.gmail.com
+   SMTP_PORT=587
    ```
-2. Verify `provider` field matches `integration_providers.provider_key`
-3. Check logs for OAuth callback errors
+2. For Gmail: create an [App Password](https://myaccount.google.com/apppasswords)
+   (requires 2FA enabled)
 
-### OAuth Redirect Loop
+### Auto-detect presets
 
-**Issue**: OAuth redirects back to authorize page
+The wizard auto-detects IMAP/SMTP servers from your email domain:
+- `gmail.com` → `imap.gmail.com` / `smtp.gmail.com`
+- `outlook.com`, `hotmail.com` → `outlook.office365.com` / `smtp.office365.com`
+- `yahoo.com` → `imap.mail.yahoo.com` / `smtp.mail.yahoo.com`
+- `icloud.com` → `imap.mail.me.com` / `smtp.mail.me.com`
 
-**Solution**:
-1. Check callback URL matches registered URL in provider console
-2. Verify token storage is working (check database)
-3. Check for CORS issues in browser console
+### Commands
 
-### Provider Not Available
-
-**Issue**: Provider shows "coming soon" but should be available
-
-**Solution**:
-```sql
-UPDATE integration_providers SET is_available = true WHERE provider_key = 'provider_key';
+```bash
+/sync                  # Sync emails via IMAP
+/sync status           # Show sync counts
+/email search <query>  # Search by sender, subject, content
 ```
+
+---
+
+## WhatsApp (neonize)
+
+### How to connect
+
+1. Run `zylch init` (step 3) or use the command:
+   ```
+   /connect whatsapp
+   ```
+2. A QR code is displayed inline in the terminal
+3. Open WhatsApp on your phone → Settings → Linked Devices → Link a Device
+4. Scan the QR code (60s timeout)
+5. Session is stored in `~/.zylch/whatsapp.db`
+
+### How it works
+
+- Uses **neonize** (Python wrapper of whatsmeow) for WhatsApp Web multi-device
+- Runs locally — no cloud API, no WhatsApp Business API needed
+- Syncs contacts and message history to SQLite on `/sync whatsapp`
+- 5 LLM tools: search, conversation, send, gap analysis, unified timeline
+
+### Commands
+
+```bash
+/connect whatsapp      # QR code login
+/sync whatsapp         # Sync contacts + messages
+```
+
+### Natural language
+
+```
+You: search WhatsApp messages from Marco
+You: show my WhatsApp conversation with Luisa
+You: send a WhatsApp message to Marco: "ci vediamo domani"
+You: which WhatsApp contacts haven't I replied to?
+You: show full timeline with Marco (email + WhatsApp + calls)
+```
+
+---
+
+## MrCall (StarChat + OAuth2)
+
+### How to connect
+
+1. Get your `client_id` and `client_secret` from the MrCall dashboard
+2. Run `zylch init` (step 5) or manually set in `~/.zylch/.env`:
+   ```bash
+   MRCALL_CLIENT_ID=your-client-id
+   MRCALL_CLIENT_SECRET=your-client-secret
+   ```
+3. The wizard opens your browser for OAuth2 consent
+4. After authorizing, tokens are stored encrypted in the `oauth_tokens` table
+
+### OAuth2 flow details
+
+- **Authorization Code + PKCE** (SHA256 challenge)
+- Local HTTP callback server on `127.0.0.1:19274`
+- Browser opens MrCall consent page automatically
+- 120s timeout for user to authorize
+- Tokens stored in SQLite, refresh supported via `refresh_mrcall_token()`
+
+### What it provides
+
+- Phone call history (via StarChat API)
+- Contact information
+- SMS sending capability
+- Call metadata for unified timeline
+
+---
+
+## Telegram Bot (interface)
+
+### How to connect
+
+1. Create a bot via [@BotFather](https://t.me/BotFather) on Telegram
+2. Copy the bot token
+3. Get your Telegram user ID (send `/start` to [@userinfobot](https://t.me/userinfobot))
+4. Run `zylch init` (step 4) or set in `~/.zylch/.env`:
+   ```bash
+   TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+   TELEGRAM_ALLOWED_USER_ID=your-numeric-id
+   ```
+5. Start the bot: `zylch telegram`
+
+### How it works
+
+- Long-polling (no webhook, no public server needed)
+- Bridges to the same ChatService as the CLI REPL
+- All slash commands and natural language queries work
+- Markdown responses converted to Telegram HTML
+- Messages >4096 chars are split automatically
+- **Default-deny**: if `TELEGRAM_ALLOWED_USER_ID` is not set, all requests are rejected
+
+### Security
+
+The bot is secured by `TELEGRAM_ALLOWED_USER_ID`. Only the specified user can
+interact with it. Without this setting, the bot rejects all messages.
+
+---
+
+## LLM Provider (BYOK)
+
+### Configuration
+
+```bash
+SYSTEM_LLM_PROVIDER=anthropic    # or "openai"
+ANTHROPIC_API_KEY=sk-ant-...
+# or
+OPENAI_API_KEY=sk-...
+```
+
+Multi-provider via aisuite. Anthropic (Claude Sonnet) is the recommended and
+default provider.
+
+---
+
+## Environment Variables Reference
+
+All variables are set in `~/.zylch/.env` via `zylch init` or manually.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Yes (if Anthropic) | Anthropic API key |
+| `OPENAI_API_KEY` | Yes (if OpenAI) | OpenAI API key |
+| `SYSTEM_LLM_PROVIDER` | No | `anthropic` (default) or `openai` |
+| `EMAIL_ADDRESS` | For email | IMAP email address |
+| `EMAIL_PASSWORD` | For email | IMAP app password |
+| `IMAP_SERVER` | For email | Auto-detected from domain |
+| `IMAP_PORT` | For email | Default: 993 |
+| `SMTP_SERVER` | For email | Auto-detected from domain |
+| `SMTP_PORT` | For email | Default: 587 |
+| `TELEGRAM_BOT_TOKEN` | For Telegram | Bot token from @BotFather |
+| `TELEGRAM_ALLOWED_USER_ID` | For Telegram | Your numeric Telegram user ID |
+| `MRCALL_CLIENT_ID` | For MrCall | OAuth2 client ID |
+| `MRCALL_CLIENT_SECRET` | For MrCall | OAuth2 client secret |
 
 ---
 
@@ -514,9 +246,8 @@ UPDATE integration_providers SET is_available = true WHERE provider_key = 'provi
 
 - [Quick Start Guide](quick-start.md) - Initial setup
 - [CLI Commands](cli-commands.md) - Command reference
-- [API Reference](../api/README.md) - API documentation
-- [QA Testing Guide](qa_testing.md) - Testing procedures
+- [Architecture](../ARCHITECTURE.md) - System design
 
 ---
 
-**Last Updated**: December 2025
+**Last Updated**: April 2026
