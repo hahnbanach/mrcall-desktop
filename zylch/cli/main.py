@@ -71,6 +71,18 @@ def status():
     run_status()
 
 
+@cli.command()
+def telegram():
+    """Start Telegram bot interface."""
+    logger.info("[CLI] Starting Telegram bot")
+    from zylch.cli.utils import load_env
+
+    load_env()
+    from zylch.telegram.bot import run_telegram_bot
+
+    run_telegram_bot()
+
+
 def main():
     """Entry point for pipx / setuptools console_scripts."""
     cli()

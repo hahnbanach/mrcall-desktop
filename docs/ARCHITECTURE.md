@@ -25,10 +25,18 @@ zylch/
 │   ├── command_handlers.py # Slash command dispatch (/sync, /tasks, etc.)
 │   ├── command_matcher.py  # NL-to-command matching (fastembed)
 │   ├── sync_service.py   # Email sync orchestration (IMAP)
+│   ├── unified_conversation.py # Multi-channel timeline (email+WA+calls)
 │   └── job_executor.py   # Background job runner
 │
 ├── email/                # Email access (IMAP/SMTP)
 │   └── imap_client.py    # IMAP client with auto-detect presets
+│
+├── whatsapp/             # WhatsApp channel (neonize/whatsmeow)
+│   ├── client.py         # WhatsAppClient (QR login, send, contacts)
+│   └── sync.py           # WhatsAppSyncService (history + messages → SQLite)
+│
+├── telegram/             # Telegram bot interface
+│   └── bot.py            # Telegram-to-ChatService bridge (polling)
 │
 ├── storage/              # Data access layer (SQLite)
 │   ├── database.py       # SQLAlchemy engine (sqlite:///~/.zylch/zylch.db)
@@ -45,6 +53,7 @@ zylch/
 │   ├── email_archive.py  # Email archive manager
 │   ├── contact_tools.py  # Contact/task/memory tools
 │   ├── crm_tools.py      # CRM + compose email tools
+│   ├── whatsapp_tools.py  # WhatsApp tools (search, conversation, send, gap, timeline)
 │   ├── starchat.py       # StarChat/MrCall HTTP client (channel)
 │   ├── call_tools.py     # Phone call tools (via StarChat)
 │   ├── sms_tools.py      # SMS tools (via StarChat)
@@ -100,12 +109,11 @@ zylch/
 ## Data Flow
 
 ```
-User
-  → zylch CLI (click)
+User → CLI REPL or Telegram bot
   → command_handlers.py (slash commands) or chat_service.py (LLM)
-  → tools execute (IMAP, StarChat, memory search)
+  → tools execute (IMAP, neonize, StarChat, memory search)
   → Storage (SQLite) ← → fastembed (embeddings)
-  → response printed to terminal
+  → response printed to terminal or sent to Telegram
 ```
 
 ## Multi-Channel Architecture
@@ -114,14 +122,27 @@ User
 |---------|----------|---------------|
 | Email | IMAP/SMTP | `zylch/email/imap_client.py` |
 | MrCall | StarChat HTTP | `zylch/tools/starchat.py` |
-| WhatsApp | GOWA HTTP | Planned |
+| WhatsApp | neonize (whatsmeow) | `zylch/whatsapp/client.py` + `sync.py` |
 | Calendar | CalDAV | Planned |
+
+### Interfaces
+
+| Interface | Implementation | How to start |
+|-----------|---------------|-------------|
+| CLI REPL | `zylch/cli/chat.py` | `zylch` |
+| Telegram bot | `zylch/telegram/bot.py` | `zylch telegram` |
+
+### Unified Timeline
+
+`zylch/services/unified_conversation.py` merges all channels into a single
+chronological timeline per contact. The `get_contact_timeline` LLM tool
+exposes this to the AI agent.
 
 ## Storage
 
 - **Engine**: SQLite with WAL mode, foreign keys enabled
-- **Location**: `~/.zylch/zylch.db`
-- **Models**: 17 (Email, Blob, BlobSentence, TaskItem, OAuthToken, etc.)
+- **Location**: `~/.zylch/zylch.db` (main), `~/.zylch/whatsapp.db` (neonize session)
+- **Models**: 19 (Email, WhatsAppMessage, WhatsAppContact, Blob, BlobSentence, TaskItem, etc.)
 - **Embeddings**: stored as LargeBinary (BLOB), loaded into numpy for search
 - **No pgvector**: cosine similarity computed in-memory via numpy
 - **No Alembic**: tables created via `Base.metadata.create_all()`
@@ -142,4 +163,6 @@ pydantic-settings   Configuration
 beautifulsoup4      HTML parsing
 python-dotenv       .env loading
 apscheduler         Background scheduling
+neonize             WhatsApp Web client (whatsmeow wrapper)
+python-telegram-bot Telegram Bot API (async, polling)
 ```

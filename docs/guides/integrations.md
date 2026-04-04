@@ -35,7 +35,8 @@ Zylch provides a unified connections system for managing external service integr
 
 | Provider | Category | Status | Auth Type |
 |----------|----------|--------|-----------|
-| **WhatsApp Business** | Messaging | ⏳ Coming Soon | OAuth 2.0 |
+| **WhatsApp** (neonize) | Messaging | ✅ Available | QR code (local) |
+| **Telegram** (bot) | Interface | ✅ Available | Bot token (@BotFather) |
 | **Slack** | Messaging | ⏳ Coming Soon | OAuth 2.0 |
 | **Microsoft Teams** | Messaging | ⏳ Coming Soon | OAuth 2.0 |
 

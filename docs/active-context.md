@@ -36,10 +36,30 @@ description: |
 - Prioritizes PERSON and COMPANY extraction over TEMPLATEs
 
 ### Channels
-- **Email**: IMAP/SMTP (bidirezionale)
+- **Email**: IMAP/SMTP (bidirectional)
 - **MrCall/StarChat**: HTTP client for contacts, calls, SMS (channel, not configurator)
-- **WhatsApp**: planned via GOWA (go-whatsapp-web-multidevice)
+- **WhatsApp**: neonize (whatsmeow) — local QR login, sync, search, send, gap analysis
 - **Calendar**: planned via CalDAV
+
+### Interfaces
+- **CLI REPL**: `zylch` — interactive chat with slash commands
+- **Telegram bot**: `zylch telegram` — same ChatService, accessible from phone
+
+### WhatsApp (implemented)
+- `zylch/whatsapp/client.py`: QR code login, session in `~/.zylch/whatsapp.db`
+- `zylch/whatsapp/sync.py`: HistorySyncEv + MessageEv → whatsapp_messages table
+- `zylch/tools/whatsapp_tools.py`: 5 LLM tools (search, conversation, send, gap, timeline)
+- `zylch/services/unified_conversation.py`: merges email + WhatsApp + calls per contact
+- `zylch/workers/memory.py`: WhatsApp message → memory extraction pipeline
+- `/connect whatsapp`: inline QR code display, 60s scan timeout
+- `/sync whatsapp`: sync contacts + messages to SQLite
+- Models: `WhatsAppMessage`, `WhatsAppContact`
+
+### Telegram bot (implemented)
+- `zylch/telegram/bot.py`: bridges Telegram → ChatService (same engine as REPL)
+- Long-polling (no webhook/server needed), secured by `TELEGRAM_ALLOWED_USER_ID`
+- Markdown → Telegram HTML conversion, message splitting (>4096 chars)
+- Config: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_ID` in `~/.zylch/.env`
 
 ### Notifications
 - Deduplication (identical unread not re-created)
@@ -76,12 +96,11 @@ Nothing — all streams completed.
 
 ## Immediate Next Steps
 
-1. **Test `zylch init` + `zylch sync`** with real email (IMAP + app password)
-2. **Test `zylch tasks`** end-to-end (requires LLM API key)
-3. **Clean remaining stale code**: `zylch/intelligence/`, `zylch/ml/`, `zylch/router/`, `zylch/webhook/` — likely stale
-4. **Update CLAUDE.md** to reflect standalone-only architecture
+1. **Test WhatsApp end-to-end**: QR login → sync → search → send
+2. **Test Telegram bot**: token setup → message routing → command handling
+3. **Test `zylch init` + `zylch sync`** with real email (IMAP + app password)
+4. **Clean remaining stale code**: `zylch/intelligence/`, `zylch/ml/`, `zylch/router/`, `zylch/webhook/` — likely stale
 5. **Add CalDAV** calendar support
-6. **Add GOWA** WhatsApp integration
 
 ## Known Issues
 
