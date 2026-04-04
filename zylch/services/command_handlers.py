@@ -494,23 +494,22 @@ Your MrCall is linked to business `{business_id}` but OAuth credentials are miss
             # Wait briefly for connection
             import asyncio
 
-            for _ in range(10):
-                if wa_client.is_connected():
-                    break
-                await asyncio.sleep(0.5)
+            try:
+                for _ in range(10):
+                    if wa_client.is_connected():
+                        break
+                    await asyncio.sleep(0.5)
 
-            if not wa_client.is_connected():
-                wa_client.disconnect()
-                return """📱 **WhatsApp Sync**
+                if not wa_client.is_connected():
+                    return """📱 **WhatsApp Sync**
 
 ❌ **Could not connect to WhatsApp**
 
 Session may have expired. Try `/connect whatsapp` to re-authenticate."""
 
-            result = sync_service.full_sync(wa_client)
-            wa_client.disconnect()
+                result = sync_service.full_sync(wa_client)
 
-            return f"""📱 **WhatsApp Sync**
+                return f"""📱 **WhatsApp Sync**
 
 ✅ **Sync complete**
 
@@ -520,6 +519,8 @@ Session may have expired. Try `/connect whatsapp` to re-authenticate."""
 **Next steps:**
 • Ask about WhatsApp conversations in natural language
 • `/tasks` to see actionable items from WhatsApp"""
+            finally:
+                wa_client.disconnect()
 
         except ImportError as e:
             logger.error(f"[/sync] WhatsApp import error: {e}")
@@ -1944,19 +1945,19 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
                 if wa_client.has_session():
                     # Try to reconnect with existing session
                     wa_client.connect(blocking=False)
-                    for _ in range(10):
-                        if wa_client.is_connected():
-                            break
-                        await asyncio.sleep(0.5)
+                    try:
+                        for _ in range(10):
+                            if wa_client.is_connected():
+                                break
+                            await asyncio.sleep(0.5)
 
-                    if wa_client.is_connected():
-                        wa_client.disconnect()
-                        return (
-                            "📱 **WhatsApp Already Connected**\n\n"
-                            "✅ Session active. Ready to sync.\n\n"
-                            "Run `/sync whatsapp` to sync messages and contacts."
-                        )
-                    else:
+                        if wa_client.is_connected():
+                            return (
+                                "📱 **WhatsApp Already Connected**\n\n"
+                                "✅ Session active. Ready to sync.\n\n"
+                                "Run `/sync whatsapp` to sync messages and contacts."
+                            )
+                    finally:
                         wa_client.disconnect()
 
                 # New connection — display QR code inline
@@ -1977,48 +1978,52 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
                     connected_ev.set()
                     logger.info("[/connect whatsapp] connected after QR scan")
 
+                # Reuse fresh client for QR flow (previous one fully disconnected)
                 wa_client = WhatsAppClient()
                 wa_client.set_qr_callback(_on_qr)
                 wa_client.on_connected(_on_connected)
                 wa_client.connect(blocking=False)
 
-                # Wait for QR code to be generated (up to 15s)
-                qr_appeared = await asyncio.to_thread(qr_ready.wait, 15.0)
+                try:
+                    # Wait for QR code to be generated (up to 15s)
+                    qr_appeared = await asyncio.to_thread(qr_ready.wait, 15.0)
 
-                if not qr_appeared or not qr_text:
-                    wa_client.disconnect()
-                    return (
-                        "❌ **WhatsApp QR code not received.**\n\n"
-                        "Possible causes: network issue or neonize error.\n"
-                        "Check logs with `ZYLCH_LOG_LEVEL=DEBUG zylch`."
+                    if not qr_appeared or not qr_text:
+                        return (
+                            "❌ **WhatsApp QR code not received.**\n\n"
+                            "Possible causes: network issue or neonize error.\n"
+                            "Check logs with `ZYLCH_LOG_LEVEL=DEBUG zylch`."
+                        )
+
+                    # Show QR and wait for scan (up to 60s)
+                    output = (
+                        "📱 **Scan this QR code with WhatsApp**\n\n"
+                        "Open WhatsApp → Settings → Linked Devices "
+                        "→ Link a Device\n\n"
+                        "```\n" + qr_text[0] + "```\n\n"
+                        "⏳ Waiting for scan (60s timeout)..."
                     )
 
-                # Show QR and wait for scan (up to 60s)
-                output = (
-                    "📱 **Scan this QR code with WhatsApp**\n\n"
-                    "Open WhatsApp → Settings → Linked Devices → Link a Device\n\n"
-                    "```\n" + qr_text[0] + "```\n\n"
-                    "⏳ Waiting for scan (60s timeout)..."
-                )
+                    # Print QR immediately so user can scan
+                    print(output)
 
-                # Print QR immediately so user can scan
-                print(output)
+                    scan_ok = await asyncio.to_thread(connected_ev.wait, 60.0)
 
-                scan_ok = await asyncio.to_thread(connected_ev.wait, 60.0)
-
-                if scan_ok:
+                    if scan_ok:
+                        return (
+                            "✅ **WhatsApp connected!**\n\n"
+                            "Session saved to `~/.zylch/whatsapp.db`.\n"
+                            "Run `/sync whatsapp` to sync messages and contacts."
+                        )
+                    else:
+                        return (
+                            "⏰ **QR code expired.** "
+                            "Run `/connect whatsapp` to try again.\n\n"
+                            "Tip: have WhatsApp open on your phone "
+                            "before running the command."
+                        )
+                finally:
                     wa_client.disconnect()
-                    return (
-                        "✅ **WhatsApp connected!**\n\n"
-                        "Session saved to `~/.zylch/whatsapp.db`.\n"
-                        "Run `/sync whatsapp` to sync messages and contacts."
-                    )
-                else:
-                    wa_client.disconnect()
-                    return (
-                        "⏰ **QR code expired.** Run `/connect whatsapp` to try again.\n\n"
-                        "Tip: have WhatsApp open on your phone before running the command."
-                    )
 
             except ImportError:
                 return "❌ **WhatsApp requires neonize.** Run: `pip install neonize`"

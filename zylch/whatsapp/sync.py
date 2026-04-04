@@ -5,8 +5,11 @@ Handles HistorySyncEv (initial) and MessageEv (ongoing).
 """
 
 import logging
+import threading
 from datetime import datetime, timezone
 from typing import Dict, Optional
+
+from zylch.storage.database import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +29,7 @@ class WhatsAppSyncService:
         self.owner_id = owner_id
         self._messages_synced = 0
         self._contacts_synced = 0
+        self._db_lock = threading.Lock()
 
     # -- History sync (initial connect) --------------------------------
 
@@ -94,49 +98,45 @@ class WhatsAppSyncService:
             return 0
 
         count = 0
-        db_session = self.storage.get_session()
         try:
-            for jid_str, contact_info in contacts_map.items():
-                name = _extract_contact_name(contact_info)
-                phone = _jid_to_phone(jid_str)
-                push_name = _extract_push_name(contact_info)
+            with self._db_lock, get_session() as session:
+                for jid_str, contact_info in contacts_map.items():
+                    name = _extract_contact_name(contact_info)
+                    phone = _jid_to_phone(jid_str)
+                    push_name = _extract_push_name(contact_info)
 
-                existing = (
-                    db_session.query(WhatsAppContact)
-                    .filter_by(
-                        owner_id=self.owner_id,
-                        jid=str(jid_str),
+                    existing = (
+                        session.query(WhatsAppContact)
+                        .filter_by(
+                            owner_id=self.owner_id,
+                            jid=str(jid_str),
+                        )
+                        .first()
                     )
-                    .first()
-                )
 
-                if existing:
-                    if name:
-                        existing.name = name
-                    if push_name:
-                        existing.push_name = push_name
-                    existing.synced_at = datetime.utcnow()
-                else:
-                    new_contact = WhatsAppContact(
-                        owner_id=self.owner_id,
-                        jid=str(jid_str),
-                        phone_number=phone,
-                        name=name,
-                        push_name=push_name,
-                        synced_at=datetime.utcnow(),
-                    )
-                    db_session.add(new_contact)
-                count += 1
+                    if existing:
+                        if name:
+                            existing.name = name
+                        if push_name:
+                            existing.push_name = push_name
+                        existing.synced_at = datetime.now(timezone.utc)
+                    else:
+                        new_contact = WhatsAppContact(
+                            owner_id=self.owner_id,
+                            jid=str(jid_str),
+                            phone_number=phone,
+                            name=name,
+                            push_name=push_name,
+                            synced_at=datetime.now(timezone.utc),
+                        )
+                        session.add(new_contact)
+                    count += 1
 
-            db_session.commit()
             self._contacts_synced = count
             logger.info(f"[wa-sync] contacts synced: {count}")
         except Exception as e:
-            db_session.rollback()
             logger.error(f"[wa-sync] contact sync error: {e}")
             count = 0
-        finally:
-            db_session.close()
         return count
 
     # -- Full sync (contacts + wait for history) -----------------------
@@ -189,7 +189,7 @@ class WhatsAppSyncService:
                 is_group=is_group,
             )
         except Exception as e:
-            logger.debug(f"[wa-sync] could not store event message: {e}")
+            logger.warning(f"[wa-sync] could not store event message: {e}")
             return False
 
     def _store_message_from_proto(self, msg) -> bool:
@@ -230,7 +230,7 @@ class WhatsAppSyncService:
                 is_group="@g.us" in chat_jid,
             )
         except Exception as e:
-            logger.debug(f"[wa-sync] could not store proto message: {e}")
+            logger.warning(f"[wa-sync] could not store proto message: {e}")
             return False
 
     def _upsert_message(
@@ -250,32 +250,28 @@ class WhatsAppSyncService:
         if not msg_id:
             return False
 
-        db_session = self.storage.get_session()
         try:
-            existing = db_session.query(WhatsAppMessage).filter_by(message_id=msg_id).first()
-            if existing:
-                return False  # Already stored
+            with self._db_lock, get_session() as session:
+                existing = session.query(WhatsAppMessage).filter_by(message_id=msg_id).first()
+                if existing:
+                    return False  # Already stored
 
-            new_msg = WhatsAppMessage(
-                owner_id=self.owner_id,
-                message_id=msg_id,
-                chat_jid=chat_jid,
-                sender_jid=sender_jid,
-                sender_name=sender_name or None,
-                text=text,
-                timestamp=timestamp or datetime.utcnow(),
-                is_from_me=is_from_me,
-                is_group=is_group,
-            )
-            db_session.add(new_msg)
-            db_session.commit()
+                new_msg = WhatsAppMessage(
+                    owner_id=self.owner_id,
+                    message_id=msg_id,
+                    chat_jid=chat_jid,
+                    sender_jid=sender_jid,
+                    sender_name=sender_name or None,
+                    text=text,
+                    timestamp=timestamp or datetime.now(timezone.utc),
+                    is_from_me=is_from_me,
+                    is_group=is_group,
+                )
+                session.add(new_msg)
             return True
         except Exception as e:
-            db_session.rollback()
-            logger.debug(f"[wa-sync] upsert error: {e}")
+            logger.warning(f"[wa-sync] upsert error: {e}")
             return False
-        finally:
-            db_session.close()
 
     @property
     def stats(self) -> Dict[str, int]:

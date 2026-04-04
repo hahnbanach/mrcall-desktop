@@ -37,6 +37,9 @@ _chat_service = None
 # Max Telegram message length
 MAX_MSG_LEN = 4096
 
+# Max conversation history entries (prevents unbounded growth)
+MAX_HISTORY = 100
+
 
 def _get_chat_service():
     """Get or create ChatService singleton."""
@@ -57,7 +60,10 @@ def _check_authorized(user_id: int) -> bool:
     """Check if Telegram user is authorized."""
     allowed = settings.telegram_allowed_user_id
     if not allowed:
-        # No restriction configured — allow anyone (single-user use)
+        logger.warning(
+            f"[telegram] TELEGRAM_ALLOWED_USER_ID not set — "
+            f"request from user {user_id} allowed by default"
+        )
         return True
     return str(user_id) == str(allowed)
 
@@ -66,29 +72,29 @@ def _md_to_telegram_html(text: str) -> str:
     """Convert basic markdown from ChatService to Telegram HTML.
 
     Handles: **bold**, *italic*, `code`, ```blocks```,
-    and escapes HTML entities. Not exhaustive — covers
-    what ChatService typically returns.
+    and escapes HTML entities. Protects code block content
+    from bold/italic conversion.
     """
-    # Escape HTML entities first
+    # Extract code blocks first, replace with placeholders
+    code_blocks = []
+
+    def _save_fenced_block(m):
+        code_blocks.append(m.group(0))
+        return f"\x00CODEBLOCK{len(code_blocks) - 1}\x00"
+
+    # Fenced code blocks: ```...```
+    text = re.sub(r"```\w*\n.*?```", _save_fenced_block, text, flags=re.DOTALL)
+    text = re.sub(r"```.*?```", _save_fenced_block, text, flags=re.DOTALL)
+
+    # Inline code: `...`
+    def _save_inline_code(m):
+        code_blocks.append(m.group(0))
+        return f"\x00CODEBLOCK{len(code_blocks) - 1}\x00"
+
+    text = re.sub(r"`[^`]+`", _save_inline_code, text)
+
+    # Escape HTML entities in non-code text
     text = html.escape(text)
-
-    # Code blocks: ```...``` → <pre>...</pre>
-    text = re.sub(
-        r"```(\w*)\n(.*?)```",
-        lambda m: f"<pre>{m.group(2)}</pre>",
-        text,
-        flags=re.DOTALL,
-    )
-    # Also handle ``` without language
-    text = re.sub(
-        r"```(.*?)```",
-        lambda m: f"<pre>{m.group(1)}</pre>",
-        text,
-        flags=re.DOTALL,
-    )
-
-    # Inline code: `...` → <code>...</code>
-    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
 
     # Bold: **...** → <b>...</b>
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
@@ -98,6 +104,19 @@ def _md_to_telegram_html(text: str) -> str:
 
     # Strikethrough: ~~...~~ → <s>...</s>
     text = re.sub(r"~~(.+?)~~", r"<s>\1</s>", text)
+
+    # Restore code blocks — escape HTML inside them separately
+    for i, block in enumerate(code_blocks):
+        if block.startswith("```"):
+            # Fenced block
+            inner = re.sub(r"^```\w*\n?", "", block)
+            inner = re.sub(r"```$", "", inner)
+            replacement = f"<pre>{html.escape(inner)}</pre>"
+        else:
+            # Inline code
+            inner = block.strip("`")
+            replacement = f"<code>{html.escape(inner)}</code>"
+        text = text.replace(f"\x00CODEBLOCK{i}\x00", replacement)
 
     return text
 
@@ -134,19 +153,16 @@ async def _send_response(
         try:
             await update.message.reply_text(chunk, parse_mode=mode)
         except Exception:
-            # Fallback: send without formatting if HTML parsing fails
-            await update.message.reply_text(
-                chunk.replace("<b>", "")
-                .replace("</b>", "")
-                .replace("<i>", "")
-                .replace("</i>", "")
-                .replace("<code>", "")
-                .replace("</code>", "")
-                .replace("<pre>", "")
-                .replace("</pre>", "")
-                .replace("<s>", "")
-                .replace("</s>", ""),
-            )
+            # Fallback: send without formatting, unescape HTML entities
+            plain = re.sub(r"<[^>]+>", "", chunk)
+            plain = html.unescape(plain)
+            await update.message.reply_text(plain)
+
+
+def _trim_history():
+    """Keep conversation history bounded."""
+    if len(_conversation_history) > MAX_HISTORY:
+        _conversation_history[:] = _conversation_history[-MAX_HISTORY:]
 
 
 async def handle_start(
@@ -216,13 +232,14 @@ async def handle_message(
         if response:
             await _send_response(update, response)
 
-        # Update history
+        # Update history (bounded)
         _conversation_history.append({"role": "user", "content": text})
         _conversation_history.append({"role": "assistant", "content": response})
+        _trim_history()
 
     except Exception as e:
         logger.error(f"[telegram] ChatService error: {e}", exc_info=True)
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text("An error occurred. Check server logs.")
 
 
 async def handle_slash_command(
@@ -268,7 +285,7 @@ async def handle_slash_command(
 
     except Exception as e:
         logger.error(f"[telegram] command error: {e}", exc_info=True)
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text("Command failed. Check server logs.")
 
 
 def run_telegram_bot(token: Optional[str] = None):
@@ -285,7 +302,7 @@ def run_telegram_bot(token: Optional[str] = None):
             "2. Send /newbot and follow instructions\n"
             "3. Add to ~/.zylch/.env:\n"
             "   TELEGRAM_BOT_TOKEN=your_token_here\n"
-            "   TELEGRAM_ALLOWED_USER_ID=your_id  (optional)\n\n"
+            "   TELEGRAM_ALLOWED_USER_ID=your_id  (recommended)\n\n"
             "Get your user ID: message @userinfobot on Telegram."
         )
         return
@@ -312,8 +329,9 @@ def run_telegram_bot(token: Optional[str] = None):
         print(f"Telegram bot started (restricted to user {allowed})")
     else:
         print(
-            "Telegram bot started (no user restriction — "
-            "set TELEGRAM_ALLOWED_USER_ID for security)"
+            "WARNING: Telegram bot started WITHOUT user restriction.\n"
+            "Anyone who finds your bot can access your data.\n"
+            "Set TELEGRAM_ALLOWED_USER_ID in ~/.zylch/.env for security."
         )
     print("Press Ctrl-C to stop.\n")
 

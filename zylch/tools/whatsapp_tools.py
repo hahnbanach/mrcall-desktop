@@ -341,7 +341,6 @@ class SendWhatsAppMessageTool(Tool):
             from zylch.whatsapp.client import WhatsAppClient
             from zylch.storage.database import get_session
             from zylch.storage.models import WhatsAppContact
-            import time
 
             owner_id = None
             if self.session_state:
@@ -383,6 +382,8 @@ class SendWhatsAppMessageTool(Tool):
                 )
 
             # Connect and send
+            import asyncio
+
             wa_client = WhatsAppClient()
             if not wa_client.has_session():
                 return ToolResult(
@@ -392,37 +393,38 @@ class SendWhatsAppMessageTool(Tool):
                 )
 
             wa_client.connect(blocking=False)
-            for _ in range(10):
-                if wa_client.is_connected():
-                    break
-                time.sleep(0.5)
+            try:
+                for _ in range(10):
+                    if wa_client.is_connected():
+                        break
+                    await asyncio.sleep(0.5)
 
-            if not wa_client.is_connected():
-                wa_client.disconnect()
+                if not wa_client.is_connected():
+                    return ToolResult(
+                        status=ToolStatus.ERROR,
+                        data=None,
+                        error="Could not connect to WhatsApp. Try /connect whatsapp.",
+                    )
+
+                # Build JID object and send
+                from neonize.utils import build_jid
+
+                recipient = build_jid(jid.split("@")[0])
+                wa_client.send_message(recipient, message)
+
+                logger.info(f"[send_whatsapp] sent to {resolved_name} ({jid})")
+
                 return ToolResult(
-                    status=ToolStatus.ERROR,
-                    data=None,
-                    error="Could not connect to WhatsApp. Try /connect whatsapp.",
+                    status=ToolStatus.SUCCESS,
+                    data={
+                        "recipient": resolved_name,
+                        "phone": phone_number or jid,
+                        "message_preview": message[:100],
+                    },
+                    message=f"WhatsApp message sent to {resolved_name}",
                 )
-
-            # Build JID object and send
-            from neonize.utils import build_jid
-
-            recipient = build_jid(jid.split("@")[0])
-            wa_client.send_message(recipient, message)
-            wa_client.disconnect()
-
-            logger.info(f"[send_whatsapp] sent to {resolved_name} ({jid})")
-
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data={
-                    "recipient": resolved_name,
-                    "phone": phone_number or jid,
-                    "message_preview": message[:100],
-                },
-                message=f"WhatsApp message sent to {resolved_name}",
-            )
+            finally:
+                wa_client.disconnect()
 
         except ImportError as e:
             return ToolResult(
