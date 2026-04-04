@@ -15,7 +15,7 @@ Multi-channel sales intelligence: connects email (IMAP), phone (MrCall/StarChat)
 | Channel | Protocol | Status |
 |---------|----------|--------|
 | Email | IMAP/SMTP | Working |
-| MrCall | StarChat HTTP | Channel adapter (starchat.py) |
+| MrCall | StarChat HTTP + OAuth2 | Channel adapter (starchat.py) + OAuth (mrcall/oauth.py) |
 | WhatsApp | neonize (whatsmeow) | Implemented — local, QR code login |
 | Calendar | CalDAV | Planned |
 
@@ -72,16 +72,16 @@ User → zylch CLI (click) or Telegram bot
 - **`zylch/cli/`** — Click CLI: `main.py` (entry point), `setup.py` (init wizard), `chat.py` (REPL), `commands.py` (direct shortcuts)
 - **`zylch/services/`** — Business logic: `chat_service.py` (LLM orchestration), `command_handlers.py` (slash commands), `sync_service.py` (IMAP sync), `job_executor.py` (background jobs)
 - **`zylch/email/`** — IMAP/SMTP client (`imap_client.py`) with auto-detect presets
-- **`zylch/storage/`** — SQLAlchemy ORM with SQLite: `models.py` (17 models), `database.py` (engine), `storage.py` (Storage class)
+- **`zylch/storage/`** — SQLAlchemy ORM with SQLite: `models.py` (19 models), `database.py` (engine), `storage.py` (Storage class)
 - **`zylch/whatsapp/`** — WhatsApp client (`client.py`, QR login via neonize) and sync service (`sync.py`)
 - **`zylch/telegram/`** — Telegram bot interface (`bot.py`, bridges to ChatService)
-- **`zylch/tools/`** — LLM tool definitions. Split into: `gmail_tools.py`, `email_sync_tools.py`, `contact_tools.py`, `crm_tools.py`, `whatsapp_tools.py`. Registry in `factory.py`. MrCall channel in `starchat.py`.
+- **`zylch/tools/`** — LLM tool definitions. Split into: `gmail_tools.py`, `email_sync_tools.py`, `contact_tools.py`, `crm_tools.py`, `whatsapp_tools.py`. Registry in `factory.py`. MrCall channel in `starchat.py`. MrCall OAuth in `mrcall/oauth.py`.
 - **`zylch/agents/`** — LLM-powered processors. `trainers/` generates prompts incrementally (task_email.py auto-runs after sync, no manual training)
 - **`zylch/memory/`** — Entity-centric memory with fastembed (384-dim, ONNX). In-memory vector search via numpy. Hybrid search (text + semantic). Reconsolidation via LLM.
 - **`zylch/llm/`** — Multi-provider LLM client via aisuite (Anthropic, OpenAI)
 
 ### Configuration
-All config via `zylch/config.py` — Pydantic Settings loading from `~/.zylch/.env`. Key vars: `SYSTEM_LLM_PROVIDER`, `ANTHROPIC_API_KEY`, `EMAIL_ADDRESS`, `EMAIL_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_ID`.
+All config via `zylch/config.py` — Pydantic Settings loading from `~/.zylch/.env`. Key vars: `SYSTEM_LLM_PROVIDER`, `ANTHROPIC_API_KEY`, `EMAIL_ADDRESS`, `EMAIL_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_ID`, `MRCALL_CLIENT_ID`, `MRCALL_CLIENT_SECRET`.
 
 ### Storage
 SQLite at `~/.zylch/zylch.db`. 19 models (incl. WhatsAppMessage, WhatsAppContact). Tables created via `Base.metadata.create_all()`. No Alembic. Embeddings as BLOB, vector search in-memory. WhatsApp session in `~/.zylch/whatsapp.db` (neonize).

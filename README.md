@@ -1,289 +1,162 @@
-# Zylch AI - Multi-Channel Sales Intelligence System
+# Zylch — Local AI Sales Intelligence
 
-Zylch AI is a local AI-powered sales intelligence assistant. Connects email (IMAP), WhatsApp (neonize), phone (MrCall/StarChat), and generates tasks, memory, and gap analysis. Mono-user CLI tool, no server. Also accessible via Telegram bot.
-
-## Design Philosophy
-
-**Precision over economy**: When necessary, Zylch AI uses Claude Sonnet, prioritizing accuracy over cost.
-
-**Task-focused**: The system answers one question: "What does Mario need to do?" No unnecessary classifications.
-
-**Person-centric**: Tasks are aggregated by person, analyzing entire relationships rather than isolated threads.
-
-**Multi-tenant**: Complete data isolation per owner with support for multiple assistants - run completely different businesses from the same system.
-
-## Features
-
-### Multi-Tenant Architecture ⭐ NEW
-- **Complete Isolation**: Each owner (Firebase UID) has private workspace
-- **Single-Assistant Mode**: One assistant per owner (v0.2.0 - no StarChat changes needed)
-- **Person-Centric Memory**: Semantic memory per contact with HNSW vector search
-- **Scalable**: Works with thousands of users
-- **Namespace Structure**: `{owner}:{assistant}:{contact}` ensures zero data leakage
-- **Auto-Setup**: Default assistant created automatically on first run
-- **CLI Management**: `/assistant` and `/mrcall` commands
-- See `docs/features/multi-tenant-architecture.md` for complete guide
-
-### Email Intelligence
-- **Thread Caching**: Fast caching of email threads with AI summaries (Haiku)
-- **Task Aggregation**: Person-centric view combining all threads per contact (Sonnet)
-- **Smart Search**: Find emails by participant (From, To, Cc), subject, or content
-- **Draft Management**: Create, edit (nano), list, and update Gmail drafts
-  - **Thread Preservation**: Drafts stay in conversation threads when edited
-  - **Read-Only Headers**: To/Subject fields protected from accidental modification
-  - **Threading Headers**: Automatic In-Reply-To and References for replies
-- **Multi-account Support**: Gmail OAuth for multiple accounts
-- **AI-Generated Email Detection**: Automatically filters low-priority AI-generated sales emails
-- **Email Archive**: Permanent SQLite storage with full-text search (FTS5)
-
-### Task Management & Contact Intelligence
-- **Memory Architecture**: Intelligent contact management with persistent memory storage (blobs)
-- **Person-Centric Tasks**: Aggregate all email threads per contact into unified view
-- **Priority Scoring**: 1-10 urgency score based on relationship context
-- **Status Tracking**: Open, waiting, closed - know what needs action
-- **Intelligent Analysis**: Sonnet-powered analysis with emotional context
-- **Custom Email Patterns**: Configure your email addresses (supports wildcards)
-- **Bot Detection**: Automatic identification and de-prioritization of automated emails
-
-### Behavioral Memory (ZylchMemory)
-- **🧠 Semantic Search**: Vector-based memory retrieval with O(log n) HNSW indexing
-- **👤 Personal Memory**: User-specific behavioral corrections (e.g., "use 'lei' with Luisa")
-- **🌍 Global Memory**: Cross-user meta-rules (e.g., "always check past communication style")
-- **Bayesian Confidence**: Rules strengthen/weaken based on success/failure
-- **Pattern Learning**: Stores successful interaction patterns for reuse
-- **Automatic Injection**: Relevant memories added to LLM context via semantic search
-- **Unix-Style CLI**: `/memory --add`, `/memory --list`, `/memory --stats` with flags
-- See `zylch_memory/` for architecture and implementation details
-
-### Integrations
-- **Pipedrive CRM**: Search contacts, retrieve deals with pipeline/stage filters
-- **Google Calendar**: Task scheduling and follow-up reminders
-  - **Google Meet Integration**: Automatically generate video conference links
-  - **Email-to-Event**: Create calendar invites directly from emails with all participants
-  - **Automatic Invites**: Sends calendar invitations to all attendees
-- **WhatsApp**: Local connection via neonize (QR code login, message sync, send, gap analysis)
-- **Telegram Bot**: Alternative interface — interact with Zylch from your phone (`zylch telegram`)
-- **MrCall/StarChat**: Phone calls and SMS
-- **Web Search**: Contact enrichment via Anthropic API
-
-## Running Locally
-
-```bash
-# MrCall Configurator (Firebase talkmeapp, local DB)
-docker compose up -d --build zylch-api
-
-# Standalone Sales Agent (Firebase zylch-test, Railway DB)
-ZYLCH_MODE=standalone docker compose up -d --build zylch-api
-```
-
-See **[Environments & Deployment](docs/guides/environments.md)** for all environments (local, Railway, Scaleway), configuration, and deploy methods.
-
-## Configuration
-
-### Environment Variables (.env)
-
-```bash
-# Required
-ANTHROPIC_API_KEY=sk-ant-...
-MY_EMAILS=you@gmail.com,you@company.com,*@automated-domain.com
-
-# Multi-tenant Configuration
-OWNER_ID=owner_default              # Firebase UID or placeholder
-ZYLCH_ASSISTANT_ID=default_assistant  # Assistant identifier
-
-# Optional - Email Style
-EMAIL_STYLE_PROMPT=NEVER use emoji. Write in plain text. Be concise.
-
-# Optional - Pipedrive
-PIPEDRIVE_API_TOKEN=your-token
-PIPEDRIVE_ENABLED=true
-
-# StarChat
-STARCHAT_API_URL=https://...
-STARCHAT_USERNAME=admin
-STARCHAT_PASSWORD=...
-STARCHAT_BUSINESS_ID=...
-```
-
-**Setup:**
-```bash
-cp .env.example .env
-# Edit .env with your API keys and settings
-```
-
-### MY_EMAILS Patterns
-Zylch AI uses this to identify which emails are yours vs. contacts:
-- Exact match: `mario@gmail.com`
-- Wildcard: `*@pipedrivemail.com` (matches all Pipedrive automated emails)
-
-## CLI Commands
-
-### Core Commands
-```bash
-/help          - Show help
-/quit          - Exit Zylch AI
-/clear         - Clear conversation history
-/history       - Show conversation history
-```
-
-### Email & Sync
-```bash
-/sync [days]   - Run morning sync (emails + calendar + gap analysis)
-                 Examples: /sync (default 30 days), /sync 3 (last 3 days)
-/tasks         - Show detected tasks
-```
-
-### Archive Management
-```bash
-/archive                    - View archive statistics
-/archive --sync            - Sync new emails (incremental)
-/archive --search "query"  - Search archive
-/archive --init            - Initialize archive (first time)
-```
-
-### Memory & Learning
-```bash
-/memory --list      - List all behavioral memories
-/memory --add       - Add new behavioral rule
-/memory --stats     - Show memory statistics
-/memory --help      - Complete memory command help
-```
-
-### Multi-Tenant
-```bash
-/assistant          - Show current assistant
-/assistant --list   - List your assistant
-/mrcall --id <id>   - Link to MrCall assistant
-```
-
-### Cache Inspection
-```bash
-/cache --help       - Cache management help
-```
+Zylch is a local AI-powered sales intelligence assistant. Connects email (IMAP), WhatsApp (neonize), phone (MrCall/StarChat), and generates tasks, relationship memory, and gap analysis. Mono-user CLI tool, no server. Also accessible via Telegram bot.
 
 ## Quick Start
 
 ```bash
-# Activate environment
-source venv/bin/activate
+# Install
+pip install -e .
 
-# Start Zylch AI CLI
-python -m zylch.cli.main
+# Setup (interactive 5-step wizard)
+zylch init
 
-# First time: sync emails (30 days, ~5-10 minutes)
-You: sync emails
+# Interactive chat
+zylch
 
-# Build person-centric tasks (~2-3 minutes for 200 contacts)
-You: build tasks
+# Sync emails
+zylch sync
+
+# Show tasks
+zylch tasks
+
+# Start Telegram bot
+zylch telegram
+```
+
+## Design Philosophy
+
+- **Task-focused**: Answers "What do I need to do?" — no unnecessary classifications
+- **Person-centric**: Tasks aggregated by contact, analyzing entire relationships
+- **Multi-channel**: Email + WhatsApp + phone calls unified per contact
+- **Local-first**: All data in SQLite, no cloud dependencies, BYOK LLM
+
+## Channels
+
+| Channel | Protocol | How to connect |
+|---------|----------|---------------|
+| Email | IMAP/SMTP | App password via `zylch init` |
+| WhatsApp | neonize (whatsmeow) | QR code scan via `zylch init` or `/connect whatsapp` |
+| MrCall | StarChat HTTP + OAuth2 | OAuth2 consent via `zylch init` |
+| Calendar | CalDAV | Planned |
+
+## Interfaces
+
+| Interface | How to start | Description |
+|-----------|-------------|-------------|
+| CLI REPL | `zylch` | Interactive chat with slash commands |
+| Telegram bot | `zylch telegram` | Same engine, accessible from phone |
+
+## Features
+
+### Email Intelligence
+- IMAP sync with auto-detect presets (Gmail, Outlook, Yahoo, iCloud)
+- Email archive with SQLite full-text search (FTS5)
+- Smart search by sender, subject, or content
+- Draft management and email composition
+
+### WhatsApp
+- Local connection via neonize (QR code login, no cloud API)
+- Message sync, contact search, send messages
+- Gap analysis: detect unanswered conversations
+- Unified timeline: see email + WhatsApp + calls per contact
+
+### Task Management
+- Person-centric: all threads per contact in one view
+- 4-level urgency (CRITICAL, HIGH, MEDIUM, LOW)
+- Incremental task prompt, auto-generated after sync
+- Prompt reconsolidation (updates existing, doesn't recreate)
+
+### Entity Memory
+- Entity-centric blob storage with fastembed (ONNX, 384-dim)
+- Hybrid search: text LIKE + semantic cosine similarity
+- LLM-powered reconsolidation (merges new info with existing knowledge)
+- Extracts PERSON and COMPANY entities from all channels
+
+### MrCall/StarChat
+- Phone call history and contact info
+- SMS sending
+- OAuth2 PKCE connection flow via `zylch init`
+
+### Telegram Bot
+- Long-polling (no server/webhook needed)
+- Secured by `TELEGRAM_ALLOWED_USER_ID` (default-deny)
+- All slash commands and natural language queries work
+- Markdown → Telegram HTML conversion
+
+## Configuration
+
+All config lives in `~/.zylch/.env`, created by `zylch init`:
+
+```bash
+# LLM (required)
+SYSTEM_LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Email (IMAP)
+EMAIL_ADDRESS=you@gmail.com
+EMAIL_PASSWORD=your-app-password
+
+# Telegram (optional)
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+TELEGRAM_ALLOWED_USER_ID=your-numeric-id
+
+# MrCall (optional)
+MRCALL_CLIENT_ID=your-client-id
+MRCALL_CLIENT_SECRET=your-client-secret
+```
+
+## CLI Commands
+
+```bash
+# Core
+/help              Show help
+/quit              Exit Zylch
+/clear             Clear conversation history
+
+# Sync & Tasks
+/sync              Sync emails via IMAP
+/sync whatsapp     Sync WhatsApp contacts + messages
+/sync status       Show sync counts
+/tasks             Show detected tasks
+
+# Connections
+/connect whatsapp  Connect WhatsApp (QR code)
+
+# Memory
+/memory --list     List behavioral memories
+/memory --add      Add new rule
+/memory --stats    Show memory stats
 ```
 
 ## Architecture
 
-Zylch AI uses a **single-agent design** with specialized tools (not multi-agent), direct Anthropic SDK (no LangChain), and a two-tier caching strategy (threads.json → tasks.json) for cost-optimized intelligence.
+```
+User → zylch CLI (click) or Telegram bot
+  → command_handlers.py (slash) or chat_service.py (LLM)
+  → tools execute (IMAP, neonize, StarChat, memory)
+  → Storage (SQLite ~/.zylch/zylch.db)
+  → response printed to terminal or sent to Telegram
+```
 
-**Complete details:** See `.claude/ARCHITECTURE.md` for system design and key decisions.
-
-## API Access
-
-Zylch AI provides HTTP API endpoints for web/mobile integration. See `docs/api/chat-api.md` for complete API documentation.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full system design.
 
 ## Documentation
 
-📚 **[Complete Documentation Index](docs/README.md)** - Start here for comprehensive guides!
+- [Architecture](docs/ARCHITECTURE.md) — System design and module map
+- [Integrations Guide](docs/guides/integrations.md) — Channel setup details
+- [CLI Commands](docs/guides/cli-commands.md) — Command reference
+- [Entity Memory](docs/features/entity-memory-system.md) — Memory system design
+- [WhatsApp Integration](docs/features/WHATSAPP_INTEGRATION_TODO.md) — Implementation details
 
-### Quick Links
+## Development
 
-**🚀 Getting Started**
-- [Quick Start Guide](docs/guides/quick-start.md) - Get up and running quickly
-- [Gmail OAuth Setup](docs/guides/gmail-oauth.md) - Configure Google authentication
-- [CLI Commands Reference](docs/guides/cli-commands.md) - Complete command guide
-
-**✨ Core Features**
-- [Email Archive](docs/features/email-archive.md) - Two-tier email storage system
-- [Relationship Intelligence](docs/features/relationship-intelligence.md) - Person-centric gap detection
-- [Task System](docs/features/relationship-intelligence.md) - Task detection and management
-- [Entity Memory System](docs/features/entity-memory-system.md) - Entity-centric memory with hybrid search
-- [Triggers & Automation](docs/features/triggers-automation.md) - Event-driven automation
-- [Sharing System](docs/features/sharing-system.md) - Team intelligence sharing
-- [MrCall Integration](docs/features/mrcall-integration.md) - Telephony & WhatsApp
-
-**🏗️ Architecture**
-- [Architecture](docs/ARCHITECTURE.md) - System architecture and design
-- [.claude/DEVELOPMENT_PLAN.md](.claude/DEVELOPMENT_PLAN.md) - Development roadmap
-
-**🔮 Future Development**
-- [Billing System](docs/features/BILLING_SYSTEM_TODO.md) - Stripe subscriptions (Phase H)
-- [WhatsApp Integration](docs/features/WHATSAPP_INTEGRATION_TODO.md) - Multi-channel messaging
-- [Desktop App](docs/features/DESKTOP_APP_TODO.md) - Tauri local-first application
-- [Mobile App](docs/features/MOBILE_APP_TODO.md) - React Native iOS + Android
-
-**📦 Legacy Documentation**
-- Archived documentation can be found in `ARCHIVE/docs/`
-- Old specifications: `MRPARK_SPEC.md`, `TASK_MANAGEMENT.md`, `REASONING_BANK_DESIGN.md`
-
-## Costs
-
-- **Task build** (200 contacts): ~$1.40 (Sonnet)
-- **Single task update**: <$0.01 (Sonnet)
-
-Total initial sync: **~$2.50** for 1000 emails + 200 contacts
-
----
-
-## Usage Examples
-
-### Email & Thread Management
-```
-You: search emails from Joanna Goodall
-You: show thread #5
-You: write an answer # Creates draft in Zylch
-You: list drafts
-You: edit draft #1 # Opens nano editor
-```
-
-### Task Management (Person-Centric)
-```
-You: status di Joanna Goodall
-# Shows: all threads aggregated, priority score, action needed
-
-You: show urgent tasks  # score >= 8
-You: show open tasks
-You: task stats  # Overview of all tasks
-You: rebuild tasks force_rebuild=true  # Refresh all tasks
-```
-
-### Contact & CRM
-```
-You: who is john.doe@company.com?  # Enriches contact
-You: search pipedrive person john.doe@company.com
-You: get deals for person 123 in pipeline 5
-```
-
-### Calendar & Meeting Scheduling
-```
-You: what's on my calendar today?
-You: schedule meeting tomorrow 2pm with john@company.com
-You: create event with Meet link
-
-# Create event from email with all participants
-You: create invite for all participants in Anna's email at the requested time with Meet link
-# → Extracts time, participants, creates event with Google Meet link, sends invites
-```
-
-### Email Archive Queries
 ```bash
-# Count total messages
-sqlite3 cache/emails/archive.db "SELECT COUNT(*) FROM messages"
-
-# Check date range
-sqlite3 cache/emails/archive.db "SELECT MIN(date) as oldest, MAX(date) as newest FROM messages"
-
-# Search messages
-sqlite3 cache/emails/archive.db "SELECT subject, sender, date FROM messages WHERE subject LIKE '%proposal%' LIMIT 5"
+# Lint & Format
+black --check zylch/
+ruff check zylch/
 ```
-
----
 
 ## License
 
-Proprietary - MrCall SRL
+Proprietary — MrCall SRL

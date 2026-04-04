@@ -40,7 +40,7 @@ zylch/
 │
 ├── storage/              # Data access layer (SQLite)
 │   ├── database.py       # SQLAlchemy engine (sqlite:///~/.zylch/zylch.db)
-│   ├── models.py         # 17 ORM models
+│   ├── models.py         # 19 ORM models
 │   └── storage.py        # Storage class (CRUD, upserts, search)
 │
 ├── tools/                # LLM tool definitions
@@ -61,6 +61,7 @@ zylch/
 │   ├── pipedrive.py      # Pipedrive CRM tools
 │   ├── web_search.py     # Web search for enrichment
 │   ├── mrcall/__init__.py # MrCall channel package
+│   ├── mrcall/oauth.py   # MrCall OAuth2 PKCE flow (CLI)
 │   └── config.py         # Tool configuration
 │
 ├── agents/               # AI agents
@@ -121,7 +122,7 @@ User → CLI REPL or Telegram bot
 | Channel | Protocol | Implementation |
 |---------|----------|---------------|
 | Email | IMAP/SMTP | `zylch/email/imap_client.py` |
-| MrCall | StarChat HTTP | `zylch/tools/starchat.py` |
+| MrCall | StarChat HTTP + OAuth2 | `zylch/tools/starchat.py` + `mrcall/oauth.py` |
 | WhatsApp | neonize (whatsmeow) | `zylch/whatsapp/client.py` + `sync.py` |
 | Calendar | CalDAV | Planned |
 
