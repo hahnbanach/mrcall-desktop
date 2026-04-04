@@ -57,14 +57,17 @@ def _get_owner_id() -> str:
 
 
 def _check_authorized(user_id: int) -> bool:
-    """Check if Telegram user is authorized."""
+    """Check if Telegram user is authorized.
+
+    Default-deny: if TELEGRAM_ALLOWED_USER_ID is not set, reject all requests.
+    """
     allowed = settings.telegram_allowed_user_id
     if not allowed:
         logger.warning(
             f"[telegram] TELEGRAM_ALLOWED_USER_ID not set — "
-            f"request from user {user_id} allowed by default"
+            f"request from user {user_id} denied (default-deny)"
         )
-        return True
+        return False
     return str(user_id) == str(allowed)
 
 
@@ -232,10 +235,10 @@ async def handle_message(
         if response:
             await _send_response(update, response)
 
-        # Update history (bounded)
-        _conversation_history.append({"role": "user", "content": text})
-        _conversation_history.append({"role": "assistant", "content": response})
-        _trim_history()
+            # Update history (bounded) — only if response is non-empty
+            _conversation_history.append({"role": "user", "content": text})
+            _conversation_history.append({"role": "assistant", "content": response})
+            _trim_history()
 
     except Exception as e:
         logger.error(f"[telegram] ChatService error: {e}", exc_info=True)

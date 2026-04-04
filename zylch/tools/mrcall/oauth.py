@@ -149,8 +149,19 @@ def run_oauth_flow(owner_id: str) -> Optional[dict]:
     _OAuthCallbackHandler.auth_error = None
 
     # Start local callback server
-    server = HTTPServer(("127.0.0.1", CALLBACK_PORT), _OAuthCallbackHandler)
-    server_thread = threading.Thread(target=server.handle_request, daemon=True)
+    try:
+        server = HTTPServer(("127.0.0.1", CALLBACK_PORT), _OAuthCallbackHandler)
+    except OSError as e:
+        logger.error(f"[mrcall-oauth] cannot bind port {CALLBACK_PORT}: {e}")
+        return None
+
+    def _serve_until_code():
+        """Handle requests until we get the auth code or an error."""
+        server.timeout = 1
+        while _OAuthCallbackHandler.auth_code is None and _OAuthCallbackHandler.auth_error is None:
+            server.handle_request()
+
+    server_thread = threading.Thread(target=_serve_until_code, daemon=True)
     server_thread.start()
 
     # Open browser

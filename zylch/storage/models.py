@@ -6,7 +6,7 @@ are replaced with SQLite equivalents.
 """
 
 import uuid as _uuid
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Any, Dict, Set
 
 from sqlalchemy import (
@@ -68,7 +68,7 @@ def _new_uuid() -> str:
 
 def _utcnow() -> datetime:
     """Return current UTC datetime for column defaults."""
-    return datetime.utcnow()
+    return datetime.now(timezone.utc)
 
 
 # -------------------------------------------------------------------
@@ -586,6 +586,7 @@ class SendgridMessageMapping(DictMixin, Base):
 
 class WhatsAppMessage(DictMixin, Base):
     __tablename__ = "whatsapp_messages"
+    __table_args__ = (UniqueConstraint("owner_id", "message_id", name="uq_wa_owner_message"),)
 
     id = Column(
         String(36),
@@ -595,7 +596,6 @@ class WhatsAppMessage(DictMixin, Base):
     owner_id = Column(Text, nullable=False, index=True)
     message_id = Column(
         Text,
-        unique=True,
         nullable=False,
     )
     chat_jid = Column(Text, nullable=False, index=True)

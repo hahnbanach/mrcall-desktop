@@ -6,12 +6,17 @@ Also includes GetContactTimelineTool for unified multi-channel view.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
 from .base import Tool, ToolResult, ToolStatus
 
 logger = logging.getLogger(__name__)
+
+
+def _escape_like(value: str) -> str:
+    """Escape SQL LIKE wildcard characters in user input."""
+    return value.replace("%", r"\%").replace("_", r"\_")
 
 
 class SearchWhatsAppTool(Tool):
@@ -60,23 +65,29 @@ class SearchWhatsAppTool(Tool):
                     q = q.filter(WhatsAppMessage.owner_id == owner_id)
 
                 # Time filter
-                cutoff = datetime.utcnow() - timedelta(days=days_back)
+                cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
                 q = q.filter(WhatsAppMessage.timestamp >= cutoff)
 
                 # Text search
                 if query:
-                    q = q.filter(WhatsAppMessage.text.ilike(f"%{query}%"))
+                    q = q.filter(
+                        WhatsAppMessage.text.ilike(f"%{_escape_like(query)}%", escape="\\")
+                    )
 
                 # Contact name filter
                 if contact_name:
-                    q = q.filter(WhatsAppMessage.sender_name.ilike(f"%{contact_name}%"))
+                    q = q.filter(
+                        WhatsAppMessage.sender_name.ilike(
+                            f"%{_escape_like(contact_name)}%", escape="\\"
+                        )
+                    )
 
                 # Phone/JID filter
                 if phone_number:
-                    clean_phone = phone_number.replace("+", "").replace(" ", "")
+                    clean_phone = _escape_like(phone_number.replace("+", "").replace(" ", ""))
                     q = q.filter(
-                        WhatsAppMessage.chat_jid.contains(clean_phone)
-                        | WhatsAppMessage.sender_jid.contains(clean_phone)
+                        WhatsAppMessage.chat_jid.ilike(f"%{clean_phone}%", escape="\\")
+                        | WhatsAppMessage.sender_jid.ilike(f"%{clean_phone}%", escape="\\")
                     )
 
                 # Skip group messages by default
@@ -197,12 +208,13 @@ class GetWhatsAppConversationTool(Tool):
 
             with get_session() as session:
                 if contact_name and not phone_number:
+                    esc = _escape_like(contact_name)
                     contact = (
                         session.query(WhatsAppContact)
                         .filter(
                             WhatsAppContact.owner_id == owner_id,
-                            WhatsAppContact.name.ilike(f"%{contact_name}%")
-                            | WhatsAppContact.push_name.ilike(f"%{contact_name}%"),
+                            WhatsAppContact.name.ilike(f"%{esc}%", escape="\\")
+                            | WhatsAppContact.push_name.ilike(f"%{esc}%", escape="\\"),
                         )
                         .first()
                     )
@@ -222,7 +234,7 @@ class GetWhatsAppConversationTool(Tool):
                     )
 
                 # Fetch messages for this conversation
-                cutoff = datetime.utcnow() - timedelta(days=days_back)
+                cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
                 messages = (
                     session.query(WhatsAppMessage)
                     .filter(
@@ -357,12 +369,13 @@ class SendWhatsAppMessageTool(Tool):
 
             if contact_name and not jid:
                 with get_session() as session:
+                    esc = _escape_like(contact_name)
                     contact = (
                         session.query(WhatsAppContact)
                         .filter(
                             WhatsAppContact.owner_id == owner_id,
-                            WhatsAppContact.name.ilike(f"%{contact_name}%")
-                            | WhatsAppContact.push_name.ilike(f"%{contact_name}%"),
+                            WhatsAppContact.name.ilike(f"%{esc}%", escape="\\")
+                            | WhatsAppContact.push_name.ilike(f"%{esc}%", escape="\\"),
                         )
                         .first()
                     )
@@ -412,7 +425,7 @@ class SendWhatsAppMessageTool(Tool):
                 recipient = build_jid(jid.split("@")[0])
                 wa_client.send_message(recipient, message)
 
-                logger.info(f"[send_whatsapp] sent to {resolved_name} ({jid})")
+                logger.debug(f"[send_whatsapp] sent to {resolved_name}")
 
                 return ToolResult(
                     status=ToolStatus.SUCCESS,
@@ -502,7 +515,7 @@ class WhatsAppGapAnalysisTool(Tool):
             gaps = []
 
             with get_session() as session:
-                cutoff = datetime.utcnow() - timedelta(days=days_back)
+                cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
 
                 # Get all 1:1 chats with recent activity
                 from sqlalchemy import func as sa_func, and_
@@ -539,7 +552,7 @@ class WhatsAppGapAnalysisTool(Tool):
 
                     # Gap type 1: Unanswered — last message is FROM contact (not from me)
                     if not last_msg.is_from_me and last_msg.text:
-                        days_waiting = (datetime.utcnow() - last_msg.timestamp).days
+                        days_waiting = (datetime.now(timezone.utc) - last_msg.timestamp).days
                         if days_waiting >= 1:
                             gaps.append(
                                 {
@@ -552,8 +565,8 @@ class WhatsAppGapAnalysisTool(Tool):
                             )
 
                 # Gap type 2: Silent contacts (had conversations but went quiet)
-                silent_cutoff = datetime.utcnow() - timedelta(days=silent_threshold_days)
-                active_cutoff = datetime.utcnow() - timedelta(days=90)
+                silent_cutoff = datetime.now(timezone.utc) - timedelta(days=silent_threshold_days)
+                active_cutoff = datetime.now(timezone.utc) - timedelta(days=90)
 
                 silent_chats = (
                     session.query(
@@ -578,7 +591,7 @@ class WhatsAppGapAnalysisTool(Tool):
                 )
 
                 for chat_jid, last_msg_time, contact_name, msg_count in silent_chats:
-                    days_silent = (datetime.utcnow() - last_msg_time).days
+                    days_silent = (datetime.now(timezone.utc) - last_msg_time).days
                     gaps.append(
                         {
                             "type": "whatsapp_silent",
