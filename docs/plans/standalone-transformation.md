@@ -961,11 +961,13 @@ Final: Integration Test
 - Store events in existing `CalendarEvent` model
 - Priority: after email sync is stable
 
-### 9. GOWA WhatsApp Integration
-- GOWA = go-whatsapp-web-multidevice (Go binary, runs locally)
-- Zylch communicates via GOWA REST API (localhost)
-- New `zylch/whatsapp/gowa_client.py`
+### 9. WhatsApp Integration via neonize
+- neonize = Python wrapper of whatsmeow (Go WhatsApp Web multi-device library)
+- Connects directly to WhatsApp servers, no separate Go binary needed
+- QR code login on first run, session persists in local SQLite
+- New `zylch/whatsapp/client.py` + `zylch/whatsapp/sync.py`
 - Store messages in new `WhatsAppMessage` model
+- See `docs/features/WHATSAPP_INTEGRATION_TODO.md` for full plan
 - Priority: after CalDAV
 
 ### 10. MrCall Channel Enhancements

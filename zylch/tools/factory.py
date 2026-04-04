@@ -3,8 +3,7 @@
 import logging
 from typing import List, Optional
 
-from zylch.config import settings
-from .base import Tool, ToolResult, ToolStatus
+from .base import Tool
 from .config import ToolConfig
 
 # Re-export SessionState for backward compatibility:
@@ -22,7 +21,6 @@ from .web_search import WebSearchTool
 from zylch.email.imap_client import IMAPClient
 
 # External service imports (non-OAuth)
-from .starchat import StarChatClient
 from .pipedrive import PipedriveClient
 from .email_archive import EmailArchiveManager
 from .email_sync import EmailSyncManager
@@ -30,6 +28,13 @@ from ..assistant.models import ModelSelector
 
 from .sms_tools import SendSMSTool
 from .call_tools import InitiateCallTool
+from .whatsapp_tools import (
+    SearchWhatsAppTool,
+    GetWhatsAppConversationTool,
+    SendWhatsAppMessageTool,
+    WhatsAppGapAnalysisTool,
+    GetContactTimelineTool,
+)
 
 # Tool classes from split modules
 from .gmail_tools import (
@@ -50,7 +55,6 @@ from .contact_tools import (
     GetTasksTool,
     SearchLocalMemoryTool,
     GetContactTool,
-    GetWhatsAppContactsTool,
 )
 from .crm_tools import (
     SearchPipedrivePersonTool,
@@ -103,15 +107,10 @@ class ToolFactory:
 
             # StarChat client - DISABLED pending OAuth2.0
             starchat = None
-            logger.info(
-                "StarChat disabled"
-                " - pending OAuth2.0 implementation"
-            )
+            logger.info("StarChat disabled" " - pending OAuth2.0 implementation")
 
             # Email client via IMAP
-            email_client = (
-                ToolFactory._create_imap_client(config)
-            )
+            email_client = ToolFactory._create_imap_client(config)
 
             # Save client reference
             ToolFactory._email_client = email_client
@@ -123,23 +122,14 @@ class ToolFactory:
                     email_archive = EmailArchiveManager(
                         gmail_client=email_client,
                         owner_id=config.owner_id,
-                        supabase_storage=(
-                            supabase_storage
-                        ),
+                        supabase_storage=(supabase_storage),
                     )
                 except Exception as e:
-                    logger.warning(
-                        "EmailArchiveManager init"
-                        f" skipped: {e}"
-                    )
+                    logger.warning("EmailArchiveManager init" f" skipped: {e}")
 
             # Email sync manager
             email_sync = None
-            if (
-                email_archive
-                and config.anthropic_api_key
-                and config.llm_provider
-            ):
+            if email_archive and config.anthropic_api_key and config.llm_provider:
                 email_sync = EmailSyncManager(
                     email_archive=email_archive,
                     api_key=config.anthropic_api_key,
@@ -153,18 +143,10 @@ class ToolFactory:
             pipedrive = None
             if config.pipedrive_api_token:
                 try:
-                    pipedrive = PipedriveClient(
-                        api_token=(
-                            config.pipedrive_api_token
-                        )
-                    )
-                    logger.info(
-                        "Pipedrive CRM connected"
-                    )
+                    pipedrive = PipedriveClient(api_token=(config.pipedrive_api_token))
+                    logger.info("Pipedrive CRM connected")
                 except Exception as e:
-                    logger.warning(
-                        f"Pipedrive failed: {e}"
-                    )
+                    logger.warning(f"Pipedrive failed: {e}")
                     pipedrive = None
 
             # Initialize hybrid search engine
@@ -173,22 +155,16 @@ class ToolFactory:
             )
 
             mem_config = MemoryConfig()
-            embedding_engine = EmbeddingEngine(
-                mem_config
-            )
+            embedding_engine = EmbeddingEngine(mem_config)
             search_engine = HybridSearchEngine(
                 get_session=get_session,
                 embedding_engine=embedding_engine,
                 default_alpha=0.3,
             )
-            logger.info(
-                "Hybrid search engine initialized"
-            )
+            logger.info("Hybrid search engine initialized")
 
         except Exception as e:
-            logger.error(
-                f"Failed to init service clients: {e}"
-            )
+            logger.error(f"Failed to init service clients: {e}")
             raise
 
         # Initialize tools list
@@ -232,19 +208,13 @@ class ToolFactory:
         tools.append(
             WebSearchTool(
                 api_key=config.anthropic_api_key,
-                provider=getattr(
-                    config, "llm_provider", "anthropic"
-                ),
+                provider=getattr(config, "llm_provider", "anthropic"),
             )
         )
 
         # Pipedrive tools (2 tools) - optional
         if pipedrive:
-            tools.extend(
-                ToolFactory._create_pipedrive_tools(
-                    pipedrive
-                )
-            )
+            tools.extend(ToolFactory._create_pipedrive_tools(pipedrive))
 
         # MrCall configuration tools (3 tools)
         if starchat:
@@ -264,13 +234,8 @@ class ToolFactory:
             )
 
         # SMS tool (send only - verification removed)
-        tools.append(
-            SendSMSTool(session_state=session_state)
-        )
-        logger.info(
-            "SMS tool initialized"
-            " (credentials loaded per-user)"
-        )
+        tools.append(SendSMSTool(session_state=session_state))
+        logger.info("SMS tool initialized" " (credentials loaded per-user)")
 
         # Call tools (1 tool)
         if starchat:
@@ -280,15 +245,32 @@ class ToolFactory:
                     session_state=session_state,
                 )
             )
-            logger.info(
-                "Call tool initialized"
-                " (StarChat/MrCall)"
-            )
+            logger.info("Call tool initialized" " (StarChat/MrCall)")
+
+        # WhatsApp tools (4 tools) — local neonize
+        tools.extend(
+            [
+                SearchWhatsAppTool(
+                    session_state=session_state,
+                ),
+                GetWhatsAppConversationTool(
+                    session_state=session_state,
+                ),
+                SendWhatsAppMessageTool(
+                    session_state=session_state,
+                ),
+                WhatsAppGapAnalysisTool(
+                    session_state=session_state,
+                ),
+                GetContactTimelineTool(
+                    session_state=session_state,
+                ),
+            ]
+        )
+        logger.info("WhatsApp tools initialized (5)")
 
         # Get Tasks tool
-        tools.append(
-            GetTasksTool(session_state=session_state)
-        )
+        tools.append(GetTasksTool(session_state=session_state))
         logger.info("Get Tasks tool initialized")
 
         # Compose Email tool
@@ -309,9 +291,7 @@ class ToolFactory:
         ToolFactory._starchat_client = starchat
         ToolFactory._email_archive = email_archive
 
-        logger.info(
-            f"Initialized {len(tools)} tools"
-        )
+        logger.info(f"Initialized {len(tools)} tools")
         return tools, session_state
 
     @staticmethod
@@ -336,15 +316,11 @@ class ToolFactory:
             "EMAIL_ADDRESS",
             config.user_email or "",
         )
-        email_pass = os.environ.get(
-            "EMAIL_PASSWORD", ""
-        )
+        email_pass = os.environ.get("EMAIL_PASSWORD", "")
 
         if not email_addr or not email_pass:
             logger.warning(
-                "IMAP not configured:"
-                " EMAIL_ADDRESS or EMAIL_PASSWORD"
-                " missing. Set in .env."
+                "IMAP not configured:" " EMAIL_ADDRESS or EMAIL_PASSWORD" " missing. Set in .env."
             )
             return None
 
@@ -353,16 +329,8 @@ class ToolFactory:
         smtp_host = os.environ.get("SMTP_HOST")
         smtp_port_str = os.environ.get("SMTP_PORT")
 
-        imap_port = (
-            int(imap_port_str)
-            if imap_port_str
-            else None
-        )
-        smtp_port = (
-            int(smtp_port_str)
-            if smtp_port_str
-            else None
-        )
+        imap_port = int(imap_port_str) if imap_port_str else None
+        smtp_port = int(smtp_port_str) if smtp_port_str else None
 
         client = IMAPClient(
             email_addr=email_addr,
@@ -375,14 +343,9 @@ class ToolFactory:
 
         try:
             client.connect()
-            logger.info(
-                f"IMAP connected as {email_addr}"
-            )
+            logger.info(f"IMAP connected as {email_addr}")
         except Exception as e:
-            logger.warning(
-                f"IMAP connection failed: {e}."
-                " Will retry on first use."
-            )
+            logger.warning(f"IMAP connection failed: {e}." " Will retry on first use.")
 
         return client
 
@@ -421,15 +384,11 @@ class ToolFactory:
             ListDraftsTool(storage, owner_id),
             EditDraftTool(storage, owner_id),
             UpdateDraftTool(storage, owner_id),
-            SendDraftTool(
-                imap_client, storage, owner_id
-            ),
+            SendDraftTool(imap_client, storage, owner_id),
         ]
 
     @staticmethod
-    def _create_email_sync_tools(
-        email_sync_manager, storage, owner_id: str
-    ) -> List[Tool]:
+    def _create_email_sync_tools(email_sync_manager, storage, owner_id: str) -> List[Tool]:
         """Create email sync tools."""
         return [
             SyncEmailsTool(email_sync_manager),
@@ -446,9 +405,7 @@ class ToolFactory:
     def _create_contact_tools(
         starchat_client,
         session_state: SessionState,
-        search_engine: Optional[
-            HybridSearchEngine
-        ] = None,
+        search_engine: Optional[HybridSearchEngine] = None,
         owner_id: str = "owner_default",
         zylch_assistant_id: str = "default_assistant",
     ) -> List[Tool]:
@@ -459,12 +416,7 @@ class ToolFactory:
                 owner_id,
                 zylch_assistant_id,
             ),
-            GetContactTool(
-                starchat_client, session_state
-            ),
-            GetWhatsAppContactsTool(
-                starchat_client, session_state
-            ),
+            GetContactTool(starchat_client, session_state),
         ]
 
     @staticmethod
@@ -473,12 +425,8 @@ class ToolFactory:
     ) -> List[Tool]:
         """Create Pipedrive CRM tools."""
         return [
-            SearchPipedrivePersonTool(
-                pipedrive_client
-            ),
-            GetPipedrivePersonDealsTool(
-                pipedrive_client
-            ),
+            SearchPipedrivePersonTool(pipedrive_client),
+            GetPipedrivePersonDealsTool(pipedrive_client),
         ]
 
     @staticmethod
@@ -511,12 +459,8 @@ class ToolFactory:
         )
 
         return [
-            GetAssistantCatalogTool(
-                starchat_client, session_state
-            ),
-            GetMrCallFeatureContextTool(
-                trainer, session_state
-            ),
+            GetAssistantCatalogTool(starchat_client, session_state),
+            GetMrCallFeatureContextTool(trainer, session_state),
             ConfigureAssistantTool(
                 starchat_client,
                 session_state,
@@ -537,4 +481,3 @@ class ToolFactory:
         TODO: Disabled - pending migration.
         """
         return []
-

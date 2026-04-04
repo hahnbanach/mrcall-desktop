@@ -1,6 +1,6 @@
 # Zylch AI - Multi-Channel Sales Intelligence System
 
-Zylch AI is a single-agent AI assistant that helps sales professionals manage email communications, enrich contact data, and automate follow-up workflows across multiple channels (email, SMS, phone). It also integrate with MrCall for configuring assistants.
+Zylch AI is a local AI-powered sales intelligence assistant. Connects email (IMAP), WhatsApp (neonize), phone (MrCall/StarChat), and generates tasks, memory, and gap analysis. Mono-user CLI tool, no server. Also accessible via Telegram bot.
 
 ## Design Philosophy
 
@@ -61,8 +61,9 @@ Zylch AI is a single-agent AI assistant that helps sales professionals manage em
   - **Google Meet Integration**: Automatically generate video conference links
   - **Email-to-Event**: Create calendar invites directly from emails with all participants
   - **Automatic Invites**: Sends calendar invitations to all attendees
-- **StarChat**: Contact storage and phone orchestration
-- **Campaign Management**: Mass emails via SendGrid, SMS via Vonage (future)
+- **WhatsApp**: Local connection via neonize (QR code login, message sync, send, gap analysis)
+- **Telegram Bot**: Alternative interface — interact with Zylch from your phone (`zylch telegram`)
+- **MrCall/StarChat**: Phone calls and SMS
 - **Web Search**: Contact enrichment via Anthropic API
 
 ## Running Locally

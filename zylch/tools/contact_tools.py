@@ -511,7 +511,11 @@ class GetContactTool(Tool):
 
 
 class GetWhatsAppContactsTool(Tool):
-    """Get contacts from WhatsApp messages via StarChat."""
+    """DEPRECATED: WhatsApp will use neonize (local), not StarChat.
+
+    Placeholder until zylch/tools/whatsapp_tools.py is implemented.
+    See docs/features/WHATSAPP_INTEGRATION_TODO.md.
+    """
 
     def __init__(
         self, starchat_client, session_state: SessionState
@@ -519,86 +523,31 @@ class GetWhatsAppContactsTool(Tool):
         super().__init__(
             name="get_whatsapp_contacts",
             description=(
-                "Get contacts from WhatsApp messages to identify"
-                " people by phone number"
+                "Get WhatsApp contacts (not yet available"
+                " — use /connect whatsapp first)"
             ),
         )
-        self.starchat = starchat_client
         self.session_state = session_state
 
     async def execute(self, days_back: int = 30):
-        """Get WhatsApp contacts for the selected business.
-
-        Args:
-            days_back: Number of days to look back for messages
-        """
-        business_id = self.session_state.get_business_id()
-        if not business_id:
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=(
-                    "No MrCall assistant selected."
-                    " Use /mrcall <id> to select one."
-                ),
-            )
-
-        try:
-            whatsapp_contacts = (
-                await self.starchat.get_whatsapp_contacts(
-                    business_id=business_id,
-                    days_back=days_back,
-                )
-            )
-
-            if not whatsapp_contacts:
-                return ToolResult(
-                    status=ToolStatus.SUCCESS,
-                    data={"contacts": []},
-                    message=(
-                        "WhatsApp integration requires StarChat"
-                        " REST API endpoint for WhatsApp messages."
-                        " This feature is pending StarChat API"
-                        " implementation. See"
-                        " STARCHAT_REQUESTS.md Request #3."
-                    ),
-                )
-
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data={
-                    "contacts": whatsapp_contacts,
-                    "total": len(whatsapp_contacts),
-                },
-                message=(
-                    f"Found {len(whatsapp_contacts)} WhatsApp"
-                    f" contacts in the last {days_back} days"
-                ),
-            )
-
-        except Exception as e:
-            logger.error(
-                f"Failed to get WhatsApp contacts: {e}"
-            )
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=(
-                    "Error retrieving WhatsApp contacts:"
-                    f" {str(e)}"
-                ),
-            )
+        """Return error: WhatsApp not yet connected."""
+        return ToolResult(
+            status=ToolStatus.ERROR,
+            data=None,
+            error=(
+                "WhatsApp not yet connected. This feature"
+                " requires neonize integration (coming soon)."
+                " See /help for available commands."
+            ),
+        )
 
     def get_schema(self) -> Dict[str, Any]:
-        """Get Anthropic function schema."""
         return {
             "name": self.name,
             "description": (
-                "Get contacts from WhatsApp messages via StarChat"
-                " PostgreSQL database. Extracts phone numbers from"
-                " whatsapp_messages table and matches them against"
-                " StarChat contacts. Use this to identify contacts"
-                " by phone number from WhatsApp conversations."
+                "Get WhatsApp contacts. Requires WhatsApp"
+                " connection via /connect whatsapp (QR code)."
+                " Not yet implemented."
             ),
             "input_schema": {
                 "type": "object",
