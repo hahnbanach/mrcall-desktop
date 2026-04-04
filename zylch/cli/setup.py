@@ -166,22 +166,46 @@ def run_init():
         tg_user_id = ""
         click.echo("  Skipped. Add TELEGRAM_BOT_TOKEN to .env later.")
 
-    # ─── 5. MrCall / StarChat ─────────────────────────────────
+    # ─── 5. MrCall (OAuth2) ──────────────────────────────────
 
     click.echo("\n5. MrCall (phone/SMS)")
+    click.echo("   Connect MrCall to sync calls and send SMS.\n")
 
-    existing_mrcall = env.get("MRCALL_BASE_URL", "")
+    existing_client_id = env.get("MRCALL_CLIENT_ID", "")
+    existing_client_secret = env.get("MRCALL_CLIENT_SECRET", "")
+    mrcall_client_id = ""
+    mrcall_client_secret = ""
+    mrcall_connected = False
 
-    if existing_mrcall:
-        if click.confirm(f"  MrCall: {existing_mrcall} — keep?", default=True):
-            mrcall_url = existing_mrcall
+    if existing_client_id:
+        # Check if already authed
+        from zylch.tools.mrcall.oauth import check_mrcall_connected
+
+        already_authed = check_mrcall_connected(email or "local-user")
+        if already_authed:
+            click.echo(f"  MrCall: connected (client {_mask(existing_client_id)})")
+            if click.confirm("  Reconnect MrCall?", default=False):
+                mrcall_client_id, mrcall_client_secret = _prompt_mrcall_creds(
+                    existing_client_id, existing_client_secret
+                )
+                mrcall_connected = _run_mrcall_oauth(email or "local-user")
+            else:
+                mrcall_client_id = existing_client_id
+                mrcall_client_secret = existing_client_secret
+                mrcall_connected = True
         else:
-            mrcall_url = click.prompt("  StarChat URL", default="https://test-env-0.scw.hbsrv.net")
+            click.echo("  MrCall: credentials present but not authorized")
+            mrcall_client_id = existing_client_id
+            mrcall_client_secret = existing_client_secret
+            # Will run OAuth after .env is written
     elif click.confirm("  Connect MrCall?", default=False):
-        mrcall_url = click.prompt("  StarChat URL", default="https://test-env-0.scw.hbsrv.net")
+        mrcall_client_id, mrcall_client_secret = _prompt_mrcall_creds("", "")
+        # OAuth will run after .env is written (needs settings loaded)
     else:
-        mrcall_url = ""
         click.echo("  Skipped.")
+
+    # Track whether we need to run OAuth after writing .env
+    run_mrcall_oauth_after = bool(mrcall_client_id and not mrcall_connected)
 
     # ─── Write .env ───────────────────────────────────────────
 
@@ -225,10 +249,11 @@ def run_init():
             lines.append(f"TELEGRAM_ALLOWED_USER_ID={tg_user_id}")
 
     # MrCall
-    if mrcall_url:
+    if mrcall_client_id:
         lines.append("")
         lines.append("# MrCall")
-        lines.append(f"MRCALL_BASE_URL={mrcall_url}")
+        lines.append(f"MRCALL_CLIENT_ID={mrcall_client_id}")
+        lines.append(f"MRCALL_CLIENT_SECRET={mrcall_client_secret}")
 
     # Preserve any extra vars from existing .env
     known_keys = {
@@ -244,6 +269,10 @@ def run_init():
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_ALLOWED_USER_ID",
         "MRCALL_BASE_URL",
+        "MRCALL_CLIENT_ID",
+        "MRCALL_CLIENT_SECRET",
+        "MRCALL_DASHBOARD_URL",
+        "MRCALL_REALM",
     }
     extra = {k: v for k, v in env.items() if k not in known_keys}
     if extra:
@@ -259,6 +288,18 @@ def run_init():
 
     logger.info(f"[init] Config saved to {ENV_PATH}")
 
+    # ─── MrCall OAuth (after .env written) ─────────────────────
+
+    if run_mrcall_oauth_after:
+        # Reload settings so OAuth module sees new client_id/secret
+        os.environ["MRCALL_CLIENT_ID"] = mrcall_client_id
+        os.environ["MRCALL_CLIENT_SECRET"] = mrcall_client_secret
+        # Reload settings singleton
+        from zylch import config as _cfg
+
+        _cfg.settings = _cfg.Settings()
+        mrcall_connected = _run_mrcall_oauth(email or "local-user")
+
     # ─── Summary ──────────────────────────────────────────────
 
     click.echo("\n" + "=" * 50)
@@ -272,8 +313,10 @@ def run_init():
         click.echo("  WhatsApp: connected")
     if tg_token:
         click.echo("  Telegram: configured")
-    if mrcall_url:
-        click.echo(f"  MrCall: {mrcall_url}")
+    if mrcall_connected:
+        click.echo("  MrCall: connected")
+    elif mrcall_client_id:
+        click.echo("  MrCall: configured (not yet authorized)")
 
     click.echo("\nNext steps:")
     if email:
@@ -343,3 +386,35 @@ def _connect_whatsapp_qr():
             click.echo("  Timeout. Run /connect whatsapp later to retry.")
     finally:
         wa_client.disconnect()
+
+
+def _prompt_mrcall_creds(existing_id: str, existing_secret: str) -> tuple:
+    """Prompt for MrCall OAuth2 client credentials."""
+    click.echo("  You need a client_id and client_secret from your MrCall admin.\n")
+    client_id = _prompt_with_existing("Client ID", existing_id, hide=False)
+    client_secret = _prompt_with_existing("Client secret", existing_secret, hide=True)
+    return client_id, client_secret
+
+
+def _run_mrcall_oauth(owner_id: str) -> bool:
+    """Run MrCall OAuth2 browser flow.
+
+    Temporarily injects client_id/secret into env so the OAuth module
+    can read them via settings, then opens browser for consent.
+    """
+    from zylch.tools.mrcall.oauth import run_oauth_flow
+
+    click.echo("\n  Opening browser for MrCall authorization...")
+    click.echo("  Log in and approve Zylch access.\n")
+
+    tokens = run_oauth_flow(owner_id)
+    if tokens:
+        target = tokens.get("target_owner", "")
+        if target:
+            click.echo(f"  MrCall connected! (user: {target[:12]}...)")
+        else:
+            click.echo("  MrCall connected!")
+        return True
+    else:
+        click.echo("  MrCall authorization failed. Try /connect mrcall later.")
+        return False

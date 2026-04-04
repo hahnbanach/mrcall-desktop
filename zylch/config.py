@@ -143,14 +143,34 @@ class Settings(BaseSettings):
 
     # MrCall / StarChat (optional channel)
     mrcall_base_url: str = Field(
-        default="https://test-env-0.scw.hbsrv.net",
+        default="https://api.mrcall.ai",
         env="MRCALL_BASE_URL",
-        description="StarChat API base URL for MrCall",
+        description="MrCall API base URL",
+    )
+    mrcall_dashboard_url: str = Field(
+        default="https://dashboard.mrcall.ai",
+        env="MRCALL_DASHBOARD_URL",
+        description="MrCall dashboard URL (OAuth consent page)",
+    )
+    mrcall_realm: str = Field(
+        default="mrcall0",
+        env="MRCALL_REALM",
+        description="MrCall realm",
+    )
+    mrcall_client_id: str = Field(
+        default="",
+        env="MRCALL_CLIENT_ID",
+        description="MrCall OAuth2 client ID",
+    )
+    mrcall_client_secret: str = Field(
+        default="",
+        env="MRCALL_CLIENT_SECRET",
+        description="MrCall OAuth2 client secret",
     )
     starchat_verify_ssl: bool = Field(
         default=True,
         env="STARCHAT_VERIFY_SSL",
-        description=("Verify SSL for StarChat API calls"),
+        description="Verify SSL for StarChat API calls",
     )
 
     # Telegram bot (optional interface)
