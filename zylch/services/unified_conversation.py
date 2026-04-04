@@ -100,7 +100,11 @@ def get_unified_timeline(
                 .all()
             )
             for e in emails:
-                is_from_me = not (e.from_email and resolved_email.lower() in e.from_email.lower())
+                is_from_me = bool(
+                    e.from_email
+                    and resolved_email
+                    and resolved_email.lower() not in (e.from_email or "").lower()
+                )
                 timeline.append(
                     {
                         "channel": "email",
