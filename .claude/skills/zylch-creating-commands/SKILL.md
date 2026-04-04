@@ -16,7 +16,7 @@ async def handle_commandname(args: List[str], config, owner_id: str) -> str:
 **Parameters (in order):**
 1. `args: List[str]` - Arguments after command name
 2. `config` - ToolConfig (rarely used, but required)
-3. `owner_id: str` - Firebase UID
+3. `owner_id: str` - User identity (EMAIL_ADDRESS)
 
 **Returns:** Markdown string shown to user
 
@@ -63,8 +63,7 @@ Inline (sync OK)
 - `zylch/services/job_executor.py` - Background job execution
 - `zylch/storage/storage.py` - `create_background_job()`, `Storage.get_instance()`
 - `zylch/api/token_storage.py` - `get_active_llm_provider(owner_id)`, `get_mrcall_credentials(owner_id)`
-- `zylch/tools/mrcall/llm_helper.py` - `modify_prompt_with_llm()` for LLM-based modifications
-- `zylch/tools/starchat.py` - `create_starchat_client()` for MrCall API
+- `zylch/tools/starchat.py` - StarChat/MrCall channel client
 
 ## CRITICAL: Help Text Updates
 
@@ -116,7 +115,7 @@ TypeError: handle_xxx() missing N required positional arguments
 |-------------------|---------------|
 | `(args, owner_id)` | `elif cmd in ['/stats', '/jobs', '/reset', '/tutorial']:` |
 | `(args, config, owner_id)` | `elif cmd in ['/memory', '/email', '/train', '/agent']:` |
-| `(args, owner_id, user_email)` | `elif cmd in ['/mrcall', '/share', '/revoke', '/connect']:` |
+| `(args, owner_id, user_email)` | `elif cmd in ['/mrcall', '/connect']:` |
 | `(args)` or `()` | `elif cmd in ['/model', '/help', '/clear', '/echo']:` |
 
 ### Example: Adding `/mycommand` with signature `(args, owner_id)`

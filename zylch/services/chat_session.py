@@ -123,7 +123,7 @@ class ChatSessionManager:
         """Create a new chat session for a user.
 
         Args:
-            user_id: Firebase user ID
+            user_id: User ID
             session_id: Optional custom session ID (generated if not provided)
 
         Returns:
@@ -177,7 +177,7 @@ class ChatSessionManager:
         """Get existing session or create new one.
 
         Args:
-            user_id: Firebase user ID
+            user_id: User ID
             session_id: Optional session ID
 
         Returns:
@@ -206,7 +206,7 @@ class ChatSessionManager:
         """Get all sessions for a user.
 
         Args:
-            user_id: Firebase user ID
+            user_id: User ID
 
         Returns:
             List of ChatSession objects
@@ -218,7 +218,7 @@ class ChatSessionManager:
         """Get the most recent session for a user.
 
         Args:
-            user_id: Firebase user ID
+            user_id: User ID
 
         Returns:
             Latest ChatSession or None

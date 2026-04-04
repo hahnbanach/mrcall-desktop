@@ -1,162 +1,138 @@
-# Zylch — Local AI Sales Intelligence
+# Zylch — Local AI-Powered Sales Intelligence
 
-Zylch is a local AI-powered sales intelligence assistant. Connects email (IMAP), WhatsApp (neonize), phone (MrCall/StarChat), and generates tasks, relationship memory, and gap analysis. Mono-user CLI tool, no server. Also accessible via Telegram bot.
-
-## Quick Start
-
-```bash
-# Install
-pip install -e .
-
-# Setup (interactive 5-step wizard)
-zylch init
-
-# Interactive chat
-zylch
-
-# Sync emails
-zylch sync
-
-# Show tasks
-zylch tasks
-
-# Start Telegram bot
-zylch telegram
-```
+Zylch is a local CLI tool that connects your email (IMAP), detects tasks, maintains relationship memory, and helps you write emails. Runs on your machine, no server needed.
 
 ## Design Philosophy
 
-- **Task-focused**: Answers "What do I need to do?" — no unnecessary classifications
-- **Person-centric**: Tasks aggregated by contact, analyzing entire relationships
-- **Multi-channel**: Email + WhatsApp + phone calls unified per contact
-- **Local-first**: All data in SQLite, no cloud dependencies, BYOK LLM
-
-## Channels
-
-| Channel | Protocol | How to connect |
-|---------|----------|---------------|
-| Email | IMAP/SMTP | App password via `zylch init` |
-| WhatsApp | neonize (whatsmeow) | QR code scan via `zylch init` or `/connect whatsapp` |
-| MrCall | StarChat HTTP + OAuth2 | OAuth2 consent via `zylch init` |
-| Calendar | CalDAV | Planned |
-
-## Interfaces
-
-| Interface | How to start | Description |
-|-----------|-------------|-------------|
-| CLI REPL | `zylch` | Interactive chat with slash commands |
-| Telegram bot | `zylch telegram` | Same engine, accessible from phone |
+- **Task-focused**: Answers one question — "What do I need to do?"
+- **Person-centric**: Tasks aggregated by person, analyzing entire relationships
+- **Local-first**: All data in SQLite on your machine, BYOK for LLM keys
+- **Multi-profile**: Manage multiple email accounts, each with isolated data and config
+- **Multi-channel**: Email (IMAP), phone (MrCall/StarChat), WhatsApp and calendar planned
 
 ## Features
 
 ### Email Intelligence
-- IMAP sync with auto-detect presets (Gmail, Outlook, Yahoo, iCloud)
-- Email archive with SQLite full-text search (FTS5)
-- Smart search by sender, subject, or content
-- Draft management and email composition
+- IMAP/SMTP with auto-detect (Gmail, Outlook, Yahoo, iCloud)
+- Email archive with SQLite full-text search
+- Thread analysis, AI-generated email detection
+- Draft management with threading headers
+- Auto-sync on first chat if last sync >24h
 
-### WhatsApp
-- Local connection via neonize (QR code login, no cloud API)
-- Message sync, contact search, send messages
-- Gap analysis: detect unanswered conversations
-- Unified timeline: see email + WhatsApp + calls per contact
-
-### Task Management
-- Person-centric: all threads per contact in one view
-- 4-level urgency (CRITICAL, HIGH, MEDIUM, LOW)
-- Incremental task prompt, auto-generated after sync
-- Prompt reconsolidation (updates existing, doesn't recreate)
+### Task Detection
+- 4-level urgency: CRITICAL, HIGH, MEDIUM, LOW
+- Person-centric view combining all threads per contact
+- Incremental prompt auto-generated after sync
+- Prompt reconsolidation (update existing, don't recreate)
 
 ### Entity Memory
-- Entity-centric blob storage with fastembed (ONNX, 384-dim)
-- Hybrid search: text LIKE + semantic cosine similarity
-- LLM-powered reconsolidation (merges new info with existing knowledge)
-- Extracts PERSON and COMPANY entities from all channels
+- Person/company/template entities in natural-language blobs
+- Hybrid search: text LIKE + fastembed cosine similarity (384-dim)
+- Memory reconsolidation via LLM (update, not duplicate)
+- In-memory vector search with numpy (no external DB)
 
-### MrCall/StarChat
-- Phone call history and contact info
-- SMS sending
-- OAuth2 PKCE connection flow via `zylch init`
+### Channels
+- **Email**: IMAP/SMTP (bidirectional)
+- **MrCall/StarChat**: Contacts, calls, SMS (channel adapter)
+- **WhatsApp**: Planned (GOWA)
+- **Calendar**: Planned (CalDAV)
 
-### Telegram Bot
-- Long-polling (no server/webhook needed)
-- Secured by `TELEGRAM_ALLOWED_USER_ID` (default-deny)
-- All slash commands and natural language queries work
-- Markdown → Telegram HTML conversion
+## Install
+
+```bash
+# pipx (recommended)
+pipx install .
+
+# Or pip dev mode
+pip install -e .
+```
+
+## Setup
+
+```bash
+zylch init
+```
+
+The wizard asks for email address, app password, LLM provider, and API key.
+Each profile is stored in `~/.zylch/profiles/<email>/` with its own `.env` and database.
+Run `zylch init` again to add more profiles. IMAP/SMTP servers auto-detected.
+
+## Usage
+
+```bash
+zylch              # Interactive chat (REPL) — shows dashboard on startup
+zylch sync         # Sync emails via IMAP
+zylch tasks        # Show actionable tasks
+zylch status       # Show sync status
+```
+
+On startup, the dashboard shows your profile, email stats, pending processing, and active tasks — plus what to do next.
+
+### Interactive Chat
+
+```
+/process           # Full pipeline: sync + memory + tasks (recommended)
+/sync              # Sync emails only
+/tasks             # Show tasks needing action
+/email search <q>  # Search email archive
+/memory search <q> # Search entity memory
+/memory list       # List memory blobs
+/memory stats      # Memory statistics
+/help              # All commands
+```
+
+Natural language works too — "my tasks", "sync emails", "who is mario@example.com?"
 
 ## Configuration
 
-All config lives in `~/.zylch/.env`, created by `zylch init`:
+Each profile has its own config in `~/.zylch/profiles/<email>/.env`:
 
 ```bash
-# LLM (required)
+# Required
+EMAIL_ADDRESS=you@gmail.com
+EMAIL_PASSWORD=xxxx-xxxx-xxxx-xxxx   # App password
 SYSTEM_LLM_PROVIDER=anthropic
 ANTHROPIC_API_KEY=sk-ant-...
 
-# Email (IMAP)
-EMAIL_ADDRESS=you@gmail.com
-EMAIL_PASSWORD=your-app-password
-
-# Telegram (optional)
-TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
-TELEGRAM_ALLOWED_USER_ID=your-numeric-id
-
-# MrCall (optional)
-MRCALL_CLIENT_ID=your-client-id
-MRCALL_CLIENT_SECRET=your-client-secret
-```
-
-## CLI Commands
-
-```bash
-# Core
-/help              Show help
-/quit              Exit Zylch
-/clear             Clear conversation history
-
-# Sync & Tasks
-/sync              Sync emails via IMAP
-/sync whatsapp     Sync WhatsApp contacts + messages
-/sync status       Show sync counts
-/tasks             Show detected tasks
-
-# Connections
-/connect whatsapp  Connect WhatsApp (QR code)
-
-# Memory
-/memory --list     List behavioral memories
-/memory --add      Add new rule
-/memory --stats    Show memory stats
+# Optional
+MY_EMAILS=you@gmail.com,you@company.com
+LOG_LEVEL=INFO
 ```
 
 ## Architecture
 
 ```
-User → zylch CLI (click) or Telegram bot
-  → command_handlers.py (slash) or chat_service.py (LLM)
-  → tools execute (IMAP, neonize, StarChat, memory)
-  → Storage (SQLite ~/.zylch/zylch.db)
-  → response printed to terminal or sent to Telegram
+User -> zylch CLI (click)
+  -> command_handlers.py (slash) or chat_service.py (LLM)
+  -> tools execute (IMAP, StarChat, memory)
+  -> Storage (SQLite ~/.zylch/profiles/<email>/zylch.db)
+  -> response printed to terminal
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full system design.
+- **13 SQLAlchemy models**, SQLite with WAL mode
+- **fastembed** (ONNX, 384-dim) for embeddings, numpy for vector search
+- **aisuite** for multi-provider LLM (Anthropic, OpenAI)
+- No server, no Docker, no external database
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full system map.
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) — System design and module map
-- [Integrations Guide](docs/guides/integrations.md) — Channel setup details
-- [CLI Commands](docs/guides/cli-commands.md) — Command reference
-- [Entity Memory](docs/features/entity-memory-system.md) — Memory system design
-- [WhatsApp Integration](docs/features/WHATSAPP_INTEGRATION_TODO.md) — Implementation details
+See [docs/README.md](docs/README.md) for the complete index:
 
-## Development
+- [Quick Start](docs/guides/quick-start.md)
+- [CLI Commands](docs/guides/cli-commands.md)
+- [Email Archive](docs/features/email-archive.md)
+- [Entity Memory](docs/features/entity-memory-system.md)
+- [Task Management](docs/features/task-management.md)
+- [Relationship Intelligence](docs/features/relationship-intelligence.md)
 
-```bash
-# Lint & Format
-black --check zylch/
-ruff check zylch/
-```
+## Requirements
+
+- Python 3.11+
+- Email account with IMAP access + app password
+- LLM API key (Anthropic or OpenAI)
 
 ## License
 
-Proprietary — MrCall SRL
+Proprietary

@@ -197,7 +197,7 @@ class EmailMemoryAgentTrainer:
 
         Args:
             storage: Storage instance
-            owner_id: Firebase UID
+            owner_id: Owner ID
             api_key: LLM API key
             user_email: User's email address (for identifying sent vs received)
             provider: LLM provider (anthropic, openai, mistral)

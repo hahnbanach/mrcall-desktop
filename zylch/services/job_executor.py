@@ -57,7 +57,7 @@ def _should_stop_job(storage: 'Storage', job_id: str, owner_id: str) -> bool:
     Args:
         storage: Storage instance
         job_id: Background job UUID
-        owner_id: Firebase UID (required for security check)
+        owner_id: Owner ID (required for security check)
 
     Returns:
         True if job should stop (status != running or job not found)
@@ -101,7 +101,7 @@ class JobExecutor:
 
         Args:
             job_id: Background job UUID
-            owner_id: Firebase UID
+            owner_id: Owner ID
             api_key: User's LLM API key (BYOK)
             llm_provider: LLM provider name (anthropic, openai, mistral)
             user_email: User's email address (for task filtering)
@@ -191,7 +191,7 @@ class JobExecutor:
 
         Args:
             job_id: Background job UUID
-            owner_id: Firebase UID
+            owner_id: Owner ID
             channel: 'email', 'calendar', 'mrcall', or 'all'
             api_key: User's LLM API key
             llm_provider: LLM provider name (anthropic, openai, mistral)
@@ -289,6 +289,13 @@ class JobExecutor:
                             _process_mrcall_sync(worker, item)
                             mrcall_count += 1
                     except Exception as e:
+                        err_str = str(e).lower()
+                        if "401" in err_str or "authentication" in err_str:
+                            logger.error(
+                                f"Auth error processing {ch}"
+                                f" — stopping (check API key): {e}"
+                            )
+                            raise
                         logger.error(f"Failed to process {ch} item: {e}")
 
                     # Update progress after each item
@@ -348,7 +355,7 @@ class JobExecutor:
 
         Args:
             job_id: Background job UUID
-            owner_id: Firebase UID
+            owner_id: Owner ID
             channel: 'email', 'calendar', or 'all'
             api_key: User's LLM API key
             llm_provider: LLM provider name (anthropic, openai, mistral)
@@ -357,6 +364,10 @@ class JobExecutor:
         storage = self.storage
 
         # Refresh task prompt before spawning the thread
+        self.storage.update_background_job_progress(
+            job_id, 0, 0, 1,
+            "Generating task detection prompt (LLM call)...",
+        )
         has_prompt = await self._refresh_task_prompt(
             owner_id, api_key, llm_provider, user_email
         )
@@ -365,6 +376,9 @@ class JobExecutor:
                 "Could not generate task detection prompt."
                 " Check LLM API key and email data."
             )
+        self.storage.update_background_job_progress(
+            job_id, 5, 0, 1, "Prompt ready. Loading emails...",
+        )
 
         def _sync_process() -> Dict[str, Any]:
             """Sync code that runs in thread pool."""
@@ -412,6 +426,13 @@ class JobExecutor:
                         if item.get('from_email')
                     ))
                     logger.info(f"Pre-computing calendar context for {len(contact_emails)} unique contacts")
+                    try:
+                        storage.update_background_job_progress(
+                            job_id, 8, 0, total,
+                            f"Loading calendar context for {len(contact_emails)} contacts...",
+                        )
+                    except Exception:
+                        pass
                     for email in contact_emails:
                         calendar_cache[email] = worker._get_calendar_context(email)
 
@@ -444,6 +465,13 @@ class JobExecutor:
                         if result:
                             action_count += 1
                     except Exception as e:
+                        err_str = str(e).lower()
+                        if "401" in err_str or "authentication" in err_str:
+                            logger.error(
+                                f"Auth error in task {ch}"
+                                f" — stopping (check API key): {e}"
+                            )
+                            raise
                         logger.error(f"Failed to analyze {ch} item: {e}")
 
                     # Update progress after each item
@@ -494,7 +522,7 @@ class JobExecutor:
 
         Args:
             job_id: Background job UUID
-            owner_id: Firebase UID
+            owner_id: Owner ID
             channel: 'email', 'calendar', or 'all'
             api_key: User's LLM API key
             llm_provider: LLM provider name (anthropic, openai, mistral)
@@ -599,7 +627,7 @@ class JobExecutor:
 
         Args:
             job_id: Background job UUID
-            owner_id: Firebase UID
+            owner_id: Owner ID
             channel: Job channel (typically 'mrcall')
             api_key: User's LLM API key (BYOK)
             llm_provider: LLM provider name
@@ -756,7 +784,7 @@ class JobExecutor:
 
         Args:
             job_id: Background job UUID
-            owner_id: Firebase UID
+            owner_id: Owner ID
             channel: 'email', 'calendar', or 'all'
             api_key: User's LLM API key (BYOK) - required for calendar sync
             llm_provider: LLM provider name (anthropic, openai, mistral)
@@ -773,67 +801,59 @@ class JobExecutor:
                 logger.info(f"Job {job_id} was stopped before starting")
                 return {"stopped": True}
 
-            from zylch.api.token_storage import get_provider, get_email, get_graph_token
-            from zylch.tools.gmail import GmailClient
-            from zylch.tools.outlook import OutlookClient
-            from zylch.tools.gcalendar import GoogleCalendarClient
+            import os as _os
+            from zylch.email.imap_client import IMAPClient
             from zylch.services.sync_service import SyncService
 
-            # Load OAuth credentials using owner_id
-            provider = get_provider(owner_id)
-            user_email = get_email(owner_id)
+            # Read IMAP creds from os.environ (set by activate_profile)
+            email_addr = _os.environ.get("EMAIL_ADDRESS", "")
+            email_pass = _os.environ.get("EMAIL_PASSWORD", "")
 
-            logger.info(f"[SYNC] provider={provider}, email={user_email}")
-
-            if not provider:
-                raise ValueError("No OAuth provider configured. Run /connect first.")
-
-            # Create email client based on provider
-            if provider == "microsoft":
-                graph_token_data = get_graph_token(owner_id)
-                if not graph_token_data or not graph_token_data.get("access_token"):
-                    raise ValueError("Microsoft Graph token not found. Please login again.")
-
-                email_client = OutlookClient(
-                    graph_token=graph_token_data["access_token"],
-                    account=user_email
+            if not email_addr or not email_pass:
+                raise ValueError(
+                    "Email not configured. Run 'zylch init' to set up IMAP credentials."
                 )
-                calendar_client = None  # Microsoft Calendar not yet supported
-                logger.info(f"[SYNC] Using Microsoft Outlook for {user_email}")
-            else:
-                # Google
-                email_client = GmailClient(
-                    account=user_email,
-                    owner_id=owner_id
-                )
-                calendar_client = GoogleCalendarClient(
-                    calendar_id="primary",
-                    account=user_email,
-                    owner_id=owner_id
-                )
-                logger.info(f"[SYNC] Using Gmail for {user_email}")
 
-            # Create sync service with LLM credentials for calendar sync
+            email_client = IMAPClient(
+                email_addr=email_addr,
+                password=email_pass,
+                imap_host=_os.environ.get("IMAP_HOST") or None,
+                imap_port=int(_os.environ.get("IMAP_PORT", "0")) or None,
+                smtp_host=_os.environ.get("SMTP_HOST") or None,
+                smtp_port=int(_os.environ.get("SMTP_PORT", "0")) or None,
+            )
+            user_email_addr = email_addr
+
+            logger.info(f"[SYNC] Using IMAP for {email_addr}")
+
+            # Create sync service
             sync_service = SyncService(
                 email_client=email_client,
-                calendar_client=calendar_client,
                 owner_id=owner_id,
                 supabase_storage=storage,
                 anthropic_api_key=api_key,
-                llm_provider=llm_provider
+                llm_provider=llm_provider,
             )
 
-            # Update progress
-            storage.update_background_job_progress(
-                job_id, 10, 0, 1, "Syncing emails..."
-            )
+            # Progress callback: updates the background job status
+            def _on_progress(pct: int, message: str):
+                storage.update_background_job_progress(
+                    job_id, pct, 0, 1, message,
+                )
 
-            # Run sync - SyncService.run_full_sync is async, need to handle
+            _on_progress(5, "Connecting to IMAP...")
+
+            # Run sync
             import asyncio
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                results = loop.run_until_complete(sync_service.run_full_sync(days_back=days_back))
+                results = loop.run_until_complete(
+                    sync_service.run_full_sync(
+                        days_back=days_back,
+                        on_progress=_on_progress,
+                    )
+                )
             finally:
                 loop.close()
 
@@ -1021,7 +1041,7 @@ class JobExecutor:
         Only chains if the memory agent is trained and there are unprocessed items.
 
         Args:
-            owner_id: Firebase UID
+            owner_id: Owner ID
             api_key: User's LLM API key
             llm_provider: LLM provider name
             user_email: User's email address
@@ -1091,7 +1111,7 @@ class JobExecutor:
         """Chain task processing (called after memory processing completes).
 
         Args:
-            owner_id: Firebase UID
+            owner_id: Owner ID
             api_key: User's LLM API key
             llm_provider: LLM provider name
             user_email: User's email address

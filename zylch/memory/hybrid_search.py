@@ -277,7 +277,7 @@ class HybridSearchEngine:
         """Execute hybrid search.
 
         Args:
-            owner_id: Firebase UID
+            owner_id: Owner ID
             query: Search query
             namespace: Optional namespace filter
             limit: Max results

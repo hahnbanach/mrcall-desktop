@@ -15,6 +15,21 @@ Enforcement gaps, missing tooling, and documentation debt.
 - [ ] No linter or CI check enforcing the 500-line file limit
   Discovered: 2026-03-17
   Impact: Large files accumulate silently (gmail_tools.py is 874 lines)
+  Update: black + ruff installed in venv/ (2026-04-03) but no CI pipeline yet
+
+- [ ] `oauth_tokens.last_sync` field is never written by any code path
+  Discovered: 2026-04-03
+  Impact: Dashboard works around it using newest email date; `chat_service.py` auto-sync check may be broken
+
+- [x] `/process` pipeline was fire-and-forget (used background jobs) → rewritten to run synchronously (2026-04-04)
+
+- [x] `blob_storage.py` passed `uuid.UUID()` objects to SQLite (only accepts strings) → fixed (2026-04-04)
+
+- [x] Auth errors (401) swallowed at 3 levels (worker, job_executor, handler) → re-raise at all levels (2026-04-04)
+
+- [ ] Memory extraction is slow (~2 emails/min) due to sequential LLM calls
+  Discovered: 2026-04-04 QA
+  Impact: `/process` on 190 emails takes ~90 minutes; consider parallel LLM calls or batching
 
 - [ ] `tests/` directory entirely stale — references old SaaS architecture
   Discovered: 2026-04-01 standalone transformation
@@ -48,6 +63,5 @@ Enforcement gaps, missing tooling, and documentation debt.
   Discovered: 2026-04-01 standalone transformation
   Impact: Dead code paths, potential runtime errors
 
-- [ ] `docs/` has many stale files referencing old SaaS architecture
-  Discovered: 2026-04-01 standalone transformation
-  Impact: Misleading documentation for new contributors
+- [x] `docs/` has many stale files referencing old SaaS architecture → cleaned up (2026-04-01)
+  19 SaaS-only files deleted, 8 files rewritten for standalone, README index rebuilt

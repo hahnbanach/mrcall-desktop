@@ -283,7 +283,7 @@ You: Schedule call with Tokyo team tomorrow 9am JST with Meet link
 ### "OAuth not working"
 - Run `/connect google` to initiate OAuth flow
 - Google Calendar requires same OAuth as Gmail
-- Tokens are stored in Supabase `oauth_tokens` table (encrypted)
+- Tokens are stored in SQLite `oauth_tokens` table (encrypted with Fernet)
 - Follow setup: `docs/guides/gmail-oauth.md`
 
 ### "Meet link not generated"

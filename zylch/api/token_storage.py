@@ -33,12 +33,18 @@ def _owner():
 # ------------------------------------------------------------------
 
 def get_provider(owner_id: str) -> Optional[str]:
-    """Return 'google' or 'microsoft' based on stored creds."""
+    """Return email provider: 'imap' from .env, or 'google'/'microsoft' from OAuth tokens."""
+    from zylch.config import settings
+    if settings.email_address and settings.email_password:
+        return "imap"
     return _storage().get_user_provider(owner_id)
 
 
 def get_email(owner_id: str) -> Optional[str]:
-    """Return the user's email from stored OAuth tokens."""
+    """Return the user's email from .env or stored OAuth tokens."""
+    from zylch.config import settings
+    if settings.email_address:
+        return settings.email_address
     return _storage().get_user_email_from_token(owner_id)
 
 

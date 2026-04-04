@@ -1,7 +1,8 @@
 """Interactive setup wizard for Zylch standalone.
 
-Multi-channel wizard: LLM → Email → WhatsApp → Telegram → MrCall.
-Re-running shows current values and asks for confirmation.
+rclone-style profile management (new/edit/delete) wrapping
+multi-channel wizard: LLM → Email → WhatsApp → Telegram → MrCall.
+Profiles stored in ~/.zylch/profiles/{email}/.
 """
 
 import logging
@@ -10,7 +11,13 @@ from pathlib import Path
 
 import click
 
-from zylch.cli.utils import ENV_PATH, ensure_zylch_dir
+from zylch.cli.profiles import (
+    delete_profile,
+    get_profile_dir,
+    list_profiles,
+    migrate_legacy_profile,
+    profile_exists,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +33,12 @@ IMAP_PRESETS = {
 }
 
 
-def _load_existing_env() -> dict:
-    """Load existing .env values into a dict."""
+def _load_profile_env(profile_name: str) -> dict:
+    """Load existing .env values from a profile into a dict."""
+    env_path = os.path.join(get_profile_dir(profile_name), ".env")
     env = {}
-    if os.path.exists(ENV_PATH):
-        with open(ENV_PATH) as f:
+    if os.path.exists(env_path):
+        with open(env_path) as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
@@ -57,21 +65,104 @@ def _prompt_with_existing(label: str, existing: str, hide: bool = False) -> str:
     return click.prompt(f"  {label}", hide_input=hide, default=existing or None)
 
 
-def run_init():
-    """Interactive setup: creates ~/.zylch/.env with all channel credentials.
+# ─── Profile menu (rclone-style) ─────────────────────────────
 
-    Channels: LLM (required), Email, WhatsApp, Telegram, MrCall.
-    Re-running preserves existing values with confirmation.
+
+def run_init():
+    """rclone-style profile manager: new / edit / delete."""
+    migrate_legacy_profile()
+    profiles = list_profiles()
+
+    if not profiles:
+        click.echo("Welcome to Zylch! Let's create your first profile.\n")
+        _run_wizard(env={}, profile_name=None)
+        return
+
+    click.echo("Zylch — Profile Manager\n")
+    click.echo("Current profiles:")
+    for i, name in enumerate(profiles, 1):
+        click.echo(f"  {i}. {name}")
+    click.echo()
+
+    choices = {
+        "n": "New profile",
+        "e": "Edit profile",
+        "d": "Delete profile",
+        "q": "Quit",
+    }
+    for key, desc in choices.items():
+        click.echo(f"  {key}) {desc}")
+    click.echo()
+
+    choice = click.prompt(
+        "Choice",
+        type=click.Choice(list(choices.keys())),
+    )
+
+    if choice == "n":
+        _run_wizard(env={}, profile_name=None)
+    elif choice == "e":
+        name = _pick_profile(profiles, "Edit")
+        env = _load_profile_env(name)
+        _run_wizard(env=env, profile_name=name)
+    elif choice == "d":
+        _delete_profile_interactive(profiles)
+
+
+def _pick_profile(profiles: list[str], action: str) -> str:
+    """Let user pick a profile from the list."""
+    if len(profiles) == 1:
+        return profiles[0]
+    click.echo()
+    for i, name in enumerate(profiles, 1):
+        click.echo(f"  {i}. {name}")
+    idx = click.prompt(
+        f"\n{action} which profile",
+        type=click.IntRange(1, len(profiles)),
+    )
+    return profiles[idx - 1]
+
+
+def _delete_profile_interactive(profiles: list[str]):
+    """Delete a profile with confirmation."""
+    name = _pick_profile(profiles, "Delete")
+    profile_dir = get_profile_dir(name)
+    db_path = os.path.join(profile_dir, "zylch.db")
+    db_size = ""
+    if os.path.isfile(db_path):
+        mb = os.path.getsize(db_path) / 1024 / 1024
+        db_size = f" ({mb:.1f} MB database)"
+
+    if click.confirm(
+        f"\nDelete profile '{name}'{db_size}?"
+        f" This cannot be undone",
+        default=False,
+    ):
+        delete_profile(name)
+        click.echo(f"Profile '{name}' deleted.")
+    else:
+        click.echo("Cancelled.")
+
+
+# ─── Multi-channel wizard ────────────────────────────────────
+
+
+def _run_wizard(env: dict, profile_name: str | None):
+    """Multi-channel setup wizard.
+
+    Args:
+        env: Existing .env values (empty for new profile).
+        profile_name: Name of existing profile being edited, or None for new.
     """
+    is_edit = bool(env)
+
     click.echo("=" * 50)
     click.echo("  Zylch — Setup Wizard")
     click.echo("=" * 50)
     click.echo()
 
-    env = _load_existing_env()
-    is_rerun = bool(env)
-    if is_rerun:
-        click.echo(f"Existing config found at {ENV_PATH}")
+    if is_edit:
+        click.echo(f"Editing profile: {profile_name}")
         click.echo("Press Enter to keep current values.\n")
 
     # ─── 1. LLM Provider (required) ──────────────────────────
@@ -86,30 +177,49 @@ def run_init():
         default=existing_provider,
     )
 
-    api_key_var = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
+    api_key_var = (
+        "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
+    )
     existing_key = env.get(api_key_var, "")
-    api_key = _prompt_with_existing(f"{provider.title()} API key", existing_key, hide=True)
+    api_key = _prompt_with_existing(
+        f"{provider.title()} API key", existing_key, hide=True,
+    )
 
-    logger.debug(f"[init] provider={provider}, key={'present' if api_key else 'absent'}")
+    logger.debug(
+        f"[init] provider={provider},"
+        f" key={'present' if api_key else 'absent'}",
+    )
 
     # ─── 2. Email (IMAP) ─────────────────────────────────────
 
     click.echo("\n2. Email (IMAP)")
-    click.echo("   Connect your email to sync messages and detect tasks.\n")
+    click.echo(
+        "   Connect your email to sync messages"
+        " and detect tasks.\n",
+    )
 
     existing_email = env.get("EMAIL_ADDRESS", "")
     existing_pw = env.get("EMAIL_PASSWORD", "")
 
     if existing_email:
-        if click.confirm(f"  Email connected: {existing_email} — keep?", default=True):
+        if click.confirm(
+            f"  Email connected: {existing_email} — keep?",
+            default=True,
+        ):
             email = existing_email
             password = existing_pw
         else:
             email = click.prompt("  Email address")
-            password = click.prompt("  App password (not account password)", hide_input=True)
+            password = click.prompt(
+                "  App password (not account password)",
+                hide_input=True,
+            )
     elif click.confirm("  Connect email?", default=True):
         email = click.prompt("  Email address")
-        password = click.prompt("  App password (not account password)", hide_input=True)
+        password = click.prompt(
+            "  App password (not account password)",
+            hide_input=True,
+        )
     else:
         email = ""
         password = ""
@@ -118,27 +228,41 @@ def run_init():
     imap_host = env.get("IMAP_HOST", "")
     smtp_host = env.get("SMTP_HOST", "")
     if email and not imap_host:
-        domain = email.split("@")[-1].lower() if "@" in email else ""
+        domain = (
+            email.split("@")[-1].lower() if "@" in email else ""
+        )
         preset = IMAP_PRESETS.get(domain)
         if preset:
             imap_host, _, smtp_host, _ = preset
-            click.echo(f"  Auto-detected: {imap_host} / {smtp_host}")
+            click.echo(
+                f"  Auto-detected: {imap_host} / {smtp_host}",
+            )
 
-    logger.debug(f"[init] email={email}, password={'present' if password else 'absent'}")
+    logger.debug(
+        f"[init] email={email},"
+        f" password={'present' if password else 'absent'}",
+    )
 
     # ─── 3. WhatsApp (neonize) ────────────────────────────────
 
     click.echo("\n3. WhatsApp")
-    click.echo("   Connect via QR code to sync WhatsApp messages.\n")
+    click.echo(
+        "   Connect via QR code to sync"
+        " WhatsApp messages.\n",
+    )
 
     wa_db = Path(os.path.expanduser("~/.zylch/whatsapp.db"))
     wa_connected = wa_db.exists()
 
     if wa_connected:
         click.echo("  WhatsApp: connected (session exists)")
-        if click.confirm("  Reset WhatsApp connection?", default=False):
+        if click.confirm(
+            "  Reset WhatsApp connection?", default=False,
+        ):
             _connect_whatsapp_qr()
-    elif click.confirm("  Connect WhatsApp now?", default=True):
+    elif click.confirm(
+        "  Connect WhatsApp now?", default=True,
+    ):
         _connect_whatsapp_qr()
     else:
         click.echo("  Skipped. Run /connect whatsapp later.")
@@ -146,30 +270,40 @@ def run_init():
     # ─── 4. Telegram bot ──────────────────────────────────────
 
     click.echo("\n4. Telegram Bot")
-    click.echo("   Use Zylch from your phone via Telegram.\n")
+    click.echo(
+        "   Use Zylch from your phone via Telegram.\n",
+    )
 
     existing_tg_token = env.get("TELEGRAM_BOT_TOKEN", "")
     existing_tg_user = env.get("TELEGRAM_ALLOWED_USER_ID", "")
 
     if existing_tg_token:
         if click.confirm(
-            f"  Telegram bot: configured ({_mask(existing_tg_token)}) — keep?", default=True
+            f"  Telegram bot: configured"
+            f" ({_mask(existing_tg_token)}) — keep?",
+            default=True,
         ):
             tg_token = existing_tg_token
             tg_user_id = existing_tg_user
         else:
             tg_token, tg_user_id = _prompt_telegram()
-    elif click.confirm("  Connect Telegram bot?", default=False):
+    elif click.confirm(
+        "  Connect Telegram bot?", default=False,
+    ):
         tg_token, tg_user_id = _prompt_telegram()
     else:
         tg_token = ""
         tg_user_id = ""
-        click.echo("  Skipped. Add TELEGRAM_BOT_TOKEN to .env later.")
+        click.echo(
+            "  Skipped. Add TELEGRAM_BOT_TOKEN to .env later.",
+        )
 
     # ─── 5. MrCall (OAuth2) ──────────────────────────────────
 
     click.echo("\n5. MrCall (phone/SMS)")
-    click.echo("   Connect MrCall to sync calls and send SMS.\n")
+    click.echo(
+        "   Connect MrCall to sync calls and send SMS.\n",
+    )
 
     existing_client_id = env.get("MRCALL_CLIENT_ID", "")
     existing_client_secret = env.get("MRCALL_CLIENT_SECRET", "")
@@ -178,38 +312,78 @@ def run_init():
     mrcall_connected = False
 
     if existing_client_id:
-        # Check if already authed
         from zylch.tools.mrcall.oauth import check_mrcall_connected
 
-        already_authed = check_mrcall_connected(email or "local-user")
+        already_authed = check_mrcall_connected(
+            email or "local-user",
+        )
         if already_authed:
-            click.echo(f"  MrCall: connected (client {_mask(existing_client_id)})")
-            if click.confirm("  Reconnect MrCall?", default=False):
-                mrcall_client_id, mrcall_client_secret = _prompt_mrcall_creds(
-                    existing_client_id, existing_client_secret
+            click.echo(
+                f"  MrCall: connected"
+                f" (client {_mask(existing_client_id)})",
+            )
+            if click.confirm(
+                "  Reconnect MrCall?", default=False,
+            ):
+                mrcall_client_id, mrcall_client_secret = (
+                    _prompt_mrcall_creds(
+                        existing_client_id,
+                        existing_client_secret,
+                    )
                 )
-                mrcall_connected = _run_mrcall_oauth(email or "local-user")
+                mrcall_connected = _run_mrcall_oauth(
+                    email or "local-user",
+                )
             else:
                 mrcall_client_id = existing_client_id
                 mrcall_client_secret = existing_client_secret
                 mrcall_connected = True
         else:
-            click.echo("  MrCall: credentials present but not authorized")
+            click.echo(
+                "  MrCall: credentials present"
+                " but not authorized",
+            )
             mrcall_client_id = existing_client_id
             mrcall_client_secret = existing_client_secret
-            # Will run OAuth after .env is written
     elif click.confirm("  Connect MrCall?", default=False):
-        mrcall_client_id, mrcall_client_secret = _prompt_mrcall_creds("", "")
-        # OAuth will run after .env is written (needs settings loaded)
+        mrcall_client_id, mrcall_client_secret = (
+            _prompt_mrcall_creds("", "")
+        )
     else:
         click.echo("  Skipped.")
 
-    # Track whether we need to run OAuth after writing .env
-    run_mrcall_oauth_after = bool(mrcall_client_id and not mrcall_connected)
+    run_mrcall_oauth_after = bool(
+        mrcall_client_id and not mrcall_connected,
+    )
 
-    # ─── Write .env ───────────────────────────────────────────
+    # ─── Determine profile name ───────────────────────────────
 
-    ensure_zylch_dir()
+    # Profile name = email address (or original name if no email)
+    new_profile_name = email or profile_name or "default"
+
+    # If editing and email changed, rename profile
+    if is_edit and profile_name and new_profile_name != profile_name:
+        if profile_exists(new_profile_name):
+            if not click.confirm(
+                f"\nProfile '{new_profile_name}'"
+                f" already exists. Overwrite?",
+            ):
+                click.echo("Cancelled.")
+                return
+        delete_profile(profile_name)
+    elif not is_edit and profile_exists(new_profile_name):
+        if not click.confirm(
+            f"\nProfile '{new_profile_name}'"
+            f" already exists. Overwrite?",
+        ):
+            click.echo("Cancelled.")
+            return
+
+    # ─── Write profile .env ───────────────────────────────────
+
+    profile_dir = get_profile_dir(new_profile_name)
+    os.makedirs(profile_dir, exist_ok=True)
+    env_path = os.path.join(profile_dir, ".env")
 
     lines = ["# Zylch Configuration (generated by zylch init)"]
 
@@ -219,7 +393,6 @@ def run_init():
     lines.append(f"SYSTEM_LLM_PROVIDER={provider}")
     if provider == "anthropic":
         lines.append(f"ANTHROPIC_API_KEY={api_key}")
-        # Preserve the other key if it existed
         other = env.get("OPENAI_API_KEY", "")
         if other:
             lines.append(f"OPENAI_API_KEY={other}")
@@ -255,7 +428,7 @@ def run_init():
         lines.append(f"MRCALL_CLIENT_ID={mrcall_client_id}")
         lines.append(f"MRCALL_CLIENT_SECRET={mrcall_client_secret}")
 
-    # Preserve any extra vars from existing .env
+    # Preserve extra vars from existing .env
     known_keys = {
         "SYSTEM_LLM_PROVIDER",
         "ANTHROPIC_API_KEY",
@@ -283,30 +456,31 @@ def run_init():
 
     lines.append("")
 
-    fd = os.open(ENV_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write("\n".join(lines))
 
-    logger.info(f"[init] Config saved to {ENV_PATH}")
+    logger.info(f"[init] Profile saved to {env_path}")
 
-    # ─── MrCall OAuth (after .env written) ─────────────────────
+    # ─── MrCall OAuth (after .env written) ────────────────────
 
     if run_mrcall_oauth_after:
-        # Reload settings so OAuth module sees new client_id/secret
         os.environ["MRCALL_CLIENT_ID"] = mrcall_client_id
         os.environ["MRCALL_CLIENT_SECRET"] = mrcall_client_secret
-        # Reload settings singleton
         from zylch import config as _cfg
 
         _cfg.settings = _cfg.Settings()
-        mrcall_connected = _run_mrcall_oauth(email or "local-user")
+        mrcall_connected = _run_mrcall_oauth(
+            email or "local-user",
+        )
 
     # ─── Summary ──────────────────────────────────────────────
 
+    action = "updated" if is_edit else "created"
     click.echo("\n" + "=" * 50)
-    click.echo("  Setup complete!")
+    click.echo(f"  Profile '{new_profile_name}' {action}!")
     click.echo("=" * 50)
-    click.echo(f"\n  Config: {ENV_PATH}")
+    click.echo(f"\n  Config: {env_path}")
     click.echo(f"  LLM:    {provider}")
     if email:
         click.echo(f"  Email:  {email}")
@@ -321,10 +495,22 @@ def run_init():
 
     click.echo("\nNext steps:")
     if email:
-        click.echo("  zylch sync       Sync emails")
-    click.echo("  zylch            Start interactive chat")
+        click.echo(
+            f"  zylch -p {new_profile_name} sync"
+            f"    Sync emails",
+        )
+    click.echo(
+        f"  zylch -p {new_profile_name}"
+        f"         Start interactive chat",
+    )
     if tg_token:
-        click.echo("  zylch telegram   Start Telegram bot")
+        click.echo(
+            f"  zylch telegram"
+            f"                Start Telegram bot",
+        )
+
+
+# ─── Channel-specific helpers ─────────────────────────────────
 
 
 def _prompt_telegram() -> tuple:
@@ -333,9 +519,13 @@ def _prompt_telegram() -> tuple:
     click.echo("    1. Open Telegram, message @BotFather")
     click.echo("    2. Send /newbot, follow instructions")
     click.echo("    3. Copy the bot token")
-    click.echo("    4. Message @userinfobot to get your user ID\n")
+    click.echo(
+        "    4. Message @userinfobot to get your user ID\n",
+    )
     token = click.prompt("  Bot token", hide_input=True)
-    user_id = click.prompt("  Your Telegram user ID (for security)", default="")
+    user_id = click.prompt(
+        "  Your Telegram user ID (for security)", default="",
+    )
     return token, user_id
 
 
@@ -344,7 +534,9 @@ def _connect_whatsapp_qr():
     try:
         from zylch.whatsapp.client import WhatsAppClient
     except ImportError:
-        click.echo("  neonize not installed. Run: pip install neonize")
+        click.echo(
+            "  neonize not installed. Run: pip install neonize",
+        )
         return
 
     import io
@@ -377,32 +569,43 @@ def _connect_whatsapp_qr():
             click.echo("  QR code not received. Check network.")
             return
 
-        click.echo("\n  Open WhatsApp → Settings → Linked Devices → Link a Device\n")
+        click.echo(
+            "\n  Open WhatsApp → Settings"
+            " → Linked Devices → Link a Device\n",
+        )
         click.echo(qr_text[0])
         click.echo("  Waiting for scan (60s)...")
 
         if connected_ev.wait(timeout=60):
             click.echo("  WhatsApp connected!")
         else:
-            click.echo("  Timeout. Run /connect whatsapp later to retry.")
+            click.echo(
+                "  Timeout. Run /connect whatsapp later"
+                " to retry.",
+            )
     finally:
         wa_client.disconnect()
 
 
-def _prompt_mrcall_creds(existing_id: str, existing_secret: str) -> tuple:
+def _prompt_mrcall_creds(
+    existing_id: str, existing_secret: str,
+) -> tuple:
     """Prompt for MrCall OAuth2 client credentials."""
-    click.echo("  You need a client_id and client_secret from your MrCall admin.\n")
-    client_id = _prompt_with_existing("Client ID", existing_id, hide=False)
-    client_secret = _prompt_with_existing("Client secret", existing_secret, hide=True)
+    click.echo(
+        "  You need a client_id and client_secret"
+        " from your MrCall admin.\n",
+    )
+    client_id = _prompt_with_existing(
+        "Client ID", existing_id, hide=False,
+    )
+    client_secret = _prompt_with_existing(
+        "Client secret", existing_secret, hide=True,
+    )
     return client_id, client_secret
 
 
 def _run_mrcall_oauth(owner_id: str) -> bool:
-    """Run MrCall OAuth2 browser flow.
-
-    Temporarily injects client_id/secret into env so the OAuth module
-    can read them via settings, then opens browser for consent.
-    """
+    """Run MrCall OAuth2 browser flow."""
     from zylch.tools.mrcall.oauth import run_oauth_flow
 
     click.echo("\n  Opening browser for MrCall authorization...")
@@ -412,10 +615,15 @@ def _run_mrcall_oauth(owner_id: str) -> bool:
     if tokens:
         target = tokens.get("target_owner", "")
         if target:
-            click.echo(f"  MrCall connected! (user: {target[:12]}...)")
+            click.echo(
+                f"  MrCall connected! (user: {target[:12]}...)",
+            )
         else:
             click.echo("  MrCall connected!")
         return True
     else:
-        click.echo("  MrCall authorization failed. Try /connect mrcall later.")
+        click.echo(
+            "  MrCall authorization failed."
+            " Try /connect mrcall later.",
+        )
         return False

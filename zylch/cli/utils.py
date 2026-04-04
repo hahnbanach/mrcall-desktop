@@ -1,37 +1,40 @@
-"""CLI utilities — env loading and owner identity."""
+"""CLI utilities — profile-aware env loading and owner identity."""
 
 import logging
 import os
 
-from dotenv import load_dotenv
-
 logger = logging.getLogger(__name__)
 
 ZYLCH_DIR = os.path.expanduser("~/.zylch")
-ENV_PATH = os.path.join(ZYLCH_DIR, ".env")
 
 
 def load_env():
-    """Load .env from ~/.zylch/ if it exists.
+    """Load env from active profile (set by activate_profile).
 
     Falls back to project-level .env for dev environments.
     """
-    if os.path.exists(ENV_PATH):
-        load_dotenv(ENV_PATH, override=True)
-        logger.debug(f"[CLI] Loaded env from {ENV_PATH}")
+    from dotenv import load_dotenv
+
+    profile_dir = os.environ.get("ZYLCH_PROFILE_DIR")
+    if profile_dir:
+        env_path = os.path.join(profile_dir, ".env")
+        if os.path.exists(env_path):
+            load_dotenv(env_path, override=True)
+            logger.debug(f"[CLI] Loaded env from {env_path}")
+            return
+
+    # Legacy fallback
+    legacy_env = os.path.join(ZYLCH_DIR, ".env")
+    if os.path.exists(legacy_env):
+        load_dotenv(legacy_env, override=True)
+        logger.debug(f"[CLI] Loaded env from {legacy_env}")
     else:
-        logger.debug(
-            f"[CLI] No env at {ENV_PATH}, using project .env"
-        )
         load_dotenv()
+        logger.debug("[CLI] Loaded project .env")
 
 
 def get_owner_id() -> str:
-    """Get owner ID for standalone mode (single-user).
-
-    Uses EMAIL_ADDRESS as the identity key. Falls back to
-    'local-user' when no email is configured.
-    """
+    """Get owner ID (EMAIL_ADDRESS from active profile)."""
     owner_id = os.environ.get("EMAIL_ADDRESS", "local-user")
     logger.debug(f"[CLI] owner_id={owner_id}")
     return owner_id
@@ -40,4 +43,6 @@ def get_owner_id() -> str:
 def ensure_zylch_dir():
     """Create ~/.zylch/ directory if it doesn't exist."""
     os.makedirs(ZYLCH_DIR, exist_ok=True)
-    logger.debug(f"[CLI] Ensured dir {ZYLCH_DIR}")
+
+# Keep ENV_PATH for backward compat (used nowhere critical now)
+ENV_PATH = os.path.join(ZYLCH_DIR, ".env")

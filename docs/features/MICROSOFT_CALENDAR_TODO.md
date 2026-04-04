@@ -209,9 +209,9 @@ async def sync_outlook_calendar(
         end_date=datetime.now() + timedelta(days=days_ahead)
     )
 
-    # Store in Supabase calendar_events table
+    # Store in SQLite calendar_events table
     for event in events:
-        await self.supabase.table('calendar_events').upsert({
+        await storage.upsert  # SQLite via SQLAlchemy('calendar_events').upsert({
             'owner_id': self.user_id,
             'provider': 'microsoft',  # NEW: Track provider
             'external_id': event.id,
@@ -242,7 +242,7 @@ async def find_outlook_meetings_without_followup(
     """Find Outlook meetings without follow-up email"""
 
     # Get Outlook calendar events
-    events = await self.supabase.table('calendar_events').select('*').eq(
+    events = await storage.upsert  # SQLite via SQLAlchemy('calendar_events').select('*').eq(
         'owner_id', self.user_id
     ).eq(
         'provider', 'microsoft'  # Filter for Outlook events

@@ -10,16 +10,16 @@ description: |
 
 | Module | Test Coverage | Docs | Arch Conformance | Known Gaps |
 |--------|:---:|:---:|:---:|---|
-| **cli/** | None | Low | High | New module, no tests yet |
+| **cli/** | None | Medium | High | Dashboard, /process pipeline, profiles |
 | **email/** | None | Low | High | New IMAP client, no tests |
-| **services/** | Low | Medium | Medium | SaaS remnants in chat_service, command_handlers |
+| **services/** | Low | Medium | Medium | process_pipeline.py added; SaaS remnants in chat_service, command_handlers |
 | **storage/** | Low | Medium | High | SQLite migration complete, no tests for upserts |
 | **tools/** | None | Medium | High | gmail_tools.py (874 lines) above guideline |
 | **agents/** | None | Low | High | No tests for incremental prompt |
 | **agents/trainers/** | None | Low | High | Task trainer incremental, untested |
-| **memory/** | None | Medium | High | In-memory vector search, untested |
+| **memory/** | None | Medium | High | UUID fix applied; in-memory vector search, untested |
 | **llm/** | None | Low | High | Simplified to 2 providers |
-| **workers/** | None | Low | Medium | Pipedrive code removed |
+| **workers/** | None | Low | High | Fail-fast on LLM errors (3 consecutive) |
 | **utils/** | Low | Low | High | Encryption + auto-reply detector |
 | **config.py** | None | Medium | High | Clean standalone config |
 

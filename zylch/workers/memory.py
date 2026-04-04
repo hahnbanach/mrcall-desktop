@@ -39,7 +39,7 @@ class MemoryWorker:
 
         Args:
             storage: Storage instance
-            owner_id: Firebase UID for namespace
+            owner_id: Owner ID for namespace
             api_key: API key for the LLM provider
             provider: LLM provider (anthropic, openai, mistral)
         """
@@ -225,6 +225,9 @@ class MemoryWorker:
     async def process_batch(self, emails: List[Dict]) -> int:
         """Process batch of emails.
 
+        Stops early on auth errors (401) to avoid hammering
+        a broken API key across hundreds of emails.
+
         Args:
             emails: List of email dicts (from get_unprocessed_emails)
 
@@ -233,11 +236,21 @@ class MemoryWorker:
         """
         logger.info(f"Processing batch of {len(emails)} emails")
         processed = 0
+        consecutive_failures = 0
 
         for email in emails:
             success = await self.process_email(email)
             if success:
                 processed += 1
+                consecutive_failures = 0
+            else:
+                consecutive_failures += 1
+                if consecutive_failures >= 3:
+                    logger.error(
+                        "3 consecutive failures — stopping"
+                        " batch (check API key)"
+                    )
+                    break
 
         logger.info(f"Batch complete: {processed}/{len(emails)} processed")
         return processed
@@ -303,6 +316,10 @@ class MemoryWorker:
 
         except Exception as e:
             logger.error(f"Failed to extract entities: {e}")
+            # Re-raise auth errors so batch can fail-fast
+            err_str = str(e).lower()
+            if "401" in err_str or "authentication" in err_str:
+                raise
             return []
 
     def _parse_entities(self, raw_output: str) -> List[str]:
@@ -456,6 +473,9 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
 
         except Exception as e:
             logger.error(f"Failed to extract calendar facts: {e}")
+            err_str = str(e).lower()
+            if "401" in err_str or "authentication" in err_str:
+                raise
             return ""
 
     # ==========================================
@@ -592,11 +612,21 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
         """
         logger.info(f"Processing batch of {len(conversations)} MrCall conversations")
         processed = 0
+        consecutive_failures = 0
 
         for conversation in conversations:
             success = await self.process_mrcall_conversation(conversation)
             if success:
                 processed += 1
+                consecutive_failures = 0
+            else:
+                consecutive_failures += 1
+                if consecutive_failures >= 3:
+                    logger.error(
+                        "3 consecutive failures — stopping"
+                        " batch (check API key)"
+                    )
+                    break
 
         logger.info(f"MrCall batch complete: {processed}/{len(conversations)} processed")
         return processed
@@ -755,6 +785,9 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
 
         except Exception as e:
             logger.error(f"Failed to extract MrCall entities: {e}")
+            err_str = str(e).lower()
+            if "401" in err_str or "authentication" in err_str:
+                raise
             return []
 
     def _extract_conversation_text(self, body: any) -> str:

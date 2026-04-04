@@ -7,7 +7,7 @@ Supabase (NO local filesystem per ARCHITECTURE.md).
 import logging
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from zylch.storage import Storage
 
@@ -64,6 +64,7 @@ class EmailArchiveManager:
         self,
         days_back: Optional[int] = None,
         force_full: bool = False,
+        on_progress: Optional[Callable[[int, str], None]] = None,
     ) -> Dict[str, Any]:
         """Sync emails from Gmail based on actual data in DB.
 
@@ -93,6 +94,9 @@ class EmailArchiveManager:
 
         # Get oldest email date from DB to know current coverage
         oldest_email_date = self.supabase.get_oldest_email_date(self.owner_id)
+        # Ensure timezone-aware for comparison with target_date
+        if oldest_email_date and oldest_email_date.tzinfo is None:
+            oldest_email_date = oldest_email_date.replace(tzinfo=timezone.utc)
 
         # Determine sync_from date
         if oldest_email_date is None:
@@ -121,6 +125,8 @@ class EmailArchiveManager:
             logger.info(
                 f"Searching for message IDs: {query}"
             )
+            if on_progress:
+                on_progress(10, "Searching mailbox...")
             message_ids = self.gmail.list_message_ids(
                 query=query, max_results=5000
             )
@@ -169,6 +175,11 @@ class EmailArchiveManager:
                 }
 
             # Fetch full messages for the new IDs
+            if on_progress:
+                on_progress(
+                    30,
+                    f"Fetching {len(new_message_ids)} new emails...",
+                )
             messages = self.gmail.get_batch(
                 new_message_ids, format="full"
             )
@@ -178,6 +189,11 @@ class EmailArchiveManager:
             )
 
             # Convert and store messages in batches
+            if on_progress:
+                on_progress(
+                    60,
+                    f"Storing {len(messages)} emails with embeddings...",
+                )
             batch_size = settings.email_archive_batch_size
             total_stored = 0
 
@@ -201,14 +217,16 @@ class EmailArchiveManager:
                     end = min(
                         i + batch_size, len(messages)
                     )
-                    if (
-                        end % 500 == 0
-                        or end >= len(messages)
-                    ):
-                        logger.info(
-                            f"Progress: {end}"
-                            f"/{len(messages)}"
-                            f" processed"
+                    logger.info(
+                        f"Progress: {end}"
+                        f"/{len(messages)}"
+                        f" processed"
+                    )
+                    if on_progress and len(messages) > 0:
+                        pct = 60 + int(30 * end / len(messages))
+                        on_progress(
+                            pct,
+                            f"Stored {end}/{len(messages)} emails",
                         )
 
                 except Exception as e:

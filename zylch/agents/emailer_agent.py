@@ -370,7 +370,7 @@ class EmailerAgent(SpecializedAgent):
 
         Args:
             storage: Storage instance
-            owner_id: Firebase UID
+            owner_id: Owner ID
             api_key: API key for LLM
             provider: LLM provider (anthropic, openai, mistral)
         """

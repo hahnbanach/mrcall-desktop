@@ -58,7 +58,7 @@ The Email Triage System solves a critical bug where support emails were incorrec
 │  │ Email Task Agent                     │                               │
 │  │                                      │                               │
 │  │ 1. Get contact importance            │ Evaluate importance rules     │
-│  │    → Loads rules from Supabase       │                               │
+│  │    → Loads rules from SQLite       │                               │
 │  │    → evaluate_rules(rules, contact)  │                               │
 │  │                                      │                               │
 │  │ 2. Analyze for tasks                 │ Ask Claude with context       │
@@ -241,7 +241,7 @@ _collect_training_sample()
        ├─→ create_sample_hash(anonymized_data)
        │   - SHA256 for deduplication
        │
-       └─→ supabase.store_training_sample({
+       └─→ storage.store_training_sample({
                owner_id, thread_id, email_data,
                predicted_verdict, feedback_type: 'auto_collected'
            })
