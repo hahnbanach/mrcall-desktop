@@ -71,12 +71,12 @@ def _search_emails(
                 f" | Subject: {r.get('subject', '')}"
                 f" | Date: {r.get('date', '')}",
             )
-            snippet = (
+            body = (
                 r.get("body_plain", "")
                 or r.get("snippet", "")
             )
-            if snippet:
-                lines.append(f"  {snippet[:200]}")
+            if body:
+                lines.append(f"  {body}")
         return "\n".join(lines)
     except Exception as e:
         return f"Search failed: {e}"
