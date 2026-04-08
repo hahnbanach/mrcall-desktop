@@ -10,63 +10,63 @@ echo "  Zylch — AI-powered sales intelligence"
 echo "  ======================================"
 echo ""
 
-# ── Check Python ──────────────────────────────────────
+# ── Detect OS and architecture ────────────────────────
 
-PYTHON=""
-for cmd in python3 python; do
-    if command -v "$cmd" &>/dev/null; then
-        version=$("$cmd" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null)
-        major=$("$cmd" -c "import sys; print(sys.version_info.major)" 2>/dev/null)
-        minor=$("$cmd" -c "import sys; print(sys.version_info.minor)" 2>/dev/null)
-        if [ "$major" -ge 3 ] && [ "$minor" -ge 11 ]; then
-            PYTHON="$cmd"
-            echo "  Found $cmd $version"
-            break
-        fi
-    fi
-done
+OS="$(uname -s)"
+ARCH="$(uname -m)"
 
-if [ -z "$PYTHON" ]; then
-    echo "  Python 3.11+ is required but not found."
-    echo ""
-    echo "  Install Python:"
-    echo "    macOS:   brew install python@3.12"
-    echo "    Ubuntu:  sudo apt install python3.12"
-    echo "    Windows: https://python.org/downloads"
-    echo ""
+case "$OS" in
+    Linux)  PLATFORM="linux" ;;
+    Darwin) PLATFORM="macos" ;;
+    *)      echo "  Unsupported OS: $OS"; exit 1 ;;
+esac
+
+case "$ARCH" in
+    x86_64|amd64)  ARCH="x64" ;;
+    arm64|aarch64) ARCH="arm64" ;;
+    *)             echo "  Unsupported architecture: $ARCH"; exit 1 ;;
+esac
+
+BINARY="zylch-${PLATFORM}-${ARCH}"
+INSTALL_DIR="/usr/local/bin"
+URL="https://github.com/malemi/zylch/releases/latest/download/${BINARY}"
+
+echo "  Platform: ${PLATFORM} ${ARCH}"
+
+# ── Download binary ───────────────────────────────────
+
+echo "  Downloading zylch..."
+TMP="$(mktemp)"
+if command -v curl &>/dev/null; then
+    curl -sL -o "$TMP" "$URL" || {
+        echo "  Download failed. Check https://github.com/malemi/zylch/releases"
+        rm -f "$TMP"
+        exit 1
+    }
+elif command -v wget &>/dev/null; then
+    wget -q -O "$TMP" "$URL" || {
+        echo "  Download failed. Check https://github.com/malemi/zylch/releases"
+        rm -f "$TMP"
+        exit 1
+    }
+else
+    echo "  curl or wget required"
     exit 1
 fi
 
-# ── Install pipx if missing ───────────────────────────
+# ── Install ───────────────────────────────────────────
 
-if ! command -v pipx &>/dev/null; then
-    echo "  Installing pipx..."
-    "$PYTHON" -m pip install --user pipx --quiet 2>/dev/null || {
-        echo "  pip install pipx failed. Trying with apt..."
-        if command -v apt &>/dev/null; then
-            sudo apt install -y pipx 2>/dev/null
-        elif command -v brew &>/dev/null; then
-            brew install pipx 2>/dev/null
-        else
-            echo "  Could not install pipx. Install it manually:"
-            echo "    https://pipx.pypa.io/stable/installation/"
-            exit 1
-        fi
-    }
-    "$PYTHON" -m pipx ensurepath 2>/dev/null || true
-    echo "  pipx installed."
+chmod +x "$TMP"
+
+if [ -w "$INSTALL_DIR" ]; then
+    mv "$TMP" "$INSTALL_DIR/zylch"
+else
+    echo "  Installing to $INSTALL_DIR (needs sudo)..."
+    sudo mv "$TMP" "$INSTALL_DIR/zylch"
 fi
 
-# ── Install zylch ─────────────────────────────────────
-
-echo "  Installing zylch..."
-pipx install zylch --python "$PYTHON" 2>/dev/null || {
-    # If already installed, upgrade
-    pipx upgrade zylch 2>/dev/null || true
-}
-
 echo ""
-echo "  Done! Run:"
+echo "  Installed! Run:"
 echo ""
 echo "    zylch init"
 echo ""
