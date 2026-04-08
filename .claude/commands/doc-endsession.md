@@ -1,30 +1,51 @@
 ---
 description: Commit Session State to Documentation
 ---
-1. **Ground truth from git, not memory.** Overcome context truncation by inspecting actual changes:
-   - Run `git status` and `git diff` for uncommitted work.
-   - Run `git log --oneline -n 10` and `git diff HEAD~3` (or appropriate range) for committed work this session.
-   - If unsure what was this session vs. prior, ask rather than guess.
-2. **Read current documentation baseline.** Read `./docs/active-context.md`, `./docs/architecture.md`, and `./docs/quality-grades.md`.
-3. **Update `./docs/active-context.md`.** Overwrite to reflect the state *right now*:
-   - What is built and working (based on the git inspection, not memory)
+Consolidate session knowledge using the Dream pattern: Orient → Gather → Consolidate → Prune.
+
+## Gate Check — Is consolidation needed?
+Before doing anything, verify at least one gate passes:
+- **Change gate**: `git status` or `git diff` shows uncommitted or recently committed changes.
+- **Context gate**: active-context.md is stale (doesn't reflect current state).
+- **Plan gate**: an execution plan has steps that were completed but not checked off.
+If no gate passes, output `No consolidation needed.` and stop.
+
+## Phase 1 — Orient
+Ground truth comes from git, not from conversation memory.
+1. Run `git status` and `git diff` for uncommitted work.
+2. Run `git log --oneline -n 10` and `git diff HEAD~3` (or appropriate range) for committed work.
+3. If unsure what was this session vs. prior, ask rather than guess.
+4. Read current documentation baseline: `./docs/active-context.md`, `./docs/ARCHITECTURE.md`.
+
+## Phase 2 — Gather Signal
+Identify what changed that is worth persisting. Priority order:
+- Structural changes (new modules, changed boundaries, new dependencies)
+- Completed execution plan steps
+- New decisions or constraints discovered
+- Quality changes (tests added/broken, tech debt created/resolved)
+- Harness gaps identified
+
+## Phase 3 — Consolidate (reconsolidate, don't append)
+Write or update docs. **Merge knowledge into existing content — do not append changelogs.**
+All docs are declarative, present-tense, living documents.
+
+5. **`./docs/active-context.md`** — Overwrite to reflect the state *right now*:
+   - What is built and working (from git inspection)
    - What was completed this session
    - Unresolved issues, failing tests, incomplete work
-   - Immediate next steps for the next session
-   - Declarative, present-tense only.
-4. **Update `./docs/architecture.md`** ONLY if structural changes occurred: new modules, new dependencies, changed boundaries, new infrastructure components. Keep it declarative — no changelogs.
-5. **Update execution plans.** If any `./docs/execution-plans/*.md` files relate to this session's work:
-   - Check off completed steps
-   - Log decisions made under `## Decisions Made`
-   - Add new open questions if they arose
-   - If a plan is fully complete, set `status: completed`
-6. **Update `./docs/quality-grades.md`** if the session changed test coverage, fixed or introduced tech debt, or improved/degraded any module's quality.
-7. **Log harness improvements.** If during this session you identified enforcement gaps, missing linters, or documentation that should exist but doesn't, append them to `./docs/harness-backlog.md` (create if it doesn't exist). Format:
+   - Immediate next steps
+6. **`./docs/ARCHITECTURE.md`** — Update ONLY if structural changes occurred. Remove stale descriptions of things that no longer exist. No changelogs.
+7. **Execution plans** (`./docs/execution-plans/*.md`) — Check off completed steps, log decisions under `## Decisions Made`, add open questions, set `status: completed` if done.
+8. **`./docs/quality-grades.md`** — Update only if test coverage, tech debt, or module quality changed.
+
+## Phase 4 — Prune and Index
+9. **Harness backlog** — If enforcement gaps were found, append to `./docs/harness-backlog.md`:
    ```
    - [ ] [Description of missing enforcement or tooling]
-     Discovered: [date or session context]
-     Impact: [what kind of errors this would prevent]
+     Discovered: [date]
+     Impact: [what errors this would prevent]
    ```
-8. **Update `./CLAUDE.md`** (or `./AGENTS.md`) only if new docs were created or existing pointers are now stale.
-9. Output only:
-   `Session state committed. Active context updated. [N execution plan steps completed. N harness gaps logged.]`
+10. **`./CLAUDE.md` index** — Update only if new docs were created or pointers are stale. Keep under ~100 lines. Remove pointers to deleted docs. Resolve contradictions.
+
+## Output
+`Session state committed. Active context updated. [N execution plan steps completed. N harness gaps logged.]`

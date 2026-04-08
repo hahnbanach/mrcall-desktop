@@ -1,7 +1,8 @@
 ---
 description: |
   Zylch standalone architecture: local CLI sales intelligence tool.
-  SQLite storage, IMAP email, fastembed vectors, BYOK LLM, no server.
+  SQLite storage, IMAP email, WhatsApp (neonize), Telegram bot,
+  fastembed vectors, BYOK LLM, no server.
 ---
 
 # Architecture
@@ -13,28 +14,38 @@ description: |
 ```
 zylch/
 ├── cli/                  # CLI entry point (click)
-│   ├── main.py           # Click group: init, sync, tasks, status
-│   ├── setup.py          # zylch init wizard (writes ~/.zylch/.env)
-│   ├── chat.py           # Interactive REPL (slash commands + natural language + startup dashboard)
-│   ├── commands.py       # Direct command shortcuts (sync, tasks, status)
+│   ├── main.py           # Click group: init, process, sync, dream, tasks, status, telegram
+│   ├── setup.py          # zylch init wizard (LLM → Email → WA → Telegram → MrCall)
+│   ├── chat.py           # Interactive REPL (slash commands + NL + dashboard)
+│   ├── commands.py       # Direct command shortcuts (process, sync, tasks, status)
 │   ├── profiles.py       # Multi-profile support (select, activate, lock)
 │   └── utils.py          # Shared helpers (load_env, get_owner_id)
 │
 ├── services/             # Business logic (stateless)
 │   ├── chat_service.py   # Chat message processing, LLM orchestration
 │   ├── chat_session.py   # Session state management
-│   ├── command_handlers.py # Slash command dispatch (/sync, /tasks, etc.)
+│   ├── command_handlers.py # Slash command dispatch (/sync, /tasks, /agent, etc.)
 │   ├── command_matcher.py  # NL-to-command matching (fastembed)
-│   ├── process_pipeline.py # /process: sync → memory → tasks pipeline
-│   ├── sync_service.py   # Email sync orchestration (IMAP)
-│   └── job_executor.py   # Background job runner
+│   ├── process_pipeline.py # /process: sync → WA → memory → tasks pipeline
+│   ├── dream.py          # Dream system: background memory consolidation (4 phases)
+│   ├── digest.py         # Proactive digest builder (tasks, gaps)
+│   ├── sync_service.py   # Email + MrCall sync orchestration
+│   ├── unified_conversation.py # Multi-channel conversation timeline
+│   └── job_executor.py   # Background job runner (REPL mode)
 │
 ├── email/                # Email access (IMAP/SMTP)
 │   └── imap_client.py    # IMAP client with auto-detect presets
 │
+├── whatsapp/             # WhatsApp (neonize/whatsmeow)
+│   ├── client.py         # WhatsApp client (QR login, send, receive)
+│   └── sync.py           # WA sync service (messages + contacts to SQLite)
+│
+├── telegram/             # Telegram bot interface
+│   └── bot.py            # Long-polling bot, bridges to ChatService
+│
 ├── storage/              # Data access layer (SQLite)
 │   ├── database.py       # SQLAlchemy engine (sqlite:///~/.zylch/zylch.db)
-│   ├── models.py         # 17 ORM models
+│   ├── models.py         # 19 ORM models
 │   └── storage.py        # Storage class (CRUD, upserts, search)
 │
 ├── tools/                # LLM tool definitions
@@ -47,13 +58,14 @@ zylch/
 │   ├── email_archive.py  # Email archive manager
 │   ├── contact_tools.py  # Contact/task/memory tools
 │   ├── crm_tools.py      # CRM + compose email tools
+│   ├── whatsapp_tools.py # WhatsApp LLM tools
 │   ├── starchat.py       # StarChat/MrCall HTTP client (channel)
 │   ├── call_tools.py     # Phone call tools (via StarChat)
 │   ├── sms_tools.py      # SMS tools (via StarChat)
+│   ├── mrcall/oauth.py   # MrCall OAuth2 flow
 │   ├── calendar_sync.py  # Calendar sync (pending CalDAV)
 │   ├── pipedrive.py      # Pipedrive CRM tools
 │   ├── web_search.py     # Web search for enrichment
-│   ├── mrcall/__init__.py # MrCall channel package
 │   └── config.py         # Tool configuration
 │
 ├── agents/               # AI agents
@@ -76,17 +88,12 @@ zylch/
 │   └── config.py         # Memory configuration
 │
 ├── llm/                  # LLM client
-│   ├── client.py         # LLMClient (aisuite wrapper)
-│   ├── providers.py      # Provider config (Anthropic, OpenAI)
+│   ├── client.py         # LLMClient (direct Anthropic/OpenAI SDK)
+│   ├── providers.py      # Provider config (models, features)
 │   └── exceptions.py     # LLM error types
 │
 ├── api/                  # Compatibility shim
 │   └── token_storage.py  # Delegates to Storage methods
-│
-├── assistant/            # Assistant orchestration
-│   ├── core.py           # Core assistant logic
-│   ├── models.py         # Assistant data models
-│   └── prompts.py        # System prompts
 │
 ├── workers/              # Background processors
 │   ├── memory.py         # Memory extraction worker
@@ -96,18 +103,27 @@ zylch/
 │   ├── auto_reply_detector.py # Email auto-reply detection
 │   └── encryption.py     # Fernet encryption for credentials
 │
-└── config.py             # Pydantic Settings (from ~/.zylch/.env)
+└── config.py             # Pydantic Settings (from profile ~/.zylch/.env)
 ```
 
 ## Data Flow
 
 ```
 User
-  → zylch CLI (click)
+  → zylch CLI (click) or Telegram bot
   → command_handlers.py (slash commands) or chat_service.py (LLM)
-  → tools execute (IMAP, StarChat, memory search)
+  → tools execute (IMAP, neonize, StarChat, memory search)
   → Storage (SQLite) ← → fastembed (embeddings)
-  → response printed to terminal
+  → response printed to terminal or sent to Telegram
+```
+
+### Process Pipeline (`zylch process`)
+```
+[1/5] Email sync (IMAP → SQLite, incremental)
+[2/5] WhatsApp sync (connect → history → contacts → disconnect)
+[3/5] Memory extraction (LLM → entity blobs, auto-trains on first run)
+[4/5] Task detection (LLM → task items, auto-trains on first run)
+[5/5] Show action items
 ```
 
 ## Multi-Channel Architecture
@@ -115,18 +131,38 @@ User
 | Channel | Protocol | Implementation |
 |---------|----------|---------------|
 | Email | IMAP/SMTP | `zylch/email/imap_client.py` |
-| MrCall | StarChat HTTP | `zylch/tools/starchat.py` |
-| WhatsApp | GOWA HTTP | Planned |
+| WhatsApp | neonize (whatsmeow) | `zylch/whatsapp/client.py` — QR login, sync on demand |
+| MrCall | StarChat HTTP + OAuth2 | `zylch/tools/starchat.py` + `mrcall/oauth.py` |
+| Telegram | python-telegram-bot | `zylch/telegram/bot.py` — bot interface (long-polling) |
 | Calendar | CalDAV | Planned |
+
+## Interfaces
+
+| Interface | Command | How |
+|-----------|---------|-----|
+| CLI REPL | `zylch -p user@example.com` | Interactive chat with slash commands |
+| CLI Process | `zylch -p user@example.com process` | Full pipeline (sync + AI) |
+| CLI Sync | `zylch -p user@example.com sync` | Fetch only (no AI) |
+| Telegram | `zylch telegram` | Bot, bridges to ChatService |
+
+## Profile System
+
+- Profiles stored in `~/.zylch/profiles/{email}/`
+- Each profile has `.env`, `zylch.db`, `profile.lock`
+- CLI `-p/--profile` option for explicit selection
+- Auto-selects if only one profile exists
+- Exclusive locking via `flock` (write commands)
+- Profile matching is exact only — no substring/fuzzy
 
 ## Storage
 
 - **Engine**: SQLite with WAL mode, foreign keys enabled
-- **Location**: `~/.zylch/profiles/<name>/zylch.db` (profile-aware via `ZYLCH_DB_PATH`)
-- **Models**: 17 (Email, Blob, BlobSentence, TaskItem, OAuthToken, etc.)
+- **Location**: `~/.zylch/profiles/<name>/zylch.db`
+- **Models**: 19 (Email, Blob, BlobSentence, TaskItem, OAuthToken, WhatsAppMessage, WhatsAppContact, MrcallConversation, etc.)
 - **Embeddings**: stored as LargeBinary (BLOB), loaded into numpy for search
 - **No pgvector**: cosine similarity computed in-memory via numpy
 - **No Alembic**: tables created via `Base.metadata.create_all()`
+- **WhatsApp session**: `~/.zylch/whatsapp.db` (neonize, separate from profile DB)
 
 ## Dependencies
 
@@ -136,9 +172,11 @@ sqlalchemy          ORM (SQLite backend)
 fastembed           Embeddings (ONNX, no PyTorch)
 numpy               Vector math
 httpx               HTTP client (StarChat, APIs)
-aisuite             Multi-provider LLM
-anthropic           Anthropic SDK
-openai              OpenAI SDK
+anthropic           Anthropic SDK (direct)
+openai              OpenAI SDK (direct)
+neonize             WhatsApp (whatsmeow wrapper)
+python-telegram-bot Telegram bot interface
+rich                Terminal formatting
 cryptography        Fernet encryption
 pydantic-settings   Configuration
 beautifulsoup4      HTML parsing
