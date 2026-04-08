@@ -406,39 +406,121 @@ class IMAPClient:
             ],
         }
 
+    def _find_sent_folder(self) -> Optional[str]:
+        """Find the Sent mail folder name.
+
+        Uses IMAP LIST to find the folder with \\Sent flag.
+        Returns the name quoted for IMAP SELECT.
+        """
+        conn = self._ensure_connected()
+        status, folders = conn.list()
+        if status != "OK":
+            return None
+
+        for folder_line in folders:
+            decoded = folder_line.decode(
+                "utf-8", errors="replace",
+            )
+            if "\\Sent" in decoded:
+                # Extract folder name (last quoted string)
+                parts = decoded.rsplit('"', 2)
+                if len(parts) >= 2:
+                    name = parts[-2]
+                    logger.debug(
+                        f"[IMAP] Found Sent folder: {name}",
+                    )
+                    # Quote for IMAP SELECT (spaces/brackets)
+                    return f'"{name}"'
+
+        # Fallback: try common names
+        for name in (
+            '"[Gmail]/Sent Mail"',
+            "Sent",
+            '"Sent Messages"',
+            "INBOX.Sent",
+        ):
+            try:
+                status, _ = conn.select(name, readonly=True)
+                if status == "OK":
+                    logger.debug(
+                        f"[IMAP] Sent folder fallback:"
+                        f" {name}",
+                    )
+                    return name
+            except Exception:
+                continue
+        return None
+
     def list_message_ids(
         self,
         query: str = "",
-        max_results: int = 5000,
+        max_results: int = 0,
     ) -> List[str]:
-        """List message IDs matching search criteria.
+        """List message IDs from INBOX + Sent folders.
 
-        Provides interface compatibility with GmailClient.
+        Syncs both received and sent emails so task detection
+        can see user replies.
 
         Args:
             query: Gmail-style query (parsed for date filter)
-            max_results: Maximum results to return
+            max_results: 0 = no limit (default). All matching
+                emails are returned.
 
         Returns:
-            List of Message-ID header values
+            List of Message-ID header values (deduplicated)
         """
         conn = self._ensure_connected()
 
         logger.debug(
-            f"[IMAP] list_message_ids(query={query}, "
-            f"max_results={max_results})"
+            f"[IMAP] list_message_ids(query={query})"
         )
-
-        conn.select("INBOX", readonly=True)
 
         # Parse Gmail-style "after:YYYY/MM/DD" into IMAP
         imap_criteria = self._gmail_query_to_imap(query)
 
+        # Collect IDs from INBOX + Sent
+        all_ids = set()
+        folders = ["INBOX"]
+        sent_folder = self._find_sent_folder()
+        if sent_folder:
+            folders.append(sent_folder)
+
+        for folder in folders:
+            try:
+                conn.select(folder, readonly=True)
+            except Exception:
+                logger.warning(
+                    f"[IMAP] Cannot select {folder}",
+                )
+                continue
+
+            ids = self._search_folder_ids(
+                conn, imap_criteria, max_results,
+            )
+            all_ids.update(ids)
+            logger.info(
+                f"[IMAP] {folder}: {len(ids)} message IDs",
+            )
+
+        logger.info(
+            f"[IMAP] Total unique IDs: {len(all_ids)}",
+        )
+        return list(all_ids)
+
+    def _search_folder_ids(
+        self,
+        conn,
+        imap_criteria: str,
+        max_results: int = 0,
+    ) -> List[str]:
+        """Search current folder and return Message-IDs."""
         status, data = conn.search(None, imap_criteria)
         if status != "OK" or not data[0]:
             return []
 
-        msg_nums = data[0].split()[-max_results:]
+        msg_nums = data[0].split()
+        if max_results > 0:
+            msg_nums = msg_nums[-max_results:]
 
         ids = []
         for num in msg_nums:
@@ -478,6 +560,8 @@ class IMAPClient:
     ) -> Optional[Dict[str, Any]]:
         """Get a single message by Message-ID header.
 
+        Searches INBOX and Sent folders.
+
         Args:
             message_id: RFC 5322 Message-ID value
 
@@ -490,20 +574,101 @@ class IMAPClient:
             f"[IMAP] get_message(message_id={message_id})"
         )
 
+        # Search INBOX first, then Sent
+        folders = ["INBOX"]
+        sent = self._find_sent_folder()
+        if sent:
+            folders.append(sent)
+
+        for folder in folders:
+            try:
+                conn.select(folder, readonly=True)
+            except Exception:
+                continue
+
+            status, data = conn.search(
+                None,
+                f'(HEADER Message-ID "{message_id}")',
+            )
+            if status == "OK" and data[0]:
+                msg_num = data[0].split()[-1]
+                return self._fetch_one(conn, msg_num)
+
+        logger.debug(
+            f"[IMAP] Message not found: {message_id}"
+        )
+        return None
+
+    def fetch_attachments(
+        self, message_id: str,
+        save_dir: str = "/tmp/zylch/attachments",
+    ) -> List[Dict[str, str]]:
+        """Download attachments from an email.
+
+        Args:
+            message_id: RFC 5322 Message-ID value
+            save_dir: Directory to save files
+
+        Returns:
+            List of {"filename", "content_type", "path"}
+        """
+        import os
+
+        conn = self._ensure_connected()
         conn.select("INBOX", readonly=True)
 
-        # Search by Message-ID header
         status, data = conn.search(
-            None, f'(HEADER Message-ID "{message_id}")'
+            None,
+            f'(HEADER Message-ID "{message_id}")',
         )
         if status != "OK" or not data[0]:
-            logger.debug(
-                f"[IMAP] Message not found: {message_id}"
-            )
-            return None
+            return []
 
         msg_num = data[0].split()[-1]
-        return self._fetch_one(conn, msg_num)
+        status, msg_data = conn.fetch(
+            msg_num, "(RFC822)",
+        )
+        if status != "OK" or not msg_data[0]:
+            return []
+
+        msg = email_lib.message_from_bytes(msg_data[0][1])
+        os.makedirs(save_dir, exist_ok=True)
+
+        results = []
+        for part in msg.walk():
+            disp = str(
+                part.get("Content-Disposition", ""),
+            )
+            if "attachment" not in disp:
+                continue
+
+            filename = part.get_filename()
+            if not filename:
+                filename = f"attachment_{len(results)}"
+            filename = _decode_header_value(filename)
+
+            payload = part.get_payload(decode=True)
+            if not payload:
+                continue
+
+            path = os.path.join(save_dir, filename)
+            with open(path, "wb") as f:
+                f.write(payload)
+
+            results.append(
+                {
+                    "filename": filename,
+                    "content_type": part.get_content_type(),
+                    "path": path,
+                    "size": len(payload),
+                },
+            )
+            logger.info(
+                f"[IMAP] Saved attachment:"
+                f" {filename} ({len(payload)} bytes)",
+            )
+
+        return results
 
     def get_batch(
         self,
