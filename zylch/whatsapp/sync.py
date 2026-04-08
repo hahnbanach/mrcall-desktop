@@ -81,29 +81,45 @@ class WhatsAppSyncService:
 
     # -- Contact sync --------------------------------------------------
 
-    def sync_contacts(self, wa_client) -> int:
-        """Fetch contacts from neonize and upsert into SQLite.
+    def sync_contacts(self, wa_client=None) -> int:
+        """Extract contacts from synced WhatsApp messages.
 
-        Args:
-            wa_client: WhatsAppClient instance (connected)
+        neonize doesn't have a "get all contacts" API, so we
+        derive contacts from messages already stored in DB.
 
         Returns:
-            Number of contacts synced.
+            Number of contacts upserted.
         """
-        from zylch.storage.models import WhatsAppContact
+        from sqlalchemy import func
 
-        contacts_map = wa_client.get_contacts()
-        if not contacts_map:
-            logger.info("[wa-sync] no contacts to sync")
-            return 0
+        from zylch.storage.models import (
+            WhatsAppContact,
+            WhatsAppMessage,
+        )
 
         count = 0
         try:
             with self._db_lock, get_session() as session:
-                for jid_str, contact_info in contacts_map.items():
-                    name = _extract_contact_name(contact_info)
+                # Get distinct chat JIDs from messages (non-group, not from me)
+                rows = (
+                    session.query(
+                        WhatsAppMessage.chat_jid,
+                        WhatsAppMessage.sender_name,
+                        func.max(WhatsAppMessage.timestamp),
+                    )
+                    .filter(
+                        WhatsAppMessage.owner_id == self.owner_id,
+                        WhatsAppMessage.is_group.is_(False),
+                        WhatsAppMessage.is_from_me.is_(False),
+                    )
+                    .group_by(WhatsAppMessage.chat_jid)
+                    .all()
+                )
+
+                for jid_str, sender_name, last_ts in rows:
+                    if not jid_str:
+                        continue
                     phone = _jid_to_phone(jid_str)
-                    push_name = _extract_push_name(contact_info)
 
                     existing = (
                         session.query(WhatsAppContact)
@@ -115,19 +131,21 @@ class WhatsAppSyncService:
                     )
 
                     if existing:
-                        if name:
-                            existing.name = name
-                        if push_name:
-                            existing.push_name = push_name
-                        existing.synced_at = datetime.now(timezone.utc)
+                        if sender_name:
+                            existing.push_name = sender_name
+                        existing.last_message_at = last_ts
+                        existing.synced_at = datetime.now(
+                            timezone.utc,
+                        )
                     else:
                         new_contact = WhatsAppContact(
                             owner_id=self.owner_id,
                             jid=str(jid_str),
                             phone_number=phone,
-                            name=name,
-                            push_name=push_name,
-                            synced_at=datetime.now(timezone.utc),
+                            push_name=sender_name,
+                            synced_at=datetime.now(
+                                timezone.utc,
+                            ),
                         )
                         session.add(new_contact)
                     count += 1
@@ -135,7 +153,9 @@ class WhatsAppSyncService:
             self._contacts_synced = count
             logger.info(f"[wa-sync] contacts synced: {count}")
         except Exception as e:
-            logger.error(f"[wa-sync] contact sync error: {e}")
+            logger.error(
+                f"[wa-sync] contact sync error: {e}",
+            )
             count = 0
         return count
 
@@ -309,22 +329,40 @@ def _extract_text(message) -> Optional[str]:
     return None
 
 
+def _safe_from_timestamp(ts) -> Optional[datetime]:
+    """Convert Unix timestamp to datetime, handling bogus values.
+
+    WhatsApp sometimes sends nanosecond timestamps or
+    corrupted values that produce years like 58227.
+    """
+    if not ts or not isinstance(ts, (int, float)) or ts <= 0:
+        return None
+    # Nanoseconds → seconds (if ts > year 3000 in seconds)
+    if ts > 32503680000:  # 3000-01-01 UTC
+        ts = ts / 1_000_000_000
+    try:
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+        # Reject dates before 2009 (WhatsApp launched) or after 2100
+        if dt.year < 2009 or dt.year > 2100:
+            return None
+        return dt
+    except (ValueError, OSError, OverflowError):
+        return None
+
+
 def _extract_timestamp(info) -> Optional[datetime]:
     """Extract timestamp from message info."""
     if hasattr(info, "Timestamp") and info.Timestamp:
         ts = info.Timestamp
-        if isinstance(ts, (int, float)):
-            return datetime.fromtimestamp(ts, tz=timezone.utc)
         if isinstance(ts, datetime):
             return ts
+        return _safe_from_timestamp(ts)
     return None
 
 
 def _extract_timestamp_from_int(ts) -> Optional[datetime]:
     """Convert Unix timestamp to datetime."""
-    if ts and isinstance(ts, (int, float)) and ts > 0:
-        return datetime.fromtimestamp(ts, tz=timezone.utc)
-    return None
+    return _safe_from_timestamp(ts)
 
 
 def _jid_to_phone(jid_str: str) -> str:

@@ -406,6 +406,7 @@ class SyncState(DictMixin, Base):
     history_id = Column(Text)
     last_sync = Column(DateTime)
     full_sync_completed = Column(DateTime)
+    last_dream_at = Column(DateTime)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow)
 
@@ -429,5 +430,68 @@ class Contact(DictMixin, Base):
     metadata_ = Column("metadata", JSON, default=dict)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow)
+
+
+# -------------------------------------------------------------------
+# WHATSAPP MESSAGES (neonize / whatsmeow)
+# -------------------------------------------------------------------
+
+
+class WhatsAppMessage(DictMixin, Base):
+    __tablename__ = "whatsapp_messages"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "message_id",
+            name="uq_wa_owner_message",
+        ),
+    )
+
+    id = Column(
+        String(36), primary_key=True, default=_new_uuid,
+    )
+    owner_id = Column(Text, nullable=False, index=True)
+    message_id = Column(Text, nullable=False)
+    chat_jid = Column(Text, nullable=False, index=True)
+    sender_jid = Column(Text, nullable=False)
+    sender_name = Column(Text)
+    text = Column(Text)
+    timestamp = Column(
+        DateTime, nullable=False, index=True,
+    )
+    is_from_me = Column(Boolean, default=False)
+    is_group = Column(Boolean, default=False)
+    media_type = Column(Text)
+    status = Column(Text)
+    created_at = Column(DateTime, default=_utcnow)
+    memory_processed_at = Column(DateTime)
+    task_processed_at = Column(DateTime)
+
+
+# -------------------------------------------------------------------
+# WHATSAPP CONTACTS (neonize / whatsmeow)
+# -------------------------------------------------------------------
+
+
+class WhatsAppContact(DictMixin, Base):
+    __tablename__ = "whatsapp_contacts"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "jid",
+            name="wa_contact_owner_jid_unique",
+        ),
+    )
+
+    id = Column(
+        String(36), primary_key=True, default=_new_uuid,
+    )
+    owner_id = Column(Text, nullable=False, index=True)
+    jid = Column(Text, nullable=False)
+    phone_number = Column(Text)
+    name = Column(Text)
+    push_name = Column(Text)
+    last_message_at = Column(DateTime)
+    synced_at = Column(DateTime, default=_utcnow)
 
 
