@@ -241,7 +241,6 @@ def _run_python(args: Dict) -> str:
 
 def _send_email(args: Dict) -> str:
     """Send email via SMTP."""
-    import asyncio
     import os
 
     to = args.get("to", "")
@@ -261,11 +260,9 @@ def _send_email(args: Dict) -> str:
             imap_host=os.environ.get("IMAP_HOST") or None,
             smtp_host=os.environ.get("SMTP_HOST") or None,
         )
-        result = asyncio.get_event_loop().run_until_complete(
-            client.send_message(
-                to=to, subject=subject, body=body,
-                in_reply_to=in_reply_to,
-            ),
+        result = client.send_message(
+            to=to, subject=subject, body=body,
+            in_reply_to=in_reply_to,
         )
         return (
             f"Email sent to {to}"

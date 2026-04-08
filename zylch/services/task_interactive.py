@@ -461,6 +461,45 @@ from zylch.services.solve_tools import (
 )
 
 
+def _format_approval_preview(
+    tool_name: str, args: Dict,
+) -> str:
+    """Format a preview for approval before execution."""
+    if tool_name == "send_email":
+        return (
+            f"**Send Email**\n"
+            f"To: {args.get('to', '')}\n"
+            f"Subject: {args.get('subject', '')}\n\n"
+            f"{args.get('body', '')}"
+        )
+    elif tool_name == "draft_email":
+        return (
+            f"**Draft Email**\n"
+            f"To: {args.get('to', '')}\n"
+            f"Subject: {args.get('subject', '')}\n\n"
+            f"{args.get('body', '')}"
+        )
+    elif tool_name == "send_whatsapp":
+        return (
+            f"**Send WhatsApp**\n"
+            f"To: {args.get('phone_number', '')}\n\n"
+            f"{args.get('message', '')}"
+        )
+    elif tool_name == "send_sms":
+        return (
+            f"**Send SMS**\n"
+            f"To: {args.get('phone_number', '')}\n\n"
+            f"{args.get('message', '')}"
+        )
+    elif tool_name == "run_python":
+        return (
+            f"**Run Python**\n"
+            f"_{args.get('description', '')}_\n\n"
+            f"```python\n{args.get('code', '')}\n```"
+        )
+    return json.dumps(args, indent=2, default=str)
+
+
 # ─── Agentic solve loop ──────────────────────────────
 
 
@@ -535,25 +574,41 @@ def _run_agent_loop(
                         f"[/cyan]",
                     )
 
+                    # Approval gate BEFORE execution
+                    if tool_name in APPROVAL_TOOLS:
+                        # Show preview of what will happen
+                        preview = _format_approval_preview(
+                            tool_name, tool_input,
+                        )
+                        console.print()
+                        console.print(Markdown(preview))
+                        if not click.confirm(
+                            "\n  Execute?",
+                            default=True,
+                        ):
+                            result = (
+                                "User declined this action."
+                            )
+                            tool_results.append(
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_id,
+                                    "content": result,
+                                },
+                            )
+                            continue
+
                     # Execute tool
                     result = _execute_tool(
                         tool_name, tool_input,
                         store, owner_id,
                     )
 
-                    # Approval gate for write tools
                     if tool_name in APPROVAL_TOOLS:
-                        console.print()
-                        console.print(Markdown(result))
-                        if not click.confirm(
-                            "\n  Approve this action?",
-                            default=True,
-                        ):
-                            result = (
-                                "User declined this action."
-                            )
+                        console.print(
+                            f"  [green]{result}[/green]",
+                        )
                     else:
-                        # Show read-only results briefly
                         preview = result[:200]
                         if len(result) > 200:
                             preview += "..."
