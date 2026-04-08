@@ -682,8 +682,8 @@ Do NOT rewrite from scratch - edit the existing draft.
                     note = item.get('note', '')
                     if results:
                         context_text += f"**Search for '{query}':** Found {len(results)} results:\n"
-                        for r in results[:3]:  # Limit to top 3
-                            content = r.get('content', '')[:500]  # Truncate long content
+                        for r in results:
+                            content = r.get('content', '')
                             context_text += f"- {content}\n"
                     elif note:
                         context_text += f"**Search for '{query}':** {note}\n"
@@ -692,7 +692,7 @@ Do NOT rewrite from scratch - edit the existing draft.
                     context_text += f"**Email from {email.get('from_email', 'unknown')}:**\n"
                     context_text += f"Subject: {email.get('subject', '(no subject)')}\n"
                     context_text += f"Date: {email.get('date', 'unknown')}\n"
-                    body = email.get('body', '')[:1000]  # Truncate
+                    body = email.get('body', '')
                     context_text += f"Body: {body}\n"
                 elif item['type'] == 'search_emails':
                     query = item.get('query', '')
@@ -700,12 +700,12 @@ Do NOT rewrite from scratch - edit the existing draft.
                     note = item.get('note', '')
                     if emails:
                         context_text += f"**Email search for '{query}':** Found {len(emails)} emails:\n"
-                        for e in emails[:5]:  # Limit to top 5
+                        for e in emails:
                             context_text += f"- From: {e.get('from_email', 'unknown')}\n"
                             context_text += f"  Subject: {e.get('subject', '(no subject)')}\n"
                             context_text += f"  Date: {e.get('date', 'unknown')}\n"
-                            body = e.get('body', '')[:300]  # Truncate
-                            context_text += f"  Body: {body}...\n"
+                            body = e.get('body', '')
+                            context_text += f"  Body: {body}\n"
                     elif note:
                         context_text += f"**Email search for '{query}':** {note}\n"
 
@@ -989,7 +989,7 @@ use that information to write the email or provide the answer. Don't just report
                 'to_email': email.get('to_email', ''),
                 'subject': email.get('subject', ''),
                 'date': email.get('date', ''),
-                'body': email.get('body_plain', '')[:500],  # Truncate for context
+                'body': email.get('body_plain', ''),
                 'id': email.get('id', '')
             })
 

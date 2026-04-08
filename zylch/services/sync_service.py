@@ -515,12 +515,9 @@ class SyncService:
             )
             body_preview = str(
                 conv.get("body", "N/A")
-            )[:500]
-            body_full = str(conv.get("body", ""))
+            )
             suffix = (
-                "..."
-                if len(body_full) > 500
-                else ""
+                ""
             )
             print(f"Body: {body_preview}{suffix}")
             if conv.get("values"):

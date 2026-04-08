@@ -123,7 +123,7 @@ def _search_memory(
                 lines.append(f"--- [{ns}]")
             else:
                 lines.append("---")
-            lines.append(content[:500])
+            lines.append(content)
         return "\n".join(lines)
     except Exception as e:
         return f"Memory search failed: {e}"

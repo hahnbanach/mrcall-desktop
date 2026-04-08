@@ -1747,11 +1747,8 @@ async def handle_email(args: List[str], config: ToolConfig, owner_id: str) -> st
                 from_name = email.get('from_name') or email.get('from_email', 'Unknown')
                 date_str = (email.get('date') or '')[:10]  # YYYY-MM-DD
 
-                # Body preview: body_plain or snippet, ~200 chars
                 body = email.get('body_plain') or email.get('snippet') or ''
-                body_preview = body[:200].replace('\n', ' ').strip()
-                if len(body) > 200:
-                    body_preview += '...'
+                body_preview = body.replace('\n', ' ').strip()
 
                 output += f"**{subject}**\n"
                 output += f"   From: {from_name} | {date_str}\n"
@@ -2063,12 +2060,7 @@ Message ID: `{sent_id if sent_id else 'N/A'}`"""
                 else:
                     date_str = str(date_val)[:16] if date_val else ""
 
-                # Truncate snippet for display
-                snip = (
-                    snippet[:120] + "..."
-                    if len(snippet) > 120
-                    else snippet
-                )
+                snip = snippet
 
                 sender = from_name or from_email
                 if from_name and from_email:

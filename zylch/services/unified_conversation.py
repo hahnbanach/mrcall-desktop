@@ -119,7 +119,7 @@ def get_unified_timeline(
                         "dt": e.date,
                         "from_me": is_from_me,
                         "summary": e.subject or "(no subject)",
-                        "preview": (e.snippet or "")[:200],
+                        "preview": e.snippet or "",
                     }
                 )
 
@@ -144,7 +144,7 @@ def get_unified_timeline(
                         "dt": e.date,
                         "from_me": False,
                         "summary": e.subject or "(no subject)",
-                        "preview": (e.snippet or "")[:200],
+                        "preview": e.snippet or "",
                     }
                 )
 
@@ -186,7 +186,7 @@ def get_unified_timeline(
                         "timestamp": (m.timestamp.isoformat() if m.timestamp else None),
                         "dt": m.timestamp,
                         "from_me": m.is_from_me,
-                        "summary": (m.text or "")[:200],
+                        "summary": m.text or "",
                         "preview": None,
                     }
                 )
