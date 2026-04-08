@@ -223,22 +223,25 @@ class WhatsAppClient:
 
     # -- Contacts ------------------------------------------------------
 
-    def get_contacts(self) -> Dict[str, Any]:
-        """Get all WhatsApp contacts from the local store.
+    def get_contacts(self) -> List[Any]:
+        """Get contact info for known JIDs.
 
-        Returns:
-            Dict mapping JID string to contact info.
+        neonize doesn't have a "get all contacts" API.
+        Returns empty list — contacts are extracted from
+        synced messages instead.
         """
-        if not self._client:
-            logger.warning("[whatsapp] client not initialized")
-            return {}
-        return self._client.contact.get_all_contacts()
+        return []
 
     def get_contact(self, jid) -> Optional[Any]:
         """Get a specific contact by JID."""
         if not self._client:
             return None
-        return self._client.contact.get_contact(jid)
+        try:
+            results = self._client.get_user_info(jid)
+            return results[0] if results else None
+        except Exception as e:
+            logger.warning(f"[whatsapp] get_contact failed: {e}")
+            return None
 
     # -- Messaging -----------------------------------------------------
 
