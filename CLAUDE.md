@@ -1,36 +1,21 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with this repository.
-
-## Project Overview
-
-Zylch — local AI-powered sales intelligence assistant. Python 3.11+ / SQLite / IMAP / BYOK LLM. Mono-user CLI tool, no server.
-
-### What It Does
-
-Multi-channel sales intelligence: connects email (IMAP), phone (MrCall/StarChat), WhatsApp (neonize/whatsmeow), and in future calendar (CalDAV). Generates tasks, maintains relationship memory, detects gaps. Also accessible via Telegram bot.
-
-### Channels
-
-| Channel | Protocol | Status |
-|---------|----------|--------|
-| Email | IMAP/SMTP | Working |
-| MrCall | StarChat HTTP + OAuth2 | Channel adapter (starchat.py) + OAuth (mrcall/oauth.py) |
-| WhatsApp | neonize (whatsmeow) | Implemented — local, QR code login |
-| Calendar | CalDAV | Planned |
-
-### Interfaces
-
-| Interface | How | Status |
-|-----------|-----|--------|
-| CLI REPL | `zylch` (interactive chat) | Working |
-| Telegram | `zylch telegram` (bot, long-polling) | Implemented |
-
-MrCall is a **channel** (read calls, send SMS, trigger actions). Configuration is delegated to StarChat → mrcall-agent (separate repo at `~/hb/mrcall-agent`).
+Zylch — local AI-powered sales intelligence CLI. Python 3.11+ / SQLite / IMAP / WhatsApp (neonize) / BYOK LLM. Mono-user, no server.
 
 ## Documentation
 
-The directory ./docs/ is continuously updated. Check `docs/README.md` for the index.
+All knowledge lives in `./docs/`. This file is the index.
+
+| Doc | What |
+|-----|------|
+| [system-rules.md](docs/system-rules.md) | Tech stack, coding standards, dependency rules, imperatives |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System map, data flow, module boundaries |
+| [CONVENTIONS.md](docs/CONVENTIONS.md) | Code style, patterns, logging, security |
+| [active-context.md](docs/active-context.md) | Current state, in-progress work, known issues |
+| [quality-grades.md](docs/quality-grades.md) | Per-module quality assessment |
+| [guides/cli-commands.md](docs/guides/cli-commands.md) | CLI and slash command reference |
+| [guides/quick-start.md](docs/guides/quick-start.md) | Install, setup, first use |
+| [agents/README.md](docs/agents/README.md) | Agent system (memory, tasks, emailer) |
 
 After context compaction, run /doc-intrasession before resuming work!
 
@@ -42,61 +27,40 @@ pip install -e .                    # Dev mode
 pipx install .                      # User install
 
 # Setup
-zylch init                          # Interactive wizard → ~/.zylch/.env
+zylch init                          # Profile wizard (LLM → Email → WhatsApp → Telegram → MrCall)
 
 # Usage
-zylch                               # Interactive chat (REPL)
-zylch sync                          # Sync emails via IMAP
-zylch tasks                         # Show actionable tasks
-zylch status                        # Show sync status
-zylch telegram                      # Start Telegram bot interface
+zylch -p user@example.com process   # Sync + memory + tasks (full pipeline)
+zylch -p user@example.com dream     # Background memory consolidation (cron-friendly)
+zylch -p user@example.com sync      # Fetch only (email + WhatsApp, no AI)
+zylch -p user@example.com tasks     # Show action items
+zylch -p user@example.com status    # Show sync stats
+zylch -p user@example.com           # Interactive chat (REPL)
+zylch profiles                      # List profiles
+zylch telegram                      # Start Telegram bot + proactive digest
 
-# Lint & Format
-black --check zylch/                # Check formatting
-ruff check zylch/                   # Lint
+# Lint
+black --check zylch/
+ruff check zylch/
 ```
 
-## Architecture
+## Channels
 
-### Flow
-```
-User → zylch CLI (click) or Telegram bot
-  → command_handlers.py (slash) or chat_service.py (LLM)
-  → tools execute (IMAP, neonize, StarChat, memory)
-  → Storage (SQLite ~/.zylch/zylch.db)
-  → response printed to terminal or sent to Telegram
-```
-
-### Key Layers
-
-- **`zylch/cli/`** — Click CLI: `main.py` (entry point), `setup.py` (init wizard), `chat.py` (REPL), `commands.py` (direct shortcuts)
-- **`zylch/services/`** — Business logic: `chat_service.py` (LLM orchestration), `command_handlers.py` (slash commands), `sync_service.py` (IMAP sync), `job_executor.py` (background jobs)
-- **`zylch/email/`** — IMAP/SMTP client (`imap_client.py`) with auto-detect presets
-- **`zylch/storage/`** — SQLAlchemy ORM with SQLite: `models.py` (19 models), `database.py` (engine), `storage.py` (Storage class)
-- **`zylch/whatsapp/`** — WhatsApp client (`client.py`, QR login via neonize) and sync service (`sync.py`)
-- **`zylch/telegram/`** — Telegram bot interface (`bot.py`, bridges to ChatService)
-- **`zylch/tools/`** — LLM tool definitions. Split into: `gmail_tools.py`, `email_sync_tools.py`, `contact_tools.py`, `crm_tools.py`, `whatsapp_tools.py`. Registry in `factory.py`. MrCall channel in `starchat.py`. MrCall OAuth in `mrcall/oauth.py`.
-- **`zylch/agents/`** — LLM-powered processors. `trainers/` generates prompts incrementally (task_email.py auto-runs after sync, no manual training)
-- **`zylch/memory/`** — Entity-centric memory with fastembed (384-dim, ONNX). In-memory vector search via numpy. Hybrid search (text + semantic). Reconsolidation via LLM.
-- **`zylch/llm/`** — Multi-provider LLM client via aisuite (Anthropic, OpenAI)
-
-### Configuration
-All config via `zylch/config.py` — Pydantic Settings loading from `~/.zylch/.env`. Key vars: `SYSTEM_LLM_PROVIDER`, `ANTHROPIC_API_KEY`, `EMAIL_ADDRESS`, `EMAIL_PASSWORD`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_ID`, `MRCALL_CLIENT_ID`, `MRCALL_CLIENT_SECRET`.
-
-### Storage
-SQLite at `~/.zylch/zylch.db`. 19 models (incl. WhatsAppMessage, WhatsAppContact). Tables created via `Base.metadata.create_all()`. No Alembic. Embeddings as BLOB, vector search in-memory. WhatsApp session in `~/.zylch/whatsapp.db` (neonize).
-
-### Related Repositories
-- `~/hb/mrcall-agent` — MrCall configurator SaaS (separate project)
+| Channel | Protocol | Status |
+|---------|----------|--------|
+| Email | IMAP/SMTP | Working |
+| WhatsApp | neonize (whatsmeow) | Working — QR code login, sync on demand |
+| MrCall | StarChat HTTP + OAuth2 | Channel adapter |
+| Telegram | python-telegram-bot | Bot interface |
+| Calendar | CalDAV | Planned |
 
 ## Critical Rules
 
-- **NO OUTPUT TRUNCATION**: Never use `[:8]`, `[:50]`, `[:100]` slicing for display. Show FULL values.
-- **DEBUG LOGGING MANDATORY**: Every feature must log inputs, calls, and results. Pattern: `logger.debug(f"[/cmd] func(param={param}) -> result={result}")`
-- **NEVER log secrets**: Only "present"/"absent".
-- **CONCURRENT OPERATIONS**: Batch all independent operations in a single message.
-- **NO ROOT FILES**: Never save working files to root. Use: `/zylch` (source), `/tests` (tests), `/docs` (docs), `/scripts` (scripts).
-- **FILES < 500 LINES**: Keep modules small and focused.
-- **NO HARDCODED SECRETS**: Use environment variables via Pydantic Settings.
-- **SQLITE STORAGE**: All data in SQLite. Embeddings in BLOB, search in-memory.
-- **Line length**: 100 chars (black + ruff configured in pyproject.toml).
+- **NO OUTPUT TRUNCATION**: Never use `[:8]`, `[:50]`, `[:100]` slicing for display
+- **DEBUG LOGGING MANDATORY**: `logger.debug(f"[/cmd] func(param={param}) -> result={result}")`
+- **NEVER log secrets**: Only "present"/"absent"
+- **FILES < 500 LINES**: Keep modules small and focused
+- **SQLITE STORAGE**: All data in SQLite. Embeddings in BLOB, search in-memory
+- **NO HARDCODED SECRETS**: Pydantic Settings from profile `.env`
+- **NO ROOT FILES**: Use `/zylch`, `/tests`, `/docs`, `/scripts`
+- **PROFILE MATCH**: Exact match only, no substring/fuzzy

@@ -1,7 +1,7 @@
 ---
 description: |
   Tech stack, coding standards, dependency rules, and imperatives for Zylch standalone.
-  Python 3.11+, Click CLI, SQLAlchemy ORM, SQLite, IMAP/SMTP, BYOK LLM.
+  Python 3.11+, Click CLI, SQLAlchemy ORM, SQLite, IMAP/SMTP, neonize, BYOK LLM.
 ---
 
 # System Rules
@@ -15,13 +15,16 @@ description: |
 | ORM | SQLAlchemy | 2.0+ |
 | Database | SQLite (WAL mode) | built-in |
 | Auth | None (mono-user, local) | - |
-| AI/LLM | aisuite (multi-provider: Anthropic, OpenAI) | aisuite 0.1.14+ |
+| AI/LLM | Direct SDK (Anthropic, OpenAI) | anthropic 0.39+, openai 1.0+ |
 | Vector Search | numpy cosine similarity (in-memory) | numpy 1.24+ |
 | Embeddings | fastembed (ONNX backend, no PyTorch) | 0.4+ |
-| HTTP Client | httpx | 0.25+ |
+| HTTP Client | httpx | 0.28+ |
 | Config | Pydantic Settings | 2.0+ |
 | Email | IMAP/SMTP (auto-detect presets) | - |
-| Telephony | StarChat/MrCall HTTP (channel adapter) | - |
+| WhatsApp | neonize (whatsmeow Go wrapper) | 0.3.15+ |
+| Telegram | python-telegram-bot | 22.0+ |
+| Telephony | StarChat/MrCall HTTP + OAuth2 | - |
+| Terminal UI | Rich | 13.0+ |
 | Scheduling | APScheduler | 3.10+ |
 | Encryption | cryptography (Fernet) | 41.0+ |
 | HTML Parsing | beautifulsoup4 | 4.12+ |
@@ -54,7 +57,7 @@ description: |
 
 ### Logging (Mandatory)
 - Every command/feature MUST have debug logging
-- Log: inputs/params received, every function call with input AND output, intermediate and final values
+- Log: inputs/params, function call with input AND output, final values
 - Pattern: `logger.debug(f"[/command] function(param={param}) -> result={result}")`
 - NEVER log tokens or secrets — only "present"/"absent"
 - NEVER truncate output in log messages (no `[:8]`, `[:50]`, etc.)
@@ -68,7 +71,7 @@ description: |
 ### Agent Pattern
 - Agents inherit from `BaseAgent` in `zylch/agents/base_agent.py`
 - Trainers in `zylch/agents/trainers/` handle prompt generation
-- Agents use `LLMClient` (aisuite wrapper) for model calls
+- Agents use `LLMClient` (direct SDK calls) for model calls
 - Storage via `Storage` class (SQLAlchemy-based)
 - Structured output via `tool_use` for reliable JSON
 
@@ -92,10 +95,12 @@ Config (config.py)
 - `services/` imports from anything except `cli/`
 - `cli/` imports from `services/`, `storage/`, `config`
 - `memory/` is a cross-cutting concern, importable by tools and agents
+- `whatsapp/` imports from `storage` only
+- `telegram/` imports from `services/`
 
 ### Data Storage
 - ALL data in SQLite via SQLAlchemy ORM
-- Models defined in `zylch/storage/models.py` (17 models)
+- Models defined in `zylch/storage/models.py` (19 models)
 - Tables created via `Base.metadata.create_all()` (no Alembic)
 - Credentials encrypted at rest (Fernet encryption)
 - Mono-user — no `owner_id` multi-tenant isolation needed
@@ -110,4 +115,5 @@ Config (config.py)
 6. ALWAYS include debug logging in every new feature
 7. ALWAYS use parameterized queries (SQLAlchemy handles this)
 8. Files MUST stay under 500 lines
-9. MrCall/StarChat is a channel adapter — configuration lives in `mrcall-agent` (separate repo)
+9. Profile name matching MUST be exact — no substring, fuzzy, or partial match
+10. MrCall/StarChat is a channel adapter — configuration lives in `mrcall-agent` (separate repo)

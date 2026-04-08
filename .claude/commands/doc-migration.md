@@ -1,55 +1,68 @@
 ---
 description: Migrate Documentation to Harness Structure
 ---
-1. **Inventory existing knowledge.** Read any existing `./docs/*.md`, `./CLAUDE.md`, `./AGENTS.md`, `README.md`, and inline code comments that describe architecture or conventions.
-2. **Ground truth from code.** Scan source directories (`src/`, `lib/`, `app/`, etc.) and configuration files (`package.json`, `build.sbt`, `docker-compose.yml`, `Makefile`, etc.) to understand the *actual* implementation — modules, dependencies, layering, data shapes, infrastructure.
-3. **Resolve conflicts.** Where documentation contradicts the code, the code wins. Flag discrepancies in the output.
-4. **Generate the harness documentation structure:**
+Build the documentation harness from scratch. Two layers: **static** (stable knowledge, cacheable) and **dynamic** (volatile state, changes every session).
 
-   - **`./CLAUDE.md`** (or `./AGENTS.md`): The table of contents. Max ~100 lines. Contains:
-     - One-sentence project description
-     - Pointers to every doc in `./docs/` with a one-line summary of each
-     - Quick-reference: how to build, test, lint, run
-     - Do NOT put rules or architecture details here — only pointers
+## Phase 1 — Inventory
+1. Read any existing `./docs/*.md`, `./CLAUDE.md`, `./AGENTS.md`, `README.md`.
+2. Scan source directories and config files to understand the *actual* implementation.
+3. Where documentation contradicts the code, **the code wins**. Flag discrepancies.
 
-   - **`./docs/system-rules.md`**: Extract and codify:
-     - Tech stack, language version, key libraries
-     - Coding standards observed in the actual codebase (naming, patterns, error handling)
-     - Formatting and style rules (what a linter would enforce)
-     - Dependency rules: which modules/layers can import from which (if detectable)
-     - Rules the agent must never violate, stated as imperatives
+## Phase 2 — Generate Static Layer
+These docs change rarely. They form the cacheable foundation.
 
-   - **`./docs/architecture.md`**: Document based on how the code *is*, not how it was imagined:
-     - High-level system map: modules/packages, their responsibilities, their boundaries
-     - Dependency direction (e.g., Types → Config → Repo → Service → Runtime → UI)
-     - Data flow: how requests/data move through the system
-     - Infrastructure: databases, queues, external services, deployment topology
-     - Cross-cutting concerns: auth, telemetry, feature flags — where they enter the system
+- **`./CLAUDE.md`** — The index. Max ~100 lines. Contains:
+  - One-sentence project description
+  - Pointers to every doc in `./docs/` with a one-line summary
+  - Quick-reference: how to build, test, lint, run
+  - NO rules or architecture details — only pointers
 
-   - **`./docs/active-context.md`**: Current project state:
-     - What is built and working
-     - What is in progress
-     - Immediate next steps
-     - Known issues or tech debt
+- **`./docs/system-rules.md`** — Absolute constraints:
+  - Tech stack, language version, key libraries
+  - Coding standards observed in the actual codebase
+  - Dependency rules: which layers can import which
+  - Rules stated as imperatives ("Never", "Always", "Must")
 
-   - **`./docs/quality-grades.md`**: For each major module/domain, assess:
-     - Test coverage (high/medium/low/none)
-     - Documentation completeness
-     - Architectural conformance
-     - Known gaps
+- **`./docs/ARCHITECTURE.md`** — System map from code reality:
+  - Modules/packages, responsibilities, boundaries
+  - Dependency direction diagram
+  - Data flow: how requests/data move through the system
+  - Infrastructure: databases, external services, deployment
+  - Cross-cutting concerns: where they enter the system
 
-   - **`./docs/execution-plans/`**: Create the directory. If there is active work in progress, create one plan file per workstream using the template:
-     ```
-     # [Plan Name]
-     status: active | completed | paused
-     ## Goal
-     ## Steps
-     - [ ] Step 1
-     - [ ] Step 2
-     ## Decisions Made
-     ## Open Questions
-     ```
+- **`./docs/CONVENTIONS.md`** — Code style, patterns, file organization
 
-5. **Tone and format.** All docs are declarative, present-tense, living documents. No changelogs, no past tense, no "we decided to." State what *is*.
-6. Output:
-   `Harness migration complete. Generated: CLAUDE.md, system-rules.md, architecture.md, active-context.md, quality-grades.md, execution-plans/. [N discrepancies found between old docs and code — see flagged items.]`
+## Phase 3 — Generate Dynamic Layer
+These docs change every session.
+
+- **`./docs/active-context.md`** — Current execution state:
+  - What is built and working
+  - What is in progress
+  - Immediate next steps
+  - Known issues or tech debt
+
+- **`./docs/quality-grades.md`** — Per-module assessment:
+  - Test coverage (high/medium/low/none)
+  - Documentation completeness
+  - Architectural conformance
+  - Known gaps
+
+- **`./docs/execution-plans/`** — One file per active workstream:
+  ```
+  # [Plan Name]
+  status: active | completed | paused
+  ## Goal
+  ## Steps
+  - [ ] Step 1
+  ## Decisions Made
+  ## Open Questions
+  ```
+
+## Principles
+- All docs are declarative, present-tense, living documents.
+- No changelogs, no past tense, no "we decided to." State what *is*.
+- Reconsolidate, don't accumulate — when updating, merge knowledge, don't append.
+- The index (`CLAUDE.md`) is the boundary marker between static and dynamic.
+
+## Output
+`Harness migration complete. Generated: CLAUDE.md, system-rules.md, ARCHITECTURE.md, CONVENTIONS.md, active-context.md, quality-grades.md, execution-plans/. [N discrepancies found between old docs and code — see flagged items.]`

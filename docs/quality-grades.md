@@ -1,27 +1,41 @@
 ---
 description: |
-  Quality assessment of Zylch standalone modules after transformation
-  from SaaS to local CLI tool.
+  Quality assessment of Zylch standalone modules.
+  Updated 2026-04-04 after WhatsApp, Telegram, profile CLI, aisuite removal.
 ---
 
 # Quality Grades
 
 ## Module Assessment
 
-| Module | Test Coverage | Docs | Arch Conformance | Known Gaps |
-|--------|:---:|:---:|:---:|---|
-| **cli/** | None | Medium | High | Dashboard, /process pipeline, profiles |
-| **email/** | None | Low | High | New IMAP client, no tests |
-| **services/** | Low | Medium | Medium | process_pipeline.py added; SaaS remnants in chat_service, command_handlers |
-| **storage/** | Low | Medium | High | SQLite migration complete, no tests for upserts |
-| **tools/** | None | Medium | High | gmail_tools.py (874 lines) above guideline |
-| **agents/** | None | Low | High | No tests for incremental prompt |
-| **agents/trainers/** | None | Low | High | Task trainer incremental, untested |
-| **memory/** | None | Medium | High | UUID fix applied; in-memory vector search, untested |
-| **llm/** | None | Low | High | Simplified to 2 providers |
-| **workers/** | None | Low | High | Fail-fast on LLM errors (3 consecutive) |
-| **utils/** | Low | Low | High | Encryption + auto-reply detector |
-| **config.py** | None | Medium | High | Clean standalone config |
+| Module | Lines | Test Coverage | Docs | Arch Conformance | Known Gaps |
+|--------|------:|:---:|:---:|:---:|---|
+| **cli/** | 172+636+146+235+49 | None | Medium | High | Profile-aware, rclone wizard |
+| **email/** | ~400 | None | Low | High | IMAP client, no tests |
+| **whatsapp/** | 307+401 | None | Low | High | neonize sync, contacts from messages |
+| **telegram/** | ~300 | None | Low | High | Bot interface, untested |
+| **services/command_handlers.py** | **5137** | None | Low | **LOW** | Massively oversized, SaaS stubs |
+| **services/process_pipeline.py** | 430 | None | Low | High | New, auto-train logic |
+| **services/** (other) | ~1500 | Low | Medium | Medium | sync_service, chat_service |
+| **storage/** | 496+~600+~300 | Low | Medium | High | 19 models, SQLite |
+| **tools/gmail_tools.py** | **988** | None | Medium | **LOW** | Oversized |
+| **tools/** (other) | ~2000 | None | Medium | High | Factory, starchat, whatsapp_tools |
+| **agents/** | ~500 | None | Low | High | Base + emailer + task orchestrator |
+| **agents/trainers/** | ~800 | None | Low | High | Incremental prompt, untested |
+| **memory/** | ~700 | None | Medium | High | fastembed, hybrid search |
+| **llm/** | 492+~120 | None | Low | High | Direct SDK (aisuite dropped) |
+| **workers/** | ~600 | None | Low | High | Fail-fast on LLM errors |
+| **config.py** | 197 | None | Medium | High | Clean standalone config |
+
+## Oversized Files (> 500 lines)
+
+| File | Lines | Action |
+|------|------:|--------|
+| `services/command_handlers.py` | 5137 | Split urgently — 10x over limit |
+| `tools/gmail_tools.py` | 988 | Split into search/draft/send modules |
+| `tools/starchat.py` | ~850 | Consider splitting |
+| `services/sync_service.py` | 770 | Acceptable if MrCall sync moves out |
+| `cli/setup.py` | 636 | Slightly over, acceptable for wizard |
 
 ## Stale Modules (Candidates for Deletion)
 
@@ -32,24 +46,13 @@ description: |
 | `zylch/router/` | `intent_classifier.py` — may be used by command_matcher | Investigate |
 | `zylch/webhook/` | Empty `__init__.py` only | Delete |
 | `zylch/api/` | Compatibility shim only | Keep for now |
+| `zylch/assistant/` | Core/models/prompts — check usage | Investigate |
 
 ## Test Status
 
-**No tests currently pass.** The `tests/` directory references the old SaaS architecture and needs a complete rewrite for standalone.
+**No tests currently pass.** The `tests/` directory references the old SaaS architecture and needs a complete rewrite.
 
-## Architectural Conformance
+## Lint Status
 
-### Conforming
-- Storage uses SQLAlchemy ORM with SQLite
-- CLI uses click with subcommands
-- Tools follow base class pattern
-- Config via Pydantic Settings
-- Embeddings via fastembed (no PyTorch)
-- Memory search via numpy (no pgvector)
-
-### Non-Conforming
-- `gmail_tools.py` (874 lines) above 500-line guideline
-- `command_handlers.py` still has SaaS-era `/connect` stubs
-- `chat_service.py` still references MrCall routing paths
-- `api/token_storage.py` is a compatibility shim (tech debt)
-- `tests/` directory entirely stale
+- 63 files need Black reformatting
+- 114 Ruff errors (91 auto-fixable)

@@ -14,7 +14,7 @@ Enforcement gaps, missing tooling, and documentation debt.
 
 - [ ] No linter or CI check enforcing the 500-line file limit
   Discovered: 2026-03-17
-  Impact: Large files accumulate silently (gmail_tools.py is 874 lines)
+  Impact: Large files accumulate silently (command_handlers.py now 5137 lines, gmail_tools.py 988)
   Update: black + ruff installed in venv/ (2026-04-03) but no CI pipeline yet
 
 - [ ] `oauth_tokens.last_sync` field is never written by any code path
@@ -64,4 +64,16 @@ Enforcement gaps, missing tooling, and documentation debt.
   Impact: Dead code paths, potential runtime errors
 
 - [x] `docs/` has many stale files referencing old SaaS architecture → cleaned up (2026-04-01)
+
+- [ ] neonize Go runtime prints "Press Ctrl+C to exit" to stdout — not suppressible from Python
+  Discovered: 2026-04-04
+  Impact: Cosmetic noise in CLI output during WhatsApp connect
+
+- [ ] neonize `get_all_contacts()` API does not exist — contacts derived from messages instead
+  Discovered: 2026-04-04
+  Impact: Contact sync depends on having messages first; no standalone contact fetch
+
+- [ ] WhatsApp session DB (`~/.zylch/whatsapp.db`) is global, not per-profile
+  Discovered: 2026-04-04
+  Impact: Multi-profile with different WA accounts not supported
   19 SaaS-only files deleted, 8 files rewritten for standalone, README index rebuilt
