@@ -667,33 +667,31 @@ def _post_solve_menu(
     task: Dict, store, owner_id: str,
     client, system: str, messages: List[Dict],
 ):
-    """After solve: approve, give feedback, or cancel."""
+    """After solve: continue conversation, mark done, or go back."""
     while True:
         console.print(
-            "  a) done   b) feedback   c) cancel",
+            "\n  d) done   b) back to task   or type to continue conversation",
         )
         choice = click.prompt(
-            "  Choice", type=str, default="a",
-        ).strip().lower()
+            "  >", type=str, default="d",
+        ).strip()
 
-        if choice == "a":
+        lower = choice.lower()
+        if lower == "d":
             store.complete_task_item(owner_id, task["id"])
             console.print(
                 "  [green]Task marked as done.[/green]",
             )
             break
-        elif choice == "b":
-            feedback = click.prompt(
-                "  Your feedback", type=str,
-            )
+        elif lower == "b":
+            break
+        else:
+            # Anything else = continue the conversation
             messages.append(
-                {"role": "user", "content": feedback},
+                {"role": "user", "content": choice},
             )
-            console.print("\n  [dim]Revising...[/dim]")
+            console.print("\n  [dim]Thinking...[/dim]")
             messages = _run_agent_loop(
                 client, system, messages,
                 store, owner_id,
             )
-            console.print()
-        elif choice == "c":
-            break
