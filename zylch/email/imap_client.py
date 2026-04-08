@@ -154,6 +154,16 @@ def _extract_plain_body(
                 html = text
             else:
                 plain = text
+    # Fallback: extract text from HTML if no plain text
+    if not plain and html:
+        try:
+            from bs4 import BeautifulSoup
+
+            soup = BeautifulSoup(html, "html.parser")
+            plain = soup.get_text(separator="\n", strip=True)
+        except Exception:
+            pass
+
     return plain, html
 
 
