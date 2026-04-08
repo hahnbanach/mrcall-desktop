@@ -34,6 +34,19 @@
       "Bash(rm -rf /)"
     ]
   },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "EnterPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/planning-principles.sh"
+          }
+        ]
+      }
+    ]
+  },
   "includeCoAuthoredBy": true,
   "enabledMcpjsonServers": ["claude-flow", "ruv-swarm"],
   "statusLine": {

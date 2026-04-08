@@ -356,6 +356,69 @@ def _run_wizard(env: dict, profile_name: str | None):
         mrcall_client_id and not mrcall_connected,
     )
 
+    # ─── 6. Personal data ─────────────────────────────────────
+
+    click.echo("\n6. Personal Data (optional)")
+    click.echo(
+        "   Zylch uses this to fill forms,"
+        " draft emails, etc.\n",
+    )
+
+    personal_fields = {
+        "USER_FULL_NAME": "Full name",
+        "USER_PHONE": "Phone number",
+        "USER_CODICE_FISCALE": "Codice fiscale",
+        "USER_DATE_OF_BIRTH": "Date of birth",
+        "USER_ADDRESS": "Address",
+        "USER_IBAN": "IBAN",
+        "USER_COMPANY": "Company name",
+        "USER_VAT_NUMBER": "VAT / P.IVA",
+    }
+
+    personal_data = {}
+    for key, label in personal_fields.items():
+        existing_val = env.get(key, "")
+        if existing_val:
+            if click.confirm(
+                f"  {label}: {existing_val} — keep?",
+                default=True,
+            ):
+                personal_data[key] = existing_val
+            else:
+                val = click.prompt(
+                    f"  {label}", default="",
+                    show_default=False,
+                )
+                if val:
+                    personal_data[key] = val
+        else:
+            val = click.prompt(
+                f"  {label} (Enter to skip)",
+                default="", show_default=False,
+            )
+            if val:
+                personal_data[key] = val
+
+    # ─── 7. Document folders ──────────────────────────────────
+
+    click.echo("\n7. Document Folders (optional)")
+    click.echo(
+        "   Zylch can read your documents"
+        " (visure, ID, contracts) to fill forms.\n",
+    )
+
+    existing_doc_paths = env.get("DOCUMENT_PATHS", "")
+    if existing_doc_paths:
+        click.echo(
+            f"  Current: {existing_doc_paths}",
+        )
+        if click.confirm("  Keep these?", default=True):
+            doc_paths = existing_doc_paths
+        else:
+            doc_paths = _prompt_document_paths()
+    else:
+        doc_paths = _prompt_document_paths()
+
     # ─── Determine profile name ───────────────────────────────
 
     # Profile name = email address (or original name if no email)
@@ -428,6 +491,19 @@ def _run_wizard(env: dict, profile_name: str | None):
         lines.append(f"MRCALL_CLIENT_ID={mrcall_client_id}")
         lines.append(f"MRCALL_CLIENT_SECRET={mrcall_client_secret}")
 
+    # Personal data
+    if personal_data:
+        lines.append("")
+        lines.append("# Personal Data")
+        for key, val in personal_data.items():
+            lines.append(f"{key}={val}")
+
+    # Document folders
+    if doc_paths:
+        lines.append("")
+        lines.append("# Document Folders")
+        lines.append(f"DOCUMENT_PATHS={doc_paths}")
+
     # Preserve extra vars from existing .env
     known_keys = {
         "SYSTEM_LLM_PROVIDER",
@@ -446,6 +522,8 @@ def _run_wizard(env: dict, profile_name: str | None):
         "MRCALL_CLIENT_SECRET",
         "MRCALL_DASHBOARD_URL",
         "MRCALL_REALM",
+        "DOCUMENT_PATHS",
+        *personal_data.keys(),
     }
     extra = {k: v for k, v in env.items() if k not in known_keys}
     if extra:
@@ -493,15 +571,22 @@ def _run_wizard(env: dict, profile_name: str | None):
     elif mrcall_client_id:
         click.echo("  MrCall: configured (not yet authorized)")
 
-    click.echo("\nNext steps:")
-    if email:
+    if personal_data:
         click.echo(
-            f"  zylch -p {new_profile_name} sync"
-            f"    Sync emails",
+            f"  Personal: {len(personal_data)} fields saved",
         )
+    if doc_paths:
+        n = len(doc_paths.split(","))
+        click.echo(f"  Documents: {n} folder(s)")
+
+    click.echo("\nNext steps:")
+    click.echo(
+        f"  zylch -p {new_profile_name} process"
+        f"   Sync + analyze everything",
+    )
     click.echo(
         f"  zylch -p {new_profile_name}"
-        f"         Start interactive chat",
+        f"           Start interactive chat",
     )
     if tg_token:
         click.echo(
@@ -511,6 +596,40 @@ def _run_wizard(env: dict, profile_name: str | None):
 
 
 # ─── Channel-specific helpers ─────────────────────────────────
+
+
+def _prompt_document_paths() -> str:
+    """Prompt for document folder paths.
+
+    Returns comma-separated paths, or empty string.
+    """
+    paths = []
+    click.echo(
+        "  Add folder paths (Enter empty to finish):",
+    )
+    while True:
+        path = click.prompt(
+            "  Path", default="", show_default=False,
+        )
+        if not path:
+            break
+        # Expand ~ but keep in stored format
+        expanded = os.path.expanduser(path.strip())
+        if os.path.isdir(expanded):
+            paths.append(path.strip())
+            click.echo(f"    Added: {path.strip()}")
+        else:
+            click.echo(
+                f"    [Warning] '{path}' not found,"
+                f" added anyway",
+            )
+            paths.append(path.strip())
+
+    if paths:
+        click.echo(f"  {len(paths)} folder(s) registered.")
+    else:
+        click.echo("  Skipped.")
+    return ",".join(paths)
 
 
 def _prompt_telegram() -> tuple:
@@ -561,11 +680,16 @@ def _connect_whatsapp_qr():
     wa_client = WhatsAppClient()
     wa_client.set_qr_callback(_on_qr)
     wa_client.on_connected(_on_connected)
+
     wa_client.connect(blocking=False)
 
     try:
         click.echo("  Generating QR code...")
         if not qr_ready.wait(timeout=15):
+            # Session already exists — no QR needed
+            if connected_ev.wait(timeout=10):
+                click.echo("  WhatsApp connected (existing session)!")
+                return
             click.echo("  QR code not received. Check network.")
             return
 
@@ -584,7 +708,10 @@ def _connect_whatsapp_qr():
                 " to retry.",
             )
     finally:
-        wa_client.disconnect()
+        # Don't call disconnect() — the daemon thread will die
+        # with the process. Calling disconnect() triggers Go's
+        # websocket close which logs noisy warnings to stderr.
+        pass
 
 
 def _prompt_mrcall_creds(

@@ -14,14 +14,37 @@ logger = logging.getLogger(__name__)
 
 
 def _configure_logging():
-    """Set up logging from LOG_LEVEL env var."""
-    level = os.environ.get("LOG_LEVEL", "WARNING").upper()
+    """Set up logging: console (WARNING+) and file (DEBUG).
+
+    Log file: ~/.zylch/profiles/{profile}/zylch.log
+    (created after profile activation, see _setup_log_file)
+    """
+    level = os.environ.get("LOG_LEVEL", "INFO").upper()
     logging.basicConfig(
         level=getattr(logging, level, logging.WARNING),
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
         datefmt="%H:%M:%S",
     )
     logger.debug(f"[CLI] Logging configured, level={level}")
+
+
+def _setup_log_file():
+    """Add file handler after profile is activated."""
+    profile_dir = os.environ.get("ZYLCH_PROFILE_DIR")
+    if not profile_dir:
+        return
+
+    log_path = os.path.join(profile_dir, "zylch.log")
+    handler = logging.FileHandler(
+        log_path, encoding="utf-8",
+    )
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(name)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+    logging.getLogger().addHandler(handler)
+    logger.debug(f"[CLI] Log file: {log_path}")
 
 
 def _setup_profile(profile_name: str | None = None, lock: bool = True):
@@ -53,6 +76,7 @@ def _setup_profile(profile_name: str | None = None, lock: bool = True):
         atexit.register(release_lock)
 
     activate_profile(profile)
+    _setup_log_file()
     return profile
 
 
@@ -101,8 +125,34 @@ def list_profiles_cmd():
 
 @cli.command()
 @click.pass_context
+def process(ctx):
+    """Sync all channels + extract memory + detect tasks."""
+    _configure_logging()
+    profile_name = ctx.obj.get("profile") if ctx.obj else None
+    profile = _setup_profile(profile_name)
+    logger.info(f"[CLI] Running process, profile={profile}")
+    from zylch.cli.commands import run_process
+
+    run_process()
+
+
+@cli.command()
+@click.pass_context
+def dream(ctx):
+    """Run background memory consolidation (can be cron'd)."""
+    _configure_logging()
+    profile_name = ctx.obj.get("profile") if ctx.obj else None
+    profile = _setup_profile(profile_name)
+    logger.info(f"[CLI] Running dream, profile={profile}")
+    from zylch.cli.commands import run_dream
+
+    run_dream()
+
+
+@cli.command()
+@click.pass_context
 def sync(ctx):
-    """Sync emails from IMAP."""
+    """Sync emails and WhatsApp (fetch only, no AI)."""
     _configure_logging()
     profile_name = ctx.obj.get("profile") if ctx.obj else None
     profile = _setup_profile(profile_name)

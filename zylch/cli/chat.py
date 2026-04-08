@@ -243,28 +243,12 @@ def interactive_chat():
     - Everything else goes to ChatService.process_message().
     - Ctrl-C or /quit exits.
     """
-    import atexit
     from zylch.cli.profiles import (
-        activate_profile,
-        acquire_lock,
+        get_active_profile,
         get_active_profile_dir,
-        migrate_legacy_profile,
-        release_lock,
-        select_profile,
     )
 
-    migrate_legacy_profile()
-    profile = select_profile()
-
-    if not acquire_lock(profile):
-        console.print(
-            f"[red]Profile '{profile}' is already in use"
-            f" by another session.[/red]"
-        )
-        raise SystemExit(1)
-    atexit.register(release_lock)
-
-    activate_profile(profile)
+    # Profile already selected and activated by main.py _setup_profile()
     load_env()
     owner_id = get_owner_id()
 
@@ -282,6 +266,7 @@ def interactive_chat():
             f" from previous session.[/yellow]\n"
         )
 
+    profile = get_active_profile()
     logger.info(
         f"[chat] Starting interactive chat,"
         f" profile={profile}, owner_id={owner_id}"
@@ -289,18 +274,31 @@ def interactive_chat():
 
     _print_dashboard(profile, owner_id)
     console.print(
-        "[dim]Type /help for commands, /quit to exit."
-        " Tab completes commands.[/dim]\n"
+        "[dim]Type /help for commands."
+        " Ctrl+C interrupts, Ctrl+D twice to exit."
+        " Tab completes.[/dim]\n"
     )
 
     conversation_history: list = []
+    _last_eof = False  # For double Ctrl+D exit
 
     while True:
         try:
             user_input = input("you> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            console.print("\n[dim]Bye![/dim]")
-            sys.exit(0)
+            _last_eof = False
+        except EOFError:
+            if _last_eof:
+                console.print("\n[dim]Bye![/dim]")
+                sys.exit(0)
+            _last_eof = True
+            console.print(
+                "\n[dim]Press Ctrl+D again to exit.[/dim]"
+            )
+            continue
+        except KeyboardInterrupt:
+            _last_eof = False
+            console.print()  # Clean line after ^C
+            continue
 
         if not user_input:
             continue
@@ -309,13 +307,20 @@ def interactive_chat():
             console.print("[dim]Bye![/dim]")
             sys.exit(0)
 
-        if user_input.startswith("/"):
-            _handle_slash_command(
-                user_input, owner_id, conversation_history
-            )
-        else:
-            _handle_chat_message(
-                user_input, owner_id, conversation_history
+        try:
+            if user_input.startswith("/"):
+                _handle_slash_command(
+                    user_input, owner_id,
+                    conversation_history,
+                )
+            else:
+                _handle_chat_message(
+                    user_input, owner_id,
+                    conversation_history,
+                )
+        except KeyboardInterrupt:
+            console.print(
+                "\n[yellow]Interrupted.[/yellow]"
             )
 
 

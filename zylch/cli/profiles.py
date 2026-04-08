@@ -132,6 +132,10 @@ def activate_profile(profile_name: str):
     _active_profile = profile_name
     _active_profile_dir = profile_dir
 
+    # Reload settings singleton so it picks up new env vars
+    import zylch.config as _cfg
+    _cfg.settings = _cfg.Settings()
+
     logger.info(f"[profile] Activated: {profile_name} ({profile_dir})")
 
 
