@@ -145,13 +145,22 @@ class TaskWorker:
     def _get_task_prompt(self) -> Optional[str]:
         """Get task detection prompt from storage."""
         if not self._task_prompt_loaded:
-            self._task_prompt = self.storage.get_agent_prompt(self.owner_id, 'task_email')
+            raw = self.storage.get_agent_prompt(
+                self.owner_id, "task_email",
+            )
+            # Treat empty string as None
+            self._task_prompt = (
+                raw if raw and raw.strip() else None
+            )
             self._task_prompt_loaded = True
 
             if self._task_prompt:
                 logger.info("Loaded user's task detection prompt")
             else:
-                logger.warning("No task prompt found - user must run /agent train tasks first")
+                logger.warning(
+                    "No task prompt found"
+                    " - user must run /agent train tasks first",
+                )
 
         return self._task_prompt
 
@@ -176,163 +185,229 @@ class TaskWorker:
         tasks = self.storage.get_task_items(self.owner_id, action_required=True)
         return tasks, None
 
-    async def _analyze_recent_events(self) -> None:
-        """Analyze recent events one-by-one using trained prompt."""
-        user_emails = {self.user_email} if self.user_email else set()
+    async def _analyze_recent_events(
+        self, concurrency: int = 5,
+    ) -> None:
+        """Analyze recent events with parallel LLM calls.
+
+        LLM calls run concurrently (bounded by semaphore).
+        DB writes are serialized per-email in the result handler.
+        """
+        import asyncio
+
+        user_emails = (
+            {self.user_email} if self.user_email else set()
+        )
         logger.debug(
-            f"[TASK] _analyze_recent_events user_emails={user_emails}"
+            f"[TASK] _analyze_recent_events"
+            f" user_emails={user_emails}",
         )
 
-        # Load trained prompt (contains baked-in behavioral patterns)
         prompt = self._get_task_prompt()
         if not prompt:
-            raise ValueError("No task prompt found. Run `/agent train tasks` first.")
+            raise ValueError(
+                "No task prompt found."
+                " Run `/agent train tasks` first.",
+            )
 
         analyzed_count = 0
         action_count = 0
-        consecutive_failures = 0
+        failures = 0
+        stop = False
 
-        # Process emails - only unprocessed ones, and only latest per thread
-        # Use task_processed_at to track which emails have been analyzed
-        all_emails = self.storage.get_unprocessed_emails_for_task(self.owner_id)
+        all_emails = (
+            self.storage.get_unprocessed_emails_for_task(
+                self.owner_id,
+            )
+        )
 
-        # Group by thread_id, keep only latest email per thread
+        # Deduplicate: latest email per thread
         threads: Dict[str, Dict] = {}
         for email in all_emails:
-            email_id = email.get('id')
-            thread_id = email.get('thread_id')
-            if not thread_id:
-                logger.error(f"Email {email_id} missing thread_id, using email id as fallback")
-                thread_id = email_id
-
+            email_id = email.get("id")
+            thread_id = email.get("thread_id") or email_id
+            ts = email.get("date_timestamp") or 0
             existing = threads.get(thread_id)
-            date_timestamp = email.get('date_timestamp')
-            existing_timestamp = existing.get('date_timestamp') if existing else None
-
-            if date_timestamp is None:
-                logger.error(f"Email {email_id} missing date_timestamp")
-            if existing_timestamp is None and existing:
-                logger.error(f"Existing email {existing.get('id')} missing date_timestamp")
-
-            if not existing or (date_timestamp or 0) > (existing_timestamp or 0):
+            existing_ts = (
+                existing.get("date_timestamp", 0)
+                if existing
+                else 0
+            )
+            if not existing or ts > existing_ts:
                 threads[thread_id] = email
 
-        logger.debug(f"[TASK] {len(all_emails)} unprocessed emails -> {len(threads)} unique threads")
+        logger.debug(
+            f"[TASK] {len(all_emails)} unprocessed"
+            f" -> {len(threads)} threads"
+            f" (concurrency={concurrency})",
+        )
 
-        for email in threads.values():
-            from_email = email.get('from_email', '').lower()
-            email_id = email.get('id', '')
+        sem = asyncio.Semaphore(concurrency)
 
-            # Skip user's own emails (the single logical rule)
-            if from_email in user_emails:
-                # Mark as processed but don't create task item
-                self.storage.mark_email_task_processed(self.owner_id, email_id)
-                continue
-            if self.user_domain and self.user_domain in from_email:
-                # Mark as processed but don't create task item
-                self.storage.mark_email_task_processed(self.owner_id, email_id)
-                continue
+        async def _analyze_one(email: Dict):
+            nonlocal analyzed_count, action_count
+            nonlocal failures, stop
+            if stop:
+                return
 
-            # Get blob context for this contact
-            blob_context, blob_id = self._get_blob_for_contact(from_email)
+            from_email = email.get("from_email", "").lower()
+            email_id = email.get("id", "")
 
-            # Get existing open task for this contact (if any)
-            existing_task = self.storage.get_task_by_contact(self.owner_id, from_email)
+            # User's own email = they replied → close any
+            # open task for this thread's contact
+            if from_email in user_emails or (
+                self.user_domain
+                and self.user_domain in from_email
+            ):
+                self.storage.mark_email_task_processed(
+                    self.owner_id, email_id,
+                )
+                # Close existing task for this contact
+                # (user responded = task handled)
+                to_email = email.get("to_email", "")
+                if isinstance(to_email, list):
+                    to_email = to_email[0] if to_email else ""
+                to_email = to_email.lower()
+                if to_email:
+                    existing = (
+                        self.storage.get_task_by_contact(
+                            self.owner_id, to_email,
+                        )
+                    )
+                    if existing:
+                        self.storage.complete_task_item(
+                            self.owner_id, existing["id"],
+                        )
+                        logger.info(
+                            f"[TASK] Auto-closed task for"
+                            f" {to_email} (user replied)",
+                        )
+                return
+
+            blob_context, blob_id = (
+                self._get_blob_for_contact(from_email)
+            )
+            existing_task = (
+                self.storage.get_task_by_contact(
+                    self.owner_id, from_email,
+                )
+            )
             existing_task_context = ""
             if existing_task:
-                existing_task_context = f"""
-EXISTING OPEN TASK FOR THIS CONTACT:
-- Action: {existing_task.get('suggested_action', 'N/A')}
-- Urgency: {existing_task.get('urgency', 'N/A')}
-- Reason: {existing_task.get('reason', 'N/A')}
-- Source emails: {len(existing_task.get('sources', {}).get('emails', []))}
+                existing_task_context = (
+                    "EXISTING OPEN TASK FOR THIS CONTACT:\n"
+                    f"- Action: {existing_task.get('suggested_action', 'N/A')}\n"
+                    f"- Urgency: {existing_task.get('urgency', 'N/A')}\n"
+                    f"- Reason: {existing_task.get('reason', 'N/A')}\n"
+                    f"- Source emails: {len(existing_task.get('sources', {}).get('emails', []))}\n\n"
+                    "Decide: UPDATE, REPLACE (create new),"
+                    " CLOSE, or keep as-is (none)?"
+                )
 
-You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE it (no longer needed)? Or keep as-is (none)?
-"""
-
-            # Prepare event data
             event_data = {
-                'id': email.get('id'),
-                'from_email': email.get('from_email'),
-                'to_email': email.get('to_email'),
-                'subject': email.get('subject'),
-                'date': email.get('date'),
-                'body': email.get('body_plain') or email.get('snippet', ''),
-                'thread_id': email.get('thread_id')
+                "id": email.get("id"),
+                "from_email": email.get("from_email"),
+                "to_email": email.get("to_email"),
+                "subject": email.get("subject"),
+                "date": email.get("date"),
+                "body": (
+                    email.get("body_plain")
+                    or email.get("snippet", "")
+                ),
+                "thread_id": email.get("thread_id"),
             }
 
-            # Apply trained prompt with existing task context
-            result = await self._analyze_event('email', event_data, blob_context, existing_task_context)
+            # LLM call (bounded by semaphore)
+            async with sem:
+                if stop:
+                    return
+                result = await self._analyze_event(
+                    "email", event_data,
+                    blob_context, existing_task_context,
+                )
+
             analyzed_count += 1
 
-            # Fail-fast: stop after 3 consecutive LLM failures (likely bad API key)
             if result is None:
-                consecutive_failures += 1
-                if consecutive_failures >= 3:
+                failures += 1
+                if failures >= 3:
                     logger.error(
-                        "3 consecutive LLM failures — stopping"
-                        " task analysis (check API key)"
+                        "3 LLM failures — stopping"
+                        " task analysis",
                     )
-                    break
-            else:
-                consecutive_failures = 0
+                    stop = True
+                self.storage.mark_email_task_processed(
+                    self.owner_id, email_id,
+                )
+                return
 
-            # Mark as processed regardless of result
-            self.storage.mark_email_task_processed(self.owner_id, email_id)
+            failures = 0
+            self.storage.mark_email_task_processed(
+                self.owner_id, email_id,
+            )
 
-            if result:
-                # HARD RULE: Never create task for user's own email
-                if self._is_user_email(from_email):
-                    logger.warning(f"Blocking task for user's own email: {from_email}")
-                    continue
+            if not result:
+                return
 
-                task_action = result.get('task_action', 'none')
+            if self._is_user_email(from_email):
+                return
 
-                # Validate task quality for create/update
-                if task_action in ('create', 'update'):
-                    suggested = result.get('suggested_action', '').strip()
-                    if not suggested or len(suggested) < 5:
-                        logger.warning(f"Skipping task with empty/short suggested_action: {suggested}")
-                        continue
+            task_action = result.get("task_action", "none")
 
-                # Handle task_action
-                if task_action == 'close' and existing_task:
-                    # Mark existing task as completed
-                    self.storage.complete_task_item(self.owner_id, existing_task['id'])
-                    logger.info(f"Closed task for {from_email}: no longer needed")
+            if task_action in ("create", "update"):
+                suggested = result.get(
+                    "suggested_action", "",
+                ).strip()
+                if not suggested or len(suggested) < 5:
+                    return
 
-                elif task_action == 'update' and existing_task:
-                    # Update existing task with new info
-                    self.storage.update_task_item(
-                        self.owner_id,
-                        existing_task['id'],
-                        urgency=result.get('urgency'),
-                        suggested_action=result.get('suggested_action'),
-                        reason=result.get('reason'),
-                        add_source_email=email_id
+            if task_action == "close" and existing_task:
+                self.storage.complete_task_item(
+                    self.owner_id, existing_task["id"],
+                )
+            elif task_action == "update" and existing_task:
+                self.storage.update_task_item(
+                    self.owner_id,
+                    existing_task["id"],
+                    urgency=result.get("urgency"),
+                    suggested_action=result.get(
+                        "suggested_action",
+                    ),
+                    reason=result.get("reason"),
+                    add_source_email=email_id,
+                )
+                action_count += 1
+            elif (
+                task_action == "create"
+                and result.get("action_required")
+            ):
+                if existing_task:
+                    self.storage.complete_task_item(
+                        self.owner_id, existing_task["id"],
                     )
-                    action_count += 1
+                result["event_id"] = email_id
+                result["event_type"] = "email"
+                result["contact_email"] = from_email
+                result["contact_name"] = email.get(
+                    "from_name", "",
+                )
+                result["email_date"] = email.get("date", "")
+                result["sources"] = {
+                    "emails": [email_id],
+                    "blobs": (
+                        [str(blob_id)] if blob_id else []
+                    ),
+                    "calendar_events": [],
+                }
+                self.storage.store_task_item(
+                    self.owner_id, result,
+                )
+                action_count += 1
 
-                elif task_action == 'create' and result.get('action_required'):
-                    # Create new task (close existing if any)
-                    if existing_task:
-                        self.storage.complete_task_item(self.owner_id, existing_task['id'])
-
-                    # Store new task with email date
-                    result['event_id'] = email_id
-                    result['event_type'] = 'email'
-                    result['contact_email'] = from_email
-                    result['contact_name'] = email.get('from_name', '')
-                    result['email_date'] = email.get('date', '')
-                    result['sources'] = {
-                        'emails': [email_id],
-                        'blobs': [str(blob_id)] if blob_id else [],
-                        'calendar_events': []
-                    }
-                    self.storage.store_task_item(self.owner_id, result)
-                    action_count += 1
-
-                # task_action == 'none' - do nothing
+        await asyncio.gather(
+            *[_analyze_one(e) for e in threads.values()],
+            return_exceptions=True,
+        )
 
         # Process calendar events - only unprocessed ones
         # Use task_processed_at to track which events have been analyzed
@@ -467,13 +542,43 @@ You must decide: UPDATE this task with new info? REPLACE it (create new)? CLOSE 
         logger.debug(f"[TASK] Blob context length: {len(blob_context)}")
         logger.debug(f"[TASK] Existing task context: {existing_task_context if existing_task_context else 'None'}")
 
-        # Call classification model with tool use for structured output
+        # Call LLM with prompt caching: trained prompt as cached
+        # system, event data as user message
+        system_prompt = [
+            {
+                "type": "text",
+                "text": formatted_prompt,
+                "cache_control": {"type": "ephemeral"},
+            },
+        ]
+        user_content = (
+            f"Event type: {event_type}\n"
+            f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}\n"
+            f"Event data: {event_data_json}\n"
+        )
+        if blob_context:
+            user_content += f"\nMemory context:\n{blob_context}"
+        if existing_task_context:
+            user_content += (
+                f"\nExisting task:\n{existing_task_context}"
+            )
+        if calendar_context:
+            user_content += (
+                f"\nCalendar context:\n{calendar_context}"
+            )
+
         try:
             response = await self.client.create_message(
-                messages=[{"role": "user", "content": formatted_prompt}],
+                system=system_prompt,
+                messages=[
+                    {"role": "user", "content": user_content},
+                ],
                 max_tokens=500,
                 tools=[TASK_DECISION_TOOL],
-                tool_choice={"type": "tool", "name": "task_decision"}
+                tool_choice={
+                    "type": "tool",
+                    "name": "task_decision",
+                },
             )
 
             # Extract result from tool use response
