@@ -1572,6 +1572,18 @@ class Storage:
     def store_task_item(self, owner_id: str, item: Dict[str, Any]) -> bool:
         """Store a single task item (upsert on owner_id + event_type + event_id)."""
         try:
+            # Ensure analyzed_at is a proper datetime
+            analyzed_at = item.get('analyzed_at')
+            if analyzed_at and isinstance(analyzed_at, str):
+                try:
+                    analyzed_at = datetime.fromisoformat(
+                        analyzed_at,
+                    )
+                except ValueError:
+                    analyzed_at = None
+            if not analyzed_at:
+                analyzed_at = datetime.now(timezone.utc)
+
             data = {
                 'owner_id': owner_id,
                 'event_type': item.get('event_type'),
@@ -1582,7 +1594,7 @@ class Storage:
                 'urgency': item.get('urgency'),
                 'reason': item.get('reason'),
                 'suggested_action': item.get('suggested_action'),
-                'analyzed_at': item.get('analyzed_at'),
+                'analyzed_at': analyzed_at,
                 'sources': item.get('sources', {}),
             }
             with get_session() as session:
@@ -2380,5 +2392,35 @@ class Storage:
             return session.query(func.count(MrcallConversation.id))\
                 .filter(MrcallConversation.owner_id == owner_id)\
                 .scalar() or 0
+
+    # ── Sync State ────────────────────────────────────
+
+    def get_sync_state(self, owner_id: str) -> dict | None:
+        """Get sync state for owner."""
+        with get_session() as session:
+            row = (
+                session.query(SyncState)
+                .filter_by(owner_id=owner_id)
+                .first()
+            )
+            return row.to_dict() if row else None
+
+    def update_sync_state(self, owner_id: str, **kwargs):
+        """Update sync state fields (creates if missing)."""
+        from datetime import datetime, timezone
+
+        with get_session() as session:
+            row = (
+                session.query(SyncState)
+                .filter_by(owner_id=owner_id)
+                .first()
+            )
+            if not row:
+                row = SyncState(owner_id=owner_id)
+                session.add(row)
+            for key, value in kwargs.items():
+                if hasattr(row, key):
+                    setattr(row, key, value)
+            row.updated_at = datetime.now(timezone.utc)
 
 

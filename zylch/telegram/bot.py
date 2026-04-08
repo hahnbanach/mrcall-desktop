@@ -336,6 +336,62 @@ def run_telegram_bot(token: Optional[str] = None):
             "Anyone who finds your bot can access your data.\n"
             "Set TELEGRAM_ALLOWED_USER_ID in ~/.zylch/.env for security."
         )
+
+    # Proactive digest scheduler (8am and 8pm)
+    if allowed:
+        _setup_digest_scheduler(app, str(allowed))
+
     print("Press Ctrl-C to stop.\n")
 
     app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+def _setup_digest_scheduler(app: Application, user_id: str):
+    """Set up APScheduler for proactive digest messages."""
+    try:
+        from apscheduler.schedulers.asyncio import (
+            AsyncIOScheduler,
+        )
+        from apscheduler.triggers.cron import CronTrigger
+    except ImportError:
+        logger.warning(
+            "[telegram] apscheduler not available,"
+            " digest disabled",
+        )
+        return
+
+    import os
+
+    from zylch.cli.utils import get_owner_id
+
+    owner_id = get_owner_id()
+
+    async def _send_digest():
+        """Build and send digest if there's something to report."""
+        try:
+            from zylch.services.digest import build_digest
+            from zylch.storage.storage import Storage
+
+            store = Storage.get_instance()
+            msg = build_digest(owner_id, store)
+            if msg:
+                await app.bot.send_message(
+                    chat_id=int(user_id),
+                    text=msg,
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+                logger.info("[telegram] Digest sent")
+        except Exception as e:
+            logger.error(f"[telegram] Digest failed: {e}")
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        _send_digest,
+        CronTrigger(hour="8,20"),  # 8am and 8pm
+        id="zylch_digest",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info(
+        "[telegram] Digest scheduler started (8am, 8pm)",
+    )
