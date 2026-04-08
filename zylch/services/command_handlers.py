@@ -146,10 +146,8 @@ def format_task_items(tasks: list) -> str:
     total = idx - 1
     if total > 0:
         lines.append(f"\n**Total: {total} items**")
-        lines.append("Use `/tasks open <ID>` to work on a task")
-        lines.append("\n_Run `/agent task process` to detect new tasks_")
     else:
-        return "No action needed! You're all caught up.\n\n_Run `/agent task process` to detect new tasks_"
+        return "No action needed! You're all caught up."
 
     return "\n".join(lines)
 
@@ -2271,6 +2269,7 @@ Shows items needing your action, analyzed by AI.
 
 **Subcommands:**
 - (none) - Show current task items
+- `interactive` - Walk through tasks one by one (skip/done/solve/instruct)
 - `refresh` - Re-analyze events with fresh LLM call
 - `status` - Show task analysis statistics
 - `reset` - Clear task cache
@@ -2289,6 +2288,21 @@ Shows items needing your action, analyzed by AI.
 
     try:
         storage = Storage.get_instance()
+
+        # Interactive mode — runs its own input loop
+        if args and args[0] == 'interactive':
+            from zylch.api.token_storage import get_active_llm_provider
+            from zylch.services.task_interactive import (
+                run_interactive_tasks,
+            )
+
+            llm_provider, api_key = get_active_llm_provider(owner_id)
+            user_email = get_email(owner_id) or ''
+            run_interactive_tasks(
+                owner_id, storage, api_key,
+                llm_provider, user_email,
+            )
+            return ""
 
         # Handle subcommands
         if args and args[0] == 'status':
@@ -2366,25 +2380,9 @@ Run `/sync` first to get fresh emails, then `/tasks refresh`."""
         tasks, _ = await worker.get_tasks(refresh=refresh)
 
         if not tasks:
-            if refresh:
-                return """**✅ Tasks**
+            return "No action needed! You're all caught up."
 
-🎉 No action needed! You're all caught up.
-
-Analyzed recent emails and calendar - nothing requires your attention.
-
-_Run `/agent task process` to detect new tasks from recent emails._"""
-            else:
-                return """**✅ Tasks**
-
-🎉 No action needed! You're all caught up.
-
-_Run `/agent task process` to detect new tasks._"""
-
-        result = format_task_items(tasks)
-        if refresh:
-            result += "\n\n_Freshly analyzed with AI_"
-        return result
+        return format_task_items(tasks)
 
     except ValueError as e:
         # Task prompt not found
