@@ -391,7 +391,7 @@ def _build_task_context(
                 or email.get("snippet", "")
             )
             if body:
-                parts.append(f"\n{body[:3000]}")
+                parts.append(f"\n{body}")
 
     # Contact memory blob
     sources = task.get("sources", {})
@@ -402,7 +402,7 @@ def _build_task_context(
             from zylch.storage.models import Blob
 
             with get_session() as session:
-                for bid in blob_ids[:2]:
+                for bid in blob_ids:
                     blob = (
                         session.query(Blob)
                         .filter_by(
