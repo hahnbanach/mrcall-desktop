@@ -64,23 +64,21 @@ def get_active_llm_provider(
 ) -> Tuple[str, str]:
     """Return (provider, api_key) for the active LLM.
 
-    Falls back to system-level settings when the user has no
-    stored key.
+    In standalone mode, always reads from profile .env
+    (via Settings). DB-stored keys are a SaaS remnant.
     """
     from zylch.config import settings
 
-    s = _storage()
-
-    # Check user-stored Anthropic key first
-    key = s.get_anthropic_key(owner_id)
-    if key:
-        return ("anthropic", key)
-
-    # Fall back to system settings
     provider = settings.system_llm_provider
     if provider == "anthropic" and settings.anthropic_api_key:
         return ("anthropic", settings.anthropic_api_key)
     if provider == "openai" and settings.openai_api_key:
+        return ("openai", settings.openai_api_key)
+
+    # Last resort: any available key
+    if settings.anthropic_api_key:
+        return ("anthropic", settings.anthropic_api_key)
+    if settings.openai_api_key:
         return ("openai", settings.openai_api_key)
 
     return (provider, "")
