@@ -128,7 +128,7 @@ class EmailArchiveManager:
             if on_progress:
                 on_progress(10, "Searching mailbox...")
             message_ids = self.gmail.list_message_ids(
-                query=query, max_results=5000
+                query=query,
             )
             logger.info(
                 f"Found {len(message_ids)} message IDs"
