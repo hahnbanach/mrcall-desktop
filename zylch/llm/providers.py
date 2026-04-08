@@ -64,21 +64,17 @@ def get_provider_info(provider: str) -> Dict[str, Any]:
 
 
 def get_model_string(provider: str) -> str:
-    """Get the full model string for a provider (aisuite format: provider:model).
+    """Get the model name for a provider.
 
     Args:
-        provider: Provider name (anthropic, openai, mistral, scaleway)
+        provider: Provider name (anthropic, openai)
 
     Returns:
-        Model string (e.g., "anthropic:claude-sonnet-4-20250514")
+        Model string (e.g., "claude-opus-4-6")
     """
     if provider not in PROVIDER_MODELS:
         raise ValueError(f"Unknown provider: {provider}")
-
-    from .client import AISUITE_PROVIDER_KEYS
-    aisuite_key = AISUITE_PROVIDER_KEYS.get(provider, provider)
-    model = PROVIDER_MODELS[provider]
-    return f"{aisuite_key}:{model}"
+    return PROVIDER_MODELS[provider]
 
 
 def format_provider_info_message(provider: str) -> str:

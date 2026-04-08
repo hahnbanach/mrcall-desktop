@@ -1,8 +1,7 @@
-"""Unified LLM client using aisuite for multi-provider support.
+"""Unified LLM client — direct SDK calls to Anthropic / OpenAI.
 
-This module provides a consistent interface for making LLM calls across
-different providers (Anthropic, OpenAI, Mistral) while maintaining backward
-compatibility with existing code that expects Anthropic response format.
+Replaces aisuite with direct provider SDK usage to avoid
+dependency conflicts (aisuite pins httpx<0.28, neonize needs >=0.28).
 """
 
 import asyncio
@@ -11,19 +10,15 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
-import aisuite
-
-from .providers import (
-    PROVIDER_FEATURES,
-    PROVIDER_MODELS,
-)
+from .providers import PROVIDER_FEATURES, PROVIDER_MODELS
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class ToolUseBlock:
-    """Represents a tool use block in the response (Anthropic-compatible format)."""
+    """Tool use block (Anthropic-compatible format)."""
+
     type: str = "tool_use"
     id: str = ""
     name: str = ""
@@ -36,48 +31,61 @@ class ToolUseBlock:
 
 @dataclass
 class TextBlock:
-    """Represents a text block in the response (Anthropic-compatible format)."""
+    """Text block (Anthropic-compatible format)."""
+
     type: str = "text"
     text: str = ""
 
 
 class LLMResponse:
-    """Adapter that provides Anthropic-compatible response interface.
+    """Adapter providing Anthropic-compatible response interface.
 
-    aisuite returns OpenAI-format responses. This adapter translates them to
-    Anthropic format so existing code doesn't need to change.
+    Normalizes both Anthropic and OpenAI response formats into
+    a consistent interface with .content, .stop_reason, .usage.
     """
 
-    def __init__(self, aisuite_response: Any):
-        self._raw = aisuite_response
+    def __init__(self, raw_response: Any):
+        self._raw = raw_response
         self._content: List[Union[TextBlock, ToolUseBlock]] = []
         self._stop_reason: str = "end_turn"
         self._parse_response()
 
     def _parse_response(self):
-        """Parse response into Anthropic-compatible format.
-
-        Handles both:
-        - OpenAI format (choices[0].message with tool_calls)
-        - Anthropic native format (content list with tool_use blocks, stop_reason)
-        """
-        # Anthropic native format: has .content as list and .stop_reason
-        if hasattr(self._raw, 'stop_reason') and hasattr(self._raw, 'content') and isinstance(self._raw.content, list):
-            for block in self._raw.content:
-                if hasattr(block, 'type'):
-                    if block.type == 'text':
-                        self._content.append(TextBlock(text=block.text))
-                    elif block.type == 'tool_use':
-                        self._content.append(ToolUseBlock(
-                            id=block.id,
-                            name=block.name,
-                            input=block.input if isinstance(block.input, dict) else {},
-                        ))
-            self._stop_reason = self._raw.stop_reason or "end_turn"
-            return
+        """Parse into Anthropic-compatible format."""
+        # Anthropic native: has .stop_reason and .content as list
+        if hasattr(self._raw, "stop_reason") and hasattr(
+            self._raw, "content"
+        ):
+            if isinstance(self._raw.content, list):
+                for block in self._raw.content:
+                    if hasattr(block, "type"):
+                        if block.type == "text":
+                            self._content.append(
+                                TextBlock(text=block.text),
+                            )
+                        elif block.type == "tool_use":
+                            inp = (
+                                block.input
+                                if isinstance(block.input, dict)
+                                else {}
+                            )
+                            self._content.append(
+                                ToolUseBlock(
+                                    id=block.id,
+                                    name=block.name,
+                                    input=inp,
+                                ),
+                            )
+                self._stop_reason = (
+                    self._raw.stop_reason or "end_turn"
+                )
+                return
 
         # OpenAI format: has .choices[0].message
-        if not hasattr(self._raw, 'choices') or not self._raw.choices:
+        if (
+            not hasattr(self._raw, "choices")
+            or not self._raw.choices
+        ):
             return
 
         choice = self._raw.choices[0]
@@ -86,24 +94,29 @@ class LLMResponse:
         if message.content:
             self._content.append(TextBlock(text=message.content))
 
-        if hasattr(message, 'tool_calls') and message.tool_calls:
-            for tool_call in message.tool_calls:
+        if (
+            hasattr(message, "tool_calls")
+            and message.tool_calls
+        ):
+            for tc in message.tool_calls:
                 try:
-                    args = json.loads(tool_call.function.arguments)
+                    args = json.loads(tc.function.arguments)
                 except (json.JSONDecodeError, TypeError):
                     args = {}
-
-                self._content.append(ToolUseBlock(
-                    id=tool_call.id,
-                    name=tool_call.function.name,
-                    input=args,
-                ))
-
+                self._content.append(
+                    ToolUseBlock(
+                        id=tc.id,
+                        name=tc.function.name,
+                        input=args,
+                    ),
+                )
             self._stop_reason = "tool_use"
         elif choice.finish_reason == "stop":
             self._stop_reason = "end_turn"
         else:
-            self._stop_reason = choice.finish_reason or "end_turn"
+            self._stop_reason = (
+                choice.finish_reason or "end_turn"
+            )
 
     @property
     def content(self) -> List[Union[TextBlock, ToolUseBlock]]:
@@ -119,30 +132,23 @@ class LLMResponse:
 
     @property
     def usage(self) -> Dict[str, int]:
-        if hasattr(self._raw, 'usage') and self._raw.usage:
-            usage = self._raw.usage
+        if hasattr(self._raw, "usage") and self._raw.usage:
+            u = self._raw.usage
             return {
-                "input_tokens": getattr(usage, 'input_tokens', 0) or getattr(usage, 'prompt_tokens', 0),
-                "output_tokens": getattr(usage, 'output_tokens', 0) or getattr(usage, 'completion_tokens', 0),
+                "input_tokens": getattr(
+                    u, "input_tokens", 0,
+                )
+                or getattr(u, "prompt_tokens", 0),
+                "output_tokens": getattr(
+                    u, "output_tokens", 0,
+                )
+                or getattr(u, "completion_tokens", 0),
             }
         return {"input_tokens": 0, "output_tokens": 0}
 
 
-# aisuite provider key mapping
-AISUITE_PROVIDER_KEYS = {
-    "anthropic": "anthropic",
-    "openai": "openai",
-    "mistral": "mistral",
-    "scaleway": "mistral",  # Scaleway uses Mistral models
-}
-
-
 class LLMClient:
-    """Unified LLM client using aisuite.
-
-    Provides a consistent interface for making LLM calls across different providers
-    (Anthropic, OpenAI, Mistral) while maintaining backward compatibility with
-    existing code that expects Anthropic response format.
+    """Unified LLM client — calls Anthropic or OpenAI SDK directly.
 
     Example:
         client = LLMClient(api_key="sk-...", provider="anthropic")
@@ -170,133 +176,157 @@ class LLMClient:
         self.model = model or PROVIDER_MODELS[provider]
         self.features = PROVIDER_FEATURES.get(provider, {})
 
-        # Build aisuite provider config with API key
-        aisuite_key = AISUITE_PROVIDER_KEYS.get(provider, provider)
-        provider_configs = {aisuite_key: {"api_key": api_key}}
+        # Initialize the appropriate SDK client
+        if provider == "anthropic":
+            import anthropic
 
-        # For Scaleway, set the base URL for Mistral-compatible API
-        if provider == "scaleway":
-            provider_configs[aisuite_key]["base_url"] = "https://api.scaleway.ai/v1"
+            self._client = anthropic.Anthropic(api_key=api_key)
+        elif provider == "openai":
+            import openai
 
-        self._client = aisuite.Client(provider_configs=provider_configs)
+            self._client = openai.OpenAI(api_key=api_key)
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
 
-        logger.info(f"Initialized LLMClient with provider={provider}, model={self.model}")
-
-    def _get_aisuite_model(self, model: Optional[str] = None) -> str:
-        """Get aisuite-formatted model string (provider:model)."""
-        model_name = model or self.model
-        if ":" in model_name:
-            return model_name
-        aisuite_key = AISUITE_PROVIDER_KEYS.get(self.provider, self.provider)
-        return f"{aisuite_key}:{model_name}"
+        logger.info(
+            f"Initialized LLMClient with"
+            f" provider={provider}, model={self.model}",
+        )
 
     def _convert_tools_to_openai_format(
-        self, tools: Optional[List[Dict[str, Any]]]
+        self, tools: Optional[List[Dict[str, Any]]],
     ) -> Optional[List[Dict[str, Any]]]:
-        """Convert Anthropic tool format to OpenAI format if needed."""
+        """Convert Anthropic tool format to OpenAI format."""
         if not tools:
             return None
-
         openai_tools = []
         for tool in tools:
             if "type" in tool and tool["type"] == "function":
                 openai_tools.append(tool)
             else:
-                openai_tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": tool.get("name", ""),
-                        "description": tool.get("description", ""),
-                        "parameters": tool.get("input_schema", {}),
+                openai_tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool.get("name", ""),
+                            "description": tool.get(
+                                "description", "",
+                            ),
+                            "parameters": tool.get(
+                                "input_schema", {},
+                            ),
+                        },
                     }
-                })
-
+                )
         return openai_tools
 
     def _convert_tool_choice(
-        self, tool_choice: Optional[Dict[str, Any]]
+        self, tool_choice: Optional[Dict[str, Any]],
     ) -> Optional[Union[str, Dict[str, Any]]]:
-        """Convert Anthropic tool_choice format to OpenAI format."""
+        """Convert Anthropic tool_choice to OpenAI format."""
         if not tool_choice:
             return None
-
         choice_type = tool_choice.get("type", "auto")
-
         if choice_type == "auto":
             return "auto"
         elif choice_type == "any":
             return "required"
         elif choice_type == "tool":
-            tool_name = tool_choice.get("name", "")
             return {
                 "type": "function",
-                "function": {"name": tool_name}
+                "function": {
+                    "name": tool_choice.get("name", ""),
+                },
             }
-
         return "auto"
 
     def _convert_messages_to_openai_format(
-        self, messages: List[Dict[str, Any]]
+        self, messages: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """Convert Anthropic-style messages to OpenAI format.
 
-        Handles:
-        - Assistant messages with tool_use blocks -> assistant with tool_calls
-        - User messages with tool_result blocks -> tool role messages
+        Handles tool_use blocks and tool_result blocks.
         """
         converted = []
         for msg in messages:
             role = msg.get("role")
             content = msg.get("content")
 
-            # Handle tool results (Anthropic puts these in user messages)
+            # Tool results (Anthropic: user message with tool_result)
             if role == "user" and isinstance(content, list):
-                tool_results = [c for c in content if isinstance(c, dict) and c.get("type") == "tool_result"]
+                tool_results = [
+                    c
+                    for c in content
+                    if isinstance(c, dict)
+                    and c.get("type") == "tool_result"
+                ]
                 if tool_results:
                     for result in tool_results:
-                        result_content = result.get("content", "")
-                        if isinstance(result_content, list):
-                            result_content = json.dumps(result_content)
-                        converted.append({
-                            "role": "tool",
-                            "tool_call_id": result.get("tool_use_id", ""),
-                            "content": str(result_content),
-                        })
+                        rc = result.get("content", "")
+                        if isinstance(rc, list):
+                            rc = json.dumps(rc)
+                        converted.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": result.get(
+                                    "tool_use_id", "",
+                                ),
+                                "content": str(rc),
+                            }
+                        )
                     continue
 
-            # Handle assistant messages with tool use blocks
-            if role == "assistant" and isinstance(content, list):
+            # Assistant messages with tool_use blocks
+            if role == "assistant" and isinstance(
+                content, list,
+            ):
                 text_parts = []
                 tool_calls = []
                 for block in content:
                     if isinstance(block, dict):
                         if block.get("type") == "tool_use":
-                            tool_calls.append({
-                                "id": block.get("id", ""),
-                                "type": "function",
-                                "function": {
-                                    "name": block.get("name", ""),
-                                    "arguments": json.dumps(block.get("input", {})),
+                            tool_calls.append(
+                                {
+                                    "id": block.get("id", ""),
+                                    "type": "function",
+                                    "function": {
+                                        "name": block.get(
+                                            "name", "",
+                                        ),
+                                        "arguments": json.dumps(
+                                            block.get(
+                                                "input", {},
+                                            ),
+                                        ),
+                                    },
                                 }
-                            })
+                            )
                         elif block.get("type") == "text":
-                            text_parts.append(block.get("text", ""))
+                            text_parts.append(
+                                block.get("text", ""),
+                            )
                     elif hasattr(block, "type"):
                         if block.type == "tool_use":
-                            tool_calls.append({
-                                "id": block.id,
-                                "type": "function",
-                                "function": {
-                                    "name": block.name,
-                                    "arguments": json.dumps(block.input),
+                            tool_calls.append(
+                                {
+                                    "id": block.id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": block.name,
+                                        "arguments": json.dumps(
+                                            block.input,
+                                        ),
+                                    },
                                 }
-                            })
+                            )
                         elif block.type == "text":
                             text_parts.append(block.text)
 
                 assistant_msg = {"role": "assistant"}
                 if text_parts:
-                    assistant_msg["content"] = "\n".join(text_parts)
+                    assistant_msg["content"] = "\n".join(
+                        text_parts,
+                    )
                 if tool_calls:
                     assistant_msg["tool_calls"] = tool_calls
                     if "content" not in assistant_msg:
@@ -304,7 +334,6 @@ class LLMClient:
                 converted.append(assistant_msg)
                 continue
 
-            # Pass through other messages unchanged
             converted.append(msg)
 
         return converted
@@ -312,20 +341,15 @@ class LLMClient:
     async def create_message(
         self,
         messages: List[Dict[str, Any]],
-        system: Optional[str] = None,
+        system: Optional[Union[str, List[Dict[str, Any]]]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Dict[str, Any]] = None,
         max_tokens: int = 4096,
         temperature: float = 1.0,
         model: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> LLMResponse:
-        """Create a message with optional tool calling.
-
-        Returns:
-            LLMResponse with Anthropic-compatible interface
-        """
-        # aisuite is synchronous — run in executor to avoid blocking
+        """Create a message with optional tool calling."""
         return await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: self.create_message_sync(
@@ -336,75 +360,130 @@ class LLMClient:
                 max_tokens=max_tokens,
                 temperature=temperature,
                 model=model,
-                **kwargs
-            )
+                **kwargs,
+            ),
         )
 
-    def create_message_sync(
+    def _call_anthropic(
         self,
         messages: List[Dict[str, Any]],
-        system: Optional[str] = None,
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[Dict[str, Any]] = None,
-        max_tokens: int = 4096,
-        temperature: float = 1.0,
-        model: Optional[str] = None,
-        **kwargs
-    ) -> LLMResponse:
-        """Synchronous version of create_message."""
-        aisuite_model = self._get_aisuite_model(model)
-
-        # Convert messages
-        full_messages = self._convert_messages_to_openai_format(messages)
-        if system:
-            full_messages = [{"role": "system", "content": system}] + full_messages
-
-        # Build request kwargs
+        system: Optional[Union[str, List[Dict[str, Any]]]],
+        tools: Optional[List[Dict[str, Any]]],
+        tool_choice: Optional[Dict[str, Any]],
+        max_tokens: int,
+        temperature: float,
+        model: str,
+        **kwargs,
+    ) -> Any:
+        """Call Anthropic SDK directly."""
         request_kwargs = {
-            "model": aisuite_model,
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if system:
+            request_kwargs["system"] = system
+        if tools:
+            request_kwargs["tools"] = tools
+        if tool_choice:
+            request_kwargs["tool_choice"] = tool_choice
+
+        # Pass through Anthropic-compatible kwargs
+        for key, value in kwargs.items():
+            request_kwargs[key] = value
+
+        num_tools = len(tools) if tools else 0
+        logger.debug(
+            f"anthropic request: model={model},"
+            f" messages={len(messages)}, tools={num_tools}",
+        )
+
+        return self._client.messages.create(**request_kwargs)
+
+    def _call_openai(
+        self,
+        messages: List[Dict[str, Any]],
+        system: Optional[str],
+        tools: Optional[List[Dict[str, Any]]],
+        tool_choice: Optional[Dict[str, Any]],
+        max_tokens: int,
+        temperature: float,
+        model: str,
+        **kwargs,
+    ) -> Any:
+        """Call OpenAI SDK directly."""
+        full_messages = self._convert_messages_to_openai_format(
+            messages,
+        )
+        if system:
+            full_messages = [
+                {"role": "system", "content": system},
+            ] + full_messages
+
+        request_kwargs = {
+            "model": model,
             "messages": full_messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
 
-        # aisuite providers convert tools from OpenAI format to their native format internally.
-        # Tools must ALWAYS be in OpenAI format — aisuite handles conversion to provider-native.
-        openai_tools = self._convert_tools_to_openai_format(tools)
+        openai_tools = self._convert_tools_to_openai_format(
+            tools,
+        )
         if openai_tools:
             request_kwargs["tools"] = openai_tools
 
-        # tool_choice: aisuite passes it directly to the provider SDK (no conversion).
-        # Anthropic SDK expects {"type": "tool", "name": "..."} — pass as-is.
-        # OpenAI SDK expects {"type": "function", "function": {"name": "..."}} — convert.
         if tool_choice:
-            if self.provider == "anthropic":
-                request_kwargs["tool_choice"] = tool_choice
-            else:
-                openai_tool_choice = self._convert_tool_choice(tool_choice)
-                if openai_tool_choice:
-                    request_kwargs["tool_choice"] = openai_tool_choice
+            oai_choice = self._convert_tool_choice(tool_choice)
+            if oai_choice:
+                request_kwargs["tool_choice"] = oai_choice
 
-        # Filter out Anthropic-specific kwargs for non-Anthropic providers
-        anthropic_only_kwargs = {"cache_control"}
+        # Filter out Anthropic-only kwargs
+        anthropic_only = {"cache_control"}
         for key, value in kwargs.items():
-            if key in anthropic_only_kwargs and self.provider != "anthropic":
-                logger.debug(f"Skipping Anthropic-only kwarg '{key}' for provider {self.provider}")
-                continue
-            request_kwargs[key] = value
+            if key not in anthropic_only:
+                request_kwargs[key] = value
 
         num_tools = len(request_kwargs.get("tools", []))
-        logger.debug(f"aisuite request: model={aisuite_model}, messages={len(full_messages)}, tools={num_tools}")
+        logger.debug(
+            f"openai request: model={model},"
+            f" messages={len(full_messages)},"
+            f" tools={num_tools}",
+        )
 
-        # Call provider directly to avoid aisuite's MCP config processing bug
-        # (is_mcp_config not defined when mcp package not installed)
-        provider_key, model_name = aisuite_model.split(":", 1)
-        from aisuite.provider import ProviderFactory
-        if provider_key not in self._client.providers:
-            config = self._client.provider_configs.get(provider_key, {})
-            self._client.providers[provider_key] = ProviderFactory.create_provider(provider_key, config)
-        provider = self._client.providers[provider_key]
-        del request_kwargs["model"]
-        response = provider.chat_completions_create(model_name, full_messages, **{k: v for k, v in request_kwargs.items() if k != "messages"})
+        return self._client.chat.completions.create(
+            **request_kwargs,
+        )
+
+    def create_message_sync(
+        self,
+        messages: List[Dict[str, Any]],
+        system: Optional[Union[str, List[Dict[str, Any]]]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Dict[str, Any]] = None,
+        max_tokens: int = 4096,
+        temperature: float = 1.0,
+        model: Optional[str] = None,
+        **kwargs,
+    ) -> LLMResponse:
+        """Synchronous version of create_message."""
+        model_name = model or self.model
+
+        if self.provider == "anthropic":
+            response = self._call_anthropic(
+                messages, system, tools, tool_choice,
+                max_tokens, temperature, model_name, **kwargs,
+            )
+        elif self.provider == "openai":
+            response = self._call_openai(
+                messages, system, tools, tool_choice,
+                max_tokens, temperature, model_name, **kwargs,
+            )
+        else:
+            raise ValueError(
+                f"Unsupported provider: {self.provider}",
+            )
 
         return LLMResponse(response)
 
