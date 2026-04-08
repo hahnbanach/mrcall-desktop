@@ -82,24 +82,31 @@ class MemoryWorker:
             The extraction prompt, or None if not configured
         """
         if not self._custom_prompt_loaded:
-            self._custom_prompt = self.storage.get_agent_prompt(self.owner_id, "memory_email")
+            raw = self.storage.get_agent_prompt(
+                self.owner_id, "memory_email",
+            )
+            # Treat empty string as None
+            self._custom_prompt = (
+                raw if raw and raw.strip() else None
+            )
             self._custom_prompt_loaded = True
 
             if self._custom_prompt:
-                logger.info("Using user's custom memory_email prompt")
+                logger.info(
+                    "Using user's custom memory_email prompt",
+                )
             else:
-                logger.warning("No custom prompt found - user must run /agent train email first")
+                logger.warning(
+                    "No custom prompt found"
+                    " - user must run /agent train email first",
+                )
 
         return self._custom_prompt
 
     def has_custom_prompt(self) -> bool:
-        """Check if user has a custom extraction prompt.
-
-        Returns:
-            True if user has configured a custom prompt
-        """
+        """Check if user has a custom extraction prompt."""
         if not self._custom_prompt_loaded:
-            self._get_extraction_prompt()  # Trigger load
+            self._get_extraction_prompt()
         return self._custom_prompt is not None
 
     async def process_email(self, email: Dict) -> bool:
@@ -222,88 +229,173 @@ class MemoryWorker:
                 f"Created new blob {blob['id']} from email {email_id} (entity {entity_num}/{total_entities})"
             )
 
-    async def process_batch(self, emails: List[Dict]) -> int:
-        """Process batch of emails.
+    async def process_batch(
+        self, emails: List[Dict], concurrency: int = 5,
+    ) -> int:
+        """Process batch of emails with parallel LLM calls.
 
-        Stops early on auth errors (401) to avoid hammering
-        a broken API key across hundreds of emails.
+        Uses asyncio.Semaphore to limit concurrency.
+        Stops on 3 consecutive failures (auth errors etc.).
 
         Args:
-            emails: List of email dicts (from get_unprocessed_emails)
+            emails: List of email dicts
+            concurrency: Max parallel LLM calls (default 5)
 
         Returns:
             Number of successfully processed emails
         """
-        logger.info(f"Processing batch of {len(emails)} emails")
+        import asyncio
+
+        logger.info(
+            f"Processing batch of {len(emails)} emails"
+            f" (concurrency={concurrency})",
+        )
+        sem = asyncio.Semaphore(concurrency)
         processed = 0
-        consecutive_failures = 0
+        failures = 0
+        stop = False
 
-        for email in emails:
-            success = await self.process_email(email)
-            if success:
-                processed += 1
-                consecutive_failures = 0
-            else:
-                consecutive_failures += 1
-                if consecutive_failures >= 3:
-                    logger.error(
-                        "3 consecutive failures — stopping"
-                        " batch (check API key)"
-                    )
-                    break
+        async def _process_one(email: Dict):
+            nonlocal processed, failures, stop
+            if stop:
+                return
+            async with sem:
+                if stop:
+                    return
+                success = await self.process_email(email)
+                if success:
+                    processed += 1
+                    failures = 0
+                else:
+                    failures += 1
+                    if failures >= 3:
+                        logger.error(
+                            "3 consecutive failures — stopping"
+                            " batch (check API key)",
+                        )
+                        stop = True
 
-        logger.info(f"Batch complete: {processed}/{len(emails)} processed")
+        await asyncio.gather(
+            *[_process_one(e) for e in emails],
+            return_exceptions=True,
+        )
+        logger.info(
+            f"Batch complete:"
+            f" {processed}/{len(emails)} processed",
+        )
         return processed
+
+    def _format_email_data(
+        self, email: Dict, contact_email: str,
+    ) -> str:
+        """Format email fields as plain text for LLM."""
+        body = (
+            email.get("body_plain", "")
+            or email.get("snippet", "")
+        )
+        cc_raw = email.get("cc_email") or email.get("cc") or []
+        if isinstance(cc_raw, list):
+            cc = ", ".join(cc_raw) if cc_raw else "(none)"
+        else:
+            cc = cc_raw if cc_raw else "(none)"
+        to = (
+            ", ".join(email.get("to_email", []))
+            if isinstance(email.get("to_email"), list)
+            else email.get("to_email", "unknown")
+        )
+        return (
+            f"From: {email.get('from_email', 'unknown')}\n"
+            f"To: {to}\n"
+            f"CC: {cc}\n"
+            f"Date: {email.get('date', 'unknown')}\n"
+            f"Subject: {email.get('subject', '(no subject)')}\n"
+            f"Contact: {contact_email}\n\n"
+            f"{body}"
+        )
 
     def _extract_entities(self, email: Dict, contact_email: str) -> List[str]:
         """Extract entities from email using LLM.
 
-        Requires user's custom prompt (from /agent train email).
-        Returns a list of entity blobs (one per entity found).
+        Uses prompt caching: trained prompt as system (cached),
+        email data as user message (varies per call).
 
         Args:
             email: Email dict
             contact_email: Email address of the contact
 
         Returns:
-            List of extracted entity blobs, or empty list if no prompt configured or SKIP
+            List of extracted entity blobs, or empty list
         """
         logging.debug("_extract_entities called")
         try:
-            # Get the extraction prompt (user's custom only, no default)
             prompt_template = self._get_extraction_prompt()
             if not prompt_template:
-                logger.warning("Skipping extraction - no custom prompt configured")
+                logger.warning(
+                    "Skipping extraction - no custom prompt",
+                )
                 return []
 
-            # Get email body, prefer body_plain, fall back to snippet
-            body = email.get("body_plain", "") or email.get("snippet", "")
-
-            # Format cc_email (may be list or string or None)
-            cc_raw = email.get("cc_email") or email.get("cc") or []
-            if isinstance(cc_raw, list):
-                cc_email = ", ".join(cc_raw) if cc_raw else "(none)"
-            else:
-                cc_email = cc_raw if cc_raw else "(none)"
-
-            prompt = prompt_template.format(
-                from_email=email.get("from_email", "unknown"),
-                to_email=(
-                    ", ".join(email.get("to_email", []))
-                    if isinstance(email.get("to_email"), list)
-                    else email.get("to_email", "unknown")
-                ),
-                cc_email=cc_email,
-                subject=email.get("subject", "(no subject)"),
-                date=email.get("date", "unknown"),
-                body=body,
-                contact_email=contact_email,
+            email_data = self._format_email_data(
+                email, contact_email,
             )
 
-            response = self.client.create_message_sync(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=1024,  # Increased for multiple entities
-            )
+            # Try cached system prompt approach first.
+            # If prompt has old-style {from_email} placeholders,
+            # fall back to legacy format.
+            try:
+                # Test if prompt has format placeholders
+                prompt_template.format(
+                    from_email="", to_email="", cc_email="",
+                    subject="", date="", body="",
+                    contact_email="",
+                )
+                # Has placeholders → legacy prompt, format inline
+                prompt = prompt_template.format(
+                    from_email=email.get("from_email", "unknown"),
+                    to_email=(
+                        ", ".join(email.get("to_email", []))
+                        if isinstance(email.get("to_email"), list)
+                        else email.get("to_email", "unknown")
+                    ),
+                    cc_email=email_data.split("\n")[2][4:],
+                    subject=email.get("subject", "(no subject)"),
+                    date=email.get("date", "unknown"),
+                    body=(
+                        email.get("body_plain", "")
+                        or email.get("snippet", "")
+                    ),
+                    contact_email=contact_email,
+                )
+                response = self.client.create_message_sync(
+                    messages=[
+                        {"role": "user", "content": prompt},
+                    ],
+                    max_tokens=1024,
+                )
+            except (KeyError, IndexError):
+                # No placeholders → use as cached system prompt
+                system = [
+                    {
+                        "type": "text",
+                        "text": prompt_template,
+                        "cache_control": {
+                            "type": "ephemeral",
+                        },
+                    },
+                ]
+                response = self.client.create_message_sync(
+                    system=system,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": (
+                                "Analyze this email:\n\n"
+                                + email_data
+                            ),
+                        },
+                    ],
+                    max_tokens=1024,
+                )
             raw_output = response.content[0].text.strip()
             logging.debug(f"RAW OUTPUT:\n{raw_output}")
             # Check for SKIP

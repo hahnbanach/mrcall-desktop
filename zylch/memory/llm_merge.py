@@ -53,6 +53,9 @@ Output ONLY the merged entity in this exact format, nothing else."""
     def merge(self, existing: str, new: str) -> str:
         """Merge two memory contents using LLM.
 
+        Uses prompt caching: merge instructions as cached system,
+        entity data as user message.
+
         Args:
             existing: Current blob content
             new: New information to merge
@@ -61,13 +64,32 @@ Output ONLY the merged entity in this exact format, nothing else."""
             Merged content string
         """
         logging.info("MERGING CALLED")
+        system = [
+            {
+                "type": "text",
+                "text": self.MERGE_PROMPT.split(
+                    "EXISTING_ENTITY:"
+                )[0].strip(),
+                "cache_control": {"type": "ephemeral"},
+            },
+        ]
+        user_content = (
+            f"EXISTING_ENTITY:\n{existing}\n\n"
+            f"NEW ENTITY:\n{new}"
+        )
         response = self.client.create_message_sync(
             model=self.model,
             max_tokens=1024,
-            messages=[{
-                "role": "user",
-                "content": self.MERGE_PROMPT.format(existing=existing, new=new)
-            }]
+            system=system,
+            messages=[
+                {"role": "user", "content": user_content},
+            ],
         )
-        logging.info(f"MERGING ENTITIES:\nexisting: {existing}\nnew:{new}\nresult:{response.content[0].text.strip()}\n\n")
-        return response.content[0].text.strip()
+        result = response.content[0].text.strip()
+        logging.info(
+            f"MERGING ENTITIES:\n"
+            f"existing: {existing}\n"
+            f"new:{new}\n"
+            f"result:{result}\n\n"
+        )
+        return result
