@@ -24,7 +24,12 @@ from neonize.events import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_WA_DB = os.path.expanduser("~/.zylch/whatsapp.db")
+def _default_wa_db() -> str:
+    """WhatsApp DB path — per-profile if available."""
+    profile_dir = os.environ.get("ZYLCH_PROFILE_DIR")
+    if profile_dir:
+        return os.path.join(profile_dir, "whatsapp.db")
+    return os.path.expanduser("~/.zylch/whatsapp.db")
 
 
 class WhatsAppClient:
@@ -37,8 +42,8 @@ class WhatsAppClient:
         client.disconnect()
     """
 
-    def __init__(self, db_path: str = DEFAULT_WA_DB):
-        self.db_path = db_path
+    def __init__(self, db_path: str = None):
+        self.db_path = db_path or _default_wa_db()
         self._client: Optional[NewClient] = None
         self._thread: Optional[threading.Thread] = None
         self._qr_callback: Optional[Callable] = None
