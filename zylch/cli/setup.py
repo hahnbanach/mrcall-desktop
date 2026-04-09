@@ -283,7 +283,19 @@ def _run_wizard(env: dict, profile_name: str | None):
         " WhatsApp messages.\n",
     )
 
-    wa_db = Path(os.path.expanduser("~/.zylch/whatsapp.db"))
+    # Check per-profile WA session (or legacy global)
+    _profile_name = email or profile_name or "default"
+    _wa_profile_path = Path(
+        get_profile_dir(_profile_name),
+    ) / "whatsapp.db"
+    _wa_global_path = Path(
+        os.path.expanduser("~/.zylch/whatsapp.db"),
+    )
+    wa_db = (
+        _wa_profile_path
+        if _wa_profile_path.exists()
+        else _wa_global_path
+    )
     wa_connected = wa_db.exists()
 
     if wa_connected:

@@ -248,7 +248,12 @@ def _run_whatsapp_sync(
     import threading
     from pathlib import Path
 
-    wa_db = Path(os.path.expanduser("~/.zylch/whatsapp.db"))
+    profile_dir = os.environ.get("ZYLCH_PROFILE_DIR", "")
+    wa_db = Path(
+        os.path.join(profile_dir, "whatsapp.db")
+        if profile_dir
+        else os.path.expanduser("~/.zylch/whatsapp.db")
+    )
     if not wa_db.exists():
         return {
             "skipped": True,
