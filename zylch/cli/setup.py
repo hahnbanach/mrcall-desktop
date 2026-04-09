@@ -719,11 +719,12 @@ def _prompt_document_paths() -> str:
         )
         if not path:
             break
-        # Expand ~ but keep in stored format
-        expanded = os.path.expanduser(path.strip())
+        # Remove shell escape backslashes and expand ~
+        clean = path.strip().replace("\\ ", " ")
+        expanded = os.path.expanduser(clean)
         if os.path.isdir(expanded):
-            paths.append(path.strip())
-            click.echo(f"    Added: {path.strip()}")
+            paths.append(clean)
+            click.echo(f"    Added: {clean}")
         else:
             click.echo(
                 f"    [Warning] '{path}' not found,"
