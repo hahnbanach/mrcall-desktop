@@ -237,6 +237,38 @@ def _run_wizard(env: dict, profile_name: str | None):
             click.echo(
                 f"  Auto-detected: {imap_host} / {smtp_host}",
             )
+        else:
+            click.echo(
+                f"\n  Domain '{domain}' — can't auto-detect.",
+            )
+            provider_choice = click.prompt(
+                "  Email provider",
+                type=click.Choice([
+                    "google", "outlook", "other",
+                ]),
+                default="google",
+            )
+            if provider_choice == "google":
+                imap_host = "imap.gmail.com"
+                smtp_host = "smtp.gmail.com"
+                click.echo(
+                    f"  Set: {imap_host} / {smtp_host}",
+                )
+            elif provider_choice == "outlook":
+                imap_host = "outlook.office365.com"
+                smtp_host = "smtp.office365.com"
+                click.echo(
+                    f"  Set: {imap_host} / {smtp_host}",
+                )
+            else:
+                imap_host = click.prompt(
+                    "  IMAP server",
+                    default=f"imap.{domain}",
+                )
+                smtp_host = click.prompt(
+                    "  SMTP server",
+                    default=f"smtp.{domain}",
+                )
 
     logger.debug(
         f"[init] email={email},"
