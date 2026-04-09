@@ -18,6 +18,7 @@ def execute_tool(
     dispatch = {
         "search_emails": _search_emails,
         "search_memory": _search_memory,
+        "update_memory": _update_memory,
         "draft_email": _draft_email,
         "run_python": _run_python,
         "send_email": _send_email,
@@ -31,7 +32,8 @@ def execute_tool(
     if not fn:
         return f"Unknown tool: {name}"
     if fn in (_search_emails, _search_memory,
-              _download_attachment, _send_sms):
+              _download_attachment, _send_sms,
+              _update_memory):
         return fn(args, store, owner_id)
     return fn(args)
 
@@ -127,6 +129,61 @@ def _search_memory(
         return "\n".join(lines)
     except Exception as e:
         return f"Memory search failed: {e}"
+
+
+def _update_memory(
+    args: Dict, store, owner_id: str,
+) -> str:
+    """Update a memory blob by searching and replacing content."""
+    query = args.get("query", "")
+    new_content = args.get("new_content", "")
+    if not query or not new_content:
+        return "Missing query or new_content"
+
+    try:
+        from zylch.memory import (
+            EmbeddingEngine,
+            HybridSearchEngine,
+            MemoryConfig,
+        )
+        from zylch.memory.blob_storage import BlobStorage
+        from zylch.storage.database import get_session
+
+        config = MemoryConfig()
+        engine = EmbeddingEngine(config)
+        search = HybridSearchEngine(get_session, engine)
+        blob_store = BlobStorage(get_session, engine)
+
+        results = search.search(
+            owner_id=owner_id, query=query, limit=1,
+        )
+        if not results:
+            return f"No memory entry found for '{query}'"
+
+        r = results[0]
+        blob_id = (
+            r.blob_id if hasattr(r, "blob_id")
+            else r.get("blob_id", "")
+        )
+        old_content = (
+            r.content if hasattr(r, "content")
+            else r.get("content", "")
+        )
+
+        blob_store.update_blob(
+            blob_id=blob_id,
+            owner_id=owner_id,
+            content=new_content,
+            event_description="Manual correction via CLI",
+        )
+
+        return (
+            f"Memory updated.\n"
+            f"Was: {old_content[:100]}...\n"
+            f"Now: {new_content[:100]}..."
+        )
+    except Exception as e:
+        return f"Update failed: {e}"
 
 
 def _download_attachment(

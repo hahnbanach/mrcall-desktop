@@ -137,6 +137,35 @@ SOLVE_TOOLS = [
         },
     },
     {
+        "name": "update_memory",
+        "description": (
+            "Update a contact's memory entry."
+            " Use to correct errors, add info, or rename."
+            " First search_memory to find the entry,"
+            " then update with corrected content."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Name or keyword to find the"
+                        " memory entry to update"
+                    ),
+                },
+                "new_content": {
+                    "type": "string",
+                    "description": (
+                        "The corrected full content"
+                        " (replaces existing)"
+                    ),
+                },
+            },
+            "required": ["query", "new_content"],
+        },
+    },
+    {
         "name": "send_email",
         "description": (
             "Send an email via SMTP. User approves before sending."
@@ -270,6 +299,7 @@ SOLVE_TOOLS = [
 APPROVAL_TOOLS = {
     "draft_email", "run_python",
     "send_email", "send_whatsapp", "send_sms",
+    "update_memory",
 }
 
 
@@ -496,6 +526,12 @@ def _format_approval_preview(
             f"**Run Python**\n"
             f"_{args.get('description', '')}_\n\n"
             f"```python\n{args.get('code', '')}\n```"
+        )
+    elif tool_name == "update_memory":
+        return (
+            f"**Update Memory**\n"
+            f"Search: {args.get('query', '')}\n\n"
+            f"New content:\n{args.get('new_content', '')}"
         )
     return json.dumps(args, indent=2, default=str)
 
