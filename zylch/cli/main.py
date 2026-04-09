@@ -143,6 +143,10 @@ def _setup_profile(profile_name: str | None = None, lock: bool = True):
 
 
 @click.group(invoke_without_command=True)
+@click.version_option(
+    version=__import__("zylch").__version__,
+    prog_name="zylch",
+)
 @click.option(
     "-p", "--profile",
     default=None,
@@ -150,7 +154,7 @@ def _setup_profile(profile_name: str | None = None, lock: bool = True):
 )
 @click.pass_context
 def cli(ctx, profile):
-    """Zylch — AI-powered sales intelligence."""
+    """Zylch — Sales Intelligence."""
     _configure_logging()
     _check_update()
     ctx.ensure_object(dict)
