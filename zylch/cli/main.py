@@ -89,6 +89,13 @@ def _configure_logging():
     ))
     logging.getLogger().addHandler(console_handler)
 
+    # Suppress noisy third-party loggers on console
+    for noisy in (
+        "httpx", "httpcore", "huggingface_hub",
+        "fastembed", "onnxruntime", "urllib3",
+    ):
+        logging.getLogger(noisy).setLevel(logging.ERROR)
+
 
 def _setup_log_file():
     """Add file handler after profile is activated."""
