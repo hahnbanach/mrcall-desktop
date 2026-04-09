@@ -719,8 +719,8 @@ def _prompt_document_paths() -> str:
         )
         if not path:
             break
-        # Remove shell escape backslashes and expand ~
-        clean = path.strip().replace("\\ ", " ")
+        # Clean shell artifacts: quotes and escape backslashes
+        clean = path.strip().strip("'\"").replace("\\ ", " ")
         expanded = os.path.expanduser(clean)
         if os.path.isdir(expanded):
             paths.append(clean)
