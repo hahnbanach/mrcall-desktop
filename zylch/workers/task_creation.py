@@ -222,11 +222,25 @@ class TaskWorker:
         )
 
         # Deduplicate: latest email per thread
+        # Also track if user replied after the contact's last email
         threads: Dict[str, Dict] = {}
+        user_replied: Dict[str, float] = {}  # thread_id → latest user reply ts
         for email in all_emails:
             email_id = email.get("id")
             thread_id = email.get("thread_id") or email_id
             ts = email.get("date_timestamp") or 0
+            from_email = email.get("from_email", "").lower()
+
+            # Track user's replies per thread
+            is_user = (
+                from_email in user_emails
+                or (self.user_domain and self.user_domain in from_email)
+            )
+            if is_user:
+                prev = user_replied.get(thread_id, 0)
+                if ts > prev:
+                    user_replied[thread_id] = ts
+
             existing = threads.get(thread_id)
             existing_ts = (
                 existing.get("date_timestamp", 0)
@@ -235,6 +249,44 @@ class TaskWorker:
             )
             if not existing or ts > existing_ts:
                 threads[thread_id] = email
+
+        # Remove threads where user replied after the contact's
+        # last email — the task is already handled
+        for thread_id in list(threads.keys()):
+            email = threads[thread_id]
+            from_email = email.get("from_email", "").lower()
+            is_user = (
+                from_email in user_emails
+                or (self.user_domain and self.user_domain in from_email)
+            )
+            if is_user:
+                continue  # Already a user email, handled below
+            contact_ts = email.get("date_timestamp") or 0
+            reply_ts = user_replied.get(thread_id, 0)
+            if reply_ts > contact_ts:
+                # User replied after contact — close any open task
+                contact_email = from_email
+                existing_task = self.storage.get_task_by_contact(
+                    self.owner_id, contact_email,
+                )
+                if existing_task:
+                    self.storage.complete_task_item(
+                        self.owner_id, existing_task["id"],
+                    )
+                    logger.info(
+                        f"[TASK] Auto-closed task for"
+                        f" {contact_email} (user replied"
+                        f" in thread)",
+                    )
+                # Mark all emails in this thread as processed
+                for e in all_emails:
+                    eid = e.get("id", "")
+                    etid = e.get("thread_id") or eid
+                    if etid == thread_id:
+                        self.storage.mark_email_task_processed(
+                            self.owner_id, eid,
+                        )
+                del threads[thread_id]
 
         logger.debug(
             f"[TASK] {len(all_emails)} unprocessed"
