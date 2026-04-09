@@ -96,9 +96,8 @@ class MemoryWorker:
                     "Using user's custom memory_email prompt",
                 )
             else:
-                logger.warning(
-                    "No custom prompt found"
-                    " - user must run /agent train email first",
+                logger.debug(
+                    "No custom prompt found — will auto-train",
                 )
 
         return self._custom_prompt
