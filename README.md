@@ -32,19 +32,20 @@ Zylch is a local CLI tool that connects your email (IMAP), detects tasks, mainta
 - In-memory vector search with numpy (no external DB)
 
 ### Channels
-- **Email**: IMAP/SMTP (bidirectional)
-- **MrCall/StarChat**: Contacts, calls, SMS (channel adapter)
-- **WhatsApp**: Planned (GOWA)
+- **Email**: IMAP/SMTP (bidirectional, INBOX + Sent)
+- **WhatsApp**: neonize/whatsmeow (QR code login, sync on demand)
+- **MrCall/StarChat**: Contacts, calls, SMS (channel adapter + OAuth2)
+- **Telegram**: Bot interface (long-polling + proactive digest)
 - **Calendar**: Planned (CalDAV)
 
 ## Install
 
 ```bash
-# pipx (recommended)
-pipx install .
+# One-line install (no Python needed — downloads standalone binary)
+curl -sL https://raw.githubusercontent.com/malemi/zylch/main/scripts/install.sh | bash
 
-# Or pip dev mode
-pip install -e .
+# Or via pip / pipx (requires Python 3.11+)
+pipx install zylch
 ```
 
 ## Setup
@@ -53,9 +54,9 @@ pip install -e .
 zylch init
 ```
 
-The wizard asks for email address, app password, LLM provider, and API key.
+The wizard walks through: LLM provider, email, WhatsApp, Telegram, MrCall, personal data, document folders.
 Each profile is stored in `~/.zylch/profiles/<email>/` with its own `.env` and database.
-Run `zylch init` again to add more profiles. IMAP/SMTP servers auto-detected.
+Run `zylch init` again to add more profiles or edit existing ones.
 
 ## Usage
 
