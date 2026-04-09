@@ -483,8 +483,14 @@ def _web_search(args: Dict) -> str:
         if not api_key:
             return "No API key for web search"
 
-        client = LLMClient(api_key=api_key, provider=provider)
+        # Use Sonnet for web search (cheaper, fast enough)
+        model = "claude-sonnet-4-20250514"
+        client = LLMClient(
+            api_key=api_key, provider=provider,
+            model=model,
+        )
         response = client.create_message_sync(
+            model=model,
             messages=[
                 {
                     "role": "user",
