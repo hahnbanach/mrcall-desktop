@@ -38,8 +38,12 @@ echo "  Platform: ${PLATFORM} ${ARCH}"
 echo "  Downloading zylch..."
 TMP="$(mktemp)"
 if command -v curl &>/dev/null; then
-    curl -sL -o "$TMP" "$URL" || {
-        echo "  Download failed. Check https://github.com/malemi/zylch/releases"
+    curl -sfL -o "$TMP" "$URL" || {
+        echo "  Download failed. No release found for ${BINARY}."
+        echo "  Check: https://github.com/malemi/zylch/releases"
+        echo ""
+        echo "  Alternative install (requires Python 3.11+):"
+        echo "    pip install zylch"
         rm -f "$TMP"
         exit 1
     }
