@@ -62,6 +62,12 @@ fi
 
 chmod +x "$TMP"
 
+# Detect install vs upgrade
+ACTION="Installed"
+if [ -f "$INSTALL_DIR/zylch" ]; then
+    ACTION="Updated"
+fi
+
 if [ -w "$INSTALL_DIR" ]; then
     mv "$TMP" "$INSTALL_DIR/zylch"
 else
@@ -70,7 +76,11 @@ else
 fi
 
 echo ""
-echo "  Installed! Run:"
+echo "  $ACTION! Run:"
 echo ""
-echo "    zylch init"
+if [ "$ACTION" = "Installed" ]; then
+    echo "    zylch init"
+else
+    echo "    zylch --help"
+fi
 echo ""
