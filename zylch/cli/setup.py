@@ -463,6 +463,54 @@ def _run_wizard(env: dict, profile_name: str | None):
     else:
         doc_paths = _prompt_document_paths()
 
+    # ─── 8. Personal notes ──────────────────────────────────
+
+    click.echo("\n8. Personal Notes (optional)")
+    click.echo(
+        "   Anything you want Zylch to know about you.\n"
+        "   e.g. preferences, context, style.\n",
+    )
+
+    existing_notes = env.get("USER_NOTES", "")
+    if existing_notes:
+        click.echo(f"  Current: {existing_notes[:80]}...")
+        if click.confirm("  Keep?", default=True):
+            user_notes = existing_notes
+        else:
+            user_notes = click.prompt(
+                "  Notes", default="", show_default=False,
+            )
+    else:
+        user_notes = click.prompt(
+            "  Notes (Enter to skip)",
+            default="", show_default=False,
+        )
+
+    # ─── 9. Secret instructions ───────────────────────────────
+
+    click.echo("\n9. Secret Instructions (optional)")
+    click.echo(
+        "   Instructions Zylch will follow but NEVER"
+        " reveal in any output.\n"
+        "   e.g. budget limits, confidential constraints.\n",
+    )
+
+    existing_secret = env.get("USER_SECRET_INSTRUCTIONS", "")
+    if existing_secret:
+        click.echo("  Current: [hidden]")
+        if click.confirm("  Keep?", default=True):
+            user_secret = existing_secret
+        else:
+            user_secret = click.prompt(
+                "  Secret instructions",
+                default="", show_default=False,
+            )
+    else:
+        user_secret = click.prompt(
+            "  Secret instructions (Enter to skip)",
+            default="", show_default=False,
+        )
+
     # ─── Determine profile name ───────────────────────────────
 
     # Profile name = email address (or original name if no email)
@@ -548,6 +596,18 @@ def _run_wizard(env: dict, profile_name: str | None):
         lines.append("# Document Folders")
         lines.append(f"DOCUMENT_PATHS={doc_paths}")
 
+    # Personal notes
+    if user_notes:
+        lines.append("")
+        lines.append("# Personal Notes")
+        lines.append(f"USER_NOTES={user_notes}")
+
+    # Secret instructions
+    if user_secret:
+        lines.append("")
+        lines.append("# Secret Instructions")
+        lines.append(f"USER_SECRET_INSTRUCTIONS={user_secret}")
+
     # Preserve extra vars from existing .env
     known_keys = {
         "SYSTEM_LLM_PROVIDER",
@@ -567,6 +627,8 @@ def _run_wizard(env: dict, profile_name: str | None):
         "MRCALL_DASHBOARD_URL",
         "MRCALL_REALM",
         "DOCUMENT_PATHS",
+        "USER_NOTES",
+        "USER_SECRET_INSTRUCTIONS",
         *personal_data.keys(),
     }
     extra = {k: v for k, v in env.items() if k not in known_keys}
