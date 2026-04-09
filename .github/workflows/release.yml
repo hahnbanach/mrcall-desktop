@@ -13,9 +13,15 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             arch: x64
+            ext: ""
           - os: macos-latest
             platform: macos
             arch: arm64
+            ext: ""
+          - os: windows-latest
+            platform: windows
+            arch: x64
+            ext: ".exe"
 
     runs-on: ${{ matrix.os }}
 
@@ -33,19 +39,13 @@ jobs:
 
       - name: Build binary
         run: |
-          pyinstaller --onefile --name zylch-${{ matrix.platform }}-${{ matrix.arch }} \
-            --hidden-import zylch.cli.main \
-            --collect-all zylch \
-            --collect-all fastembed \
-            --collect-all neonize \
-            --collect-all onnxruntime \
-            zylch/cli/main.py
+          pyinstaller --onefile --name zylch-${{ matrix.platform }}-${{ matrix.arch }} --hidden-import zylch.cli.main --collect-all zylch --collect-all fastembed --collect-all neonize --collect-all onnxruntime zylch/cli/main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: zylch-${{ matrix.platform }}-${{ matrix.arch }}
-          path: dist/zylch-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/zylch-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -63,3 +63,4 @@ jobs:
           files: |
             zylch-linux-x64/zylch-linux-x64
             zylch-macos-arm64/zylch-macos-arm64
+            zylch-windows-x64/zylch-windows-x64.exe
