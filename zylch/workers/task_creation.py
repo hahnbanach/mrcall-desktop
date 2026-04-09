@@ -157,9 +157,8 @@ class TaskWorker:
             if self._task_prompt:
                 logger.info("Loaded user's task detection prompt")
             else:
-                logger.warning(
-                    "No task prompt found"
-                    " - user must run /agent train tasks first",
+                logger.debug(
+                    "No task prompt found — will auto-train",
                 )
 
         return self._task_prompt
