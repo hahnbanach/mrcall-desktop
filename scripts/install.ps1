@@ -10,6 +10,9 @@ $url = "https://github.com/malemi/zylch/releases/latest/download/zylch-windows-x
 $installDir = "$env:LOCALAPPDATA\Zylch"
 $exe = "$installDir\zylch.exe"
 
+# Detect install vs upgrade
+$isUpgrade = Test-Path $exe
+
 # Create install directory
 if (-not (Test-Path $installDir)) {
     New-Item -ItemType Directory -Path $installDir -Force | Out-Null
@@ -34,8 +37,14 @@ if ($currentPath -notlike "*$installDir*") {
     Write-Host "  Added to PATH (restart terminal to use)"
 }
 
+$action = if ($isUpgrade) { "Updated" } else { "Installed" }
+
 Write-Host ""
-Write-Host "  Installed! Run:"
+Write-Host "  $action! Run:"
 Write-Host ""
-Write-Host "    zylch init"
+if ($isUpgrade) {
+    Write-Host "    zylch --help"
+} else {
+    Write-Host "    zylch init"
+}
 Write-Host ""
