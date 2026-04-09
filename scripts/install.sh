@@ -33,6 +33,14 @@ URL="https://github.com/malemi/zylch/releases/latest/download/${BINARY}"
 
 echo "  Platform: ${PLATFORM} ${ARCH}"
 
+# Get latest version
+VERSION=$(curl -sfL "https://api.github.com/repos/malemi/zylch/releases/latest" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+if [ -n "$VERSION" ]; then
+    echo "  Version:  ${VERSION}"
+else
+    echo "  Version:  latest"
+fi
+
 # ── Download binary ───────────────────────────────────
 
 echo "  Downloading zylch..."
