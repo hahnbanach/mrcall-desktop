@@ -13,11 +13,19 @@ import click
 logger = logging.getLogger(__name__)
 
 
+_update_message = None
+
+
 def _check_update():
-    """Check GitHub for newer release (non-blocking)."""
+    """Check GitHub for newer release (non-blocking).
+
+    Stores message in _update_message for display at startup,
+    not printed from background thread (avoids terminal corruption).
+    """
     import threading
 
     def _check():
+        global _update_message
         try:
             import httpx
 
@@ -34,31 +42,41 @@ def _check_update():
             latest = data.get("tag_name", "").lstrip("v")
             if not latest or latest == __version__:
                 return
-            # Simple version compare (works for semver)
             if latest > __version__:
                 body = data.get("body", "").strip()
                 notes = ""
                 if body:
-                    # First 3 lines of release notes
                     lines = body.splitlines()[:3]
                     notes = "\n    ".join(lines)
 
-                click.echo(
+                msg = (
                     f"\n  Update available: v{__version__}"
-                    f" → v{latest}",
+                    f" → v{latest}"
                 )
                 if notes:
-                    click.echo(f"    {notes}")
-                click.echo(
-                    "  Run: curl -sL https://raw.githubusercontent.com"
-                    "/malemi/zylch/main/scripts/install.sh | bash\n",
+                    msg += f"\n    {notes}"
+                msg += (
+                    "\n  Run: curl -sL https://raw."
+                    "githubusercontent.com/malemi/zylch"
+                    "/main/scripts/install.sh | bash\n"
                 )
+                _update_message = msg
         except Exception:
-            pass  # Never block on update check
+            pass
 
     threading.Thread(
         target=_check, daemon=True, name="update-check",
     ).start()
+
+
+def _show_update():
+    """Show update message if available (call from main thread)."""
+    import time
+
+    # Give background thread a moment
+    time.sleep(0.5)
+    if _update_message:
+        click.echo(_update_message, err=True)
 
 
 def _configure_logging():
@@ -146,6 +164,7 @@ def _setup_profile(profile_name: str | None = None, lock: bool = True):
 
     activate_profile(profile)
     _setup_log_file()
+    _show_update()
     return profile
 
 
@@ -276,6 +295,13 @@ def telegram():
 
 def main():
     """Entry point for pipx / setuptools console_scripts."""
+    # Suppress multiprocessing resource_tracker warnings
+    # (fastembed/onnxruntime spawn processes that die on exit)
+    import warnings
+
+    warnings.filterwarnings(
+        "ignore", "resource_tracker",
+    )
     cli()
 
 
