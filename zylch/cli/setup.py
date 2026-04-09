@@ -477,14 +477,9 @@ def _run_wizard(env: dict, profile_name: str | None):
         if click.confirm("  Keep?", default=True):
             user_notes = existing_notes
         else:
-            user_notes = click.prompt(
-                "  Notes", default="", show_default=False,
-            )
+            user_notes = _prompt_multiline("  Notes")
     else:
-        user_notes = click.prompt(
-            "  Notes (Enter to skip)",
-            default="", show_default=False,
-        )
+        user_notes = _prompt_multiline("  Notes")
 
     # ─── 9. Secret instructions ───────────────────────────────
 
@@ -501,14 +496,12 @@ def _run_wizard(env: dict, profile_name: str | None):
         if click.confirm("  Keep?", default=True):
             user_secret = existing_secret
         else:
-            user_secret = click.prompt(
+            user_secret = _prompt_multiline(
                 "  Secret instructions",
-                default="", show_default=False,
             )
     else:
-        user_secret = click.prompt(
-            "  Secret instructions (Enter to skip)",
-            default="", show_default=False,
+        user_secret = _prompt_multiline(
+            "  Secret instructions",
         )
 
     # ─── Determine profile name ───────────────────────────────
@@ -702,6 +695,24 @@ def _run_wizard(env: dict, profile_name: str | None):
 
 
 # ─── Channel-specific helpers ─────────────────────────────────
+
+
+def _prompt_multiline(label: str) -> str:
+    """Prompt for multiline text input.
+
+    Type lines, empty line to finish. Enter to skip entirely.
+    """
+    click.echo(
+        f"  {label} (type lines, empty line to finish,"
+        f" Enter to skip):",
+    )
+    lines = []
+    while True:
+        line = click.prompt("  ", default="", show_default=False)
+        if not line:
+            break
+        lines.append(line)
+    return " ".join(lines) if lines else ""
 
 
 def _prompt_document_paths() -> str:
