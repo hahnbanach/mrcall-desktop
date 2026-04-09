@@ -62,18 +62,32 @@ def _check_update():
 
 
 def _configure_logging():
-    """Set up logging: console (WARNING+) and file (DEBUG).
+    """Set up logging: console (WARNING only), file (DEBUG).
 
-    Log file: ~/.zylch/profiles/{profile}/zylch.log
-    (created after profile activation, see _setup_log_file)
+    Console shows only warnings/errors — no noise.
+    File gets everything (DEBUG) for troubleshooting.
+    Override console with LOG_LEVEL env var if needed.
     """
-    level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    console_level = os.environ.get(
+        "LOG_LEVEL", "WARNING",
+    ).upper()
+    # Root logger at DEBUG so file handler catches all
     logging.basicConfig(
-        level=getattr(logging, level, logging.WARNING),
+        level=logging.DEBUG,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
         datefmt="%H:%M:%S",
+        handlers=[],  # No default handler
     )
-    logger.debug(f"[CLI] Logging configured, level={level}")
+    # Console handler: WARNING+ (quiet)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(
+        getattr(logging, console_level, logging.WARNING),
+    )
+    console_handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(name)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    ))
+    logging.getLogger().addHandler(console_handler)
 
 
 def _setup_log_file():
