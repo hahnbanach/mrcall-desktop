@@ -6,7 +6,7 @@
 set -euo pipefail
 
 echo ""
-echo "  Zylch — AI-powered sales intelligence"
+echo "  Zylch — Sales Intelligence"
 echo "  ======================================"
 echo ""
 
