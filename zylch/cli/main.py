@@ -13,6 +13,54 @@ import click
 logger = logging.getLogger(__name__)
 
 
+def _check_update():
+    """Check GitHub for newer release (non-blocking)."""
+    import threading
+
+    def _check():
+        try:
+            import httpx
+
+            from zylch import __version__
+
+            resp = httpx.get(
+                "https://api.github.com/repos/malemi/zylch"
+                "/releases/latest",
+                timeout=3,
+            )
+            if resp.status_code != 200:
+                return
+            data = resp.json()
+            latest = data.get("tag_name", "").lstrip("v")
+            if not latest or latest == __version__:
+                return
+            # Simple version compare (works for semver)
+            if latest > __version__:
+                body = data.get("body", "").strip()
+                notes = ""
+                if body:
+                    # First 3 lines of release notes
+                    lines = body.splitlines()[:3]
+                    notes = "\n    ".join(lines)
+
+                click.echo(
+                    f"\n  Update available: v{__version__}"
+                    f" → v{latest}",
+                )
+                if notes:
+                    click.echo(f"    {notes}")
+                click.echo(
+                    "  Run: curl -sL https://raw.githubusercontent.com"
+                    "/malemi/zylch/main/scripts/install.sh | bash\n",
+                )
+        except Exception:
+            pass  # Never block on update check
+
+    threading.Thread(
+        target=_check, daemon=True, name="update-check",
+    ).start()
+
+
 def _configure_logging():
     """Set up logging: console (WARNING+) and file (DEBUG).
 
@@ -90,6 +138,7 @@ def _setup_profile(profile_name: str | None = None, lock: bool = True):
 def cli(ctx, profile):
     """Zylch — AI-powered sales intelligence."""
     _configure_logging()
+    _check_update()
     ctx.ensure_object(dict)
     ctx.obj["profile"] = profile
     if ctx.invoked_subcommand is None:
