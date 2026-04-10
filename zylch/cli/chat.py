@@ -35,17 +35,18 @@ def _setup_readline(profile_dir: str):
     """Configure readline: history file, tab completion, bindings."""
     history_file = os.path.join(profile_dir, ".zylch_history")
 
-    # Load existing history
+    # Load existing history (may fail on macOS sandbox)
     try:
         readline.read_history_file(history_file)
-    except FileNotFoundError:
+    except (FileNotFoundError, PermissionError, OSError):
         pass
 
-    readline.set_history_length(1000)
-
-    # Save history on exit
-    import atexit
-    atexit.register(readline.write_history_file, history_file)
+    try:
+        readline.set_history_length(1000)
+        import atexit
+        atexit.register(readline.write_history_file, history_file)
+    except (PermissionError, OSError):
+        pass  # Read-only or sandboxed — no history
 
     # Slash command completion
     commands = [
