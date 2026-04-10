@@ -746,9 +746,22 @@ def _instruct_task(
         user_email.split("@")[0] if user_email else "the user"
     )
 
-    instructions = click.prompt(
-        "\n  What would you like to do?", type=str,
+    console.print(
+        "\n  What would you like to do?"
+        " (type, empty line to send)",
     )
+    lines = []
+    while True:
+        try:
+            line = input("  > ")
+        except (EOFError, KeyboardInterrupt):
+            break
+        if not line:
+            break
+        lines.append(line)
+    instructions = "\n".join(lines)
+    if not instructions.strip():
+        return
 
     client = LLMClient(api_key=api_key, provider=provider)
     system = SOLVE_SYSTEM_PROMPT.format(
@@ -785,11 +798,25 @@ def _post_solve_menu(
     """After solve: continue conversation, mark done, or go back."""
     while True:
         console.print(
-            "\n  d) done   b) back to task   or type to continue conversation",
+            "\n  [bold]d)[/bold] Done"
+            "   [bold]b)[/bold] Back to task"
+            "   or type to continue (empty line to send)",
         )
-        choice = click.prompt(
-            "  >", type=str, default="d",
-        ).strip()
+        lines = []
+        while True:
+            try:
+                line = input("  > ")
+            except (EOFError, KeyboardInterrupt):
+                break
+            if not line and lines:
+                break  # Empty line after text = send
+            if not line and not lines:
+                break  # Just Enter = default (done)
+            lines.append(line)
+
+        choice = "\n".join(lines).strip()
+        if not choice:
+            choice = "d"
 
         lower = choice.lower()
         if lower == "d":
