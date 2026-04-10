@@ -191,41 +191,48 @@ def _print_dashboard(profile: str, owner_id: str):
             f"  {active} tasks needing action{urgency_line}",
         )
 
-    # Pending work
-    needs_sync = (
-        (total_emails == 0 and sync_age_hours is None)
-        or (sync_age_hours is not None and sync_age_hours > 1)
-    )
-    needs_processing = pending_memory or pending_tasks
+    # --- Menu ---
+    console.print()
 
-    if not needs_sync and not needs_processing and active == 0:
-        console.print(
-            "  [green]All up to date.[/green]",
-        )
-
-    # --- Suggestions ---
-    suggestions = []
-
-    if needs_sync or needs_processing:
-        suggestions.append(
-            "/update — sync + analyze + detect tasks",
-        )
-
+    options = []
     if active > 0:
-        suggestions.append(
-            "/tasks interactive — review tasks one by one",
+        options.append(
+            ("a", f"Show your {active} tasks", "/tasks interactive"),
         )
-
-    if not suggestions and total_emails > 0:
-        suggestions.append(
-            "Ask me anything about your contacts"
-            " and emails.",
+    if total_emails == 0 or (
+        sync_age_hours is not None and sync_age_hours > 0.5
+    ) or pending_memory or pending_tasks:
+        age = last_sync_str if total_emails > 0 else "never"
+        options.append(
+            ("b", f"Look for new messages (last update: {age})", "/update"),
         )
+    options.append(
+        ("c", "Let's chat!", None),
+    )
 
-    if suggestions:
-        console.print()
-        for s in suggestions:
-            console.print(f"  [dim]{s}[/dim]")
+    for key, label, _ in options:
+        console.print(f"  [bold]{key})[/bold] {label}")
+    console.print()
+
+    # Get choice
+    while True:
+        try:
+            choice = input("  > ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            choice = "c"
+            break
+        if choice in [o[0] for o in options]:
+            break
+        if not choice:
+            choice = options[0][0]  # Default to first
+            break
+
+    # Execute choice
+    for key, _, cmd in options:
+        if choice == key and cmd:
+            return cmd  # Return command to execute
+
+    return None  # Chat mode
 
     console.print()
 
@@ -281,15 +288,20 @@ def interactive_chat():
         f" profile={profile}, owner_id={owner_id}"
     )
 
-    _print_dashboard(profile, owner_id)
+    startup_cmd = _print_dashboard(profile, owner_id)
     console.print(
-        "[dim]Type /help for commands."
-        " Ctrl+C interrupts, Ctrl+D twice to exit."
-        " Tab completes.[/dim]\n"
+        "[dim]Ctrl+C interrupts, Ctrl+D twice to exit.[/dim]\n"
     )
 
     conversation_history: list = []
     _last_eof = False  # For double Ctrl+D exit
+
+    # Execute startup choice if any
+    if startup_cmd:
+        _handle_slash_command(
+            startup_cmd, owner_id, conversation_history,
+        )
+        console.print()
 
     while True:
         try:

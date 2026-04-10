@@ -338,7 +338,7 @@ def run_interactive_tasks(
                 task, store, owner_id,
                 api_key, provider, user_email,
             )
-        elif choice == "4":  # instruct
+        elif choice == "4":  # discuss
             _instruct_task(
                 task, store, owner_id,
                 api_key, provider, user_email,
@@ -380,7 +380,7 @@ def _prompt_choice() -> str:
     console.print()
     console.print(
         "  1) skip   2) done   3) solve"
-        "   4) instruct   q) quit",
+        "   4) discuss   q) quit",
     )
     while True:
         choice = click.prompt(
@@ -745,7 +745,7 @@ def _instruct_task(
     )
 
     instructions = click.prompt(
-        "\n  Your instructions", type=str,
+        "\n  What would you like to do?", type=str,
     )
 
     client = LLMClient(api_key=api_key, provider=provider)
