@@ -343,7 +343,7 @@ def run_interactive_tasks(
                 task, store, owner_id,
                 api_key, provider, user_email,
             )
-        elif choice == "q":
+        elif choice == "e":
             break
 
         console.print()
@@ -382,13 +382,13 @@ def _prompt_choice() -> str:
     console.print("  [bold]2)[/bold] Close it — already done")
     console.print("  [bold]3)[/bold] I trust you — solve it!")
     console.print("  [bold]4)[/bold] Let's discuss that")
-    console.print("  [bold]q)[/bold] Quit")
+    console.print("  [bold]e)[/bold] Exit and let's chat")
     console.print()
     while True:
         choice = click.prompt(
             "  >", type=str, default="1",
         ).strip().lower()
-        if choice in ("1", "2", "3", "4", "q"):
+        if choice in ("1", "2", "3", "4", "e"):
             return choice
         console.print("  [red]Invalid choice[/red]")
 
