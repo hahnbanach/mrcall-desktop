@@ -1,3 +1,8 @@
 """Zylch — Sales Intelligence."""
 
-__version__ = "0.1.15"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("zylch")
+except PackageNotFoundError:
+    __version__ = "0.0.0-dev"
