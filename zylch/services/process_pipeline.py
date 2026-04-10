@@ -172,6 +172,14 @@ async def handle_process(
         )
 
     # --- Step 4: Show tasks ---
+    # Update last_update timestamp
+    from datetime import datetime, timezone
+
+    store.update_sync_state(
+        owner_id,
+        last_dream_at=datetime.now(timezone.utc),
+    )
+
     console.print(
         "\n[bold cyan][5/5] Your action items:[/bold cyan]"
     )
