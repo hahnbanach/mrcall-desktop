@@ -13,7 +13,7 @@ import click
 logger = logging.getLogger(__name__)
 
 
-_update_data = None  # (version, notes) or None
+_update_data = None  # (version, notes), False (no update), or None (pending)
 
 
 def _check_update():
@@ -33,12 +33,14 @@ def _check_update():
                 timeout=3,
             )
             if resp.status_code != 200:
+                _update_data = False
                 return
             data = resp.json()
             latest = data.get("tag_name", "").lstrip("v")
             if not latest or latest == __version__:
+                _update_data = False
                 return
-            # Proper semver compare (not string compare)
+            # Proper semver compare
             def _ver(v):
                 return tuple(
                     int(x) for x in v.split(".")
@@ -46,8 +48,10 @@ def _check_update():
             if _ver(latest) > _ver(__version__):
                 body = data.get("body", "").strip()
                 _update_data = (latest, body)
+            else:
+                _update_data = False
         except Exception:
-            pass
+            _update_data = False
 
     threading.Thread(
         target=_check, daemon=True, name="update-check",
@@ -62,9 +66,12 @@ def _show_update():
 
     from zylch import __version__
 
-    # Give background thread a moment
-    time.sleep(0.5)
-    if not _update_data:
+    # Wait for background thread (up to 3s)
+    for _ in range(6):
+        if _update_data is not None:
+            break
+        time.sleep(0.5)
+    if not _update_data or _update_data is False:
         return
 
     latest, notes = _update_data
