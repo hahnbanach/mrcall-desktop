@@ -840,9 +840,9 @@ def _connect_whatsapp_qr():
     """Run WhatsApp QR code connection flow inline."""
     try:
         from zylch.whatsapp.client import WhatsAppClient
-    except ImportError:
+    except (ImportError, OSError):
         click.echo(
-            "  neonize not installed. Run: pip install neonize",
+            "  WhatsApp not available in this build.",
         )
         return
 
