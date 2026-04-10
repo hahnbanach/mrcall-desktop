@@ -187,6 +187,22 @@ def _print_dashboard(profile: str, owner_id: str):
     )
     console.print()
 
+    # First-time or no-tasks intro
+    if total_emails == 0:
+        console.print(
+            "  I'm Zylch, your sales intelligence agent.\n"
+            "  I connect to your email, WhatsApp, and phone\n"
+            "  to find what needs your attention — and help\n"
+            "  you get it done.\n\n"
+            "  Let's start by syncing your messages.\n",
+        )
+    elif active == 0 and entities == 0:
+        console.print(
+            "  I analyze your messages, detect tasks,\n"
+            "  remember your contacts, and help you reply.\n"
+            "  Run an update to get started.\n",
+        )
+
     # Status line
     if total_emails > 0:
         console.print(
