@@ -13,19 +13,15 @@ import click
 logger = logging.getLogger(__name__)
 
 
-_update_message = None
+_update_data = None  # (version, notes) or None
 
 
 def _check_update():
-    """Check GitHub for newer release (non-blocking).
-
-    Stores message in _update_message for display at startup,
-    not printed from background thread (avoids terminal corruption).
-    """
+    """Check GitHub for newer release (non-blocking)."""
     import threading
 
     def _check():
-        global _update_message
+        global _update_data
         try:
             import httpx
 
@@ -44,23 +40,7 @@ def _check_update():
                 return
             if latest > __version__:
                 body = data.get("body", "").strip()
-                notes = ""
-                if body:
-                    lines = body.splitlines()[:3]
-                    notes = "\n    ".join(lines)
-
-                msg = (
-                    f"\n  Update available: v{__version__}"
-                    f" → v{latest}"
-                )
-                if notes:
-                    msg += f"\n    {notes}"
-                msg += (
-                    "\n  Run: curl -sL https://raw."
-                    "githubusercontent.com/malemi/zylch"
-                    "/main/scripts/install.sh | bash\n"
-                )
-                _update_message = msg
+                _update_data = (latest, body)
         except Exception:
             pass
 
@@ -70,13 +50,76 @@ def _check_update():
 
 
 def _show_update():
-    """Show update message if available (call from main thread)."""
+    """Show update info and offer to upgrade."""
+    import subprocess
+    import sys
     import time
+
+    from zylch import __version__
 
     # Give background thread a moment
     time.sleep(0.5)
-    if _update_message:
-        click.echo(_update_message, err=True)
+    if not _update_data:
+        return
+
+    latest, notes = _update_data
+
+    click.echo(
+        f"\n  New version available:"
+        f" v{__version__} → v{latest}",
+    )
+    if notes:
+        # Show release notes (non-tech summary)
+        for line in notes.splitlines()[:5]:
+            if line.strip():
+                click.echo(f"    {line.strip()}")
+    click.echo()
+
+    if click.confirm("  Upgrade now?", default=True):
+        # Detect install method and upgrade
+        is_binary = getattr(sys, "frozen", False)
+        if is_binary:
+            click.echo("  Downloading update...")
+            try:
+                subprocess.run(
+                    [
+                        "bash", "-c",
+                        "curl -sfL https://raw.githubusercontent.com"
+                        "/malemi/zylch/main/scripts/install.sh | bash",
+                    ],
+                    check=True,
+                )
+                click.echo(
+                    "  Updated! Restart zylch to use"
+                    f" v{latest}.",
+                )
+                raise SystemExit(0)
+            except subprocess.CalledProcessError:
+                click.echo(
+                    "  Update failed. Run manually:\n"
+                    "  curl -sL https://raw.githubusercontent"
+                    ".com/malemi/zylch/main/scripts"
+                    "/install.sh | bash",
+                )
+        else:
+            click.echo("  Upgrading via pip...")
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", "pip",
+                     "install", "--upgrade", "zylch"],
+                    check=True,
+                )
+                click.echo(
+                    f"  Updated to v{latest}!"
+                    f" Restart zylch.",
+                )
+                raise SystemExit(0)
+            except subprocess.CalledProcessError:
+                click.echo(
+                    "  Update failed. Run manually:\n"
+                    "  pip install --upgrade zylch",
+                )
+    click.echo()
 
 
 def _configure_logging():
