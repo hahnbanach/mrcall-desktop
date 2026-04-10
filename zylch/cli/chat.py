@@ -161,62 +161,71 @@ def _print_dashboard(profile: str, owner_id: str):
         entities = 0
 
     # --- Print ---
-    console.print(f"[bold cyan]Zylch AI[/bold cyan] — {profile}")
+    from zylch import __version__
+
+    console.print()
     console.print(
-        f"  [dim]Email:[/dim] {total_emails} synced,"
-        f" last sync {last_sync_str}"
+        f"[bold cyan]Zylch[/bold cyan] v{__version__}"
+        f" — [dim]{profile}[/dim]",
     )
+    console.print()
 
-    pending_parts = []
-    if pending_memory:
-        pending_parts.append(
-            f"{pending_memory} for memory"
-        )
-    if pending_tasks:
-        pending_parts.append(
-            f"{pending_tasks} for tasks"
-        )
-    if pending_parts:
+    # Status line
+    if total_emails > 0:
         console.print(
-            f"  [yellow]Pending:[/yellow]"
-            f" {', '.join(pending_parts)}"
+            f"  {total_emails} emails synced"
+            f" (last: {last_sync_str})",
         )
-
-    if active > 0:
+    else:
         console.print(
-            f"  [dim]Tasks:[/dim] {active}"
-            f" active{urgency_line}"
+            "  No emails synced yet.",
         )
 
     if entities > 0:
         console.print(
-            f"  [dim]Memory:[/dim] {entities} entities"
+            f"  {entities} contacts in memory",
         )
 
-    # --- Suggestions: tell the user what to do ---
-    suggestions = []
+    if active > 0:
+        console.print(
+            f"  {active} tasks needing action{urgency_line}",
+        )
 
+    # Pending work
     needs_sync = (
         (total_emails == 0 and sync_age_hours is None)
         or (sync_age_hours is not None and sync_age_hours > 1)
     )
     needs_processing = pending_memory or pending_tasks
 
+    if not needs_sync and not needs_processing and active == 0:
+        console.print(
+            "  [green]All up to date.[/green]",
+        )
+
+    # --- Suggestions ---
+    suggestions = []
+
     if needs_sync or needs_processing:
         suggestions.append(
-            "/update — sync + analyze + detect tasks"
+            "/update — sync + analyze + detect tasks",
         )
 
     if active > 0:
         suggestions.append(
-            "/tasks — review your action items"
+            "/tasks interactive — review tasks one by one",
+        )
+
+    if not suggestions and total_emails > 0:
+        suggestions.append(
+            "Ask me anything about your contacts"
+            " and emails.",
         )
 
     if suggestions:
         console.print()
-        console.print("[bold]Next:[/bold]")
         for s in suggestions:
-            console.print(f"  [green]>{s}[/green]")
+            console.print(f"  [dim]{s}[/dim]")
 
     console.print()
 
