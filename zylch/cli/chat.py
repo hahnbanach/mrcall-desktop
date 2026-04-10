@@ -194,20 +194,28 @@ def _print_dashboard(profile: str, owner_id: str):
     # --- Menu ---
     console.print()
 
+    console.print(
+        "  [bold]What would you like to do?[/bold]",
+    )
+    console.print()
+
     options = []
+    idx = 1
     if active > 0:
         options.append(
-            ("a", f"Show your {active} tasks", "/tasks interactive"),
+            (str(idx), f"Show your {active} tasks", "/tasks interactive"),
         )
+        idx += 1
     if total_emails == 0 or (
         sync_age_hours is not None and sync_age_hours > 0.5
     ) or pending_memory or pending_tasks:
         age = last_sync_str if total_emails > 0 else "never"
         options.append(
-            ("b", f"Look for new messages (last update: {age})", "/update"),
+            (str(idx), f"Look for new messages (last update: {age})", "/update"),
         )
+        idx += 1
     options.append(
-        ("c", "Let's chat!", None),
+        (str(idx), "Let's chat!", None),
     )
 
     for key, label, _ in options:
