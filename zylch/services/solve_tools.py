@@ -259,8 +259,10 @@ def _run_python(args: Dict) -> str:
     output_dir = "/tmp/zylch"
     os.makedirs(output_dir, exist_ok=True)
 
+    # Script temp file in /tmp (not /tmp/zylch) to avoid
+    # showing up when user code scans the output directory
     with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".py", dir=output_dir,
+        mode="w", suffix=".py",
         delete=False,
     ) as f:
         f.write(code)
