@@ -271,8 +271,11 @@ def _run_python(args: Dict) -> str:
         script_path = f.name
 
     try:
+        import sys
+
+        python = sys.executable or "python3"
         result = subprocess.run(
-            ["python", script_path],
+            [python, script_path],
             capture_output=True,
             text=True,
             timeout=60,

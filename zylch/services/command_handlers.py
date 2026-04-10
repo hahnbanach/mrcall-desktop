@@ -758,6 +758,17 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None, 
         user_email: User's email (optional)
         context: Request context containing source, firebase_token, etc.
     """
+    # Check if MrCall module is available
+    try:
+        from zylch.agents.trainers.mrcall_configurator import (
+            MrCallConfiguratorTrainer,
+        )
+    except (ImportError, ModuleNotFoundError):
+        return (
+            "MrCall is not available."
+            " The MrCall agent module is not installed."
+        )
+
     from zylch.storage import Storage
     from zylch.api.token_storage import get_mrcall_credentials
     import httpx
@@ -768,8 +779,6 @@ async def handle_mrcall(args: List[str], owner_id: str, user_email: str = None, 
     firebase_token = context.get("firebase_token") if context else None
     logger.debug(f"[/mrcall] is_dashboard={is_dashboard}, has_firebase_token={bool(firebase_token)}")
 
-    # Derive from single source of truth (MrCallConfiguratorTrainer.FEATURES)
-    from zylch.agents.trainers import MrCallConfiguratorTrainer
     FEATURE_TO_VARIABLES = {
         name: feature["variables"]
         for name, feature in MrCallConfiguratorTrainer.FEATURES.items()

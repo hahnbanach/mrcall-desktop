@@ -412,8 +412,14 @@ def _expand_file_refs(text: str) -> str:
     """
     import re
 
-    # Match paths: /... or ~/... (with optional backslash escapes)
-    path_pattern = r'(?:/[\w./@-]+(?:\\ [\w./@-]+)*|~[\w./@-]+(?:\\ [\w./@-]+)*)'
+    # Match paths ending with file extension:
+    # /path/to/file.ext or ~/path/to/file.ext
+    # Handles spaces (with or without backslash escapes)
+    path_pattern = (
+        r'(?:[/~][\w./@: -]*?'  # Start with / or ~
+        r'(?:\\ [\w./@: -]*?)*'  # Optional backslash-escaped spaces
+        r'\.\w{1,5})'  # Must end with .extension
+    )
     matches = re.findall(path_pattern, text)
     if not matches:
         return text
