@@ -378,13 +378,15 @@ def _show_task(idx: int, total: int, task: Dict):
 def _prompt_choice() -> str:
     """Prompt user for action on current task."""
     console.print()
-    console.print(
-        "  1) skip   2) done   3) solve"
-        "   4) discuss   q) quit",
-    )
+    console.print("  [bold]1)[/bold] Skip — analyze later")
+    console.print("  [bold]2)[/bold] Close it — already done")
+    console.print("  [bold]3)[/bold] I trust you — solve it!")
+    console.print("  [bold]4)[/bold] Let's discuss that")
+    console.print("  [bold]q)[/bold] Quit")
+    console.print()
     while True:
         choice = click.prompt(
-            "  Choice", type=str, default="1",
+            "  >", type=str, default="1",
         ).strip().lower()
         if choice in ("1", "2", "3", "4", "q"):
             return choice
