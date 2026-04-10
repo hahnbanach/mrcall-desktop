@@ -104,26 +104,19 @@ class TaskWorker:
         self._task_prompt_loaded: bool = False
 
     def _is_user_email(self, email: str) -> bool:
-        """Check if email belongs to the user (hard symbolic check).
+        """Check if email belongs to the user (exact match only).
 
-        This is a hard rule - LLM decisions cannot override this.
+        Only matches the user's own email address.
+        Colleagues on the same domain are NOT the user.
         """
         if not email:
             return False
 
         email_lower = email.lower()
 
-        # Check 1: Exact match with self.user_email
         if self.user_email and email_lower == self.user_email:
             logger.debug(
                 f"[TASK] _is_user_email({email}) -> True (exact match)"
-            )
-            return True
-
-        # Check 2: Same domain as user
-        if self.user_domain and self.user_domain in email_lower:
-            logger.debug(
-                f"[TASK] _is_user_email({email}) -> True (domain match)"
             )
             return True
 
@@ -171,14 +164,14 @@ class TaskWorker:
         """Get actionable tasks, optionally refreshing analysis.
 
         Args:
-            refresh: If True, re-analyze all events. If False, return cached results.
+            refresh: If True, analyze new (unprocessed) events
+                     and create/update/close tasks incrementally.
+                     Does NOT delete existing tasks.
 
         Returns:
             Tuple of (task items that need action, None for compatibility)
         """
         if refresh:
-            # Clear existing and re-analyze
-            self.storage.clear_task_items(self.owner_id)
             await self._analyze_recent_events()
 
         tasks = self.storage.get_task_items(self.owner_id, action_required=True)
@@ -230,11 +223,8 @@ class TaskWorker:
             ts = email.get("date_timestamp") or 0
             from_email = email.get("from_email", "").lower()
 
-            # Track user's replies per thread
-            is_user = (
-                from_email in user_emails
-                or (self.user_domain and self.user_domain in from_email)
-            )
+            # Track user's replies per thread (exact match only)
+            is_user = from_email in user_emails
             if is_user:
                 prev = user_replied.get(thread_id, 0)
                 if ts > prev:
@@ -254,10 +244,7 @@ class TaskWorker:
         for thread_id in list(threads.keys()):
             email = threads[thread_id]
             from_email = email.get("from_email", "").lower()
-            is_user = (
-                from_email in user_emails
-                or (self.user_domain and self.user_domain in from_email)
-            )
+            is_user = from_email in user_emails
             if is_user:
                 continue  # Already a user email, handled below
             contact_ts = email.get("date_timestamp") or 0
@@ -305,24 +292,27 @@ class TaskWorker:
             email_id = email.get("id", "")
 
             # User's own email = they replied → close any
-            # open task for this thread's contact
-            if from_email in user_emails or (
-                self.user_domain
-                and self.user_domain in from_email
-            ):
+            # open task for this thread's contacts
+            if from_email in user_emails:
                 self.storage.mark_email_task_processed(
                     self.owner_id, email_id,
                 )
-                # Close existing task for this contact
+                # Close existing tasks for each recipient
                 # (user responded = task handled)
-                to_email = email.get("to_email", "")
-                if isinstance(to_email, list):
-                    to_email = to_email[0] if to_email else ""
-                to_email = to_email.lower()
-                if to_email:
+                to_raw = email.get("to_email", "")
+                if isinstance(to_raw, list):
+                    to_raw = ", ".join(to_raw)
+                # Parse comma-separated recipients
+                for addr in to_raw.split(","):
+                    addr = addr.strip().lower()
+                    # Extract email from "Name <email>" format
+                    if "<" in addr and ">" in addr:
+                        addr = addr.split("<")[1].split(">")[0].strip()
+                    if not addr or addr in user_emails:
+                        continue
                     existing = (
                         self.storage.get_task_by_contact(
-                            self.owner_id, to_email,
+                            self.owner_id, addr,
                         )
                     )
                     if existing:
@@ -331,7 +321,7 @@ class TaskWorker:
                         )
                         logger.info(
                             f"[TASK] Auto-closed task for"
-                            f" {to_email} (user replied)",
+                            f" {addr} (user replied)",
                         )
                 return
 
