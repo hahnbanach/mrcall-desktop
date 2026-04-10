@@ -103,36 +103,11 @@ async def _sync_emails_direct(owner_id: str, console):
     return result
 
 
-def run_dream():
-    """Execute dream: memory consolidation with gate checks."""
+def run_update():
+    """Execute update: sync + memory + tasks. Gate-aware."""
     load_env()
     owner_id = get_owner_id()
-    logger.debug(f"[cmd:dream] owner_id={owner_id}")
-
-    from zylch.api.token_storage import (
-        get_active_llm_provider,
-    )
-    from zylch.services.dream import run_dream as _dream
-    from zylch.storage.storage import Storage
-
-    store = Storage.get_instance()
-    llm_provider, api_key = get_active_llm_provider(
-        owner_id,
-    )
-    if not api_key:
-        print("No API key configured. Run 'zylch init'.")
-        return
-
-    asyncio.run(
-        _dream(owner_id, store, api_key, llm_provider),
-    )
-
-
-def run_process():
-    """Execute full pipeline: sync → train → memory → tasks."""
-    load_env()
-    owner_id = get_owner_id()
-    logger.debug(f"[cmd:process] owner_id={owner_id}")
+    logger.debug(f"[cmd:update] owner_id={owner_id}")
 
     from zylch.services.process_pipeline import handle_process
     from zylch.tools.config import ToolConfig

@@ -62,8 +62,9 @@ Run `zylch init` again to add more profiles or edit existing ones.
 
 ```bash
 zylch              # Interactive chat (REPL) — shows dashboard on startup
-zylch sync         # Sync emails via IMAP
+zylch update       # Sync + analyze + detect tasks (cron-friendly)
 zylch tasks        # Show actionable tasks
+zylch sync         # Sync emails only (no AI)
 zylch status       # Show sync status
 ```
 
