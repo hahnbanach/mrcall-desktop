@@ -653,14 +653,22 @@ def _run_wizard(env: dict, profile_name: str | None):
 
     # ─── 10. Automatic updates (crontab) ─────────────────────
 
-    click.echo("\n10. Automatic Updates (optional)")
-    click.echo(
-        "   Keep Zylch updated every 10 minutes"
-        " in background.\n",
-    )
+    import sys
 
-    if click.confirm("  Enable?", default=True):
-        _setup_crontab(new_profile_name, profile_dir)
+    if sys.platform == "win32":
+        click.echo("\n10. Automatic Updates")
+        click.echo(
+            "   Not available on Windows yet."
+            " Run 'zylch update' manually.",
+        )
+    else:
+        click.echo("\n10. Automatic Updates (optional)")
+        click.echo(
+            "   Keep Zylch updated every 10 minutes"
+            " in background.\n",
+        )
+        if click.confirm("  Enable?", default=True):
+            _setup_crontab(new_profile_name, profile_dir)
 
     # ─── Summary ──────────────────────────────────────────────
 
