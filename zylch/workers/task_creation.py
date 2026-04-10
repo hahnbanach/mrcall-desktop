@@ -204,7 +204,7 @@ class TaskWorker:
 
         analyzed_count = 0
         action_count = 0
-        failures = 0
+        consecutive_failures = []  # list acts as thread-safe counter
         stop = False
 
         all_emails = (
@@ -284,7 +284,7 @@ class TaskWorker:
 
         async def _analyze_one(email: Dict):
             nonlocal analyzed_count, action_count
-            nonlocal failures, stop
+            nonlocal stop
             if stop:
                 return
 
@@ -370,10 +370,10 @@ class TaskWorker:
             analyzed_count += 1
 
             if result is None:
-                failures += 1
-                if failures >= 3:
+                consecutive_failures.append(1)
+                if len(consecutive_failures) >= 3:
                     logger.error(
-                        "3 LLM failures — stopping"
+                        "3+ LLM failures — stopping"
                         " task analysis",
                     )
                     stop = True
@@ -382,7 +382,7 @@ class TaskWorker:
                 )
                 return
 
-            failures = 0
+            consecutive_failures.clear()
             self.storage.mark_email_task_processed(
                 self.owner_id, email_id,
             )
@@ -871,15 +871,23 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
                 'location': item.get('location')
             }
 
-        # Run async _analyze_event in sync context
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # Run async _analyze_event — reuse running loop or create one
         try:
-            result = loop.run_until_complete(
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                result = pool.submit(
+                    asyncio.run,
+                    self._analyze_event(event_type, event_data, blob_context, existing_task_context, calendar_context),
+                ).result()
+        else:
+            result = asyncio.run(
                 self._analyze_event(event_type, event_data, blob_context, existing_task_context, calendar_context)
             )
-        finally:
-            loop.close()
 
         # Mark as processed
         self._mark_processed(event_type, item_id)
