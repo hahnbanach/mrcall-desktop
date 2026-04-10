@@ -79,13 +79,23 @@ def _print_dashboard(profile: str, owner_id: str):
     email_stats = store.get_email_stats(owner_id)
     total_emails = email_stats.get("total_emails", 0)
 
-    # Last sync = newest email date in DB
+    # Last update = from SyncState, fallback to newest email date
     last_sync_str = "never"
     sync_age_hours = None
-    latest = email_stats.get("latest_date")
-    if latest:
+
+    sync_state = store.get_sync_state(owner_id)
+    last_update = None
+    if sync_state:
+        last_update = sync_state.get("last_dream_at")
+    if not last_update:
+        last_update = email_stats.get("latest_date")
+
+    if last_update:
         try:
-            ls = datetime.fromisoformat(latest)
+            if isinstance(last_update, str):
+                ls = datetime.fromisoformat(last_update)
+            else:
+                ls = last_update
             if ls.tzinfo is None:
                 ls = ls.replace(tzinfo=timezone.utc)
             delta = datetime.now(timezone.utc) - ls
