@@ -481,6 +481,103 @@ def _expand_file_refs(text: str) -> str:
     return text
 
 
+def _handle_agent_run(
+    instructions: str,
+    owner_id: str,
+    conversation_history: list,
+):
+    """Run agentic loop with all tools (from chat)."""
+    from zylch.api.token_storage import get_active_llm_provider
+    from zylch.llm.client import LLMClient
+    from zylch.services.task_interactive import (
+        APPROVAL_TOOLS,
+        SOLVE_SYSTEM_PROMPT,
+        SOLVE_TOOLS,
+        _format_approval_preview,
+        _get_personal_data_section,
+        _run_agent_loop,
+    )
+    from zylch.services.solve_tools import execute_tool
+    from zylch.storage.storage import Storage
+
+    provider, api_key = get_active_llm_provider(owner_id)
+    if not api_key:
+        console.print("[red]No API key. Run zylch init.[/red]")
+        return
+
+    user_email = os.environ.get("EMAIL_ADDRESS", "")
+    user_name = (
+        user_email.split("@")[0] if user_email else "you"
+    )
+    store = Storage.get_instance()
+
+    client = LLMClient(api_key=api_key, provider=provider)
+    system = SOLVE_SYSTEM_PROMPT.format(
+        user_name=user_name,
+        personal_data_section=_get_personal_data_section(),
+    )
+
+    if not instructions:
+        console.print(
+            "  What should I do?"
+            " (type, empty line to send)",
+        )
+        lines = []
+        while True:
+            try:
+                line = input("  > ")
+            except (EOFError, KeyboardInterrupt):
+                return
+            if not line:
+                break
+            lines.append(line)
+        instructions = "\n".join(lines)
+        instructions = _expand_file_refs(instructions)
+        if not instructions.strip():
+            return
+
+    messages = [
+        {"role": "user", "content": instructions},
+    ]
+
+    console.print("\n  [dim]Working...[/dim]")
+    messages = _run_agent_loop(
+        client, system, messages, store, owner_id,
+    )
+
+    # Post-loop: continue conversation or done
+    while True:
+        console.print(
+            "\n  [bold]d)[/bold] Done"
+            "   or type to continue"
+            " (empty line to send)",
+        )
+        lines = []
+        while True:
+            try:
+                line = input("  > ")
+            except (EOFError, KeyboardInterrupt):
+                return
+            if not line and lines:
+                break
+            if not line and not lines:
+                return  # Enter = done
+            lines.append(line)
+
+        followup = "\n".join(lines).strip()
+        followup = _expand_file_refs(followup)
+        if followup.lower() == "d":
+            return
+
+        messages.append(
+            {"role": "user", "content": followup},
+        )
+        console.print("\n  [dim]Working...[/dim]")
+        messages = _run_agent_loop(
+            client, system, messages, store, owner_id,
+        )
+
+
 def _handle_slash_command(
     raw_input: str,
     owner_id: str,
@@ -504,6 +601,15 @@ def _handle_slash_command(
     if cmd == "/clear":
         conversation_history.clear()
         console.print("[dim]Conversation cleared.[/dim]")
+        return
+
+    # /agent run <instructions> — agentic loop with tools
+    if cmd == "/agent" and args and args[0] == "run":
+        instructions = " ".join(args[1:]) if len(args) > 1 else ""
+        instructions = _expand_file_refs(instructions)
+        _handle_agent_run(
+            instructions, owner_id, conversation_history,
+        )
         return
 
     if cmd not in COMMAND_HANDLERS:
