@@ -39,6 +39,11 @@ Planned improvements ranked by impact. Each needs analysis before implementation
 - Dedup by contact_email: keep highest urgency, merge sources
 - Could run as part of dream prune phase
 
+### Windows Task Scheduler for automatic updates
+- `_setup_crontab` uses `crontab` which doesn't exist on Windows
+- Need `schtasks.exe` equivalent for Windows Task Scheduler
+- Low priority: most users are Mac/Linux
+
 ### Stale Code Cleanup
 - `zylch/intelligence/` — empty, delete
 - `zylch/webhook/` — empty, delete
