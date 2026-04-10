@@ -382,6 +382,8 @@ def interactive_chat():
                     conversation_history,
                 )
             else:
+                # Attach file content if path detected
+                user_input = _expand_file_refs(user_input)
                 _handle_chat_message(
                     user_input, owner_id,
                     conversation_history,
@@ -390,6 +392,93 @@ def interactive_chat():
             console.print(
                 "\n[yellow]Interrupted.[/yellow]"
             )
+
+
+def _expand_file_refs(text: str) -> str:
+    """Detect file paths in user input and attach content.
+
+    Supports: /path/to/file, ~/path, paths with backslash escapes.
+    For .docx/.pdf, uses python-docx/pypdf to extract text.
+    """
+    import re
+
+    # Match paths: /... or ~/... (with optional backslash escapes)
+    path_pattern = r'(?:/[\w./@-]+(?:\\ [\w./@-]+)*|~[\w./@-]+(?:\\ [\w./@-]+)*)'
+    matches = re.findall(path_pattern, text)
+    if not matches:
+        return text
+
+    for match in matches:
+        clean = match.replace("\\ ", " ").strip("'\"")
+        expanded = os.path.expanduser(clean)
+
+        if not os.path.isfile(expanded):
+            continue
+
+        ext = os.path.splitext(expanded)[1].lower()
+        content = None
+
+        try:
+            if ext in (".txt", ".md", ".csv", ".json", ".xml"):
+                with open(expanded, "r", errors="replace") as f:
+                    content = f.read()
+
+            elif ext == ".docx":
+                try:
+                    import docx
+                    doc = docx.Document(expanded)
+                    content = "\n".join(
+                        p.text for p in doc.paragraphs
+                    )
+                except ImportError:
+                    import subprocess
+                    result = subprocess.run(
+                        ["python", "-c",
+                         f"import docx; doc=docx.Document('{expanded}');"
+                         f"print('\\n'.join(p.text for p in doc.paragraphs))"],
+                        capture_output=True, text=True, timeout=10,
+                    )
+                    if result.returncode == 0:
+                        content = result.stdout
+
+            elif ext == ".pdf":
+                try:
+                    import pypdf
+                    reader = pypdf.PdfReader(expanded)
+                    content = "\n".join(
+                        page.extract_text() or ""
+                        for page in reader.pages
+                    )
+                except ImportError:
+                    pass
+
+            else:
+                # Binary file — just note it exists
+                size = os.path.getsize(expanded)
+                text += (
+                    f"\n\n[File attached: {os.path.basename(expanded)}"
+                    f" ({size} bytes, {ext})]"
+                )
+                continue
+
+        except Exception as e:
+            text += (
+                f"\n\n[Could not read {os.path.basename(expanded)}: {e}]"
+            )
+            continue
+
+        if content:
+            fname = os.path.basename(expanded)
+            console.print(
+                f"  [dim]Attached: {fname}"
+                f" ({len(content)} chars)[/dim]",
+            )
+            text += (
+                f"\n\n--- FILE: {fname} ---\n"
+                f"{content}\n--- END FILE ---"
+            )
+
+    return text
 
 
 def _handle_slash_command(
