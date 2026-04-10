@@ -173,6 +173,7 @@ class Storage:
                 'message_id_header': email.get('message_id_header'),
                 'in_reply_to': email.get('in_reply_to'),
                 'references': email.get('references'),
+                'is_auto_reply': email.get('is_auto_reply', False),
                 'updated_at': datetime.now(timezone.utc),
             }
             if embedding is not None:
