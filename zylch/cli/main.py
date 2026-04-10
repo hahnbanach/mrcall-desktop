@@ -38,7 +38,12 @@ def _check_update():
             latest = data.get("tag_name", "").lstrip("v")
             if not latest or latest == __version__:
                 return
-            if latest > __version__:
+            # Proper semver compare (not string compare)
+            def _ver(v):
+                return tuple(
+                    int(x) for x in v.split(".")
+                )
+            if _ver(latest) > _ver(__version__):
                 body = data.get("body", "").strip()
                 _update_data = (latest, body)
         except Exception:

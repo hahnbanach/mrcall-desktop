@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zylch"
-version = "0.1.10"
-description = "AI-powered local sales intelligence assistant"
+version = "0.1.11"
+description = "Intelligent sales agent"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
