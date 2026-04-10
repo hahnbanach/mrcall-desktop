@@ -197,6 +197,7 @@ SOLVE_TOOLS = [
         "name": "download_attachment",
         "description": (
             "Download attachments from an email."
+            " Use the email ID from search_emails results."
             " Saves to /tmp/zylch/attachments/."
         ),
         "input_schema": {
@@ -204,7 +205,10 @@ SOLVE_TOOLS = [
             "properties": {
                 "email_id": {
                     "type": "string",
-                    "description": "Email Message-ID",
+                    "description": (
+                        "Email ID (UUID from search_emails,"
+                        " NOT the subject line)"
+                    ),
                 },
             },
             "required": ["email_id"],

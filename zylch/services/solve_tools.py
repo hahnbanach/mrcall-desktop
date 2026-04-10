@@ -68,8 +68,10 @@ def _search_emails(
 
         lines = [f"Found {len(results)} emails:"]
         for r in results:
+            email_id = r.get("id", "")
             lines.append(
-                f"- From: {r.get('from_email', '')}"
+                f"- ID: {email_id}"
+                f" | From: {r.get('from_email', '')}"
                 f" | Subject: {r.get('subject', '')}"
                 f" | Date: {r.get('date', '')}",
             )
