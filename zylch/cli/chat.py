@@ -163,10 +163,27 @@ def _print_dashboard(profile: str, owner_id: str):
     # --- Print ---
     from zylch import __version__
 
+    # Time-aware greeting
+    from datetime import datetime
+    hour = datetime.now().hour
+    if hour < 12:
+        greeting = "Good morning"
+    elif hour < 18:
+        greeting = "Good afternoon"
+    else:
+        greeting = "Good evening"
+
+    # User name from env or profile
+    user_name = os.environ.get("USER_FULL_NAME", "")
+    if user_name:
+        user_name = user_name.split()[0]  # First name
+    else:
+        user_name = profile.split("@")[0]  # mario.alemi → mario
+
     console.print()
     console.print(
-        f"[bold cyan]Zylch[/bold cyan] v{__version__}"
-        f" — [dim]{profile}[/dim]",
+        f"[bold cyan]{greeting}, {user_name}![/bold cyan]"
+        f" [dim](Zylch v{__version__})[/dim]",
     )
     console.print()
 
