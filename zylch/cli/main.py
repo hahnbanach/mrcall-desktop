@@ -261,28 +261,15 @@ def list_profiles_cmd():
 
 @cli.command()
 @click.pass_context
-def process(ctx):
-    """Sync all channels + extract memory + detect tasks."""
+def update(ctx):
+    """Sync + analyze + detect tasks. Cron-friendly."""
     _configure_logging()
     profile_name = ctx.obj.get("profile") if ctx.obj else None
     profile = _setup_profile(profile_name)
-    logger.info(f"[CLI] Running process, profile={profile}")
-    from zylch.cli.commands import run_process
+    logger.info(f"[CLI] Running update, profile={profile}")
+    from zylch.cli.commands import run_update
 
-    run_process()
-
-
-@cli.command()
-@click.pass_context
-def dream(ctx):
-    """Run background memory consolidation (can be cron'd)."""
-    _configure_logging()
-    profile_name = ctx.obj.get("profile") if ctx.obj else None
-    profile = _setup_profile(profile_name)
-    logger.info(f"[CLI] Running dream, profile={profile}")
-    from zylch.cli.commands import run_dream
-
-    run_dream()
+    run_update()
 
 
 @cli.command()

@@ -4722,7 +4722,7 @@ COMMAND_HANDLERS = {
     '/help': handle_help,
     '/tutorial': handle_tutorial,
     '/sync': handle_sync,
-    '/process': None,  # lazy-loaded from process_pipeline
+    '/update': None,  # lazy-loaded from process_pipeline
     '/memory': handle_memory,
     '/email': handle_email,
     '/mrcall': handle_mrcall,
@@ -4740,12 +4740,12 @@ COMMAND_HANDLERS = {
     '/tutorial': handle_tutorial,
 }
 
-# Lazy-load /process to avoid circular imports
-def _load_process_handler():
+# Lazy-load /update to avoid circular imports
+def _load_update_handler():
     from zylch.services.process_pipeline import handle_process
-    COMMAND_HANDLERS['/process'] = handle_process
+    COMMAND_HANDLERS['/update'] = handle_process
 
-_load_process_handler()
+_load_update_handler()
 
 
 # Natural language triggers for semantic command matching

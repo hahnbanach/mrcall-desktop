@@ -50,7 +50,7 @@ def _setup_readline(profile_dir: str):
 
     # Slash command completion
     commands = [
-        "/help", "/quit", "/process", "/sync",
+        "/help", "/quit", "/update", "/sync",
         "/tasks", "/stats",
         "/email", "/memory", "/agent", "/calendar",
         "/connect", "/mrcall", "/jobs", "/clear",
@@ -204,8 +204,7 @@ def _print_dashboard(profile: str, owner_id: str):
 
     if needs_sync or needs_processing:
         suggestions.append(
-            "/process — sync + extract memory"
-            " + detect tasks, all at once"
+            "/update — sync + analyze + detect tasks"
         )
 
     if active > 0:
@@ -359,7 +358,7 @@ def _handle_slash_command(
     handler = COMMAND_HANDLERS[cmd]
 
     try:
-        if cmd in ("/sync", "/process"):
+        if cmd in ("/sync", "/update"):
             config = ToolConfig.from_settings()
             result = asyncio.run(
                 handler(args, config, owner_id)

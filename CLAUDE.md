@@ -30,8 +30,7 @@ pipx install .                      # User install
 zylch init                          # Profile wizard (LLM → Email → WhatsApp → Telegram → MrCall)
 
 # Usage
-zylch -p user@example.com process   # Sync + memory + tasks (full pipeline)
-zylch -p user@example.com dream     # Background memory consolidation (cron-friendly)
+zylch -p user@example.com update    # Sync + analyze + detect tasks (cron-friendly)
 zylch -p user@example.com sync      # Fetch only (email + WhatsApp, no AI)
 zylch -p user@example.com tasks     # Show action items
 zylch -p user@example.com status    # Show sync stats

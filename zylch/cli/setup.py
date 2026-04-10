@@ -680,8 +680,8 @@ def _run_wizard(env: dict, profile_name: str | None):
 
     click.echo("\nNext steps:")
     click.echo(
-        f"  zylch -p {new_profile_name} process"
-        f"   Sync + analyze everything",
+        f"  zylch -p {new_profile_name} update"
+        f"    Sync + analyze + detect tasks",
     )
     click.echo(
         f"  zylch -p {new_profile_name}"
