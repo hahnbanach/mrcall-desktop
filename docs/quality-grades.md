@@ -1,7 +1,7 @@
 ---
 description: |
   Quality assessment of Zylch standalone modules.
-  Updated 2026-04-04 after WhatsApp, Telegram, profile CLI, aisuite removal.
+  Updated 2026-04-10 after task detection bug fixes (0.1.16).
 ---
 
 # Quality Grades
@@ -24,7 +24,7 @@ description: |
 | **agents/trainers/** | ~800 | None | Low | High | Incremental prompt, untested |
 | **memory/** | ~700 | None | Medium | High | fastembed, hybrid search |
 | **llm/** | 492+~120 | None | Low | High | Direct SDK (aisuite dropped) |
-| **workers/** | ~600 | None | Low | High | Fail-fast on LLM errors |
+| **workers/** | ~600 | **10 tests** | Low | High | Task bugs fixed, regression tests |
 | **config.py** | 197 | None | Medium | High | Clean standalone config |
 
 ## Oversized Files (> 500 lines)
@@ -50,7 +50,7 @@ description: |
 
 ## Test Status
 
-**No tests currently pass.** The `tests/` directory references the old SaaS architecture and needs a complete rewrite.
+10 tests pass in `tests/workers/test_task_worker_bugs.py` (task detection regression tests). The rest of `tests/` references the old SaaS architecture and needs a rewrite.
 
 ## Lint Status
 
