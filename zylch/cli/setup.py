@@ -651,6 +651,17 @@ def _run_wizard(env: dict, profile_name: str | None):
             email or "local-user",
         )
 
+    # ─── 10. Automatic updates (crontab) ─────────────────────
+
+    click.echo("\n10. Automatic Updates (optional)")
+    click.echo(
+        "   Keep Zylch updated every 10 minutes"
+        " in background.\n",
+    )
+
+    if click.confirm("  Enable?", default=True):
+        _setup_crontab(new_profile_name, profile_dir)
+
     # ─── Summary ──────────────────────────────────────────────
 
     action = "updated" if is_edit else "created"
@@ -713,6 +724,57 @@ def _prompt_multiline(label: str) -> str:
             break
         lines.append(line)
     return " ".join(lines) if lines else ""
+
+
+def _setup_crontab(profile_name: str, profile_dir: str):
+    """Add crontab entry for automatic updates."""
+    import shutil
+    import subprocess
+
+    zylch_path = shutil.which("zylch")
+    if not zylch_path:
+        click.echo(
+            "  [Warning] zylch not found in PATH."
+            " Add crontab manually.",
+        )
+        return
+
+    log_path = os.path.join(profile_dir, "cron.log")
+    entry = (
+        f'*/10 * * * * {zylch_path}'
+        f' -p "{profile_name}" update'
+        f' >> "{log_path}" 2>&1'
+    )
+    marker = f"zylch.*{profile_name}.*update"
+
+    # Read existing crontab
+    try:
+        result = subprocess.run(
+            ["crontab", "-l"],
+            capture_output=True, text=True,
+        )
+        existing = result.stdout
+    except Exception:
+        existing = ""
+
+    # Check if already present
+    import re
+    if re.search(marker, existing):
+        click.echo("  Already configured.")
+        return
+
+    # Append entry
+    new_crontab = existing.rstrip("\n") + "\n" + entry + "\n"
+    try:
+        subprocess.run(
+            ["crontab", "-"],
+            input=new_crontab, text=True, check=True,
+        )
+        click.echo(f"  Crontab added: every 10 minutes")
+        click.echo(f"  Log: {log_path}")
+    except Exception as e:
+        click.echo(f"  [Warning] Failed to set crontab: {e}")
+        click.echo(f"  Add manually: {entry}")
 
 
 def _prompt_document_paths() -> str:
