@@ -92,19 +92,22 @@ class EmailArchiveManager:
         sync_days = days_back if days_back is not None else 30
         target_date = now - timedelta(days=sync_days)
 
-        # Get oldest email date from DB to know current coverage
+        # Determine sync_from: use newest email date minus 1 day
+        # (overlap for safety), or target_date if DB is empty or
+        # we need older coverage.
+        newest_email_date = self.supabase.get_newest_email_date(self.owner_id)
+        if newest_email_date and newest_email_date.tzinfo is None:
+            newest_email_date = newest_email_date.replace(tzinfo=timezone.utc)
         oldest_email_date = self.supabase.get_oldest_email_date(self.owner_id)
-        # Ensure timezone-aware for comparison with target_date
         if oldest_email_date and oldest_email_date.tzinfo is None:
             oldest_email_date = oldest_email_date.replace(tzinfo=timezone.utc)
 
-        # Determine sync_from date
-        if oldest_email_date is None:
-            # No emails in DB - sync from target_date
+        if newest_email_date is None:
+            # No emails in DB — first sync
             sync_from = target_date
             logger.info(f"No emails in DB. Syncing from {sync_from.strftime('%Y-%m-%d')}")
         elif target_date < oldest_email_date:
-            # Need older emails - sync from target_date
+            # User wants older coverage than we have
             sync_from = target_date
             logger.info(
                 f"Extending coverage from"
@@ -113,9 +116,9 @@ class EmailArchiveManager:
                 f" {sync_from.strftime('%Y-%m-%d')}"
             )
         else:
-            # Already have coverage - sync from oldest to catch any gaps
-            sync_from = oldest_email_date
-            logger.info(f"Syncing from oldest email date: {sync_from.strftime('%Y-%m-%d')}")
+            # Normal incremental: from newest minus 1 day (overlap for timezone safety)
+            sync_from = newest_email_date - timedelta(days=1)
+            logger.info(f"Incremental sync from {sync_from.strftime('%Y-%m-%d')} (newest - 1 day)")
 
         try:
             # Fetch email IDs via IMAP date query
@@ -141,20 +144,10 @@ class EmailArchiveManager:
                     'messages_deleted': 0
                 }
 
-            # Get existing email IDs to filter dupes
-            existing_emails = self.supabase.get_emails(
+            # Get existing email IDs (lightweight — only ID columns)
+            existing_ids = self.supabase.get_existing_email_ids(
                 self.owner_id,
-                limit=len(message_ids) + 1000,
             )
-            # Support both gmail_id and message_id
-            existing_ids = set()
-            for em in existing_emails:
-                if em.get("gmail_id"):
-                    existing_ids.add(em["gmail_id"])
-                if em.get("message_id_header"):
-                    existing_ids.add(
-                        em["message_id_header"]
-                    )
 
             new_message_ids = [
                 msg_id

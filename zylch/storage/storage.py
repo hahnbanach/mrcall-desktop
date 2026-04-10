@@ -294,6 +294,41 @@ class Storage:
             logger.error(f"Failed to get oldest email date: {e}")
             return None
 
+    def get_newest_email_date(self, owner_id: str) -> Optional[datetime]:
+        """Get the date of the newest email in the archive."""
+        try:
+            with get_session() as session:
+                row = session.query(Email.date)\
+                    .filter(Email.owner_id == owner_id)\
+                    .order_by(Email.date.desc())\
+                    .first()
+                if row and row[0]:
+                    return row[0]
+                return None
+        except Exception as e:
+            logger.error(f"Failed to get newest email date: {e}")
+            return None
+
+    def get_existing_email_ids(self, owner_id: str) -> set:
+        """Get all gmail_id and message_id_header values for dedup.
+
+        Returns only IDs, not full records — much lighter than get_emails.
+        """
+        ids = set()
+        try:
+            with get_session() as session:
+                rows = session.query(
+                    Email.gmail_id, Email.message_id_header,
+                ).filter(Email.owner_id == owner_id).all()
+                for r in rows:
+                    if r.gmail_id:
+                        ids.add(r.gmail_id)
+                    if r.message_id_header:
+                        ids.add(r.message_id_header)
+        except Exception as e:
+            logger.error(f"Failed to get existing email IDs: {e}")
+        return ids
+
     def search_emails(
         self,
         owner_id: str,
@@ -1198,8 +1233,11 @@ class Storage:
         """Get all emails not yet processed by Task Agent."""
         with get_session() as session:
             rows = session.query(
-                    Email.id, Email.from_email, Email.to_email, Email.body_plain,
-                    Email.snippet, Email.subject, Email.date_timestamp, Email.thread_id,
+                    Email.id, Email.from_email, Email.from_name,
+                    Email.to_email, Email.body_plain,
+                    Email.snippet, Email.subject, Email.date,
+                    Email.date_timestamp, Email.thread_id,
+                    Email.is_auto_reply,
                 )\
                 .filter(
                     Email.owner_id == owner_id,
@@ -1211,12 +1249,15 @@ class Storage:
                 {
                     'id': str(r.id),
                     'from_email': r.from_email,
+                    'from_name': r.from_name,
                     'to_email': r.to_email,
                     'body_plain': r.body_plain,
                     'snippet': r.snippet,
                     'subject': r.subject,
+                    'date': r.date.isoformat() if r.date else None,
                     'date_timestamp': r.date_timestamp,
                     'thread_id': r.thread_id,
+                    'is_auto_reply': r.is_auto_reply,
                 }
                 for r in rows
             ]
@@ -1585,11 +1626,12 @@ class Storage:
             if not analyzed_at:
                 analyzed_at = datetime.now(timezone.utc)
 
+            raw_contact = item.get('contact_email') or ''
             data = {
                 'owner_id': owner_id,
                 'event_type': item.get('event_type'),
                 'event_id': item.get('event_id'),
-                'contact_email': item.get('contact_email'),
+                'contact_email': raw_contact.lower(),
                 'contact_name': item.get('contact_name'),
                 'action_required': item.get('action_required', False),
                 'urgency': item.get('urgency'),

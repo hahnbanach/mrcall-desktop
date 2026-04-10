@@ -216,6 +216,8 @@ class IMAPClient:
         )
 
         self._conn: Optional[imaplib.IMAP4_SSL] = None
+        self._sent_folder: Optional[str] = None
+        self._sent_folder_resolved: bool = False
 
         logger.debug(
             f"[IMAP] Configured for {email_addr} "
@@ -411,17 +413,37 @@ class IMAPClient:
                 if references_raw
                 else ""
             ),
-            "snippet": (body_plain or body_html or "")[
-                :200
-            ],
+            "snippet": body_plain or body_html or "",
+            # Auto-reply detection headers
+            "auto_submitted": msg.get(
+                "Auto-Submitted", ""
+            ),
+            "x_autoreply": msg.get(
+                "X-Autoreply", ""
+            ),
+            "precedence": msg.get("Precedence", ""),
+            "x_auto_response_suppress": msg.get(
+                "X-Auto-Response-Suppress", ""
+            ),
         }
 
     def _find_sent_folder(self) -> Optional[str]:
-        """Find the Sent mail folder name.
+        """Find the Sent mail folder name (cached per session).
 
         Uses IMAP LIST to find the folder with \\Sent flag.
         Returns the name quoted for IMAP SELECT.
+        Result is cached — IMAP LIST is only called once.
         """
+        if self._sent_folder_resolved:
+            return self._sent_folder
+
+        result = self._find_sent_folder_uncached()
+        self._sent_folder = result
+        self._sent_folder_resolved = True
+        return result
+
+    def _find_sent_folder_uncached(self) -> Optional[str]:
+        """Find the Sent mail folder (no cache)."""
         conn = self._ensure_connected()
         status, folders = conn.list()
         if status != "OK":
@@ -439,7 +461,6 @@ class IMAPClient:
                     logger.debug(
                         f"[IMAP] Found Sent folder: {name}",
                     )
-                    # Quote for IMAP SELECT (spaces/brackets)
                     return f'"{name}"'
 
         # Fallback: try common names
