@@ -8,16 +8,18 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             platform: linux
             arch: x64
             ext: ""
-          - os: macos-14-large
+          - os: macos-latest
             platform: macos
             arch: x64
             ext: ""
+            rosetta: true
           - os: macos-latest
             platform: macos
             arch: arm64
@@ -32,18 +34,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python (native)
+        if: ${{ !matrix.rosetta }}
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
+      - name: Setup Python x86_64 via Rosetta
+        if: ${{ matrix.rosetta }}
+        run: |
+          # Install x86_64 Python via Rosetta
+          arch -x86_64 /bin/bash -c '
+            curl -sL https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg -o /tmp/python.pkg
+            sudo installer -pkg /tmp/python.pkg -target /
+          '
+          echo "/Library/Frameworks/Python.framework/Versions/3.12/bin" >> $GITHUB_PATH
+
       - name: Install dependencies
         run: |
-          pip install -e .
-          pip install pyinstaller
+          ${{ matrix.rosetta && 'arch -x86_64' || '' }} python3 -m pip install -e .
+          ${{ matrix.rosetta && 'arch -x86_64' || '' }} python3 -m pip install pyinstaller
 
       - name: Build binary
         run: |
-          pyinstaller --onefile --name zylch-${{ matrix.platform }}-${{ matrix.arch }} --hidden-import zylch.cli.main --collect-all zylch --collect-all fastembed --collect-all neonize --collect-binaries neonize --collect-all onnxruntime --collect-binaries onnxruntime zylch/cli/main.py
+          ${{ matrix.rosetta && 'arch -x86_64' || '' }} python3 -m PyInstaller --onefile --name zylch-${{ matrix.platform }}-${{ matrix.arch }} --hidden-import zylch.cli.main --collect-all zylch --collect-all fastembed --collect-all neonize --collect-binaries neonize --collect-all onnxruntime --collect-binaries onnxruntime zylch/cli/main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
