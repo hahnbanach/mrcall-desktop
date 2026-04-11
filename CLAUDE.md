@@ -16,6 +16,7 @@ All knowledge lives in `./docs/`. This file is the index.
 | [guides/cli-commands.md](docs/guides/cli-commands.md) | CLI and slash command reference |
 | [guides/quick-start.md](docs/guides/quick-start.md) | Install, setup, first use |
 | [agents/README.md](docs/agents/README.md) | Agent system (memory, tasks, emailer) |
+| [qa/testing-live.md](docs/qa/testing-live.md) | Live testing: use Zylch, compare against Gmail |
 
 After context compaction, run /doc-intrasession before resuming work!
 

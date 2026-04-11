@@ -60,6 +60,11 @@ The generated prompt must:
    - Their typical response time to important contacts
    - VIP contact patterns or specific contacts (if identifiable)
    - Noise/ignore signals specific to this user (specific senders, domains, subject patterns)
+     BUT: never blanket-filter invoice reminders (e.g. Xero, QuickBooks) — repeated
+     reminders (2+) for the same invoice mean it is unpaid and need action (MEDIUM).
+     AND: never blanket-filter calendar decline notices — if the same person declines
+     3+ meetings, that is a LOW task suggesting the user reach out via email or
+     reschedule at a different time.
    - Commitment phrases this user tends to use
    - FAQ topics: recurring questions that appear across multiple contacts (list them explicitly!)
    - Marketing senders that should ALWAYS be filtered out
@@ -97,6 +102,10 @@ The generated prompt must:
    - Is there a deadline or time-sensitive element?
    - Is this a recurring question (FAQ)? → Suggest draft response, lower urgency
    - Is this marketing/promotional? → NO_ACTION
+   - Is this an invoice reminder (Xero, QuickBooks, etc.)? → If 2+ reminders for the same
+     invoice, ACTION: medium — the bill is overdue and needs payment or dispute
+   - Is this a calendar decline? → If same person declined 3+ times, ACTION: low —
+     suggest reaching out by email or proposing a different time slot
    - Is this a routine complaint? → low urgency unless risk of customer churn
 
 5. **OUTPUT FORMAT**
@@ -257,22 +266,15 @@ class EmailTaskAgentTrainer:
         return prompt_content, metadata
 
     def _get_recent_threads(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """Get recent email threads with full conversation context.
-
-        Returns threads (grouped emails) rather than individual emails,
-        so the LLM can see response patterns.
-        """
-        # Fetch enough emails to get ~self.search_limit threads
+        """Get recent email threads grouped by thread_id for pattern analysis."""
         emails = self.storage.get_emails(self.owner_id, limit=self.search_limit*3)
 
         # Group by thread_id
         threads: Dict[str, List[Dict]] = {}
         for email in emails:
-            tid = email.get('thread_id', email.get('id', ''))  # Fallback to id if no thread
+            tid = email.get('thread_id', email.get('id', ''))
             if tid:
-                if tid not in threads:
-                    threads[tid] = []
-                threads[tid].append(email)
+                threads.setdefault(tid, []).append(email)
 
         # Sort emails within each thread by date
         for tid in threads:
@@ -409,97 +411,50 @@ Body: {body}
         existing_prompt: Optional[str],
         emails_since: Optional[datetime],
     ) -> Tuple[Optional[str], Dict[str, Any]]:
-        """Build prompt incrementally from new emails only.
-
-        If no existing prompt, delegates to full build_task_prompt().
-        If existing prompt provided, checks new emails and decides
-        whether the prompt needs updating.
-
-        Args:
-            existing_prompt: Current prompt text, or None for full build
-            emails_since: Only consider emails after this timestamp
-
-        Returns:
-            Tuple of (updated_prompt_or_None, metadata).
-            prompt is None when no update is needed.
-        """
-        logger.debug(
-            f"[build_task_prompt_incremental] owner={self.owner_id},"
-            f" existing_prompt={'present' if existing_prompt else 'absent'},"
-            f" emails_since={emails_since}"
-        )
+        """Build prompt incrementally from new emails, or full build if no existing prompt."""
+        logger.debug(f"[build_task_prompt_incremental] owner={self.owner_id}, existing_prompt={'present' if existing_prompt else 'absent'}, emails_since={emails_since}")
 
         # No existing prompt — do a full generation
         if existing_prompt is None:
-            logger.info(
-                "[build_task_prompt_incremental]"
-                " No existing prompt, delegating to full build"
-            )
+            logger.info("[build_task_prompt_incremental] No existing prompt, delegating to full build")
             prompt, meta = await self.build_task_prompt()
             meta["action"] = "full_build"
             return prompt, meta
 
         # Get new emails since the given timestamp
-        threads = self._get_recent_threads_since(
-            since=emails_since or datetime.min.replace(
-                tzinfo=timezone.utc
-            ),
-            limit=self.search_limit,
-        )
+        since_dt = emails_since or datetime.min.replace(tzinfo=timezone.utc)
+        threads = self._get_recent_threads_since(since=since_dt, limit=self.search_limit)
 
         if not threads:
-            logger.info(
-                "[build_task_prompt_incremental]"
-                " No new emails, skipping update"
-            )
+            logger.info("[build_task_prompt_incremental] No new emails, skipping update")
             return None, {"skipped": "no_new_emails"}
 
         new_email_count = sum(
             len(t.get("emails", [])) for t in threads
         )
-        logger.info(
-            f"[build_task_prompt_incremental]"
-            f" {len(threads)} new threads"
-            f" ({new_email_count} emails) to evaluate"
-        )
+        logger.info(f"[build_task_prompt_incremental] {len(threads)} new threads ({new_email_count} emails) to evaluate")
 
         threads_text = self._format_threads(threads)
-
         update_prompt = TASK_AGENT_UPDATE_PROMPT.format(
             existing_prompt=existing_prompt,
             new_email_count=new_email_count,
             new_threads=threads_text,
         )
-
-        logger.debug(
-            f"[build_task_prompt_incremental]"
-            f" Update prompt size: {len(update_prompt)} chars"
-            f" (~{len(update_prompt) // 4} tokens)"
-        )
+        logger.debug(f"[build_task_prompt_incremental] Update prompt size: {len(update_prompt)} chars (~{len(update_prompt) // 4} tokens)")
 
         response = self.client.create_message_sync(
-            model=self.model,
-            max_tokens=4000,
+            model=self.model, max_tokens=4000,
             messages=[{"role": "user", "content": update_prompt}],
         )
 
         result_text = response.content[0].text.strip()
-        logger.debug(
-            f"[build_task_prompt_incremental]"
-            f" LLM response length={len(result_text)}"
-        )
+        logger.debug(f"[build_task_prompt_incremental] LLM response length={len(result_text)}")
 
         if "NO_CHANGES_NEEDED" in result_text:
-            logger.info(
-                "[build_task_prompt_incremental]"
-                " LLM says no changes needed"
-            )
+            logger.info("[build_task_prompt_incremental] LLM says no changes needed")
             return None, {"skipped": "no_changes_needed"}
 
-        logger.info(
-            f"[build_task_prompt_incremental]"
-            f" Prompt updated ({len(result_text)} chars)"
-        )
+        logger.info(f"[build_task_prompt_incremental] Prompt updated ({len(result_text)} chars)")
         return result_text, {
             "action": "updated",
             "new_threads_analyzed": len(threads),
@@ -508,74 +463,33 @@ Body: {body}
         }
 
     def _get_recent_threads_since(
-        self,
-        since: datetime,
-        limit: int = 20,
+        self, since: datetime, limit: int = 20,
     ) -> List[Dict[str, Any]]:
-        """Get recent email threads with emails after a given date.
+        """Get recent email threads with emails after `since`."""
+        logger.debug(f"[_get_recent_threads_since] owner={self.owner_id}, since={since}, limit={limit}")
 
-        Uses the same thread grouping logic as _get_recent_threads()
-        but filtered to only include emails received after `since`.
-
-        Args:
-            since: Only include emails after this timestamp
-            limit: Max number of threads to return
-
-        Returns:
-            List of thread dicts with 'thread_id', 'emails',
-            'most_recent' keys.
-        """
-        logger.debug(
-            f"[_get_recent_threads_since] owner={self.owner_id},"
-            f" since={since}, limit={limit}"
-        )
-
-        emails = self.storage.get_emails_since(
-            self.owner_id, since, limit=limit * 3
-        )
-        logger.debug(
-            f"[_get_recent_threads_since]"
-            f" Fetched {len(emails)} emails since {since}"
-        )
+        emails = self.storage.get_emails_since(self.owner_id, since, limit=limit * 3)
+        logger.debug(f"[_get_recent_threads_since] Fetched {len(emails)} emails since {since}")
 
         # Group by thread_id
         threads: Dict[str, List[Dict]] = {}
         for email in emails:
-            tid = email.get(
-                "thread_id", email.get("id", "")
-            )
+            tid = email.get("thread_id", email.get("id", ""))
             if tid:
-                if tid not in threads:
-                    threads[tid] = []
-                threads[tid].append(email)
+                threads.setdefault(tid, []).append(email)
 
         # Sort emails within each thread by date
         for tid in threads:
-            threads[tid].sort(
-                key=lambda e: e.get("date_timestamp", 0)
-            )
+            threads[tid].sort(key=lambda e: e.get("date_timestamp", 0))
 
         # Sort threads by most recent email
         thread_list = []
         for tid, thread_emails in threads.items():
             if thread_emails:
-                most_recent = max(
-                    e.get("date_timestamp", 0)
-                    for e in thread_emails
-                )
-                thread_list.append({
-                    "thread_id": tid,
-                    "emails": thread_emails,
-                    "most_recent": most_recent,
-                })
+                most_recent = max(e.get("date_timestamp", 0) for e in thread_emails)
+                thread_list.append({"thread_id": tid, "emails": thread_emails, "most_recent": most_recent})
 
-        thread_list.sort(
-            key=lambda t: t["most_recent"], reverse=True
-        )
-
+        thread_list.sort(key=lambda t: t["most_recent"], reverse=True)
         result = thread_list[:limit]
-        logger.debug(
-            f"[_get_recent_threads_since]"
-            f" Grouped into {len(result)} threads"
-        )
+        logger.debug(f"[_get_recent_threads_since] Grouped into {len(result)} threads")
         return result

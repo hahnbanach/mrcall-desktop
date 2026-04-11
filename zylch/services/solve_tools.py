@@ -198,7 +198,10 @@ def _download_attachment(
     if not email_id:
         return "No email_id provided"
 
-    email = store.get_email_by_id(owner_id, email_id)
+    # Try internal UUID first, then fall back to gmail_id
+    email = store.get_email_by_supabase_id(owner_id, email_id)
+    if not email:
+        email = store.get_email_by_id(owner_id, email_id)
     if not email:
         return f"Email {email_id} not found"
 
@@ -423,18 +426,32 @@ def _read_document(args: Dict) -> str:
     if not filename:
         return "No filename provided"
 
+    home = os.path.expanduser("~")
+    profile_dir = os.environ.get("ZYLCH_PROFILE_DIR", "")
+    defaults = [
+        os.path.join(home, "gdrive-shared"),
+        os.path.join(home, "Documents"),
+        os.path.join(home, "Downloads"),
+    ]
+    if profile_dir:
+        defaults.append(profile_dir)
     doc_paths = os.environ.get("DOCUMENT_PATHS", "")
-    if not doc_paths:
+    if doc_paths:
+        configured = [
+            os.path.expanduser(p.strip())
+            for p in doc_paths.split(",")
+            if p.strip()
+        ]
+        paths = [p for p in configured if os.path.isdir(p)]
+        if not paths:
+            paths = [p for p in defaults if os.path.isdir(p)]
+    else:
+        paths = [p for p in defaults if os.path.isdir(p)]
+    if not paths:
         return (
-            "No document folders configured."
+            "No document folders found."
             " Add DOCUMENT_PATHS to your profile .env"
         )
-
-    paths = [
-        os.path.expanduser(p.strip())
-        for p in doc_paths.split(",")
-        if p.strip()
-    ]
 
     found = []
     for base in paths:
