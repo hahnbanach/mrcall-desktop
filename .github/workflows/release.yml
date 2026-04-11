@@ -59,20 +59,26 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libmagic1
 
       - name: Install dependencies
+        shell: bash
         run: |
-          ${{ matrix.rosetta && 'arch -x86_64' || '' }} python3 -m pip install -e .
-          ${{ matrix.rosetta && 'arch -x86_64' || '' }} python3 -m pip install pyinstaller
+          PY="${{ matrix.rosetta && 'arch -x86_64 python3' || 'python3' }}"
+          $PY -m pip install -e .
+          $PY -m pip install pyinstaller
 
       - name: Build binary
+        shell: bash
         run: |
-          # Find neonize native lib path for explicit inclusion
-          NEO_LIB=$(${{ matrix.rosetta && 'arch -x86_64' || '' }} python3 -c "import neonize; from pathlib import Path; p=Path(neonize.__file__).parent; libs=list(p.glob('neonize-*')); print(libs[0]) if libs else print('')" 2>/dev/null || echo "")
+          PY="${{ matrix.rosetta && 'arch -x86_64 python3' || 'python3' }}"
+          # Find neonize native lib for explicit inclusion
+          NEO_LIB=$($PY -c "import neonize; from pathlib import Path; p=Path(neonize.__file__).parent; libs=list(p.glob('neonize-*')); print(libs[0]) if libs else print('')" 2>/dev/null || echo "")
           NEO_FLAG=""
+          SEP=":"
+          if [ "${{ matrix.platform }}" = "windows" ]; then SEP=";"; fi
           if [ -n "$NEO_LIB" ] && [ -f "$NEO_LIB" ]; then
-            NEO_FLAG="--add-binary ${NEO_LIB}:neonize"
+            NEO_FLAG="--add-binary ${NEO_LIB}${SEP}neonize"
             echo "Including neonize lib: $NEO_LIB"
           fi
-          ${{ matrix.rosetta && 'arch -x86_64' || '' }} python3 -m PyInstaller --onefile --name zylch-${{ matrix.platform }}-${{ matrix.arch }} --hidden-import zylch.cli.main --collect-all zylch --collect-all fastembed --collect-all neonize --collect-binaries neonize --collect-all onnxruntime --collect-binaries onnxruntime $NEO_FLAG zylch/cli/main.py
+          $PY -m PyInstaller --onefile --name zylch-${{ matrix.platform }}-${{ matrix.arch }} --hidden-import zylch.cli.main --collect-all zylch --collect-all fastembed --collect-all neonize --collect-binaries neonize --collect-all onnxruntime --collect-binaries onnxruntime $NEO_FLAG zylch/cli/main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
