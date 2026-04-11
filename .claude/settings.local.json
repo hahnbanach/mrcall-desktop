@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(head:*)",
+      "Bash(git pull:*)",
+      "Bash(mkdir -p /home/mal/private/zylch-standalone/credentials)",
+      "Bash(ZYLCH_MODE=standalone docker compose up -d --build zylch-api)",
+      "Bash(cp /home/mal/private/zylch-standalone/docker-compose.yml ~/hb/zylch/docker-compose.yml)",
+      "Bash(cp /home/mal/private/zylch-standalone/.env.standalone ~/hb/zylch/.env.standalone)",
+      "Bash(black --check zylch/)",
+      "Bash(ruff check:*)",
+      "Bash(python3 -m ruff check zylch/ --statistics)",
+      "Bash(pip3 list:*)",
+      "Bash(/home/mal/private/zylch-standalone/venv/bin/python:*)",
+      "Bash(venv/bin/pip show:*)",
+      "Bash(venv/bin/zylch --help)",
+      "Bash(curl -s -w '\\\\nHTTP_CODE:%{http_code}' https://api.anthropic.com/v1/messages -H 'x-api-key: __CMDSUB_OUTPUT__')",
+      "Bash(venv/bin/python:*)",
+      "Bash(/home/mal/private/zylch-standalone/venv/bin/ruff check:*)"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"Never say something is working without having it tested before. Testing a product means using the very same commands the final user would use. The REPL, the APIs, whatever is the product, testing means do as the final user would do. Premature and unrequested optimization is Evil. Advise: always try to delegate to subagents in order to spare context.\"}}'"
+          }
+        ]
+      }
+    ]
+  }
+}

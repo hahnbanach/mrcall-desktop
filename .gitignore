@@ -103,7 +103,6 @@ hive-mind-prompt-*.txt
 hive-mind-prompt-*.txt
 
 # Claude Flow generated files
-.claude/settings.local.json
 .mcp.json
 claude-flow.config.json
 .swarm/
