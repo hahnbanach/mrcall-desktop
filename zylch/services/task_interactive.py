@@ -7,10 +7,9 @@
   4. instruct — user gives instructions, LLM executes with tools
 """
 
-import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Dict, List
 
 import click
 from rich.console import Console

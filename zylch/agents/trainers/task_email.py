@@ -9,9 +9,7 @@ Analyzes the user's email threads and memory blobs to understand:
 Then generates a self-contained agent prompt for identifying actionable items.
 """
 
-import json
 import logging
-from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
