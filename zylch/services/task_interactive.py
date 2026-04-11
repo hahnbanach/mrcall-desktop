@@ -816,7 +816,7 @@ def _post_solve_menu(
 
         choice = "\n".join(lines).strip()
         if not choice:
-            choice = "d"
+            choice = "b"
 
         lower = choice.lower()
         if lower == "d":

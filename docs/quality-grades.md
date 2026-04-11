@@ -1,7 +1,7 @@
 ---
 description: |
   Quality assessment of Zylch standalone modules.
-  Updated 2026-04-10 after task detection bug fixes (0.1.16).
+  Updated 2026-04-11 after 14 task detection + execution fixes (0.1.20).
 ---
 
 # Quality Grades
@@ -15,7 +15,7 @@ description: |
 | **whatsapp/** | 307+401 | None | Low | High | neonize sync, contacts from messages |
 | **telegram/** | ~300 | None | Low | High | Bot interface, untested |
 | **services/command_handlers.py** | **5137** | None | Low | **LOW** | Massively oversized, SaaS stubs |
-| **services/process_pipeline.py** | 430 | None | Low | High | New, auto-train logic |
+| **services/process_pipeline.py** | 483 | None | Low | High | Sync default 60d, auto-train |
 | **services/** (other) | ~1500 | Low | Medium | Medium | sync_service, chat_service |
 | **storage/** | 496+~600+~300 | Low | Medium | High | 19 models, SQLite |
 | **tools/gmail_tools.py** | **988** | None | Medium | **LOW** | Oversized |
@@ -24,7 +24,7 @@ description: |
 | **agents/trainers/** | ~800 | None | Low | High | Incremental prompt, untested |
 | **memory/** | ~700 | None | Medium | High | fastembed, hybrid search |
 | **llm/** | 492+~120 | None | Low | High | Direct SDK (aisuite dropped) |
-| **workers/** | ~600 | **10 tests** | Low | High | Task bugs fixed, regression tests |
+| **workers/task_creation.py** | **1170+** | **10 tests** | Low | **LOW** | 14 fixes applied, needs splitting |
 | **config.py** | 197 | None | Medium | High | Clean standalone config |
 
 ## Oversized Files (> 500 lines)
@@ -36,6 +36,7 @@ description: |
 | `tools/starchat.py` | ~850 | Consider splitting |
 | `services/sync_service.py` | 770 | Acceptable if MrCall sync moves out |
 | `cli/setup.py` | 636 | Slightly over, acceptable for wizard |
+| `workers/task_creation.py` | 1170+ | Split: rules, analysis, storage |
 
 ## Stale Modules (Candidates for Deletion)
 

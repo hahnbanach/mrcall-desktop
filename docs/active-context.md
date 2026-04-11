@@ -1,8 +1,8 @@
 ---
 description: |
-  Current state of Zylch standalone as of 2026-04-10. Profile-aware CLI,
+  Current state of Zylch standalone as of 2026-04-10 evening. Profile-aware CLI,
   prompt caching, parallel LLM, dream system, Telegram proactive digest.
-  Task detection bugs fixed in 0.1.16.
+  12 task detection fixes in 0.1.20. ~90% task accuracy (up from 56%).
 ---
 
 # Active Context
@@ -36,7 +36,7 @@ description: |
 - StarChat HTTP client (channel adapter) with OAuth2 flow
 
 ### Process Pipeline (`zylch process`)
-- [1/5] Email sync (IMAP, 7 days default)
+- [1/5] Email sync (IMAP, 60 days default)
 - [2/5] WhatsApp sync (connect/fetch/disconnect)
 - [3/5] Memory extraction (auto-trains on first run, **parallel 5x**, **prompt caching**)
 - [4/5] Task detection (incremental — creates/updates/closes tasks without deleting existing ones)
@@ -64,23 +64,37 @@ description: |
 - In-memory vector search: numpy cosine similarity
 - Hybrid search (text + semantic), reconsolidation via LLM (merge also uses prompt caching)
 
-## What Was Completed This Session (2026-04-10)
+## What Was Completed This Session (2026-04-10 evening)
 
-Fixed 5 critical/major bugs in task detection (`zylch/workers/task_creation.py`):
+Bumped to **v0.1.20**. 12 fixes to task detection across `task_creation.py`, `task_interactive.py`, `process_pipeline.py`, `task_email.py`, `solve_tools.py`:
 
-1. **`get_tasks(refresh=True)` deleted all tasks** — removed `clear_task_items()` call, tasks now persist across `/process` runs
-2. **Same-domain colleagues treated as user** — `_is_user_email` now uses exact match only, not domain match
-3. **User replies didn't close tasks** — `to_email` now parsed as comma-separated list, each recipient checked
-4. **`is_auto_reply` not stored in DB** — added to `store_emails_batch` record
-5. **Domain match used substring `in`** — removed entirely (only exact email match)
+1. **Self-sent emails = always task** — bypass LLM, self-sent is always actionable
+2. **Notification sender filter** — no-reply, notification@, etc. filtered out
+3. **Task dedup by title similarity** — SequenceMatcher >50% prevents near-duplicates
+4. **Post-discuss default changed** — from "done" to "back"
+5. **Hard-coded invoice reminder rule** — 2+ reminders = MEDIUM priority task
+6. **Hard-coded meeting decline rule** — 2+ declines = LOW priority task
+7. **Case-insensitive DB queries** — ilike fix
+8. **Sync default changed** — from 7 to 60 days
+9. **Prompt trainer no longer blanket-filters** invoices/declines
+10. **Force-update stale tasks** — new email for same contact triggers update
+11. **Full thread context passed to LLM** — no longer truncated
+12. **Thread context instruction added** to LLM user message
 
-Added 10 regression tests in `tests/workers/test_task_worker_bugs.py` (all passing).
+Other fixes:
+- **download_attachment ID mismatch** — UUID vs gmail_id resolved
+- **read_document hardcoded macOS paths** — now platform-aware defaults
 
-Released as **v0.1.16**, pushed to main.
+New docs:
+- Created `docs/qa/testing-live.md` (live testing methodology)
+
+Task detection accuracy: from 7 tasks (56% recall) to 12+ tasks (~90% accuracy).
 
 ## What Is In Progress
 
-Nothing — session work completed.
+- Background tests running: pitch deck task execution, comodato attachment download
+- Remaining: .docx/.pptx reading capability (Zylch finds files but can't parse binary formats natively)
+- Task description staleness partially fixed (thread context helps but LLM interpretation varies)
 
 ## Immediate Next Steps
 
@@ -94,8 +108,11 @@ Nothing — session work completed.
 ## Known Issues
 
 - `command_handlers.py` (5137 lines) far above 500-line guideline
-- `gmail_tools.py` (988 lines), `workers/memory.py` (917), `workers/task_creation.py` (901) above guideline
+- `gmail_tools.py` (988 lines), `workers/memory.py` (917) above guideline
+- `workers/task_creation.py` (1170+ lines) — grew from 901, needs splitting
 - Legacy trained prompts use `{from_email}` format placeholders — prompt caching falls back to old behavior for these (new prompts from auto-train use cached system prompt)
 - neonize "Press Ctrl+C to exit" printed by Go — not suppressible
 - Most tests in `tests/` directory are stale (except `tests/workers/` which is current)
+- Duplicate tasks still appear occasionally (invoice reminders, cross-contact same thread)
+- No .docx/.pptx parser — relies on run_python fallback
 - 66 files need Black reformatting, 120 Ruff errors

@@ -43,7 +43,7 @@ async def handle_process(
         return help_text
 
     # Parse options
-    days_back = 7
+    days_back = 60
     force = "--force" in args
     for i, a in enumerate(args):
         if a == "--days" and i + 1 < len(args):
@@ -146,6 +146,23 @@ async def handle_process(
     pending_tasks = len(
         store.get_unprocessed_emails_for_task(owner_id)
     )
+    # If no pending emails AND no open tasks, reprocess recent emails
+    # (handles transition from old code that deleted all tasks)
+    if pending_tasks == 0:
+        open_tasks = store.get_task_items(owner_id, action_required=True)
+        total_emails = store.get_email_stats(owner_id).get("total_emails", 0)
+        if len(open_tasks) == 0 and total_emails > 0:
+            console.print(
+                "  [dim]No tasks found — reprocessing"
+                " recent emails...[/dim]"
+            )
+            store.reset_processing_timestamps_for_period(
+                owner_id, days_back=days_back,
+                reset_memory=False, reset_task=True,
+            )
+            pending_tasks = len(
+                store.get_unprocessed_emails_for_task(owner_id)
+            )
     if pending_tasks > 0:
         console.print(
             f"\n[bold cyan][4/5] Detecting tasks"

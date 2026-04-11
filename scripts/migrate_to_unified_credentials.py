@@ -21,6 +21,7 @@ Safety:
     - Can be run multiple times safely (idempotent)
 """
 
+import os
 import sys
 import logging
 import argparse
@@ -28,7 +29,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 # Add parent directory to path
-sys.path.insert(0, '/Users/mal/hb/zylch')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from zylch.storage import Storage
 from zylch.utils.encryption import encrypt, decrypt
