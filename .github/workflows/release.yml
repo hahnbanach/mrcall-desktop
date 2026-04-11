@@ -14,6 +14,10 @@ jobs:
             platform: linux
             arch: x64
             ext: ""
+          - os: macos-13
+            platform: macos
+            arch: x64
+            ext: ""
           - os: macos-latest
             platform: macos
             arch: arm64
@@ -62,5 +66,6 @@ jobs:
         with:
           files: |
             zylch-linux-x64/zylch-linux-x64
+            zylch-macos-x64/zylch-macos-x64
             zylch-macos-arm64/zylch-macos-arm64
             zylch-windows-x64/zylch-windows-x64.exe

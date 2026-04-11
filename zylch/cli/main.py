@@ -46,7 +46,7 @@ def _check_update():
                     int(x) for x in v.split(".")
                 )
             if _ver(latest) > _ver(__version__):
-                body = data.get("body", "").strip()
+                body = (data.get("body") or "").strip()
                 _update_data = (latest, body)
             else:
                 _update_data = False

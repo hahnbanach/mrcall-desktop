@@ -20,12 +20,20 @@ All knowledge lives in `./docs/`. This file is the index.
 
 After context compaction, run /doc-intrasession before resuming work!
 
+## Install
+
+Zylch is distributed as a **prebuilt binary** via `scripts/install.sh` (curl one-liner).
+The installer downloads from GitHub Releases and puts the binary in `/usr/local/bin/zylch`.
+Re-running the same script upgrades in place. `pip install -e .` is for **dev only**.
+
 ## Quick Reference
 
 ```bash
-# Install
-pip install -e .                    # Dev mode
-pipx install .                      # User install
+# Install / Upgrade
+curl -sL https://raw.githubusercontent.com/malemi/zylch/main/scripts/install.sh | bash
+
+# Dev mode (contributors only)
+pip install -e .
 
 # Setup
 zylch init                          # Profile wizard (LLM → Email → WhatsApp → Telegram → MrCall)

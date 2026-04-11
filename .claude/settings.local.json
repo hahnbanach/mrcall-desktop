@@ -16,7 +16,9 @@
       "Bash(venv/bin/zylch --help)",
       "Bash(curl -s -w '\\\\nHTTP_CODE:%{http_code}' https://api.anthropic.com/v1/messages -H 'x-api-key: __CMDSUB_OUTPUT__')",
       "Bash(venv/bin/python:*)",
-      "Bash(/path/to/engine/venv/bin/ruff check:*)"
+      "Bash(/path/to/engine/venv/bin/ruff check:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)"
     ]
   },
   "hooks": {
