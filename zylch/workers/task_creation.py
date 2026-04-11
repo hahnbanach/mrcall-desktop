@@ -8,7 +8,7 @@ import json
 import logging
 import re
 from difflib import SequenceMatcher
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from zylch.llm import LLMClient
@@ -769,9 +769,9 @@ class TaskWorker:
         # Debug logging
         prompt_lines = formatted_prompt.count('\n') + 1
         logger.info(f"[TASK] Sending prompt to LLM ({len(formatted_prompt)} chars, {prompt_lines} lines)")
-        logger.debug(f"[TASK] ===== FULL PROMPT START =====")
+        logger.debug("[TASK] ===== FULL PROMPT START =====")
         logger.debug(f"[TASK] {formatted_prompt}")
-        logger.debug(f"[TASK] ===== FULL PROMPT END =====")
+        logger.debug("[TASK] ===== FULL PROMPT END =====")
         logger.debug(f"[TASK] Analyzing {event_type}")
         logger.debug(f"[TASK] Event data: {event_data_json}")
         logger.debug(f"[TASK] Blob context length: {len(blob_context)}")
@@ -1159,9 +1159,9 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
                 if reason and len(reason) >= 10:
                     result['suggested_action'] = reason
                     suggested = reason
-                    logger.info(f"[TASK] Using reason as suggested_action fallback")
+                    logger.info("[TASK] Using reason as suggested_action fallback")
                 else:
-                    logger.warning(f"[TASK] Skipping task with empty suggested_action and no reason fallback")
+                    logger.warning("[TASK] Skipping task with empty suggested_action and no reason fallback")
                 return None
 
         if task_action == 'close' and target_task:
