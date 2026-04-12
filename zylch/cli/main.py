@@ -324,6 +324,72 @@ def status(ctx):
 
 
 @cli.command()
+@click.pass_context
+def rpc(ctx):
+    """JSON-RPC 2.0 sidecar over stdin/stdout (for Electron desktop app).
+
+    Reads line-delimited JSON-RPC requests from stdin and writes
+    responses/notifications to stdout. Logs go to the profile log file
+    and stderr only — stdout is the RPC wire.
+    """
+    import asyncio
+    import logging as _logging
+    import sys
+
+    # Configure logging BEFORE profile setup, with stderr as console
+    # so we never pollute stdout (which is the RPC wire).
+    _configure_logging()
+    root = _logging.getLogger()
+    for h in list(root.handlers):
+        if isinstance(h, _logging.StreamHandler) and getattr(
+            h, "stream", None
+        ) is sys.stdout:
+            root.removeHandler(h)
+    has_stderr = any(
+        isinstance(h, _logging.StreamHandler)
+        and getattr(h, "stream", None) is sys.stderr
+        for h in root.handlers
+    )
+    if not has_stderr:
+        stderr_h = _logging.StreamHandler(sys.stderr)
+        stderr_h.setLevel(_logging.WARNING)
+        stderr_h.setFormatter(_logging.Formatter(
+            "%(asctime)s %(name)s %(levelname)s %(message)s",
+            datefmt="%H:%M:%S",
+        ))
+        root.addHandler(stderr_h)
+
+    # Activate profile manually (not _setup_profile — it calls
+    # _show_update which writes to stdout and would corrupt the wire).
+    from zylch.cli.profiles import (
+        activate_profile,
+        acquire_lock,
+        migrate_legacy_profile,
+        release_lock,
+        select_profile,
+    )
+    from zylch.cli.utils import load_env
+
+    profile_name = ctx.obj.get("profile") if ctx.obj else None
+    migrate_legacy_profile()
+    profile = select_profile(profile_name)
+    if not acquire_lock(profile):
+        sys.stderr.write(
+            f"Profile '{profile}' is already in use by another session.\n"
+        )
+        raise SystemExit(1)
+    atexit.register(release_lock)
+    activate_profile(profile)
+    _setup_log_file()
+    load_env()
+    logger.info(f"[CLI] rpc server starting, profile={profile}")
+
+    from zylch.rpc.server import serve
+
+    asyncio.run(serve())
+
+
+@cli.command()
 def telegram():
     """Start Telegram bot interface."""
     logger.info("[CLI] Starting Telegram bot")
