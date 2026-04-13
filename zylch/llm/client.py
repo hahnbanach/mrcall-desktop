@@ -376,9 +376,42 @@ class LLMClient:
         **kwargs,
     ) -> Any:
         """Call Anthropic SDK directly."""
+        # Coerce any SDK block objects (TextBlock/ToolUseBlock) lingering
+        # in messages to plain dicts — otherwise anthropic's request JSON
+        # serializer raises "Object of type TextBlock is not JSON
+        # serializable".
+        def _coerce_block(b):
+            if isinstance(b, dict):
+                return b
+            btype = getattr(b, "type", None)
+            if btype == "text":
+                return {"type": "text", "text": getattr(b, "text", "")}
+            if btype == "tool_use":
+                return {
+                    "type": "tool_use",
+                    "id": getattr(b, "id", ""),
+                    "name": getattr(b, "name", ""),
+                    "input": dict(getattr(b, "input", {}) or {}),
+                }
+            if hasattr(b, "model_dump"):
+                try:
+                    return b.model_dump()
+                except Exception:
+                    pass
+            return b
+
+        coerced_messages = []
+        for m in messages:
+            content = m.get("content") if isinstance(m, dict) else None
+            if isinstance(content, list):
+                new_content = [_coerce_block(b) for b in content]
+                coerced_messages.append({**m, "content": new_content})
+            else:
+                coerced_messages.append(m)
+
         request_kwargs = {
             "model": model,
-            "messages": messages,
+            "messages": coerced_messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
         }

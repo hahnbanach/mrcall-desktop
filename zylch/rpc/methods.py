@@ -33,6 +33,32 @@ class SolveInProgressError(Exception):
     code = -32000
 
 
+class ChatBusyError(Exception):
+    """Raised when a chat.send arrives for a conversation whose previous
+    turn is still awaiting approval."""
+
+    code = -32001
+
+
+# ─── Chat approval state ─────────────────────────────────────
+# tool_use_id -> Future[bool] (resolved by chat.approve)
+_pending_approvals: Dict[str, asyncio.Future] = {}
+# conversation_id -> asyncio.Task running the current chat.send
+_active_chats: Dict[str, asyncio.Task] = {}
+
+
+def _approval_preview(tool_name: str, tool_input: Dict[str, Any]) -> str:
+    """Build a short, human-friendly preview string (<500 chars, no full body)."""
+    try:
+        from zylch.services.task_executor import format_approval_preview
+        preview = format_approval_preview(tool_name, tool_input)
+    except Exception:
+        preview = f"{tool_name}: keys={list((tool_input or {}).keys())}"
+    if preview and len(preview) > 500:
+        preview = preview[:497] + "..."
+    return preview
+
+
 def _owner_id() -> str:
     from zylch.cli.utils import get_owner_id
 
@@ -241,28 +267,135 @@ async def tasks_solve_approve(
 
 
 async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """chat.send(message, conversation_history=[]) -> ChatService result dict."""
+    """chat.send(message, conversation_history=[], conversation_id="general",
+    context={}) -> ChatService result dict.
+
+    Destructive tools trigger `chat.pending_approval` notifications; the
+    client must respond via `chat.approve` to resume.
+    """
     from zylch.services.chat_service import ChatService
 
     message = params.get("message")
     if not message:
         raise ValueError("message is required")
     conversation_history = params.get("conversation_history") or []
+    conversation_id = str(params.get("conversation_id") or "general")
+    req_context = params.get("context") or {}
+    if not isinstance(req_context, dict):
+        req_context = {}
+
+    # Concurrency guard per conversation_id
+    existing = _active_chats.get(conversation_id)
+    if existing is not None and not existing.done():
+        raise ChatBusyError(
+            "chat busy, approve or decline pending action first"
+        )
 
     owner_id = _owner_id()
     logger.debug(
         f"[rpc] chat.send owner_id={owner_id} "
+        f"conversation_id={conversation_id} "
         f"message_len={len(message)} "
-        f"history_len={len(conversation_history)}"
+        f"history_len={len(conversation_history)} "
+        f"has_context={bool(req_context)}"
     )
+
+    # Optional context notification (confirms task scoping to the UI)
+    task_id = req_context.get("task_id") if isinstance(req_context, dict) else None
+    if task_id:
+        try:
+            notify("chat.context", {
+                "conversation_id": conversation_id,
+                "task_id": task_id,
+            })
+        except Exception as e:
+            logger.warning(f"[rpc] chat.context notify failed: {e}")
+
+    async def approval_callback(
+        tool_use_id: str, tool_name: str, tool_input: Dict[str, Any],
+    ) -> bool:
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future = loop.create_future()
+        _pending_approvals[tool_use_id] = fut
+        preview = _approval_preview(tool_name, tool_input)
+        try:
+            input_keys = list((tool_input or {}).keys())
+        except Exception:
+            input_keys = []
+        logger.debug(
+            f"[rpc] chat.pending_approval conversation_id={conversation_id} "
+            f"tool_use_id={tool_use_id} tool={tool_name} keys={input_keys}"
+        )
+        try:
+            notify("chat.pending_approval", {
+                "conversation_id": conversation_id,
+                "tool_use_id": tool_use_id,
+                "name": tool_name,
+                "input": tool_input,
+                "preview": preview,
+            })
+        except Exception as e:
+            logger.warning(f"[rpc] pending_approval notify failed: {e}")
+        try:
+            approved = await asyncio.wait_for(fut, timeout=600)
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"[rpc] approval timeout tool_use_id={tool_use_id}"
+            )
+            if not fut.done():
+                fut.cancel()
+            approved = False
+        finally:
+            _pending_approvals.pop(tool_use_id, None)
+        logger.debug(
+            f"[approval] tool={tool_name} approved={approved}"
+        )
+        return bool(approved)
+
     service = ChatService()
-    result = await service.process_message(
-        user_message=message,
-        user_id=owner_id,
-        conversation_history=conversation_history,
-    )
+
+    async def _run():
+        return await service.process_message(
+            user_message=message,
+            user_id=owner_id,
+            conversation_history=conversation_history,
+            context=req_context,
+            approval_callback=approval_callback,
+        )
+
+    task = asyncio.create_task(_run())
+    _active_chats[conversation_id] = task
+    try:
+        result = await task
+    finally:
+        if _active_chats.get(conversation_id) is task:
+            _active_chats.pop(conversation_id, None)
+
     logger.debug("[rpc] chat.send -> result keys=%s", list(result.keys()))
     return result
+
+
+async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """chat.approve(tool_use_id, approved) -> {ok: true}.
+
+    Unknown tool_use_id -> ValueError (maps to JSON-RPC -32602 via
+    server's INVALID_PARAMS handling).
+    """
+    tool_use_id = params.get("tool_use_id")
+    if not tool_use_id:
+        raise ValueError("tool_use_id is required")
+    approved = bool(params.get("approved", False))
+    logger.debug(
+        f"[rpc] chat.approve tool_use_id={tool_use_id} approved={approved}"
+    )
+    fut = _pending_approvals.pop(tool_use_id, None)
+    if fut is None:
+        err = ValueError(f"no pending approval for tool_use_id={tool_use_id}")
+        err.code = -32602  # type: ignore[attr-defined]
+        raise err
+    if not fut.done():
+        fut.set_result(approved)
+    return {"ok": True}
 
 
 # ─── Sync ────────────────────────────────────────────────────
@@ -321,5 +454,6 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.solve": tasks_solve,
     "tasks.solve.approve": tasks_solve_approve,
     "chat.send": chat_send,
+    "chat.approve": chat_approve,
     "sync.run": sync_run,
 }
