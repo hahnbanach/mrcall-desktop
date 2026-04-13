@@ -26,8 +26,23 @@ const api = {
     skip: (task_id: string) => call<{ ok: boolean }>('tasks.skip', { task_id })
   },
   chat: {
-    send: (message: string, conversation_history: unknown[] = []) =>
-      call<any>('chat.send', { message, conversation_history }, 120000)
+    send: (
+      message: string,
+      conversation_history: unknown[] = [],
+      opts: { conversationId?: string; context?: Record<string, unknown> } = {}
+    ) =>
+      call<any>(
+        'chat.send',
+        {
+          message,
+          conversation_history,
+          conversation_id: opts.conversationId ?? 'general',
+          context: opts.context ?? {}
+        },
+        120000
+      ),
+    approve: (tool_use_id: string, approved: boolean) =>
+      call<{ ok: boolean }>('chat.approve', { tool_use_id, approved })
   },
   sync: {
     run: () => call<any>('sync.run', {}, 600000)

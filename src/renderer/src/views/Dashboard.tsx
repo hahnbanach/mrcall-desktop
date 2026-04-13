@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { ZylchTask } from '../types'
+import { useConversations } from '../store/conversations'
+
+interface Props {
+  onOpenChat?: () => void
+}
 
 const URGENCY_ORDER = ['high', 'medium', 'low']
 const URGENCY_STYLES: Record<string, string> = {
@@ -8,7 +13,8 @@ const URGENCY_STYLES: Record<string, string> = {
   low: 'bg-slate-100 text-slate-700 border-slate-300'
 }
 
-export default function Dashboard() {
+export default function Dashboard({ onOpenChat }: Props = {}) {
+  const { openTaskChat } = useConversations()
   const [tasks, setTasks] = useState<ZylchTask[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -149,11 +155,13 @@ export default function Dashboard() {
                       Close
                     </button>
                     <button
-                      disabled
-                      title="Coming soon"
-                      className="px-3 py-1.5 text-sm border rounded text-slate-400 cursor-not-allowed"
+                      onClick={() => {
+                        openTaskChat(t)
+                        onOpenChat?.()
+                      }}
+                      className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
                     >
-                      Solve (coming soon)
+                      Solve
                     </button>
                   </div>
                 </article>

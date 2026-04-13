@@ -22,7 +22,12 @@ export interface ZylchAPI {
     skip: (task_id: string) => Promise<{ ok: boolean }>
   }
   chat: {
-    send: (message: string, conversation_history?: unknown[]) => Promise<any>
+    send: (
+      message: string,
+      conversation_history?: unknown[],
+      opts?: { conversationId?: string; context?: Record<string, unknown> }
+    ) => Promise<any>
+    approve: (tool_use_id: string, approved: boolean) => Promise<{ ok: boolean }>
   }
   sync: {
     run: () => Promise<any>
