@@ -1,13 +1,17 @@
 """Core Zylch AI agent using LLM abstraction layer."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from ..llm import LLMClient
 from .models import ModelSelector
 from .prompts import get_system_prompt, get_system_prompt_base
 from ..tools.base import Tool, ToolResult, ToolStatus
 from ..agents.base import BaseConversationalAgent
+from ..services.task_executor import APPROVAL_TOOLS
+
+# Type alias for approval callback: (tool_use_id, tool_name, input_dict) -> approved
+ApprovalCallback = Callable[[str, str, Dict[str, Any]], Awaitable[bool]]
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +68,7 @@ class ZylchAIAgent(BaseConversationalAgent):
         self,
         user_message: str,
         context: Optional[Dict[str, Any]] = None,
+        approval_callback: Optional[ApprovalCallback] = None,
     ) -> str:
         """Process user message with tool use.
 
@@ -109,8 +114,33 @@ class ZylchAIAgent(BaseConversationalAgent):
 
         # Handle tool use loop
         while response.stop_reason == "tool_use":
+            # Normalize assistant content blocks to plain dicts so that
+            # conversation_history stays JSON-serializable across turns
+            # (SDK TextBlock/ToolUseBlock instances break re-serialization
+            # once we loop back with a declined tool_result).
+            assistant_content_dicts: List[Dict[str, Any]] = []
+            for block in response.content:
+                btype = getattr(block, "type", None)
+                if btype == "text":
+                    assistant_content_dicts.append(
+                        {"type": "text", "text": getattr(block, "text", "")}
+                    )
+                elif btype == "tool_use":
+                    assistant_content_dicts.append({
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": dict(block.input or {}),
+                    })
+                else:
+                    # Unknown block type — best-effort model_dump
+                    try:
+                        assistant_content_dicts.append(block.model_dump())
+                    except Exception:
+                        pass
+
             # Extract tool calls from response
-            tool_results, direct_response = await self._execute_tools(response.content)
+            tool_results, direct_response = await self._execute_tools(response.content, approval_callback)
 
             # Check for direct response tools (e.g., get_tasks)
             # These tools return pre-formatted output that should be returned as-is
@@ -119,7 +149,7 @@ class ZylchAIAgent(BaseConversationalAgent):
                 # Add assistant's tool use to history
                 self.conversation_history.append({
                     "role": "assistant",
-                    "content": response.content
+                    "content": assistant_content_dicts
                 })
                 # Add the direct response as assistant message
                 self.conversation_history.append({
@@ -167,7 +197,11 @@ class ZylchAIAgent(BaseConversationalAgent):
     # Tools that return pre-formatted output and should bypass the second LLM call
     DIRECT_RESPONSE_TOOLS = {'get_tasks'}
 
-    async def _execute_tools(self, content: List[Any]) -> tuple[List[Dict[str, Any]], str | None]:
+    async def _execute_tools(
+        self,
+        content: List[Any],
+        approval_callback: Optional[ApprovalCallback] = None,
+    ) -> tuple[List[Dict[str, Any]], str | None]:
         """Execute tool calls from response.
 
         Args:
@@ -187,6 +221,27 @@ class ZylchAIAgent(BaseConversationalAgent):
 
                 logger.info(f"Executing tool: {tool_name}")
                 logger.debug(f"Tool input: {tool_input}")
+
+                # Approval gate for destructive tools
+                if approval_callback is not None and tool_name in APPROVAL_TOOLS:
+                    approved = False
+                    try:
+                        approved = bool(await approval_callback(block.id, tool_name, dict(tool_input or {})))
+                    except Exception as e:
+                        logger.warning(f"[approval] callback raised for tool={tool_name}: {e}; treating as declined")
+                        approved = False
+                    try:
+                        input_keys = list((tool_input or {}).keys())
+                    except Exception:
+                        input_keys = []
+                    logger.debug(f"[approval] tool={tool_name} approved={approved} keys={input_keys}")
+                    if not approved:
+                        results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": "User declined this action.",
+                        })
+                        continue
 
                 # Execute tool
                 tool_result = await self._call_tool(tool_name, tool_input)

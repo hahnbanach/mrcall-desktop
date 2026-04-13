@@ -30,8 +30,15 @@ logger = logging.getLogger(__name__)
 
 
 APPROVAL_TOOLS = {
-    "draft_email", "run_python",
-    "send_email", "send_whatsapp", "send_sms",
+    # actual destructive tool names exposed to ChatService / CLI
+    "send_draft",             # gmail_tools.py — actually sends a Gmail draft
+    "send_whatsapp_message",  # whatsapp_tools.py — sends a WhatsApp message
+    "send_sms",               # sms_tools.py — sends an SMS
+    # legacy / alias names kept for safety in case other code paths use them
+    "send_email",
+    "send_whatsapp",
+    "draft_email",
+    "run_python",
     "update_memory",
 }
 

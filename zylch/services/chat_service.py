@@ -1,6 +1,6 @@
 """Chat service - business logic for conversational AI interactions."""
 
-from typing import Dict, Any, Optional, List
+from typing import Awaitable, Callable, Dict, Any, Optional, List
 import logging
 import re
 import shlex
@@ -147,7 +147,8 @@ class ChatService:
         user_id: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         session_id: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
+        approval_callback: Optional[Callable[[str, str, Dict[str, Any]], Awaitable[bool]]] = None,
     ) -> Dict[str, Any]:
         """Process a chat message through the Zylch AI agent.
 
@@ -567,7 +568,8 @@ class ChatService:
             logger.info(f"Processing message for user {user_id}: {user_message}")
             response = await self.agent.process_message(
                 user_message=user_message,
-                context=agent_context
+                context=agent_context,
+                approval_callback=approval_callback,
             )
 
             execution_time_ms = (time.time() - start_time) * 1000
