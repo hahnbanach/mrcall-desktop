@@ -446,6 +446,86 @@ async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return result
 
 
+# ─── Narration ───────────────────────────────────────────────
+
+
+async def narration_summarize(
+    params: Dict[str, Any], notify: NotifyFn,
+) -> Any:
+    """narration.summarize(lines, context="") -> {"text": str}.
+
+    Summarizes recent sidecar stderr lines into a short first-person
+    Italian sentence using Haiku, for display while a chat.send is
+    in flight. Never raises; returns {"text": ""} on any failure.
+    """
+    import re
+
+    lines = params.get("lines") or []
+    context = params.get("context") or ""
+    if not isinstance(lines, list) or not lines:
+        return {"text": ""}
+
+    ansi = re.compile(r"\x1b\[[0-9;]*m")
+    cleaned = []
+    for ln in lines[-20:]:
+        s = ansi.sub("", str(ln)).strip()
+        if not s:
+            continue
+        if " DEBUG " in s:
+            continue
+        cleaned.append(s[:300])
+    if not cleaned:
+        return {"text": ""}
+
+    joined = "\n".join(cleaned)
+    system = (
+        "Riassumi in una singola frase in italiano, in prima persona, "
+        "al presente, max 80 caratteri, cosa Zylch sta facendo adesso "
+        "in base alle righe di log fornite. Parla come Zylch stesso "
+        "('Sto scaricando…', 'Sto cercando…', 'Sto componendo l'email…')."
+        " Se vedi un errore o warning importante, dillo in modo empatico "
+        "e breve. Se non c'è niente di significativo, rispondi con una "
+        "stringa vuota. Non aggiungere virgolette, prefissi, o spiegazioni."
+    )
+    if context:
+        user = (
+            f"Contesto utente: {context[:200]}\n\n"
+            f"Ultime righe di log:\n{joined}"
+        )
+    else:
+        user = f"Ultime righe di log:\n{joined}"
+
+    try:
+        from zylch.config import settings
+        from zylch.llm.client import LLMClient
+
+        api_key = getattr(settings, "anthropic_api_key", None)
+        if not api_key:
+            return {"text": ""}
+
+        client = LLMClient(
+            api_key=api_key,
+            provider="anthropic",
+            model="claude-haiku-4-5-20251001",
+        )
+        resp = await asyncio.to_thread(
+            client.create_message_sync,
+            messages=[{"role": "user", "content": user}],
+            system=system,
+            max_tokens=60,
+        )
+        text = ""
+        if resp.content:
+            blk = resp.content[0]
+            text = getattr(blk, "text", "") or ""
+        text = text.strip().strip('"\'').strip()
+        logger.debug(f"[rpc] narration.summarize -> {text!r}")
+        return {"text": text}
+    except Exception as e:
+        logger.warning(f"[rpc] narration.summarize failed: {e}")
+        return {"text": ""}
+
+
 # Dispatch table — kept explicit so adding/removing methods is obvious.
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.list": tasks_list,
@@ -456,4 +536,5 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "chat.send": chat_send,
     "chat.approve": chat_approve,
     "sync.run": sync_run,
+    "narration.summarize": narration_summarize,
 }
