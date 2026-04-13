@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useConversations, type Approval } from '../store/conversations'
+import { useNarration } from '../hooks/useNarration'
 
 interface Props {
   onGoToDashboard?: () => void
@@ -22,6 +23,19 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [completing, setCompleting] = useState(false)
   const [inputHeight, setInputHeight] = useState(160)
+
+  // Build context for narration: prefer the user's current draft, else the
+  // last user message in history. Kept short (Haiku caps at 200 chars).
+  const narrationContext = (() => {
+    const d = active.draftInput?.trim()
+    if (d) return d
+    for (let i = active.history.length - 1; i >= 0; i -= 1) {
+      const m = active.history[i]
+      if (m.role === 'user' && m.content) return m.content
+    }
+    return ''
+  })()
+  const narration = useNarration(!!active.busy, narrationContext)
 
   const startResize = (e: React.MouseEvent): void => {
     const startY = e.clientY
@@ -197,8 +211,14 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
               )}
             </div>
           ))}
-          {active.busy && (
-            <div className="text-slate-500 text-sm">Zylch sta pensando…</div>
+          {active.busy && !active.pendingApproval && (
+            narration ? (
+              <div className="text-slate-500 italic text-sm whitespace-pre-wrap">
+                {narration}
+              </div>
+            ) : (
+              <div className="text-slate-500 text-sm">Zylch sta pensando…</div>
+            )
           )}
 
           {active.pendingApproval && (

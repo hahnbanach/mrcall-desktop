@@ -47,16 +47,29 @@ function startSidecar(): void {
     console.log(`[main] notification method=${msg.method}`)
     mainWindow?.webContents.send('rpc:notification', msg)
   })
+  sidecar.on('stderr', (chunk: string) => {
+    mainWindow?.webContents.send('sidecar:stderr', chunk)
+  })
   sidecar.on('exit', () => {
     console.error('[main] sidecar exited')
   })
   sidecar.start()
 }
 
+// Per-method default timeouts (ms). Callers may override by passing an
+// explicit `timeout` — this map only sets the default when none given.
+const METHOD_TIMEOUTS: Record<string, number> = {
+  'chat.send': 600000, // 10 min — embedding download + tool-use loop
+  'tasks.solve': 600000, // 10 min — multi-turn tool use
+  'sync.run': 300000, // 5 min — fresh-account IMAP sync
+  'narration.summarize': 15000 // fast Haiku call; fail fast
+}
+
 function registerIpc(): void {
   ipcMain.handle('rpc:call', async (_e, method: string, params: unknown, timeout?: number) => {
     if (!sidecar) throw new Error('sidecar not started')
-    return sidecar.call(method, params, timeout ?? 60000)
+    const effective = timeout ?? METHOD_TIMEOUTS[method] ?? 60000
+    return sidecar.call(method, params, effective)
   })
 }
 
