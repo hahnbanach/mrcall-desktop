@@ -3,6 +3,19 @@ import { contextBridge, ipcRenderer } from 'electron'
 type NotifyCb = (params: unknown) => void
 const listeners = new Map<string, Set<NotifyCb>>()
 
+type StderrCb = (chunk: string) => void
+const stderrListeners = new Set<StderrCb>()
+
+ipcRenderer.on('sidecar:stderr', (_e, chunk: string) => {
+  for (const cb of stderrListeners) {
+    try {
+      cb(chunk)
+    } catch (e) {
+      console.error('[preload] stderr handler error', e)
+    }
+  }
+})
+
 ipcRenderer.on('rpc:notification', (_e, msg: { method: string; params: unknown }) => {
   const set = listeners.get(msg.method)
   if (!set) return
@@ -39,13 +52,17 @@ const api = {
           conversation_id: opts.conversationId ?? 'general',
           context: opts.context ?? {}
         },
-        120000
+        600000
       ),
     approve: (tool_use_id: string, approved: boolean) =>
       call<{ ok: boolean }>('chat.approve', { tool_use_id, approved })
   },
   sync: {
-    run: () => call<any>('sync.run', {}, 600000)
+    run: () => call<any>('sync.run', {}, 300000)
+  },
+  narration: {
+    summarize: (lines: string[], context: string = '') =>
+      call<{ text: string }>('narration.summarize', { lines, context }, 15000)
   },
   onNotification: (method: string, cb: NotifyCb): (() => void) => {
     let set = listeners.get(method)
@@ -55,6 +72,12 @@ const api = {
     }
     set.add(cb)
     return () => set!.delete(cb)
+  },
+  onStderr: (cb: StderrCb): (() => void) => {
+    stderrListeners.add(cb)
+    return () => {
+      stderrListeners.delete(cb)
+    }
   }
 }
 

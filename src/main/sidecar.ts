@@ -44,8 +44,9 @@ export class SidecarClient extends EventEmitter {
     this.proc.stdout.on('data', (chunk: string) => this.onStdout(chunk))
     this.proc.stderr.setEncoding('utf8')
     this.proc.stderr.on('data', (chunk: string) => {
-      // zylch logs to stderr; just mirror for debugging
+      // zylch logs to stderr; mirror for debugging AND forward to renderer
       process.stderr.write(`[sidecar.stderr] ${chunk}`)
+      this.emit('stderr', chunk)
     })
     this.proc.on('exit', (code, signal) => {
       console.error(`[sidecar] exit code=${code} signal=${signal}`)

@@ -52,6 +52,17 @@ const onNotif = (method) => new Promise((resolve) => {
 })
 
 const run = async () => {
+  console.log('=== 0. narration.summarize ===')
+  const n1 = await call('narration.summarize', {
+    lines: ['Fetching 5 files: 20%|██ | 1/5 [00:00<00:03, 1.11it/s]'],
+    context: 'ricerca email'
+  })
+  console.log('narration(tqdm):', JSON.stringify(n1))
+  if (typeof n1.text !== 'string') throw new Error('narration.summarize: bad shape')
+  const n2 = await call('narration.summarize', { lines: [] })
+  console.log('narration(empty):', JSON.stringify(n2))
+  if (n2.text !== '') throw new Error('empty lines should yield empty text')
+
   console.log('=== 1. tasks.list ===')
   const tasks = await call('tasks.list', {})
   console.log(`got ${tasks.length} tasks`)
