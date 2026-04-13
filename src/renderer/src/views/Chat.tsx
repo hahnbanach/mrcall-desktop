@@ -21,6 +21,26 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
   const active = state.conversations.find((c) => c.id === state.activeId)!
   const scrollRef = useRef<HTMLDivElement>(null)
   const [completing, setCompleting] = useState(false)
+  const [inputHeight, setInputHeight] = useState(160)
+
+  const startResize = (e: React.MouseEvent): void => {
+    const startY = e.clientY
+    const startH = inputHeight
+    const onMove = (ev: MouseEvent): void => {
+      // Dragging UP (negative deltaY in screen coords) makes input TALLER.
+      const delta = startY - ev.clientY
+      setInputHeight(Math.max(60, Math.min(600, startH + delta)))
+    }
+    const onUp = (): void => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    document.body.style.userSelect = 'none'
+    e.preventDefault()
+  }
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
@@ -190,28 +210,37 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
           )}
         </div>
 
-        <div className="border-t bg-white p-3 flex gap-2">
-          <textarea
-            className="flex-1 border rounded px-3 py-2 text-sm resize-none"
-            rows={3}
-            placeholder="Scrivi un messaggio…"
-            value={active.draftInput}
-            disabled={active.busy}
-            onChange={(e) => setDraftInput(active.id, e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                send()
-              }
-            }}
+        <div
+          className="border-t bg-white flex flex-col"
+          style={{ height: inputHeight }}
+        >
+          <div
+            onMouseDown={startResize}
+            title="Trascina per ridimensionare"
+            className="h-1.5 cursor-ns-resize bg-slate-200 hover:bg-slate-400 shrink-0"
           />
-          <button
-            onClick={send}
-            disabled={active.busy || !active.draftInput.trim()}
-            className="px-4 py-2 bg-slate-900 text-white rounded text-sm disabled:bg-slate-400"
-          >
-            Invia
-          </button>
+          <div className="flex-1 min-h-0 p-3 flex gap-2">
+            <textarea
+              className="flex-1 h-full border rounded px-3 py-2 text-sm resize-none"
+              placeholder="Scrivi un messaggio…"
+              value={active.draftInput}
+              disabled={active.busy}
+              onChange={(e) => setDraftInput(active.id, e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  send()
+                }
+              }}
+            />
+            <button
+              onClick={send}
+              disabled={active.busy || !active.draftInput.trim()}
+              className="px-4 py-2 bg-slate-900 text-white rounded text-sm disabled:bg-slate-400 self-end"
+            >
+              Invia
+            </button>
+          </div>
         </div>
       </div>
     </div>
