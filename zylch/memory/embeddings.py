@@ -1,6 +1,8 @@
 """Embedding generation using fastembed (ONNX backend)."""
 
 import logging
+import os
+from pathlib import Path
 from typing import List, Union
 
 import numpy as np
@@ -8,6 +10,20 @@ import numpy as np
 from .config import MemoryConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _persistent_cache_dir() -> str:
+    """Return a persistent directory for the fastembed model cache.
+
+    The default fastembed cache lives under the OS temp dir, which macOS
+    aggressively cleans (and any OS may evict after reboot), leading to
+    `NO_SUCHFILE` errors on subsequent runs even though HF metadata
+    stayed behind. Anchor the cache under `~/.zylch/` instead so it
+    survives reboots and $TMPDIR cleanup.
+    """
+    cache = Path(os.path.expanduser("~/.zylch/fastembed_cache"))
+    cache.mkdir(parents=True, exist_ok=True)
+    return str(cache)
 
 
 class EmbeddingEngine:
@@ -27,15 +43,17 @@ class EmbeddingEngine:
         self.model_name = config.embedding_model
         self.dim = config.embedding_dim
 
+        cache_dir = _persistent_cache_dir()
         logger.info(
             f"Loading embedding model: {self.model_name} "
-            f"(fastembed/ONNX backend)"
+            f"(fastembed/ONNX backend, cache_dir={cache_dir})"
         )
 
         from fastembed import TextEmbedding
 
         self.model = TextEmbedding(
             model_name=self.model_name,
+            cache_dir=cache_dir,
         )
 
         # Verify dimensionality
