@@ -62,7 +62,9 @@ const METHOD_TIMEOUTS: Record<string, number> = {
   'chat.send': 600000, // 10 min — embedding download + tool-use loop
   'tasks.solve': 600000, // 10 min — multi-turn tool use
   'sync.run': 300000, // 5 min — fresh-account IMAP sync
-  'narration.summarize': 15000 // fast Haiku call; fail fast
+  'narration.summarize': 60000 // Haiku is fast, but first-run model
+  // downloads (fastembed, etc.) briefly block the sidecar asyncio loop
+  // while a parallel chat.send initialises — 60s avoids spurious timeouts.
 }
 
 function registerIpc(): void {
