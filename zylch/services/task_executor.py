@@ -29,17 +29,17 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+# Canonical set of destructive tool names that require explicit user
+# approval before execution. These are the real Tool.name values exposed
+# by ToolFactory.create_all_tools(), imported by both ChatService
+# (zylch/assistant/core.py:11) and TaskExecutor below. No aliases, no
+# legacy ghosts — the five entries here are the single source of truth.
 APPROVAL_TOOLS = {
-    # actual destructive tool names exposed to ChatService / CLI
-    "send_draft",             # gmail_tools.py — actually sends a Gmail draft
-    "send_whatsapp_message",  # whatsapp_tools.py — sends a WhatsApp message
-    "send_sms",               # sms_tools.py — sends an SMS
-    # legacy / alias names kept for safety in case other code paths use them
-    "send_email",
-    "send_whatsapp",
-    "draft_email",
-    "run_python",
+    "send_draft",
+    "send_whatsapp_message",
+    "send_sms",
     "update_memory",
+    "run_python",
 }
 
 

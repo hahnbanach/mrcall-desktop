@@ -61,6 +61,10 @@ from .crm_tools import (
     GetPipedrivePersonDealsTool,
     ComposeEmailTool,
 )
+from .download_attachment_tool import DownloadAttachmentTool  # Phase A
+from .read_document_tool import ReadDocumentTool  # Phase A
+from .run_python_tool import RunPythonTool  # Phase A
+from .update_memory_tool import UpdateMemoryTool  # Phase A
 
 logger = logging.getLogger(__name__)
 
@@ -272,6 +276,20 @@ class ToolFactory:
         # Get Tasks tool
         tools.append(GetTasksTool(session_state=session_state))
         logger.info("Get Tasks tool initialized")
+
+        # Phase A tools (attachment, document, python, memory)
+        tools.extend([
+            DownloadAttachmentTool(
+                storage=supabase_storage,
+                session_state=session_state,
+                owner_id=config.owner_id),
+            ReadDocumentTool(),
+            RunPythonTool(),
+            UpdateMemoryTool(
+                session_state=session_state,
+                owner_id=config.owner_id),
+        ])
+        logger.info("Phase A tools initialized (4)")
 
         # Compose Email tool
         tools.append(
