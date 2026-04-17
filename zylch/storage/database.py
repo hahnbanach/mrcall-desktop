@@ -111,7 +111,45 @@ def init_db():
 
     engine = get_engine()
     _Base.metadata.create_all(engine)
+
+    # Light-touch migrations for columns added after initial schema.
+    # `create_all` creates missing tables but does NOT add columns to existing
+    # tables. For SQLite, ALTER TABLE ADD COLUMN is cheap and idempotent-ish.
+    _apply_column_migrations(engine)
+
     logger.info(f"Database initialized at {_resolve_db_path()}")
+
+
+def _apply_column_migrations(engine: Engine) -> None:
+    """Add columns introduced after a table was first created.
+
+    Each entry: (table, column, ddl_type_with_default). We inspect the
+    existing column set via PRAGMA table_info and ALTER-ADD if missing.
+    """
+    migrations = [
+        # 2026-04-17: chat attachments — absolute local paths attached to a
+        # draft and transported to MIME at send time.
+        ("drafts", "attachment_paths", "JSON DEFAULT '[]'"),
+    ]
+    with engine.begin() as conn:
+        for table, column, ddl in migrations:
+            try:
+                rows = conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
+            except Exception as e:
+                logger.debug(f"[migrate] PRAGMA failed for {table}: {e}")
+                continue
+            existing = {r[1] for r in rows}
+            if not existing:
+                # Table doesn't exist yet -- create_all above would have made
+                # it fresh with the column already present.
+                continue
+            if column in existing:
+                continue
+            try:
+                conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+                logger.info(f"[migrate] Added {table}.{column} ({ddl})")
+            except Exception as e:
+                logger.warning(f"[migrate] Failed to add {table}.{column}: {e}")
 
 
 def dispose_engine() -> None:

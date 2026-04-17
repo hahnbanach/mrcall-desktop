@@ -436,6 +436,7 @@ class Storage:
         references: list = None,
         thread_id: str = None,
         provider: str = "google",
+        attachment_paths: list = None,
     ) -> Dict[str, Any]:
         """Create a draft email."""
         to_list = to if isinstance(to, list) else [to]
@@ -450,6 +451,7 @@ class Storage:
                 thread_id=thread_id,
                 provider=provider,
                 status="draft",
+                attachment_paths=attachment_paths or [],
             )
             session.add(draft)
             session.flush()

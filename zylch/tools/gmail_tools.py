@@ -7,12 +7,26 @@ CreateDraftTool and ListDraftsTool use Storage (DB drafts).
 """
 
 import logging
+import os
 import subprocess
 import tempfile
+from typing import List, Optional
 
 from .base import Tool, ToolResult, ToolStatus
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_attachment_paths(paths: Optional[List[str]]) -> List[str]:
+    """Expand ~ and resolve to absolute paths. Does NOT verify existence."""
+    if not paths:
+        return []
+    out: List[str] = []
+    for p in paths:
+        if not isinstance(p, str) or not p.strip():
+            continue
+        out.append(os.path.abspath(os.path.expanduser(p)))
+    return out
 
 
 class GmailSearchTool(Tool):
@@ -287,6 +301,7 @@ class CreateDraftTool(Tool):
         in_reply_to: str = None,
         references: str = None,
         thread_id: str = None,
+        attachment_paths: Optional[List[str]] = None,
     ):
         try:
             refs_list = None
@@ -297,6 +312,16 @@ class CreateDraftTool(Tool):
                     else references
                 )
 
+            # Normalize + verify attachments BEFORE persisting so we fail fast.
+            norm_paths = _normalize_attachment_paths(attachment_paths)
+            for p in norm_paths:
+                if not os.path.isfile(p):
+                    return ToolResult(
+                        status=ToolStatus.ERROR,
+                        data=None,
+                        error=f"Attachment not found: {p}",
+                    )
+
             draft = self.storage.create_draft(
                 owner_id=self.owner_id,
                 to=to,
@@ -305,6 +330,7 @@ class CreateDraftTool(Tool):
                 in_reply_to=in_reply_to,
                 references=refs_list,
                 thread_id=thread_id,
+                attachment_paths=norm_paths,
             )
 
             if not draft:
@@ -315,13 +341,19 @@ class CreateDraftTool(Tool):
                 )
 
             thread_info = " (in reply to thread)" if in_reply_to else ""
+            attach_info = ""
+            if norm_paths:
+                attach_info = "\nAttachments:\n" + "\n".join(
+                    f"  - {os.path.basename(p)}" for p in norm_paths
+                )
             return ToolResult(
                 status=ToolStatus.SUCCESS,
-                data={"draft_id": draft.get("id")},
+                data={"draft_id": draft.get("id"), "attachment_paths": norm_paths},
                 message=(
                     f"Draft created{thread_info}!\n"
                     f"To: {to}\n"
-                    f"Subject: {subject}\n\n"
+                    f"Subject: {subject}"
+                    f"{attach_info}\n\n"
                     f"Message body:\n"
                     f"{'─' * 70}\n"
                     f"{body}\n"
@@ -346,6 +378,9 @@ class CreateDraftTool(Tool):
                 " locally and can be sent later. If this"
                 " is a REPLY, provide in_reply_to and"
                 " references from the original message."
+                " attachment_paths: optional list of local"
+                " file paths (absolute or ~-expanded) to"
+                " attach when the draft is sent."
             ),
             "input_schema": {
                 "type": "object",
@@ -373,6 +408,14 @@ class CreateDraftTool(Tool):
                     "thread_id": {
                         "type": "string",
                         "description": ("Thread ID for replies"),
+                    },
+                    "attachment_paths": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Optional list of local file paths"
+                            " to attach (absolute or ~-expanded)."
+                        ),
                     },
                 },
                 "required": ["to", "subject", "body"],
@@ -574,6 +617,7 @@ class UpdateDraftTool(Tool):
         to: str = None,
         subject: str = None,
         body: str = None,
+        attachment_paths: Optional[List[str]] = None,
     ):
         try:
             update_data = {}
@@ -583,6 +627,16 @@ class UpdateDraftTool(Tool):
                 update_data["subject"] = subject
             if body is not None:
                 update_data["body"] = body
+            if attachment_paths is not None:
+                norm_paths = _normalize_attachment_paths(attachment_paths)
+                for p in norm_paths:
+                    if not os.path.isfile(p):
+                        return ToolResult(
+                            status=ToolStatus.ERROR,
+                            data=None,
+                            error=f"Attachment not found: {p}",
+                        )
+                update_data["attachment_paths"] = norm_paths
 
             self.storage.update_draft(self.owner_id, draft_id, update_data)
 
@@ -593,6 +647,10 @@ class UpdateDraftTool(Tool):
                 updates.append(f"Subject: {subject}")
             if body:
                 updates.append("Body: updated")
+            if attachment_paths is not None:
+                updates.append(
+                    f"Attachments: {len(update_data.get('attachment_paths', []))} file(s)"
+                )
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
@@ -612,8 +670,8 @@ class UpdateDraftTool(Tool):
             "name": self.name,
             "description": (
                 "Update an existing draft. You can update"
-                " recipient, subject, body, or any combo."
-                " Fields not provided stay unchanged."
+                " recipient, subject, body, attachment_paths,"
+                " or any combo. Fields not provided stay unchanged."
             ),
             "input_schema": {
                 "type": "object",
@@ -633,6 +691,13 @@ class UpdateDraftTool(Tool):
                     "body": {
                         "type": "string",
                         "description": ("New email body text"),
+                    },
+                    "attachment_paths": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Replacement list of local file" " paths to attach. Pass [] to clear."
+                        ),
                     },
                 },
                 "required": ["draft_id"],
@@ -685,6 +750,7 @@ class SendDraftTool(Tool):
             body = draft.get("body", "")
             in_reply_to = draft.get("in_reply_to")
             references = draft.get("references")
+            attachment_paths = draft.get("attachment_paths") or []
 
             if not to:
                 return ToolResult(
@@ -693,7 +759,22 @@ class SendDraftTool(Tool):
                     error=("Draft has no recipient address"),
                 )
 
-            logger.debug(f"[send_draft] Sending to={to}," f" subject={subject}")
+            # Verify every attachment still exists -- never send a partial
+            # email when an attachment has been moved or deleted since the
+            # draft was created.
+            for p in attachment_paths:
+                if not os.path.isfile(p):
+                    return ToolResult(
+                        status=ToolStatus.ERROR,
+                        data=None,
+                        error=(f"Attachment no longer exists: {p}." " Email NOT sent."),
+                    )
+
+            logger.debug(
+                f"[send_draft] Sending to={to},"
+                f" subject={subject},"
+                f" attachments={len(attachment_paths)}"
+            )
 
             sent_message = self.imap.send_message(
                 to=to,
@@ -701,6 +782,7 @@ class SendDraftTool(Tool):
                 body=body,
                 in_reply_to=in_reply_to,
                 references=(" ".join(references) if references else None),
+                attachment_paths=attachment_paths or None,
             )
 
             self.storage.mark_draft_sent(
