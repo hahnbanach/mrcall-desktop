@@ -35,13 +35,19 @@ INTERNAL_ERROR = -32603
 # instead of queuing behind the awaiting handler's final response.
 _stdout_lock = threading.Lock()
 
+# Capture the real stdout at import time. Handlers like `update.run` swap
+# `sys.stdout` for the duration of a subcommand (to keep rich.Console
+# chatter off the wire). The RPC writer must always target the real
+# stdout, not whatever `sys.stdout` happens to be right now.
+_REAL_STDOUT = sys.stdout
+
 
 def _write_line_sync(obj: Dict[str, Any]) -> None:
     """Serialize obj and write one line to stdout immediately, flushed."""
     line = json.dumps(obj, ensure_ascii=False, default=str)
     with _stdout_lock:
-        sys.stdout.write(line + "\n")
-        sys.stdout.flush()
+        _REAL_STDOUT.write(line + "\n")
+        _REAL_STDOUT.flush()
 
 
 async def _write_line(obj: Dict[str, Any]) -> None:
@@ -53,11 +59,13 @@ def _make_notify():
     """Return a sync `notify(method, params)` that writes immediately."""
 
     def notify(method: str, params: Dict[str, Any]) -> None:
-        _write_line_sync({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-        })
+        _write_line_sync(
+            {
+                "jsonrpc": "2.0",
+                "method": method,
+                "params": params,
+            }
+        )
 
     return notify
 
@@ -73,25 +81,29 @@ async def _handle_request(raw_line: str) -> None:
         req = json.loads(line)
     except json.JSONDecodeError as e:
         logger.debug(f"[rpc] parse error: {e}")
-        await _write_line({
-            "jsonrpc": "2.0",
-            "id": None,
-            "error": {
-                "code": PARSE_ERROR,
-                "message": f"Parse error: {e}",
-            },
-        })
+        await _write_line(
+            {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {
+                    "code": PARSE_ERROR,
+                    "message": f"Parse error: {e}",
+                },
+            }
+        )
         return
 
     if not isinstance(req, dict):
-        await _write_line({
-            "jsonrpc": "2.0",
-            "id": None,
-            "error": {
-                "code": INVALID_REQUEST,
-                "message": "Request must be a JSON object",
-            },
-        })
+        await _write_line(
+            {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {
+                    "code": INVALID_REQUEST,
+                    "message": "Request must be a JSON object",
+                },
+            }
+        )
         return
 
     req_id: Optional[Any] = req.get("id")
@@ -102,27 +114,31 @@ async def _handle_request(raw_line: str) -> None:
     if not isinstance(method, str) or not method:
         if is_notification:
             return
-        await _write_line({
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "error": {
-                "code": INVALID_REQUEST,
-                "message": "Missing or invalid 'method'",
-            },
-        })
+        await _write_line(
+            {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {
+                    "code": INVALID_REQUEST,
+                    "message": "Missing or invalid 'method'",
+                },
+            }
+        )
         return
 
     if not isinstance(params, dict):
         if is_notification:
             return
-        await _write_line({
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "error": {
-                "code": INVALID_PARAMS,
-                "message": "'params' must be an object",
-            },
-        })
+        await _write_line(
+            {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {
+                    "code": INVALID_PARAMS,
+                    "message": "'params' must be an object",
+                },
+            }
+        )
         return
 
     handler = METHODS.get(method)
@@ -130,14 +146,16 @@ async def _handle_request(raw_line: str) -> None:
         logger.debug(f"[rpc] unknown method={method}")
         if is_notification:
             return
-        await _write_line({
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "error": {
-                "code": METHOD_NOT_FOUND,
-                "message": f"Method not found: {method}",
-            },
-        })
+        await _write_line(
+            {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {
+                    "code": METHOD_NOT_FOUND,
+                    "message": f"Method not found: {method}",
+                },
+            }
+        )
         return
 
     logger.debug(f"[rpc] method={method} params={params}")
@@ -154,23 +172,27 @@ async def _handle_request(raw_line: str) -> None:
         err_code = getattr(e, "code", None)
         if not isinstance(err_code, int):
             err_code = INTERNAL_ERROR
-        await _write_line({
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "error": {
-                "code": err_code,
-                "message": f"{type(e).__name__}: {e}",
-            },
-        })
+        await _write_line(
+            {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {
+                    "code": err_code,
+                    "message": f"{type(e).__name__}: {e}",
+                },
+            }
+        )
         return
 
     if is_notification:
         return
-    await _write_line({
-        "jsonrpc": "2.0",
-        "id": req_id,
-        "result": result,
-    })
+    await _write_line(
+        {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": result,
+        }
+    )
 
 
 async def _read_lines(loop: asyncio.AbstractEventLoop):

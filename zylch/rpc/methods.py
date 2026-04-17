@@ -14,7 +14,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,7 @@ def _approval_preview(tool_name: str, tool_input: Dict[str, Any]) -> str:
     """Build a short, human-friendly preview string (<500 chars, no full body)."""
     try:
         from zylch.services.task_executor import format_approval_preview
+
         preview = format_approval_preview(tool_name, tool_input)
     except Exception:
         preview = f"{tool_name}: keys={list((tool_input or {}).keys())}"
@@ -86,10 +87,7 @@ async def tasks_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
     store = Storage.get_instance()
     tasks = store.get_task_items(owner_id=owner_id, limit=limit)
     if not include_skipped:
-        tasks = [
-            t for t in tasks
-            if not (t.get("sources") or {}).get("skipped_at")
-        ]
+        tasks = [t for t in tasks if not (t.get("sources") or {}).get("skipped_at")]
     logger.debug(f"[rpc] tasks.list -> {len(tasks)} tasks")
     return tasks
 
@@ -103,9 +101,7 @@ async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
         raise ValueError("task_id is required")
 
     owner_id = _owner_id()
-    logger.debug(
-        f"[rpc] tasks.complete owner_id={owner_id} task_id={task_id}"
-    )
+    logger.debug(f"[rpc] tasks.complete owner_id={owner_id} task_id={task_id}")
     store = Storage.get_instance()
     ok = store.complete_task_item(owner_id=owner_id, task_id=task_id)
     logger.debug(f"[rpc] tasks.complete -> {ok}")
@@ -219,7 +215,12 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
         messages = [{"role": "user", "content": user_msg}]
 
         executor = TaskExecutor(
-            client, system, messages, store, owner_id, SOLVE_TOOLS,
+            client,
+            system,
+            messages,
+            store,
+            owner_id,
+            SOLVE_TOOLS,
         )
         _active_executor = executor
         try:
@@ -228,9 +229,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
                 # Forward event as a notification; omit tool_input
                 # contents for pending events if they look sensitive
                 # (we still send preview text).
-                logger.debug(
-                    f"[rpc] tasks.solve.event type={event.get('type')}"
-                )
+                logger.debug(f"[rpc] tasks.solve.event type={event.get('type')}")
                 notify("tasks.solve.event", event)
                 if event["type"] == "done":
                     final = {"ok": True, "result": event["result"]}
@@ -244,7 +243,8 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 
 async def tasks_solve_approve(
-    params: Dict[str, Any], notify: NotifyFn,
+    params: Dict[str, Any],
+    notify: NotifyFn,
 ) -> Any:
     """tasks.solve.approve(tool_use_id, approved, edited_input=None)."""
     tool_use_id = params.get("tool_use_id")
@@ -287,9 +287,7 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     # Concurrency guard per conversation_id
     existing = _active_chats.get(conversation_id)
     if existing is not None and not existing.done():
-        raise ChatBusyError(
-            "chat busy, approve or decline pending action first"
-        )
+        raise ChatBusyError("chat busy, approve or decline pending action first")
 
     owner_id = _owner_id()
     logger.debug(
@@ -304,15 +302,20 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
     task_id = req_context.get("task_id") if isinstance(req_context, dict) else None
     if task_id:
         try:
-            notify("chat.context", {
-                "conversation_id": conversation_id,
-                "task_id": task_id,
-            })
+            notify(
+                "chat.context",
+                {
+                    "conversation_id": conversation_id,
+                    "task_id": task_id,
+                },
+            )
         except Exception as e:
             logger.warning(f"[rpc] chat.context notify failed: {e}")
 
     async def approval_callback(
-        tool_use_id: str, tool_name: str, tool_input: Dict[str, Any],
+        tool_use_id: str,
+        tool_name: str,
+        tool_input: Dict[str, Any],
     ) -> bool:
         loop = asyncio.get_event_loop()
         fut: asyncio.Future = loop.create_future()
@@ -327,29 +330,28 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
             f"tool_use_id={tool_use_id} tool={tool_name} keys={input_keys}"
         )
         try:
-            notify("chat.pending_approval", {
-                "conversation_id": conversation_id,
-                "tool_use_id": tool_use_id,
-                "name": tool_name,
-                "input": tool_input,
-                "preview": preview,
-            })
+            notify(
+                "chat.pending_approval",
+                {
+                    "conversation_id": conversation_id,
+                    "tool_use_id": tool_use_id,
+                    "name": tool_name,
+                    "input": tool_input,
+                    "preview": preview,
+                },
+            )
         except Exception as e:
             logger.warning(f"[rpc] pending_approval notify failed: {e}")
         try:
             approved = await asyncio.wait_for(fut, timeout=600)
         except asyncio.TimeoutError:
-            logger.warning(
-                f"[rpc] approval timeout tool_use_id={tool_use_id}"
-            )
+            logger.warning(f"[rpc] approval timeout tool_use_id={tool_use_id}")
             if not fut.done():
                 fut.cancel()
             approved = False
         finally:
             _pending_approvals.pop(tool_use_id, None)
-        logger.debug(
-            f"[approval] tool={tool_name} approved={approved}"
-        )
+        logger.debug(f"[approval] tool={tool_name} approved={approved}")
         return bool(approved)
 
     service = ChatService()
@@ -385,9 +387,7 @@ async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
     if not tool_use_id:
         raise ValueError("tool_use_id is required")
     approved = bool(params.get("approved", False))
-    logger.debug(
-        f"[rpc] chat.approve tool_use_id={tool_use_id} approved={approved}"
-    )
+    logger.debug(f"[rpc] chat.approve tool_use_id={tool_use_id} approved={approved}")
     fut = _pending_approvals.pop(tool_use_id, None)
     if fut is None:
         err = ValueError(f"no pending approval for tool_use_id={tool_use_id}")
@@ -398,59 +398,73 @@ async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"ok": True}
 
 
-# ─── Sync ────────────────────────────────────────────────────
+# ─── Update ──────────────────────────────────────────────────
 
 
-async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """sync.run() -> final sync result. Emits `sync.progress` notifications."""
-    from zylch.email.imap_client import IMAPClient
-    from zylch.services.sync_service import SyncService
-    from zylch.storage.storage import Storage
+async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """update.run() -> full pipeline result (sync + memory + tasks).
+
+    Mirrors the CLI `zylch update` path: calls
+    `process_pipeline.handle_process([], config, owner_id)`.
+
+    Emits coarse `update.progress` notifications at start (0%) and end
+    (100%). Phase-granularity progress is NOT available because
+    `handle_process` does not accept an `on_progress` callback —
+    adding that is a separate scope.
+    """
+    from zylch.services.process_pipeline import handle_process
+    from zylch.tools.config import ToolConfig
 
     owner_id = _owner_id()
-    logger.debug(f"[rpc] sync.run owner_id={owner_id}")
+    logger.debug(f"[rpc] update.run owner_id={owner_id}")
 
     email_addr = os.environ.get("EMAIL_ADDRESS", "")
     email_pass = os.environ.get("EMAIL_PASSWORD", "")
     if not email_addr or not email_pass:
-        raise RuntimeError(
-            "Email not configured for this profile — run `zylch init`."
-        )
+        raise RuntimeError("Email not configured for this profile — run `zylch init`.")
 
-    email_client = IMAPClient(
-        email_addr=email_addr,
-        password=email_pass,
-        imap_host=os.environ.get("IMAP_HOST") or None,
-        imap_port=(int(os.environ.get("IMAP_PORT", "0")) or None),
-        smtp_host=os.environ.get("SMTP_HOST") or None,
-        smtp_port=(int(os.environ.get("SMTP_PORT", "0")) or None),
-    )
-    store = Storage.get_instance()
-    sync_svc = SyncService(
-        email_client=email_client,
-        owner_id=owner_id,
-        supabase_storage=store,
-    )
-
-    def _on_progress(pct: int, message: str) -> None:
+    def _emit(pct: int, message: str) -> None:
         try:
             notify(
-                "sync.progress",
+                "update.progress",
                 {"pct": int(pct), "message": str(message)},
             )
         except Exception as e:
-            logger.warning(f"[rpc] sync.progress notify failed: {e}")
+            logger.warning(f"[rpc] update.progress notify failed: {e}")
 
-    result = await sync_svc.sync_emails(on_progress=_on_progress)
-    logger.debug(f"[rpc] sync.run -> success={result.get('success')}")
-    return result
+    _emit(0, "Starting full pipeline…")
+    # `handle_process` (and its inner `rich.Console()`) writes status to
+    # stdout. stdout is the JSON-RPC wire for this sidecar, so we swap
+    # sys.stdout -> sys.stderr for the duration of the pipeline to
+    # keep the wire clean. Notifications still go out via `notify`,
+    # which writes via the server's dedicated writer using the captured
+    # real-stdout reference.
+    import sys
+
+    real_stdout = sys.stdout
+    try:
+        config = ToolConfig.from_settings()
+        sys.stdout = sys.stderr
+        try:
+            summary = await handle_process([], config, owner_id)
+        finally:
+            sys.stdout = real_stdout
+    except Exception as e:
+        logger.exception("[rpc] update.run failed")
+        _emit(100, f"Failed: {e}")
+        raise
+    _emit(100, "Done")
+
+    logger.debug("[rpc] update.run -> ok (summary_len=%d)", len(summary or ""))
+    return {"success": True, "summary": summary or ""}
 
 
 # ─── Narration ───────────────────────────────────────────────
 
 
 async def narration_summarize(
-    params: Dict[str, Any], notify: NotifyFn,
+    params: Dict[str, Any],
+    notify: NotifyFn,
 ) -> Any:
     """narration.summarize(lines, context="") -> {"text": str}.
 
@@ -488,10 +502,7 @@ async def narration_summarize(
         "stringa vuota. Non aggiungere virgolette, prefissi, o spiegazioni."
     )
     if context:
-        user = (
-            f"Contesto utente: {context[:200]}\n\n"
-            f"Ultime righe di log:\n{joined}"
-        )
+        user = f"Contesto utente: {context[:200]}\n\n" f"Ultime righe di log:\n{joined}"
     else:
         user = f"Ultime righe di log:\n{joined}"
 
@@ -518,7 +529,7 @@ async def narration_summarize(
         if resp.content:
             blk = resp.content[0]
             text = getattr(blk, "text", "") or ""
-        text = text.strip().strip('"\'').strip()
+        text = text.strip().strip("\"'").strip()
         logger.debug(f"[rpc] narration.summarize -> {text!r}")
         return {"text": text}
     except Exception as e:
@@ -535,6 +546,6 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.solve.approve": tasks_solve_approve,
     "chat.send": chat_send,
     "chat.approve": chat_approve,
-    "sync.run": sync_run,
+    "update.run": update_run,
     "narration.summarize": narration_summarize,
 }
