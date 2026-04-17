@@ -36,7 +36,15 @@ const api = {
     list: (params: { include_completed?: boolean; include_skipped?: boolean } = {}) =>
       call<any[]>('tasks.list', params),
     complete: (task_id: string) => call<{ ok: boolean }>('tasks.complete', { task_id }),
-    skip: (task_id: string) => call<{ ok: boolean }>('tasks.skip', { task_id })
+    skip: (task_id: string) => call<{ ok: boolean }>('tasks.skip', { task_id }),
+    reanalyze: (task_id: string) =>
+      call<{
+        ok: boolean
+        action: 'kept' | 'closed' | 'updated'
+        reason: string
+        task_id: string
+        usage?: Record<string, unknown>
+      }>('tasks.reanalyze', { task_id }, 120000)
   },
   chat: {
     send: (
