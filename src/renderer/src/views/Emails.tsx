@@ -64,8 +64,8 @@ export default function Emails() {
     )
   }
 
-  const emails: ThreadEmail[] = result?.emails ?? []
-  if (emails.length === 0) {
+  const emailsAsc: ThreadEmail[] = result?.emails ?? []
+  if (emailsAsc.length === 0) {
     return (
       <div className="p-8 text-slate-500">
         No messages in this thread.
@@ -73,7 +73,11 @@ export default function Emails() {
     )
   }
 
-  const subject = emails[0]?.subject || '(no subject)'
+  // Backend returns emails ASC (chronological); render in reverse so the
+  // newest message is at the top of the Email tab. Do NOT change the
+  // backend order: other call sites (LLM thread context) depend on ASC.
+  const emails: ThreadEmail[] = emailsAsc.slice().reverse()
+  const subject = emailsAsc[0]?.subject || '(no subject)'
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
