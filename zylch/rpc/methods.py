@@ -562,6 +562,70 @@ async def narration_summarize(
         return {"text": ""}
 
 
+async def narration_predict(
+    params: Dict[str, Any],
+    notify: NotifyFn,
+) -> Any:
+    """narration.predict(message, context="") -> {"text": str}.
+
+    Predicts in first-person Italian what Zylch is about to do, based on
+    the user's message. Used as the immediate placeholder while a
+    chat.send is in flight, before stderr-driven narration kicks in.
+    Never raises; returns {"text": ""} on any failure.
+    """
+    message = params.get("message") or ""
+    context = params.get("context") or ""
+    if not isinstance(message, str):
+        message = str(message)
+    message = message.strip()
+    if not message:
+        return {"text": ""}
+
+    logger.debug(
+        f"[rpc] narration.predict message_len={len(message)} " f"has_context={bool(context)}"
+    )
+
+    system = (
+        "Predici in italiano, prima persona, cosa sto per fare in base a "
+        "questa richiesta dell'utente. Max 80 char, inizia con 'Sto …'. "
+        "Se richiesta vaga, 'Sto pensando alla tua richiesta.'. "
+        "Nessun prefisso/virgolette."
+    )
+    user = f"Richiesta: {message[:500]}"
+    if context:
+        user += f"\nContesto: {context[:300]}"
+
+    try:
+        from zylch.config import settings
+        from zylch.llm.client import LLMClient
+
+        api_key = getattr(settings, "anthropic_api_key", None)
+        if not api_key:
+            return {"text": ""}
+
+        client = LLMClient(
+            api_key=api_key,
+            provider="anthropic",
+            model="claude-haiku-4-5-20251001",
+        )
+        resp = await asyncio.to_thread(
+            client.create_message_sync,
+            messages=[{"role": "user", "content": user}],
+            system=system,
+            max_tokens=60,
+        )
+        text = ""
+        if resp.content:
+            blk = resp.content[0]
+            text = getattr(blk, "text", "") or ""
+        text = text.strip().strip("\"'").strip()
+        logger.debug(f"[rpc] narration.predict -> {text!r}")
+        return {"text": text}
+    except Exception as e:
+        logger.warning(f"[rpc] narration.predict failed: {e}")
+        return {"text": ""}
+
+
 # Dispatch table — kept explicit so adding/removing methods is obvious.
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.list": tasks_list,
@@ -574,4 +638,5 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "chat.approve": chat_approve,
     "update.run": update_run,
     "narration.summarize": narration_summarize,
+    "narration.predict": narration_predict,
 }
