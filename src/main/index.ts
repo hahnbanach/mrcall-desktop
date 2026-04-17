@@ -74,6 +74,11 @@ function registerIpc(): void {
     return sidecar.call(method, params, effective)
   })
 
+  // Returns the active profile email so the renderer can derive its accent
+  // colour and window title. Falls back to whatever ZYLCH_PROFILE was set to
+  // when the main process started (same constant used to spawn the sidecar).
+  ipcMain.handle('profile:current', async (): Promise<string> => ZYLCH_PROFILE)
+
   // File picker for chat attachments. Returns absolute paths (possibly empty
   // if the user cancelled). Electron resolves paths already.
   ipcMain.handle('dialog:selectFiles', async (): Promise<string[]> => {
