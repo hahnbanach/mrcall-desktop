@@ -101,9 +101,12 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
         /* fallback seed already set */
       })
     try {
+      const chatContext: Record<string, unknown> = {}
+      if (active.taskId) chatContext.task_id = active.taskId
+      if (active.sourceEmailId) chatContext.email_id = active.sourceEmailId
       const res = await window.zylch.chat.send(text, historySnapshot, {
         conversationId: active.id,
-        context: active.taskId ? { task_id: active.taskId } : {}
+        context: chatContext
       })
       const content =
         (res && (res.response || res.message || res.content)) || JSON.stringify(res, null, 2)
