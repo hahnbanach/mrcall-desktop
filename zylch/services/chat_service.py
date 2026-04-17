@@ -211,10 +211,28 @@ class ChatService:
             # (e.g., "send it" should be understood as confirmation, not transformed to "/email send")
             # Also skip for messages that already start with /mrcall (prevent rewriting valid slash commands)
             starts_with_slash_command = user_message.strip().startswith("/mrcall")
+            # Short confirmation phrases that refer to the draft the LLM
+            # just created. Routing these through the semantic matcher
+            # bypasses the draft-preview flow (the LLM must show the
+            # body and ask for confirmation before calling send_draft).
+            _normalized = user_message.strip().lower().rstrip(".!?")
+            confirm_phrases = {
+                "send it",
+                "send it.",
+                "send",
+                "inviala",
+                "invialo",
+                "invia",
+                "spedisci",
+                "spediscila",
+                "spediscilo",
+            }
+            is_send_confirmation = _normalized in confirm_phrases
             if (
                 not is_in_task_mode
                 and not is_in_mrcall_config_mode
                 and not starts_with_slash_command
+                and not is_send_confirmation
             ):
                 matched_command = self._match_semantic_command(user_message)
                 if matched_command:

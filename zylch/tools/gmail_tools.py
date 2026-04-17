@@ -773,6 +773,63 @@ class UpdateDraftTool(Tool):
         }
 
 
+class DeleteDraftTool(Tool):
+    """Delete a draft from the local DB."""
+
+    def __init__(self, storage, owner_id: str):
+        super().__init__(
+            name="delete_draft",
+            description=(
+                "Delete a draft by id. Use when user says"
+                " 'cancella', 'delete', 'discard' a draft."
+            ),
+        )
+        self.storage = storage
+        self.owner_id = owner_id
+
+    async def execute(self, draft_id: str):
+        try:
+            deleted = self.storage.delete_draft(self.owner_id, draft_id)
+            if not deleted:
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error=f"Draft not found: {draft_id}",
+                )
+            return ToolResult(
+                status=ToolStatus.SUCCESS,
+                data={"draft_id": draft_id},
+                message=f"Draft {draft_id} deleted",
+            )
+        except Exception as e:
+            logger.error(f"Failed to delete draft: {e}")
+            return ToolResult(
+                status=ToolStatus.ERROR,
+                data=None,
+                error=f"Error deleting draft: {str(e)}",
+            )
+
+    def get_schema(self):
+        return {
+            "name": self.name,
+            "description": (
+                "Delete a draft by id from the local DB."
+                " Use when the user says 'cancella',"
+                " 'delete', or 'discard' a draft."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "draft_id": {
+                        "type": "string",
+                        "description": "Draft ID to delete",
+                    },
+                },
+                "required": ["draft_id"],
+            },
+        }
+
+
 class SendDraftTool(Tool):
     """Send a draft via SMTP (using IMAPClient)."""
 

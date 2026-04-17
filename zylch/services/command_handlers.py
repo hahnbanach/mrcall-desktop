@@ -5233,10 +5233,16 @@ COMMAND_PATTERNS = {
         "compose email to {to:email}",
         "write email to {to:email} about {subject:text}",
         # Drafts - Send
+        # NOTE: "send it" is intentionally NOT listed here. It's a
+        # confirmation phrase that must be interpreted by the LLM via
+        # the send_draft tool (see command_matcher.py and
+        # chat_service.py semantic-match guard). Listing it caused
+        # "send it" to semantically match and get rewritten to
+        # /email list --draft (the _format_email fallback), which
+        # defeats the draft-preview flow.
         "send draft",
         "send draft {draft_id:text}",
         "send the email",
-        "send it",
         # Drafts - Delete
         "delete draft",
         "delete draft {draft_id:text}",
