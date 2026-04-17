@@ -24,6 +24,37 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
   const [completing, setCompleting] = useState(false)
   const [inputHeight, setInputHeight] = useState(160)
   const [narrationSeed, setNarrationSeed] = useState<string>('')
+  const [pendingAttachments, setPendingAttachments] = useState<string[]>([])
+
+  const basename = (p: string): string => {
+    const parts = p.split(/[\\/]/)
+    return parts[parts.length - 1] || p
+  }
+
+  const pickAttachments = async (): Promise<void> => {
+    try {
+      const paths = await window.zylch.files.select()
+      if (paths && paths.length > 0) {
+        setPendingAttachments((prev) => {
+          const seen = new Set(prev)
+          const merged = [...prev]
+          for (const p of paths) {
+            if (!seen.has(p)) {
+              seen.add(p)
+              merged.push(p)
+            }
+          }
+          return merged
+        })
+      }
+    } catch (e) {
+      console.error('[Chat] file picker failed', e)
+    }
+  }
+
+  const removeAttachment = (path: string): void => {
+    setPendingAttachments((prev) => prev.filter((p) => p !== path))
+  }
 
   // Build context for narration: prefer the user's current draft, else the
   // last user message in history. Kept short (Haiku caps at 200 chars).
@@ -100,10 +131,12 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
       .catch(() => {
         /* fallback seed already set */
       })
+    const attachmentsSnapshot = pendingAttachments.slice()
     try {
       const chatContext: Record<string, unknown> = {}
       if (active.taskId) chatContext.task_id = active.taskId
       if (active.sourceEmailId) chatContext.email_id = active.sourceEmailId
+      if (attachmentsSnapshot.length > 0) chatContext.attachment_paths = attachmentsSnapshot
       const res = await window.zylch.chat.send(text, historySnapshot, {
         conversationId: active.id,
         context: chatContext
@@ -111,6 +144,8 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
       const content =
         (res && (res.response || res.message || res.content)) || JSON.stringify(res, null, 2)
       appendAssistant(active.id, content)
+      // Clear attachments only after a successful send.
+      setPendingAttachments([])
     } catch (e: any) {
       appendAssistant(active.id, '**Error:** ' + (e.message || String(e)))
     } finally {
@@ -250,6 +285,27 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
             title="Trascina per ridimensionare"
             className="h-1.5 cursor-ns-resize bg-slate-200 hover:bg-slate-400 shrink-0"
           />
+          {pendingAttachments.length > 0 && (
+            <div className="px-3 pt-2 flex flex-wrap gap-2">
+              {pendingAttachments.map((path) => (
+                <span
+                  key={path}
+                  title={path}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs border border-slate-300 rounded bg-slate-100 text-slate-800"
+                >
+                  <span className="truncate max-w-[240px]">{basename(path)}</span>
+                  <button
+                    onClick={() => removeAttachment(path)}
+                    disabled={active.busy}
+                    className="text-slate-500 hover:text-slate-900"
+                    title="Rimuovi allegato"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="flex-1 min-h-0 p-3 flex gap-2">
             <textarea
               className="flex-1 h-full border rounded px-3 py-2 text-sm resize-none"
@@ -264,6 +320,14 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
                 }
               }}
             />
+            <button
+              onClick={pickAttachments}
+              disabled={active.busy}
+              title="Allega file"
+              className="px-3 py-2 bg-slate-200 text-slate-800 rounded text-sm hover:bg-slate-300 disabled:bg-slate-100 disabled:text-slate-400 self-end"
+            >
+              📎
+            </button>
             <button
               onClick={send}
               disabled={active.busy || !active.draftInput.trim()}

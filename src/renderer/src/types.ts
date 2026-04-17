@@ -39,6 +39,9 @@ export interface ZylchAPI {
   update: {
     run: () => Promise<any>
   }
+  files: {
+    select: () => Promise<string[]>
+  }
   narration: {
     summarize: (lines: string[], context?: string) => Promise<{ text: string }>
     predict: (message: string, context?: string) => Promise<{ text: string }>
