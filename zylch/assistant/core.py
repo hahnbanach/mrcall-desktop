@@ -6,6 +6,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from ..llm import LLMClient
 from .models import ModelSelector
 from .prompts import get_system_prompt, get_system_prompt_base
+from .turn_context import new_turn_id, get_turn_id
 from ..tools.base import Tool, ToolResult, ToolStatus
 from ..agents.base import BaseConversationalAgent
 from ..services.task_executor import APPROVAL_TOOLS
@@ -81,13 +82,20 @@ class ZylchAIAgent(BaseConversationalAgent):
         Returns:
             Agent's response
         """
+        # Install a turn id for log correlation across LLM calls, tool loop,
+        # and the tools themselves (which read it from a ContextVar).
+        turn_id = new_turn_id()
+        logger.debug(
+            f"[chat turn={turn_id}] process_message start" f" user_message_len={len(user_message)}"
+        )
+
         # Add user message to history
         self.conversation_history.append({"role": "user", "content": user_message})
 
         # Select appropriate model (check for forced model in context)
         force_model = context.get("force_model") if context else None
         model = self.model_selector.select_model(user_message, context, force_model=force_model)
-        logger.info(f"Using model: {model}")
+        logger.info(f"[chat turn={turn_id}] Using model: {model}")
 
         # Build system prompt with context
         system_prompt = get_system_prompt() + get_system_prompt_base()
@@ -114,7 +122,13 @@ class ZylchAIAgent(BaseConversationalAgent):
         )
 
         # Handle tool use loop
+        step = 0
         while response.stop_reason == "tool_use":
+            step += 1
+            logger.debug(
+                f"[chat turn={turn_id} step={step}] tool_use stop_reason"
+                f" — entering tool loop iteration"
+            )
             # Normalize assistant content blocks to plain dicts so that
             # conversation_history stays JSON-serializable across turns
             # (SDK TextBlock/ToolUseBlock instances break re-serialization
@@ -144,7 +158,7 @@ class ZylchAIAgent(BaseConversationalAgent):
 
             # Extract tool calls from response
             tool_results, direct_response = await self._execute_tools(
-                response.content, approval_callback
+                response.content, approval_callback, turn_id=turn_id, step=step
             )
 
             # Check for direct response tools (e.g., get_tasks)
@@ -193,11 +207,16 @@ class ZylchAIAgent(BaseConversationalAgent):
         self,
         content: List[Any],
         approval_callback: Optional[ApprovalCallback] = None,
+        turn_id: Optional[str] = None,
+        step: int = 0,
     ) -> tuple[List[Dict[str, Any]], str | None]:
         """Execute tool calls from response.
 
         Args:
             content: Response content blocks
+            approval_callback: Optional approval gate
+            turn_id: Chat-turn id used for log correlation
+            step: Current tool-loop iteration (1-based)
 
         Returns:
             Tuple of (tool_results for Anthropic API, direct_response if applicable)
@@ -205,14 +224,24 @@ class ZylchAIAgent(BaseConversationalAgent):
         """
         results = []
         direct_response = None
+        tid = turn_id or get_turn_id()
 
         for block in content:
             if block.type == "tool_use":
                 tool_name = block.name
                 tool_input = block.input
+                try:
+                    input_keys = list((tool_input or {}).keys())
+                except Exception:
+                    input_keys = []
 
-                logger.info(f"Executing tool: {tool_name}")
-                logger.debug(f"Tool input: {tool_input}")
+                logger.info(
+                    f"[chat turn={tid} step={step}] tool={tool_name}"
+                    f" input_keys={input_keys} status=executing"
+                )
+                logger.debug(
+                    f"[chat turn={tid} step={step}] tool={tool_name}" f" full_input={tool_input}"
+                )
 
                 # Approval gate for destructive tools
                 if approval_callback is not None and tool_name in APPROVAL_TOOLS:
@@ -247,13 +276,20 @@ class ZylchAIAgent(BaseConversationalAgent):
                 tool_result = await self._call_tool(tool_name, tool_input)
 
                 # Log tool result details for debugging
-                logger.info(f"Tool {tool_name} result status: {tool_result.status.value}")
+                logger.info(
+                    f"[chat turn={tid} step={step}] tool={tool_name}"
+                    f" input_keys={input_keys} status={tool_result.status.value}"
+                )
                 if tool_result.message:
-                    logger.info(f"Tool {tool_name} message: {tool_result.message}")
+                    logger.info(
+                        f"[chat turn={tid} step={step}] tool={tool_name}"
+                        f" message={tool_result.message}"
+                    )
                     # Special logging for freshness check
                     if "fresh contact" in tool_result.message.lower():
                         logger.warning(
-                            "⚠️  FRESH CONTACT DETECTED - Agent should NOT call Gmail/web search!"
+                            f"[chat turn={tid} step={step}] FRESH CONTACT DETECTED"
+                            " — agent should NOT call Gmail/web search!"
                         )
 
                 # Check if this is a direct response tool (bypass second LLM call)
