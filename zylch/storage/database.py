@@ -117,6 +117,9 @@ def init_db():
     # tables. For SQLite, ALTER TABLE ADD COLUMN is cheap and idempotent-ish.
     _apply_column_migrations(engine)
 
+    # Idempotent row-level backfills for data shape changes (not schema).
+    _apply_data_backfills()
+
     logger.info(f"Database initialized at {_resolve_db_path()}")
 
 
@@ -156,6 +159,76 @@ def _apply_column_migrations(engine: Engine) -> None:
                 logger.info(f"[migrate] Added {table}.{column} ({ddl})")
             except Exception as e:
                 logger.warning(f"[migrate] Failed to add {table}.{column}: {e}")
+
+
+def _apply_data_backfills() -> None:
+    """Row-level, idempotent data backfills for shape changes.
+
+    Runs inside a single transactional session. Each backfill must be
+    idempotent: re-running on an already-migrated DB must be a no-op.
+    """
+    # 2026-04-17: TaskItem.sources.thread_id — the desktop "Open" button
+    # on the Tasks view needs sources.thread_id to activate the Email
+    # tab. Tasks created before task_creation.py started storing
+    # thread_id in sources have {"emails": [...], "blobs": [...],
+    # "calendar_events": [...]} with no thread_id. Derive thread_id
+    # from Email rows via sources.emails[0].
+    from zylch.storage.models import Email, TaskItem
+
+    factory = get_session_factory()
+    session = factory()
+    try:
+        candidates = session.query(TaskItem).filter(TaskItem.sources.isnot(None)).all()
+
+        # First pass: decide what needs a lookup. Skip rows already populated
+        # or rows whose sources has no emails[0] to derive from.
+        needs_lookup: dict[str, list] = {}  # first_email_id -> [task, ...]
+        for task in candidates:
+            sources = task.sources or {}
+            if not isinstance(sources, dict):
+                continue
+            if sources.get("thread_id"):
+                continue
+            emails = sources.get("emails") or []
+            if not emails:
+                continue
+            first_email_id = emails[0]
+            if not first_email_id:
+                continue
+            needs_lookup.setdefault(first_email_id, []).append(task)
+
+        if not needs_lookup:
+            return
+
+        # Batch lookup: single IN(...) query for all required email ids.
+        email_ids = list(needs_lookup.keys())
+        rows = session.query(Email.id, Email.thread_id).filter(Email.id.in_(email_ids)).all()
+        thread_by_email = {eid: tid for eid, tid in rows if tid}
+
+        backfilled = 0
+        for email_id, tasks in needs_lookup.items():
+            thread_id = thread_by_email.get(email_id)
+            if not thread_id:
+                logger.debug(
+                    f"[backfill] skip task(s) — email {email_id} missing or " f"has no thread_id"
+                )
+                continue
+            for task in tasks:
+                sources = dict(task.sources or {})
+                sources["thread_id"] = thread_id
+                task.sources = sources
+                backfilled += 1
+
+        if backfilled:
+            session.commit()
+            logger.info(f"[backfill] backfilled thread_id on {backfilled} task(s)")
+        else:
+            session.rollback()
+    except Exception as e:
+        session.rollback()
+        logger.warning(f"[backfill] sources.thread_id backfill failed: {e}")
+    finally:
+        session.close()
 
 
 def dispose_engine() -> None:
