@@ -10,6 +10,6 @@ Contains utilities for:
 from zylch.ml.anonymizer import TriageAnonymizer, create_sample_hash
 
 __all__ = [
-    'TriageAnonymizer',
-    'create_sample_hash',
+    "TriageAnonymizer",
+    "create_sample_hash",
 ]

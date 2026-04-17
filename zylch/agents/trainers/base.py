@@ -11,7 +11,6 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from zylch.config import settings
 from zylch.llm import LLMClient, PROVIDER_MODELS
 from zylch.storage import Storage
 from zylch.storage.database import get_session
@@ -24,12 +23,7 @@ class BaseAgentTrainer:
     """Base class for all agent trainers with shared initialization and methods."""
 
     def __init__(
-        self,
-        storage: Storage,
-        owner_id: str,
-        api_key: str,
-        user_email: str,
-        provider: str
+        self, storage: Storage, owner_id: str, api_key: str, user_email: str, provider: str
     ):
         """Initialize base trainer with common configuration.
 
@@ -45,18 +39,12 @@ class BaseAgentTrainer:
         self.provider = provider
         self.model = PROVIDER_MODELS.get(provider, PROVIDER_MODELS["anthropic"])
         self.client = LLMClient(api_key=api_key, provider=provider)
-        self.user_email = user_email.lower() if user_email else ''
+        self.user_email = user_email.lower() if user_email else ""
         self.user_domain = (
-            user_email.split('@')[1].lower()
-            if user_email and '@' in user_email
-            else ''
+            user_email.split("@")[1].lower() if user_email and "@" in user_email else ""
         )
 
-    def _get_emails(
-        self,
-        limit: int = 100,
-        filter_sent: bool = False
-    ) -> List[Dict[str, Any]]:
+    def _get_emails(self, limit: int = 100, filter_sent: bool = False) -> List[Dict[str, Any]]:
         """Get emails from storage, optionally filtering for sent only.
 
         Args:
@@ -66,13 +54,15 @@ class BaseAgentTrainer:
         Returns:
             List of email dicts, sorted by date (newest first)
         """
-        all_emails = self.storage.get_emails(self.owner_id, limit=limit * 2 if filter_sent else limit)
+        all_emails = self.storage.get_emails(
+            self.owner_id, limit=limit * 2 if filter_sent else limit
+        )
 
         if filter_sent and self.user_domain:
             # Filter to only sent emails
             emails = []
             for email in all_emails:
-                from_email = email.get('from_email', '').lower()
+                from_email = email.get("from_email", "").lower()
                 if self.user_domain in from_email:
                     emails.append(email)
             emails = emails[:limit]
@@ -80,13 +70,11 @@ class BaseAgentTrainer:
             emails = all_emails[:limit]
 
         # Sort by date (newest first)
-        emails.sort(key=lambda e: e.get('date_timestamp', 0), reverse=True)
+        emails.sort(key=lambda e: e.get("date_timestamp", 0), reverse=True)
         return emails
 
     def _get_blobs(
-        self,
-        entity_type: Optional[str] = None,
-        limit: int = 50
+        self, entity_type: Optional[str] = None, limit: int = 50
     ) -> List[Dict[str, Any]]:
         """Get memory blobs from storage, optionally filtering by entity type.
 
@@ -101,16 +89,12 @@ class BaseAgentTrainer:
             query = session.query(Blob).filter(Blob.owner_id == self.owner_id)
 
             if entity_type:
-                query = query.filter(Blob.content.ilike(f'%Entity type: {entity_type}%'))
+                query = query.filter(Blob.content.ilike(f"%Entity type: {entity_type}%"))
 
             rows = query.order_by(Blob.updated_at.desc()).limit(limit).all()
             return [r.to_dict() for r in rows]
 
-    def _generate_prompt(
-        self,
-        meta_prompt: str,
-        max_tokens: int = 4000
-    ) -> str:
+    def _generate_prompt(self, meta_prompt: str, max_tokens: int = 4000) -> str:
         """Generate a prompt by calling the LLM with a meta-prompt.
 
         Args:
@@ -125,7 +109,7 @@ class BaseAgentTrainer:
         response = self.client.create_message_sync(
             model=self.model,
             max_tokens=max_tokens,
-            messages=[{"role": "user", "content": meta_prompt}]
+            messages=[{"role": "user", "content": meta_prompt}],
         )
 
         prompt_content = response.content[0].text.strip()
@@ -133,10 +117,7 @@ class BaseAgentTrainer:
         return prompt_content
 
     def _format_email_samples(
-        self,
-        emails: List[Dict[str, Any]],
-        max_samples: int = 15,
-        body_limit: int = 500
+        self, emails: List[Dict[str, Any]], max_samples: int = 15, body_limit: int = 500
     ) -> str:
         """Format emails as text samples for meta-prompts.
 
@@ -154,17 +135,17 @@ class BaseAgentTrainer:
             if len(samples) >= max_samples:
                 break
 
-            from_email = email.get('from_email', 'unknown')
-            to_emails = email.get('to_email', [])
+            from_email = email.get("from_email", "unknown")
+            to_emails = email.get("to_email", [])
             if isinstance(to_emails, list):
-                to_str = ', '.join(to_emails)
+                to_str = ", ".join(to_emails)
             else:
                 to_str = str(to_emails)
 
-            subject = email.get('subject', '(no subject)')
-            body = email.get('body_plain', '') or email.get('snippet', '')
+            subject = email.get("subject", "(no subject)")
+            body = email.get("body_plain", "") or email.get("snippet", "")
             if len(body) > body_limit:
-                body = body[:body_limit] + '...[truncated]'
+                body = body[:body_limit] + "...[truncated]"
 
             samples.append(f"""
 --- Email {i} ---
@@ -175,7 +156,7 @@ Body:
 {body}
 """)
 
-        return '\n'.join(samples) if samples else "No email samples available."
+        return "\n".join(samples) if samples else "No email samples available."
 
     def _analyze_user_profile(self, sent_emails: List[Dict[str, Any]]) -> str:
         """Extract user profile from their sent emails.
@@ -189,43 +170,51 @@ Body:
             Text description of user's profile
         """
         patterns = {
-            'greetings': [],
-            'signoffs': [],
-            'subjects': [],
-            'avg_length': 0,
-            'languages': set()
+            "greetings": [],
+            "signoffs": [],
+            "subjects": [],
+            "avg_length": 0,
+            "languages": set(),
         }
 
         for email in sent_emails:
-            body = email.get('body_plain', '') or ''
-            subject = email.get('subject', '')
+            body = email.get("body_plain", "") or ""
+            subject = email.get("subject", "")
 
             # Extract greeting (first line)
-            lines = body.strip().split('\n')
+            lines = body.strip().split("\n")
             if lines:
                 first_line = lines[0].strip()
                 if len(first_line) < 100:
-                    patterns['greetings'].append(first_line)
+                    patterns["greetings"].append(first_line)
 
             # Extract sign-off (last 300 chars)
             if len(body) > 200:
-                patterns['signoffs'].append(body[-300:])
+                patterns["signoffs"].append(body[-300:])
 
             # Subject patterns
             if subject:
-                patterns['subjects'].append(subject)
+                patterns["subjects"].append(subject)
 
             # Language detection (simple heuristic)
-            italian_markers = ['ciao', 'salve', 'buongiorno', 'gentile', 'cordiali', 'saluti', 'grazie']
+            italian_markers = [
+                "ciao",
+                "salve",
+                "buongiorno",
+                "gentile",
+                "cordiali",
+                "saluti",
+                "grazie",
+            ]
             if any(m in body.lower() for m in italian_markers):
-                patterns['languages'].add('Italian')
+                patterns["languages"].add("Italian")
             else:
-                patterns['languages'].add('English')
+                patterns["languages"].add("English")
 
-            patterns['avg_length'] += len(body)
+            patterns["avg_length"] += len(body)
 
         if sent_emails:
-            patterns['avg_length'] //= len(sent_emails)
+            patterns["avg_length"] //= len(sent_emails)
 
         # Build profile text
         profile_parts = [
@@ -234,17 +223,17 @@ Body:
             f"Languages detected: {', '.join(patterns['languages']) if patterns['languages'] else 'Unknown'}",
         ]
 
-        if patterns['greetings']:
-            unique_greetings = list(set(patterns['greetings']))
+        if patterns["greetings"]:
+            unique_greetings = list(set(patterns["greetings"]))
             profile_parts.append(f"Greeting patterns: {', '.join(unique_greetings)}")
 
-        if patterns['signoffs']:
+        if patterns["signoffs"]:
             profile_parts.append(f"Signature sample:\n{patterns['signoffs'][0]}")
 
-        if patterns['subjects']:
+        if patterns["subjects"]:
             profile_parts.append(f"Subject patterns: {', '.join(patterns['subjects'])}")
 
-        return '\n'.join(profile_parts)
+        return "\n".join(profile_parts)
 
     def _build_metadata(self, **extra) -> Dict[str, Any]:
         """Build standard metadata dict for storing with the prompt.
@@ -256,8 +245,8 @@ Body:
             Metadata dict with generated_at, user_domain, and any extra fields
         """
         metadata = {
-            'generated_at': datetime.now(timezone.utc).isoformat(),
-            'user_domain': self.user_domain,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_domain": self.user_domain,
         }
         metadata.update(extra)
         return metadata

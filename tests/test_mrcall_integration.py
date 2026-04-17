@@ -4,23 +4,17 @@ Run with: python -m pytest tests/test_mrcall_integration.py -v
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
+
 
 # Test imports
 def test_imports():
     """Test that all mrcall modules import correctly."""
     from zylch.tools.mrcall import (
-        extract_variables,
-        validate_variable_preservation,
-        create_variable_preservation_instructions,
-        format_variable_changes,
-        modify_prompt_with_llm,
-        GetAssistantCatalogTool,
-        ConfigureAssistantTool,
-        SaveMrCallAdminRuleTool,
         MRCALL_ADMIN_NAMESPACE,
         MRCALL_BUSINESS_PREFIX,
     )
+
     assert MRCALL_ADMIN_NAMESPACE == "mrcall:admin"
     assert MRCALL_BUSINESS_PREFIX == "mrcall:"
 
@@ -209,10 +203,7 @@ class TestToolExecution:
         session = SessionState(business_id=None)
 
         tool = ConfigureAssistantTool(mock_starchat, session, mock_memory, "api-key")
-        result = await tool.execute(
-            variable_name="TEST_VAR",
-            request="Test request"
-        )
+        result = await tool.execute(variable_name="TEST_VAR", request="Test request")
 
         assert result.status == ToolStatus.ERROR
         assert "No MrCall assistant selected" in result.error
@@ -229,10 +220,7 @@ class TestToolExecution:
         session = SessionState(business_id="test-123")
 
         tool = SaveMrCallAdminRuleTool(mock_starchat, session, mock_memory)
-        result = await tool.execute(
-            rule="Test rule",
-            applies_to="all"
-        )
+        result = await tool.execute(rule="Test rule", applies_to="all")
 
         assert result.status == ToolStatus.ERROR
         assert "Permesso negato" in result.error

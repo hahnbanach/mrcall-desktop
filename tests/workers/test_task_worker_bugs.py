@@ -9,7 +9,6 @@ Tests the critical bugs:
 
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime, timezone
 
 from zylch.workers.task_creation import TaskWorker
 
@@ -117,7 +116,8 @@ class TestUserReplyClosesTask:
         await worker.get_tasks(refresh=True)
 
         mock_storage.complete_task_item.assert_called_with(
-            "test_owner", "task-mapostoli",
+            "test_owner",
+            "task-mapostoli",
         )
 
     @pytest.mark.asyncio
@@ -145,7 +145,8 @@ class TestUserReplyClosesTask:
         await worker.get_tasks(refresh=True)
 
         mock_storage.complete_task_item.assert_called_with(
-            "test_owner", "task-mapostoli",
+            "test_owner",
+            "task-mapostoli",
         )
 
 

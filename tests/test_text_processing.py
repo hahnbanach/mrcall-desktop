@@ -1,6 +1,5 @@
 """Tests for text processing utilities."""
 
-import pytest
 from zylch_memory.text_processing import split_sentences
 
 

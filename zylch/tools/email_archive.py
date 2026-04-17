@@ -35,15 +35,10 @@ class EmailArchiveManager:
         """
         self.gmail = gmail_client
         self.owner_id = owner_id
-        self.supabase = (
-            supabase_storage or Storage.get_instance()
-        )
+        self.supabase = supabase_storage or Storage.get_instance()
         self._connected = False
 
-        logger.info(
-            f"EmailArchiveManager initialized"
-            f" for owner {owner_id}"
-        )
+        logger.info(f"EmailArchiveManager initialized" f" for owner {owner_id}")
 
     def _ensure_connected(self) -> None:
         """Ensure IMAP client is connected (lazy)."""
@@ -51,7 +46,7 @@ class EmailArchiveManager:
             # IMAPClient auto-reconnects via
             # _ensure_connected(), but we call
             # connect() if not yet done
-            if hasattr(self.gmail, '_conn'):
+            if hasattr(self.gmail, "_conn"):
                 if self.gmail._conn is None:
                     self.gmail.connect()
             else:
@@ -79,10 +74,7 @@ class EmailArchiveManager:
         """
         from zylch.config import settings
 
-        logger.info(
-            f"Starting email sync"
-            f" (days_back={days_back})..."
-        )
+        logger.info(f"Starting email sync" f" (days_back={days_back})...")
 
         # Ensure Gmail is authenticated (lazy)
         self._ensure_connected()
@@ -122,49 +114,32 @@ class EmailArchiveManager:
 
         try:
             # Fetch email IDs via IMAP date query
-            query = (
-                f"after:{sync_from.strftime('%Y/%m/%d')}"
-            )
-            logger.info(
-                f"Searching for message IDs: {query}"
-            )
+            query = f"after:{sync_from.strftime('%Y/%m/%d')}"
+            logger.info(f"Searching for message IDs: {query}")
             if on_progress:
                 on_progress(10, "Searching mailbox...")
             message_ids = self.gmail.list_message_ids(
                 query=query,
             )
-            logger.info(
-                f"Found {len(message_ids)} message IDs"
-            )
+            logger.info(f"Found {len(message_ids)} message IDs")
 
             if not message_ids:
-                return {
-                    'success': True,
-                    'messages_added': 0,
-                    'messages_deleted': 0
-                }
+                return {"success": True, "messages_added": 0, "messages_deleted": 0}
 
             # Get existing email IDs (lightweight — only ID columns)
             existing_ids = self.supabase.get_existing_email_ids(
                 self.owner_id,
             )
 
-            new_message_ids = [
-                msg_id
-                for msg_id in message_ids
-                if msg_id not in existing_ids
-            ]
-            logger.info(
-                f"Found {len(new_message_ids)}"
-                f" new messages to sync"
-            )
+            new_message_ids = [msg_id for msg_id in message_ids if msg_id not in existing_ids]
+            logger.info(f"Found {len(new_message_ids)}" f" new messages to sync")
 
             if not new_message_ids:
                 return {
-                    'success': True,
-                    'messages_added': 0,
-                    'messages_deleted': 0,
-                    'total_fetched': 0
+                    "success": True,
+                    "messages_added": 0,
+                    "messages_deleted": 0,
+                    "total_fetched": 0,
                 }
 
             # Fetch full messages for the new IDs
@@ -173,13 +148,8 @@ class EmailArchiveManager:
                     30,
                     f"Fetching {len(new_message_ids)} new emails...",
                 )
-            messages = self.gmail.get_batch(
-                new_message_ids, format="full"
-            )
-            logger.info(
-                f"Fetched {len(messages)}"
-                f" full messages"
-            )
+            messages = self.gmail.get_batch(new_message_ids, format="full")
+            logger.info(f"Fetched {len(messages)}" f" full messages")
 
             # Convert and store messages in batches
             if on_progress:
@@ -190,31 +160,18 @@ class EmailArchiveManager:
             batch_size = settings.email_archive_batch_size
             total_stored = 0
 
-            for i in range(
-                0, len(messages), batch_size
-            ):
+            for i in range(0, len(messages), batch_size):
                 batch = messages[i : i + batch_size]
                 try:
-                    archive_messages = [
-                        self._convert_message(msg)
-                        for msg in batch
-                    ]
-                    stored = (
-                        self.supabase.store_emails_batch(
-                            self.owner_id,
-                            archive_messages,
-                        )
+                    archive_messages = [self._convert_message(msg) for msg in batch]
+                    stored = self.supabase.store_emails_batch(
+                        self.owner_id,
+                        archive_messages,
                     )
                     total_stored += stored
 
-                    end = min(
-                        i + batch_size, len(messages)
-                    )
-                    logger.info(
-                        f"Progress: {end}"
-                        f"/{len(messages)}"
-                        f" processed"
-                    )
+                    end = min(i + batch_size, len(messages))
+                    logger.info(f"Progress: {end}" f"/{len(messages)}" f" processed")
                     if on_progress and len(messages) > 0:
                         pct = 60 + int(30 * end / len(messages))
                         on_progress(
@@ -223,29 +180,20 @@ class EmailArchiveManager:
                         )
 
                 except Exception as e:
-                    logger.error(
-                        f"Error storing batch"
-                        f" at offset {i}: {e}"
-                    )
+                    logger.error(f"Error storing batch" f" at offset {i}: {e}")
 
-            logger.info(
-                f"Email sync complete:"
-                f" {total_stored} messages stored"
-            )
+            logger.info(f"Email sync complete:" f" {total_stored} messages stored")
 
             return {
-                'success': True,
-                'messages_added': total_stored,
-                'messages_deleted': 0,
-                'total_fetched': len(messages)
+                "success": True,
+                "messages_added": total_stored,
+                "messages_deleted": 0,
+                "total_fetched": len(messages),
             }
 
         except Exception as e:
             logger.error(f"Email sync failed: {e}", exc_info=True)
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return {"success": False, "error": str(e)}
 
     def _extract_emails_from_header(self, header: str) -> str:
         """Extract email addresses from RFC 5322 format.
@@ -260,23 +208,21 @@ class EmailArchiveManager:
             Comma-separated email addresses
         """
         if not header:
-            return ''
+            return ""
 
         emails = []
-        for part in header.split(','):
+        for part in header.split(","):
             part = part.strip()
-            if '<' in part and '>' in part:
-                email = part.split('<')[1].split('>')[0].strip()
+            if "<" in part and ">" in part:
+                email = part.split("<")[1].split(">")[0].strip()
             else:
                 email = part.strip()
             if email:
                 emails.append(email)
 
-        return ', '.join(emails)
+        return ", ".join(emails)
 
-    def _convert_message(
-        self, msg: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _convert_message(self, msg: Dict[str, Any]) -> Dict[str, Any]:
         """Convert email message to archive format.
 
         Works with both IMAPClient and legacy GmailClient
@@ -294,49 +240,29 @@ class EmailArchiveManager:
         # 1. Try Date header first
         if msg.get("date"):
             try:
-                dt = parsedate_to_datetime(
-                    msg["date"]
-                )
+                dt = parsedate_to_datetime(msg["date"])
                 date_timestamp = int(dt.timestamp())
                 date_iso = dt.isoformat()
             except Exception as e:
-                logger.warning(
-                    f"Failed to parse Date header"
-                    f" '{msg['date']}': {e}"
-                )
+                logger.warning(f"Failed to parse Date header" f" '{msg['date']}': {e}")
 
         # 2. Fallback to internal_date (Gmail API)
-        if (
-            date_iso is None
-            and msg.get("internal_date")
-        ):
+        if date_iso is None and msg.get("internal_date"):
             try:
-                ts = (
-                    int(msg["internal_date"]) / 1000
-                )
-                dt = datetime.fromtimestamp(
-                    ts, tz=timezone.utc
-                )
+                ts = int(msg["internal_date"]) / 1000
+                dt = datetime.fromtimestamp(ts, tz=timezone.utc)
                 date_timestamp = int(ts)
                 date_iso = dt.isoformat()
             except Exception as e:
-                logger.warning(
-                    f"Failed to parse"
-                    f" internal_date: {e}"
-                )
+                logger.warning(f"Failed to parse" f" internal_date: {e}")
 
         # 3. Final fallback to current time
         if date_iso is None:
             now = datetime.now(timezone.utc)
             date_timestamp = int(now.timestamp())
             date_iso = now.isoformat()
-            msg_id = msg.get(
-                "message_id", msg.get("id", "?")
-            )
-            logger.warning(
-                f"Using current time for msg"
-                f" {msg_id} (no date parsed)"
-            )
+            msg_id = msg.get("message_id", msg.get("id", "?"))
+            logger.warning(f"Using current time for msg" f" {msg_id} (no date parsed)")
 
         # Extract from email/name
         from_email = msg.get("from_email")
@@ -346,9 +272,7 @@ class EmailArchiveManager:
             if "<" in from_str and ">" in from_str:
                 parts = from_str.split("<")
                 from_name = parts[0].strip()
-                from_email = (
-                    parts[1].split(">")[0].strip()
-                )
+                from_email = parts[1].split(">")[0].strip()
             else:
                 from_email = from_str.strip()
 
@@ -358,29 +282,19 @@ class EmailArchiveManager:
         )
 
         auto_reply_headers = {
-            "Auto-Submitted": msg.get(
-                "auto_submitted"
-            ),
+            "Auto-Submitted": msg.get("auto_submitted"),
             "X-Autoreply": msg.get("x_autoreply"),
             "Precedence": msg.get("precedence"),
-            "X-Auto-Response-Suppress": msg.get(
-                "x_auto_response_suppress"
-            ),
+            "X-Auto-Response-Suppress": msg.get("x_auto_response_suppress"),
         }
-        is_auto_reply = detect_auto_reply(
-            auto_reply_headers, from_email
-        )
+        is_auto_reply = detect_auto_reply(auto_reply_headers, from_email)
 
         # Use message_id as ID (IMAP) or id (Gmail)
-        msg_id = msg.get(
-            "message_id", msg.get("id", "")
-        )
+        msg_id = msg.get("message_id", msg.get("id", ""))
 
         # Body: IMAP provides body_plain/body_html,
         # Gmail provides body
-        body_plain = msg.get(
-            "body_plain", msg.get("body", "")
-        )
+        body_plain = msg.get("body_plain", msg.get("body", ""))
         body_html = msg.get("body_html")
 
         return {
@@ -388,12 +302,8 @@ class EmailArchiveManager:
             "thread_id": msg.get("thread_id", ""),
             "from_email": from_email,
             "from_name": from_name,
-            "to_email": self._extract_emails_from_header(
-                msg.get("to", "")
-            ),
-            "cc_email": self._extract_emails_from_header(
-                msg.get("cc", "")
-            ),
+            "to_email": self._extract_emails_from_header(msg.get("to", "")),
+            "cc_email": self._extract_emails_from_header(msg.get("cc", "")),
             "subject": msg.get("subject", ""),
             "date": date_iso,
             "date_timestamp": date_timestamp,
@@ -401,12 +311,8 @@ class EmailArchiveManager:
             "body_plain": body_plain,
             "body_html": body_html,
             "labels": msg.get("labels", []),
-            "message_id_header": msg.get(
-                "message_id", ""
-            ),
-            "in_reply_to": msg.get(
-                "in_reply_to", ""
-            ),
+            "message_id_header": msg.get("message_id", ""),
+            "in_reply_to": msg.get("in_reply_to", ""),
             "references": msg.get("references", ""),
             "is_auto_reply": is_auto_reply,
         }
@@ -448,7 +354,7 @@ class EmailArchiveManager:
         query: str,
         from_date: Optional[datetime] = None,
         to_date: Optional[datetime] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """Full-text search across all archived messages.
 

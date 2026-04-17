@@ -192,12 +192,7 @@ class EmailTaskAgentTrainer:
     """Builds personalized task detection prompt by analyzing user email patterns."""
 
     def __init__(
-        self,
-        storage: Storage,
-        owner_id: str,
-        api_key: str,
-        user_email: str,
-        provider: str
+        self, storage: Storage, owner_id: str, api_key: str, user_email: str, provider: str
     ):
         """Initialize EmailTaskAgentTrainer.
 
@@ -213,17 +208,17 @@ class EmailTaskAgentTrainer:
         self.provider = provider
         self.model = PROVIDER_MODELS.get(provider, settings.default_model)
         self.client = LLMClient(api_key=api_key, provider=provider)
-        self.user_email = user_email.lower() if user_email else ''
-        self.user_domain = user_email.split('@')[1].lower() if user_email and '@' in user_email else ''
+        self.user_email = user_email.lower() if user_email else ""
+        self.user_domain = (
+            user_email.split("@")[1].lower() if user_email and "@" in user_email else ""
+        )
 
         # Initialize hybrid search for blob retrieval
         config = MemoryConfig()
         self.embedding_engine = EmbeddingEngine(config)
         from zylch.storage.database import get_session
-        self.hybrid_search = HybridSearchEngine(
-            get_session,
-            self.embedding_engine
-        )
+
+        self.hybrid_search = HybridSearchEngine(get_session, self.embedding_engine)
         self.search_limit = 20  # Reduced from 100 to avoid context window overflow
 
     async def build_task_prompt(self) -> Tuple[str, Dict[str, Any]]:
@@ -254,42 +249,38 @@ class EmailTaskAgentTrainer:
         prompt_content = self._generate_prompt(threads_text, blobs_text)
 
         metadata = {
-            'generated_at': datetime.now(timezone.utc).isoformat(),
-            'user_domain': self.user_domain,
-            'threads_analyzed': len(threads),
-            'frequent_contacts_count': len(contact_emails),
-            'blobs_found': len(blobs)
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_domain": self.user_domain,
+            "threads_analyzed": len(threads),
+            "frequent_contacts_count": len(contact_emails),
+            "blobs_found": len(blobs),
         }
 
         return prompt_content, metadata
 
     def _get_recent_threads(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get recent email threads grouped by thread_id for pattern analysis."""
-        emails = self.storage.get_emails(self.owner_id, limit=self.search_limit*3)
+        emails = self.storage.get_emails(self.owner_id, limit=self.search_limit * 3)
 
         # Group by thread_id
         threads: Dict[str, List[Dict]] = {}
         for email in emails:
-            tid = email.get('thread_id', email.get('id', ''))
+            tid = email.get("thread_id", email.get("id", ""))
             if tid:
                 threads.setdefault(tid, []).append(email)
 
         # Sort emails within each thread by date
         for tid in threads:
-            threads[tid].sort(key=lambda e: e.get('date_timestamp', 0))
+            threads[tid].sort(key=lambda e: e.get("date_timestamp", 0))
 
         # Sort threads by most recent email
         thread_list = []
         for tid, emails in threads.items():
             if emails:
-                most_recent = max(e.get('date_timestamp', 0) for e in emails)
-                thread_list.append({
-                    'thread_id': tid,
-                    'emails': emails,
-                    'most_recent': most_recent
-                })
+                most_recent = max(e.get("date_timestamp", 0) for e in emails)
+                thread_list.append({"thread_id": tid, "emails": emails, "most_recent": most_recent})
 
-        thread_list.sort(key=lambda t: t['most_recent'], reverse=True)
+        thread_list.sort(key=lambda t: t["most_recent"], reverse=True)
 
         return thread_list[:limit]
 
@@ -298,8 +289,8 @@ class EmailTaskAgentTrainer:
         contacts = set()
 
         for thread in threads:
-            for email in thread.get('emails', []):
-                from_email = email.get('from_email', '').lower()
+            for email in thread.get("emails", []):
+                from_email = email.get("from_email", "").lower()
                 # Exclude user's own domain
                 if from_email and self.user_domain and self.user_domain not in from_email:
                     contacts.add(from_email)
@@ -311,20 +302,22 @@ class EmailTaskAgentTrainer:
         blobs = []
         namespace = f"user:{self.owner_id}"
 
-        for email in contact_emails[:self.search_limit]:  # Limit to avoid too many searches
+        for email in contact_emails[: self.search_limit]:  # Limit to avoid too many searches
             try:
                 results = self.hybrid_search.search(
                     owner_id=self.owner_id,
                     query=email,  # Search by email address
                     namespace=namespace,
-                    limit=1
+                    limit=1,
                 )
                 if results:
-                    blobs.append({
-                        'contact_email': email,
-                        'content': results[0].content,
-                        'blob_id': results[0].blob_id
-                    })
+                    blobs.append(
+                        {
+                            "contact_email": email,
+                            "content": results[0].content,
+                            "blob_id": results[0].blob_id,
+                        }
+                    )
             except Exception as e:
                 logger.warning(f"Failed to search blob for {email}: {e}")
 
@@ -339,19 +332,19 @@ class EmailTaskAgentTrainer:
         formatted = []
 
         for i, thread in enumerate(threads, 1):
-            emails = thread.get('emails', [])
+            emails = thread.get("emails", [])
             if not emails:
                 continue
 
             # Get subject from first email, but use LAST email for content
-            subject = emails[0].get('subject', '(no subject)')
+            subject = emails[0].get("subject", "(no subject)")
             last_email = emails[-1]  # Last email has the full thread context
 
-            from_email = last_email.get('from_email', 'unknown')
-            date = last_email.get('date', 'unknown')
-            body = last_email.get('body_plain', '') or last_email.get('snippet', '')
+            from_email = last_email.get("from_email", "unknown")
+            date = last_email.get("date", "unknown")
+            body = last_email.get("body_plain", "") or last_email.get("snippet", "")
             if len(body) > MAX_EMAIL_BODY_CHARS:
-                body = body[:MAX_EMAIL_BODY_CHARS] + '...[truncated]'
+                body = body[:MAX_EMAIL_BODY_CHARS] + "...[truncated]"
 
             is_user = self.user_domain and self.user_domain in from_email.lower()
             sender_label = f"{from_email} [USER]" if is_user else from_email
@@ -364,7 +357,7 @@ Body: {body}
 """
             formatted.append(thread_text)
 
-        return '\n'.join(formatted) if formatted else "No threads available."
+        return "\n".join(formatted) if formatted else "No threads available."
 
     def _format_blobs(self, blobs: List[Dict[str, Any]]) -> str:
         """Format memory blobs as text for the meta-prompt."""
@@ -373,31 +366,27 @@ Body: {body}
 
         formatted = []
         for blob in blobs:
-            content = blob['content']
+            content = blob["content"]
             if len(content) > MAX_BLOB_CONTENT_CHARS:
-                content = content[:MAX_BLOB_CONTENT_CHARS] + '...[truncated]'
+                content = content[:MAX_BLOB_CONTENT_CHARS] + "...[truncated]"
             formatted.append(f"""
 --- Blob for {blob['contact_email']} ---
 {content}
 """)
 
-        return '\n'.join(formatted)
+        return "\n".join(formatted)
 
     def _generate_prompt(self, threads_text: str, blobs_text: str) -> str:
         """Generate the final task detection prompt using LLM."""
         meta_prompt = TASK_AGENT_META_PROMPT.format(
-            threads=threads_text,
-            blobs=blobs_text,
-            search_limit=self.search_limit
+            threads=threads_text, blobs=blobs_text, search_limit=self.search_limit
         )
 
         logger.info(f"Training task detection agent (provider: {self.provider})...")
         logger.debug(f"Prompt size: {len(meta_prompt)} chars (~{len(meta_prompt)//4} tokens)")
 
         response = self.client.create_message_sync(
-            model=self.model,
-            max_tokens=4000,
-            messages=[{"role": "user", "content": meta_prompt}]
+            model=self.model, max_tokens=4000, messages=[{"role": "user", "content": meta_prompt}]
         )
 
         prompt_content = response.content[0].text.strip()
@@ -410,11 +399,15 @@ Body: {body}
         emails_since: Optional[datetime],
     ) -> Tuple[Optional[str], Dict[str, Any]]:
         """Build prompt incrementally from new emails, or full build if no existing prompt."""
-        logger.debug(f"[build_task_prompt_incremental] owner={self.owner_id}, existing_prompt={'present' if existing_prompt else 'absent'}, emails_since={emails_since}")
+        logger.debug(
+            f"[build_task_prompt_incremental] owner={self.owner_id}, existing_prompt={'present' if existing_prompt else 'absent'}, emails_since={emails_since}"
+        )
 
         # No existing prompt — do a full generation
         if existing_prompt is None:
-            logger.info("[build_task_prompt_incremental] No existing prompt, delegating to full build")
+            logger.info(
+                "[build_task_prompt_incremental] No existing prompt, delegating to full build"
+            )
             prompt, meta = await self.build_task_prompt()
             meta["action"] = "full_build"
             return prompt, meta
@@ -427,10 +420,10 @@ Body: {body}
             logger.info("[build_task_prompt_incremental] No new emails, skipping update")
             return None, {"skipped": "no_new_emails"}
 
-        new_email_count = sum(
-            len(t.get("emails", [])) for t in threads
+        new_email_count = sum(len(t.get("emails", [])) for t in threads)
+        logger.info(
+            f"[build_task_prompt_incremental] {len(threads)} new threads ({new_email_count} emails) to evaluate"
         )
-        logger.info(f"[build_task_prompt_incremental] {len(threads)} new threads ({new_email_count} emails) to evaluate")
 
         threads_text = self._format_threads(threads)
         update_prompt = TASK_AGENT_UPDATE_PROMPT.format(
@@ -438,10 +431,13 @@ Body: {body}
             new_email_count=new_email_count,
             new_threads=threads_text,
         )
-        logger.debug(f"[build_task_prompt_incremental] Update prompt size: {len(update_prompt)} chars (~{len(update_prompt) // 4} tokens)")
+        logger.debug(
+            f"[build_task_prompt_incremental] Update prompt size: {len(update_prompt)} chars (~{len(update_prompt) // 4} tokens)"
+        )
 
         response = self.client.create_message_sync(
-            model=self.model, max_tokens=4000,
+            model=self.model,
+            max_tokens=4000,
             messages=[{"role": "user", "content": update_prompt}],
         )
 
@@ -461,10 +457,14 @@ Body: {body}
         }
 
     def _get_recent_threads_since(
-        self, since: datetime, limit: int = 20,
+        self,
+        since: datetime,
+        limit: int = 20,
     ) -> List[Dict[str, Any]]:
         """Get recent email threads with emails after `since`."""
-        logger.debug(f"[_get_recent_threads_since] owner={self.owner_id}, since={since}, limit={limit}")
+        logger.debug(
+            f"[_get_recent_threads_since] owner={self.owner_id}, since={since}, limit={limit}"
+        )
 
         emails = self.storage.get_emails_since(self.owner_id, since, limit=limit * 3)
         logger.debug(f"[_get_recent_threads_since] Fetched {len(emails)} emails since {since}")
@@ -485,7 +485,9 @@ Body: {body}
         for tid, thread_emails in threads.items():
             if thread_emails:
                 most_recent = max(e.get("date_timestamp", 0) for e in thread_emails)
-                thread_list.append({"thread_id": tid, "emails": thread_emails, "most_recent": most_recent})
+                thread_list.append(
+                    {"thread_id": tid, "emails": thread_emails, "most_recent": most_recent}
+                )
 
         thread_list.sort(key=lambda t: t["most_recent"], reverse=True)
         result = thread_list[:limit]

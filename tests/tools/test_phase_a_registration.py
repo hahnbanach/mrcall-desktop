@@ -14,7 +14,6 @@ from zylch.tools.read_document_tool import ReadDocumentTool
 from zylch.tools.run_python_tool import RunPythonTool
 from zylch.tools.update_memory_tool import UpdateMemoryTool
 
-
 EXPECTED = {
     "download_attachment",
     "read_document",
@@ -73,6 +72,7 @@ def test_factory_imports_new_tools():
         RunPythonTool as F_RP,
         UpdateMemoryTool as F_UM,
     )
+
     assert F_DL is DownloadAttachmentTool
     assert F_RD is ReadDocumentTool
     assert F_RP is RunPythonTool
@@ -81,6 +81,7 @@ def test_factory_imports_new_tools():
 
 def test_approval_tools_canonical():
     from zylch.services.task_executor import APPROVAL_TOOLS
+
     assert APPROVAL_TOOLS == {
         "send_draft",
         "send_whatsapp_message",

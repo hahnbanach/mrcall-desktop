@@ -28,8 +28,7 @@ def _check_update():
             from zylch import __version__
 
             resp = httpx.get(
-                "https://api.github.com/repos/malemi/zylch"
-                "/releases/latest",
+                "https://api.github.com/repos/malemi/zylch" "/releases/latest",
                 timeout=3,
             )
             if resp.status_code != 200:
@@ -40,11 +39,11 @@ def _check_update():
             if not latest or latest == __version__:
                 _update_data = False
                 return
+
             # Proper semver compare
             def _ver(v):
-                return tuple(
-                    int(x) for x in v.split(".")
-                )
+                return tuple(int(x) for x in v.split("."))
+
             if _ver(latest) > _ver(__version__):
                 body = (data.get("body") or "").strip()
                 _update_data = (latest, body)
@@ -54,7 +53,9 @@ def _check_update():
             _update_data = False
 
     threading.Thread(
-        target=_check, daemon=True, name="update-check",
+        target=_check,
+        daemon=True,
+        name="update-check",
     ).start()
 
 
@@ -77,8 +78,7 @@ def _show_update():
     latest, notes = _update_data
 
     click.echo(
-        f"\n  New version available:"
-        f" v{__version__} → v{latest}",
+        f"\n  New version available:" f" v{__version__} → v{latest}",
     )
     if notes:
         # Show release notes (non-tech summary)
@@ -95,15 +95,15 @@ def _show_update():
             try:
                 subprocess.run(
                     [
-                        "bash", "-c",
+                        "bash",
+                        "-c",
                         "curl -sfL https://raw.githubusercontent.com"
                         "/malemi/zylch/main/scripts/install.sh | bash",
                     ],
                     check=True,
                 )
                 click.echo(
-                    "  Updated! Restart zylch to use"
-                    f" v{latest}.",
+                    "  Updated! Restart zylch to use" f" v{latest}.",
                 )
                 raise SystemExit(0)
             except subprocess.CalledProcessError:
@@ -117,19 +117,16 @@ def _show_update():
             click.echo("  Upgrading via pip...")
             try:
                 subprocess.run(
-                    [sys.executable, "-m", "pip",
-                     "install", "--upgrade", "zylch"],
+                    [sys.executable, "-m", "pip", "install", "--upgrade", "zylch"],
                     check=True,
                 )
                 click.echo(
-                    f"  Updated to v{latest}!"
-                    f" Restart zylch.",
+                    f"  Updated to v{latest}!" f" Restart zylch.",
                 )
                 raise SystemExit(0)
             except subprocess.CalledProcessError:
                 click.echo(
-                    "  Update failed. Run manually:\n"
-                    "  pip install --upgrade zylch",
+                    "  Update failed. Run manually:\n" "  pip install --upgrade zylch",
                 )
     click.echo()
 
@@ -142,7 +139,8 @@ def _configure_logging():
     Override console with LOG_LEVEL env var if needed.
     """
     console_level = os.environ.get(
-        "LOG_LEVEL", "WARNING",
+        "LOG_LEVEL",
+        "WARNING",
     ).upper()
     # Root logger at DEBUG so file handler catches all
     logging.basicConfig(
@@ -156,16 +154,22 @@ def _configure_logging():
     console_handler.setLevel(
         getattr(logging, console_level, logging.WARNING),
     )
-    console_handler.setFormatter(logging.Formatter(
-        "%(asctime)s %(name)s %(levelname)s %(message)s",
-        datefmt="%H:%M:%S",
-    ))
+    console_handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s %(name)s %(levelname)s %(message)s",
+            datefmt="%H:%M:%S",
+        )
+    )
     logging.getLogger().addHandler(console_handler)
 
     # Suppress noisy third-party loggers on console
     for noisy in (
-        "httpx", "httpcore", "huggingface_hub",
-        "fastembed", "onnxruntime", "urllib3",
+        "httpx",
+        "httpcore",
+        "huggingface_hub",
+        "fastembed",
+        "onnxruntime",
+        "urllib3",
     ):
         logging.getLogger(noisy).setLevel(logging.ERROR)
 
@@ -178,13 +182,16 @@ def _setup_log_file():
 
     log_path = os.path.join(profile_dir, "zylch.log")
     handler = logging.FileHandler(
-        log_path, encoding="utf-8",
+        log_path,
+        encoding="utf-8",
     )
     handler.setLevel(logging.DEBUG)
-    handler.setFormatter(logging.Formatter(
-        "%(asctime)s %(name)s %(levelname)s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    ))
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s %(name)s %(levelname)s %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
     logging.getLogger().addHandler(handler)
     logger.debug(f"[CLI] Log file: {log_path}")
 
@@ -210,10 +217,7 @@ def _setup_profile(profile_name: str | None = None, lock: bool = True):
 
     if lock:
         if not acquire_lock(profile):
-            click.echo(
-                f"Profile '{profile}' is already in use"
-                f" by another session."
-            )
+            click.echo(f"Profile '{profile}' is already in use" f" by another session.")
             raise SystemExit(1)
         atexit.register(release_lock)
 
@@ -229,7 +233,8 @@ def _setup_profile(profile_name: str | None = None, lock: bool = True):
     prog_name="zylch",
 )
 @click.option(
-    "-p", "--profile",
+    "-p",
+    "--profile",
     default=None,
     help="Profile name (email). Auto-selects if only one exists.",
 )
@@ -341,22 +346,21 @@ def rpc(ctx):
     _configure_logging()
     root = _logging.getLogger()
     for h in list(root.handlers):
-        if isinstance(h, _logging.StreamHandler) and getattr(
-            h, "stream", None
-        ) is sys.stdout:
+        if isinstance(h, _logging.StreamHandler) and getattr(h, "stream", None) is sys.stdout:
             root.removeHandler(h)
     has_stderr = any(
-        isinstance(h, _logging.StreamHandler)
-        and getattr(h, "stream", None) is sys.stderr
+        isinstance(h, _logging.StreamHandler) and getattr(h, "stream", None) is sys.stderr
         for h in root.handlers
     )
     if not has_stderr:
         stderr_h = _logging.StreamHandler(sys.stderr)
         stderr_h.setLevel(_logging.WARNING)
-        stderr_h.setFormatter(_logging.Formatter(
-            "%(asctime)s %(name)s %(levelname)s %(message)s",
-            datefmt="%H:%M:%S",
-        ))
+        stderr_h.setFormatter(
+            _logging.Formatter(
+                "%(asctime)s %(name)s %(levelname)s %(message)s",
+                datefmt="%H:%M:%S",
+            )
+        )
         root.addHandler(stderr_h)
 
     # Activate profile manually (not _setup_profile — it calls
@@ -374,9 +378,7 @@ def rpc(ctx):
     migrate_legacy_profile()
     profile = select_profile(profile_name)
     if not acquire_lock(profile):
-        sys.stderr.write(
-            f"Profile '{profile}' is already in use by another session.\n"
-        )
+        sys.stderr.write(f"Profile '{profile}' is already in use by another session.\n")
         raise SystemExit(1)
     atexit.register(release_lock)
     activate_profile(profile)
@@ -408,7 +410,8 @@ def main():
     import warnings
 
     warnings.filterwarnings(
-        "ignore", "resource_tracker",
+        "ignore",
+        "resource_tracker",
     )
     cli()
 

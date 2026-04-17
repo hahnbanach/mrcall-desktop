@@ -18,8 +18,7 @@ class SyncEmailsTool(Tool):
         super().__init__(
             name="sync_emails",
             description=(
-                "Synchronize emails via IMAP, analyze"
-                " with AI, and cache for quick access"
+                "Synchronize emails via IMAP, analyze" " with AI, and cache for quick access"
             ),
         )
         self.email_sync = email_sync_manager
@@ -31,15 +30,9 @@ class SyncEmailsTool(Tool):
     ):
         try:
             logger.info("Starting email sync...")
-            results = self.email_sync.sync_emails(
-                force_full=force_full, days_back=days_back
-            )
+            results = self.email_sync.sync_emails(force_full=force_full, days_back=days_back)
 
-            days_msg = (
-                f" (ultimi {days_back} giorni)"
-                if days_back
-                else ""
-            )
+            days_msg = f" (ultimi {days_back} giorni)" if days_back else ""
             return ToolResult(
                 status=ToolStatus.SUCCESS,
                 data=results,
@@ -56,9 +49,7 @@ class SyncEmailsTool(Tool):
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
-                error=(
-                    f"Error during synchronization: {str(e)}"
-                ),
+                error=(f"Error during synchronization: {str(e)}"),
             )
 
     def get_schema(self):
@@ -86,8 +77,7 @@ class SyncEmailsTool(Tool):
                     "force_full": {
                         "type": "boolean",
                         "description": (
-                            "Forza nuova sincronizzazione completa"
-                            " ignorando cache esistente"
+                            "Forza nuova sincronizzazione completa" " ignorando cache esistente"
                         ),
                         "default": False,
                     },
@@ -103,9 +93,7 @@ class SearchEmailsTool(Tool):
     def __init__(self, email_sync_manager, storage, owner_id: str):
         super().__init__(
             name="search_emails",
-            description=(
-                "Search emails with hybrid FTS + semantic search"
-            ),
+            description=("Search emails with hybrid FTS + semantic search"),
         )
         self.email_sync = email_sync_manager
         self.storage = storage
@@ -119,34 +107,31 @@ class SearchEmailsTool(Tool):
     ):
         try:
             if self.storage and query:
-                emails = self.storage.search_emails(
-                    self.owner_id, query, limit=20
-                )
+                emails = self.storage.search_emails(self.owner_id, query, limit=20)
 
                 results = []
                 for email in emails:
-                    results.append({
-                        "subject": email.get("subject"),
-                        "from": email.get("sender"),
-                        "to": email.get("recipient"),
-                        "cc": email.get("cc"),
-                        "date": email.get("date"),
-                        "body": email.get("body_text", ""),
-                        "message_id": email.get("message_id"),
-                        "in_reply_to": email.get("in_reply_to"),
-                        "references": email.get("references"),
-                        "thread_id": email.get("thread_id"),
-                        "gmail_id": email.get("gmail_id"),
-                        "score": email.get(
-                            "combined_score",
-                            email.get("score", 0),
-                        ),
-                    })
+                    results.append(
+                        {
+                            "subject": email.get("subject"),
+                            "from": email.get("sender"),
+                            "to": email.get("recipient"),
+                            "cc": email.get("cc"),
+                            "date": email.get("date"),
+                            "body": email.get("body_text", ""),
+                            "message_id": email.get("message_id"),
+                            "in_reply_to": email.get("in_reply_to"),
+                            "references": email.get("references"),
+                            "thread_id": email.get("thread_id"),
+                            "gmail_id": email.get("gmail_id"),
+                            "score": email.get(
+                                "combined_score",
+                                email.get("score", 0),
+                            ),
+                        }
+                    )
 
-                message = (
-                    f"Found {len(emails)} emails"
-                    f" matching '{query}'"
-                )
+                message = f"Found {len(emails)} emails" f" matching '{query}'"
                 return ToolResult(
                     status=ToolStatus.SUCCESS,
                     data={
@@ -159,10 +144,7 @@ class SearchEmailsTool(Tool):
             return ToolResult(
                 status=ToolStatus.SUCCESS,
                 data={"threads": [], "total": 0},
-                message=(
-                    "No search query provided."
-                    " Use 'query' parameter to search emails."
-                ),
+                message=("No search query provided." " Use 'query' parameter to search emails."),
             )
 
         except Exception as e:
@@ -190,8 +172,7 @@ class SearchEmailsTool(Tool):
                     "query": {
                         "type": "string",
                         "description": (
-                            "Search query - keywords, names, or"
-                            " topics to find in emails"
+                            "Search query - keywords, names, or" " topics to find in emails"
                         ),
                     },
                 },
@@ -206,10 +187,7 @@ class CloseEmailThreadTool(Tool):
     def __init__(self, email_sync_manager):
         super().__init__(
             name="close_email_threads",
-            description=(
-                "Mark email threads as closed/resolved"
-                " (no action needed)"
-            ),
+            description=("Mark email threads as closed/resolved" " (no action needed)"),
         )
         self.email_sync = email_sync_manager
 
@@ -220,33 +198,20 @@ class CloseEmailThreadTool(Tool):
             subjects: List of subject keywords to match
         """
         try:
-            results = self.email_sync.mark_threads_closed_by_subject(
-                subjects
-            )
+            results = self.email_sync.mark_threads_closed_by_subject(subjects)
 
             if results["closed_count"] == 0:
                 return ToolResult(
                     status=ToolStatus.SUCCESS,
                     data=results,
-                    message=(
-                        "No conversations found with these subjects"
-                    ),
+                    message=("No conversations found with these subjects"),
                 )
 
-            threads_list = "\n".join([
-                f"  - {t['subject']}"
-                for t in results["threads"]
-            ])
+            threads_list = "\n".join([f"  - {t['subject']}" for t in results["threads"]])
 
-            message = (
-                f"Chiuse {results['closed_count']}"
-                f" conversazioni:\n{threads_list}"
-            )
+            message = f"Chiuse {results['closed_count']}" f" conversazioni:\n{threads_list}"
             if results["closed_count"] > 5:
-                message += (
-                    f"\n  ... e altre"
-                    f" {results['closed_count'] - 5}"
-                )
+                message += f"\n  ... e altre" f" {results['closed_count'] - 5}"
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
@@ -303,19 +268,13 @@ class EmailStatsTool(Tool):
         try:
             stats = self.email_sync.get_stats()
 
-            message = (
-                f"Email cache: {stats['total_threads']}"
-                " conversazioni totali."
-            )
+            message = f"Email cache: {stats['total_threads']}" " conversazioni totali."
             message += (
                 f" Aperte: {stats['open_threads']}"
                 f" (da rispondere: {stats['need_answer']},"
                 f" reminder: {stats['need_reminder']})."
             )
-            message += (
-                f" Ultima sincronizzazione:"
-                f" {stats['last_sync'] or 'mai'}"
-            )
+            message += f" Ultima sincronizzazione:" f" {stats['last_sync'] or 'mai'}"
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,

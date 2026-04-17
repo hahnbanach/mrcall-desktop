@@ -12,7 +12,7 @@ class TestLLMMergeService:
     @pytest.fixture
     def mock_anthropic(self):
         """Create mock Anthropic client."""
-        with patch('zylch_memory.llm_merge.anthropic.Anthropic') as mock:
+        with patch("zylch_memory.llm_merge.anthropic.Anthropic") as mock:
             yield mock
 
     def test_merge_prompt_contains_rules(self):

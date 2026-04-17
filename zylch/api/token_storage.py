@@ -19,12 +19,14 @@ logger = logging.getLogger(__name__)
 def _storage():
     """Return the global Storage singleton (lazy)."""
     from zylch.storage.storage import Storage
+
     return Storage.get_instance()
 
 
 def _owner():
     """Return the configured owner_id."""
     from zylch.config import settings
+
     return settings.owner_id
 
 
@@ -32,9 +34,11 @@ def _owner():
 # Provider / email helpers
 # ------------------------------------------------------------------
 
+
 def get_provider(owner_id: str) -> Optional[str]:
     """Return email provider: 'imap' from .env, or 'google'/'microsoft' from OAuth tokens."""
     from zylch.config import settings
+
     if settings.email_address and settings.email_password:
         return "imap"
     return _storage().get_user_provider(owner_id)
@@ -43,6 +47,7 @@ def get_provider(owner_id: str) -> Optional[str]:
 def get_email(owner_id: str) -> Optional[str]:
     """Return the user's email from .env or stored OAuth tokens."""
     from zylch.config import settings
+
     if settings.email_address:
         return settings.email_address
     return _storage().get_user_email_from_token(owner_id)
@@ -58,6 +63,7 @@ def get_graph_token(
 # ------------------------------------------------------------------
 # LLM provider
 # ------------------------------------------------------------------
+
 
 def get_active_llm_provider(
     owner_id: str,
@@ -88,23 +94,19 @@ def get_active_llm_provider(
 # MrCall credentials
 # ------------------------------------------------------------------
 
+
 def get_mrcall_credentials(
     owner_id: str,
 ) -> Optional[Dict[str, Any]]:
     """Return MrCall/StarChat OAuth credentials."""
-    return _storage().get_provider_credentials(
-        owner_id, "mrcall"
-    )
+    return _storage().get_provider_credentials(owner_id, "mrcall")
 
 
 def refresh_mrcall_token(
     owner_id: str,
 ) -> Optional[Dict[str, Any]]:
     """Placeholder — token refresh not supported standalone."""
-    logger.warning(
-        "refresh_mrcall_token called but not"
-        " implemented in standalone mode"
-    )
+    logger.warning("refresh_mrcall_token called but not" " implemented in standalone mode")
     return get_mrcall_credentials(owner_id)
 
 
@@ -112,18 +114,18 @@ def refresh_mrcall_token(
 # Vonage
 # ------------------------------------------------------------------
 
+
 def get_vonage_keys(
     owner_id: str,
 ) -> Optional[Dict[str, str]]:
     """Return Vonage API credentials."""
-    return _storage().get_provider_credentials(
-        owner_id, "vonage"
-    )
+    return _storage().get_provider_credentials(owner_id, "vonage")
 
 
 # ------------------------------------------------------------------
 # Delete helpers (used by /disconnect)
 # ------------------------------------------------------------------
+
 
 def delete_user_credentials(owner_id: str) -> bool:
     """Delete Google + Microsoft OAuth tokens."""
@@ -135,9 +137,7 @@ def delete_user_credentials(owner_id: str) -> bool:
 
 def delete_mrcall_credentials(owner_id: str) -> bool:
     """Delete MrCall credentials."""
-    return _storage().delete_provider_credentials(
-        owner_id, "mrcall"
-    )
+    return _storage().delete_provider_credentials(owner_id, "mrcall")
 
 
 def delete_anthropic_key(owner_id: str) -> bool:
@@ -147,31 +147,24 @@ def delete_anthropic_key(owner_id: str) -> bool:
 
 def delete_pipedrive_key(owner_id: str) -> bool:
     """Delete Pipedrive API token."""
-    return _storage().delete_provider_credentials(
-        owner_id, "pipedrive"
-    )
+    return _storage().delete_provider_credentials(owner_id, "pipedrive")
 
 
 def delete_vonage_keys(owner_id: str) -> bool:
     """Delete Vonage API credentials."""
-    return _storage().delete_provider_credentials(
-        owner_id, "vonage"
-    )
+    return _storage().delete_provider_credentials(owner_id, "vonage")
 
 
 def delete_sendgrid_key(owner_id: str) -> bool:
     """Delete SendGrid API key."""
-    return _storage().delete_provider_credentials(
-        owner_id, "sendgrid"
-    )
+    return _storage().delete_provider_credentials(owner_id, "sendgrid")
 
 
 def delete_llm_provider_key(
-    owner_id: str, provider: str = "",
+    owner_id: str,
+    provider: str = "",
 ) -> bool:
     """Delete an LLM provider key."""
     if not provider:
         provider = "anthropic"
-    return _storage().delete_provider_credentials(
-        owner_id, provider
-    )
+    return _storage().delete_provider_credentials(owner_id, provider)

@@ -25,9 +25,7 @@ def extract_identifiers_section(content: str) -> str:
         The #IDENTIFIERS section content, or full content
         if no section found.
     """
-    match = re.search(
-        r'#IDENTIFIERS(.*?)#ABOUT', content, re.DOTALL
-    )
+    match = re.search(r"#IDENTIFIERS(.*?)#ABOUT", content, re.DOTALL)
     if match:
         return match.group(1).strip()
     return content
@@ -101,9 +99,7 @@ class InMemoryVectorIndex:
 
         if vectors:
             self._matrix = np.vstack(vectors)
-            self._norms = np.linalg.norm(
-                self._matrix, axis=1
-            )
+            self._norms = np.linalg.norm(self._matrix, axis=1)
             self._ids = ids
         else:
             self._matrix = None
@@ -113,10 +109,7 @@ class InMemoryVectorIndex:
         self._owner_id = owner_id
         self._count = len(ids)
         elapsed_ms = (time.perf_counter() - t0) * 1000
-        logger.debug(
-            f"[VectorIndex] load: {self._count} vectors "
-            f"in {elapsed_ms:.1f}ms"
-        )
+        logger.debug(f"[VectorIndex] load: {self._count} vectors " f"in {elapsed_ms:.1f}ms")
 
     def search(
         self,
@@ -139,19 +132,12 @@ class InMemoryVectorIndex:
             return []
 
         t0 = time.perf_counter()
-        scores = np.dot(self._matrix, query_vec) / (
-            self._norms * query_norm
-        )
+        scores = np.dot(self._matrix, query_vec) / (self._norms * query_norm)
         top_idx = np.argsort(scores)[-top_k:][::-1]
-        results = [
-            (self._ids[i], float(scores[i]))
-            for i in top_idx
-            if scores[i] > 0
-        ]
+        results = [(self._ids[i], float(scores[i])) for i in top_idx if scores[i] > 0]
         elapsed_ms = (time.perf_counter() - t0) * 1000
         logger.debug(
-            f"[VectorIndex] search: top_k={top_k}, "
-            f"found={len(results)} in {elapsed_ms:.2f}ms"
+            f"[VectorIndex] search: top_k={top_k}, " f"found={len(results)} in {elapsed_ms:.2f}ms"
         )
         return results
 
@@ -178,22 +164,12 @@ class HybridSearchEngine:
 
     def _ensure_index(self, owner_id: str):
         """Load vector index from DB if not cached."""
-        if (
-            self._index.is_loaded
-            and self._index._owner_id == owner_id
-        ):
+        if self._index.is_loaded and self._index._owner_id == owner_id:
             return
 
-        logger.debug(
-            f"[HybridSearch] loading vector index "
-            f"for owner={owner_id}"
-        )
+        logger.debug(f"[HybridSearch] loading vector index " f"for owner={owner_id}")
         with self._get_session() as session:
-            rows = (
-                session.query(Blob.id, Blob.embedding)
-                .filter(Blob.owner_id == owner_id)
-                .all()
-            )
+            rows = session.query(Blob.id, Blob.embedding).filter(Blob.owner_id == owner_id).all()
         blobs = [(str(r.id), r.embedding) for r in rows]
         self._index.load(blobs, owner_id)
 
@@ -211,43 +187,27 @@ class HybridSearchEngine:
             return {}
 
         # Split query into terms for multi-term matching
-        terms = [
-            t.strip().lower()
-            for t in query.split()
-            if t.strip()
-        ]
+        terms = [t.strip().lower() for t in query.split() if t.strip()]
         if not terms:
             return {}
 
-        logger.debug(
-            f"[HybridSearch] text_search: "
-            f"terms={terms}, namespace={namespace}"
-        )
+        logger.debug(f"[HybridSearch] text_search: " f"terms={terms}, namespace={namespace}")
 
         with self._get_session() as session:
-            q = session.query(
-                Blob.id, Blob.content
-            ).filter(Blob.owner_id == owner_id)
+            q = session.query(Blob.id, Blob.content).filter(Blob.owner_id == owner_id)
             if namespace:
                 q = q.filter(Blob.namespace == namespace)
             rows = q.all()
 
         scores: Dict[str, float] = {}
         for row in rows:
-            identifiers = extract_identifiers_section(
-                row.content or ""
-            ).lower()
-            matched = sum(
-                1 for t in terms if t in identifiers
-            )
+            identifiers = extract_identifiers_section(row.content or "").lower()
+            matched = sum(1 for t in terms if t in identifiers)
             if matched > 0:
                 score = matched / len(terms)
                 scores[str(row.id)] = score
 
-        logger.debug(
-            f"[HybridSearch] text_search: "
-            f"{len(scores)} matches"
-        )
+        logger.debug(f"[HybridSearch] text_search: " f"{len(scores)} matches")
         return scores
 
     def _exact_match_score(
@@ -261,9 +221,7 @@ class HybridSearchEngine:
         """
         if not pattern:
             return 0.0
-        identifiers = extract_identifiers_section(
-            content
-        ).lower()
+        identifiers = extract_identifiers_section(content).lower()
         return 1.0 if pattern.lower() in identifiers else 0.0
 
     def search(
@@ -286,9 +244,7 @@ class HybridSearchEngine:
         Returns:
             List of SearchResult sorted by hybrid_score desc
         """
-        fts_weight = (
-            alpha if alpha is not None else self.default_alpha
-        )
+        fts_weight = alpha if alpha is not None else self.default_alpha
 
         # Detect identifier pattern for exact matching
         pattern = detect_pattern(query)
@@ -305,26 +261,18 @@ class HybridSearchEngine:
 
         # 2. Vector search
         self._ensure_index(owner_id)
-        vec_results = self._index.search(
-            query_embedding, top_k=limit * 3
-        )
+        vec_results = self._index.search(query_embedding, top_k=limit * 3)
         vec_scores = dict(vec_results)
 
         # 3. Text search (on #IDENTIFIERS section)
         fts_query = extract_identifiers_section(query)
-        fts_scores = self._text_search(
-            owner_id, fts_query, namespace
-        )
+        fts_scores = self._text_search(owner_id, fts_query, namespace)
 
         # 4. Merge candidate IDs
-        all_ids = set(vec_scores.keys()) | set(
-            fts_scores.keys()
-        )
+        all_ids = set(vec_scores.keys()) | set(fts_scores.keys())
 
         if not all_ids:
-            logger.debug(
-                "[HybridSearch] search returned no results"
-            )
+            logger.debug("[HybridSearch] search returned no results")
             return []
 
         # 5. Load blob data for candidates
@@ -346,41 +294,36 @@ class HybridSearchEngine:
 
             sem_score = vec_scores.get(bid, 0.0)
             fts_score = fts_scores.get(bid, 0.0)
-            exact = self._exact_match_score(
-                blob_data["content"], exact_pattern
-            )
+            exact = self._exact_match_score(blob_data["content"], exact_pattern)
 
             # Hybrid: alpha * FTS + (1-alpha) * semantic
-            hybrid = (
-                fts_weight * fts_score
-                + (1 - fts_weight) * sem_score
-            )
+            hybrid = fts_weight * fts_score + (1 - fts_weight) * sem_score
             # Boost with exact match
             if exact > 0:
                 hybrid = max(hybrid, exact)
 
-            scored.append(SearchResult(
-                blob_id=bid,
-                content=blob_data["content"],
-                namespace=blob_data["namespace"],
-                fts_score=fts_score,
-                semantic_score=sem_score,
-                exact_score=exact,
-                hybrid_score=hybrid,
-                events=blob_data.get("events", []),
-            ))
+            scored.append(
+                SearchResult(
+                    blob_id=bid,
+                    content=blob_data["content"],
+                    namespace=blob_data["namespace"],
+                    fts_score=fts_score,
+                    semantic_score=sem_score,
+                    exact_score=exact,
+                    hybrid_score=hybrid,
+                    events=blob_data.get("events", []),
+                )
+            )
 
         scored.sort(key=lambda r: r.hybrid_score, reverse=True)
         scored = scored[:limit]
 
         # 7. Get matching sentences for top results
         for result in scored:
-            result.matching_sentences = (
-                self._get_matching_sentences(
-                    result.blob_id,
-                    owner_id,
-                    query_embedding,
-                )
+            result.matching_sentences = self._get_matching_sentences(
+                result.blob_id,
+                owner_id,
+                query_embedding,
             )
 
         # Debug log scores
@@ -406,9 +349,7 @@ class HybridSearchEngine:
 
         Returns blob if hybrid_score > RECONSOLIDATION_THRESHOLD.
         """
-        logger.debug(
-            f"Reconsolidation search query: {content[:80]}"
-        )
+        logger.debug(f"Reconsolidation search query: {content[:80]}")
 
         results = self.search(
             owner_id=owner_id,
@@ -419,9 +360,7 @@ class HybridSearchEngine:
         )
 
         if not results:
-            logger.debug(
-                "Reconsolidation: No results from hybrid search"
-            )
+            logger.debug("Reconsolidation: No results from hybrid search")
             return None
 
         top_result = results[0]
@@ -433,10 +372,7 @@ class HybridSearchEngine:
             f"semantic={top_result.semantic_score:.3f}"
         )
 
-        if (
-            top_result.hybrid_score
-            >= self.RECONSOLIDATION_THRESHOLD
-        ):
+        if top_result.hybrid_score >= self.RECONSOLIDATION_THRESHOLD:
             logger.debug(
                 f"Reconsolidation: MATCH "
                 f"(score {top_result.hybrid_score:.3f} "
@@ -462,9 +398,7 @@ class HybridSearchEngine:
 
         Returns list of candidates above threshold.
         """
-        logger.debug(
-            "Finding reconsolidation candidates for content"
-        )
+        logger.debug("Finding reconsolidation candidates for content")
 
         results = self.search(
             owner_id=owner_id,
@@ -474,21 +408,14 @@ class HybridSearchEngine:
             alpha=0.5,
         )
 
-        candidates = [
-            r
-            for r in results
-            if r.hybrid_score >= self.RECONSOLIDATION_THRESHOLD
-        ]
+        candidates = [r for r in results if r.hybrid_score >= self.RECONSOLIDATION_THRESHOLD]
 
         logger.debug(
             f"Found {len(candidates)} candidates above "
             f"threshold {self.RECONSOLIDATION_THRESHOLD}"
         )
         for i, c in enumerate(candidates, 1):
-            logger.debug(
-                f"  Candidate {i}: blob_id={c.blob_id}, "
-                f"hybrid={c.hybrid_score:.3f}"
-            )
+            logger.debug(f"  Candidate {i}: blob_id={c.blob_id}, " f"hybrid={c.hybrid_score:.3f}")
 
         return candidates
 
@@ -528,18 +455,13 @@ class HybridSearchEngine:
         for s in sentences:
             if s.embedding is None:
                 continue
-            emb = np.frombuffer(
-                s.embedding, dtype=np.float32
-            )
+            emb = np.frombuffer(s.embedding, dtype=np.float32)
             if emb.size == 0:
                 continue
             emb_norm = np.linalg.norm(emb)
             if emb_norm == 0:
                 continue
-            sim = float(
-                np.dot(query_embedding, emb)
-                / (query_norm * emb_norm)
-            )
+            sim = float(np.dot(query_embedding, emb) / (query_norm * emb_norm))
             scored.append((sim, s.sentence_text))
 
         scored.sort(reverse=True)

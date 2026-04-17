@@ -5,7 +5,7 @@
 
 import uuid as _uuid
 from datetime import datetime, date
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Set
 
 from sqlalchemy import (
     Boolean,
@@ -23,10 +23,10 @@ from sqlalchemy import (
 
 from .database import Base
 
-
 # -------------------------------------------------------------------
 # DictMixin — shared to_dict() for all models
 # -------------------------------------------------------------------
+
 
 class DictMixin:
     """Mixin providing to_dict() serialization.
@@ -37,15 +37,10 @@ class DictMixin:
 
     _EXCLUDE_FROM_DICT: Set[str] = {"embedding"}
 
-    def to_dict(
-        self, include_vectors: bool = False
-    ) -> Dict[str, Any]:
+    def to_dict(self, include_vectors: bool = False) -> Dict[str, Any]:
         d: Dict[str, Any] = {}
         for col in self.__table__.columns:
-            if (
-                not include_vectors
-                and col.name in self._EXCLUDE_FROM_DICT
-            ):
+            if not include_vectors and col.name in self._EXCLUDE_FROM_DICT:
                 continue
             val = getattr(self, col.name)
             # Serialize types that aren't JSON-native
@@ -77,11 +72,14 @@ def _utcnow() -> datetime:
 # EMAILS
 # -------------------------------------------------------------------
 
+
 class Email(DictMixin, Base):
     __tablename__ = "emails"
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     gmail_id = Column(Text, nullable=False)
@@ -110,7 +108,8 @@ class Email(DictMixin, Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "owner_id", "gmail_id",
+            "owner_id",
+            "gmail_id",
             name="emails_owner_gmail_unique",
         ),
     )
@@ -120,11 +119,14 @@ class Email(DictMixin, Base):
 # CALENDAR EVENTS
 # -------------------------------------------------------------------
 
+
 class CalendarEvent(DictMixin, Base):
     __tablename__ = "calendar_events"
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     google_event_id = Column(Text, nullable=False)
@@ -145,7 +147,8 @@ class CalendarEvent(DictMixin, Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "owner_id", "google_event_id",
+            "owner_id",
+            "google_event_id",
             name="calendar_events_owner_gid_unique",
         ),
     )
@@ -155,11 +158,14 @@ class CalendarEvent(DictMixin, Base):
 # BLOBS (entity memory)
 # -------------------------------------------------------------------
 
+
 class Blob(DictMixin, Base):
     __tablename__ = "blobs"
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     namespace = Column(Text, nullable=False)
@@ -174,7 +180,9 @@ class BlobSentence(DictMixin, Base):
     __tablename__ = "blob_sentences"
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     blob_id = Column(
         String(36),
@@ -191,11 +199,14 @@ class BlobSentence(DictMixin, Base):
 # OAUTH TOKENS
 # -------------------------------------------------------------------
 
+
 class OAuthToken(DictMixin, Base):
     __tablename__ = "oauth_tokens"
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False)
     provider = Column(Text, nullable=False)
@@ -211,23 +222,25 @@ class OAuthToken(DictMixin, Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "owner_id", "provider",
+            "owner_id",
+            "provider",
             name="oauth_tokens_owner_provider_unique",
         ),
     )
-
-
 
 
 # -------------------------------------------------------------------
 # DRAFTS
 # -------------------------------------------------------------------
 
+
 class Draft(DictMixin, Base):
     __tablename__ = "drafts"
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     to_addresses = Column(JSON, default=list)
@@ -268,11 +281,14 @@ class Draft(DictMixin, Base):
 # TASK ITEMS
 # -------------------------------------------------------------------
 
+
 class TaskItem(DictMixin, Base):
     __tablename__ = "task_items"
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     event_type = Column(Text, nullable=False)
@@ -290,7 +306,9 @@ class TaskItem(DictMixin, Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "owner_id", "event_type", "event_id",
+            "owner_id",
+            "event_type",
+            "event_id",
             name="task_items_owner_event_unique",
         ),
     )
@@ -300,11 +318,14 @@ class TaskItem(DictMixin, Base):
 # BACKGROUND JOBS
 # -------------------------------------------------------------------
 
+
 class BackgroundJob(DictMixin, Base):
     __tablename__ = "background_jobs"
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     business_id = Column(Text, nullable=True, index=True)
@@ -328,11 +349,14 @@ class BackgroundJob(DictMixin, Base):
 # AGENT PROMPTS
 # -------------------------------------------------------------------
 
+
 class AgentPrompt(DictMixin, Base):
     __tablename__ = "agent_prompts"
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False)
     agent_type = Column(Text, nullable=False)
@@ -343,7 +367,8 @@ class AgentPrompt(DictMixin, Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "owner_id", "agent_type",
+            "owner_id",
+            "agent_type",
             name="agent_prompts_owner_type_unique",
         ),
     )
@@ -353,11 +378,14 @@ class AgentPrompt(DictMixin, Base):
 # USER NOTIFICATIONS
 # -------------------------------------------------------------------
 
+
 class UserNotification(DictMixin, Base):
     __tablename__ = "user_notifications"
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     message = Column(Text, nullable=False)
@@ -366,11 +394,10 @@ class UserNotification(DictMixin, Base):
     created_at = Column(DateTime, default=_utcnow)
 
 
-
-
 # -------------------------------------------------------------------
 # MRCALL CONVERSATIONS
 # -------------------------------------------------------------------
+
 
 class MrcallConversation(DictMixin, Base):
     __tablename__ = "mrcall_conversations"
@@ -396,11 +423,14 @@ class MrcallConversation(DictMixin, Base):
 # SYNC STATE
 # -------------------------------------------------------------------
 
+
 class SyncState(DictMixin, Base):
     __tablename__ = "sync_state"
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, unique=True)
     history_id = Column(Text)
@@ -411,17 +441,18 @@ class SyncState(DictMixin, Base):
     updated_at = Column(DateTime, default=_utcnow)
 
 
-
-
 # -------------------------------------------------------------------
 # CONTACTS
 # -------------------------------------------------------------------
+
 
 class Contact(DictMixin, Base):
     __tablename__ = "contacts"
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     email = Column(Text)
@@ -448,7 +479,9 @@ class WhatsAppMessage(DictMixin, Base):
     )
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     message_id = Column(Text, nullable=False)
@@ -457,7 +490,9 @@ class WhatsAppMessage(DictMixin, Base):
     sender_name = Column(Text)
     text = Column(Text)
     timestamp = Column(
-        DateTime, nullable=False, index=True,
+        DateTime,
+        nullable=False,
+        index=True,
     )
     is_from_me = Column(Boolean, default=False)
     is_group = Column(Boolean, default=False)
@@ -484,7 +519,9 @@ class WhatsAppContact(DictMixin, Base):
     )
 
     id = Column(
-        String(36), primary_key=True, default=_new_uuid,
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
     )
     owner_id = Column(Text, nullable=False, index=True)
     jid = Column(Text, nullable=False)
@@ -493,5 +530,3 @@ class WhatsAppContact(DictMixin, Base):
     push_name = Column(Text)
     last_message_at = Column(DateTime)
     synced_at = Column(DateTime, default=_utcnow)
-
-

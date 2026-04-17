@@ -44,14 +44,9 @@ def run_sync():
     store = Storage.get_instance()
     wa = _run_whatsapp_sync(owner_id, store)
     if wa.get("skipped"):
-        console.print(
-            f"  Skipped: {wa.get('reason', 'not configured')}"
-        )
+        console.print(f"  Skipped: {wa.get('reason', 'not configured')}")
     else:
-        console.print(
-            f"  {wa.get('contacts', 0)} contacts,"
-            f" {wa.get('messages', 0)} messages"
-        )
+        console.print(f"  {wa.get('contacts', 0)} contacts," f" {wa.get('messages', 0)} messages")
 
 
 async def _sync_emails_direct(owner_id: str, console):
@@ -73,13 +68,9 @@ async def _sync_emails_direct(owner_id: str, console):
         email_addr=email_addr,
         password=email_pass,
         imap_host=os.environ.get("IMAP_HOST") or None,
-        imap_port=(
-            int(os.environ.get("IMAP_PORT", "0")) or None
-        ),
+        imap_port=(int(os.environ.get("IMAP_PORT", "0")) or None),
         smtp_host=os.environ.get("SMTP_HOST") or None,
-        smtp_port=(
-            int(os.environ.get("SMTP_PORT", "0")) or None
-        ),
+        smtp_port=(int(os.environ.get("SMTP_PORT", "0")) or None),
     )
 
     store = Storage.get_instance()
@@ -140,7 +131,5 @@ def run_status():
     from zylch.services.command_handlers import handle_sync
 
     config = ToolConfig.from_settings()
-    result = asyncio.run(
-        handle_sync(["status"], config, owner_id)
-    )
+    result = asyncio.run(handle_sync(["status"], config, owner_id))
     print(result)

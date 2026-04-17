@@ -14,14 +14,14 @@ PROVIDER_MODELS: Dict[str, str] = {
 PROVIDER_FEATURES: Dict[str, Dict[str, bool]] = {
     "anthropic": {
         "tool_calling": True,
-        "web_search": True,      # Built-in web_search_20250305 tool
+        "web_search": True,  # Built-in web_search_20250305 tool
         "prompt_caching": True,  # cache_control: {"type": "ephemeral"}
         "vision": True,
     },
     "openai": {
         "tool_calling": True,
-        "web_search": True,      # Via Responses API (web_search_preview tool)
-        "prompt_caching": False, # Anthropic-only feature
+        "web_search": True,  # Via Responses API (web_search_preview tool)
+        "prompt_caching": False,  # Anthropic-only feature
         "vision": True,
     },
 }
@@ -93,12 +93,12 @@ def format_provider_info_message(provider: str) -> str:
 
     lines = [
         f"**{provider.upper()} Provider Connected**",
-        f"",
+        "",
         f"**Model:** `{info['model']}`",
     ]
 
     if info["is_eu"]:
-        lines.append(f"**Region:** EU (GDPR compliant)")
+        lines.append("**Region:** EU (GDPR compliant)")
 
     lines.append("")
     lines.append("**Features:**")
@@ -111,7 +111,9 @@ def format_provider_info_message(provider: str) -> str:
 
     if info["unavailable_features"]:
         lines.append("")
-        lines.append("*Note: Prompt caching is Anthropic-exclusive. Web search is available with Anthropic and OpenAI.*")
+        lines.append(
+            "*Note: Prompt caching is Anthropic-exclusive. Web search is available with Anthropic and OpenAI.*"
+        )
 
     return "\n".join(lines)
 

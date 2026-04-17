@@ -25,7 +25,7 @@ class ChatMessage:
             "role": self.role,
             "content": self.content,
             "timestamp": self.timestamp,
-            "session_id": self.session_id
+            "session_id": self.session_id,
         }
 
 
@@ -51,10 +51,7 @@ class ChatSession:
         """
         timestamp = datetime.utcnow().isoformat()
         message = ChatMessage(
-            role=role,
-            content=content,
-            timestamp=timestamp,
-            session_id=self.session_id
+            role=role, content=content, timestamp=timestamp, session_id=self.session_id
         )
         self.messages.append(message)
         self.last_activity = timestamp
@@ -80,21 +77,19 @@ class ChatSession:
             "session_id": self.session_id,
             "created_at": self.created_at,
             "last_activity": self.last_activity,
-            "messages": [msg.to_dict() for msg in self.messages]
+            "messages": [msg.to_dict() for msg in self.messages],
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "ChatSession":
         """Create ChatSession from dictionary."""
-        messages = [
-            ChatMessage(**msg) for msg in data.get("messages", [])
-        ]
+        messages = [ChatMessage(**msg) for msg in data.get("messages", [])]
         return cls(
             user_id=data["user_id"],
             session_id=data["session_id"],
             created_at=data["created_at"],
             messages=messages,
-            last_activity=data.get("last_activity", data["created_at"])
+            last_activity=data.get("last_activity", data["created_at"]),
         )
 
 
@@ -141,9 +136,7 @@ class ChatSessionManager:
 
         # Create new session
         session = ChatSession(
-            user_id=user_id,
-            session_id=session_id,
-            created_at=datetime.utcnow().isoformat()
+            user_id=user_id, session_id=session_id, created_at=datetime.utcnow().isoformat()
         )
 
         # Store session
@@ -256,9 +249,7 @@ class ChatSessionManager:
         return message
 
     def get_session_history(
-        self,
-        session_id: str,
-        limit: Optional[int] = None
+        self, session_id: str, limit: Optional[int] = None
     ) -> List[ChatMessage]:
         """Get conversation history for a session.
 

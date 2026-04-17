@@ -3,4 +3,4 @@
 Database file: ~/.zylch/zylch.db
 """
 
-from .storage import Storage
+from .storage import Storage as Storage

@@ -27,7 +27,7 @@ class InitiateCallTool(Tool):
         """
         super().__init__(
             name="initiate_call",
-            description="Initiate an outbound phone call to a contact using the MrCall AI assistant"
+            description="Initiate an outbound phone call to a contact using the MrCall AI assistant",
         )
         self.starchat = starchat_client
         self.session_state = session_state
@@ -58,12 +58,12 @@ class InitiateCallTool(Tool):
                 return ToolResult(
                     status=ToolStatus.ERROR,
                     data=None,
-                    error="No MrCall assistant selected. Use /mrcall <business_id> to select one, or provide business_id parameter."
+                    error="No MrCall assistant selected. Use /mrcall <business_id> to select one, or provide business_id parameter.",
                 )
 
             # Normalize phone number
-            if not phone_number.startswith('+'):
-                phone_number = '+' + phone_number.lstrip('0')
+            if not phone_number.startswith("+"):
+                phone_number = "+" + phone_number.lstrip("0")
 
             # Build variables for the call
             variables = {}
@@ -89,16 +89,12 @@ class InitiateCallTool(Tool):
                     "call_id": result.get("call_id"),
                     "status": result.get("status", "initiated"),
                 },
-                message=f"Call initiated to {phone_number}. The MrCall AI assistant will handle the conversation."
+                message=f"Call initiated to {phone_number}. The MrCall AI assistant will handle the conversation.",
             )
 
         except Exception as e:
             logger.error(f"Failed to initiate call to {phone_number}: {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=str(e)
-            )
+            return ToolResult(status=ToolStatus.ERROR, data=None, error=str(e))
 
     def get_schema(self) -> Dict[str, Any]:
         return {
@@ -109,21 +105,21 @@ class InitiateCallTool(Tool):
                 "properties": {
                     "phone_number": {
                         "type": "string",
-                        "description": "Phone number to call (with country code, e.g., +12025551234)"
+                        "description": "Phone number to call (with country code, e.g., +12025551234)",
                     },
                     "purpose": {
                         "type": "string",
-                        "description": "Purpose or context for the call (e.g., 'demo follow-up', 'schedule meeting')"
+                        "description": "Purpose or context for the call (e.g., 'demo follow-up', 'schedule meeting')",
                     },
                     "contact_name": {
                         "type": "string",
-                        "description": "Name of the person being called (for personalization)"
+                        "description": "Name of the person being called (for personalization)",
                     },
                     "business_id": {
                         "type": "string",
-                        "description": "Specific MrCall assistant/business ID to use (optional, uses session default)"
-                    }
+                        "description": "Specific MrCall assistant/business ID to use (optional, uses session default)",
+                    },
                 },
-                "required": ["phone_number"]
-            }
+                "required": ["phone_number"],
+            },
         }

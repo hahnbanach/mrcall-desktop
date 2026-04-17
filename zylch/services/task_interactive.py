@@ -34,21 +34,22 @@ console = Console()
 
 
 def run_interactive_tasks(
-    owner_id: str, store, api_key: str,
-    provider: str, user_email: str,
+    owner_id: str,
+    store,
+    api_key: str,
+    provider: str,
+    user_email: str,
 ):
     """Walk through active tasks interactively."""
     tasks = store.get_task_items(owner_id, action_required=True)
     # Filter out skipped tasks (sources.skipped_at set).
-    tasks = [t for t in tasks
-             if not (t.get("sources") or {}).get("skipped_at")]
+    tasks = [t for t in tasks if not (t.get("sources") or {}).get("skipped_at")]
     if not tasks:
         console.print("No tasks needing action.")
         return
 
     console.print(
-        f"\n[bold cyan]Interactive Task Review"
-        f" ({len(tasks)} tasks)[/bold cyan]\n",
+        f"\n[bold cyan]Interactive Task Review" f" ({len(tasks)} tasks)[/bold cyan]\n",
     )
 
     for i, task in enumerate(tasks, 1):
@@ -64,7 +65,12 @@ def run_interactive_tasks(
             _solve_task(task, store, owner_id, api_key, provider, user_email)
         elif choice == "4":
             _instruct_task(
-                task, store, owner_id, api_key, provider, user_email,
+                task,
+                store,
+                owner_id,
+                api_key,
+                provider,
+                user_email,
             )
         elif choice == "e":
             break
@@ -83,9 +89,7 @@ def _show_task(idx: int, total: int, task: Dict):
         "LOW": "[dim]LOW[/dim]",
     }.get(urgency, urgency)
 
-    contact = (
-        task.get("contact_name") or task.get("contact_email", "Unknown")
-    )
+    contact = task.get("contact_name") or task.get("contact_email", "Unknown")
     action = task.get("suggested_action", "")
     reason = task.get("reason", "")
 
@@ -105,9 +109,15 @@ def _prompt_choice() -> str:
     console.print("  [bold]e)[/bold] Exit and let's chat")
     console.print()
     while True:
-        choice = click.prompt(
-            "  >", type=str, default="1",
-        ).strip().lower()
+        choice = (
+            click.prompt(
+                "  >",
+                type=str,
+                default="1",
+            )
+            .strip()
+            .lower()
+        )
         if choice in ("1", "2", "3", "4", "e"):
             return choice
         console.print("  [red]Invalid choice[/red]")
@@ -160,8 +170,12 @@ def _cli_run_executor(executor: TaskExecutor) -> List[Dict]:
 
 
 def _solve_task(
-    task: Dict, store, owner_id: str,
-    api_key: str, provider: str, user_email: str,
+    task: Dict,
+    store,
+    owner_id: str,
+    api_key: str,
+    provider: str,
+    user_email: str,
 ):
     """Agentic solve: LLM uses tools to research and propose."""
     from zylch.llm.client import LLMClient
@@ -174,17 +188,24 @@ def _solve_task(
         personal_data_section=get_personal_data_section(),
     )
 
-    messages = [{
-        "role": "user",
-        "content": (
-            f"Solve this task. Use tools to research if needed, then"
-            f" propose a concrete solution.\n\n{context}"
-        ),
-    }]
+    messages = [
+        {
+            "role": "user",
+            "content": (
+                f"Solve this task. Use tools to research if needed, then"
+                f" propose a concrete solution.\n\n{context}"
+            ),
+        }
+    ]
 
     console.print("\n  [dim]Working...[/dim]")
     executor = TaskExecutor(
-        client, system, messages, store, owner_id, SOLVE_TOOLS,
+        client,
+        system,
+        messages,
+        store,
+        owner_id,
+        SOLVE_TOOLS,
     )
     messages = _cli_run_executor(executor)
 
@@ -193,8 +214,12 @@ def _solve_task(
 
 
 def _instruct_task(
-    task: Dict, store, owner_id: str,
-    api_key: str, provider: str, user_email: str,
+    task: Dict,
+    store,
+    owner_id: str,
+    api_key: str,
+    provider: str,
+    user_email: str,
 ):
     from zylch.llm.client import LLMClient
 
@@ -223,18 +248,25 @@ def _instruct_task(
         personal_data_section=get_personal_data_section(),
     )
 
-    messages = [{
-        "role": "user",
-        "content": (
-            f"Task context:\n\n{context}\n\n"
-            f"User instructions: {instructions}\n\n"
-            f"Use tools as needed to fulfill these instructions."
-        ),
-    }]
+    messages = [
+        {
+            "role": "user",
+            "content": (
+                f"Task context:\n\n{context}\n\n"
+                f"User instructions: {instructions}\n\n"
+                f"Use tools as needed to fulfill these instructions."
+            ),
+        }
+    ]
 
     console.print("\n  [dim]Working...[/dim]")
     executor = TaskExecutor(
-        client, system, messages, store, owner_id, SOLVE_TOOLS,
+        client,
+        system,
+        messages,
+        store,
+        owner_id,
+        SOLVE_TOOLS,
     )
     messages = _cli_run_executor(executor)
 
@@ -243,8 +275,12 @@ def _instruct_task(
 
 
 def _post_solve_menu(
-    task: Dict, store, owner_id: str,
-    client, system: str, messages: List[Dict],
+    task: Dict,
+    store,
+    owner_id: str,
+    client,
+    system: str,
+    messages: List[Dict],
 ):
     while True:
         console.print(
@@ -279,6 +315,11 @@ def _post_solve_menu(
             messages.append({"role": "user", "content": choice})
             console.print("\n  [dim]Thinking...[/dim]")
             executor = TaskExecutor(
-                client, system, messages, store, owner_id, SOLVE_TOOLS,
+                client,
+                system,
+                messages,
+                store,
+                owner_id,
+                SOLVE_TOOLS,
             )
             messages = _cli_run_executor(executor)

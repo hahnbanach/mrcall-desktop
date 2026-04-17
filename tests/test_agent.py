@@ -1,7 +1,6 @@
 """Tests for Zylch AI agent."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
 from zylch.assistant import ZylchAIAgent
 from zylch.assistant.models import ModelSelector
@@ -16,20 +15,14 @@ class MockTool(Tool):
 
     async def execute(self, **kwargs):
         return ToolResult(
-            status=ToolStatus.SUCCESS,
-            data={"test": "data"},
-            message="Mock tool executed"
+            status=ToolStatus.SUCCESS, data={"test": "data"}, message="Mock tool executed"
         )
 
     def get_schema(self):
         return {
             "name": self.name,
             "description": self.description,
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
+            "input_schema": {"type": "object", "properties": {}, "required": []},
         }
 
 

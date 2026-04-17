@@ -12,7 +12,7 @@ This trainer extends BaseAgentTrainer for shared initialization and methods.
 """
 
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Tuple
 
 from zylch.agents.trainers.base import BaseAgentTrainer
 from zylch.storage import Storage
@@ -108,12 +108,7 @@ class EmailerAgentTrainer(BaseAgentTrainer):
     """
 
     def __init__(
-        self,
-        storage: Storage,
-        owner_id: str,
-        api_key: str,
-        user_email: str,
-        provider: str
+        self, storage: Storage, owner_id: str, api_key: str, user_email: str, provider: str
     ):
         """Initialize EmailerAgentTrainer.
 
@@ -163,8 +158,7 @@ class EmailerAgentTrainer(BaseAgentTrainer):
 
         # Step 4: Generate the prompt using inherited method
         meta_prompt = EMAILER_META_PROMPT.format(
-            user_profile=user_profile,
-            sent_email_samples=sent_samples
+            user_profile=user_profile, sent_email_samples=sent_samples
         )
         prompt_content = self._generate_prompt(meta_prompt, max_tokens=4000)
 

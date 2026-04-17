@@ -24,6 +24,7 @@ from neonize.events import (
 
 logger = logging.getLogger(__name__)
 
+
 def _default_wa_db() -> str:
     """WhatsApp DB path — per-profile if available."""
     profile_dir = os.environ.get("ZYLCH_PROFILE_DIR")

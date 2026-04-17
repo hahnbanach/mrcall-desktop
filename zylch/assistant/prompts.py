@@ -307,4 +307,3 @@ Contact Variables in StarChat:
 - LAST_ENRICHED: ISO timestamp of last enrichment
 
 Remember: This is an assistance tool, not automation. The human makes all final decisions."""
-

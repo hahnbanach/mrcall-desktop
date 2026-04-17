@@ -6,14 +6,14 @@ and the full email processing pipeline with mocked dependencies.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from datetime import datetime
 
 from app.workers.memory_worker import (
     extract_phone_numbers,
     extract_linkedin_urls,
     reconsolidate,
-    process_email
+    process_email,
 )
 
 
@@ -168,7 +168,7 @@ class TestReconsolidation:
             "phones": ["555-987-6543", "555-123-4567"],  # One new, one existing
             "linkedins": ["linkedin.com/in/john-doe"],
             "topics": ["machine learning", "data science"],
-            "action_items": ["Schedule follow-up call"]
+            "action_items": ["Schedule follow-up call"],
         }
 
         result = reconsolidate(old_memory, new_data)
@@ -202,7 +202,7 @@ class TestReconsolidation:
             "phones": ["555-123-4567"],
             "linkedins": ["linkedin.com/in/john-doe"],
             "topics": ["AI", "ML"],
-            "action_items": ["Send proposal"]
+            "action_items": ["Send proposal"],
         }
 
         result = reconsolidate(old_memory, new_data)
@@ -216,12 +216,7 @@ class TestReconsolidation:
         """Test reconsolidation with empty new data."""
         old_memory = "Name: John Doe\nCompany: Acme Corp"
 
-        new_data = {
-            "phones": [],
-            "linkedins": [],
-            "topics": [],
-            "action_items": []
-        }
+        new_data = {"phones": [], "linkedins": [], "topics": [], "action_items": []}
 
         result = reconsolidate(old_memory, new_data)
 
@@ -237,7 +232,7 @@ class TestReconsolidation:
             "phones": ["555-111-1111", "555-222-2222", "555-333-3333"],
             "linkedins": ["linkedin.com/in/person1", "linkedin.com/in/person2"],
             "topics": ["topic1", "topic2", "topic3", "topic4"],
-            "action_items": ["action1", "action2", "action3"]
+            "action_items": ["action1", "action2", "action3"],
         }
 
         result = reconsolidate(old_memory, new_data)
@@ -274,12 +269,15 @@ class TestProcessEmail:
         # Mock the messages.create response
         mock_response = Mock()
         mock_response.content = [
-            Mock(type="text", text="""
+            Mock(
+                type="text",
+                text="""
             PHONES: 555-123-4567, +1-555-987-6543
             LINKEDINS: linkedin.com/in/john-doe
             TOPICS: artificial intelligence, machine learning, neural networks
             ACTION_ITEMS: Schedule demo call, Send whitepaper, Follow up next week
-            """)
+            """,
+            )
         ]
 
         client.messages.create.return_value = mock_response
@@ -303,13 +301,17 @@ class TestProcessEmail:
             Best regards,
             John
             """,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
-    def test_process_email_full_pipeline(self, mock_storage_client, mock_anthropic_client, sample_email):
+    def test_process_email_full_pipeline(
+        self, mock_storage_client, mock_anthropic_client, sample_email
+    ):
         """Test the complete email processing pipeline with mocks."""
-        with patch('app.workers.memory_worker.storage_client', mock_storage_client), \
-             patch('app.workers.memory_worker.anthropic_client', mock_anthropic_client):
+        with (
+            patch("app.workers.memory_worker.storage_client", mock_storage_client),
+            patch("app.workers.memory_worker.anthropic_client", mock_anthropic_client),
+        ):
 
             result = process_email(sample_email)
 
@@ -348,12 +350,16 @@ class TestProcessEmail:
             assert result["contact"] == "john.doe@example.com"
             assert "memory_updated" in result
 
-    def test_process_email_no_previous_memory(self, mock_storage_client, mock_anthropic_client, sample_email):
+    def test_process_email_no_previous_memory(
+        self, mock_storage_client, mock_anthropic_client, sample_email
+    ):
         """Test processing email when contact has no previous memory."""
         mock_storage_client.get_contact_memory.return_value = ""
 
-        with patch('app.workers.memory_worker.storage_client', mock_storage_client), \
-             patch('app.workers.memory_worker.anthropic_client', mock_anthropic_client):
+        with (
+            patch("app.workers.memory_worker.storage_client", mock_storage_client),
+            patch("app.workers.memory_worker.anthropic_client", mock_anthropic_client),
+        ):
 
             result = process_email(sample_email)
 
@@ -366,12 +372,16 @@ class TestProcessEmail:
             # Old Memory section should be empty or not misleading
             assert sample_email["body"] in message_content
 
-    def test_process_email_api_error(self, mock_storage_client, mock_anthropic_client, sample_email):
+    def test_process_email_api_error(
+        self, mock_storage_client, mock_anthropic_client, sample_email
+    ):
         """Test handling of Anthropic API errors."""
         mock_anthropic_client.messages.create.side_effect = Exception("API Error")
 
-        with patch('app.workers.memory_worker.storage_client', mock_storage_client), \
-             patch('app.workers.memory_worker.anthropic_client', mock_anthropic_client):
+        with (
+            patch("app.workers.memory_worker.storage_client", mock_storage_client),
+            patch("app.workers.memory_worker.anthropic_client", mock_anthropic_client),
+        ):
 
             result = process_email(sample_email)
 
@@ -382,12 +392,16 @@ class TestProcessEmail:
             # Should not store memory when processing fails
             assert not mock_storage_client.store_contact_memory.called
 
-    def test_process_email_storage_error(self, mock_storage_client, mock_anthropic_client, sample_email):
+    def test_process_email_storage_error(
+        self, mock_storage_client, mock_anthropic_client, sample_email
+    ):
         """Test handling of storage errors."""
         mock_storage_client.store_contact_memory.side_effect = Exception("Storage Error")
 
-        with patch('app.workers.memory_worker.storage_client', mock_storage_client), \
-             patch('app.workers.memory_worker.anthropic_client', mock_anthropic_client):
+        with (
+            patch("app.workers.memory_worker.storage_client", mock_storage_client),
+            patch("app.workers.memory_worker.anthropic_client", mock_anthropic_client),
+        ):
 
             result = process_email(sample_email)
 
@@ -414,7 +428,9 @@ class TestBatchProcessing:
 
         mock_response = Mock()
         mock_response.content = [
-            Mock(type="text", text="PHONES: 555-0000\nLINKEDINS: \nTOPICS: test\nACTION_ITEMS: none")
+            Mock(
+                type="text", text="PHONES: 555-0000\nLINKEDINS: \nTOPICS: test\nACTION_ITEMS: none"
+            )
         ]
 
         client.messages.create.return_value = mock_response
@@ -429,15 +445,19 @@ class TestBatchProcessing:
                 "from": f"user{i}@example.com",
                 "subject": f"Subject {i}",
                 "body": f"Email body {i} with phone (555) 000-000{i}",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
             for i in range(10)
         ]
 
-    def test_batch_processing_efficiency(self, mock_storage_client, mock_anthropic_client, batch_emails):
+    def test_batch_processing_efficiency(
+        self, mock_storage_client, mock_anthropic_client, batch_emails
+    ):
         """Test that 10 emails are processed efficiently."""
-        with patch('app.workers.memory_worker.storage_client', mock_storage_client), \
-             patch('app.workers.memory_worker.anthropic_client', mock_anthropic_client):
+        with (
+            patch("app.workers.memory_worker.storage_client", mock_storage_client),
+            patch("app.workers.memory_worker.anthropic_client", mock_anthropic_client),
+        ):
 
             results = []
             start_time = datetime.now()
@@ -468,8 +488,11 @@ class TestBatchProcessing:
             # Allow 5 seconds for overhead
             assert duration < 5.0
 
-    def test_batch_processing_partial_failure(self, mock_storage_client, mock_anthropic_client, batch_emails):
+    def test_batch_processing_partial_failure(
+        self, mock_storage_client, mock_anthropic_client, batch_emails
+    ):
         """Test batch processing when some emails fail."""
+
         # Make every 3rd email fail
         def side_effect(*args, **kwargs):
             call_count = mock_anthropic_client.messages.create.call_count
@@ -484,8 +507,10 @@ class TestBatchProcessing:
 
         mock_anthropic_client.messages.create.side_effect = side_effect
 
-        with patch('app.workers.memory_worker.storage_client', mock_storage_client), \
-             patch('app.workers.memory_worker.anthropic_client', mock_anthropic_client):
+        with (
+            patch("app.workers.memory_worker.storage_client", mock_storage_client),
+            patch("app.workers.memory_worker.anthropic_client", mock_anthropic_client),
+        ):
 
             results = []
             for email in batch_emails:

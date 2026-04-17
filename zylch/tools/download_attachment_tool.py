@@ -44,18 +44,14 @@ class DownloadAttachmentTool(Tool):
         return self._owner_id
 
     async def execute(self, email_id: str = "", **kwargs) -> ToolResult:
-        logger.debug(
-            f"[download_attachment] execute(args={{'email_id': '{email_id}'}})"
-        )
+        logger.debug(f"[download_attachment] execute(args={{'email_id': '{email_id}'}})")
         if not email_id:
             result = ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
                 error="No email_id provided",
             )
-            logger.debug(
-                f"[download_attachment] -> status={result.status}"
-            )
+            logger.debug(f"[download_attachment] -> status={result.status}")
             return result
 
         owner_id = self._get_owner_id()
@@ -65,9 +61,7 @@ class DownloadAttachmentTool(Tool):
                 data=None,
                 error="No owner_id available",
             )
-            logger.debug(
-                f"[download_attachment] -> status={result.status}"
-            )
+            logger.debug(f"[download_attachment] -> status={result.status}")
             return result
 
         # Try internal UUID first, then fall back to gmail_id
@@ -80,9 +74,7 @@ class DownloadAttachmentTool(Tool):
                 data=None,
                 error=f"Email {email_id} not found",
             )
-            logger.debug(
-                f"[download_attachment] -> status={result.status}"
-            )
+            logger.debug(f"[download_attachment] -> status={result.status}")
             return result
 
         message_id = email.get("message_id", email_id)
@@ -102,9 +94,7 @@ class DownloadAttachmentTool(Tool):
                     data={"attachments": []},
                     message="No attachments found in this email",
                 )
-                logger.debug(
-                    f"[download_attachment] -> status={result.status}"
-                )
+                logger.debug(f"[download_attachment] -> status={result.status}")
                 return result
 
             # Normalize: return list of {local_path, filename, size}
@@ -141,8 +131,7 @@ class DownloadAttachmentTool(Tool):
                 message="\n".join(lines),
             )
             logger.debug(
-                f"[download_attachment] -> status={result.status}"
-                f" count={len(normalized)}"
+                f"[download_attachment] -> status={result.status}" f" count={len(normalized)}"
             )
             return result
         except Exception as e:
@@ -152,9 +141,7 @@ class DownloadAttachmentTool(Tool):
                 data=None,
                 error=f"Download failed: {e}",
             )
-            logger.debug(
-                f"[download_attachment] -> status={result.status}"
-            )
+            logger.debug(f"[download_attachment] -> status={result.status}")
             return result
 
     def get_schema(self) -> Dict[str, Any]:
@@ -167,8 +154,7 @@ class DownloadAttachmentTool(Tool):
                     "email_id": {
                         "type": "string",
                         "description": (
-                            "Email ID (UUID from search_emails,"
-                            " NOT the subject line)"
+                            "Email ID (UUID from search_emails," " NOT the subject line)"
                         ),
                     },
                 },

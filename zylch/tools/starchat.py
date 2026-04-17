@@ -118,7 +118,7 @@ class StarChatClient:
             expires_at = credentials.get("expires_at")
             if expires_at:
                 if isinstance(expires_at, str):
-                    expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                    expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
 
                 # Refresh if expiring within 5 minutes
                 if expires_at < datetime.now(timezone.utc) + timedelta(minutes=5):
@@ -150,9 +150,7 @@ class StarChatClient:
         await self._refresh_token_if_needed()
 
         response = await self.client.request(
-            "GET",
-            f"/mrcall/v1/{self.realm}/crm/contact",
-            json={"contactId": contact_id}
+            "GET", f"/mrcall/v1/{self.realm}/crm/contact", json={"contactId": contact_id}
         )
 
         if response.status_code == 404:
@@ -164,9 +162,7 @@ class StarChatClient:
         return data[0] if isinstance(data, list) and len(data) > 0 else data
 
     async def get_contact_by_email(
-        self,
-        email: str,
-        business_id: Optional[str] = None
+        self, email: str, business_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """Get contact by email address (async version).
 
@@ -184,9 +180,7 @@ class StarChatClient:
         return self._filter_contact_by_email(contacts, email)
 
     def get_contact_by_email_sync(
-        self,
-        email: str,
-        business_id: Optional[str] = None
+        self, email: str, business_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """Get contact by email address (sync version).
 
@@ -198,6 +192,7 @@ class StarChatClient:
             Contact data or None if not found
         """
         import asyncio
+
         logger.debug(f"Getting contact by email (sync): {email}")
 
         try:
@@ -205,10 +200,11 @@ class StarChatClient:
             if loop.is_running():
                 # We're in an async context, create a new event loop in a thread
                 import concurrent.futures
+
                 with concurrent.futures.ThreadPoolExecutor() as pool:
                     future = pool.submit(
                         asyncio.run,
-                        self.search_contacts(email=email, business_id=business_id, limit=1)
+                        self.search_contacts(email=email, business_id=business_id, limit=1),
                     )
                     contacts = future.result()
             else:
@@ -224,9 +220,7 @@ class StarChatClient:
         return self._filter_contact_by_email(contacts, email)
 
     def _filter_contact_by_email(
-        self,
-        contacts: List[Dict[str, Any]],
-        email: str
+        self, contacts: List[Dict[str, Any]], email: str
     ) -> Optional[Dict[str, Any]]:
         """Filter contacts list to find exact email match.
 
@@ -283,18 +277,20 @@ class StarChatClient:
         Returns:
             List of matching contacts
         """
-        logger.info(f"🔍 search_contacts called with: business_id={business_id}, email={email}, phone={phone}")
+        logger.info(
+            f"🔍 search_contacts called with: business_id={business_id}, email={email}, phone={phone}"
+        )
         logger.debug(f"Searching contacts with filter: {filter_expression}")
 
         if business_id:
-            logger.info(f"✅ Using BasicAuth endpoint (business_id provided)")
+            logger.info("✅ Using BasicAuth endpoint (business_id provided)")
             endpoint = f"/mrcall/v1/crm/contact/{business_id}"
             # Use GET to fetch all contacts
             logger.info(f"GET {endpoint}")
             response = await self.client.get(endpoint)
         else:
             # JWT endpoint supports proper search
-            logger.info(f"⚠️  Using JWT endpoint (no business_id provided)")
+            logger.info("⚠️  Using JWT endpoint (no business_id provided)")
             endpoint = f"/mrcall/v1/{self.realm}/crm/contact/search"
             search_body = {
                 "from": 0,
@@ -340,7 +336,9 @@ class StarChatClient:
         Returns:
             List of matching contacts (paginated)
         """
-        logger.info(f"🔄 search_contacts_paginated: business_id={business_id}, email={email}, phone={phone}")
+        logger.info(
+            f"🔄 search_contacts_paginated: business_id={business_id}, email={email}, phone={phone}"
+        )
 
         logger.info(f"Fetching all contacts for business: {business_id}")
 
@@ -359,9 +357,7 @@ class StarChatClient:
         return contacts
 
     async def create_contact(
-        self,
-        contact_data: Dict[str, Any],
-        business_id: Optional[str] = None
+        self, contact_data: Dict[str, Any], business_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Create new contact.
 
@@ -414,11 +410,7 @@ class StarChatClient:
             # Return success anyway since we got 200 OK
             return {"status": "created", "contact": contact_data, "raw_response": response_text}
 
-    async def update_contact(
-        self,
-        contact_id: str,
-        updates: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def update_contact(self, contact_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update contact data.
 
         Args:
@@ -444,18 +436,13 @@ class StarChatClient:
                 if not isinstance(value, str):
                     current["variables"][key] = json.dumps(value)
 
-        response = await self.client.put(
-            f"/mrcall/v1/{self.realm}/crm/contact",
-            json=current
-        )
+        response = await self.client.put(f"/mrcall/v1/{self.realm}/crm/contact", json=current)
         response.raise_for_status()
 
         return response.json()
 
     async def update_contact_variables(
-        self,
-        contact_id: str,
-        variables: Dict[str, Any]
+        self, contact_id: str, variables: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Update contact variables (merge with existing).
 
@@ -482,10 +469,7 @@ class StarChatClient:
             current["variables"][key] = json.dumps(value) if not isinstance(value, str) else value
 
         # Update contact
-        response = await self.client.put(
-            f"/mrcall/v1/{self.realm}/crm/contact",
-            json=current
-        )
+        response = await self.client.put(f"/mrcall/v1/{self.realm}/crm/contact", json=current)
         response.raise_for_status()
 
         return response.json()
@@ -499,8 +483,7 @@ class StarChatClient:
         logger.info(f"Deleting contact: {contact_id}")
 
         response = await self.client.delete(
-            f"/mrcall/v1/{self.realm}/crm/contact",
-            json={"contactIds": [contact_id]}
+            f"/mrcall/v1/{self.realm}/crm/contact", json={"contactIds": [contact_id]}
         )
         response.raise_for_status()
 
@@ -523,33 +506,41 @@ class StarChatClient:
             # Note: This endpoint uses POST with JSON body for search
             # The realm should already include any prefix (e.g., "delegated_mrcall0")
             endpoint = f"/mrcall/v1/{self.realm}/crm/business/search"
-            
+
             logger.info(f"Using business search endpoint: {endpoint}")
-            
-            logger.debug(f"[StarChat] get_business_config: POST body={{'businessId': '{business_id}'}}")
-            response = await self.client.request(
-                "POST",
-                endpoint,
-                json={"businessId": business_id}
+
+            logger.debug(
+                f"[StarChat] get_business_config: POST body={{'businessId': '{business_id}'}}"
             )
+            response = await self.client.request("POST", endpoint, json={"businessId": business_id})
             if response.status_code == 404:
-                logger.info(f"[StarChat] get_business_config: 404 not found for business_id={business_id}")
+                logger.info(
+                    f"[StarChat] get_business_config: 404 not found for business_id={business_id}"
+                )
                 return None
 
             response.raise_for_status()
             data = response.json()
-            logger.info(f"[StarChat] get_business_config: response type={type(data).__name__}, len={len(data) if isinstance(data, list) else 'N/A'}")
+            logger.info(
+                f"[StarChat] get_business_config: response type={type(data).__name__}, len={len(data) if isinstance(data, list) else 'N/A'}"
+            )
 
             # API returns a list, extract matching element
             if isinstance(data, list) and len(data) > 0:
                 result = next((b for b in data if b.get("businessId") == business_id), data[0])
-                logger.info(f"[StarChat] get_business_config: FOUND template={result.get('template')}, variables={len(result.get('variables', {}))}")
+                logger.info(
+                    f"[StarChat] get_business_config: FOUND template={result.get('template')}, variables={len(result.get('variables', {}))}"
+                )
                 return result
             elif isinstance(data, dict) and data:
-                logger.info(f"[StarChat] get_business_config: FOUND (dict) template={data.get('template')}, variables={len(data.get('variables', {}))}")
+                logger.info(
+                    f"[StarChat] get_business_config: FOUND (dict) template={data.get('template')}, variables={len(data.get('variables', {}))}"
+                )
                 return data
             else:
-                logger.info(f"[StarChat] get_business_config: empty or unexpected response. Type={type(data).__name__}, value={json.dumps(data, indent=4) if data else 'empty'}")
+                logger.info(
+                    f"[StarChat] get_business_config: empty or unexpected response. Type={type(data).__name__}, value={json.dumps(data, indent=4) if data else 'empty'}"
+                )
                 return None
 
         except Exception as e:
@@ -579,7 +570,9 @@ class StarChatClient:
         Returns:
             Variable catalog schema
         """
-        logger.info(f"Fetching variable schema: template={template_name}, lang={language}, langDesc={language_descriptions}")
+        logger.info(
+            f"Fetching variable schema: template={template_name}, lang={language}, langDesc={language_descriptions}"
+        )
 
         params = {
             "templateName": template_name,
@@ -592,18 +585,24 @@ class StarChatClient:
         # The realm should already include any prefix (e.g., "delegated_mrcall0")
         endpoint = f"/mrcall/v1/{self.realm}/crm/variables"
         logger.info(f"Fetching variable schema from: {endpoint} with params={params}")
-        logger.debug(f"[StarChat] get_variable_schema: auth_type={self.auth_type}, realm={self.realm}")
+        logger.debug(
+            f"[StarChat] get_variable_schema: auth_type={self.auth_type}, realm={self.realm}"
+        )
 
         response = await self.client.get(endpoint, params=params)
         response.raise_for_status()
         schema = response.json()
         var_count = len(schema) if isinstance(schema, (dict, list)) else 0
-        logger.debug(f"[StarChat] get_variable_schema(template={params['templateName']}) -> {var_count} variables")
+        logger.debug(
+            f"[StarChat] get_variable_schema(template={params['templateName']}) -> {var_count} variables"
+        )
 
         # Log sample for debugging metadata extraction
         if isinstance(schema, list) and schema:
             first_collection = schema[0]
-            variables = first_collection.get("variables", []) if isinstance(first_collection, dict) else []
+            variables = (
+                first_collection.get("variables", []) if isinstance(first_collection, dict) else []
+            )
             # variables may contain nested lists — find first dict item
             sample = None
             for item in variables:
@@ -618,11 +617,15 @@ class StarChatClient:
                     if sample:
                         break
             if sample:
-                logger.debug(f"[StarChat] get_variable_schema: response is list of {len(schema)} collections, sample var='{sample.get('name')}', keys={list(sample.keys())}")
+                logger.debug(
+                    f"[StarChat] get_variable_schema: response is list of {len(schema)} collections, sample var='{sample.get('name')}', keys={list(sample.keys())}"
+                )
         elif isinstance(schema, dict) and schema:
             sample_key = next(iter(schema))
             sample_val = schema[sample_key]
-            logger.debug(f"[StarChat] get_variable_schema: response is dict with {len(schema)} keys, sample='{sample_key}', keys={list(sample_val.keys()) if isinstance(sample_val, dict) else type(sample_val).__name__}")
+            logger.debug(
+                f"[StarChat] get_variable_schema: response is dict with {len(schema)} keys, sample='{sample_key}', keys={list(sample_val.keys()) if isinstance(sample_val, dict) else type(sample_val).__name__}"
+            )
 
         return schema
 
@@ -640,7 +643,9 @@ class StarChatClient:
         """
         try:
             # 1. Get business config for current values and template
-            logger.debug(f"[StarChat] get_all_variables: get_business_config(business_id={business_id})")
+            logger.debug(
+                f"[StarChat] get_all_variables: get_business_config(business_id={business_id})"
+            )
             business = await self.get_business_config(business_id)
             logger.debug(f"[StarChat] get_all_variables: business found={business is not None}")
             if not business:
@@ -652,20 +657,26 @@ class StarChatClient:
             raw_lang = business.get("languageCountry", "")
             biz_lang = raw_lang.replace("_", "-") if raw_lang else ""
             biz_lang_short = biz_lang[:2] if biz_lang else ""
-            logger.debug(f"[StarChat] get_all_variables: template={template}, current_values_count={len(current_values)}, languageCountry={raw_lang} -> biz_lang={biz_lang}")
+            logger.debug(
+                f"[StarChat] get_all_variables: template={template}, current_values_count={len(current_values)}, languageCountry={raw_lang} -> biz_lang={biz_lang}"
+            )
             logger.info(f"Fetching variables for template: {template}")
 
             # 2. Get schema for descriptions
             # nested=True with languageDescriptions returns localized flat fields
             # Response is an array of collections: [{variables: [{name, type, description, defaultValue, ...}]}]
-            logger.debug(f"[StarChat] get_all_variables: get_variable_schema(template={template}, nested=True, langDesc={biz_lang_short or 'en'})")
+            logger.debug(
+                f"[StarChat] get_all_variables: get_variable_schema(template={template}, nested=True, langDesc={biz_lang_short or 'en'})"
+            )
             raw_schema = await self.get_variable_schema(
                 template_name=template,
                 language=biz_lang or "en-US",
                 nested=True,
                 language_descriptions=biz_lang_short or "en",
             )
-            logger.debug(f"[StarChat] get_all_variables: raw_schema type={type(raw_schema).__name__}, items={len(raw_schema) if raw_schema else 0}")
+            logger.debug(
+                f"[StarChat] get_all_variables: raw_schema type={type(raw_schema).__name__}, items={len(raw_schema) if raw_schema else 0}"
+            )
 
             # 3. Flatten collections array into {var_name: var_data}
             # variables arrays may contain nested lists (dashboard uses .flat())
@@ -684,7 +695,9 @@ class StarChatClient:
                                     flat_schema[name] = var
             elif isinstance(raw_schema, dict):
                 flat_schema = raw_schema
-            logger.debug(f"[StarChat] get_all_variables: flattened schema: {len(flat_schema)} variables")
+            logger.debug(
+                f"[StarChat] get_all_variables: flattened schema: {len(flat_schema)} variables"
+            )
 
             # 4. Combine schema with current values
             combined = []
@@ -711,23 +724,29 @@ class StarChatClient:
                         elif isinstance(dep_item, str):
                             depends_on.append(dep_item)
 
-                logger.debug(f"[StarChat] get_all_variables: var={name}, humanName='{human_name}', desc='{desc}', default='{default_val}', value='{value}', modifiable={modifiable}, visible={visible}, admin={admin}, depends_on={depends_on}")
+                logger.debug(
+                    f"[StarChat] get_all_variables: var={name}, humanName='{human_name}', desc='{desc}', default='{default_val}', value='{value}', modifiable={modifiable}, visible={visible}, admin={admin}, depends_on={depends_on}"
+                )
 
-                combined.append({
-                    "name": name,
-                    "human_name": human_name,
-                    "description": desc,
-                    "default": default_val,
-                    "value": value,
-                    "modifiable": modifiable,
-                    "visible": visible,
-                    "admin": admin,
-                    "depends_on": depends_on,
-                })
-                
+                combined.append(
+                    {
+                        "name": name,
+                        "human_name": human_name,
+                        "description": desc,
+                        "default": default_val,
+                        "value": value,
+                        "modifiable": modifiable,
+                        "visible": visible,
+                        "admin": admin,
+                        "depends_on": depends_on,
+                    }
+                )
+
             # Sort by name
             combined.sort(key=lambda x: x["name"])
-            logger.debug(f"[StarChat] get_all_variables: combined {len(combined)} variables: {[v['name'] for v in combined]}")
+            logger.debug(
+                f"[StarChat] get_all_variables: combined {len(combined)} variables: {[v['name'] for v in combined]}"
+            )
             return combined
 
         except Exception as e:
@@ -755,7 +774,9 @@ class StarChatClient:
             Exception: If request fails
         """
         logger.info(f"Updating variable {variable_name} for business: {business_id}")
-        logger.debug(f"[StarChat] update_business_variable: fetching current config for {business_id}")
+        logger.debug(
+            f"[StarChat] update_business_variable: fetching current config for {business_id}"
+        )
 
         # First, get current business to extract required fields
         business_data = await self.get_business_config(business_id)
@@ -764,8 +785,10 @@ class StarChatClient:
             logger.debug(f"[StarChat] update_business_variable: business not found: {business_id}")
             raise ValueError(f"No business found with ID: {business_id}")
 
-        current_val = business_data.get('variables', {}).get(variable_name)
-        logger.debug(f"[StarChat] update_business_variable: {variable_name}: current='{current_val}' -> new='{value}'")
+        current_val = business_data.get("variables", {}).get(variable_name)
+        logger.debug(
+            f"[StarChat] update_business_variable: {variable_name}: current='{current_val}' -> new='{value}'"
+        )
 
         # Build MINIMAL payload with only required fields
         # Based on FirebaseBusinessService.update():
@@ -781,14 +804,16 @@ class StarChatClient:
             "businessId": business_data.get("businessId"),
             "languageCountry": business_data.get("languageCountry"),
             "template": business_data.get("template"),
-            "variables": {variable_name: value}
+            "variables": {variable_name: value},
         }
 
         # PUT the updated business back
         # The realm should already include any prefix (e.g., "delegated_mrcall0")
         endpoint = f"/mrcall/v1/{self.realm}/crm/business"
         logger.info(f"Putting updated business to: {endpoint}")
-        logger.debug(f"[StarChat] update_business_variables: auth_type={self.auth_type}, realm={self.realm}")
+        logger.debug(
+            f"[StarChat] update_business_variables: auth_type={self.auth_type}, realm={self.realm}"
+        )
         logger.debug(f"PUT request body: {minimal_payload}")
 
         response = await self.client.put(
@@ -796,7 +821,9 @@ class StarChatClient:
             json=minimal_payload,
         )
 
-        logger.debug(f"[StarChat] update_business_variable: PUT response status={response.status_code}")
+        logger.debug(
+            f"[StarChat] update_business_variable: PUT response status={response.status_code}"
+        )
         if response.status_code >= 400:
             logger.error(f"PUT failed: {response.status_code} - {response.text}")
         response.raise_for_status()
@@ -834,9 +861,7 @@ class StarChatClient:
             return None
 
     async def get_whatsapp_contacts(
-        self,
-        business_id: str,
-        days_back: int = 30
+        self, business_id: str, days_back: int = 30
     ) -> List[Dict[str, Any]]:
         """DEPRECATED: WhatsApp now uses neonize (local), not StarChat.
 
@@ -878,8 +903,8 @@ class StarChatClient:
         logger.info(f"Initiating outbound call to {phone_number} via business {business_id}")
 
         # Normalize phone number
-        if not phone_number.startswith('+'):
-            phone_number = '+' + phone_number.lstrip('0')
+        if not phone_number.startswith("+"):
+            phone_number = "+" + phone_number.lstrip("0")
 
         # Build request body
         call_data = {
@@ -894,8 +919,7 @@ class StarChatClient:
         if variables:
             # Ensure all variables are strings
             call_data["variables"] = {
-                k: str(v) if not isinstance(v, str) else v
-                for k, v in variables.items()
+                k: str(v) if not isinstance(v, str) else v for k, v in variables.items()
             }
 
         # StarChat outbound call endpoint
@@ -943,7 +967,10 @@ class StarChatClient:
 # Factory Function for Creating StarChat Clients
 # =============================================================================
 
-async def create_starchat_client(owner_id: str, supabase_storage: Optional[Any] = None) -> StarChatClient:
+
+async def create_starchat_client(
+    owner_id: str, supabase_storage: Optional[Any] = None
+) -> StarChatClient:
     """
     Create StarChat client with appropriate auth method.
 
@@ -967,6 +994,7 @@ async def create_starchat_client(owner_id: str, supabase_storage: Optional[Any] 
     # Get or create Supabase storage
     if not supabase_storage:
         from zylch.storage import Storage
+
         supabase_storage = Storage()
 
     # Try OAuth first (preferred method)
@@ -976,7 +1004,7 @@ async def create_starchat_client(owner_id: str, supabase_storage: Optional[Any] 
         if credentials and credentials.get("access_token"):
             logger.info(f"Creating StarChat client with OAuth for owner {owner_id}")
             return StarChatClient(
-                base_url=settings.mrcall_base_url.rstrip('/'),
+                base_url=settings.mrcall_base_url.rstrip("/"),
                 auth_type="oauth",
                 access_token=credentials["access_token"],
                 realm=settings.mrcall_realm,
@@ -992,7 +1020,7 @@ async def create_starchat_client(owner_id: str, supabase_storage: Optional[Any] 
     if hasattr(settings, "starchat_username") and settings.starchat_username:
         logger.info(f"Creating StarChat client with Basic Auth (fallback) for owner {owner_id}")
         return StarChatClient(
-            base_url=settings.mrcall_base_url.rstrip('/'),
+            base_url=settings.mrcall_base_url.rstrip("/"),
             auth_type="basic",
             username=settings.starchat_username,
             password=settings.starchat_password,

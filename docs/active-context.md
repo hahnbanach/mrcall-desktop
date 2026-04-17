@@ -101,7 +101,7 @@ Task detection accuracy: from 7 tasks (56% recall) to 12+ tasks (~90% accuracy).
 1. **Run `zylch process` end-to-end** — validate that tasks persist and colleague emails generate tasks
 2. **Clean stale modules**: `zylch/intelligence/`, `zylch/ml/`, `zylch/router/`, `zylch/webhook/`
 3. **Split oversized files**: `command_handlers.py` (5137), `gmail_tools.py` (988)
-4. **Fix lint**: 66 Black reformats, 120 Ruff errors
+4. **Lint clean** (2026-04-17): `make lint` exits 0 — Black and Ruff pass on `zylch/` and `tests/`
 5. **Test `zylch dream`** — run gate checks, verify prune, check last_dream_at persists
 6. **Test Telegram digest** — start bot, wait for 8am/8pm, verify message
 
@@ -115,4 +115,4 @@ Task detection accuracy: from 7 tasks (56% recall) to 12+ tasks (~90% accuracy).
 - Most tests in `tests/` directory are stale (except `tests/workers/` which is current)
 - Duplicate tasks still appear occasionally (invoice reminders, cross-contact same thread)
 - No .docx/.pptx parser — relies on run_python fallback
-- 66 files need Black reformatting, 120 Ruff errors
+- Lint clean as of 2026-04-17: `make lint` exits 0 (Black + Ruff pass on `zylch/` and `tests/`)
