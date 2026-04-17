@@ -57,8 +57,8 @@ const api = {
     approve: (tool_use_id: string, approved: boolean) =>
       call<{ ok: boolean }>('chat.approve', { tool_use_id, approved })
   },
-  sync: {
-    run: () => call<any>('sync.run', {}, 300000)
+  update: {
+    run: () => call<any>('update.run', {}, 600000)
   },
   narration: {
     summarize: (lines: string[], context: string = '') =>
