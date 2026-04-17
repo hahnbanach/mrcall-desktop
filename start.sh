@@ -20,6 +20,11 @@ if [ ! -f "$ZYLCH_DIR/venv/bin/zylch" ]; then
     exit 1
 fi
 
+echo ">> git pull $(basename "$ZYLCH_DIR")"
+git -C "$ZYLCH_DIR" pull --ff-only
+echo ">> git pull $(basename "$DIR")"
+git -C "$DIR" pull --ff-only
+
 PROFILE="${1:-}"
 
 cd "$DIR"
