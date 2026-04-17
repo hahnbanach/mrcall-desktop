@@ -580,6 +580,7 @@ async def emails_list_by_thread(
     """
     from zylch.api.token_storage import get_email, get_provider
     from zylch.storage.storage import Storage
+    from zylch.workers.thread_presenter import strip_quoted
 
     thread_id = params.get("thread_id")
     if not thread_id:
@@ -602,6 +603,8 @@ async def emails_list_by_thread(
             date_val = r.get("date")
             # `to_dict()` isoformats datetime columns.
             date_iso = date_val if isinstance(date_val, str) else ""
+            body_raw = r.get("body_plain") or ""
+            body_clean = strip_quoted(body_raw, cap=None) if body_raw else ""
             out.append(
                 {
                     "id": r.get("id") or "",
@@ -611,7 +614,7 @@ async def emails_list_by_thread(
                     "cc_email": r.get("cc_email") or "",
                     "date": date_iso,
                     "subject": r.get("subject") or "",
-                    "body_plain": r.get("body_plain") or "",
+                    "body_plain": body_clean,
                     "is_auto_reply": bool(r.get("is_auto_reply")),
                     "is_user_sent": bool(user_email and from_email.lower() == user_email),
                     "has_attachments": False,

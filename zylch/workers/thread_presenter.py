@@ -27,12 +27,13 @@ _QUOTED_CUT_PATTERNS = [
 ]
 
 
-def strip_quoted(body: str) -> str:
+def strip_quoted(body: str, cap: Optional[int] = 1500) -> str:
     """Return the new (non-quoted) content of an email body.
 
     Removes lines starting with '>' (quoted), truncates at the first
     quoted-history or signature marker, collapses consecutive blank
-    lines, and caps at 1500 chars.
+    lines. If `cap` is an int (>0), caps the output at that many
+    chars; if `cap` is None, no length cap is applied.
     """
     if not body:
         return ""
@@ -59,8 +60,8 @@ def strip_quoted(body: str) -> str:
         collapsed.pop()
     result_lines = [re.sub(r"[ \t]+", " ", line) for line in collapsed]
     result = "\n".join(result_lines)
-    if len(result) > 1500:
-        result = result[:1500].rstrip() + "…[truncated]"
+    if cap is not None and len(result) > cap:
+        result = result[:cap].rstrip() + "…[truncated]"
     return result
 
 
@@ -124,7 +125,7 @@ def build_thread_history(
         except Exception:
             date_str = te.date or ""
         body_src = te.body_plain or te.snippet or ""
-        body_clean = strip_quoted(body_src)
+        body_clean = strip_quoted(body_src, cap=1500)
         if not body_clean:
             body_clean = body_src.strip()
             if len(body_clean) > 1500:
