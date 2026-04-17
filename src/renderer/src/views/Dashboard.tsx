@@ -4,7 +4,7 @@ import { useConversations } from '../store/conversations'
 
 interface Props {
   onOpenChat?: () => void
-  onOpenEmails?: (threadId: string) => void
+  onOpenEmails?: (threadId: string, taskId?: string) => void
 }
 
 const URGENCY_ORDER = ['high', 'medium', 'low']
@@ -15,7 +15,7 @@ const URGENCY_STYLES: Record<string, string> = {
 }
 
 export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
-  const { openTaskChat } = useConversations()
+  const { openTaskChat, state: convState } = useConversations()
   const [tasks, setTasks] = useState<ZylchTask[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -214,7 +214,21 @@ export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
                       return (
                         <button
                           onClick={() => {
-                            if (tid) onOpenEmails?.(tid)
+                            if (tid) {
+                              // Ensure the same task conversation Solve uses
+                              // exists in the store, so the Email tab's
+                              // composer can post to the same conversation_id.
+                              // openTaskChat replaces the conversation in
+                              // place, which would clobber any history a
+                              // prior Solve had — only call it if the
+                              // conversation doesn't exist yet.
+                              const convId = `task-${t.id}`
+                              const exists = convState.conversations.some(
+                                (c) => c.id === convId
+                              )
+                              if (!exists) openTaskChat(t)
+                              onOpenEmails?.(tid, t.id)
+                            }
                           }}
                           disabled={disabled}
                           title={

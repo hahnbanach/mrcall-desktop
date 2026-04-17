@@ -11,7 +11,7 @@ type View = 'dashboard' | 'chat' | 'emails' | 'update'
 
 function AppInner() {
   const [view, setView] = useState<View>('dashboard')
-  const { setActiveThreadId } = useThread()
+  const { setActiveThreadId, setActiveTaskId } = useThread()
   const tabs: { id: View; label: string }[] = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'chat', label: 'Chat' },
@@ -41,8 +41,9 @@ function AppInner() {
         {view === 'dashboard' && (
           <Dashboard
             onOpenChat={() => setView('chat')}
-            onOpenEmails={(threadId) => {
+            onOpenEmails={(threadId, taskId) => {
               setActiveThreadId(threadId)
+              setActiveTaskId(taskId ?? null)
               setView('emails')
             }}
           />
