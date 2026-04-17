@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useConversations, type Approval } from '../store/conversations'
 import { useNarration } from '../hooks/useNarration'
+import ChatComposer, { type ChatComposerTaskContext } from '../components/ChatComposer'
 
 interface Props {
   onGoToDashboard?: () => void
@@ -22,45 +23,12 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
   const active = state.conversations.find((c) => c.id === state.activeId)!
   const scrollRef = useRef<HTMLDivElement>(null)
   const [completing, setCompleting] = useState(false)
-  const [inputHeight, setInputHeight] = useState(160)
   const [narrationSeed, setNarrationSeed] = useState<string>('')
-  const [pendingAttachments, setPendingAttachments] = useState<string[]>([])
+  const [lastUserText, setLastUserText] = useState<string>('')
 
-  const basename = (p: string): string => {
-    const parts = p.split(/[\\/]/)
-    return parts[parts.length - 1] || p
-  }
-
-  const pickAttachments = async (): Promise<void> => {
-    try {
-      const paths = await window.zylch.files.select()
-      if (paths && paths.length > 0) {
-        setPendingAttachments((prev) => {
-          const seen = new Set(prev)
-          const merged = [...prev]
-          for (const p of paths) {
-            if (!seen.has(p)) {
-              seen.add(p)
-              merged.push(p)
-            }
-          }
-          return merged
-        })
-      }
-    } catch (e) {
-      console.error('[Chat] file picker failed', e)
-    }
-  }
-
-  const removeAttachment = (path: string): void => {
-    setPendingAttachments((prev) => prev.filter((p) => p !== path))
-  }
-
-  // Build context for narration: prefer the user's current draft, else the
-  // last user message in history. Kept short (Haiku caps at 200 chars).
+  // Build context for narration: prefer the last user message in history.
   const narrationContext = (() => {
-    const d = active.draftInput?.trim()
-    if (d) return d
+    if (lastUserText) return lastUserText
     for (let i = active.history.length - 1; i >= 0; i -= 1) {
       const m = active.history[i]
       if (m.role === 'user' && m.content) return m.content
@@ -68,25 +36,6 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
     return ''
   })()
   const narration = useNarration(!!active.busy, narrationContext, narrationSeed)
-
-  const startResize = (e: React.MouseEvent): void => {
-    const startY = e.clientY
-    const startH = inputHeight
-    const onMove = (ev: MouseEvent): void => {
-      // Dragging UP (negative deltaY in screen coords) makes input TALLER.
-      const delta = startY - ev.clientY
-      setInputHeight(Math.max(60, Math.min(600, startH + delta)))
-    }
-    const onUp = (): void => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-      document.body.style.userSelect = ''
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    document.body.style.userSelect = 'none'
-    e.preventDefault()
-  }
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
@@ -114,11 +63,17 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
     }
   }, [setPendingApproval])
 
-  const send = async (): Promise<void> => {
-    const text = active.draftInput.trim()
+  const send = async (
+    text: string,
+    attachmentPaths: string[],
+    _ctx?: ChatComposerTaskContext
+  ): Promise<void> => {
     if (!text || active.busy) return
+    // Clear the per-conversation seed/template; subsequent re-mounts of
+    // the composer (e.g. after switching tabs) should start empty.
     setDraftInput(active.id, '')
     appendUser(active.id, text)
+    setLastUserText(text)
     setNarrationSeed('Sto pensando alla tua richiesta.')
     setBusy(active.id, true)
     const historySnapshot = active.history.map((m) => ({ role: m.role, content: m.content }))
@@ -131,12 +86,11 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
       .catch(() => {
         /* fallback seed already set */
       })
-    const attachmentsSnapshot = pendingAttachments.slice()
     try {
       const chatContext: Record<string, unknown> = {}
       if (active.taskId) chatContext.task_id = active.taskId
       if (active.sourceEmailId) chatContext.email_id = active.sourceEmailId
-      if (attachmentsSnapshot.length > 0) chatContext.attachment_paths = attachmentsSnapshot
+      if (attachmentPaths.length > 0) chatContext.attachment_paths = attachmentPaths
       const res = await window.zylch.chat.send(text, historySnapshot, {
         conversationId: active.id,
         context: chatContext
@@ -144,10 +98,9 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
       const content =
         (res && (res.response || res.message || res.content)) || JSON.stringify(res, null, 2)
       appendAssistant(active.id, content)
-      // Clear attachments only after a successful send.
-      setPendingAttachments([])
     } catch (e: any) {
       appendAssistant(active.id, '**Error:** ' + (e.message || String(e)))
+      throw e
     } finally {
       setBusy(active.id, false)
       setNarrationSeed('')
@@ -276,67 +229,15 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
           )}
         </div>
 
-        <div
-          className="border-t bg-white flex flex-col"
-          style={{ height: inputHeight }}
-        >
-          <div
-            onMouseDown={startResize}
-            title="Trascina per ridimensionare"
-            className="h-1.5 cursor-ns-resize bg-slate-200 hover:bg-slate-400 shrink-0"
-          />
-          {pendingAttachments.length > 0 && (
-            <div className="px-3 pt-2 flex flex-wrap gap-2">
-              {pendingAttachments.map((path) => (
-                <span
-                  key={path}
-                  title={path}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs border border-slate-300 rounded bg-slate-100 text-slate-800"
-                >
-                  <span className="truncate max-w-[240px]">{basename(path)}</span>
-                  <button
-                    onClick={() => removeAttachment(path)}
-                    disabled={active.busy}
-                    className="text-slate-500 hover:text-slate-900"
-                    title="Rimuovi allegato"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-          <div className="flex-1 min-h-0 p-3 flex gap-2">
-            <textarea
-              className="flex-1 h-full border rounded px-3 py-2 text-sm resize-none"
-              placeholder="Scrivi un messaggio…"
-              value={active.draftInput}
-              disabled={active.busy}
-              onChange={(e) => setDraftInput(active.id, e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  send()
-                }
-              }}
-            />
-            <button
-              onClick={pickAttachments}
-              disabled={active.busy}
-              title="Allega file"
-              className="px-3 py-2 bg-slate-200 text-slate-800 rounded text-sm hover:bg-slate-300 disabled:bg-slate-100 disabled:text-slate-400 self-end"
-            >
-              📎
-            </button>
-            <button
-              onClick={send}
-              disabled={active.busy || !active.draftInput.trim()}
-              className="px-4 py-2 bg-slate-900 text-white rounded text-sm disabled:bg-slate-400 self-end"
-            >
-              Invia
-            </button>
-          </div>
-        </div>
+        <ChatComposer
+          key={active.id}
+          onSubmit={send}
+          disabled={!!active.busy}
+          placeholder="Scrivi un messaggio…"
+          taskContext={{ taskId: active.taskId, emailId: active.sourceEmailId }}
+          narration={narration}
+          initialText={active.draftInput}
+        />
       </div>
     </div>
   )
