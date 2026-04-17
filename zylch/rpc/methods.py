@@ -747,6 +747,90 @@ async def narration_predict(
         return {"text": ""}
 
 
+# ─── Settings ────────────────────────────────────────────────
+
+
+async def settings_schema(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """settings.schema() -> list of field descriptors (no values)."""
+    from zylch.services.settings_schema import get_schema
+
+    schema = get_schema()
+    logger.debug(f"[rpc] settings.schema -> {len(schema)} fields")
+    return {"fields": schema}
+
+
+async def settings_get(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """settings.get() -> {key: value} for the active profile's .env.
+
+    Secret fields (password / api_key) are ALWAYS masked: returns
+    `"<set>"` if a value is present, `""` if absent. Non-secret fields
+    are returned verbatim. There is no `include_secrets` opt-out — for
+    editing, the user simply types a new value to overwrite.
+    """
+    from zylch.services.settings_io import read_env
+    from zylch.services.settings_schema import KNOWN_KEYS, SECRET_KEYS
+
+    raw = read_env()
+    out: Dict[str, str] = {}
+    for key in KNOWN_KEYS:
+        value = raw.get(key, "")
+        if key in SECRET_KEYS:
+            out[key] = "<set>" if value else ""
+        else:
+            out[key] = value
+    # NEVER log values. Just key counts.
+    masked = sum(1 for k in KNOWN_KEYS if k in SECRET_KEYS and raw.get(k))
+    logger.debug(
+        f"[rpc] settings.get -> {len(out)} keys, {masked} secrets masked",
+    )
+    return {"values": out}
+
+
+async def settings_update(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """settings.update(updates: {key: value}) -> {ok, applied: [keys]}.
+
+    Validates that all keys are known (defined in the schema). Skips
+    secret values that look like the unmasked placeholder `"<set>"` —
+    that means the UI sent the masked value back unchanged.
+    """
+    from zylch.services.settings_io import update_env
+    from zylch.services.settings_schema import KNOWN_KEYS, SECRET_KEYS
+
+    updates = params.get("updates")
+    if not isinstance(updates, dict):
+        err = ValueError("'updates' must be an object {key: value}")
+        err.code = -32602  # type: ignore[attr-defined]
+        raise err
+
+    # Filter and validate.
+    cleaned: Dict[str, str] = {}
+    skipped: list[str] = []
+    unknown: list[str] = []
+    for key, value in updates.items():
+        if key not in KNOWN_KEYS:
+            unknown.append(key)
+            continue
+        if not isinstance(value, str):
+            value = "" if value is None else str(value)
+        if key in SECRET_KEYS and value == "<set>":
+            # UI sent the placeholder back unchanged — keep stored value.
+            skipped.append(key)
+            continue
+        cleaned[key] = value
+
+    if unknown:
+        err = ValueError(f"unknown setting keys: {sorted(unknown)}")
+        err.code = -32602  # type: ignore[attr-defined]
+        raise err
+
+    logger.debug(
+        f"[rpc] settings.update keys={sorted(cleaned.keys())} "
+        f"skipped_unchanged={sorted(skipped)}",
+    )
+    applied = update_env(cleaned)
+    return {"ok": True, "applied": applied, "skipped_unchanged": skipped}
+
+
 # Dispatch table — kept explicit so adding/removing methods is obvious.
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.list": tasks_list,
@@ -761,4 +845,7 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "narration.summarize": narration_summarize,
     "narration.predict": narration_predict,
     "emails.list_by_thread": emails_list_by_thread,
+    "settings.schema": settings_schema,
+    "settings.get": settings_get,
+    "settings.update": settings_update,
 }
