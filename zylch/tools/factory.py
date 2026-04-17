@@ -63,6 +63,7 @@ from .crm_tools import (
 )
 from .download_attachment_tool import DownloadAttachmentTool  # Phase A
 from .read_document_tool import ReadDocumentTool  # Phase A
+from .read_email_tool import ReadEmailTool
 from .run_python_tool import RunPythonTool  # Phase A
 from .update_memory_tool import UpdateMemoryTool  # Phase A
 
@@ -277,18 +278,23 @@ class ToolFactory:
         tools.append(GetTasksTool(session_state=session_state))
         logger.info("Get Tasks tool initialized")
 
-        # Phase A tools (attachment, document, python, memory)
+        # Phase A tools (attachment, document, python, memory) + read_email
         tools.extend(
             [
                 DownloadAttachmentTool(
                     storage=supabase_storage, session_state=session_state, owner_id=config.owner_id
                 ),
                 ReadDocumentTool(),
+                ReadEmailTool(
+                    storage=supabase_storage,
+                    session_state=session_state,
+                    owner_id=config.owner_id,
+                ),
                 RunPythonTool(),
                 UpdateMemoryTool(session_state=session_state, owner_id=config.owner_id),
             ]
         )
-        logger.info("Phase A tools initialized (4)")
+        logger.info("Phase A tools initialized (5: +read_email)")
 
         # Compose Email tool
         tools.append(
