@@ -18,7 +18,10 @@
       "Bash(venv/bin/python:*)",
       "Bash(/path/to/engine/venv/bin/ruff check:*)",
       "Bash(python:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(venv/bin/zylch -p user@example.com rpc)",
+      "Bash(venv/bin/black --check zylch/)",
+      "Bash(echo \"EXIT_CODE=$?\")"
     ]
   },
   "hooks": {

@@ -18,10 +18,11 @@ These docs reflect the current execution state and change every session.
 5. If `./docs/execution-plans/` exists, check for active plans (not marked `status: completed`).
 
 ## Phase 3 — Constraint Smoke Check
-6. Run mechanical enforcement:
-   - Check `Makefile`, `package.json` scripts, or `./tools/` for linters/structural tests.
-   - If they exist, run them. Surface violations before starting new work.
-   - If none exist, note as a harness gap.
+6. Detect the lint/test harness (do not run it here — surfacing is enough):
+   - Check for any of: `Makefile`, `package.json`, `pyproject.toml`, `./tools/`.
+   - If `./CLAUDE.md` documents lint/test commands, treat those as the source of truth.
+   - Only report a "harness gap" if none of the above are found.
+   - Do not execute the linters — a separate agent runs them.
 
 ## Output
 Do not output summaries or greetings. Output only:
