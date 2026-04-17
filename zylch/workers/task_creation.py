@@ -15,6 +15,7 @@ from zylch.llm import LLMClient
 from zylch.storage import Storage
 from zylch.storage.models import Email
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
+from zylch.workers.thread_presenter import build_thread_history, strip_quoted
 
 logger = logging.getLogger(__name__)
 
@@ -67,56 +68,10 @@ TASK_DECISION_TOOL = {
 }
 
 
-# Regex patterns for quoted-history stripping (module-level, compiled once)
-_QUOTED_CUT_PATTERNS = [
-    re.compile(r"^On .+ wrote:\s*$", re.IGNORECASE),
-    re.compile(r"^Il .+ ha scritto:\s*$", re.IGNORECASE),
-    re.compile(r"^From: .+$", re.IGNORECASE),
-    re.compile(r"^Da: .+$", re.IGNORECASE),
-    re.compile(r"^-----Original Message-----\s*$", re.IGNORECASE),
-    re.compile(r"^--\s*$"),
-]
-
-
-def _strip_quoted(body: str) -> str:
-    """Return the new (non-quoted) content of an email body.
-
-    Removes lines starting with '>' (quoted), truncates at the first quoted-history
-    or signature marker, collapses consecutive blank lines, and caps at 1500 chars.
-    """
-    if not body:
-        return ""
-    lines = body.splitlines()
-    kept: List[str] = []
-    for raw in lines:
-        stripped = raw.rstrip()
-        # Stop at quoted-history / signature delimiters
-        if any(p.match(stripped) for p in _QUOTED_CUT_PATTERNS):
-            break
-        # Skip quoted lines (> prefix, possibly after whitespace)
-        if stripped.lstrip().startswith(">"):
-            continue
-        kept.append(stripped)
-    # Collapse consecutive empty lines
-    collapsed: List[str] = []
-    prev_blank = False
-    for line in kept:
-        is_blank = not line.strip()
-        if is_blank and prev_blank:
-            continue
-        collapsed.append(line)
-        prev_blank = is_blank
-    # Trim leading/trailing blank lines
-    while collapsed and not collapsed[0].strip():
-        collapsed.pop(0)
-    while collapsed and not collapsed[-1].strip():
-        collapsed.pop()
-    # Collapse internal runs of whitespace within each line
-    result_lines = [re.sub(r"[ \t]+", " ", line) for line in collapsed]
-    result = "\n".join(result_lines)
-    if len(result) > 1500:
-        result = result[:1500].rstrip() + "…[truncated]"
-    return result
+# Backward-compatibility alias: _strip_quoted was historically private to this
+# module. The implementation now lives in workers.thread_presenter.strip_quoted;
+# we keep the underscore alias so any in-tree references continue to work.
+_strip_quoted = strip_quoted
 
 
 class TaskWorker:
@@ -562,45 +517,11 @@ class TaskWorker:
             thread_history_section = ""
             if thread_id:
                 with _gs() as sess:
-                    thread_emails = (
-                        sess.query(Email)
-                        .filter(
-                            Email.owner_id == self.owner_id,
-                            Email.thread_id == thread_id,
-                        )
-                        .order_by(Email.date_timestamp.asc())
-                        .limit(20)
-                        .all()
-                    )
-                blocks: List[str] = []
-                user_email_lc = (self.user_email or "").lower()
-                for te in thread_emails:
-                    te_from = (te.from_email or "").lower()
-                    is_user = bool(user_email_lc) and te_from == user_email_lc
-                    role = "USER REPLY ✓" if is_user else "CONTACT"
-                    # Format date as 'YYYY-MM-DD HH:MM' when possible
-                    date_str = ""
-                    try:
-                        if te.date_timestamp:
-                            date_str = datetime.fromtimestamp(
-                                te.date_timestamp, tz=timezone.utc
-                            ).strftime("%Y-%m-%d %H:%M")
-                        else:
-                            date_str = (te.date or "")[:16]
-                    except Exception:
-                        date_str = te.date or ""
-                    body_src = te.body_plain or te.snippet or ""
-                    body_clean = _strip_quoted(body_src)
-                    if not body_clean:
-                        # Fall back to raw body capped at 1500 chars if strip removed everything
-                        body_clean = body_src.strip()
-                        if len(body_clean) > 1500:
-                            body_clean = body_clean[:1500].rstrip() + "…[truncated]"
-                    blocks.append(f"[{date_str}] {role} {te.from_email}:\n{body_clean}")
-                if blocks:
-                    thread_history_section = (
-                        "THREAD HISTORY (chronological, user replies marked with ✓):\n"
-                        + "\n\n".join(blocks)
+                    thread_history_section = build_thread_history(
+                        session=sess,
+                        owner_id=self.owner_id,
+                        thread_id=thread_id,
+                        user_email=self.user_email,
                     )
             # Out-of-band field — _analyze_event pops it before JSON serialization
             event_data["_thread_history"] = thread_history_section
