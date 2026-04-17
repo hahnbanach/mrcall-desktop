@@ -67,6 +67,58 @@ TASK_DECISION_TOOL = {
 }
 
 
+# Regex patterns for quoted-history stripping (module-level, compiled once)
+_QUOTED_CUT_PATTERNS = [
+    re.compile(r"^On .+ wrote:\s*$", re.IGNORECASE),
+    re.compile(r"^Il .+ ha scritto:\s*$", re.IGNORECASE),
+    re.compile(r"^From: .+$", re.IGNORECASE),
+    re.compile(r"^Da: .+$", re.IGNORECASE),
+    re.compile(r"^-----Original Message-----\s*$", re.IGNORECASE),
+    re.compile(r"^--\s*$"),
+]
+
+
+def _strip_quoted(body: str) -> str:
+    """Return the new (non-quoted) content of an email body.
+
+    Removes lines starting with '>' (quoted), truncates at the first quoted-history
+    or signature marker, collapses consecutive blank lines, and caps at 1500 chars.
+    """
+    if not body:
+        return ""
+    lines = body.splitlines()
+    kept: List[str] = []
+    for raw in lines:
+        stripped = raw.rstrip()
+        # Stop at quoted-history / signature delimiters
+        if any(p.match(stripped) for p in _QUOTED_CUT_PATTERNS):
+            break
+        # Skip quoted lines (> prefix, possibly after whitespace)
+        if stripped.lstrip().startswith(">"):
+            continue
+        kept.append(stripped)
+    # Collapse consecutive empty lines
+    collapsed: List[str] = []
+    prev_blank = False
+    for line in kept:
+        is_blank = not line.strip()
+        if is_blank and prev_blank:
+            continue
+        collapsed.append(line)
+        prev_blank = is_blank
+    # Trim leading/trailing blank lines
+    while collapsed and not collapsed[0].strip():
+        collapsed.pop(0)
+    while collapsed and not collapsed[-1].strip():
+        collapsed.pop()
+    # Collapse internal runs of whitespace within each line
+    result_lines = [re.sub(r"[ \t]+", " ", line) for line in collapsed]
+    result = "\n".join(result_lines)
+    if len(result) > 1500:
+        result = result[:1500].rstrip() + "…[truncated]"
+    return result
+
+
 class TaskWorker:
     """Analyzes events using trained prompt and identifies actionable items."""
 
@@ -491,17 +543,23 @@ class TaskWorker:
                 )
                 existing_task_context = "\n".join(lines)
 
+            trigger_body_raw = email.get("body_plain") or email.get("snippet", "")
+            trigger_body_clean = _strip_quoted(trigger_body_raw) or trigger_body_raw
             event_data = {
                 "id": email.get("id"),
                 "from_email": email.get("from_email"),
                 "to_email": email.get("to_email"),
                 "subject": email.get("subject"),
                 "date": email.get("date"),
-                "body": (email.get("body_plain") or email.get("snippet", "")),
+                "body": trigger_body_clean,
                 "thread_id": email.get("thread_id"),
             }
 
-            # Thread context for LLM
+            # Thread history for LLM — chronological, quoted-history stripped,
+            # user replies marked. Passed OUT-OF-BAND via event_data['_thread_history']
+            # so _analyze_event can render it as a top-level section in user_content
+            # (instead of burying it in the JSON-serialized event_data body).
+            thread_history_section = ""
             if thread_id:
                 with _gs() as sess:
                     thread_emails = (
@@ -510,17 +568,42 @@ class TaskWorker:
                             Email.owner_id == self.owner_id,
                             Email.thread_id == thread_id,
                         )
-                        .order_by(Email.date_timestamp.desc())
+                        .order_by(Email.date_timestamp.asc())
                         .limit(20)
                         .all()
                     )
-                thread_ctx = []
+                blocks: List[str] = []
+                user_email_lc = (self.user_email or "").lower()
                 for te in thread_emails:
-                    if te.id != email_id:
-                        body = te.body_plain or te.snippet or ""
-                        thread_ctx.append(f"[{te.date}] {te.from_email}: {body}")
-                if thread_ctx:
-                    event_data["thread_context"] = "\n".join(thread_ctx)
+                    te_from = (te.from_email or "").lower()
+                    is_user = bool(user_email_lc) and te_from == user_email_lc
+                    role = "USER REPLY ✓" if is_user else "CONTACT"
+                    # Format date as 'YYYY-MM-DD HH:MM' when possible
+                    date_str = ""
+                    try:
+                        if te.date_timestamp:
+                            date_str = datetime.fromtimestamp(
+                                te.date_timestamp, tz=timezone.utc
+                            ).strftime("%Y-%m-%d %H:%M")
+                        else:
+                            date_str = (te.date or "")[:16]
+                    except Exception:
+                        date_str = te.date or ""
+                    body_src = te.body_plain or te.snippet or ""
+                    body_clean = _strip_quoted(body_src)
+                    if not body_clean:
+                        # Fall back to raw body capped at 1500 chars if strip removed everything
+                        body_clean = body_src.strip()
+                        if len(body_clean) > 1500:
+                            body_clean = body_clean[:1500].rstrip() + "…[truncated]"
+                    blocks.append(f"[{date_str}] {role} {te.from_email}:\n{body_clean}")
+                if blocks:
+                    thread_history_section = (
+                        "THREAD HISTORY (chronological, user replies marked with ✓):\n"
+                        + "\n\n".join(blocks)
+                    )
+            # Out-of-band field — _analyze_event pops it before JSON serialization
+            event_data["_thread_history"] = thread_history_section
 
             async with sem:
                 result = await self._analyze_event(
@@ -860,6 +943,15 @@ class TaskWorker:
         if not prompt:
             return None
 
+        # Extract out-of-band thread history (set by _collect) before JSON
+        # serialization so it doesn't bloat event_data_json. Rendered below as
+        # a top-level section in user_content.
+        thread_history_section = ""
+        if isinstance(event_data, dict):
+            thread_history_section = event_data.pop("_thread_history", "") or ""
+            # Legacy field — also strip to keep payload small
+            event_data.pop("thread_context", None)
+
         # Format the prompt with event data
         # Support both {var} and {{var}} formats (LLM may generate either)
         try:
@@ -930,11 +1022,12 @@ class TaskWorker:
             f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}\n"
             f"Event data: {event_data_json}\n"
         )
-        if event_data.get("thread_context"):
+        if thread_history_section:
+            user_content += f"\n{thread_history_section}\n"
             user_content += (
-                "\nIMPORTANT — THREAD CONTEXT: The event_data includes thread_context with the FULL conversation history. "
+                "\nIMPORTANT — THREAD CONTEXT: The THREAD HISTORY above contains the FULL conversation history in chronological order, with user replies marked 'USER REPLY ✓'. "
                 "Your task description MUST reflect the LATEST state of the conversation, not just this single email. "
-                "If a colleague already replied or took action, describe what remains to be done AFTER their reply. "
+                "If the user has already replied (look for 'USER REPLY ✓'), describe what remains to be done AFTER their reply — do NOT say the user hasn't responded. "
                 "If someone proposed a meeting date and is awaiting confirmation, say 'wait for confirmation' not 'propose a date'.\n"
             )
         if blob_context:
