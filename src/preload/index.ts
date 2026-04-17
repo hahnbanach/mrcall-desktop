@@ -85,6 +85,32 @@ const api = {
     predict: (message: string, context: string = '') =>
       call<{ text: string }>('narration.predict', { message, context }, 15000)
   },
+  settings: {
+    schema: () =>
+      call<{
+        fields: Array<{
+          key: string
+          label: string
+          type: 'text' | 'password' | 'number' | 'select' | 'textarea'
+          group: string
+          optional?: boolean
+          options?: string[]
+          help?: string
+          secret?: boolean
+        }>
+      }>('settings.schema', {}, 30000),
+    get: () => call<{ values: Record<string, string> }>('settings.get', {}, 30000),
+    update: (updates: Record<string, string>) =>
+      call<{ ok: boolean; applied: string[]; skipped_unchanged: string[] }>(
+        'settings.update',
+        { updates },
+        30000
+      )
+  },
+  sidecar: {
+    restart: (): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('sidecar:restart') as Promise<{ ok: boolean }>
+  },
   onNotification: (method: string, cb: NotifyCb): (() => void) => {
     let set = listeners.get(method)
     if (!set) {

@@ -56,6 +56,23 @@ function startSidecar(): void {
   sidecar.start()
 }
 
+// Restart the sidecar in place. Used after settings.update so the new
+// .env values are picked up (Pydantic Settings only reads on startup).
+// Resolves once the new sidecar has been spawned; the renderer should
+// wait a tick before issuing its next rpc:call so the child has time
+// to initialise.
+async function restartSidecar(): Promise<void> {
+  if (sidecar) {
+    console.log('[main] restarting sidecar')
+    sidecar.stop()
+    // Give the OS a moment to reap the old process before spawning.
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  startSidecar()
+  // Small grace period so the next call doesn't race the spawn.
+  await new Promise((r) => setTimeout(r, 500))
+}
+
 // Per-method default timeouts (ms). Callers may override by passing an
 // explicit `timeout` — this map only sets the default when none given.
 const METHOD_TIMEOUTS: Record<string, number> = {
@@ -88,6 +105,19 @@ function registerIpc(): void {
     })
     if (result.canceled) return []
     return result.filePaths
+  })
+
+  // Restart the sidecar (called after settings.update so new .env values
+  // are loaded). Returns once the new child has been spawned and given a
+  // brief grace period to initialise its asyncio loop.
+  ipcMain.handle('sidecar:restart', async (): Promise<{ ok: boolean }> => {
+    try {
+      await restartSidecar()
+      return { ok: true }
+    } catch (e) {
+      console.error('[main] sidecar restart failed', e)
+      return { ok: false }
+    }
   })
 }
 
