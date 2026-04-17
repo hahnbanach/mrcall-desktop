@@ -595,6 +595,60 @@ def _handle_agent_run(
         )
 
 
+def _handle_update_task(task_id_prefix: str, owner_id: str) -> None:
+    """Handle `/update <task_id[_prefix]>` — force re-analysis of one task.
+
+    Thin wrapper around `workers.task_reanalyze.reanalyze_task` (same
+    function called by the `tasks.reanalyze` RPC method). Accepts a full
+    task id or a prefix of at least 6 characters.
+    """
+    from zylch.workers.task_reanalyze import (
+        reanalyze_task_sync,
+        resolve_task_id_prefix,
+    )
+
+    logger.debug(f"[chat] /update task prefix={task_id_prefix} owner_id={owner_id}")
+    full_id, candidates = resolve_task_id_prefix(owner_id, task_id_prefix)
+    if full_id is None:
+        if not candidates:
+            if len(task_id_prefix) < 6:
+                console.print(
+                    f"[yellow]Task prefix must be at least 6 characters "
+                    f"(got '{task_id_prefix}').[/yellow]"
+                )
+            else:
+                console.print(f"[yellow]No task matching '{task_id_prefix}'.[/yellow]")
+        else:
+            console.print(
+                f"[yellow]Prefix '{task_id_prefix}' is ambiguous "
+                f"({len(candidates)} matches): "
+                f"{', '.join(c[:12] for c in candidates[:5])}"
+                f"{'…' if len(candidates) > 5 else ''}[/yellow]"
+            )
+        return
+
+    console.print(f"[dim]Reanalyzing task {full_id}…[/dim]")
+    result = reanalyze_task_sync(full_id, owner_id)
+    if not result.get("ok"):
+        console.print(f"[red]Error: {result.get('error', 'unknown')}[/red]")
+        return
+
+    action = result.get("action", "kept")
+    reason = result.get("reason", "")
+    usage = result.get("usage") or {}
+    color = {"closed": "green", "updated": "cyan", "kept": "white"}.get(action, "white")
+    console.print(
+        f"\n[bold {color}]Action:[/bold {color}] {action}",
+    )
+    console.print(f"[bold]Reason:[/bold] {reason}")
+    console.print(f"[dim]task_id: {full_id}[/dim]")
+    if usage:
+        console.print(
+            f"[dim]LLM tokens: input={usage.get('input_tokens', 0)} "
+            f"output={usage.get('output_tokens', 0)}[/dim]"
+        )
+
+
 def _handle_slash_command(
     raw_input: str,
     owner_id: str,
@@ -618,6 +672,12 @@ def _handle_slash_command(
     if cmd == "/clear":
         conversation_history.clear()
         console.print("[dim]Conversation cleared.[/dim]")
+        return
+
+    # /update <task_id[_prefix]> — force re-analysis of a single task.
+    # `/update` (no args) still runs the full pipeline via handle_process.
+    if cmd == "/update" and args and not args[0].startswith("-"):
+        _handle_update_task(args[0], owner_id)
         return
 
     # /agent run <instructions> — agentic loop with tools

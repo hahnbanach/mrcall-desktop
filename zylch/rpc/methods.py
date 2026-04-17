@@ -149,6 +149,31 @@ async def tasks_skip(params: Dict[str, Any], notify: NotifyFn) -> Any:
 # ─── Solve ───────────────────────────────────────────────────
 
 
+async def tasks_reanalyze(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """tasks.reanalyze(task_id) -> {ok, action, reason, task_id}.
+
+    Forces an LLM re-evaluation of a single open task using the latest
+    thread history. Applies the decision to storage:
+      - action='close'  -> sets completed_at = now() (returned as 'closed')
+      - action='update' -> updates urgency/suggested_action/reason (returned
+        as 'updated')
+      - action='keep'   -> no DB change (returned as 'kept')
+
+    Reuses the exact same thread history builder as the task worker.
+    """
+    from zylch.workers.task_reanalyze import reanalyze_task
+
+    task_id = params.get("task_id")
+    if not task_id:
+        raise ValueError("task_id is required")
+
+    owner_id = _owner_id()
+    logger.debug(f"[rpc] tasks.reanalyze owner_id={owner_id} task_id={task_id}")
+    result = await reanalyze_task(task_id=task_id, owner_id=owner_id)
+    logger.debug(f"[rpc] tasks.reanalyze -> {result}")
+    return result
+
+
 async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.solve(task_id, instructions="") — streams `tasks.solve.event`
     notifications; pauses on tool approval (waits for tasks.solve.approve).
@@ -542,6 +567,7 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.list": tasks_list,
     "tasks.complete": tasks_complete,
     "tasks.skip": tasks_skip,
+    "tasks.reanalyze": tasks_reanalyze,
     "tasks.solve": tasks_solve,
     "tasks.solve.approve": tasks_solve_approve,
     "chat.send": chat_send,
