@@ -21,6 +21,7 @@ export type Conversation = {
   id: string
   title: string
   taskId?: string
+  sourceEmailId?: string
   history: Msg[]
   draftInput: string
   pendingApproval: Approval | null
@@ -142,12 +143,19 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
   const openTaskChat = useCallback((task: ZylchTask) => {
     const id = 'task-' + task.id
     const title = task.contact_name || task.contact_email || task.id.slice(0, 8)
+    // Source email id from task.sources.emails[0] if present — gives the LLM
+    // a direct handle instead of forcing a search_emails guess.
+    const sourceEmailId =
+      task.sources && Array.isArray(task.sources.emails) && task.sources.emails.length > 0
+        ? task.sources.emails[0]
+        : undefined
     dispatch({
       type: 'OPEN_TASK_CHAT',
       conv: {
         id,
         title,
         taskId: task.id,
+        sourceEmailId,
         history: [],
         draftInput: buildTemplate(task),
         pendingApproval: null,
