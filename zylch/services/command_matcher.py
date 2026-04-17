@@ -306,7 +306,10 @@ class SemanticCommandMatcher:
             return " ".join(parts)
 
         # Drafts - Send
-        if "send draft" in template or "send the email" in template or "send it" in template:
+        # NOTE: "send it" is intentionally NOT matched here. It's a confirmation
+        # phrase that must be interpreted by the LLM via the send_draft tool
+        # (see chat_service.py:211). Only explicit phrases rewrite to /email send.
+        if "send draft" in template or "send the email" in template:
             draft_id = params.get("draft_id", "")
             if draft_id:
                 return f"/email send {draft_id}"

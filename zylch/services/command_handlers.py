@@ -1936,11 +1936,16 @@ For simple drafts without context, use the `compose_email` tool in chat."""
             if not provider:
                 return "❌ No email provider connected\n\nUse `/connect google` or `/connect microsoft` first."
 
-            # Mark as sending
+            # Mark as sending.
+            # NOTE: only persist `provider` for OAuth providers. The drafts
+            # table has CHECK (provider IN ('google','microsoft')), so writing
+            # 'imap' would raise sqlite3.IntegrityError. For IMAP the provider
+            # is recoverable at runtime via get_provider(owner_id).
             with get_session() as session:
-                session.query(Draft).filter(Draft.id == draft["id"]).update(
-                    {"status": "sending", "provider": provider}
-                )
+                update_fields = {"status": "sending"}
+                if provider in ("google", "microsoft"):
+                    update_fields["provider"] = provider
+                session.query(Draft).filter(Draft.id == draft["id"]).update(update_fields)
 
             try:
                 # Convert list fields to comma-separated strings for email APIs
@@ -2001,10 +2006,78 @@ For simple drafts without context, use the `compose_email` tool in chat."""
 
                     sent_id = sent_message.get("id", "")
 
+                elif provider == "imap":
+                    import os as _os
+                    from zylch.email.imap_client import IMAPClient
+
+                    email_addr = _os.environ.get("EMAIL_ADDRESS", "") or user_email or ""
+                    email_pass = _os.environ.get("EMAIL_PASSWORD", "")
+                    if not email_addr or not email_pass:
+                        raise Exception(
+                            "IMAP not configured: EMAIL_ADDRESS or EMAIL_PASSWORD missing."
+                        )
+
+                    imap_port_str = _os.environ.get("IMAP_PORT")
+                    smtp_port_str = _os.environ.get("SMTP_PORT")
+                    imap_client = IMAPClient(
+                        email_addr=email_addr,
+                        password=email_pass,
+                        imap_host=_os.environ.get("IMAP_HOST") or None,
+                        imap_port=(int(imap_port_str) if imap_port_str else None),
+                        smtp_host=_os.environ.get("SMTP_HOST") or None,
+                        smtp_port=(int(smtp_port_str) if smtp_port_str else None),
+                    )
+
+                    # IMAPClient.send_message expects cc/bcc as List[str] (or None)
+                    # — pass the original list fields, not the comma-joined strings.
+                    cc_list = (
+                        draft["cc_addresses"]
+                        if draft.get("cc_addresses") and isinstance(draft["cc_addresses"], list)
+                        else None
+                    )
+                    bcc_list = (
+                        draft["bcc_addresses"]
+                        if draft.get("bcc_addresses") and isinstance(draft["bcc_addresses"], list)
+                        else None
+                    )
+
+                    refs = draft.get("references")
+                    if isinstance(refs, list):
+                        refs = " ".join(refs) if refs else None
+
+                    sent_message = imap_client.send_message(
+                        to=to_str,
+                        subject=draft.get("subject", ""),
+                        body=draft.get("body", ""),
+                        cc=cc_list,
+                        bcc=bcc_list,
+                        in_reply_to=draft.get("in_reply_to"),
+                        references=refs,
+                        attachment_paths=draft.get("attachment_paths") or None,
+                    )
+
+                    sent_id = sent_message.get("id", "")
+
+                    # Mark draft as sent (status='sent', sent_at, sent_message_id).
+                    # Do NOT delete — per task spec, status must become 'sent'.
+                    from zylch.storage import Storage as _Storage
+
+                    _Storage().mark_draft_sent(owner_id, draft["id"], sent_id)
+
+                    to_str = ", ".join(draft["to_addresses"])
+                    return f"""✅ **Email sent!**
+
+**To:** {to_str}
+**Subject:** {draft.get('subject', '(no subject)')}
+**Via:** IMAP/SMTP
+
+Message ID: `{sent_id if sent_id else 'N/A'}`"""
+
                 else:
                     raise Exception(f"Unknown provider: {provider}")
 
-                # Delete draft after successful send
+                # Delete draft after successful send (google/microsoft only — IMAP
+                # branch already returned above after mark_draft_sent).
                 with get_session() as session:
                     session.query(Draft).filter(Draft.id == draft["id"]).delete()
 
