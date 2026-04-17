@@ -256,10 +256,15 @@ class TaskWorker:
         self,
         concurrency: int = 5,
     ) -> None:
-        """Analyze recent events with parallel LLM calls.
+        """Analyze recent events with parallel LLM, sequential DB writes.
 
-        LLM calls run concurrently (bounded by semaphore).
-        DB writes are serialized per-email in the result handler.
+        Phase 1 (parallel): for each thread's winner email, run any sync
+        pre-checks (user-self-sent, notifications, hard-coded rules) inline
+        and collect LLM decisions concurrently.
+
+        Phase 2 (sequential): apply decisions one-by-one with fresh dedup
+        checks. This eliminates the race where two _analyze_one coroutines
+        both pass _is_duplicate_task before either calls store_task_item.
         """
         import asyncio
 
@@ -276,12 +281,17 @@ class TaskWorker:
 
         analyzed_count = 0
         action_count = 0
-        consecutive_failures = []  # list acts as thread-safe counter
-        stop = False
 
         all_emails = self.storage.get_unprocessed_emails_for_task(
             self.owner_id,
         )
+
+        # Build index: thread_id -> ALL unprocessed emails (user + non-user)
+        # so we can mark every sibling processed once a thread's outcome is
+        # decided (Fix C: previously only the "winner" was marked, leaving
+        # siblings — including non-winning user replies — to be reprocessed
+        # forever and regenerate duplicate tasks).
+        thread_all_emails: Dict[str, List[Dict]] = {}
 
         # Deduplicate: latest email per thread
         # Also track if user replied after the contact's last email
@@ -299,11 +309,24 @@ class TaskWorker:
                 prev = user_replied.get(thread_id, 0)
                 if ts > prev:
                     user_replied[thread_id] = ts
+            thread_all_emails.setdefault(thread_id, []).append(email)
 
             existing = threads.get(thread_id)
             existing_ts = existing.get("date_timestamp", 0) if existing else 0
             if not existing or ts > existing_ts:
                 threads[thread_id] = email
+
+        def _mark_thread_nonuser_processed(tid: str) -> None:
+            """Mark ALL emails in thread as task_processed (Fix C).
+
+            Despite the legacy name, this marks every sibling — both
+            non-user contact emails and other user replies in the same
+            thread — so that the next run does not re-analyze them.
+            """
+            for e in thread_all_emails.get(tid, []):
+                eid = e.get("id", "")
+                if eid:
+                    self.storage.mark_email_task_processed(self.owner_id, eid)
 
         # Remove threads where user replied after the contact's
         # last email — the task is already handled
@@ -312,35 +335,33 @@ class TaskWorker:
             from_email = email.get("from_email", "").lower()
             is_user = from_email in user_emails
             if is_user:
-                continue  # Already a user email, handled below
+                continue  # Already a user email, handled in phase 1 below
             contact_ts = email.get("date_timestamp") or 0
             reply_ts = user_replied.get(thread_id, 0)
             if reply_ts > contact_ts:
-                # User replied after contact — close any open task
-                contact_email = from_email
-                existing_task = self.storage.get_task_by_contact(
-                    self.owner_id,
-                    contact_email,
+                # User replied after contact — close any open task (Fix D:
+                # lookup by THREAD, not just by current contact_email, so we
+                # close tasks opened on a different participant too).
+                thread_tasks = self.storage.get_tasks_by_thread(
+                    self.owner_id, thread_id, open_only=True
                 )
-                if existing_task:
-                    self.storage.complete_task_item(
-                        self.owner_id,
-                        existing_task["id"],
-                    )
+                for t in thread_tasks:
+                    self.storage.complete_task_item(self.owner_id, t["id"])
                     logger.info(
-                        f"[TASK] Auto-closed task for"
-                        f" {contact_email} (user replied"
-                        f" in thread)",
+                        f"[TASK] Auto-closed task {t['id']} for thread "
+                        f"{thread_id} (user replied in thread)"
                     )
-                # Mark all emails in this thread as processed
-                for e in all_emails:
-                    eid = e.get("id", "")
-                    etid = e.get("thread_id") or eid
-                    if etid == thread_id:
-                        self.storage.mark_email_task_processed(
-                            self.owner_id,
-                            eid,
-                        )
+                # Fallback by contact (in case task has no source email yet
+                # linked to the thread).
+                existing_task = self.storage.get_task_by_contact(self.owner_id, from_email)
+                if existing_task and not any(t["id"] == existing_task["id"] for t in thread_tasks):
+                    self.storage.complete_task_item(self.owner_id, existing_task["id"])
+                    logger.info(
+                        f"[TASK] Auto-closed task {existing_task['id']} for "
+                        f"{from_email} (user replied in thread)"
+                    )
+                # Fix C: mark ALL non-user siblings processed, not only winner
+                _mark_thread_nonuser_processed(thread_id)
                 del threads[thread_id]
 
         logger.debug(
@@ -351,15 +372,17 @@ class TaskWorker:
 
         sem = asyncio.Semaphore(concurrency)
 
-        async def _analyze_one(email: Dict):
-            nonlocal analyzed_count, action_count
-            nonlocal stop
-            if stop:
-                return
+        # Phase 1: per thread, collect either a "done" marker (already
+        # handled inline: self-sent, user-reply, notification, hard-coded)
+        # or (email, llm_result) for sequential application.
+        async def _collect(email: Dict):
+            nonlocal analyzed_count
 
             from_email = email.get("from_email", "").lower()
             email_id = email.get("id", "")
+            thread_id = email.get("thread_id") or email_id
 
+            # Self-sent reminder
             if from_email in user_emails:
                 to_raw = email.get("to_email", "")
                 if isinstance(to_raw, list):
@@ -372,85 +395,29 @@ class TaskWorker:
                     if addr:
                         to_addrs.add(addr)
                 if to_addrs and to_addrs.issubset(user_emails):
-                    logger.debug(f"[TASK] Self-sent email detected: {email_id}")
-                    subject = email.get("subject", "").strip() or "Self-reminder"
-                    body = (email.get("body_plain") or email.get("snippet") or "")[:200].strip()
-                    desc = f"Self-sent reminder. {body}" if body else "Self-sent reminder"
-                    task_result = {
-                        "action_required": True,
-                        "task_action": "create",
-                        "urgency": "medium",
-                        "suggested_action": subject,
-                        "reason": desc,
-                        "analyzed_at": datetime.now(timezone.utc).isoformat(),
-                        "event_id": email_id,
-                        "event_type": "email",
-                        "contact_email": from_email,
-                        "contact_name": email.get("from_name", ""),
-                        "email_date": email.get("date", ""),
-                        "sources": {
-                            "emails": [email_id],
-                            "blobs": [],
-                            "calendar_events": [],
-                        },
-                    }
-                    self.storage.store_task_item(self.owner_id, task_result)
-                    self.storage.mark_email_task_processed(self.owner_id, email_id)
-                    action_count += 1
-                    logger.debug(f"[TASK] Created self-sent task: {subject}")
-                    return
-
-            # User's own email = they replied → close any
-            # open task for this thread's contacts
-            if from_email in user_emails:
-                self.storage.mark_email_task_processed(
-                    self.owner_id,
-                    email_id,
-                )
-                # Close existing tasks for each recipient
-                # (user responded = task handled)
-                to_raw = email.get("to_email", "")
-                if isinstance(to_raw, list):
-                    to_raw = ", ".join(to_raw)
-                # Parse comma-separated recipients
-                for addr in to_raw.split(","):
-                    addr = addr.strip().lower()
-                    # Extract email from "Name <email>" format
-                    if "<" in addr and ">" in addr:
-                        addr = addr.split("<")[1].split(">")[0].strip()
-                    if not addr or addr in user_emails:
-                        continue
-                    existing = self.storage.get_task_by_contact(
-                        self.owner_id,
-                        addr,
-                    )
-                    if existing:
-                        self.storage.complete_task_item(
-                            self.owner_id,
-                            existing["id"],
-                        )
-                        logger.info(
-                            f"[TASK] Auto-closed task for" f" {addr} (user replied)",
-                        )
-                return
+                    return ("self_sent", email)
+                return ("user_reply", email)
 
             if self._is_notification_sender(from_email):
-                logger.debug(f"[TASK] Skipping notification sender: {from_email}")
-                self.storage.mark_email_task_processed(self.owner_id, email_id)
-                return
+                return ("notification", email)
 
-            # --- Hard-coded rules: overdue invoices & repeated declines ---
+            # Hard-coded rules
             subject = email.get("subject", "")
             from zylch.storage.database import get_session as _gs
 
-            _hc_task = None  # hard-coded task result, if any
+            _hc_task = None
             if re.search(
-                r"payment reminder|invoice|bill|overdue|is due|payment failed", subject, re.I
+                r"payment reminder|invoice|bill|overdue|is due|payment failed",
+                subject,
+                re.I,
             ):
                 with _gs() as sess:
                     cnt = (
                         sess.query(Email)
-                        .filter(Email.owner_id == self.owner_id, Email.from_email.ilike(from_email))
+                        .filter(
+                            Email.owner_id == self.owner_id,
+                            Email.from_email.ilike(from_email),
+                        )
                         .filter(
                             Email.subject.ilike("%invoice%")
                             | Email.subject.ilike("%payment%")
@@ -461,7 +428,6 @@ class TaskWorker:
                         .count()
                     )
                 if cnt >= 2:
-                    logger.debug(f"[TASK] Overdue invoice rule: {from_email}, count={cnt}")
                     _hc_task = {
                         "urgency": "medium",
                         "suggested_action": subject,
@@ -472,7 +438,10 @@ class TaskWorker:
                 with _gs() as sess:
                     cnt = (
                         sess.query(Email)
-                        .filter(Email.owner_id == self.owner_id, Email.from_email.ilike(from_email))
+                        .filter(
+                            Email.owner_id == self.owner_id,
+                            Email.from_email.ilike(from_email),
+                        )
                         .filter(
                             Email.subject.ilike("Declined:%") | Email.subject.ilike("Annullato:%")
                         )
@@ -480,7 +449,6 @@ class TaskWorker:
                     )
                 if cnt >= 2:
                     cname = email.get("from_name", "") or from_email
-                    logger.debug(f"[TASK] Repeated decline rule: {cname}, count={cnt}")
                     _hc_task = {
                         "urgency": "low",
                         "suggested_action": f"Reschedule with {cname} — {cnt} meeting declines",
@@ -488,39 +456,40 @@ class TaskWorker:
                         "contact_name": cname,
                     }
             if _hc_task:
-                _hc_task.update(
-                    {
-                        "action_required": True,
-                        "task_action": "create",
-                        "analyzed_at": datetime.now(timezone.utc).isoformat(),
-                        "event_id": email_id,
-                        "event_type": "email",
-                        "contact_email": from_email,
-                        "email_date": email.get("date", ""),
-                        "sources": {"emails": [email_id], "blobs": [], "calendar_events": []},
-                    }
-                )
-                self.storage.store_task_item(self.owner_id, _hc_task)
-                self.storage.mark_email_task_processed(self.owner_id, email_id)
-                action_count += 1
-                return
+                return ("hardcoded", email, _hc_task)
 
+            # LLM path: build context (thread-aware for Fix D: we surface
+            # ANY open task on the thread, not just the current contact).
             blob_context, blob_id = self._get_blob_for_contact(from_email)
-            existing_task = self.storage.get_task_by_contact(
-                self.owner_id,
-                from_email,
+            thread_tasks = (
+                self.storage.get_tasks_by_thread(self.owner_id, thread_id, open_only=True)
+                if thread_id
+                else []
             )
+            existing_task = self.storage.get_task_by_contact(self.owner_id, from_email)
+            # Prefer thread-level task; include contact-level if distinct
+            existing_tasks_all: List[Dict] = list(thread_tasks)
+            if existing_task and not any(t["id"] == existing_task["id"] for t in thread_tasks):
+                existing_tasks_all.append(existing_task)
+
             existing_task_context = ""
-            if existing_task:
-                existing_task_context = (
-                    "EXISTING OPEN TASK FOR THIS CONTACT:\n"
-                    f"- Action: {existing_task.get('suggested_action', 'N/A')}\n"
-                    f"- Urgency: {existing_task.get('urgency', 'N/A')}\n"
-                    f"- Reason: {existing_task.get('reason', 'N/A')}\n"
-                    f"- Source emails: {len(existing_task.get('sources', {}).get('emails', []))}\n\n"
-                    "Decide: UPDATE, REPLACE (create new),"
-                    " CLOSE, or keep as-is (none)?"
+            if existing_tasks_all:
+                lines = [
+                    f"EXISTING OPEN TASKS FOR THIS THREAD/CONTACT ({len(existing_tasks_all)}):"
+                ]
+                for i, t in enumerate(existing_tasks_all, 1):
+                    lines.append(
+                        f"Task #{i} (ID: {t.get('id')}):\n"
+                        f"- Action: {t.get('suggested_action', 'N/A')}\n"
+                        f"- Urgency: {t.get('urgency', 'N/A')}\n"
+                        f"- Reason: {t.get('reason', 'N/A')}\n"
+                        f"- Source emails: {len(t.get('sources', {}).get('emails', []))}"
+                    )
+                lines.append(
+                    "Decide: UPDATE (target_task_id), CLOSE (target_task_id), "
+                    "CREATE (new issue), or NONE."
                 )
+                existing_task_context = "\n".join(lines)
 
             event_data = {
                 "id": email.get("id"),
@@ -532,8 +501,7 @@ class TaskWorker:
                 "thread_id": email.get("thread_id"),
             }
 
-            # Fetch other emails in the same thread for context
-            thread_id = email.get("thread_id")
+            # Thread context for LLM
             if thread_id:
                 with _gs() as sess:
                     thread_emails = (
@@ -553,91 +521,215 @@ class TaskWorker:
                         thread_ctx.append(f"[{te.date}] {te.from_email}: {body}")
                 if thread_ctx:
                     event_data["thread_context"] = "\n".join(thread_ctx)
-                    logger.debug(
-                        f"[TASK] Thread context for {email_id}: "
-                        f"{len(thread_ctx)} sibling emails"
-                    )
 
-            # LLM call (bounded by semaphore)
             async with sem:
-                if stop:
-                    return
                 result = await self._analyze_event(
-                    "email",
-                    event_data,
-                    blob_context,
-                    existing_task_context,
+                    "email", event_data, blob_context, existing_task_context
                 )
-
             analyzed_count += 1
 
-            if result is None:
-                consecutive_failures.append(1)
-                if len(consecutive_failures) >= 3:
-                    logger.error(
-                        "3+ LLM failures — stopping" " task analysis",
-                    )
-                    stop = True
-                self.storage.mark_email_task_processed(
-                    self.owner_id,
-                    email_id,
-                )
-                return
-
-            consecutive_failures.clear()
-            self.storage.mark_email_task_processed(
-                self.owner_id,
-                email_id,
+            return (
+                "llm",
+                email,
+                {
+                    "result": result,
+                    "blob_id": blob_id,
+                    "existing_tasks": existing_tasks_all,
+                },
             )
 
-            if not result:
-                return
+        collected = await asyncio.gather(
+            *[_collect(e) for e in threads.values()],
+            return_exceptions=True,
+        )
+
+        # Phase 2: apply decisions sequentially, with fresh dedup checks.
+        consecutive_failures = 0
+        for item in collected:
+            if isinstance(item, Exception):
+                logger.error(f"[TASK] _collect raised: {item}")
+                continue
+            kind = item[0]
+            email = item[1]
+            email_id = email.get("id", "")
+            thread_id = email.get("thread_id") or email_id
+            from_email = email.get("from_email", "").lower()
+
+            if kind == "self_sent":
+                subject = email.get("subject", "").strip() or "Self-reminder"
+                body = (email.get("body_plain") or email.get("snippet") or "")[:200].strip()
+                desc = f"Self-sent reminder. {body}" if body else "Self-sent reminder"
+                task_result = {
+                    "action_required": True,
+                    "task_action": "create",
+                    "urgency": "medium",
+                    "suggested_action": subject,
+                    "reason": desc,
+                    "analyzed_at": datetime.now(timezone.utc).isoformat(),
+                    "event_id": email_id,
+                    "event_type": "email",
+                    "contact_email": from_email,
+                    "contact_name": email.get("from_name", ""),
+                    "email_date": email.get("date", ""),
+                    "sources": {
+                        "emails": [email_id],
+                        "blobs": [],
+                        "calendar_events": [],
+                    },
+                }
+                if not self._is_duplicate_task(subject):
+                    self.storage.store_task_item(self.owner_id, task_result)
+                    action_count += 1
+                    logger.debug(f"[TASK] Created self-sent task: {subject}")
+                self.storage.mark_email_task_processed(self.owner_id, email_id)
+                continue
+
+            if kind == "user_reply":
+                # User reply: close tasks on thread + tasks on each recipient
+                self.storage.mark_email_task_processed(self.owner_id, email_id)
+                thread_tasks = (
+                    self.storage.get_tasks_by_thread(self.owner_id, thread_id, open_only=True)
+                    if thread_id
+                    else []
+                )
+                for t in thread_tasks:
+                    self.storage.complete_task_item(self.owner_id, t["id"])
+                    logger.debug(
+                        f"[TASK] dedup/close task_id={t['id']} thread_id={thread_id} decision=user_replied"
+                    )
+                to_raw = email.get("to_email", "")
+                if isinstance(to_raw, list):
+                    to_raw = ", ".join(to_raw)
+                for addr in to_raw.split(","):
+                    addr = addr.strip().lower()
+                    if "<" in addr and ">" in addr:
+                        addr = addr.split("<")[1].split(">")[0].strip()
+                    if not addr or addr in user_emails:
+                        continue
+                    existing = self.storage.get_task_by_contact(self.owner_id, addr)
+                    if existing and not any(t["id"] == existing["id"] for t in thread_tasks):
+                        self.storage.complete_task_item(self.owner_id, existing["id"])
+                        logger.info(f"[TASK] Auto-closed task for {addr} (user replied)")
+                # Fix C: mark ALL non-user siblings processed when the thread
+                # winner is a user reply — otherwise they leak to the next run
+                # and regenerate a duplicate task.
+                _mark_thread_nonuser_processed(thread_id)
+                continue
+
+            if kind == "notification":
+                logger.debug(f"[TASK] Skipping notification sender: {from_email}")
+                self.storage.mark_email_task_processed(self.owner_id, email_id)
+                continue
+
+            if kind == "hardcoded":
+                hc = item[2]
+                hc.update(
+                    {
+                        "action_required": True,
+                        "task_action": "create",
+                        "analyzed_at": datetime.now(timezone.utc).isoformat(),
+                        "event_id": email_id,
+                        "event_type": "email",
+                        "contact_email": from_email,
+                        "email_date": email.get("date", ""),
+                        "sources": {
+                            "emails": [email_id],
+                            "blobs": [],
+                            "calendar_events": [],
+                        },
+                    }
+                )
+                # Fresh dedup check at apply time (Fix A).
+                if not self._is_duplicate_task(hc.get("suggested_action", "")):
+                    self.storage.store_task_item(self.owner_id, hc)
+                    action_count += 1
+                else:
+                    logger.debug(
+                        f"[TASK] dedup/skip hardcoded task for {from_email} thread_id={thread_id}"
+                    )
+                _mark_thread_nonuser_processed(thread_id)
+                continue
+
+            # kind == "llm"
+            payload = item[2]
+            result = payload["result"]
+            blob_id = payload["blob_id"]
+            existing_tasks_all: List[Dict] = payload["existing_tasks"]
+
+            if result is None:
+                consecutive_failures += 1
+                if consecutive_failures >= 3:
+                    logger.error(
+                        "3+ LLM failures — stopping task analysis",
+                    )
+                    _mark_thread_nonuser_processed(thread_id)
+                    break
+                _mark_thread_nonuser_processed(thread_id)
+                continue
+
+            consecutive_failures = 0
 
             if self._is_user_email(from_email):
-                return
+                _mark_thread_nonuser_processed(thread_id)
+                continue
 
             task_action = result.get("task_action", "none")
+            target_task_id = result.get("target_task_id")
+            # Resolve target from existing tasks on thread/contact
+            target_task = None
+            if target_task_id:
+                target_task = next(
+                    (t for t in existing_tasks_all if t.get("id") == target_task_id),
+                    None,
+                )
+            # Fallback: if LLM said close/update but no valid id, and there
+            # is exactly one open task on the thread, use that (Fix B).
+            if target_task is None and task_action in ("close", "update"):
+                if len(existing_tasks_all) == 1:
+                    target_task = existing_tasks_all[0]
+                    logger.debug(
+                        f"[TASK] Resolved target_task to sole thread task "
+                        f"{target_task['id']} for action={task_action} "
+                        f"thread_id={thread_id}"
+                    )
 
             if task_action in ("create", "update"):
-                suggested = result.get(
-                    "suggested_action",
-                    "",
-                ).strip()
+                suggested = result.get("suggested_action", "").strip()
                 if not suggested or len(suggested) < 5:
-                    return
+                    _mark_thread_nonuser_processed(thread_id)
+                    continue
 
-            if task_action == "close" and existing_task:
-                self.storage.complete_task_item(
-                    self.owner_id,
-                    existing_task["id"],
+            if task_action == "close" and target_task:
+                self.storage.complete_task_item(self.owner_id, target_task["id"])
+                logger.debug(
+                    f"[TASK] dedup/close task_id={target_task['id']} thread_id={thread_id} decision=llm_close"
                 )
-            elif task_action == "update" and existing_task:
+            elif task_action == "update" and target_task:
                 self.storage.update_task_item(
                     self.owner_id,
-                    existing_task["id"],
+                    target_task["id"],
                     urgency=result.get("urgency"),
-                    suggested_action=result.get(
-                        "suggested_action",
-                    ),
+                    suggested_action=result.get("suggested_action"),
                     reason=result.get("reason"),
                     add_source_email=email_id,
                 )
                 action_count += 1
+                logger.debug(
+                    f"[TASK] dedup/update task_id={target_task['id']} thread_id={thread_id} decision=llm_update"
+                )
             elif (
                 task_action not in ("update", "close", "create")
-                and existing_task
+                and existing_tasks_all
                 and result.get("suggested_action")
             ):
-                # Force-update stale task: LLM said "none" but
-                # a new email arrived for a contact with an open task.
+                stale = existing_tasks_all[0]
                 logger.debug(
-                    f"[TASK] Forcing update on stale task "
-                    f"{existing_task['id']} for {from_email}, "
-                    f"LLM said '{task_action}'"
+                    f"[TASK] Forcing update on stale task {stale['id']} for "
+                    f"{from_email}, LLM said '{task_action}' thread_id={thread_id}"
                 )
                 self.storage.update_task_item(
                     self.owner_id,
-                    existing_task["id"],
+                    stale["id"],
                     urgency=result.get("urgency"),
                     suggested_action=result.get("suggested_action"),
                     reason=result.get("reason"),
@@ -645,36 +737,49 @@ class TaskWorker:
                 )
             elif task_action == "create" and result.get("action_required"):
                 suggested = result.get("suggested_action", "")
-                if self._is_duplicate_task(suggested):
-                    return
-                if existing_task:
-                    self.storage.complete_task_item(
-                        self.owner_id,
-                        existing_task["id"],
+                # Fix A: fresh dedup at apply time; Fix D: if thread already
+                # has an open task, UPDATE it instead of creating a duplicate.
+                if existing_tasks_all:
+                    target = existing_tasks_all[0]
+                    logger.debug(
+                        f"[TASK] Converting create→update on thread "
+                        f"task_id={target['id']} thread_id={thread_id} "
+                        f"from_email={from_email} (thread already has open task)"
                     )
-                result["event_id"] = email_id
-                result["event_type"] = "email"
-                result["contact_email"] = from_email
-                result["contact_name"] = email.get(
-                    "from_name",
-                    "",
-                )
-                result["email_date"] = email.get("date", "")
-                result["sources"] = {
-                    "emails": [email_id],
-                    "blobs": ([str(blob_id)] if blob_id else []),
-                    "calendar_events": [],
-                }
-                self.storage.store_task_item(
-                    self.owner_id,
-                    result,
-                )
-                action_count += 1
+                    self.storage.update_task_item(
+                        self.owner_id,
+                        target["id"],
+                        urgency=result.get("urgency"),
+                        suggested_action=result.get("suggested_action"),
+                        reason=result.get("reason"),
+                        add_source_email=email_id,
+                    )
+                elif self._is_duplicate_task(suggested):
+                    logger.debug(
+                        f"[TASK] dedup/skip create suggested='{suggested[:60]}' "
+                        f"thread_id={thread_id} decision=similar_exists"
+                    )
+                else:
+                    result["event_id"] = email_id
+                    result["event_type"] = "email"
+                    result["contact_email"] = from_email
+                    result["contact_name"] = email.get("from_name", "")
+                    result["email_date"] = email.get("date", "")
+                    result["sources"] = {
+                        "emails": [email_id],
+                        "blobs": ([str(blob_id)] if blob_id else []),
+                        "calendar_events": [],
+                    }
+                    self.storage.store_task_item(self.owner_id, result)
+                    action_count += 1
+                    logger.debug(
+                        f"[TASK] dedup/create new task thread_id={thread_id} "
+                        f"from_email={from_email}"
+                    )
 
-        await asyncio.gather(
-            *[_analyze_one(e) for e in threads.values()],
-            return_exceptions=True,
-        )
+            # Fix C: mark ALL non-user siblings of this thread processed,
+            # so next run doesn't re-analyze them.
+            _mark_thread_nonuser_processed(thread_id)
 
         # Process calendar events - only unprocessed ones
         # Use task_processed_at to track which events have been analyzed

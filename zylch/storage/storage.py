@@ -1789,6 +1789,51 @@ class Storage:
             logger.error(f"Failed to get tasks by contact {contact_email}: {e}")
             return []
 
+    def get_tasks_by_thread(
+        self,
+        owner_id: str,
+        thread_id: str,
+        open_only: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """Get tasks whose source emails belong to the given thread.
+
+        `sources.emails` is a list of email IDs. We resolve those IDs to
+        Email.thread_id and return tasks where any source email matches
+        `thread_id`. Used to close/update tasks across a thread even when
+        the sender changes (e.g. same conversation with different people).
+        """
+        if not thread_id:
+            return []
+        try:
+            with get_session() as session:
+                # Email IDs belonging to the thread
+                thread_email_ids = {
+                    str(r.id)
+                    for r in session.query(Email.id)
+                    .filter(
+                        Email.owner_id == owner_id,
+                        Email.thread_id == thread_id,
+                    )
+                    .all()
+                }
+                if not thread_email_ids:
+                    return []
+
+                q = session.query(TaskItem).filter(TaskItem.owner_id == owner_id)
+                if open_only:
+                    q = q.filter(TaskItem.completed_at.is_(None))
+                rows = q.all()
+                matches: List[Dict[str, Any]] = []
+                for r in rows:
+                    src = r.sources or {}
+                    src_emails = [str(x) for x in (src.get("emails") or [])]
+                    if any(eid in thread_email_ids for eid in src_emails):
+                        matches.append(r.to_dict())
+                return matches
+        except Exception as e:
+            logger.error(f"Failed to get tasks by thread {thread_id}: {e}")
+            return []
+
     def merge_task_sources(
         self,
         owner_id: str,
