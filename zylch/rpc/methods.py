@@ -586,14 +586,22 @@ async def narration_predict(
     )
 
     system = (
-        "Predici in italiano, prima persona, cosa sto per fare in base a "
-        "questa richiesta dell'utente. Max 80 char, inizia con 'Sto …'. "
-        "Se richiesta vaga, 'Sto pensando alla tua richiesta.'. "
-        "Nessun prefisso/virgolette."
+        "You predict, in Italian first person, what Zylch is about to do "
+        "based on the user's request. "
+        "Respond with EXACTLY ONE Italian sentence, max 80 characters, "
+        "starting with 'Sto '. "
+        "Do not explain. Do not warn. Do not comment on the content. "
+        "Do not analyze phishing/fraud/risk. "
+        "Do not use markdown, bullets, emoji, or newlines. "
+        "Do not quote the user's message. "
+        "If the request is ambiguous, respond exactly: "
+        "'Sto pensando alla tua richiesta.'"
     )
     user = f"Richiesta: {message[:500]}"
     if context:
         user += f"\nContesto: {context[:300]}"
+
+    fallback = "Sto pensando alla tua richiesta."
 
     try:
         from zylch.config import settings
@@ -612,15 +620,47 @@ async def narration_predict(
             client.create_message_sync,
             messages=[{"role": "user", "content": user}],
             system=system,
-            max_tokens=60,
+            max_tokens=40,
+            stop_sequences=["---"],
         )
         text = ""
         if resp.content:
             blk = resp.content[0]
             text = getattr(blk, "text", "") or ""
-        text = text.strip().strip("\"'").strip()
-        logger.debug(f"[rpc] narration.predict -> {text!r}")
-        return {"text": text}
+
+        # Post-process: first non-empty line only, strip decorations.
+        raw = text
+        first_line = ""
+        for line in (raw or "").split("\n"):
+            stripped = line.strip()
+            if stripped:
+                first_line = stripped
+                break
+        # Strip common decorations: quotes, asterisks, emoji-bullets, leading dashes
+        cleaned = first_line.strip()
+        for ch in ("\U0001f6a9", "\U0001f534", "\U0001f7e2", "\U0001f7e1"):
+            cleaned = cleaned.replace(ch, "")
+        cleaned = cleaned.strip().strip("\"'`").strip()
+        # Remove leading markdown markers
+        while cleaned.startswith(("**", "- ", "* ", "> ", "#")):
+            if cleaned.startswith("**"):
+                cleaned = cleaned[2:].strip()
+            else:
+                cleaned = cleaned[2:].strip()
+        # Strip trailing ** if present
+        if cleaned.endswith("**"):
+            cleaned = cleaned[:-2].strip()
+        # Safety cap
+        if len(cleaned) > 100:
+            cleaned = cleaned[:100].rstrip()
+
+        # Validate: must start with "Sto " (accept case-insensitive 'sto ')
+        if not cleaned or not cleaned[:4].lower().startswith("sto "):
+            logger.debug(f"[rpc] narration.predict fallback: raw={raw!r} cleaned={cleaned!r}")
+            return {"text": fallback}
+
+        logger.debug(f"[rpc] narration.predict -> {cleaned!r}")
+        return {"text": cleaned}
     except Exception as e:
         logger.warning(f"[rpc] narration.predict failed: {e}")
         return {"text": ""}
