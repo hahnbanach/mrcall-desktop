@@ -196,8 +196,15 @@ async def _handle_request(raw_line: str) -> None:
 
 
 async def _read_lines(loop: asyncio.AbstractEventLoop):
-    """Async iterator over stdin lines (without blocking the loop)."""
-    reader = asyncio.StreamReader()
+    """Async iterator over stdin lines (without blocking the loop).
+
+    The default asyncio StreamReader limit is 64 KiB per line. A single
+    chat.send request can easily exceed that once conversation_history
+    contains a few turns with embedded email bodies or tool_result
+    payloads. We raise the limit to 16 MiB — any JSON-RPC frame larger
+    than that is a bug on the caller side, not a line buffer issue.
+    """
+    reader = asyncio.StreamReader(limit=16 * 1024 * 1024)
     protocol = asyncio.StreamReaderProtocol(reader)
     await loop.connect_read_pipe(lambda: protocol, sys.stdin)
     while True:
