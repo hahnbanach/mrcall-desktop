@@ -4,6 +4,7 @@ import { useConversations } from '../store/conversations'
 
 interface Props {
   onOpenChat?: () => void
+  onOpenEmails?: (threadId: string) => void
 }
 
 const URGENCY_ORDER = ['high', 'medium', 'low']
@@ -13,7 +14,7 @@ const URGENCY_STYLES: Record<string, string> = {
   low: 'bg-slate-100 text-slate-700 border-slate-300'
 }
 
-export default function Dashboard({ onOpenChat }: Props = {}) {
+export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
   const { openTaskChat } = useConversations()
   const [tasks, setTasks] = useState<ZylchTask[]>([])
   const [loading, setLoading] = useState(true)
@@ -207,6 +208,24 @@ export default function Dashboard({ onOpenChat }: Props = {}) {
                     >
                       {updating.has(t.id) ? 'Analyzing…' : 'Update'}
                     </button>
+                    {(() => {
+                      const tid = t.sources?.thread_id || null
+                      const disabled = !tid
+                      return (
+                        <button
+                          onClick={() => {
+                            if (tid) onOpenEmails?.(tid)
+                          }}
+                          disabled={disabled}
+                          title={
+                            disabled ? 'No thread for this task' : 'Open thread'
+                          }
+                          className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Open
+                        </button>
+                      )
+                    })()}
                   </div>
                   {keptNotice[t.id] && (
                     <div className="mt-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-1.5">
