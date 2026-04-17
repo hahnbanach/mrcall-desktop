@@ -3,12 +3,13 @@ import Dashboard from './views/Dashboard'
 import Chat from './views/Chat'
 import Update from './views/Update'
 import Emails from './views/Emails'
+import Settings from './views/Settings'
 import { ConversationsProvider } from './store/conversations'
 import { ThreadProvider, useThread } from './store/thread'
 import { profileColor } from './lib/profileColor'
 import './types'
 
-type View = 'dashboard' | 'chat' | 'emails' | 'update'
+type View = 'dashboard' | 'chat' | 'emails' | 'update' | 'settings'
 
 function AppInner() {
   const [view, setView] = useState<View>('dashboard')
@@ -42,7 +43,8 @@ function AppInner() {
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'chat', label: 'Chat' },
     { id: 'emails', label: 'Email' },
-    { id: 'update', label: 'Update' }
+    { id: 'update', label: 'Update' },
+    { id: 'settings', label: 'Settings' }
   ]
   return (
     <div className="flex flex-col h-full">
@@ -103,6 +105,7 @@ function AppInner() {
         {view === 'chat' && <Chat onGoToDashboard={() => setView('dashboard')} />}
         {view === 'emails' && <Emails />}
         {view === 'update' && <Update />}
+        {view === 'settings' && <Settings />}
       </main>
     </div>
   )

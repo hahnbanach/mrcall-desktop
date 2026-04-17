@@ -76,6 +76,27 @@ export interface ZylchAPI {
     summarize: (lines: string[], context?: string) => Promise<{ text: string }>
     predict: (message: string, context?: string) => Promise<{ text: string }>
   }
+  settings: {
+    schema: () => Promise<{
+      fields: Array<{
+        key: string
+        label: string
+        type: 'text' | 'password' | 'number' | 'select' | 'textarea'
+        group: string
+        optional?: boolean
+        options?: string[]
+        help?: string
+        secret?: boolean
+      }>
+    }>
+    get: () => Promise<{ values: Record<string, string> }>
+    update: (
+      updates: Record<string, string>
+    ) => Promise<{ ok: boolean; applied: string[]; skipped_unchanged: string[] }>
+  }
+  sidecar: {
+    restart: () => Promise<{ ok: boolean }>
+  }
   onNotification: (method: string, cb: (params: any) => void) => () => void
   onStderr: (cb: (chunk: string) => void) => () => void
 }
