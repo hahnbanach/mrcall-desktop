@@ -733,7 +733,8 @@ class IMAPClient:
         to: str,
         subject: str,
         body: str,
-        cc: Optional[str] = None,
+        cc: Optional[List[str]] = None,
+        bcc: Optional[List[str]] = None,
         in_reply_to: Optional[str] = None,
         references: Optional[str] = None,
         attachment_paths: Optional[List[str]] = None,
@@ -741,22 +742,30 @@ class IMAPClient:
         """Send email via SMTP.
 
         Args:
-            to: Recipient email address
-            subject: Email subject
-            body: Plain text body
-            cc: CC addresses (comma-separated)
-            in_reply_to: Message-ID for reply threading
-            references: References header for threading
+            to: Recipient email address (or comma-separated list).
+            subject: Email subject.
+            body: Plain text body.
+            cc: Optional list of CC email addresses. Added to the Cc
+                header and to the SMTP recipient list.
+            bcc: Optional list of BCC email addresses. Added to the
+                SMTP recipient list but NOT to any header (Bcc is
+                invisible to other recipients).
+            in_reply_to: Message-ID for reply threading.
+            references: References header for threading.
             attachment_paths: Optional list of local file paths to attach.
                 When present, the message is built as a multipart using
                 ``email.message.EmailMessage``; when absent, legacy
                 ``MIMEText`` is used for backwards compatibility.
 
         Returns:
-            Dict with message_id of sent email
+            Dict with message_id of sent email.
         """
+        cc_list = [a.strip() for a in (cc or []) if a and a.strip()]
+        bcc_list = [a.strip() for a in (bcc or []) if a and a.strip()]
+
         logger.debug(
             f"[SMTP] send(to={to}, subject={subject},"
+            f" cc={len(cc_list)}, bcc={len(bcc_list)},"
             f" attachments={len(attachment_paths or [])})"
         )
 
@@ -774,8 +783,11 @@ class IMAPClient:
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid(domain=self.email_addr.split("@")[1])
 
-        if cc:
-            msg["Cc"] = cc
+        if cc_list:
+            # Cc header is visible to all recipients.
+            msg["Cc"] = ", ".join(cc_list)
+        # NOTE: NEVER set a Bcc header. Bcc is implicit and must only be
+        # delivered via the SMTP envelope (to_addrs below).
         if in_reply_to:
             msg["In-Reply-To"] = in_reply_to
         if references:
@@ -799,10 +811,13 @@ class IMAPClient:
                     filename=os.path.basename(path),
                 )
 
-        # Collect all recipients
-        recipients = [addr.strip() for addr in to.split(",")]
-        if cc:
-            recipients.extend(addr.strip() for addr in cc.split(","))
+        # Collect all recipients for the SMTP envelope. BCC recipients
+        # must be included here so SMTP delivers to them, but we already
+        # omitted the Bcc header above so they remain invisible to
+        # To/Cc recipients.
+        recipients = [addr.strip() for addr in to.split(",") if addr.strip()]
+        recipients.extend(cc_list)
+        recipients.extend(bcc_list)
 
         try:
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as smtp:
@@ -835,8 +850,8 @@ class IMAPClient:
         subject: str,
         body: str,
         from_email: Optional[str] = None,
-        cc: Optional[str] = None,
-        bcc: Optional[str] = None,
+        cc: Optional[List[str]] = None,
+        bcc: Optional[List[str]] = None,
         in_reply_to: Optional[str] = None,
         references: Optional[str] = None,
         thread_id: Optional[str] = None,
@@ -845,26 +860,28 @@ class IMAPClient:
         """Send email (GmailClient-compatible interface).
 
         Args:
-            to: Recipient email
-            subject: Email subject
-            body: Email body
-            from_email: Ignored (uses self.email_addr)
-            cc: CC recipients
-            bcc: BCC recipients (not supported in SMTP
-                 envelope but added to recipients)
-            in_reply_to: Message-ID for threading
-            references: References header for threading
-            thread_id: Ignored (IMAP uses Message-ID refs)
+            to: Recipient email.
+            subject: Email subject.
+            body: Email body.
+            from_email: Ignored (uses self.email_addr).
+            cc: Optional list of CC recipients. Appears in the Cc
+                header and in the SMTP envelope.
+            bcc: Optional list of BCC recipients. Added to the SMTP
+                envelope ONLY — no Bcc header is emitted.
+            in_reply_to: Message-ID for threading.
+            references: References header for threading.
+            thread_id: Ignored (IMAP uses Message-ID refs).
             attachment_paths: Local file paths to attach.
 
         Returns:
-            Dict with sent message info
+            Dict with sent message info.
         """
         result = self.send(
             to=to,
             subject=subject,
             body=body,
             cc=cc,
+            bcc=bcc,
             in_reply_to=in_reply_to,
             references=references,
             attachment_paths=attachment_paths,

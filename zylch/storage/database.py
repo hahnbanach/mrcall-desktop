@@ -130,6 +130,12 @@ def _apply_column_migrations(engine: Engine) -> None:
         # 2026-04-17: chat attachments — absolute local paths attached to a
         # draft and transported to MIME at send time.
         ("drafts", "attachment_paths", "JSON DEFAULT '[]'"),
+        # 2026-04-17: CC/BCC recipients on drafts. Allows "reply-to-all" and
+        # adding additional recipients from chat. The columns exist in the
+        # ORM model from the start but legacy DBs created before this
+        # migration may lack them.
+        ("drafts", "cc_addresses", "JSON DEFAULT '[]'"),
+        ("drafts", "bcc_addresses", "JSON DEFAULT '[]'"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in migrations:

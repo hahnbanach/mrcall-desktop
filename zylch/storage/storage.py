@@ -437,13 +437,21 @@ class Storage:
         thread_id: str = None,
         provider: str = "google",
         attachment_paths: list = None,
+        cc: list = None,
+        bcc: list = None,
     ) -> Dict[str, Any]:
-        """Create a draft email."""
+        """Create a draft email.
+
+        cc/bcc: optional lists of email addresses. Stored as JSON lists;
+        empty list if None.
+        """
         to_list = to if isinstance(to, list) else [to]
         with get_session() as session:
             draft = Draft(
                 owner_id=owner_id,
                 to_addresses=to_list,
+                cc_addresses=list(cc) if cc else [],
+                bcc_addresses=list(bcc) if bcc else [],
                 subject=subject,
                 body=body,
                 in_reply_to=in_reply_to,
