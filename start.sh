@@ -30,5 +30,6 @@ PROFILE="${1:-}"
 cd "$DIR"
 ZYLCH_CWD="$ZYLCH_DIR" \
 ZYLCH_BINARY="$ZYLCH_DIR/venv/bin/zylch" \
+LOG_LEVEL="${LOG_LEVEL:-DEBUG}" \
 ${PROFILE:+ZYLCH_PROFILE="$PROFILE"} \
 npm run dev
