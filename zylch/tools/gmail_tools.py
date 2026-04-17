@@ -302,6 +302,8 @@ class CreateDraftTool(Tool):
         references: str = None,
         thread_id: str = None,
         attachment_paths: Optional[List[str]] = None,
+        cc: Optional[List[str]] = None,
+        bcc: Optional[List[str]] = None,
     ):
         try:
             refs_list = None
@@ -322,6 +324,12 @@ class CreateDraftTool(Tool):
                         error=f"Attachment not found: {p}",
                     )
 
+            # Basic normalization: strip, drop empties. We deliberately do
+            # NOT reject malformed addresses -- SMTP will surface that at
+            # send time -- but obvious garbage like empty strings is filtered.
+            cc_list = [a.strip() for a in (cc or []) if isinstance(a, str) and a.strip()]
+            bcc_list = [a.strip() for a in (bcc or []) if isinstance(a, str) and a.strip()]
+
             draft = self.storage.create_draft(
                 owner_id=self.owner_id,
                 to=to,
@@ -331,6 +339,8 @@ class CreateDraftTool(Tool):
                 references=refs_list,
                 thread_id=thread_id,
                 attachment_paths=norm_paths,
+                cc=cc_list,
+                bcc=bcc_list,
             )
 
             if not draft:
@@ -346,12 +356,21 @@ class CreateDraftTool(Tool):
                 attach_info = "\nAttachments:\n" + "\n".join(
                     f"  - {os.path.basename(p)}" for p in norm_paths
                 )
+            cc_info = f"\nCc: {', '.join(cc_list)}" if cc_list else ""
+            bcc_info = f"\nBcc: {', '.join(bcc_list)}" if bcc_list else ""
             return ToolResult(
                 status=ToolStatus.SUCCESS,
-                data={"draft_id": draft.get("id"), "attachment_paths": norm_paths},
+                data={
+                    "draft_id": draft.get("id"),
+                    "attachment_paths": norm_paths,
+                    "cc": cc_list,
+                    "bcc": bcc_list,
+                },
                 message=(
                     f"Draft created{thread_info}!\n"
-                    f"To: {to}\n"
+                    f"To: {to}"
+                    f"{cc_info}"
+                    f"{bcc_info}\n"
                     f"Subject: {subject}"
                     f"{attach_info}\n\n"
                     f"Message body:\n"
@@ -415,6 +434,24 @@ class CreateDraftTool(Tool):
                         "description": (
                             "Optional list of local file paths"
                             " to attach (absolute or ~-expanded)."
+                        ),
+                    },
+                    "cc": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "CC recipients (optional). Use when"
+                            " the user wants to reply-to-all or"
+                            " add additional recipients."
+                        ),
+                    },
+                    "bcc": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "BCC recipients (optional). Use when"
+                            " the user wants blind-copied additional"
+                            " recipients not visible to others."
                         ),
                     },
                 },
@@ -618,6 +655,8 @@ class UpdateDraftTool(Tool):
         subject: str = None,
         body: str = None,
         attachment_paths: Optional[List[str]] = None,
+        cc: Optional[List[str]] = None,
+        bcc: Optional[List[str]] = None,
     ):
         try:
             update_data = {}
@@ -637,6 +676,14 @@ class UpdateDraftTool(Tool):
                             error=f"Attachment not found: {p}",
                         )
                 update_data["attachment_paths"] = norm_paths
+            if cc is not None:
+                update_data["cc_addresses"] = [
+                    a.strip() for a in cc if isinstance(a, str) and a.strip()
+                ]
+            if bcc is not None:
+                update_data["bcc_addresses"] = [
+                    a.strip() for a in bcc if isinstance(a, str) and a.strip()
+                ]
 
             self.storage.update_draft(self.owner_id, draft_id, update_data)
 
@@ -651,6 +698,12 @@ class UpdateDraftTool(Tool):
                 updates.append(
                     f"Attachments: {len(update_data.get('attachment_paths', []))} file(s)"
                 )
+            if cc is not None:
+                cc_vals = update_data.get("cc_addresses", [])
+                updates.append(f"Cc: {', '.join(cc_vals) if cc_vals else '(cleared)'}")
+            if bcc is not None:
+                bcc_vals = update_data.get("bcc_addresses", [])
+                updates.append(f"Bcc: {', '.join(bcc_vals) if bcc_vals else '(cleared)'}")
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
@@ -698,6 +751,21 @@ class UpdateDraftTool(Tool):
                         "description": (
                             "Replacement list of local file" " paths to attach. Pass [] to clear."
                         ),
+                    },
+                    "cc": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Replacement list of CC recipients."
+                            " Pass [] to clear. Use when the user"
+                            " wants to reply-to-all or add"
+                            " additional recipients."
+                        ),
+                    },
+                    "bcc": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": ("Replacement list of BCC recipients." " Pass [] to clear."),
                     },
                 },
                 "required": ["draft_id"],
@@ -751,6 +819,8 @@ class SendDraftTool(Tool):
             in_reply_to = draft.get("in_reply_to")
             references = draft.get("references")
             attachment_paths = draft.get("attachment_paths") or []
+            cc_addresses = draft.get("cc_addresses") or []
+            bcc_addresses = draft.get("bcc_addresses") or []
 
             if not to:
                 return ToolResult(
@@ -772,6 +842,7 @@ class SendDraftTool(Tool):
 
             logger.debug(
                 f"[send_draft] Sending to={to},"
+                f" cc={cc_addresses}, bcc={len(bcc_addresses)},"
                 f" subject={subject},"
                 f" attachments={len(attachment_paths)}"
             )
@@ -780,6 +851,8 @@ class SendDraftTool(Tool):
                 to=to,
                 subject=subject,
                 body=body,
+                cc=cc_addresses or None,
+                bcc=bcc_addresses or None,
                 in_reply_to=in_reply_to,
                 references=(" ".join(references) if references else None),
                 attachment_paths=attachment_paths or None,
