@@ -57,9 +57,7 @@ class UpdateMemoryTool(Tool):
                 data=None,
                 error="Missing query or new_content",
             )
-            logger.debug(
-                f"[update_memory] -> status={result.status}"
-            )
+            logger.debug(f"[update_memory] -> status={result.status}")
             return result
 
         owner_id = self._get_owner_id()
@@ -69,9 +67,7 @@ class UpdateMemoryTool(Tool):
                 data=None,
                 error="No owner_id available",
             )
-            logger.debug(
-                f"[update_memory] -> status={result.status}"
-            )
+            logger.debug(f"[update_memory] -> status={result.status}")
             return result
 
         try:
@@ -89,7 +85,9 @@ class UpdateMemoryTool(Tool):
             blob_store = BlobStorage(get_session, engine)
 
             results = search.search(
-                owner_id=owner_id, query=query, limit=1,
+                owner_id=owner_id,
+                query=query,
+                limit=1,
             )
             if not results:
                 result = ToolResult(
@@ -97,21 +95,19 @@ class UpdateMemoryTool(Tool):
                     data=None,
                     error=f"No memory entry found for '{query}'",
                 )
-                logger.debug(
-                    f"[update_memory] -> status={result.status}"
-                )
+                logger.debug(f"[update_memory] -> status={result.status}")
                 return result
 
             r = results[0]
             blob_id = (
-                r.blob_id if hasattr(r, "blob_id")
-                else r.get("blob_id", "") if isinstance(r, dict)
-                else ""
+                r.blob_id
+                if hasattr(r, "blob_id")
+                else r.get("blob_id", "") if isinstance(r, dict) else ""
             )
             old_content = (
-                r.content if hasattr(r, "content")
-                else r.get("content", "") if isinstance(r, dict)
-                else ""
+                r.content
+                if hasattr(r, "content")
+                else r.get("content", "") if isinstance(r, dict) else ""
             )
 
             if not blob_id:
@@ -120,9 +116,7 @@ class UpdateMemoryTool(Tool):
                     data=None,
                     error="Matched result had no blob_id",
                 )
-                logger.debug(
-                    f"[update_memory] -> status={result.status}"
-                )
+                logger.debug(f"[update_memory] -> status={result.status}")
                 return result
 
             blob_store.update_blob(
@@ -138,16 +132,9 @@ class UpdateMemoryTool(Tool):
                     "blob_id": str(blob_id),
                     "action": "updated",
                 },
-                message=(
-                    "Memory updated.\n"
-                    f"Was: {old_content}\n"
-                    f"Now: {new_content}"
-                ),
+                message=("Memory updated.\n" f"Was: {old_content}\n" f"Now: {new_content}"),
             )
-            logger.debug(
-                f"[update_memory] -> status={result.status}"
-                f" blob_id={blob_id}"
-            )
+            logger.debug(f"[update_memory] -> status={result.status}" f" blob_id={blob_id}")
             return result
         except Exception as e:
             logger.error(f"[update_memory] failed: {e}")
@@ -156,9 +143,7 @@ class UpdateMemoryTool(Tool):
                 data=None,
                 error=f"Update failed: {e}",
             )
-            logger.debug(
-                f"[update_memory] -> status={result.status}"
-            )
+            logger.debug(f"[update_memory] -> status={result.status}")
             return result
 
     def get_schema(self) -> Dict[str, Any]:
@@ -170,17 +155,11 @@ class UpdateMemoryTool(Tool):
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": (
-                            "Name or keyword to find the memory"
-                            " entry to update"
-                        ),
+                        "description": ("Name or keyword to find the memory" " entry to update"),
                     },
                     "new_content": {
                         "type": "string",
-                        "description": (
-                            "The corrected full content (replaces"
-                            " existing)"
-                        ),
+                        "description": ("The corrected full content (replaces" " existing)"),
                     },
                 },
                 "required": ["query", "new_content"],

@@ -8,6 +8,7 @@ from enum import Enum
 
 class ToolStatus(Enum):
     """Tool execution status."""
+
     SUCCESS = "success"
     ERROR = "error"
     PENDING_APPROVAL = "pending_approval"
@@ -16,6 +17,7 @@ class ToolStatus(Enum):
 @dataclass
 class ToolResult:
     """Result from tool execution."""
+
     status: ToolStatus
     data: Any
     message: Optional[str] = None

@@ -11,9 +11,8 @@ Example:
 """
 
 import logging
-import time
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any
 import re
 
 from zylch.services.command_handlers import COMMAND_PATTERNS
@@ -24,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class MatchResult:
     """Result of a semantic match."""
+
     command: str
     confidence: float
     matched_template: str
@@ -54,12 +54,15 @@ class SemanticCommandMatcher:
         try:
             logger.info("[CommandMatcher] Initializing SemanticCommandMatcher...")
             from zylch.memory import EmbeddingEngine, MemoryConfig
+
             config = MemoryConfig()
             self._embedding_engine = EmbeddingEngine(config)
             logger.info("[CommandMatcher] EmbeddingEngine created")
-            
+
             self._initialized = True
-            logger.info(f"[CommandMatcher] SemanticCommandMatcher initialized with {len(COMMAND_PATTERNS)} patterns")
+            logger.info(
+                f"[CommandMatcher] SemanticCommandMatcher initialized with {len(COMMAND_PATTERNS)} patterns"
+            )
         except Exception as e:
             logger.error(f"[CommandMatcher] Failed to initialize: {e}", exc_info=True)
             self._initialized = False
@@ -97,12 +100,12 @@ class SemanticCommandMatcher:
             for template in templates:
                 # Remove parameter types for embedding comparison (e.g. "{limit:int}" -> "limit")
                 # This makes "show 5 drafts" match better with "show drafts" semantically
-                clean_template = re.sub(r'\{([^:}]+)(?::[^}]+)?\}', r'\1', template)
+                clean_template = re.sub(r"\{([^:}]+)(?::[^}]+)?\}", r"\1", template)
 
                 try:
                     template_embedding = self._embedding_engine.encode(clean_template)
                     score = self._embedding_engine.similarity(user_embedding, template_embedding)
-                    
+
                     if score > best_score:
                         best_score = score
                         best_command = command
@@ -111,7 +114,9 @@ class SemanticCommandMatcher:
                     continue
 
         if not best_command or best_score < self.MIN_CONFIDENCE:
-            logger.info(f"[CommandMatcher] No match or low confidence ({best_score:.2f}) for: '{user_message}'")
+            logger.info(
+                f"[CommandMatcher] No match or low confidence ({best_score:.2f}) for: '{user_message}'"
+            )
             return None
 
         # 3. Extract parameters
@@ -121,10 +126,12 @@ class SemanticCommandMatcher:
             command=best_command,
             confidence=best_score,
             matched_template=best_template,
-            params=params
+            params=params,
         )
 
-        logger.info(f"[CommandMatcher] Raw match: command={result.command}, confidence={result.confidence:.2f}, template='{result.matched_template}'")
+        logger.info(
+            f"[CommandMatcher] Raw match: command={result.command}, confidence={result.confidence:.2f}, template='{result.matched_template}'"
+        )
 
         # Format the command with extracted parameters
         command = self._format_command(result, user_message)
@@ -140,7 +147,7 @@ class SemanticCommandMatcher:
         """
         Extract parameters from user message based on template variables.
         Simple heuristic extraction since we don't have a rigid parser.
-        
+
         Supported types in template: {name:type}
         - int: Extract numbers
         - email: Extract emails
@@ -148,45 +155,49 @@ class SemanticCommandMatcher:
         - text: Catch-all
         """
         params = {}
-        
+
         # Find all typed variables in template: {param:type}
-        var_matches = re.findall(r'\{([^:}]+):([^}]+)\}', template)
-        
+        var_matches = re.findall(r"\{([^:}]+):([^}]+)\}", template)
+
         for var_name, var_type in var_matches:
             val = None
-            if var_type == 'int':
+            if var_type == "int":
                 # Find first number
-                match = re.search(r'\b(\d+)\b', user_message)
+                match = re.search(r"\b(\d+)\b", user_message)
                 if match:
                     val = match.group(1)
-            elif var_type == 'email':
+            elif var_type == "email":
                 # Find email
-                match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', user_message)
+                match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", user_message)
                 if match:
                     val = match.group(0)
-            elif var_type == 'date':
+            elif var_type == "date":
                 # Very basic date extraction - looking for common patterns
                 # In a real system this would use dateparser
-                match = re.search(r'\b(today|tomorrow|yesterday|\d{4}-\d{2}-\d{2})\b', user_message.lower())
+                match = re.search(
+                    r"\b(today|tomorrow|yesterday|\d{4}-\d{2}-\d{2})\b", user_message.lower()
+                )
                 if match:
                     val = match.group(0)
-            elif var_type == 'time':
-                match = re.search(r'\b(\d{1,2}:\d{2}(?:\s?[ap]m)?)\b', user_message.lower())
+            elif var_type == "time":
+                match = re.search(r"\b(\d{1,2}:\d{2}(?:\s?[ap]m)?)\b", user_message.lower())
                 if match:
                     val = match.group(0)
-            elif var_type == 'duration':
-                match = re.search(r'\b(\d+\s*(?:minutes?|hours?|days?|mins?|hrs?))\b', user_message.lower())
+            elif var_type == "duration":
+                match = re.search(
+                    r"\b(\d+\s*(?:minutes?|hours?|days?|mins?|hrs?))\b", user_message.lower()
+                )
                 if match:
                     val = match.group(0)
-            elif var_type == 'text':
+            elif var_type == "text":
                 # Hard to extract "rest of text" without alignment
-                # For now, if it's a named entity like query/content, take the whole message 
+                # For now, if it's a named entity like query/content, take the whole message
                 # minus the known trigger words, or just specific logic in _format_command
                 pass
-                
+
             if val:
                 params[var_name] = val
-                
+
         return params
 
     def _format_command(self, result: MatchResult, original_input: str) -> str:
@@ -210,27 +221,27 @@ class SemanticCommandMatcher:
         template = result.matched_template
 
         # Special handling based on command type
-        if command == '/sync':
+        if command == "/sync":
             return self._format_sync(params)
-        elif command == '/memory':
+        elif command == "/memory":
             return self._format_memory(params, template, original_input)
-        elif command == '/email':
+        elif command == "/email":
             return self._format_email(params, template)
-        elif command == '/calendar':
+        elif command == "/calendar":
             return self._format_calendar(params, template)
-        elif command == '/model':
+        elif command == "/model":
             return self._format_model(params)
-        elif command == '/archive':
+        elif command == "/archive":
             return self._format_archive(params, template)
-        elif command == '/share':
+        elif command == "/share":
             return self._format_share(params)
-        elif command == '/revoke':
+        elif command == "/revoke":
             return self._format_revoke(params)
-        elif command == '/tutorial':
+        elif command == "/tutorial":
             return self._format_tutorial(params)
-        elif command == '/connect':
+        elif command == "/connect":
             return self._format_connect(params)
-        elif command == '/mrcall':
+        elif command == "/mrcall":
             return self._format_mrcall(params, template)
         else:
             # Default: just return the command
@@ -238,27 +249,32 @@ class SemanticCommandMatcher:
 
     def _format_sync(self, params: Dict[str, Any]) -> str:
         """/sync [--days <n>]"""
-        if 'days' in params:
+        if "days" in params:
             return f"/sync --days {params['days']}"
         return "/sync"
 
     def _format_memory(self, params: Dict[str, Any], template: str, original_input: str) -> str:
         """/memory [search query | store content | stats | list | reset]"""
         # Determine subcommand from template
-        if 'search' in template or 'who is' in template or 'what do you know' in template or 'find in memory' in template:
+        if (
+            "search" in template
+            or "who is" in template
+            or "what do you know" in template
+            or "find in memory" in template
+        ):
             # Pass the FULL original message as the search query
             return f"/memory search {original_input}"
-        elif 'store' in template or 'remember' in template or 'save to memory' in template:
-            content = params.get('content', '')
+        elif "store" in template or "remember" in template or "save to memory" in template:
+            content = params.get("content", "")
             return f"/memory store {content}"
-        elif 'stats' in template or 'statistics' in template:
+        elif "stats" in template or "statistics" in template:
             return "/memory stats"
-        elif 'list' in template or 'show memories' in template:
-            limit = params.get('limit', '')
+        elif "list" in template or "show memories" in template:
+            limit = params.get("limit", "")
             if limit:
                 return f"/memory list {limit}"
             return "/memory list"
-        elif 'reset' in template or 'clear memory' in template or 'delete all' in template:
+        elif "reset" in template or "clear memory" in template or "delete all" in template:
             return "/memory reset"
 
         # Default to search with original input
@@ -267,47 +283,57 @@ class SemanticCommandMatcher:
     def _format_email(self, params: Dict[str, Any], template: str) -> str:
         """/email [list --draft | create | send | delete | search]"""
         # Drafts - List
-        if 'list draft' in template or 'show draft' in template or 'my draft' in template:
-            limit = params.get('limit', '')
+        if "list draft" in template or "show draft" in template or "my draft" in template:
+            limit = params.get("limit", "")
             if limit:
                 return f"/email list --draft --limit {limit}"
             return "/email list --draft"
 
         # Drafts - Create
-        if 'create draft' in template or 'draft email' in template or 'compose' in template or 'write email' in template:
-            to = params.get('to', '')
-            subject = params.get('subject', '')
+        if (
+            "create draft" in template
+            or "draft email" in template
+            or "compose" in template
+            or "write email" in template
+        ):
+            to = params.get("to", "")
+            subject = params.get("subject", "")
             parts = ["/email create"]
             if to:
                 parts.append(f"--to {to}")
             if subject:
-                parts.append(f"--subject \"{subject}\"")
+                parts.append(f'--subject "{subject}"')
             return " ".join(parts)
 
         # Drafts - Send
-        if 'send draft' in template or 'send the email' in template or 'send it' in template:
-            draft_id = params.get('draft_id', '')
+        if "send draft" in template or "send the email" in template or "send it" in template:
+            draft_id = params.get("draft_id", "")
             if draft_id:
                 return f"/email send {draft_id}"
             return "/email send"
 
         # Drafts - Delete
-        if 'delete draft' in template or 'discard draft' in template:
-            draft_id = params.get('draft_id', '')
+        if "delete draft" in template or "discard draft" in template:
+            draft_id = params.get("draft_id", "")
             if draft_id:
                 return f"/email delete {draft_id}"
             return "/email delete"
 
         # Search
-        if 'search' in template or 'find email' in template or 'emails from' in template or 'emails about' in template:
-            query = params.get('query', '')
-            sender = params.get('sender', '')
-            days = params.get('days', '')
-            limit = params.get('limit', '')
+        if (
+            "search" in template
+            or "find email" in template
+            or "emails from" in template
+            or "emails about" in template
+        ):
+            query = params.get("query", "")
+            sender = params.get("sender", "")
+            days = params.get("days", "")
+            limit = params.get("limit", "")
 
             parts = ["/email search"]
             if query:
-                parts.append(f"\"{query}\"")
+                parts.append(f'"{query}"')
             if sender:
                 parts.append(f"--from {sender}")
             if days:
@@ -322,9 +348,16 @@ class SemanticCommandMatcher:
     def _format_calendar(self, params: Dict[str, Any], template: str) -> str:
         """/calendar [list | create | search]"""
         # List
-        if 'show calendar' in template or 'my calendar' in template or 'calendar for' in template or 'meetings' in template or 'events' in template or 'what\'s on' in template:
-            date = params.get('date', '')
-            limit = params.get('limit', '')
+        if (
+            "show calendar" in template
+            or "my calendar" in template
+            or "calendar for" in template
+            or "meetings" in template
+            or "events" in template
+            or "what's on" in template
+        ):
+            date = params.get("date", "")
+            limit = params.get("limit", "")
             parts = ["/calendar list"]
             if date:
                 parts.append(f"--date {date}")
@@ -333,14 +366,14 @@ class SemanticCommandMatcher:
             return " ".join(parts)
 
         # Create
-        if 'create event' in template or 'schedule meeting' in template or 'add event' in template:
-            attendee = params.get('attendee', '')
-            date = params.get('date', '')
-            time = params.get('time', '')
-            title = params.get('title', '')
+        if "create event" in template or "schedule meeting" in template or "add event" in template:
+            attendee = params.get("attendee", "")
+            date = params.get("date", "")
+            time = params.get("time", "")
+            title = params.get("title", "")
             parts = ["/calendar create"]
             if title:
-                parts.append(f"--title \"{title}\"")
+                parts.append(f'--title "{title}"')
             if attendee:
                 parts.append(f"--attendee {attendee}")
             if date:
@@ -350,11 +383,11 @@ class SemanticCommandMatcher:
             return " ".join(parts)
 
         # Search
-        if 'search calendar' in template or 'find meeting' in template or 'when is' in template:
-            query = params.get('query', '')
-            attendee = params.get('attendee', '')
+        if "search calendar" in template or "find meeting" in template or "when is" in template:
+            query = params.get("query", "")
+            attendee = params.get("attendee", "")
             if query:
-                return f"/calendar search \"{query}\""
+                return f'/calendar search "{query}"'
             if attendee:
                 return f"/calendar search {attendee}"
             return "/calendar search"
@@ -363,27 +396,27 @@ class SemanticCommandMatcher:
 
     def _format_model(self, params: Dict[str, Any]) -> str:
         """/model"""
-        model = params.get('model', '')
+        model = params.get("model", "")
         if model:
             return f"/model {model}"
         return "/model"
 
     def _format_archive(self, params: Dict[str, Any], template: str) -> str:
         """/archive [stats | search query | list]"""
-        if 'search' in template or 'find' in template:
-            query = params.get('query', '')
-            limit = params.get('limit', '')
+        if "search" in template or "find" in template:
+            query = params.get("query", "")
+            limit = params.get("limit", "")
             parts = ["/archive search"]
             if query:
-                parts.append(f"\"{query}\"")
+                parts.append(f'"{query}"')
             if limit:
                 parts.append(f"--limit {limit}")
             return " ".join(parts)
 
-        if 'stats' in template or 'statistics' in template:
+        if "stats" in template or "statistics" in template:
             return "/archive stats"
 
-        limit = params.get('limit', '')
+        limit = params.get("limit", "")
         if limit:
             return f"/archive list --limit {limit}"
 
@@ -391,8 +424,8 @@ class SemanticCommandMatcher:
 
     def _format_share(self, params: Dict[str, Any]) -> str:
         """/share [email]"""
-        email = params.get('email', '')
-        name = params.get('name', '')
+        email = params.get("email", "")
+        name = params.get("name", "")
         if email:
             return f"/share {email}"
         if name:
@@ -401,29 +434,29 @@ class SemanticCommandMatcher:
 
     def _format_revoke(self, params: Dict[str, Any]) -> str:
         """/revoke [email]"""
-        email = params.get('email', '')
+        email = params.get("email", "")
         if email:
             return f"/revoke {email}"
         return "/revoke"
 
     def _format_tutorial(self, params: Dict[str, Any]) -> str:
         """/tutorial [topic]"""
-        topic = params.get('topic', '')
+        topic = params.get("topic", "")
         if topic:
             return f"/tutorial {topic}"
         return "/tutorial"
 
     def _format_connect(self, params: Dict[str, Any]) -> str:
         """/connect [provider]"""
-        provider = params.get('provider', '')
+        provider = params.get("provider", "")
         if provider:
             return f"/connect {provider}"
         return "/connect"
 
     def _format_mrcall(self, params: Dict[str, Any], template: str) -> str:
         """/mrcall variables get [--name <name>]"""
-        if 'variable' in template or 'value' in template:
-            name = params.get('name', '')
+        if "variable" in template or "value" in template:
+            name = params.get("name", "")
             if name:
                 return f"/mrcall variables get --name {name}"
             return "/mrcall variables get"

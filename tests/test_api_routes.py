@@ -10,7 +10,6 @@ These tests verify:
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
-from datetime import datetime, timezone
 
 from zylch.api.main import app
 
@@ -24,15 +23,13 @@ def client():
 @pytest.fixture
 def mock_firebase_auth():
     """Mock Firebase authentication."""
-    with patch('zylch.api.firebase_auth.verify_id_token') as mock_verify:
+    with patch("zylch.api.firebase_auth.verify_id_token") as mock_verify:
         # Return a mock decoded token
         mock_verify.return_value = {
-            'uid': 'test-user-123',
-            'email': 'test@example.com',
-            'name': 'Test User',
-            'firebase': {
-                'sign_in_provider': 'google.com'
-            }
+            "uid": "test-user-123",
+            "email": "test@example.com",
+            "name": "Test User",
+            "firebase": {"sign_in_provider": "google.com"},
         }
         yield mock_verify
 
@@ -40,15 +37,13 @@ def mock_firebase_auth():
 @pytest.fixture
 def mock_firebase_get_current_user():
     """Mock get_current_user dependency."""
-    with patch('zylch.api.firebase_auth.get_current_user') as mock_get_user:
+    with patch("zylch.api.firebase_auth.get_current_user") as mock_get_user:
         mock_get_user.return_value = {
-            'uid': 'test-user-123',
-            'email': 'test@example.com',
-            'name': 'Test User',
-            'token': 'mock-firebase-token',
-            'firebase': {
-                'sign_in_provider': 'google.com'
-            }
+            "uid": "test-user-123",
+            "email": "test@example.com",
+            "name": "Test User",
+            "token": "mock-firebase-token",
+            "firebase": {"sign_in_provider": "google.com"},
         }
         yield mock_get_user
 
@@ -61,16 +56,16 @@ class TestRootEndpoints:
         response = client.get("/")
         assert response.status_code == 200
         data = response.json()
-        assert data['name'] == "Zylch AI API"
-        assert 'version' in data
-        assert data['status'] == "running"
+        assert data["name"] == "Zylch AI API"
+        assert "version" in data
+        assert data["status"] == "running"
 
     def test_health_endpoint(self, client):
         """Test health check endpoint."""
         response = client.get("/health")
         assert response.status_code == 200
         data = response.json()
-        assert data['status'] == "healthy"
+        assert data["status"] == "healthy"
 
 
 class TestAuthEndpoints:
@@ -78,39 +73,32 @@ class TestAuthEndpoints:
 
     def test_login_success(self, client):
         """Test successful login with valid Firebase token."""
-        with patch('firebase_admin.auth.verify_id_token') as mock_verify:
+        with patch("firebase_admin.auth.verify_id_token") as mock_verify:
             mock_verify.return_value = {
-                'uid': 'test-user-123',
-                'email': 'test@example.com',
-                'name': 'Test User',
-                'firebase': {
-                    'sign_in_provider': 'google.com'
-                }
+                "uid": "test-user-123",
+                "email": "test@example.com",
+                "name": "Test User",
+                "firebase": {"sign_in_provider": "google.com"},
             }
 
-            response = client.post(
-                "/api/auth/login",
-                json={"firebase_token": "valid-token"}
-            )
+            response = client.post("/api/auth/login", json={"firebase_token": "valid-token"})
 
             assert response.status_code == 200
             data = response.json()
-            assert data['success'] is True
-            assert data['owner_id'] == 'test-user-123'
-            assert data['email'] == 'test@example.com'
-            assert 'token' in data
-            assert 'expires_at' in data
+            assert data["success"] is True
+            assert data["owner_id"] == "test-user-123"
+            assert data["email"] == "test@example.com"
+            assert "token" in data
+            assert "expires_at" in data
 
     def test_login_invalid_token(self, client):
         """Test login with invalid Firebase token."""
-        with patch('firebase_admin.auth.verify_id_token') as mock_verify:
+        with patch("firebase_admin.auth.verify_id_token") as mock_verify:
             from firebase_admin import auth as firebase_auth
+
             mock_verify.side_effect = firebase_auth.InvalidIdTokenError("Invalid token")
 
-            response = client.post(
-                "/api/auth/login",
-                json={"firebase_token": "invalid-token"}
-            )
+            response = client.post("/api/auth/login", json={"firebase_token": "invalid-token"})
 
             assert response.status_code == 401
 
@@ -156,10 +144,7 @@ class TestDataEndpoints:
 
     def test_apply_modifiers_requires_auth(self, client):
         """Test modifier endpoint requires authentication."""
-        response = client.post(
-            "/api/data/modifier",
-            json={"operations": []}
-        )
+        response = client.post("/api/data/modifier", json={"operations": []})
         # Should fail without auth header (422 = missing required header, 401/403 = auth failed)
         assert response.status_code in [401, 403, 422]
 
@@ -174,125 +159,125 @@ class TestDataEndpointsAuthenticated:
     @pytest.mark.skip(reason="Requires FastAPI dependency override - Firebase mock not working")
     def test_list_emails_success(self, client):
         """Test listing emails with valid auth."""
-        with patch('zylch.api.routes.data.get_current_user') as mock_auth:
-            with patch('zylch.api.routes.data.get_user_id_from_token') as mock_get_id:
-                with patch('zylch.api.routes.data.get_email_store') as mock_store:
+        with patch("zylch.api.routes.data.get_current_user") as mock_auth:
+            with patch("zylch.api.routes.data.get_user_id_from_token") as mock_get_id:
+                with patch("zylch.api.routes.data.get_email_store") as mock_store:
                     # Mock authentication
-                    mock_auth.return_value = {'uid': 'test-user-123'}
-                    mock_get_id.return_value = 'test-user-123'
+                    mock_auth.return_value = {"uid": "test-user-123"}
+                    mock_get_id.return_value = "test-user-123"
 
                     # Mock store
                     mock_email_store = MagicMock()
                     mock_email_store.list_threads.return_value = []
                     mock_email_store.get_stats.return_value = {
-                        'total_threads': 0,
-                        'last_modified': None
+                        "total_threads": 0,
+                        "last_modified": None,
                     }
                     mock_store.return_value = mock_email_store
 
                     response = client.get(
-                        "/api/data/emails",
-                        headers={"authorization": "Bearer mock-token"}
+                        "/api/data/emails", headers={"authorization": "Bearer mock-token"}
                     )
 
                     assert response.status_code == 200
                     data = response.json()
-                    assert data['success'] is True
-                    assert 'threads' in data
-                    assert 'stats' in data
+                    assert data["success"] is True
+                    assert "threads" in data
+                    assert "stats" in data
 
     @pytest.mark.skip(reason="Requires FastAPI dependency override - Firebase mock not working")
     def test_list_calendar_success(self, client):
         """Test listing calendar events with valid auth."""
-        with patch('zylch.api.routes.data.get_current_user') as mock_auth:
-            with patch('zylch.api.routes.data.get_user_id_from_token') as mock_get_id:
-                with patch('zylch.api.routes.data.get_calendar_store') as mock_store:
+        with patch("zylch.api.routes.data.get_current_user") as mock_auth:
+            with patch("zylch.api.routes.data.get_user_id_from_token") as mock_get_id:
+                with patch("zylch.api.routes.data.get_calendar_store") as mock_store:
                     # Mock authentication
-                    mock_auth.return_value = {'uid': 'test-user-123'}
-                    mock_get_id.return_value = 'test-user-123'
+                    mock_auth.return_value = {"uid": "test-user-123"}
+                    mock_get_id.return_value = "test-user-123"
 
                     # Mock store
                     mock_calendar_store = MagicMock()
                     mock_calendar_store.list_events.return_value = []
                     mock_calendar_store.get_stats.return_value = {
-                        'total_events': 0,
-                        'last_modified': None
+                        "total_events": 0,
+                        "last_modified": None,
                     }
                     mock_store.return_value = mock_calendar_store
 
                     response = client.get(
-                        "/api/data/calendar",
-                        headers={"authorization": "Bearer mock-token"}
+                        "/api/data/calendar", headers={"authorization": "Bearer mock-token"}
                     )
 
                     assert response.status_code == 200
                     data = response.json()
-                    assert data['success'] is True
-                    assert 'events' in data
-                    assert 'stats' in data
+                    assert data["success"] is True
+                    assert "events" in data
+                    assert "stats" in data
 
     @pytest.mark.skip(reason="Requires FastAPI dependency override - Firebase mock not working")
     def test_list_contacts_success(self, client):
         """Test listing contacts with valid auth."""
-        with patch('zylch.api.routes.data.get_current_user') as mock_auth:
-            with patch('zylch.api.routes.data.get_user_id_from_token') as mock_get_id:
-                with patch('zylch.api.routes.data.get_contact_store') as mock_store:
+        with patch("zylch.api.routes.data.get_current_user") as mock_auth:
+            with patch("zylch.api.routes.data.get_user_id_from_token") as mock_get_id:
+                with patch("zylch.api.routes.data.get_contact_store") as mock_store:
                     # Mock authentication
-                    mock_auth.return_value = {'uid': 'test-user-123'}
-                    mock_get_id.return_value = 'test-user-123'
+                    mock_auth.return_value = {"uid": "test-user-123"}
+                    mock_get_id.return_value = "test-user-123"
 
                     # Mock store
                     mock_contact_store = MagicMock()
                     mock_contact_store.list_contacts.return_value = []
                     mock_contact_store.get_stats.return_value = {
-                        'total_contacts': 0,
-                        'last_modified': None
+                        "total_contacts": 0,
+                        "last_modified": None,
                     }
                     mock_store.return_value = mock_contact_store
 
                     response = client.get(
-                        "/api/data/contacts",
-                        headers={"authorization": "Bearer mock-token"}
+                        "/api/data/contacts", headers={"authorization": "Bearer mock-token"}
                     )
 
                     assert response.status_code == 200
                     data = response.json()
-                    assert data['success'] is True
-                    assert 'contacts' in data
-                    assert 'stats' in data
+                    assert data["success"] is True
+                    assert "contacts" in data
+                    assert "stats" in data
 
     @pytest.mark.skip(reason="Requires FastAPI dependency override - Firebase mock not working")
     def test_storage_stats_success(self, client):
         """Test getting storage stats with valid auth."""
-        with patch('zylch.api.routes.data.get_current_user') as mock_auth:
-            with patch('zylch.api.routes.data.get_user_id_from_token') as mock_get_id:
-                with patch('zylch.api.routes.data.get_email_store') as mock_email_store:
-                    with patch('zylch.api.routes.data.get_calendar_store') as mock_calendar_store:
-                        with patch('zylch.api.routes.data.get_contact_store') as mock_contact_store:
+        with patch("zylch.api.routes.data.get_current_user") as mock_auth:
+            with patch("zylch.api.routes.data.get_user_id_from_token") as mock_get_id:
+                with patch("zylch.api.routes.data.get_email_store") as mock_email_store:
+                    with patch("zylch.api.routes.data.get_calendar_store") as mock_calendar_store:
+                        with patch("zylch.api.routes.data.get_contact_store") as mock_contact_store:
                             # Mock authentication
-                            mock_auth.return_value = {'uid': 'test-user-123'}
-                            mock_get_id.return_value = 'test-user-123'
+                            mock_auth.return_value = {"uid": "test-user-123"}
+                            mock_get_id.return_value = "test-user-123"
 
                             # Mock stores
-                            for mock_store in [mock_email_store, mock_calendar_store, mock_contact_store]:
+                            for mock_store in [
+                                mock_email_store,
+                                mock_calendar_store,
+                                mock_contact_store,
+                            ]:
                                 store_instance = MagicMock()
                                 store_instance.get_stats.return_value = {
-                                    'total': 0,
-                                    'last_modified': None
+                                    "total": 0,
+                                    "last_modified": None,
                                 }
                                 mock_store.return_value = store_instance
 
                             response = client.get(
-                                "/api/data/stats",
-                                headers={"authorization": "Bearer mock-token"}
+                                "/api/data/stats", headers={"authorization": "Bearer mock-token"}
                             )
 
                             assert response.status_code == 200
                             data = response.json()
-                            assert data['success'] is True
-                            assert 'email' in data
-                            assert 'calendar' in data
-                            assert 'contacts' in data
+                            assert data["success"] is True
+                            assert "email" in data
+                            assert "calendar" in data
+                            assert "contacts" in data
 
 
 class TestStorageClasses:
@@ -346,24 +331,20 @@ class TestStorageClasses:
 
             # Save thread for user 1
             store.save_thread(
-                thread_id="thread-1",
-                owner_id="user-1",
-                thread_data={"subject": "Test 1"}
+                thread_id="thread-1", owner_id="user-1", thread_data={"subject": "Test 1"}
             )
 
             # Save thread for user 2
             store.save_thread(
-                thread_id="thread-1",
-                owner_id="user-2",
-                thread_data={"subject": "Test 2"}
+                thread_id="thread-1", owner_id="user-2", thread_data={"subject": "Test 2"}
             )
 
             # Verify isolation
             thread_user1 = store.get_thread("thread-1", "user-1")
             thread_user2 = store.get_thread("thread-1", "user-2")
 
-            assert thread_user1['subject'] == "Test 1"
-            assert thread_user2['subject'] == "Test 2"
+            assert thread_user1["subject"] == "Test 1"
+            assert thread_user2["subject"] == "Test 2"
 
             # Verify user 1 can't access user 2's data
             assert store.get_thread("thread-1", "user-3") is None

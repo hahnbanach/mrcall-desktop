@@ -12,7 +12,7 @@ from email.header import decode_header
 from email.mime.text import MIMEText
 from email.utils import formatdate, make_msgid, parseaddr
 from typing import Any, Dict, List, Optional
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -68,12 +68,8 @@ def _resolve_host(
     """
     domain = email_addr.split("@")[1].lower()
     preset = presets.get(domain)
-    host = explicit_host or (
-        preset[0] if preset else f"{fallback_prefix}.{domain}"
-    )
-    port = explicit_port or (
-        preset[1] if preset else fallback_port
-    )
+    host = explicit_host or (preset[0] if preset else f"{fallback_prefix}.{domain}")
+    port = explicit_port or (preset[1] if preset else fallback_port)
     return host, port
 
 
@@ -96,9 +92,7 @@ def _decode_header_value(raw: Optional[str]) -> str:
             try:
                 decoded_parts.append(data.decode(enc))
             except (UnicodeDecodeError, LookupError):
-                decoded_parts.append(
-                    data.decode("latin-1", errors="replace")
-                )
+                decoded_parts.append(data.decode("latin-1", errors="replace"))
         else:
             decoded_parts.append(data)
     return "".join(decoded_parts)
@@ -132,9 +126,7 @@ def _extract_plain_body(
             try:
                 text = payload.decode(charset)
             except (UnicodeDecodeError, LookupError):
-                text = payload.decode(
-                    "latin-1", errors="replace"
-                )
+                text = payload.decode("latin-1", errors="replace")
             if ct == "text/plain" and not plain:
                 plain = text
             elif ct == "text/html" and not html:
@@ -146,9 +138,7 @@ def _extract_plain_body(
             try:
                 text = payload.decode(charset)
             except (UnicodeDecodeError, LookupError):
-                text = payload.decode(
-                    "latin-1", errors="replace"
-                )
+                text = payload.decode("latin-1", errors="replace")
             ct = msg.get_content_type()
             if ct == "text/html":
                 html = text
@@ -227,17 +217,10 @@ class IMAPClient:
 
     def connect(self) -> None:
         """Connect and authenticate to IMAP server."""
-        logger.debug(
-            f"[IMAP] Connecting to "
-            f"{self.imap_host}:{self.imap_port}"
-        )
-        self._conn = imaplib.IMAP4_SSL(
-            self.imap_host, self.imap_port
-        )
+        logger.debug(f"[IMAP] Connecting to " f"{self.imap_host}:{self.imap_port}")
+        self._conn = imaplib.IMAP4_SSL(self.imap_host, self.imap_port)
         self._conn.login(self.email_addr, self.password)
-        logger.info(
-            f"[IMAP] Connected as {self.email_addr}"
-        )
+        logger.info(f"[IMAP] Connected as {self.email_addr}")
 
     def disconnect(self) -> None:
         """Disconnect from IMAP server."""
@@ -290,16 +273,11 @@ class IMAPClient:
         """
         conn = self._ensure_connected()
 
-        logger.debug(
-            f"[IMAP] fetch_emails(folder={folder}, "
-            f"since={since}, limit={limit})"
-        )
+        logger.debug(f"[IMAP] fetch_emails(folder={folder}, " f"since={since}, limit={limit})")
 
         status, _ = conn.select(folder, readonly=True)
         if status != "OK":
-            logger.error(
-                f"[IMAP] Cannot select folder {folder}"
-            )
+            logger.error(f"[IMAP] Cannot select folder {folder}")
             return []
 
         # Build IMAP search criteria
@@ -311,20 +289,14 @@ class IMAPClient:
 
         status, data = conn.search(None, criteria)
         if status != "OK" or not data[0]:
-            logger.debug(
-                f"[IMAP] No messages match criteria "
-                f"{criteria}"
-            )
+            logger.debug(f"[IMAP] No messages match criteria " f"{criteria}")
             return []
 
         msg_nums = data[0].split()
         # Take most recent (last N)
         msg_nums = msg_nums[-limit:]
 
-        logger.debug(
-            f"[IMAP] Found {len(msg_nums)} messages, "
-            f"fetching..."
-        )
+        logger.debug(f"[IMAP] Found {len(msg_nums)} messages, " f"fetching...")
 
         results = []
         for num in msg_nums:
@@ -333,14 +305,9 @@ class IMAPClient:
                 if parsed:
                     results.append(parsed)
             except Exception as e:
-                logger.warning(
-                    f"[IMAP] Error fetching msg {num}: {e}"
-                )
+                logger.warning(f"[IMAP] Error fetching msg {num}: {e}")
 
-        logger.info(
-            f"[IMAP] fetch_emails -> {len(results)} emails "
-            f"from {folder}"
-        )
+        logger.info(f"[IMAP] fetch_emails -> {len(results)} emails " f"from {folder}")
         return results
 
     def _fetch_one(
@@ -405,26 +372,14 @@ class IMAPClient:
             "body_html": body_html,
             "body": body_plain or body_html,
             "thread_id": thread_id.strip(),
-            "in_reply_to": (
-                in_reply_to.strip() if in_reply_to else ""
-            ),
-            "references": (
-                references_raw.strip()
-                if references_raw
-                else ""
-            ),
+            "in_reply_to": (in_reply_to.strip() if in_reply_to else ""),
+            "references": (references_raw.strip() if references_raw else ""),
             "snippet": body_plain or body_html or "",
             # Auto-reply detection headers
-            "auto_submitted": msg.get(
-                "Auto-Submitted", ""
-            ),
-            "x_autoreply": msg.get(
-                "X-Autoreply", ""
-            ),
+            "auto_submitted": msg.get("Auto-Submitted", ""),
+            "x_autoreply": msg.get("X-Autoreply", ""),
             "precedence": msg.get("Precedence", ""),
-            "x_auto_response_suppress": msg.get(
-                "X-Auto-Response-Suppress", ""
-            ),
+            "x_auto_response_suppress": msg.get("X-Auto-Response-Suppress", ""),
         }
 
     def _find_sent_folder(self) -> Optional[str]:
@@ -451,7 +406,8 @@ class IMAPClient:
 
         for folder_line in folders:
             decoded = folder_line.decode(
-                "utf-8", errors="replace",
+                "utf-8",
+                errors="replace",
             )
             if "\\Sent" in decoded:
                 # Extract folder name (last quoted string)
@@ -474,8 +430,7 @@ class IMAPClient:
                 status, _ = conn.select(name, readonly=True)
                 if status == "OK":
                     logger.debug(
-                        f"[IMAP] Sent folder fallback:"
-                        f" {name}",
+                        f"[IMAP] Sent folder fallback:" f" {name}",
                     )
                     return name
             except Exception:
@@ -502,9 +457,7 @@ class IMAPClient:
         """
         conn = self._ensure_connected()
 
-        logger.debug(
-            f"[IMAP] list_message_ids(query={query})"
-        )
+        logger.debug(f"[IMAP] list_message_ids(query={query})")
 
         # Parse Gmail-style "after:YYYY/MM/DD" into IMAP
         imap_criteria = self._gmail_query_to_imap(query)
@@ -526,7 +479,9 @@ class IMAPClient:
                 continue
 
             ids = self._search_folder_ids(
-                conn, imap_criteria, max_results,
+                conn,
+                imap_criteria,
+                max_results,
             )
             all_ids.update(ids)
             logger.info(
@@ -556,39 +511,24 @@ class IMAPClient:
         ids = []
         for num in msg_nums:
             try:
-                status, hdr_data = conn.fetch(
-                    num, "(BODY[HEADER.FIELDS (MESSAGE-ID)])"
-                )
+                status, hdr_data = conn.fetch(num, "(BODY[HEADER.FIELDS (MESSAGE-ID)])")
                 if status == "OK" and hdr_data[0]:
                     raw = hdr_data[0][1]
                     if isinstance(raw, bytes):
-                        raw = raw.decode(
-                            "utf-8", errors="replace"
-                        )
+                        raw = raw.decode("utf-8", errors="replace")
                     # Extract Message-ID value
                     for line in raw.strip().splitlines():
-                        if line.lower().startswith(
-                            "message-id:"
-                        ):
-                            mid = line.split(":", 1)[
-                                1
-                            ].strip()
+                        if line.lower().startswith("message-id:"):
+                            mid = line.split(":", 1)[1].strip()
                             ids.append(mid)
                             break
             except Exception as e:
-                logger.warning(
-                    f"[IMAP] Error fetching ID for "
-                    f"msg {num}: {e}"
-                )
+                logger.warning(f"[IMAP] Error fetching ID for " f"msg {num}: {e}")
 
-        logger.info(
-            f"[IMAP] list_message_ids -> {len(ids)} IDs"
-        )
+        logger.info(f"[IMAP] list_message_ids -> {len(ids)} IDs")
         return ids
 
-    def get_message(
-        self, message_id: str
-    ) -> Optional[Dict[str, Any]]:
+    def get_message(self, message_id: str) -> Optional[Dict[str, Any]]:
         """Get a single message by Message-ID header.
 
         Searches INBOX and Sent folders.
@@ -601,9 +541,7 @@ class IMAPClient:
         """
         conn = self._ensure_connected()
 
-        logger.debug(
-            f"[IMAP] get_message(message_id={message_id})"
-        )
+        logger.debug(f"[IMAP] get_message(message_id={message_id})")
 
         # Search INBOX first, then Sent
         folders = ["INBOX"]
@@ -625,13 +563,12 @@ class IMAPClient:
                 msg_num = data[0].split()[-1]
                 return self._fetch_one(conn, msg_num)
 
-        logger.debug(
-            f"[IMAP] Message not found: {message_id}"
-        )
+        logger.debug(f"[IMAP] Message not found: {message_id}")
         return None
 
     def fetch_attachments(
-        self, message_id: str,
+        self,
+        message_id: str,
         save_dir: str = "/tmp/zylch/attachments",
     ) -> List[Dict[str, str]]:
         """Download attachments from an email.
@@ -657,7 +594,8 @@ class IMAPClient:
 
         msg_num = data[0].split()[-1]
         status, msg_data = conn.fetch(
-            msg_num, "(RFC822)",
+            msg_num,
+            "(RFC822)",
         )
         if status != "OK" or not msg_data[0]:
             return []
@@ -695,8 +633,7 @@ class IMAPClient:
                 },
             )
             logger.info(
-                f"[IMAP] Saved attachment:"
-                f" {filename} ({len(payload)} bytes)",
+                f"[IMAP] Saved attachment:" f" {filename} ({len(payload)} bytes)",
             )
 
         return results
@@ -717,18 +654,13 @@ class IMAPClient:
         Returns:
             List of parsed email dicts
         """
-        logger.debug(
-            f"[IMAP] get_batch(count={len(message_ids)})"
-        )
+        logger.debug(f"[IMAP] get_batch(count={len(message_ids)})")
         results = []
         for mid in message_ids:
             msg = self.get_message(mid)
             if msg:
                 results.append(msg)
-        logger.info(
-            f"[IMAP] get_batch -> {len(results)}"
-            f"/{len(message_ids)} fetched"
-        )
+        logger.info(f"[IMAP] get_batch -> {len(results)}" f"/{len(message_ids)} fetched")
         return results
 
     def search(
@@ -751,10 +683,7 @@ class IMAPClient:
         """
         conn = self._ensure_connected()
 
-        logger.debug(
-            f"[IMAP] search(query={query}, "
-            f"folder={folder}, limit={limit})"
-        )
+        logger.debug(f"[IMAP] search(query={query}, " f"folder={folder}, limit={limit})")
 
         conn.select(folder, readonly=True)
 
@@ -763,9 +692,7 @@ class IMAPClient:
 
         status, data = conn.search(None, imap_criteria)
         if status != "OK" or not data[0]:
-            logger.debug(
-                f"[IMAP] No search results for: {query}"
-            )
+            logger.debug(f"[IMAP] No search results for: {query}")
             return []
 
         msg_nums = data[0].split()[-limit:]
@@ -777,15 +704,9 @@ class IMAPClient:
                 if parsed:
                     results.append(parsed)
             except Exception as e:
-                logger.warning(
-                    f"[IMAP] Error fetching search "
-                    f"result {num}: {e}"
-                )
+                logger.warning(f"[IMAP] Error fetching search " f"result {num}: {e}")
 
-        logger.info(
-            f"[IMAP] search -> {len(results)} results "
-            f"for '{query}'"
-        )
+        logger.info(f"[IMAP] search -> {len(results)} results " f"for '{query}'")
         return results
 
     def search_messages(
@@ -802,9 +723,7 @@ class IMAPClient:
         Returns:
             List of email dicts
         """
-        return self.search(
-            query=query, limit=max_results
-        )
+        return self.search(query=query, limit=max_results)
 
     def send(
         self,
@@ -828,18 +747,14 @@ class IMAPClient:
         Returns:
             Dict with message_id of sent email
         """
-        logger.debug(
-            f"[SMTP] send(to={to}, subject={subject})"
-        )
+        logger.debug(f"[SMTP] send(to={to}, subject={subject})")
 
         msg = MIMEText(body, "plain", "utf-8")
         msg["From"] = self.email_addr
         msg["To"] = to
         msg["Subject"] = subject
         msg["Date"] = formatdate(localtime=True)
-        msg["Message-ID"] = make_msgid(
-            domain=self.email_addr.split("@")[1]
-        )
+        msg["Message-ID"] = make_msgid(domain=self.email_addr.split("@")[1])
 
         if cc:
             msg["Cc"] = cc
@@ -849,18 +764,12 @@ class IMAPClient:
             msg["References"] = references
 
         # Collect all recipients
-        recipients = [
-            addr.strip() for addr in to.split(",")
-        ]
+        recipients = [addr.strip() for addr in to.split(",")]
         if cc:
-            recipients.extend(
-                addr.strip() for addr in cc.split(",")
-            )
+            recipients.extend(addr.strip() for addr in cc.split(","))
 
         try:
-            with smtplib.SMTP(
-                self.smtp_host, self.smtp_port
-            ) as smtp:
+            with smtplib.SMTP(self.smtp_host, self.smtp_port) as smtp:
                 smtp.ehlo()
                 smtp.starttls()
                 smtp.ehlo()
@@ -872,10 +781,7 @@ class IMAPClient:
                 )
 
             sent_id = msg["Message-ID"]
-            logger.info(
-                f"[SMTP] Email sent to {to}: {subject} "
-                f"(id={sent_id})"
-            )
+            logger.info(f"[SMTP] Email sent to {to}: {subject} " f"(id={sent_id})")
             return {"id": sent_id, "status": "sent"}
 
         except Exception as e:
@@ -946,17 +852,13 @@ class IMAPClient:
         remaining = query.strip()
 
         # Extract after: date
-        after_match = re.search(
-            r"after:(\d{4})/(\d{2})/(\d{2})", remaining
-        )
+        after_match = re.search(r"after:(\d{4})/(\d{2})/(\d{2})", remaining)
         if after_match:
             y, m, d = after_match.groups()
             dt = datetime(int(y), int(m), int(d))
             imap_date = dt.strftime("%d-%b-%Y")
             parts.append(f'SINCE "{imap_date}"')
-            remaining = remaining[
-                : after_match.start()
-            ] + remaining[after_match.end() :]
+            remaining = remaining[: after_match.start()] + remaining[after_match.end() :]
 
         # Extract from: and to: directives
         for directive in ("from", "to"):
@@ -966,24 +868,17 @@ class IMAPClient:
                 value = match.group(1)
                 imap_key = directive.upper()
                 parts.append(f'{imap_key} "{value}"')
-                remaining = (
-                    remaining[: match.start()]
-                    + remaining[match.end() :]
-                )
+                remaining = remaining[: match.start()] + remaining[match.end() :]
 
         # Handle OR operator for remaining text
         remaining = remaining.strip()
         if remaining:
             # Check for "X OR Y" pattern
-            or_match = re.match(
-                r"(.+?)\s+OR\s+(.+)", remaining
-            )
+            or_match = re.match(r"(.+?)\s+OR\s+(.+)", remaining)
             if or_match:
                 left = or_match.group(1).strip()
                 right = or_match.group(2).strip()
-                parts.append(
-                    f'OR TEXT "{left}" TEXT "{right}"'
-                )
+                parts.append(f'OR TEXT "{left}" TEXT "{right}"')
             elif remaining:
                 parts.append(f'TEXT "{remaining}"')
 
@@ -992,7 +887,5 @@ class IMAPClient:
 
         # IMAP search: multiple criteria are ANDed
         result = " ".join(parts)
-        logger.debug(
-            f"[IMAP] Query '{query}' -> IMAP '{result}'"
-        )
+        logger.debug(f"[IMAP] Query '{query}' -> IMAP '{result}'")
         return result

@@ -23,11 +23,18 @@ console = Console()
 
 # Commands that need ToolConfig with BYOK credentials
 _BYOK_COMMANDS = {
-    "/memory", "/email", "/agent", "/calendar",
+    "/memory",
+    "/email",
+    "/agent",
+    "/calendar",
 }
 # Commands that need only (args, owner_id)
 _SIMPLE_COMMANDS = {
-    "/tasks", "/stats", "/jobs", "/reset", "/tutorial",
+    "/tasks",
+    "/stats",
+    "/jobs",
+    "/reset",
+    "/tutorial",
 }
 
 
@@ -44,16 +51,27 @@ def _setup_readline(profile_dir: str):
     try:
         readline.set_history_length(1000)
         import atexit
+
         atexit.register(readline.write_history_file, history_file)
     except (PermissionError, OSError):
         pass  # Read-only or sandboxed — no history
 
     # Slash command completion
     commands = [
-        "/help", "/quit", "/update", "/sync",
-        "/tasks", "/stats",
-        "/email", "/memory", "/agent", "/calendar",
-        "/connect", "/mrcall", "/jobs", "/clear",
+        "/help",
+        "/quit",
+        "/update",
+        "/sync",
+        "/tasks",
+        "/stats",
+        "/email",
+        "/memory",
+        "/agent",
+        "/calendar",
+        "/connect",
+        "/mrcall",
+        "/jobs",
+        "/clear",
         "/model",
     ]
 
@@ -103,13 +121,9 @@ def _print_dashboard(profile: str, owner_id: str):
             if delta.days > 0:
                 last_sync_str = f"{delta.days}d ago"
             elif delta.seconds >= 3600:
-                last_sync_str = (
-                    f"{delta.seconds // 3600}h ago"
-                )
+                last_sync_str = f"{delta.seconds // 3600}h ago"
             elif delta.seconds >= 60:
-                last_sync_str = (
-                    f"{delta.seconds // 60}m ago"
-                )
+                last_sync_str = f"{delta.seconds // 60}m ago"
             else:
                 last_sync_str = "just now"
         except Exception:
@@ -117,25 +131,18 @@ def _print_dashboard(profile: str, owner_id: str):
 
     # --- Pending processing ---
     try:
-        pending_memory = len(
-            store.get_unprocessed_emails(owner_id)
-        )
+        pending_memory = len(store.get_unprocessed_emails(owner_id))
     except Exception:
         pending_memory = 0
     try:
-        pending_tasks = len(
-            store.get_unprocessed_emails_for_task(owner_id)
-        )
+        pending_tasks = len(store.get_unprocessed_emails_for_task(owner_id))
     except Exception:
         pending_tasks = 0
 
     # --- Active tasks ---
     task_stats = store.get_task_items_stats(owner_id)
     if task_stats:
-        active = (
-            task_stats["action_required"]
-            - task_stats["completed"]
-        )
+        active = task_stats["action_required"] - task_stats["completed"]
         if active < 0:
             active = 0
     else:
@@ -146,7 +153,9 @@ def _print_dashboard(profile: str, owner_id: str):
     if active > 0:
         try:
             items = store.get_task_items(
-                owner_id, action_required=True, limit=200,
+                owner_id,
+                action_required=True,
+                limit=200,
             )
             by_urgency = {}
             for t in items:
@@ -175,6 +184,7 @@ def _print_dashboard(profile: str, owner_id: str):
 
     # Time-aware greeting
     from datetime import datetime
+
     hour = datetime.now().hour
     if hour < 12:
         greeting = "Good morning"
@@ -192,8 +202,7 @@ def _print_dashboard(profile: str, owner_id: str):
 
     console.print()
     console.print(
-        f"[bold cyan]{greeting}, {user_name}![/bold cyan]"
-        f" [dim](Zylch v{__version__})[/dim]",
+        f"[bold cyan]{greeting}, {user_name}![/bold cyan]" f" [dim](Zylch v{__version__})[/dim]",
     )
     console.print()
 
@@ -222,8 +231,7 @@ def _print_dashboard(profile: str, owner_id: str):
     # Status line
     if total_emails > 0:
         console.print(
-            f"  {total_emails} emails synced"
-            f" (last: {last_sync_str})",
+            f"  {total_emails} emails synced" f" (last: {last_sync_str})",
         )
     else:
         console.print(
@@ -255,9 +263,12 @@ def _print_dashboard(profile: str, owner_id: str):
             (str(idx), f"Show your {active} tasks", "/tasks interactive"),
         )
         idx += 1
-    if total_emails == 0 or (
-        sync_age_hours is not None and sync_age_hours > 0.5
-    ) or pending_memory or pending_tasks:
+    if (
+        total_emails == 0
+        or (sync_age_hours is not None and sync_age_hours > 0.5)
+        or pending_memory
+        or pending_tasks
+    ):
         age = last_sync_str if total_emails > 0 else "never"
         options.append(
             (str(idx), f"Look for new messages (last update: {age})", "/update"),
@@ -332,23 +343,18 @@ def interactive_chat():
 
     # Reap zombie jobs from dead sessions
     from zylch.storage.storage import Storage
+
     zombies = Storage.get_instance().reap_zombie_jobs()
     if zombies:
         console.print(
-            f"[yellow]Cleaned {zombies} failed job(s)"
-            f" from previous session.[/yellow]\n"
+            f"[yellow]Cleaned {zombies} failed job(s)" f" from previous session.[/yellow]\n"
         )
 
     profile = get_active_profile()
-    logger.info(
-        f"[chat] Starting interactive chat,"
-        f" profile={profile}, owner_id={owner_id}"
-    )
+    logger.info(f"[chat] Starting interactive chat," f" profile={profile}, owner_id={owner_id}")
 
     startup_cmd = _print_dashboard(profile, owner_id)
-    console.print(
-        "[dim]Ctrl+C interrupts, Ctrl+D twice to exit.[/dim]\n"
-    )
+    console.print("[dim]Ctrl+C interrupts, Ctrl+D twice to exit.[/dim]\n")
 
     conversation_history: list = []
     _last_eof = False  # For double Ctrl+D exit
@@ -356,7 +362,9 @@ def interactive_chat():
     # Execute startup choice if any
     if startup_cmd:
         _handle_slash_command(
-            startup_cmd, owner_id, conversation_history,
+            startup_cmd,
+            owner_id,
+            conversation_history,
         )
         console.print()
 
@@ -369,9 +377,7 @@ def interactive_chat():
                 console.print("\n[dim]Bye![/dim]")
                 sys.exit(0)
             _last_eof = True
-            console.print(
-                "\n[dim]Press Ctrl+D again to exit.[/dim]"
-            )
+            console.print("\n[dim]Press Ctrl+D again to exit.[/dim]")
             continue
         except KeyboardInterrupt:
             _last_eof = False
@@ -388,20 +394,20 @@ def interactive_chat():
         try:
             if user_input.startswith("/"):
                 _handle_slash_command(
-                    user_input, owner_id,
+                    user_input,
+                    owner_id,
                     conversation_history,
                 )
             else:
                 # Attach file content if path detected
                 user_input = _expand_file_refs(user_input)
                 _handle_chat_message(
-                    user_input, owner_id,
+                    user_input,
+                    owner_id,
                     conversation_history,
                 )
         except KeyboardInterrupt:
-            console.print(
-                "\n[yellow]Interrupted.[/yellow]"
-            )
+            console.print("\n[yellow]Interrupted.[/yellow]")
 
 
 def _expand_file_refs(text: str) -> str:
@@ -416,9 +422,9 @@ def _expand_file_refs(text: str) -> str:
     # /path/to/file.ext or ~/path/to/file.ext
     # Handles spaces (with or without backslash escapes)
     path_pattern = (
-        r'(?:[/~][\w./@: -]*?'  # Start with / or ~
-        r'(?:\\ [\w./@: -]*?)*'  # Optional backslash-escaped spaces
-        r'\.\w{1,5})'  # Must end with .extension
+        r"(?:[/~][\w./@: -]*?"  # Start with / or ~
+        r"(?:\\ [\w./@: -]*?)*"  # Optional backslash-escaped spaces
+        r"\.\w{1,5})"  # Must end with .extension
     )
     matches = re.findall(path_pattern, text)
     if not matches:
@@ -442,17 +448,22 @@ def _expand_file_refs(text: str) -> str:
             elif ext == ".docx":
                 try:
                     import docx
+
                     doc = docx.Document(expanded)
-                    content = "\n".join(
-                        p.text for p in doc.paragraphs
-                    )
+                    content = "\n".join(p.text for p in doc.paragraphs)
                 except ImportError:
                     import subprocess
+
                     result = subprocess.run(
-                        ["python", "-c",
-                         f"import docx; doc=docx.Document('{expanded}');"
-                         f"print('\\n'.join(p.text for p in doc.paragraphs))"],
-                        capture_output=True, text=True, timeout=10,
+                        [
+                            "python",
+                            "-c",
+                            f"import docx; doc=docx.Document('{expanded}');"
+                            f"print('\\n'.join(p.text for p in doc.paragraphs))",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
                     )
                     if result.returncode == 0:
                         content = result.stdout
@@ -460,11 +471,9 @@ def _expand_file_refs(text: str) -> str:
             elif ext == ".pdf":
                 try:
                     import pypdf
+
                     reader = pypdf.PdfReader(expanded)
-                    content = "\n".join(
-                        page.extract_text() or ""
-                        for page in reader.pages
-                    )
+                    content = "\n".join(page.extract_text() or "" for page in reader.pages)
                 except ImportError:
                     pass
 
@@ -472,27 +481,20 @@ def _expand_file_refs(text: str) -> str:
                 # Binary file — just note it exists
                 size = os.path.getsize(expanded)
                 text += (
-                    f"\n\n[File attached: {os.path.basename(expanded)}"
-                    f" ({size} bytes, {ext})]"
+                    f"\n\n[File attached: {os.path.basename(expanded)}" f" ({size} bytes, {ext})]"
                 )
                 continue
 
         except Exception as e:
-            text += (
-                f"\n\n[Could not read {os.path.basename(expanded)}: {e}]"
-            )
+            text += f"\n\n[Could not read {os.path.basename(expanded)}: {e}]"
             continue
 
         if content:
             fname = os.path.basename(expanded)
             console.print(
-                f"  [dim]Attached: {fname}"
-                f" ({len(content)} chars)[/dim]",
+                f"  [dim]Attached: {fname}" f" ({len(content)} chars)[/dim]",
             )
-            text += (
-                f"\n\n--- FILE: {fname} ---\n"
-                f"{content}\n--- END FILE ---"
-            )
+            text += f"\n\n--- FILE: {fname} ---\n" f"{content}\n--- END FILE ---"
 
     return text
 
@@ -506,14 +508,10 @@ def _handle_agent_run(
     from zylch.api.token_storage import get_active_llm_provider
     from zylch.llm.client import LLMClient
     from zylch.services.task_interactive import (
-        APPROVAL_TOOLS,
         SOLVE_SYSTEM_PROMPT,
-        SOLVE_TOOLS,
-        _format_approval_preview,
         _get_personal_data_section,
         _run_agent_loop,
     )
-    from zylch.services.solve_tools import execute_tool
     from zylch.storage.storage import Storage
 
     provider, api_key = get_active_llm_provider(owner_id)
@@ -522,9 +520,7 @@ def _handle_agent_run(
         return
 
     user_email = os.environ.get("EMAIL_ADDRESS", "")
-    user_name = (
-        user_email.split("@")[0] if user_email else "you"
-    )
+    user_name = user_email.split("@")[0] if user_email else "you"
     store = Storage.get_instance()
 
     client = LLMClient(api_key=api_key, provider=provider)
@@ -535,8 +531,7 @@ def _handle_agent_run(
 
     if not instructions:
         console.print(
-            "  What should I do?"
-            " (type, empty line to send)",
+            "  What should I do?" " (type, empty line to send)",
         )
         lines = []
         while True:
@@ -558,15 +553,17 @@ def _handle_agent_run(
 
     console.print("\n  [dim]Working...[/dim]")
     messages = _run_agent_loop(
-        client, system, messages, store, owner_id,
+        client,
+        system,
+        messages,
+        store,
+        owner_id,
     )
 
     # Post-loop: continue conversation or done
     while True:
         console.print(
-            "\n  [bold]d)[/bold] Done"
-            "   or type to continue"
-            " (empty line to send)",
+            "\n  [bold]d)[/bold] Done" "   or type to continue" " (empty line to send)",
         )
         lines = []
         while True:
@@ -590,7 +587,11 @@ def _handle_agent_run(
         )
         console.print("\n  [dim]Working...[/dim]")
         messages = _run_agent_loop(
-            client, system, messages, store, owner_id,
+            client,
+            system,
+            messages,
+            store,
+            owner_id,
         )
 
 
@@ -624,14 +625,14 @@ def _handle_slash_command(
         instructions = " ".join(args[1:]) if len(args) > 1 else ""
         instructions = _expand_file_refs(instructions)
         _handle_agent_run(
-            instructions, owner_id, conversation_history,
+            instructions,
+            owner_id,
+            conversation_history,
         )
         return
 
     if cmd not in COMMAND_HANDLERS:
-        console.print(
-            f"[yellow]Unknown command: {cmd}. Type /help.[/yellow]"
-        )
+        console.print(f"[yellow]Unknown command: {cmd}. Type /help.[/yellow]")
         return
 
     handler = COMMAND_HANDLERS[cmd]
@@ -639,26 +640,16 @@ def _handle_slash_command(
     try:
         if cmd in ("/sync", "/update"):
             config = ToolConfig.from_settings()
-            result = asyncio.run(
-                handler(args, config, owner_id)
-            )
+            result = asyncio.run(handler(args, config, owner_id))
         elif cmd in _BYOK_COMMANDS:
-            config = ToolConfig.from_settings_with_owner(
-                owner_id
-            )
+            config = ToolConfig.from_settings_with_owner(owner_id)
             if cmd == "/agent":
                 ctx = {
-                    "_conversation_history": (
-                        conversation_history
-                    ),
+                    "_conversation_history": (conversation_history),
                 }
-                result = asyncio.run(
-                    handler(args, config, owner_id, ctx)
-                )
+                result = asyncio.run(handler(args, config, owner_id, ctx))
             else:
-                result = asyncio.run(
-                    handler(args, config, owner_id)
-                )
+                result = asyncio.run(handler(args, config, owner_id))
         elif cmd in _SIMPLE_COMMANDS:
             result = asyncio.run(handler(args, owner_id))
         elif cmd in ("/help", "/echo"):
@@ -667,13 +658,9 @@ def _handle_slash_command(
             else:
                 result = asyncio.run(handler())
         elif cmd in ("/share", "/revoke", "/connect"):
-            result = asyncio.run(
-                handler(args, owner_id, None)
-            )
+            result = asyncio.run(handler(args, owner_id, None))
         elif cmd == "/mrcall":
-            result = asyncio.run(
-                handler(args, owner_id, None, None)
-            )
+            result = asyncio.run(handler(args, owner_id, None, None))
         else:
             result = asyncio.run(handler(args, owner_id))
 
@@ -694,12 +681,8 @@ def _handle_chat_message(
     conversation_history: list,
 ):
     """Send a natural-language message to ChatService."""
-    from zylch.services.chat_service import ChatService
 
-    logger.debug(
-        f"[chat] Sending to ChatService: "
-        f"{repr(user_input[:80])}"
-    )
+    logger.debug(f"[chat] Sending to ChatService: " f"{repr(user_input[:80])}")
 
     try:
         service = _get_chat_service()
@@ -719,17 +702,11 @@ def _handle_chat_message(
             console.print()
 
         # Update history for next turn
-        conversation_history.append(
-            {"role": "user", "content": user_input}
-        )
-        conversation_history.append(
-            {"role": "assistant", "content": response}
-        )
+        conversation_history.append({"role": "user", "content": user_input})
+        conversation_history.append({"role": "assistant", "content": response})
 
     except Exception as e:
-        logger.error(
-            f"[chat] ChatService error: {e}", exc_info=True
-        )
+        logger.error(f"[chat] ChatService error: {e}", exc_info=True)
         console.print(f"[red]Error: {e}[/red]")
 
 

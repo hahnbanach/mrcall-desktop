@@ -25,9 +25,7 @@ class BaseConversationalAgent(ABC):
 
     @abstractmethod
     async def process_message(
-        self,
-        user_message: str,
-        context: Optional[Dict[str, Any]] = None
+        self, user_message: str, context: Optional[Dict[str, Any]] = None
     ) -> str:
         """Process a user's message and return a string response.
 

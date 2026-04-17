@@ -93,11 +93,7 @@ class RunPythonTool(Tool):
                 parts.append(f"Exit code: {returncode}")
             message = "\n".join(parts) if parts else "OK (no output)"
 
-            status = (
-                ToolStatus.SUCCESS
-                if returncode == 0
-                else ToolStatus.ERROR
-            )
+            status = ToolStatus.SUCCESS if returncode == 0 else ToolStatus.ERROR
             result = ToolResult(
                 status=status,
                 data={
@@ -108,10 +104,7 @@ class RunPythonTool(Tool):
                 message=message,
                 error=(None if status == ToolStatus.SUCCESS else message),
             )
-            logger.debug(
-                f"[run_python] -> status={result.status}"
-                f" rc={returncode}"
-            )
+            logger.debug(f"[run_python] -> status={result.status}" f" rc={returncode}")
             return result
 
         except subprocess.TimeoutExpired:
@@ -154,9 +147,7 @@ class RunPythonTool(Tool):
                     },
                     "description": {
                         "type": "string",
-                        "description": (
-                            "Brief description of what the code does"
-                        ),
+                        "description": ("Brief description of what the code does"),
                     },
                 },
                 "required": ["code", "description"],

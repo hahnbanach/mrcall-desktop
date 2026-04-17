@@ -11,7 +11,7 @@ Then generates a self-contained agent prompt for entity extraction from emails.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from zylch.config import settings
 from zylch.llm import LLMClient, PROVIDER_MODELS
@@ -186,12 +186,7 @@ class EmailMemoryAgentTrainer:
     """Builds personalized email memory agent by analyzing user's email patterns."""
 
     def __init__(
-        self,
-        storage: Storage,
-        owner_id: str,
-        api_key: str,
-        user_email: str,
-        provider: str
+        self, storage: Storage, owner_id: str, api_key: str, user_email: str, provider: str
     ):
         """Initialize PromptBuilder.
 
@@ -207,8 +202,10 @@ class EmailMemoryAgentTrainer:
         self.provider = provider
         self.model = PROVIDER_MODELS.get(provider, settings.default_model)
         self.client = LLMClient(api_key=api_key, provider=provider)
-        self.user_email = user_email.lower() if user_email else ''
-        self.user_domain = user_email.split('@')[1].lower() if user_email and '@' in user_email else ''
+        self.user_email = user_email.lower() if user_email else ""
+        self.user_domain = (
+            user_email.split("@")[1].lower() if user_email and "@" in user_email else ""
+        )
         self.search_limit = 20  # Reduced to avoid context window overflow
 
     def _get_entity_format_suffix(self) -> str:
@@ -286,14 +283,13 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
 
         # Step 5: Generate the prompt using Claude
         prompt_content = self._generate_prompt(
-            user_profile=user_profile,
-            email_samples=email_samples
+            user_profile=user_profile, email_samples=email_samples
         )
 
         metadata = {
-            'generated_at': datetime.now(timezone.utc).isoformat(),
-            'user_domain': user_domain,
-            'threads_analyzed': len(threads)
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "user_domain": user_domain,
+            "threads_analyzed": len(threads),
         }
 
         return prompt_content, metadata
@@ -316,7 +312,7 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
         # Group by thread_id
         threads: Dict[str, List[Dict]] = {}
         for email in emails:
-            tid = email.get('thread_id', email.get('id', ''))  # Fallback to id if no thread
+            tid = email.get("thread_id", email.get("id", ""))  # Fallback to id if no thread
             if tid:
                 if tid not in threads:
                     threads[tid] = []
@@ -324,20 +320,18 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
 
         # Sort emails within each thread by date
         for tid in threads:
-            threads[tid].sort(key=lambda e: e.get('date_timestamp', 0))
+            threads[tid].sort(key=lambda e: e.get("date_timestamp", 0))
 
         # Sort threads by most recent email
         thread_list = []
         for tid, thread_emails in threads.items():
             if thread_emails:
-                most_recent = max(e.get('date_timestamp', 0) for e in thread_emails)
-                thread_list.append({
-                    'thread_id': tid,
-                    'emails': thread_emails,
-                    'most_recent': most_recent
-                })
+                most_recent = max(e.get("date_timestamp", 0) for e in thread_emails)
+                thread_list.append(
+                    {"thread_id": tid, "emails": thread_emails, "most_recent": most_recent}
+                )
 
-        thread_list.sort(key=lambda t: t['most_recent'], reverse=True)
+        thread_list.sort(key=lambda t: t["most_recent"], reverse=True)
 
         return thread_list[:limit]
 
@@ -351,7 +345,7 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
         # Find emails sent BY the user
         user_sent_emails = []
         for email in emails:
-            from_email = email.get('from_email', '')
+            from_email = email.get("from_email", "")
             if user_domain and user_domain in from_email.lower():
                 user_sent_emails.append(email)
 
@@ -363,7 +357,7 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
         subjects = []
 
         for email in user_sent_emails:
-            body = email.get('body_plain', '') or ''
+            body = email.get("body_plain", "") or ""
 
             # Look for signature (last 200 chars often contain signature)
             if len(body) > 200:
@@ -371,7 +365,7 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
                 signatures.append(signature_area)
 
             # Collect subjects for templates
-            subject = email.get('subject', '')
+            subject = email.get("subject", "")
             if subject:
                 subjects.append(subject)
 
@@ -384,7 +378,7 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
             # Just include one signature sample for role detection
             profile_parts.append(f"Signature sample: {signatures[0]}")
 
-        return '\n'.join(profile_parts)
+        return "\n".join(profile_parts)
 
     def _format_email_samples(self, threads: List[Dict[str, Any]]) -> str:
         """Format threads as text samples for the meta-prompt.
@@ -395,17 +389,17 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
         samples = []
 
         for i, thread in enumerate(threads, 1):
-            emails = thread.get('emails', [])
+            emails = thread.get("emails", [])
             if not emails:
                 continue
 
             # Get subject from first email, but use LAST email for content
-            subject = emails[0].get('subject', '(no subject)')
+            subject = emails[0].get("subject", "(no subject)")
             last_email = emails[-1]  # Last email has the full thread context
 
-            from_email = last_email.get('from_email', 'unknown')
-            date = last_email.get('date', 'unknown')
-            body = last_email.get('body_plain', '') or last_email.get('snippet', '')
+            from_email = last_email.get("from_email", "unknown")
+            date = last_email.get("date", "unknown")
+            body = last_email.get("body_plain", "") or last_email.get("snippet", "")
 
             # Truncate body to avoid context window overflow
             # 20 threads * 12000 chars = 240,000 chars ~= 60k tokens.
@@ -420,26 +414,19 @@ Date: {date}
 Body: {body}
 """)
 
-        return '\n'.join(samples) if samples else "No samples available."
+        return "\n".join(samples) if samples else "No samples available."
 
-    def _generate_prompt(
-        self,
-        user_profile: str,
-        email_samples: str
-    ) -> str:
+    def _generate_prompt(self, user_profile: str, email_samples: str) -> str:
         """Generate the final extraction prompt using LLM."""
         meta_prompt = EMAIL_AGENT_META_PROMPT.format(
-            user_profile=user_profile,
-            email_samples=email_samples
+            user_profile=user_profile, email_samples=email_samples
         )
 
         logger.info(f"Training email analyzer agent (provider: {self.provider})...")
         logger.debug(f"Prompt size: {len(meta_prompt)} chars (~{len(meta_prompt)//4} tokens)")
 
         response = self.client.create_message_sync(
-            model=self.model,
-            max_tokens=4000,
-            messages=[{"role": "user", "content": meta_prompt}]
+            model=self.model, max_tokens=4000, messages=[{"role": "user", "content": meta_prompt}]
         )
 
         prompt_content = response.content[0].text.strip()

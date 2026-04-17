@@ -5,7 +5,6 @@ Returns None when there's nothing to report.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +20,9 @@ def build_digest(owner_id: str, store) -> str | None:
         Markdown-formatted digest, or None if nothing to report.
     """
     tasks = store.get_task_items(
-        owner_id, action_required=True,
+        owner_id,
+        action_required=True,
     )
-    email_stats = store.get_email_stats(owner_id)
     unprocessed = len(
         store.get_unprocessed_emails(owner_id),
     )
@@ -54,14 +53,15 @@ def build_digest(owner_id: str, store) -> str | None:
             }.get(urgency, "⚪")
             for t in items[:3]:  # Max 3 per urgency
                 action = t.get(
-                    "suggested_action", "Review",
+                    "suggested_action",
+                    "Review",
                 )
                 contact = t.get("contact_name") or t.get(
-                    "contact_email", "",
+                    "contact_email",
+                    "",
                 )
                 lines.append(
-                    f"{icon} {action}"
-                    + (f" ({contact})" if contact else ""),
+                    f"{icon} {action}" + (f" ({contact})" if contact else ""),
                 )
         if len(tasks) > 9:
             lines.append(
@@ -71,8 +71,7 @@ def build_digest(owner_id: str, store) -> str | None:
     # Unprocessed items
     if unprocessed > 0:
         lines.append(
-            f"\n_{unprocessed} emails pending analysis._"
-            f" Run `/process` to update.",
+            f"\n_{unprocessed} emails pending analysis._" f" Run `/process` to update.",
         )
 
     if not lines:

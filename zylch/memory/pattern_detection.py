@@ -13,9 +13,9 @@ class DetectedPattern:
     value: str  # The matched pattern
 
 
-EMAIL_REGEX = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-PHONE_REGEX = r'[\+]?[0-9]{7,15}'  # International format, 7-15 digits
-URL_REGEX = r'https?://[^\s]+'
+EMAIL_REGEX = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+PHONE_REGEX = r"[\+]?[0-9]{7,15}"  # International format, 7-15 digits
+URL_REGEX = r"https?://[^\s]+"
 
 
 def detect_pattern(query: str) -> Optional[DetectedPattern]:
@@ -30,8 +30,9 @@ def detect_pattern(query: str) -> Optional[DetectedPattern]:
     query = query.strip()
 
     # Strip surrounding quotes (user may type "email@example.com")
-    if (query.startswith('"') and query.endswith('"')) or \
-       (query.startswith("'") and query.endswith("'")):
+    if (query.startswith('"') and query.endswith('"')) or (
+        query.startswith("'") and query.endswith("'")
+    ):
         query = query[1:-1]
 
     # Check for email pattern
@@ -39,7 +40,7 @@ def detect_pattern(query: str) -> Optional[DetectedPattern]:
         return DetectedPattern(type="email", value=query)
 
     # Check for phone pattern (clean first)
-    clean_phone = re.sub(r'[\s\-\(\)]', '', query)
+    clean_phone = re.sub(r"[\s\-\(\)]", "", query)
     if re.fullmatch(PHONE_REGEX, clean_phone):
         return DetectedPattern(type="phone", value=clean_phone)
 

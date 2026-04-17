@@ -116,12 +116,11 @@ def activate_profile(profile_name: str):
     env_path = os.path.join(profile_dir, ".env")
 
     if not os.path.isfile(env_path):
-        raise FileNotFoundError(
-            f"Profile '{profile_name}' not found at {env_path}"
-        )
+        raise FileNotFoundError(f"Profile '{profile_name}' not found at {env_path}")
 
     # Load profile .env into os.environ
     from dotenv import load_dotenv
+
     load_dotenv(env_path, override=True)
 
     # Point database to profile directory
@@ -134,6 +133,7 @@ def activate_profile(profile_name: str):
 
     # Reload settings singleton so it picks up new env vars
     import zylch.config as _cfg
+
     _cfg.settings = _cfg.Settings()
 
     logger.info(f"[profile] Activated: {profile_name} ({profile_dir})")
@@ -216,6 +216,7 @@ def migrate_legacy_profile():
 
     # Read email from legacy .env to name the profile
     from dotenv import dotenv_values
+
     values = dotenv_values(legacy_env)
     email = values.get("EMAIL_ADDRESS", "default")
 
@@ -242,10 +243,5 @@ def migrate_legacy_profile():
 
     # Remove legacy .env (DB already moved)
     os.remove(legacy_env)
-    logger.info(
-        f"[migrate] Legacy profile migrated to"
-        f" profiles/{email}/"
-    )
-    click.echo(
-        f"Migrated existing config to profile: {email}"
-    )
+    logger.info(f"[migrate] Legacy profile migrated to" f" profiles/{email}/")
+    click.echo(f"Migrated existing config to profile: {email}")

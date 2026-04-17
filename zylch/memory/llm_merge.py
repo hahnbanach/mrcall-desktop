@@ -1,7 +1,7 @@
 """LLM-assisted memory reconsolidation."""
+
 import logging
 
-from typing import Optional
 
 from zylch.llm import LLMClient, PROVIDER_MODELS
 
@@ -49,7 +49,6 @@ Name: [name]
 
 Output ONLY the merged entity in this exact format, nothing else."""
 
-
     def merge(self, existing: str, new: str) -> str:
         """Merge two memory contents using LLM.
 
@@ -67,16 +66,11 @@ Output ONLY the merged entity in this exact format, nothing else."""
         system = [
             {
                 "type": "text",
-                "text": self.MERGE_PROMPT.split(
-                    "EXISTING_ENTITY:"
-                )[0].strip(),
+                "text": self.MERGE_PROMPT.split("EXISTING_ENTITY:")[0].strip(),
                 "cache_control": {"type": "ephemeral"},
             },
         ]
-        user_content = (
-            f"EXISTING_ENTITY:\n{existing}\n\n"
-            f"NEW ENTITY:\n{new}"
-        )
+        user_content = f"EXISTING_ENTITY:\n{existing}\n\n" f"NEW ENTITY:\n{new}"
         response = self.client.create_message_sync(
             model=self.model,
             max_tokens=1024,
@@ -87,9 +81,6 @@ Output ONLY the merged entity in this exact format, nothing else."""
         )
         result = response.content[0].text.strip()
         logging.info(
-            f"MERGING ENTITIES:\n"
-            f"existing: {existing}\n"
-            f"new:{new}\n"
-            f"result:{result}\n\n"
+            f"MERGING ENTITIES:\n" f"existing: {existing}\n" f"new:{new}\n" f"result:{result}\n\n"
         )
         return result

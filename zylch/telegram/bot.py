@@ -355,12 +355,9 @@ def _setup_digest_scheduler(app: Application, user_id: str):
         from apscheduler.triggers.cron import CronTrigger
     except ImportError:
         logger.warning(
-            "[telegram] apscheduler not available,"
-            " digest disabled",
+            "[telegram] apscheduler not available," " digest disabled",
         )
         return
-
-    import os
 
     from zylch.cli.utils import get_owner_id
 

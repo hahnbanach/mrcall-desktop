@@ -278,17 +278,16 @@ class ToolFactory:
         logger.info("Get Tasks tool initialized")
 
         # Phase A tools (attachment, document, python, memory)
-        tools.extend([
-            DownloadAttachmentTool(
-                storage=supabase_storage,
-                session_state=session_state,
-                owner_id=config.owner_id),
-            ReadDocumentTool(),
-            RunPythonTool(),
-            UpdateMemoryTool(
-                session_state=session_state,
-                owner_id=config.owner_id),
-        ])
+        tools.extend(
+            [
+                DownloadAttachmentTool(
+                    storage=supabase_storage, session_state=session_state, owner_id=config.owner_id
+                ),
+                ReadDocumentTool(),
+                RunPythonTool(),
+                UpdateMemoryTool(session_state=session_state, owner_id=config.owner_id),
+            ]
+        )
         logger.info("Phase A tools initialized (4)")
 
         # Compose Email tool

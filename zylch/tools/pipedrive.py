@@ -41,15 +41,10 @@ class PipedriveClient:
         url = f"{self.base_url}/{endpoint}"
 
         # Add API token to params
-        params = kwargs.pop('params', {})
-        params['api_token'] = self.api_token
+        params = kwargs.pop("params", {})
+        params["api_token"] = self.api_token
 
-        response = self.client.request(
-            method=method,
-            url=url,
-            params=params,
-            **kwargs
-        )
+        response = self.client.request(method=method, url=url, params=params, **kwargs)
 
         response.raise_for_status()
         return response.json()
@@ -65,36 +60,36 @@ class PipedriveClient:
         """
         try:
             result = self._request(
-                'GET',
-                'persons/search',
-                params={
-                    'term': email,
-                    'fields': 'email',
-                    'exact_match': True
-                }
+                "GET",
+                "persons/search",
+                params={"term": email, "fields": "email", "exact_match": True},
             )
 
-            if result.get('success') and result.get('data', {}).get('items'):
-                items = result['data']['items']
+            if result.get("success") and result.get("data", {}).get("items"):
+                items = result["data"]["items"]
                 logger.debug(f"Pipedrive search returned {len(items)} items")
 
                 # Return first exact match
                 for item in items:
-                    person = item.get('item', {})
+                    person = item.get("item", {})
                     logger.debug(f"Person object: {person}")
 
                     # Verify email match - handle both string and array formats
-                    person_emails = person.get('emails', [])
+                    person_emails = person.get("emails", [])
 
                     # If emails is a string, convert to list
                     if isinstance(person_emails, str):
-                        person_emails = [{'value': person_emails}]
+                        person_emails = [{"value": person_emails}]
 
                     for email_obj in person_emails:
                         # Handle both dict and string format
-                        email_value = email_obj.get('value') if isinstance(email_obj, dict) else email_obj
+                        email_value = (
+                            email_obj.get("value") if isinstance(email_obj, dict) else email_obj
+                        )
                         if email_value and email_value.lower() == email.lower():
-                            logger.info(f"Found person: {person.get('name')} (ID: {person.get('id')})")
+                            logger.info(
+                                f"Found person: {person.get('name')} (ID: {person.get('id')})"
+                            )
                             return person
 
             logger.info(f"No person found for email: {email}")
@@ -114,10 +109,10 @@ class PipedriveClient:
             Person data
         """
         try:
-            result = self._request('GET', f'persons/{person_id}')
+            result = self._request("GET", f"persons/{person_id}")
 
-            if result.get('success') and result.get('data'):
-                return result['data']
+            if result.get("success") and result.get("data"):
+                return result["data"]
 
             raise ValueError(f"Person {person_id} not found")
 
@@ -130,7 +125,7 @@ class PipedriveClient:
         person_id: int,
         status: Optional[str] = None,
         pipeline_id: Optional[int] = None,
-        stage_id: Optional[int] = None
+        stage_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Get deals for a person with optional filters.
 
@@ -146,25 +141,21 @@ class PipedriveClient:
         try:
             params = {}
             if status:
-                params['status'] = status
+                params["status"] = status
 
-            result = self._request(
-                'GET',
-                f'persons/{person_id}/deals',
-                params=params
-            )
+            result = self._request("GET", f"persons/{person_id}/deals", params=params)
 
-            if not result.get('success'):
+            if not result.get("success"):
                 return []
 
-            deals = result.get('data', [])
+            deals = result.get("data", [])
 
             # Apply pipeline/stage filters
             if pipeline_id is not None:
-                deals = [d for d in deals if d.get('pipeline_id') == pipeline_id]
+                deals = [d for d in deals if d.get("pipeline_id") == pipeline_id]
 
             if stage_id is not None:
-                deals = [d for d in deals if d.get('stage_id') == stage_id]
+                deals = [d for d in deals if d.get("stage_id") == stage_id]
 
             logger.info(f"Found {len(deals)} deals for person {person_id}")
             return deals
@@ -180,10 +171,10 @@ class PipedriveClient:
             List of pipelines
         """
         try:
-            result = self._request('GET', 'pipelines')
+            result = self._request("GET", "pipelines")
 
-            if result.get('success'):
-                return result.get('data', [])
+            if result.get("success"):
+                return result.get("data", [])
 
             return []
 
@@ -203,12 +194,12 @@ class PipedriveClient:
         try:
             params = {}
             if pipeline_id is not None:
-                params['pipeline_id'] = pipeline_id
+                params["pipeline_id"] = pipeline_id
 
-            result = self._request('GET', 'stages', params=params)
+            result = self._request("GET", "stages", params=params)
 
-            if result.get('success'):
-                return result.get('data', [])
+            if result.get("success"):
+                return result.get("data", [])
 
             return []
 
@@ -217,9 +208,7 @@ class PipedriveClient:
             raise
 
     def get_person_activities(
-        self,
-        person_id: int,
-        done: Optional[bool] = None
+        self, person_id: int, done: Optional[bool] = None
     ) -> List[Dict[str, Any]]:
         """Get activities for a person.
 
@@ -233,16 +222,12 @@ class PipedriveClient:
         try:
             params = {}
             if done is not None:
-                params['done'] = 1 if done else 0
+                params["done"] = 1 if done else 0
 
-            result = self._request(
-                'GET',
-                f'persons/{person_id}/activities',
-                params=params
-            )
+            result = self._request("GET", f"persons/{person_id}/activities", params=params)
 
-            if result.get('success'):
-                return result.get('data', [])
+            if result.get("success"):
+                return result.get("data", [])
 
             return []
 
@@ -250,11 +235,7 @@ class PipedriveClient:
             logger.error(f"Failed to get activities for person {person_id}: {e}")
             raise
 
-    def list_deals(
-        self,
-        status: str = "all_not_deleted",
-        limit: int = 500
-    ) -> List[Dict[str, Any]]:
+    def list_deals(self, status: str = "all_not_deleted", limit: int = 500) -> List[Dict[str, Any]]:
         """List all deals from Pipedrive.
 
         Args:
@@ -270,30 +251,30 @@ class PipedriveClient:
 
             while True:
                 result = self._request(
-                    'GET',
-                    'deals',
+                    "GET",
+                    "deals",
                     params={
-                        'status': status,
-                        'start': start,
-                        'limit': min(limit - len(all_deals), 500)
-                    }
+                        "status": status,
+                        "start": start,
+                        "limit": min(limit - len(all_deals), 500),
+                    },
                 )
 
-                if not result.get('success'):
+                if not result.get("success"):
                     break
 
-                deals = result.get('data', [])
+                deals = result.get("data", [])
                 if not deals:
                     break
 
                 all_deals.extend(deals)
 
                 # Check if there are more pages
-                pagination = result.get('additional_data', {}).get('pagination', {})
-                if not pagination.get('more_items_in_collection'):
+                pagination = result.get("additional_data", {}).get("pagination", {})
+                if not pagination.get("more_items_in_collection"):
                     break
 
-                start = pagination.get('next_start', start + len(deals))
+                start = pagination.get("next_start", start + len(deals))
 
                 # Respect limit
                 if len(all_deals) >= limit:

@@ -12,7 +12,6 @@ These credentials are NOT read from env vars - they must be fetched from Supabas
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 from ..config import settings
 
@@ -69,7 +68,7 @@ class ToolConfig:
     default_model: str = "claude-opus-4-6-20260205"
 
     @classmethod
-    def from_settings(cls) -> 'ToolConfig':
+    def from_settings(cls) -> "ToolConfig":
         """Create ToolConfig from global settings (without BYOK credentials).
 
         BYOK credentials (anthropic_api_key, pipedrive_api_token, etc.) are
@@ -81,23 +80,19 @@ class ToolConfig:
         return cls(
             # My Emails
             my_emails=settings.my_emails,
-
             # Multi-tenant Configuration
             owner_id=settings.owner_id,
             zylch_assistant_id=settings.zylch_assistant_id,
-
             # User Identity (for sharing)
             user_email=settings.user_email,
             user_display_name=settings.user_display_name,
-
             # LLM Model
             default_model=settings.default_model,
-
             # BYOK credentials left empty - use from_settings_with_owner()
         )
 
     @classmethod
-    def from_settings_with_owner(cls, owner_id: str, storage=None) -> 'ToolConfig':
+    def from_settings_with_owner(cls, owner_id: str, storage=None) -> "ToolConfig":
         """Create ToolConfig from settings AND fetch BYOK credentials from Supabase.
 
         This method fetches per-user credentials (Anthropic, Pipedrive, SendGrid,
@@ -117,11 +112,13 @@ class ToolConfig:
         # Get storage instance
         if storage is None:
             from ..storage import Storage
+
             storage = Storage.get_instance()
 
         # Fetch BYOK credentials from Supabase
         # LLM Provider (detect active provider)
         from ..api.token_storage import get_active_llm_provider
+
         provider, api_key = get_active_llm_provider(owner_id)
         if provider and api_key:
             config.llm_provider = provider
@@ -138,10 +135,13 @@ class ToolConfig:
         # (useful for integrations like MrCall where operator provides the key)
         if not config.anthropic_api_key:
             from zylch.llm.providers import get_system_llm_credentials
+
             sys_provider, sys_key = get_system_llm_credentials()
             if sys_key:
                 config.llm_provider = sys_provider
-                config.anthropic_api_key = sys_key  # field name is legacy, stores any provider's key
+                config.anthropic_api_key = (
+                    sys_key  # field name is legacy, stores any provider's key
+                )
 
         # Pipedrive
         pipedrive_token = storage.get_pipedrive_key(owner_id)
@@ -157,10 +157,10 @@ class ToolConfig:
             config.sendgrid_from_email = sendgrid_from
 
         # Microsoft Graph tokens
-        ms_token = storage.get_oauth_token(owner_id, 'microsoft')
+        ms_token = storage.get_oauth_token(owner_id, "microsoft")
         if ms_token:
-            config.auth_provider = 'microsoft'
-            config.graph_token = ms_token.get('access_token', '')
-            config.graph_refresh_token = ms_token.get('refresh_token', '')
+            config.auth_provider = "microsoft"
+            config.graph_token = ms_token.get("access_token", "")
+            config.graph_refresh_token = ms_token.get("refresh_token", "")
 
         return config

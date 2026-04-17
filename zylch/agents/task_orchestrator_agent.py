@@ -39,15 +39,15 @@ CALL_AGENT_TOOL = {
             "agent_name": {
                 "type": "string",
                 "enum": ["emailer", "mrcall"],
-                "description": "Which agent to call: 'emailer' for email tasks, 'mrcall' for MrCall configuration"
+                "description": "Which agent to call: 'emailer' for email tasks, 'mrcall' for MrCall configuration",
             },
             "instructions": {
                 "type": "string",
-                "description": "Instructions for the agent - what to do with the task context"
-            }
+                "description": "Instructions for the agent - what to do with the task context",
+            },
         },
-        "required": ["agent_name", "instructions"]
-    }
+        "required": ["agent_name", "instructions"],
+    },
 }
 
 # Tool for direct text response without calling sub-agents
@@ -57,24 +57,17 @@ RESPOND_TOOL = {
     "input_schema": {
         "type": "object",
         "properties": {
-            "message": {
-                "type": "string",
-                "description": "Message to display to the user"
-            }
+            "message": {"type": "string", "description": "Message to display to the user"}
         },
-        "required": ["message"]
-    }
+        "required": ["message"],
+    },
 }
 
 # Tool to send the pending email draft
 SEND_EMAIL_TOOL = {
     "name": "send_email",
     "description": "Send the pending email draft. Use when user confirms with 'send it', 'ok', 'yes', 'invia', 'conferma', etc. Only works if there's a pending email draft from a previous call_agent to emailer.",
-    "input_schema": {
-        "type": "object",
-        "properties": {},
-        "required": []
-    }
+    "input_schema": {"type": "object", "properties": {}, "required": []},
 }
 
 
@@ -156,7 +149,9 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
         # Conversation history for multi-turn
         self.conversation_history: list = []
 
-        logger.info(f"TaskOrchestratorAgent initialized for owner={owner_id}, task={session_state.get_task_id()}")
+        logger.info(
+            f"TaskOrchestratorAgent initialized for owner={owner_id}, task={session_state.get_task_id()}"
+        )
 
     def _get_emailer_agent(self) -> EmailerAgent:
         """Lazy-load EmailerAgent."""
@@ -165,7 +160,7 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
                 storage=self.storage,
                 owner_id=self.owner_id,
                 api_key=self.api_key,
-                provider=self.provider
+                provider=self.provider,
             )
         return self._emailer_agent
 
@@ -177,7 +172,7 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
                 owner_id=self.owner_id,
                 api_key=self.api_key,
                 provider=self.provider,
-                starchat_client=self.starchat_client
+                starchat_client=self.starchat_client,
             )
         return self._mrcall_agent
 
@@ -192,15 +187,15 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
             return "Error: No active task. Use `/tasks open <ID>` to start."
 
         # 1. ENRICH CONTEXT WITH DATE
-        contact = task_context.get('contact_email') or task_context.get('contact_name') or 'Unknown'
-        action = task_context.get('suggested_action', 'No action suggested')
-        urgency = task_context.get('urgency', 'medium')
-        sources = task_context.get('sources', {})
+        contact = task_context.get("contact_email") or task_context.get("contact_name") or "Unknown"
+        action = task_context.get("suggested_action", "No action suggested")
+        urgency = task_context.get("urgency", "medium")
+        sources = task_context.get("sources", {})
 
         # Extract task creation date for temporal context
-        task_creation_date = task_context.get('created_at', 'unknown date')
-        if task_creation_date != 'unknown date':
-            task_creation_date = task_creation_date.split('T')[0]  # Get just the date part
+        task_creation_date = task_context.get("created_at", "unknown date")
+        if task_creation_date != "unknown date":
+            task_creation_date = task_creation_date.split("T")[0]  # Get just the date part
 
         task_details = f"""## 🎯 Current Task (ID: {task_context.get('id', 'unknown')})
 
@@ -273,9 +268,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
 """
 
     async def process_message(
-        self,
-        user_message: str,
-        context: Optional[Dict[str, Any]] = None
+        self, user_message: str, context: Optional[Dict[str, Any]] = None
     ) -> str:
         """Process a user message in task mode.
 
@@ -287,10 +280,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             Response string for the user
         """
         # Add user message to history
-        self.conversation_history.append({
-            "role": "user",
-            "content": user_message
-        })
+        self.conversation_history.append({"role": "user", "content": user_message})
 
         # Build system prompt with current task context
         system_prompt = self._build_system_prompt()
@@ -303,7 +293,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                 messages=self.conversation_history,
                 system=system_prompt,
                 tools=tools,
-                max_tokens=2000
+                max_tokens=2000,
             )
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
@@ -313,10 +303,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
         result_message = await self._handle_response(response)
 
         # Add assistant response to history
-        self.conversation_history.append({
-            "role": "assistant",
-            "content": result_message
-        })
+        self.conversation_history.append({"role": "assistant", "content": result_message})
 
         return result_message
 
@@ -331,7 +318,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
         """
         if response.stop_reason == "tool_use":
             for block in response.content:
-                if hasattr(block, 'input'):  # ToolUseBlock
+                if hasattr(block, "input"):  # ToolUseBlock
                     if block.name == "call_agent":
                         return await self._handle_call_agent(block.input)
                     elif block.name == "respond":
@@ -341,7 +328,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
 
         # Text response fallback
         for block in response.content:
-            if hasattr(block, 'text'):
+            if hasattr(block, "text"):
                 return block.text
 
         return "I couldn't process your request. Please try again."
@@ -364,15 +351,17 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             if agent_name == "emailer":
                 agent = self._get_emailer_agent()
                 # Get task_num from context if available
-                task_context = self.session_state.get_task_context()
-                task_num = None  # Could extract from task_context if needed
+                # (task_context could be extracted from session_state if needed)
+                task_num = None
 
                 # Get previous draft if this is a modification request
                 previous_draft = None
                 last_result = self.session_state.get_last_action_result()
-                if last_result and last_result.get('tool_used') == 'write_email':
-                    previous_draft = last_result.get('result', {})
-                    logger.debug(f"[TaskOrchestrator] Passing previous_draft to EmailerAgent: subject={previous_draft.get('subject', '?')}")
+                if last_result and last_result.get("tool_used") == "write_email":
+                    previous_draft = last_result.get("result", {})
+                    logger.debug(
+                        f"[TaskOrchestrator] Passing previous_draft to EmailerAgent: subject={previous_draft.get('subject', '?')}"
+                    )
 
                 result = await agent.run(
                     instructions=instructions,
@@ -417,19 +406,21 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
         draft_id = None
         last_result = self.session_state.get_last_action_result()
 
-        if last_result and last_result.get('tool_used') == 'write_email':
-            draft_id = last_result.get('result', {}).get('draft_id')
-            logger.debug(f"[TaskOrchestrator] send_email: draft_id from last_action_result = {draft_id}")
+        if last_result and last_result.get("tool_used") == "write_email":
+            draft_id = last_result.get("result", {}).get("draft_id")
+            logger.debug(
+                f"[TaskOrchestrator] send_email: draft_id from last_action_result = {draft_id}"
+            )
 
         # 2. If no draft_id in memory, try to get most recent draft from DB
         if not draft_id:
             logger.debug("[TaskOrchestrator] No draft_id in memory, checking DB for recent drafts")
             try:
                 supabase = Storage.get_instance()
-                drafts = supabase.list_drafts(self.owner_id, status='draft')
+                drafts = supabase.list_drafts(self.owner_id, status="draft")
                 if drafts:
                     # Get the most recent draft
-                    draft_id = drafts[0].get('id')
+                    draft_id = drafts[0].get("id")
                     logger.debug(f"[TaskOrchestrator] Found most recent draft in DB: {draft_id}")
             except Exception as e:
                 logger.error(f"[TaskOrchestrator] Failed to query drafts: {e}")
@@ -440,10 +431,11 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
         # 3. Fetch draft from database
         try:
             with get_session() as session:
-                draft_row = session.query(Draft).filter(
-                    Draft.id == draft_id,
-                    Draft.owner_id == self.owner_id
-                ).one_or_none()
+                draft_row = (
+                    session.query(Draft)
+                    .filter(Draft.id == draft_id, Draft.owner_id == self.owner_id)
+                    .one_or_none()
+                )
 
                 if not draft_row:
                     return f"⚠️ Draft not found (id: {draft_id}). It may have been deleted."
@@ -461,43 +453,41 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
             return "❌ No email provider connected.\n\nUse `/connect google` or `/connect microsoft` first."
 
         # 5. Extract draft fields
-        to_addresses = draft.get('to_addresses', [])
-        to_str = ', '.join(to_addresses) if isinstance(to_addresses, list) else to_addresses
-        subject = draft.get('subject', '')
-        body = draft.get('body', '')
-        in_reply_to = draft.get('in_reply_to')
-        references = draft.get('references', [])
-        thread_id = draft.get('thread_id')
+        to_addresses = draft.get("to_addresses", [])
+        to_str = ", ".join(to_addresses) if isinstance(to_addresses, list) else to_addresses
+        subject = draft.get("subject", "")
+        body = draft.get("body", "")
+        in_reply_to = draft.get("in_reply_to")
+        references = draft.get("references", [])
+        thread_id = draft.get("thread_id")
 
         if not to_str:
             return "❌ No recipient specified in the email draft."
 
-        logger.info(f"[TaskOrchestrator] Sending email to {to_str} via {provider} (draft_id={draft_id})")
+        logger.info(
+            f"[TaskOrchestrator] Sending email to {to_str} via {provider} (draft_id={draft_id})"
+        )
 
         # Mark draft as sending
         try:
             with get_session() as session:
-                session.query(Draft).filter(Draft.id == draft_id).update({
-                    'status': 'sending',
-                    'provider': provider
-                })
+                session.query(Draft).filter(Draft.id == draft_id).update(
+                    {"status": "sending", "provider": provider}
+                )
         except Exception as e:
             logger.warning(f"[TaskOrchestrator] Failed to update draft status: {e}")
 
         try:
             # 6. Send via appropriate provider
-            if provider == 'google':
+            if provider == "google":
                 from zylch.tools.gmail import GmailClient
 
-                gmail = GmailClient(
-                    account=user_email,
-                    owner_id=self.owner_id
-                )
+                gmail = GmailClient(account=user_email, owner_id=self.owner_id)
 
                 # Convert references list to string if needed
                 refs_str = None
                 if references:
-                    refs_str = ' '.join(references) if isinstance(references, list) else references
+                    refs_str = " ".join(references) if isinstance(references, list) else references
 
                 sent_message = gmail.send_message(
                     to=to_str,
@@ -508,19 +498,16 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                     thread_id=thread_id,
                 )
 
-                sent_id = sent_message.get('id', '')
+                sent_id = sent_message.get("id", "")
 
-            elif provider == 'microsoft':
+            elif provider == "microsoft":
                 from zylch.tools.outlook import OutlookClient
 
                 graph_token = get_graph_token(self.owner_id)
                 if not graph_token:
                     return "❌ Microsoft token expired. Please reconnect with `/connect microsoft`."
 
-                outlook = OutlookClient(
-                    graph_token=graph_token['access_token'],
-                    account=user_email
-                )
+                outlook = OutlookClient(graph_token=graph_token["access_token"], account=user_email)
 
                 sent_message = outlook.send_message(
                     to=to_str,
@@ -528,7 +515,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                     body=body,
                 )
 
-                sent_id = sent_message.get('id', '')
+                sent_id = sent_message.get("id", "")
 
             else:
                 return f"❌ Unknown email provider: {provider}"
@@ -558,11 +545,13 @@ The task may now be complete. Use `/tasks exit` to return to normal chat, or con
             # Restore draft status on failure
             try:
                 with get_session() as session:
-                    session.query(Draft).filter(Draft.id == draft_id).update({
-                        'status': 'draft',
-                        'error_message': str(e),
-                    })
-            except:
+                    session.query(Draft).filter(Draft.id == draft_id).update(
+                        {
+                            "status": "draft",
+                            "error_message": str(e),
+                        }
+                    )
+            except Exception:
                 pass
 
             logger.error(f"[TaskOrchestrator] Failed to send email: {e}", exc_info=True)
@@ -570,13 +559,13 @@ The task may now be complete. Use `/tasks exit` to return to normal chat, or con
 
     def _format_emailer_result(self, result: Dict[str, Any]) -> str:
         """Format EmailerAgent result for display."""
-        tool_used = result.get('tool_used', 'unknown')
-        agent_result = result.get('result', {})
+        tool_used = result.get("tool_used", "unknown")
+        agent_result = result.get("result", {})
 
-        if tool_used == 'write_email':
-            subject = agent_result.get('subject', '(no subject)')
-            body = agent_result.get('body', '')
-            recipient = agent_result.get('recipient_email', '(not specified)')
+        if tool_used == "write_email":
+            subject = agent_result.get("subject", "(no subject)")
+            body = agent_result.get("body", "")
+            recipient = agent_result.get("recipient_email", "(not specified)")
 
             return f"""**📧 Email Draft Ready**
 
@@ -589,11 +578,11 @@ The task may now be complete. Use `/tasks exit` to return to normal chat, or con
 
 Say \"send it\" to send, or tell me what to change."""
 
-        elif tool_used == 'respond_text':
-            return agent_result.get('response', 'No response from agent.')
+        elif tool_used == "respond_text":
+            return agent_result.get("response", "No response from agent.")
 
-        elif tool_used == 'search_memory':
-            results = agent_result.get('results', [])
+        elif tool_used == "search_memory":
+            results = agent_result.get("results", [])
             return f"Found {len(results)} relevant items in memory."
 
         else:
@@ -601,22 +590,26 @@ Say \"send it\" to send, or tell me what to change."""
 
     def _format_mrcall_result(self, result: Dict[str, Any]) -> str:
         """Format MrCallAgent result for display."""
-        if result.get('error'):
+        if result.get("error"):
             return f"❌ Error: {result['error']}"
 
-        tool_used = result.get('tool_used', 'unknown')
-        agent_result = result.get('result', {})
+        tool_used = result.get("tool_used", "unknown")
+        agent_result = result.get("result", {})
 
-        if tool_used in ['configure_welcome_inbound', 'configure_welcome_outbound', 'configure_booking']:
-            if agent_result.get('success'):
-                updated = agent_result.get('updated', [])
-                return f"✅ Configuration updated:\n" + "\n".join([f"- {u}" for u in updated])
+        if tool_used in [
+            "configure_welcome_inbound",
+            "configure_welcome_outbound",
+            "configure_booking",
+        ]:
+            if agent_result.get("success"):
+                updated = agent_result.get("updated", [])
+                return "✅ Configuration updated:\n" + "\n".join([f"- {u}" for u in updated])
             else:
-                errors = agent_result.get('errors', ['Unknown error'])
-                return f"❌ Failed to update:\n" + "\n".join([f"- {e}" for e in errors])
+                errors = agent_result.get("errors", ["Unknown error"])
+                return "❌ Failed to update:\n" + "\n".join([f"- {e}" for e in errors])
 
-        elif tool_used == 'respond_text':
-            return agent_result.get('response', 'No response from agent.')
+        elif tool_used == "respond_text":
+            return agent_result.get("response", "No response from agent.")
 
         else:
             return f"Agent completed action: {tool_used}"

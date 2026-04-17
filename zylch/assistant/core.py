@@ -51,7 +51,9 @@ class ZylchAIAgent(BaseConversationalAgent):
         self.conversation_history: List[Dict[str, Any]] = []
         self.message_count = 0
 
-        logger.info(f"Initialized Zylch AI agent with {len(tools)} tools, provider={provider}{f' and {len(self.triggered_instructions)} triggered instructions' if self.triggered_instructions else ''}")
+        logger.info(
+            f"Initialized Zylch AI agent with {len(tools)} tools, provider={provider}{f' and {len(self.triggered_instructions)} triggered instructions' if self.triggered_instructions else ''}"
+        )
 
     def _get_tool_schemas(self) -> List[Dict[str, Any]]:
         """Get Anthropic tool schemas for all registered tools.
@@ -60,7 +62,7 @@ class ZylchAIAgent(BaseConversationalAgent):
             List of tool schemas
         """
         schemas = [tool.get_schema() for tool in self.tools]
-        tool_names = [s['name'] for s in schemas]
+        tool_names = [s["name"] for s in schemas]
         logger.info(f"Tools available to Claude: {tool_names}")
         return schemas
 
@@ -80,10 +82,7 @@ class ZylchAIAgent(BaseConversationalAgent):
             Agent's response
         """
         # Add user message to history
-        self.conversation_history.append({
-            "role": "user",
-            "content": user_message
-        })
+        self.conversation_history.append({"role": "user", "content": user_message})
 
         # Select appropriate model (check for forced model in context)
         force_model = context.get("force_model") if context else None
@@ -101,7 +100,9 @@ class ZylchAIAgent(BaseConversationalAgent):
         if self.triggered_instructions:
             instructions_text = "\n".join(f"- {instr}" for instr in self.triggered_instructions)
             system_prompt += f"\n\n**TRIGGERED INSTRUCTIONS (event-driven, for reference):**\n{instructions_text}"
-            logger.info(f"Injected {len(self.triggered_instructions)} triggered instructions into system prompt")
+            logger.info(
+                f"Injected {len(self.triggered_instructions)} triggered instructions into system prompt"
+            )
 
         # Create message with tool support (with current date/time)
         # Note: model selection is now handled by LLMClient based on provider
@@ -109,7 +110,7 @@ class ZylchAIAgent(BaseConversationalAgent):
             messages=self.conversation_history,
             system=system_prompt,
             tools=self._get_tool_schemas(),
-            max_tokens=self.max_tokens
+            max_tokens=self.max_tokens,
         )
 
         # Handle tool use loop
@@ -126,12 +127,14 @@ class ZylchAIAgent(BaseConversationalAgent):
                         {"type": "text", "text": getattr(block, "text", "")}
                     )
                 elif btype == "tool_use":
-                    assistant_content_dicts.append({
-                        "type": "tool_use",
-                        "id": block.id,
-                        "name": block.name,
-                        "input": dict(block.input or {}),
-                    })
+                    assistant_content_dicts.append(
+                        {
+                            "type": "tool_use",
+                            "id": block.id,
+                            "name": block.name,
+                            "input": dict(block.input or {}),
+                        }
+                    )
                 else:
                     # Unknown block type — best-effort model_dump
                     try:
@@ -140,62 +143,51 @@ class ZylchAIAgent(BaseConversationalAgent):
                         pass
 
             # Extract tool calls from response
-            tool_results, direct_response = await self._execute_tools(response.content, approval_callback)
+            tool_results, direct_response = await self._execute_tools(
+                response.content, approval_callback
+            )
 
             # Check for direct response tools (e.g., get_tasks)
             # These tools return pre-formatted output that should be returned as-is
             if direct_response:
-                logger.info(f"Direct response from tool, skipping second LLM call")
+                logger.info("Direct response from tool, skipping second LLM call")
                 # Add assistant's tool use to history
-                self.conversation_history.append({
-                    "role": "assistant",
-                    "content": assistant_content_dicts
-                })
+                self.conversation_history.append(
+                    {"role": "assistant", "content": assistant_content_dicts}
+                )
                 # Add the direct response as assistant message
-                self.conversation_history.append({
-                    "role": "assistant",
-                    "content": direct_response
-                })
+                self.conversation_history.append({"role": "assistant", "content": direct_response})
                 return direct_response
 
             # Add assistant's tool use to history
-            self.conversation_history.append({
-                "role": "assistant",
-                "content": response.content
-            })
+            self.conversation_history.append({"role": "assistant", "content": response.content})
 
             # Add tool results to history
-            self.conversation_history.append({
-                "role": "user",
-                "content": tool_results
-            })
+            self.conversation_history.append({"role": "user", "content": tool_results})
 
             # Continue conversation with tool results (with current date/time)
             response = await self.client.create_message(
                 messages=self.conversation_history,
                 system=system_prompt,  # Use same system prompt with context
                 tools=self._get_tool_schemas(),
-                max_tokens=self.max_tokens
+                max_tokens=self.max_tokens,
             )
 
         # Extract final text response
         assistant_message = ""
         for block in response.content:
-            if hasattr(block, 'text'):
+            if hasattr(block, "text"):
                 assistant_message += block.text
 
         # Add final response to history
-        self.conversation_history.append({
-            "role": "assistant",
-            "content": assistant_message
-        })
+        self.conversation_history.append({"role": "assistant", "content": assistant_message})
 
         self.message_count += 1
 
         return assistant_message
 
     # Tools that return pre-formatted output and should bypass the second LLM call
-    DIRECT_RESPONSE_TOOLS = {'get_tasks'}
+    DIRECT_RESPONSE_TOOLS = {"get_tasks"}
 
     async def _execute_tools(
         self,
@@ -226,21 +218,29 @@ class ZylchAIAgent(BaseConversationalAgent):
                 if approval_callback is not None and tool_name in APPROVAL_TOOLS:
                     approved = False
                     try:
-                        approved = bool(await approval_callback(block.id, tool_name, dict(tool_input or {})))
+                        approved = bool(
+                            await approval_callback(block.id, tool_name, dict(tool_input or {}))
+                        )
                     except Exception as e:
-                        logger.warning(f"[approval] callback raised for tool={tool_name}: {e}; treating as declined")
+                        logger.warning(
+                            f"[approval] callback raised for tool={tool_name}: {e}; treating as declined"
+                        )
                         approved = False
                     try:
                         input_keys = list((tool_input or {}).keys())
                     except Exception:
                         input_keys = []
-                    logger.debug(f"[approval] tool={tool_name} approved={approved} keys={input_keys}")
+                    logger.debug(
+                        f"[approval] tool={tool_name} approved={approved} keys={input_keys}"
+                    )
                     if not approved:
-                        results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": "User declined this action.",
-                        })
+                        results.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": "User declined this action.",
+                            }
+                        )
                         continue
 
                 # Execute tool
@@ -252,11 +252,18 @@ class ZylchAIAgent(BaseConversationalAgent):
                     logger.info(f"Tool {tool_name} message: {tool_result.message}")
                     # Special logging for freshness check
                     if "fresh contact" in tool_result.message.lower():
-                        logger.warning(f"⚠️  FRESH CONTACT DETECTED - Agent should NOT call Gmail/web search!")
+                        logger.warning(
+                            "⚠️  FRESH CONTACT DETECTED - Agent should NOT call Gmail/web search!"
+                        )
 
                 # Check if this is a direct response tool (bypass second LLM call)
-                if tool_name in self.DIRECT_RESPONSE_TOOLS and tool_result.status == ToolStatus.SUCCESS:
-                    logger.info(f"Tool {tool_name} is a direct response tool - will skip second LLM call")
+                if (
+                    tool_name in self.DIRECT_RESPONSE_TOOLS
+                    and tool_result.status == ToolStatus.SUCCESS
+                ):
+                    logger.info(
+                        f"Tool {tool_name} is a direct response tool - will skip second LLM call"
+                    )
                     direct_response = tool_result.message
                     # Don't add to results - we're returning directly
                     continue
@@ -265,11 +272,9 @@ class ZylchAIAgent(BaseConversationalAgent):
                 formatted_result = self._format_tool_result(tool_result)
                 logger.debug(f"Formatted tool result sent to agent:\n{formatted_result}")
 
-                results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": formatted_result
-                })
+                results.append(
+                    {"type": "tool_result", "tool_use_id": block.id, "content": formatted_result}
+                )
 
         return results, direct_response
 
@@ -284,11 +289,7 @@ class ZylchAIAgent(BaseConversationalAgent):
             Tool execution result
         """
         if name not in self.tool_map:
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=f"Unknown tool: {name}"
-            )
+            return ToolResult(status=ToolStatus.ERROR, data=None, error=f"Unknown tool: {name}")
 
         tool = self.tool_map[name]
 
@@ -297,11 +298,7 @@ class ZylchAIAgent(BaseConversationalAgent):
             return result
         except Exception as e:
             logger.error(f"Tool execution failed: {name} - {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=str(e)
-            )
+            return ToolResult(status=ToolStatus.ERROR, data=None, error=str(e))
 
     def _format_tool_result(self, result: ToolResult) -> str:
         """Format tool result for Anthropic.

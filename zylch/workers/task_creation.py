@@ -27,16 +27,16 @@ TASK_DECISION_TOOL = {
         "properties": {
             "action_required": {
                 "type": "boolean",
-                "description": "True if user needs to take action, False otherwise"
+                "description": "True if user needs to take action, False otherwise",
             },
             "task_action": {
                 "type": "string",
                 "enum": ["create", "update", "close", "none"],
-                "description": "create=new task, update=modify existing task, close=mark existing task resolved, none=no task needed"
+                "description": "create=new task, update=modify existing task, close=mark existing task resolved, none=no task needed",
             },
             "target_task_id": {
                 "type": "string",
-                "description": "For update/close: the ID of the existing task to modify. Required if task_action is 'update' or 'close'."
+                "description": "For update/close: the ID of the existing task to modify. Required if task_action is 'update' or 'close'.",
             },
             "urgency": {
                 "type": "string",
@@ -54,16 +54,16 @@ TASK_DECISION_TOOL = {
             "suggested_action": {
                 "type": "string",
                 "minLength": 10,
-                "description": "Specific action the user should take (e.g., 'Reply to John with project timeline' not just 'Reply')"
+                "description": "Specific action the user should take (e.g., 'Reply to John with project timeline' not just 'Reply')",
             },
             "reason": {
                 "type": "string",
                 "minLength": 20,
-                "description": "Why this needs attention - provide enough context for the executive to understand without reading the email"
-            }
+                "description": "Why this needs attention - provide enough context for the executive to understand without reading the email",
+            },
         },
-        "required": ["action_required", "task_action", "suggested_action", "reason", "urgency"]
-    }
+        "required": ["action_required", "task_action", "suggested_action", "reason", "urgency"],
+    },
 }
 
 
@@ -90,17 +90,17 @@ class TaskWorker:
         self.storage = storage
         self.owner_id = owner_id
         self.client = LLMClient(api_key=api_key, provider=provider)
-        self.user_email = user_email.lower() if user_email else ''
-        self.user_domain = user_email.split('@')[1].lower() if user_email and '@' in user_email else ''
+        self.user_email = user_email.lower() if user_email else ""
+        self.user_domain = (
+            user_email.split("@")[1].lower() if user_email and "@" in user_email else ""
+        )
 
         # Initialize hybrid search for blob retrieval
         config = MemoryConfig()
         self.embedding_engine = EmbeddingEngine(config)
         from zylch.storage.database import get_session
-        self.hybrid_search = HybridSearchEngine(
-            get_session,
-            self.embedding_engine
-        )
+
+        self.hybrid_search = HybridSearchEngine(get_session, self.embedding_engine)
 
         # Cache for task prompt
         self._task_prompt: Optional[str] = None
@@ -118,14 +118,10 @@ class TaskWorker:
         email_lower = email.lower()
 
         if self.user_email and email_lower == self.user_email:
-            logger.debug(
-                f"[TASK] _is_user_email({email}) -> True (exact match)"
-            )
+            logger.debug(f"[TASK] _is_user_email({email}) -> True (exact match)")
             return True
 
-        logger.debug(
-            f"[TASK] _is_user_email({email}) -> False"
-        )
+        logger.debug(f"[TASK] _is_user_email({email}) -> False")
         return False
 
     def _is_duplicate_task(self, new_title: str) -> bool:
@@ -138,60 +134,80 @@ class TaskWorker:
                 continue
             ratio = SequenceMatcher(None, new_lower, existing).ratio()
             if ratio > 0.5:
-                logger.debug(f"[task] Skipping duplicate: '{new_title}' similar to existing '{existing}' (ratio={ratio:.2f})")
+                logger.debug(
+                    f"[task] Skipping duplicate: '{new_title}' similar to existing '{existing}' (ratio={ratio:.2f})"
+                )
                 return True
         return False
 
     _NOTIFICATION_PATTERNS = [
-        'noreply', 'no-reply', 'no_reply',
-        'donotreply', 'do-not-reply', 'do_not_reply',
-        'notification', 'notifications',
-        'mailer-daemon', 'postmaster',
-        'autoresponder', 'auto-reply', 'autoreply',
-        'bounce', 'daemon', 'automated',
-        'system', 'alert', 'alerts',
-        'news', 'newsletter', 'marketing',
-        'digest', 'updates', 'info',
-        'support', 'helpdesk', 'feedback',
+        "noreply",
+        "no-reply",
+        "no_reply",
+        "donotreply",
+        "do-not-reply",
+        "do_not_reply",
+        "notification",
+        "notifications",
+        "mailer-daemon",
+        "postmaster",
+        "autoresponder",
+        "auto-reply",
+        "autoreply",
+        "bounce",
+        "daemon",
+        "automated",
+        "system",
+        "alert",
+        "alerts",
+        "news",
+        "newsletter",
+        "marketing",
+        "digest",
+        "updates",
+        "info",
+        "support",
+        "helpdesk",
+        "feedback",
     ]
 
     _NOTIFICATION_DOMAINS = [
-        'accounts.google.com',
-        'facebookmail.com',
-        'linkedin.com',
-        'amazonses.com',
-        'shopify.com',
-        'stripe.com',
-        'paypal.com',
-        'squarespace.com',
-        'mailchimp.com',
-        'sendgrid.net',
-        'mandrillapp.com',
-        'postmarkapp.com',
+        "accounts.google.com",
+        "facebookmail.com",
+        "linkedin.com",
+        "amazonses.com",
+        "shopify.com",
+        "stripe.com",
+        "paypal.com",
+        "squarespace.com",
+        "mailchimp.com",
+        "sendgrid.net",
+        "mandrillapp.com",
+        "postmarkapp.com",
     ]
 
     def _is_notification_sender(self, email: str) -> bool:
         if not email:
             return False
         email_lower = email.lower()
-        local = email_lower.split('@')[0] if '@' in email_lower else email_lower
+        local = email_lower.split("@")[0] if "@" in email_lower else email_lower
         for pat in self._NOTIFICATION_PATTERNS:
             if pat in local:
                 return True
-        if '@' in email_lower:
-            domain = email_lower.split('@')[1]
+        if "@" in email_lower:
+            domain = email_lower.split("@")[1]
             for d in self._NOTIFICATION_DOMAINS:
-                if domain == d or domain.endswith('.' + d):
+                if domain == d or domain.endswith("." + d):
                     return True
         return False
 
     def _is_auto_reply(self, email_dict: Dict) -> bool:
         """Check if an email is an auto-reply (not a real human response)."""
-        body = (email_dict.get('body_plain') or email_dict.get('snippet') or '').lower()
+        body = (email_dict.get("body_plain") or email_dict.get("snippet") or "").lower()
         auto_phrases = [
-            'la tua richiesta è stata presa in carico',
-            'your request has been taken up',
-            'ciao mrcaller! grazie mille del tuo messaggio',
+            "la tua richiesta è stata presa in carico",
+            "your request has been taken up",
+            "ciao mrcaller! grazie mille del tuo messaggio",
         ]
         return any(phrase in body for phrase in auto_phrases)
 
@@ -199,12 +215,11 @@ class TaskWorker:
         """Get task detection prompt from storage."""
         if not self._task_prompt_loaded:
             raw = self.storage.get_agent_prompt(
-                self.owner_id, "task_email",
+                self.owner_id,
+                "task_email",
             )
             # Treat empty string as None
-            self._task_prompt = (
-                raw if raw and raw.strip() else None
-            )
+            self._task_prompt = raw if raw and raw.strip() else None
             self._task_prompt_loaded = True
 
             if self._task_prompt:
@@ -238,7 +253,8 @@ class TaskWorker:
         return tasks, None
 
     async def _analyze_recent_events(
-        self, concurrency: int = 5,
+        self,
+        concurrency: int = 5,
     ) -> None:
         """Analyze recent events with parallel LLM calls.
 
@@ -247,19 +263,15 @@ class TaskWorker:
         """
         import asyncio
 
-        user_emails = (
-            {self.user_email} if self.user_email else set()
-        )
+        user_emails = {self.user_email} if self.user_email else set()
         logger.debug(
-            f"[TASK] _analyze_recent_events"
-            f" user_emails={user_emails}",
+            f"[TASK] _analyze_recent_events" f" user_emails={user_emails}",
         )
 
         prompt = self._get_task_prompt()
         if not prompt:
             raise ValueError(
-                "No task prompt found."
-                " Run `/agent train tasks` first.",
+                "No task prompt found." " Run `/agent train tasks` first.",
             )
 
         analyzed_count = 0
@@ -267,10 +279,8 @@ class TaskWorker:
         consecutive_failures = []  # list acts as thread-safe counter
         stop = False
 
-        all_emails = (
-            self.storage.get_unprocessed_emails_for_task(
-                self.owner_id,
-            )
+        all_emails = self.storage.get_unprocessed_emails_for_task(
+            self.owner_id,
         )
 
         # Deduplicate: latest email per thread
@@ -291,11 +301,7 @@ class TaskWorker:
                     user_replied[thread_id] = ts
 
             existing = threads.get(thread_id)
-            existing_ts = (
-                existing.get("date_timestamp", 0)
-                if existing
-                else 0
-            )
+            existing_ts = existing.get("date_timestamp", 0) if existing else 0
             if not existing or ts > existing_ts:
                 threads[thread_id] = email
 
@@ -313,11 +319,13 @@ class TaskWorker:
                 # User replied after contact — close any open task
                 contact_email = from_email
                 existing_task = self.storage.get_task_by_contact(
-                    self.owner_id, contact_email,
+                    self.owner_id,
+                    contact_email,
                 )
                 if existing_task:
                     self.storage.complete_task_item(
-                        self.owner_id, existing_task["id"],
+                        self.owner_id,
+                        existing_task["id"],
                     )
                     logger.info(
                         f"[TASK] Auto-closed task for"
@@ -330,7 +338,8 @@ class TaskWorker:
                     etid = e.get("thread_id") or eid
                     if etid == thread_id:
                         self.storage.mark_email_task_processed(
-                            self.owner_id, eid,
+                            self.owner_id,
+                            eid,
                         )
                 del threads[thread_id]
 
@@ -395,7 +404,8 @@ class TaskWorker:
             # open task for this thread's contacts
             if from_email in user_emails:
                 self.storage.mark_email_task_processed(
-                    self.owner_id, email_id,
+                    self.owner_id,
+                    email_id,
                 )
                 # Close existing tasks for each recipient
                 # (user responded = task handled)
@@ -410,18 +420,17 @@ class TaskWorker:
                         addr = addr.split("<")[1].split(">")[0].strip()
                     if not addr or addr in user_emails:
                         continue
-                    existing = (
-                        self.storage.get_task_by_contact(
-                            self.owner_id, addr,
-                        )
+                    existing = self.storage.get_task_by_contact(
+                        self.owner_id,
+                        addr,
                     )
                     if existing:
                         self.storage.complete_task_item(
-                            self.owner_id, existing["id"],
+                            self.owner_id,
+                            existing["id"],
                         )
                         logger.info(
-                            f"[TASK] Auto-closed task for"
-                            f" {addr} (user replied)",
+                            f"[TASK] Auto-closed task for" f" {addr} (user replied)",
                         )
                 return
 
@@ -433,45 +442,73 @@ class TaskWorker:
             # --- Hard-coded rules: overdue invoices & repeated declines ---
             subject = email.get("subject", "")
             from zylch.storage.database import get_session as _gs
+
             _hc_task = None  # hard-coded task result, if any
-            if re.search(r"payment reminder|invoice|bill|overdue|is due|payment failed", subject, re.I):
+            if re.search(
+                r"payment reminder|invoice|bill|overdue|is due|payment failed", subject, re.I
+            ):
                 with _gs() as sess:
-                    cnt = sess.query(Email).filter(Email.owner_id == self.owner_id, Email.from_email.ilike(from_email)).filter(
-                        Email.subject.ilike("%invoice%") | Email.subject.ilike("%payment%") | Email.subject.ilike("%bill%")
-                        | Email.subject.ilike("%overdue%") | Email.subject.ilike("%is due%")).count()
+                    cnt = (
+                        sess.query(Email)
+                        .filter(Email.owner_id == self.owner_id, Email.from_email.ilike(from_email))
+                        .filter(
+                            Email.subject.ilike("%invoice%")
+                            | Email.subject.ilike("%payment%")
+                            | Email.subject.ilike("%bill%")
+                            | Email.subject.ilike("%overdue%")
+                            | Email.subject.ilike("%is due%")
+                        )
+                        .count()
+                    )
                 if cnt >= 2:
                     logger.debug(f"[TASK] Overdue invoice rule: {from_email}, count={cnt}")
-                    _hc_task = {"urgency": "medium", "suggested_action": subject,
-                                "reason": f"Repeated invoice/payment reminder from {from_email}. {cnt} reminders received.",
-                                "contact_name": email.get("from_name", "")}
+                    _hc_task = {
+                        "urgency": "medium",
+                        "suggested_action": subject,
+                        "reason": f"Repeated invoice/payment reminder from {from_email}. {cnt} reminders received.",
+                        "contact_name": email.get("from_name", ""),
+                    }
             elif re.match(r"^(Declined|Annullato):", subject, re.I):
                 with _gs() as sess:
-                    cnt = sess.query(Email).filter(Email.owner_id == self.owner_id, Email.from_email.ilike(from_email)).filter(
-                        Email.subject.ilike("Declined:%") | Email.subject.ilike("Annullato:%")).count()
+                    cnt = (
+                        sess.query(Email)
+                        .filter(Email.owner_id == self.owner_id, Email.from_email.ilike(from_email))
+                        .filter(
+                            Email.subject.ilike("Declined:%") | Email.subject.ilike("Annullato:%")
+                        )
+                        .count()
+                    )
                 if cnt >= 2:
                     cname = email.get("from_name", "") or from_email
                     logger.debug(f"[TASK] Repeated decline rule: {cname}, count={cnt}")
-                    _hc_task = {"urgency": "low", "suggested_action": f"Reschedule with {cname} — {cnt} meeting declines",
-                                "reason": f"{cname} has declined {cnt} meeting invitations. Consider reaching out by email or proposing a different format.",
-                                "contact_name": cname}
+                    _hc_task = {
+                        "urgency": "low",
+                        "suggested_action": f"Reschedule with {cname} — {cnt} meeting declines",
+                        "reason": f"{cname} has declined {cnt} meeting invitations. Consider reaching out by email or proposing a different format.",
+                        "contact_name": cname,
+                    }
             if _hc_task:
-                _hc_task.update({"action_required": True, "task_action": "create",
-                                 "analyzed_at": datetime.now(timezone.utc).isoformat(), "event_id": email_id,
-                                 "event_type": "email", "contact_email": from_email,
-                                 "email_date": email.get("date", ""),
-                                 "sources": {"emails": [email_id], "blobs": [], "calendar_events": []}})
+                _hc_task.update(
+                    {
+                        "action_required": True,
+                        "task_action": "create",
+                        "analyzed_at": datetime.now(timezone.utc).isoformat(),
+                        "event_id": email_id,
+                        "event_type": "email",
+                        "contact_email": from_email,
+                        "email_date": email.get("date", ""),
+                        "sources": {"emails": [email_id], "blobs": [], "calendar_events": []},
+                    }
+                )
                 self.storage.store_task_item(self.owner_id, _hc_task)
                 self.storage.mark_email_task_processed(self.owner_id, email_id)
                 action_count += 1
                 return
 
-            blob_context, blob_id = (
-                self._get_blob_for_contact(from_email)
-            )
-            existing_task = (
-                self.storage.get_task_by_contact(
-                    self.owner_id, from_email,
-                )
+            blob_context, blob_id = self._get_blob_for_contact(from_email)
+            existing_task = self.storage.get_task_by_contact(
+                self.owner_id,
+                from_email,
             )
             existing_task_context = ""
             if existing_task:
@@ -491,10 +528,7 @@ class TaskWorker:
                 "to_email": email.get("to_email"),
                 "subject": email.get("subject"),
                 "date": email.get("date"),
-                "body": (
-                    email.get("body_plain")
-                    or email.get("snippet", "")
-                ),
+                "body": (email.get("body_plain") or email.get("snippet", "")),
                 "thread_id": email.get("thread_id"),
             }
 
@@ -516,9 +550,7 @@ class TaskWorker:
                 for te in thread_emails:
                     if te.id != email_id:
                         body = te.body_plain or te.snippet or ""
-                        thread_ctx.append(
-                            f"[{te.date}] {te.from_email}: {body}"
-                        )
+                        thread_ctx.append(f"[{te.date}] {te.from_email}: {body}")
                 if thread_ctx:
                     event_data["thread_context"] = "\n".join(thread_ctx)
                     logger.debug(
@@ -531,8 +563,10 @@ class TaskWorker:
                 if stop:
                     return
                 result = await self._analyze_event(
-                    "email", event_data,
-                    blob_context, existing_task_context,
+                    "email",
+                    event_data,
+                    blob_context,
+                    existing_task_context,
                 )
 
             analyzed_count += 1
@@ -541,18 +575,19 @@ class TaskWorker:
                 consecutive_failures.append(1)
                 if len(consecutive_failures) >= 3:
                     logger.error(
-                        "3+ LLM failures — stopping"
-                        " task analysis",
+                        "3+ LLM failures — stopping" " task analysis",
                     )
                     stop = True
                 self.storage.mark_email_task_processed(
-                    self.owner_id, email_id,
+                    self.owner_id,
+                    email_id,
                 )
                 return
 
             consecutive_failures.clear()
             self.storage.mark_email_task_processed(
-                self.owner_id, email_id,
+                self.owner_id,
+                email_id,
             )
 
             if not result:
@@ -565,14 +600,16 @@ class TaskWorker:
 
             if task_action in ("create", "update"):
                 suggested = result.get(
-                    "suggested_action", "",
+                    "suggested_action",
+                    "",
                 ).strip()
                 if not suggested or len(suggested) < 5:
                     return
 
             if task_action == "close" and existing_task:
                 self.storage.complete_task_item(
-                    self.owner_id, existing_task["id"],
+                    self.owner_id,
+                    existing_task["id"],
                 )
             elif task_action == "update" and existing_task:
                 self.storage.update_task_item(
@@ -606,33 +643,31 @@ class TaskWorker:
                     reason=result.get("reason"),
                     add_source_email=email_id,
                 )
-            elif (
-                task_action == "create"
-                and result.get("action_required")
-            ):
+            elif task_action == "create" and result.get("action_required"):
                 suggested = result.get("suggested_action", "")
                 if self._is_duplicate_task(suggested):
                     return
                 if existing_task:
                     self.storage.complete_task_item(
-                        self.owner_id, existing_task["id"],
+                        self.owner_id,
+                        existing_task["id"],
                     )
                 result["event_id"] = email_id
                 result["event_type"] = "email"
                 result["contact_email"] = from_email
                 result["contact_name"] = email.get(
-                    "from_name", "",
+                    "from_name",
+                    "",
                 )
                 result["email_date"] = email.get("date", "")
                 result["sources"] = {
                     "emails": [email_id],
-                    "blobs": (
-                        [str(blob_id)] if blob_id else []
-                    ),
+                    "blobs": ([str(blob_id)] if blob_id else []),
                     "calendar_events": [],
                 }
                 self.storage.store_task_item(
-                    self.owner_id, result,
+                    self.owner_id,
+                    result,
                 )
                 action_count += 1
 
@@ -647,11 +682,11 @@ class TaskWorker:
         logger.debug(f"[TASK] Found {len(events)} unprocessed calendar events")
 
         for event in events:
-            event_id = event.get('id', '')
+            event_id = event.get("id", "")
 
             # Get attendees for context
-            attendees = event.get('attendees', [])
-            attendee_emails = [a.get('email', '') for a in attendees if a.get('email')]
+            attendees = event.get("attendees", [])
+            attendee_emails = [a.get("email", "") for a in attendees if a.get("email")]
 
             # Get blob context for first attendee (if any)
             blob_context = "(no prior context)"
@@ -661,33 +696,33 @@ class TaskWorker:
 
             # Prepare event data
             event_data = {
-                'id': event_id,
-                'summary': event.get('summary'),
-                'description': event.get('description', ''),
-                'start_time': event.get('start_time'),
-                'end_time': event.get('end_time'),
-                'attendees': attendee_emails,
-                'location': event.get('location')
+                "id": event_id,
+                "summary": event.get("summary"),
+                "description": event.get("description", ""),
+                "start_time": event.get("start_time"),
+                "end_time": event.get("end_time"),
+                "attendees": attendee_emails,
+                "location": event.get("location"),
             }
 
-            result = await self._analyze_event('calendar', event_data, blob_context)
+            result = await self._analyze_event("calendar", event_data, blob_context)
             analyzed_count += 1
 
             # Mark as processed regardless of result
             self.storage.mark_calendar_event_task_processed(self.owner_id, event_id)
 
             if result:
-                suggested = result.get('suggested_action', '')
+                suggested = result.get("suggested_action", "")
                 if self._is_duplicate_task(suggested):
                     continue
-                result['event_id'] = event_id
-                result['event_type'] = 'calendar'
-                result['contact_email'] = attendee_emails[0] if attendee_emails else None
-                result['contact_name'] = event.get('summary', '')
+                result["event_id"] = event_id
+                result["event_type"] = "calendar"
+                result["contact_email"] = attendee_emails[0] if attendee_emails else None
+                result["contact_name"] = event.get("summary", "")
                 # Track all data sources used to create this task
-                result['sources'] = {
-                    'calendar_events': [event_id],
-                    'blobs': [str(blob_id)] if blob_id else []
+                result["sources"] = {
+                    "calendar_events": [event_id],
+                    "blobs": [str(blob_id)] if blob_id else [],
                 }
                 self.storage.store_task_item(self.owner_id, result)
                 action_count += 1
@@ -702,7 +737,7 @@ class TaskWorker:
         event_data: Dict[str, Any],
         blob_context: str,
         existing_task_context: str = "",
-        calendar_context: str = ""
+        calendar_context: str = "",
     ) -> Optional[Dict[str, Any]]:
         """Analyze a single event using the trained prompt.
 
@@ -724,42 +759,37 @@ class TaskWorker:
         # Support both {var} and {{var}} formats (LLM may generate either)
         try:
             event_data_json = json.dumps(event_data, default=str)
-            formatted_prompt = prompt.replace(
-                "{{event_type}}", event_type
-            ).replace(
-                "{event_type}", event_type
-            ).replace(
-                "{{event_data}}", event_data_json
-            ).replace(
-                "{event_data}", event_data_json
-            ).replace(
-                "{{blob_context}}", blob_context
-            ).replace(
-                "{blob_context}", blob_context
-            ).replace(
-                "{{user_email}}", self.user_email
-            ).replace(
-                "{user_email}", self.user_email
-            ).replace(
-                "{{existing_task}}", existing_task_context
-            ).replace(
-                "{existing_task}", existing_task_context
-            ).replace(
-                "{{calendar_context}}", calendar_context
-            ).replace(
-                "{calendar_context}", calendar_context
-            ).replace(
-                "{{today}}", datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            ).replace(
-                "{today}", datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            formatted_prompt = (
+                prompt.replace("{{event_type}}", event_type)
+                .replace("{event_type}", event_type)
+                .replace("{{event_data}}", event_data_json)
+                .replace("{event_data}", event_data_json)
+                .replace("{{blob_context}}", blob_context)
+                .replace("{blob_context}", blob_context)
+                .replace("{{user_email}}", self.user_email)
+                .replace("{user_email}", self.user_email)
+                .replace("{{existing_task}}", existing_task_context)
+                .replace("{existing_task}", existing_task_context)
+                .replace("{{calendar_context}}", calendar_context)
+                .replace("{calendar_context}", calendar_context)
+                .replace("{{today}}", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+                .replace("{today}", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
             )
 
             # Append existing task context if provided (in case trained prompt doesn't have placeholder)
-            if existing_task_context and "{{existing_task}}" not in prompt and "{existing_task}" not in prompt:
+            if (
+                existing_task_context
+                and "{{existing_task}}" not in prompt
+                and "{existing_task}" not in prompt
+            ):
                 formatted_prompt += f"\n\n{existing_task_context}"
 
             # Append calendar context if provided (in case trained prompt doesn't have placeholder)
-            if calendar_context and "{{calendar_context}}" not in prompt and "{calendar_context}" not in prompt:
+            if (
+                calendar_context
+                and "{{calendar_context}}" not in prompt
+                and "{calendar_context}" not in prompt
+            ):
                 formatted_prompt += f"\n\n{calendar_context}"
 
         except Exception as e:
@@ -767,15 +797,19 @@ class TaskWorker:
             return None
 
         # Debug logging
-        prompt_lines = formatted_prompt.count('\n') + 1
-        logger.info(f"[TASK] Sending prompt to LLM ({len(formatted_prompt)} chars, {prompt_lines} lines)")
+        prompt_lines = formatted_prompt.count("\n") + 1
+        logger.info(
+            f"[TASK] Sending prompt to LLM ({len(formatted_prompt)} chars, {prompt_lines} lines)"
+        )
         logger.debug("[TASK] ===== FULL PROMPT START =====")
         logger.debug(f"[TASK] {formatted_prompt}")
         logger.debug("[TASK] ===== FULL PROMPT END =====")
         logger.debug(f"[TASK] Analyzing {event_type}")
         logger.debug(f"[TASK] Event data: {event_data_json}")
         logger.debug(f"[TASK] Blob context length: {len(blob_context)}")
-        logger.debug(f"[TASK] Existing task context: {existing_task_context if existing_task_context else 'None'}")
+        logger.debug(
+            f"[TASK] Existing task context: {existing_task_context if existing_task_context else 'None'}"
+        )
 
         # Call LLM with prompt caching: trained prompt as cached
         # system, event data as user message
@@ -801,13 +835,9 @@ class TaskWorker:
         if blob_context:
             user_content += f"\nMemory context:\n{blob_context}"
         if existing_task_context:
-            user_content += (
-                f"\nExisting task:\n{existing_task_context}"
-            )
+            user_content += f"\nExisting task:\n{existing_task_context}"
         if calendar_context:
-            user_content += (
-                f"\nCalendar context:\n{calendar_context}"
-            )
+            user_content += f"\nCalendar context:\n{calendar_context}"
 
         try:
             response = await self.client.create_message(
@@ -829,16 +859,16 @@ class TaskWorker:
                     result = block.input
                     logger.debug(f"[TASK] Tool response: {result}")
 
-                    task_action = result.get('task_action', 'none')
+                    task_action = result.get("task_action", "none")
 
                     # Return full result for caller to handle task_action
                     return {
-                        'action_required': result.get('action_required', False),
-                        'task_action': task_action,
-                        'urgency': result.get('urgency', 'medium'),
-                        'suggested_action': result.get('suggested_action', ''),
-                        'reason': result.get('reason', ''),
-                        'analyzed_at': datetime.now(timezone.utc).isoformat()
+                        "action_required": result.get("action_required", False),
+                        "task_action": task_action,
+                        "urgency": result.get("urgency", "medium"),
+                        "suggested_action": result.get("suggested_action", ""),
+                        "reason": result.get("reason", ""),
+                        "analyzed_at": datetime.now(timezone.utc).isoformat(),
                     }
 
             logger.warning(f"[TASK] No tool_use block in response for {event_type}")
@@ -863,10 +893,7 @@ class TaskWorker:
         try:
             namespace = f"user:{self.owner_id}"
             results = self.hybrid_search.search(
-                owner_id=self.owner_id,
-                query=contact_email,
-                namespace=namespace,
-                limit=1
+                owner_id=self.owner_id, query=contact_email, namespace=namespace, limit=1
             )
 
             if results:
@@ -896,10 +923,7 @@ class TaskWorker:
 
         try:
             events = self.storage.get_calendar_events_by_attendee(
-                self.owner_id,
-                contact_email,
-                days_back=7,
-                days_forward=14
+                self.owner_id, contact_email, days_back=7, days_forward=14
             )
 
             if not events:
@@ -910,12 +934,12 @@ class TaskWorker:
             upcoming_events = []
 
             for event in events:
-                start_str = event.get('start_time', '')
+                start_str = event.get("start_time", "")
                 if start_str:
                     try:
                         # Parse ISO format
                         if isinstance(start_str, str):
-                            start_dt = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                            start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
                         else:
                             start_dt = start_str
                         if start_dt < now:
@@ -933,18 +957,24 @@ class TaskWorker:
 
             if upcoming_events:
                 lines.append(f"\n📅 UPCOMING MEETINGS ({len(upcoming_events)}):")
-                lines.append("(If there's already a meeting scheduled, you may not need to create a 'schedule call' task)")
+                lines.append(
+                    "(If there's already a meeting scheduled, you may not need to create a 'schedule call' task)"
+                )
                 for event in upcoming_events[:3]:  # Limit to 3
-                    summary = event.get('summary', 'No title')
-                    start = event.get('start_time', '')[:16] if event.get('start_time') else 'TBD'
+                    summary = event.get("summary", "No title")
+                    start = event.get("start_time", "")[:16] if event.get("start_time") else "TBD"
                     lines.append(f"  - {summary} ({start})")
 
             if past_events:
                 lines.append(f"\n📋 RECENT MEETINGS ({len(past_events)}):")
-                lines.append("(If a meeting just happened, consider whether follow-up is needed based on meeting type)")
+                lines.append(
+                    "(If a meeting just happened, consider whether follow-up is needed based on meeting type)"
+                )
                 for event in past_events[:3]:  # Limit to 3
-                    summary = event.get('summary', 'No title')
-                    start = event.get('start_time', '')[:16] if event.get('start_time') else 'unknown'
+                    summary = event.get("summary", "No title")
+                    start = (
+                        event.get("start_time", "")[:16] if event.get("start_time") else "unknown"
+                    )
                     lines.append(f"  - {summary} ({start})")
 
             return "\n".join(lines)
@@ -954,10 +984,7 @@ class TaskWorker:
             return ""
 
     def analyze_item_sync(
-        self,
-        event_type: str,
-        item: Dict,
-        calendar_cache: Optional[Dict[str, str]] = None
+        self, event_type: str, item: Dict, calendar_cache: Optional[Dict[str, str]] = None
     ) -> Optional[Dict]:
         """Sync version of item analysis for background job execution.
 
@@ -981,8 +1008,8 @@ class TaskWorker:
         if event_type == "email":
             contact_email = item.get("from_email", "").lower()
         else:
-            attendees = item.get('attendees', [])
-            attendee_emails = [a.get('email', '') for a in attendees if a.get('email')]
+            attendees = item.get("attendees", [])
+            attendee_emails = [a.get("email", "") for a in attendees if a.get("email")]
             contact_email = attendee_emails[0].lower() if attendee_emails else ""
 
         if event_type == "email" and contact_email and self._is_user_email(contact_email):
@@ -1036,32 +1063,36 @@ class TaskWorker:
             return None
 
         # Check if support already replied AFTER this email in the same thread
-        if event_type == "email" and item.get('thread_id'):
-            thread_emails = self.storage.get_thread_emails(self.owner_id, item['thread_id'])
-            item_timestamp = item.get('date_timestamp', 0)
+        if event_type == "email" and item.get("thread_id"):
+            thread_emails = self.storage.get_thread_emails(self.owner_id, item["thread_id"])
+            item_timestamp = item.get("date_timestamp", 0)
             has_reply_after = any(
-                e.get('date_timestamp', 0) > item_timestamp
-                and self._is_user_email(e.get('from_email', ''))
+                e.get("date_timestamp", 0) > item_timestamp
+                and self._is_user_email(e.get("from_email", ""))
                 and not self._is_auto_reply(e)
                 for e in thread_emails
             )
             if has_reply_after:
-                logger.info(f"[TASK] Skipping {contact_email} — support replied after this email in thread {item['thread_id']}")
+                logger.info(
+                    f"[TASK] Skipping {contact_email} — support replied after this email in thread {item['thread_id']}"
+                )
                 self._mark_processed(event_type, item_id)
                 return None
 
         # Get ALL existing open tasks for this contact (for context)
-        existing_tasks = self.storage.get_tasks_by_contact(self.owner_id, contact_email) if contact_email else []
+        existing_tasks = (
+            self.storage.get_tasks_by_contact(self.owner_id, contact_email) if contact_email else []
+        )
         existing_task_context = ""
         if existing_tasks:
             existing_task_context = f"""
 EXISTING OPEN TASKS FOR THIS CONTACT ({len(existing_tasks)} tasks):
 """
             for i, task in enumerate(existing_tasks, 1):
-                task_id = task.get('id', 'unknown')
-                sources = task.get('sources', {})
-                email_ids = sources.get('emails', [])
-                created = task.get('created_at', '')[:10] if task.get('created_at') else 'unknown'
+                task_id = task.get("id", "unknown")
+                sources = task.get("sources", {})
+                email_ids = sources.get("emails", [])
+                created = task.get("created_at", "")[:10] if task.get("created_at") else "unknown"
 
                 existing_task_context += f"""
 Task #{i} (ID: {task_id}):
@@ -1083,7 +1114,11 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
 """
 
         # Get blob context
-        blob_context, blob_id = self._get_blob_for_contact(contact_email) if contact_email else ("(no prior context)", None)
+        blob_context, blob_id = (
+            self._get_blob_for_contact(contact_email)
+            if contact_email
+            else ("(no prior context)", None)
+        )
 
         # Get calendar context (meetings with this contact)
         # Use cache if provided (N+1 optimization), otherwise fetch directly
@@ -1097,23 +1132,23 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
         # Build event data
         if event_type == "email":
             event_data = {
-                'id': item.get('id'),
-                'from_email': item.get('from_email'),
-                'to_email': item.get('to_email'),
-                'subject': item.get('subject'),
-                'date': item.get('date'),
-                'body': item.get('body_plain') or item.get('snippet', ''),
-                'thread_id': item.get('thread_id')
+                "id": item.get("id"),
+                "from_email": item.get("from_email"),
+                "to_email": item.get("to_email"),
+                "subject": item.get("subject"),
+                "date": item.get("date"),
+                "body": item.get("body_plain") or item.get("snippet", ""),
+                "thread_id": item.get("thread_id"),
             }
         else:
             event_data = {
-                'id': item_id,
-                'summary': item.get('summary'),
-                'description': item.get('description', ''),
-                'start_time': item.get('start_time'),
-                'end_time': item.get('end_time'),
-                'attendees': [a.get('email', '') for a in item.get('attendees', [])],
-                'location': item.get('location')
+                "id": item_id,
+                "summary": item.get("summary"),
+                "description": item.get("description", ""),
+                "start_time": item.get("start_time"),
+                "end_time": item.get("end_time"),
+                "attendees": [a.get("email", "") for a in item.get("attendees", [])],
+                "location": item.get("location"),
             }
 
         # Run async _analyze_event — reuse running loop or create one
@@ -1124,14 +1159,23 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
 
         if loop and loop.is_running():
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 result = pool.submit(
                     asyncio.run,
-                    self._analyze_event(event_type, event_data, blob_context, existing_task_context, calendar_context),
+                    self._analyze_event(
+                        event_type,
+                        event_data,
+                        blob_context,
+                        existing_task_context,
+                        calendar_context,
+                    ),
                 ).result()
         else:
             result = asyncio.run(
-                self._analyze_event(event_type, event_data, blob_context, existing_task_context, calendar_context)
+                self._analyze_event(
+                    event_type, event_data, blob_context, existing_task_context, calendar_context
+                )
             )
 
         # Mark as processed
@@ -1141,68 +1185,74 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
             return None
 
         # Handle task_action
-        task_action = result.get('task_action', 'create')
-        target_task_id = result.get('target_task_id')
+        task_action = result.get("task_action", "create")
+        target_task_id = result.get("target_task_id")
 
         # Find target task from existing_tasks list using ID from LLM
         target_task = None
         if target_task_id and existing_tasks:
-            target_task = next((t for t in existing_tasks if t.get('id') == target_task_id), None)
+            target_task = next((t for t in existing_tasks if t.get("id") == target_task_id), None)
             if not target_task:
-                logger.warning(f"[TASK] LLM specified target_task_id={target_task_id} but not found in existing tasks")
+                logger.warning(
+                    f"[TASK] LLM specified target_task_id={target_task_id} but not found in existing tasks"
+                )
 
         # Validate task quality for create/update — use reason as fallback
-        if task_action in ('create', 'update'):
-            suggested = result.get('suggested_action', '').strip()
+        if task_action in ("create", "update"):
+            suggested = result.get("suggested_action", "").strip()
             if not suggested or len(suggested) < 5:
-                reason = result.get('reason', '').strip()
+                reason = result.get("reason", "").strip()
                 if reason and len(reason) >= 10:
-                    result['suggested_action'] = reason
+                    result["suggested_action"] = reason
                     suggested = reason
                     logger.info("[TASK] Using reason as suggested_action fallback")
                 else:
-                    logger.warning("[TASK] Skipping task with empty suggested_action and no reason fallback")
+                    logger.warning(
+                        "[TASK] Skipping task with empty suggested_action and no reason fallback"
+                    )
                 return None
 
-        if task_action == 'close' and target_task:
-            self.storage.complete_task_item(self.owner_id, target_task['id'])
+        if task_action == "close" and target_task:
+            self.storage.complete_task_item(self.owner_id, target_task["id"])
             logger.info(f"[TASK] Closed task {target_task['id']} for {contact_email}")
             return None
 
-        elif task_action == 'update' and target_task:
+        elif task_action == "update" and target_task:
             self.storage.update_task_item(
                 self.owner_id,
-                target_task['id'],
-                urgency=result.get('urgency'),
-                suggested_action=result.get('suggested_action'),
-                reason=result.get('reason'),
-                add_source_email=item_id if event_type == 'email' else None
+                target_task["id"],
+                urgency=result.get("urgency"),
+                suggested_action=result.get("suggested_action"),
+                reason=result.get("reason"),
+                add_source_email=item_id if event_type == "email" else None,
             )
             logger.info(f"[TASK] Updated task {target_task['id']} for {contact_email}")
             return result
 
-        elif task_action == 'create' and result.get('action_required'):
-            suggested = result.get('suggested_action', '')
+        elif task_action == "create" and result.get("action_required"):
+            suggested = result.get("suggested_action", "")
             if self._is_duplicate_task(suggested):
                 return None
 
             # Build task result
             task_result = {
-                'action_required': True,
-                'urgency': result.get('urgency', 'medium'),
-                'suggested_action': result.get('suggested_action', ''),
-                'reason': result.get('reason', ''),
-                'analyzed_at': datetime.now(timezone.utc).isoformat(),
-                'event_id': item_id,
-                'event_type': event_type,
-                'contact_email': contact_email,
-                'contact_name': item.get('from_name', '') if event_type == 'email' else item.get('summary', ''),
-                'email_date': item.get('date', ''),
-                'sources': {
-                    'emails': [str(item_id)] if event_type == 'email' else [],
-                    'calendar_events': [str(item_id)] if event_type == 'calendar' else [],
-                    'blobs': [str(blob_id)] if blob_id else []
-                }
+                "action_required": True,
+                "urgency": result.get("urgency", "medium"),
+                "suggested_action": result.get("suggested_action", ""),
+                "reason": result.get("reason", ""),
+                "analyzed_at": datetime.now(timezone.utc).isoformat(),
+                "event_id": item_id,
+                "event_type": event_type,
+                "contact_email": contact_email,
+                "contact_name": (
+                    item.get("from_name", "") if event_type == "email" else item.get("summary", "")
+                ),
+                "email_date": item.get("date", ""),
+                "sources": {
+                    "emails": [str(item_id)] if event_type == "email" else [],
+                    "calendar_events": [str(item_id)] if event_type == "calendar" else [],
+                    "blobs": [str(blob_id)] if blob_id else [],
+                },
             }
             self.storage.store_task_item(self.owner_id, task_result)
             logger.info(f"[TASK] Created task for {contact_email}")

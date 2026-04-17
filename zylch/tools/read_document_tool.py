@@ -36,11 +36,7 @@ def _collect_search_paths() -> List[str]:
 
     doc_paths = os.environ.get("DOCUMENT_PATHS", "")
     if doc_paths:
-        configured = [
-            os.path.expanduser(p.strip())
-            for p in doc_paths.split(",")
-            if p.strip()
-        ]
+        configured = [os.path.expanduser(p.strip()) for p in doc_paths.split(",") if p.strip()]
         paths = [p for p in configured if os.path.isdir(p)]
         if not paths:
             paths = [p for p in defaults if os.path.isdir(p)]
@@ -64,10 +60,7 @@ class ReadDocumentTool(Tool):
         )
 
     async def execute(self, filename: str = "", **kwargs) -> ToolResult:
-        logger.debug(
-            f"[read_document] execute(args={{'filename_len':"
-            f" {len(filename)}}})"
-        )
+        logger.debug(f"[read_document] execute(args={{'filename_len':" f" {len(filename)}}})")
         if not filename:
             result = ToolResult(
                 status=ToolStatus.ERROR,
@@ -87,14 +80,9 @@ class ReadDocumentTool(Tool):
                 result = ToolResult(
                     status=ToolStatus.ERROR,
                     data=None,
-                    error=(
-                        "No document folders found."
-                        " Add DOCUMENT_PATHS to your profile .env"
-                    ),
+                    error=("No document folders found." " Add DOCUMENT_PATHS to your profile .env"),
                 )
-                logger.debug(
-                    f"[read_document] -> status={result.status}"
-                )
+                logger.debug(f"[read_document] -> status={result.status}")
                 return result
 
             found: List[str] = []
@@ -110,14 +98,9 @@ class ReadDocumentTool(Tool):
                 result = ToolResult(
                     status=ToolStatus.ERROR,
                     data=None,
-                    error=(
-                        f"No file matching '{filename}' in:"
-                        f" {', '.join(paths)}"
-                    ),
+                    error=(f"No file matching '{filename}' in:" f" {', '.join(paths)}"),
                 )
-                logger.debug(
-                    f"[read_document] -> status={result.status}"
-                )
+                logger.debug(f"[read_document] -> status={result.status}")
                 return result
 
             path = found[0]
@@ -128,14 +111,9 @@ class ReadDocumentTool(Tool):
             result = ToolResult(
                 status=ToolStatus.SUCCESS,
                 data={"text": "", "path": path, "format": "pdf"},
-                message=(
-                    f"Found PDF: {path}\n"
-                    f"Use run_python to read it with pypdf."
-                ),
+                message=(f"Found PDF: {path}\n" f"Use run_python to read it with pypdf."),
             )
-            logger.debug(
-                f"[read_document] -> status={result.status} format=pdf"
-            )
+            logger.debug(f"[read_document] -> status={result.status} format=pdf")
             return result
 
         if ext in TEXT_EXTS:
@@ -151,10 +129,7 @@ class ReadDocumentTool(Tool):
                     },
                     message=f"File: {path}",
                 )
-                logger.debug(
-                    f"[read_document] -> status={result.status}"
-                    f" bytes={len(content)}"
-                )
+                logger.debug(f"[read_document] -> status={result.status}" f" bytes={len(content)}")
                 return result
             except Exception as e:
                 logger.error(f"[read_document] read failed: {e}")
@@ -163,9 +138,7 @@ class ReadDocumentTool(Tool):
                     data=None,
                     error=f"Could not read {path}: {e}",
                 )
-                logger.debug(
-                    f"[read_document] -> status={result.status}"
-                )
+                logger.debug(f"[read_document] -> status={result.status}")
                 return result
 
         result = ToolResult(
@@ -175,14 +148,9 @@ class ReadDocumentTool(Tool):
                 "path": path,
                 "format": ext.lstrip(".") or "binary",
             },
-            message=(
-                f"Found: {path} ({ext})\n"
-                f"Use run_python to process this file."
-            ),
+            message=(f"Found: {path} ({ext})\n" f"Use run_python to process this file."),
         )
-        logger.debug(
-            f"[read_document] -> status={result.status} format={ext}"
-        )
+        logger.debug(f"[read_document] -> status={result.status} format={ext}")
         return result
 
     def get_schema(self) -> Dict[str, Any]:
@@ -194,9 +162,7 @@ class ReadDocumentTool(Tool):
                 "properties": {
                     "filename": {
                         "type": "string",
-                        "description": (
-                            "Filename or partial name to search"
-                        ),
+                        "description": ("Filename or partial name to search"),
                     },
                 },
                 "required": ["filename"],

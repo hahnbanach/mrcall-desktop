@@ -12,7 +12,10 @@ logger = logging.getLogger(__name__)
 
 
 def execute_tool(
-    name: str, args: Dict, store, owner_id: str,
+    name: str,
+    args: Dict,
+    store,
+    owner_id: str,
 ) -> str:
     """Dispatch tool by name."""
     dispatch = {
@@ -31,9 +34,7 @@ def execute_tool(
     fn = dispatch.get(name)
     if not fn:
         return f"Unknown tool: {name}"
-    if fn in (_search_emails, _search_memory,
-              _download_attachment, _send_sms,
-              _update_memory):
+    if fn in (_search_emails, _search_memory, _download_attachment, _send_sms, _update_memory):
         return fn(args, store, owner_id)
     return fn(args)
 
@@ -42,7 +43,9 @@ def execute_tool(
 
 
 def _search_emails(
-    args: Dict, store, owner_id: str,
+    args: Dict,
+    store,
+    owner_id: str,
 ) -> str:
     """Search email archive."""
     query = args.get("query", "")
@@ -61,7 +64,8 @@ def _search_emails(
             supabase_storage=store,
         )
         results = archive.search_messages(
-            query=query, limit=limit,
+            query=query,
+            limit=limit,
         )
         if not results:
             return f"No emails found for '{query}'"
@@ -75,10 +79,7 @@ def _search_emails(
                 f" | Subject: {r.get('subject', '')}"
                 f" | Date: {r.get('date', '')}",
             )
-            body = (
-                r.get("body_plain", "")
-                or r.get("snippet", "")
-            )
+            body = r.get("body_plain", "") or r.get("snippet", "")
             if body:
                 lines.append(f"  {body}")
         return "\n".join(lines)
@@ -87,7 +88,9 @@ def _search_emails(
 
 
 def _search_memory(
-    args: Dict, store, owner_id: str,
+    args: Dict,
+    store,
+    owner_id: str,
 ) -> str:
     """Search contact memory blobs."""
     query = args.get("query", "")
@@ -107,7 +110,9 @@ def _search_memory(
         search = HybridSearchEngine(get_session, engine)
 
         results = search.search(
-            owner_id=owner_id, query=query, limit=3,
+            owner_id=owner_id,
+            query=query,
+            limit=3,
         )
         if not results:
             return f"No memory found for '{query}'"
@@ -115,14 +120,11 @@ def _search_memory(
         lines = [f"Found {len(results)} memory entries:"]
         for r in results:
             content = (
-                r.content if hasattr(r, "content")
-                else r.get("content", "") if isinstance(r, dict)
-                else str(r)
+                r.content
+                if hasattr(r, "content")
+                else r.get("content", "") if isinstance(r, dict) else str(r)
             )
-            ns = (
-                r.namespace if hasattr(r, "namespace")
-                else ""
-            )
+            ns = r.namespace if hasattr(r, "namespace") else ""
             if ns:
                 lines.append(f"--- [{ns}]")
             else:
@@ -134,7 +136,9 @@ def _search_memory(
 
 
 def _update_memory(
-    args: Dict, store, owner_id: str,
+    args: Dict,
+    store,
+    owner_id: str,
 ) -> str:
     """Update a memory blob by searching and replacing content."""
     query = args.get("query", "")
@@ -157,20 +161,16 @@ def _update_memory(
         blob_store = BlobStorage(get_session, engine)
 
         results = search.search(
-            owner_id=owner_id, query=query, limit=1,
+            owner_id=owner_id,
+            query=query,
+            limit=1,
         )
         if not results:
             return f"No memory entry found for '{query}'"
 
         r = results[0]
-        blob_id = (
-            r.blob_id if hasattr(r, "blob_id")
-            else r.get("blob_id", "")
-        )
-        old_content = (
-            r.content if hasattr(r, "content")
-            else r.get("content", "")
-        )
+        blob_id = r.blob_id if hasattr(r, "blob_id") else r.get("blob_id", "")
+        old_content = r.content if hasattr(r, "content") else r.get("content", "")
 
         blob_store.update_blob(
             blob_id=blob_id,
@@ -179,17 +179,15 @@ def _update_memory(
             event_description="Manual correction via CLI",
         )
 
-        return (
-            f"Memory updated.\n"
-            f"Was: {old_content[:100]}...\n"
-            f"Now: {new_content[:100]}..."
-        )
+        return f"Memory updated.\n" f"Was: {old_content[:100]}...\n" f"Now: {new_content[:100]}..."
     except Exception as e:
         return f"Update failed: {e}"
 
 
 def _download_attachment(
-    args: Dict, store, owner_id: str,
+    args: Dict,
+    store,
+    owner_id: str,
 ) -> str:
     """Download attachments from an email."""
     import os
@@ -224,8 +222,7 @@ def _download_attachment(
         ]
         for a in attachments:
             lines.append(
-                f"- {a['filename']} ({a['content_type']},"
-                f" {a['size']} bytes) → {a['path']}",
+                f"- {a['filename']} ({a['content_type']}," f" {a['size']} bytes) → {a['path']}",
             )
         return "\n".join(lines)
     except Exception as e:
@@ -240,12 +237,7 @@ def _draft_email(args: Dict) -> str:
     to = args.get("to", "")
     subject = args.get("subject", "")
     body = args.get("body", "")
-    return (
-        f"DRAFT EMAIL:\n"
-        f"To: {to}\n"
-        f"Subject: {subject}\n\n"
-        f"{body}"
-    )
+    return f"DRAFT EMAIL:\n" f"To: {to}\n" f"Subject: {subject}\n\n" f"{body}"
 
 
 # ─── Code execution ─────────────────────────────────
@@ -267,7 +259,8 @@ def _run_python(args: Dict) -> str:
     # Script temp file in /tmp (not /tmp/zylch) to avoid
     # showing up when user code scans the output directory
     with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".py",
+        mode="w",
+        suffix=".py",
         delete=False,
     ) as f:
         f.write(code)
@@ -328,13 +321,12 @@ def _send_email(args: Dict) -> str:
             smtp_host=os.environ.get("SMTP_HOST") or None,
         )
         result = client.send_message(
-            to=to, subject=subject, body=body,
+            to=to,
+            subject=subject,
+            body=body,
             in_reply_to=in_reply_to,
         )
-        return (
-            f"Email sent to {to}"
-            f" (ID: {result.get('id', 'unknown')})"
-        )
+        return f"Email sent to {to}" f" (ID: {result.get('id', 'unknown')})"
     except Exception as e:
         return f"Send failed: {e}"
 
@@ -376,7 +368,9 @@ def _send_whatsapp(args: Dict) -> str:
 
 
 def _send_sms(
-    args: Dict, store, owner_id: str,
+    args: Dict,
+    store,
+    owner_id: str,
 ) -> str:
     """Send SMS via MrCall/StarChat."""
     phone = args.get("phone_number", "")
@@ -386,7 +380,8 @@ def _send_sms(
 
     try:
         creds = store.get_provider_credentials(
-            owner_id, "mrcall",
+            owner_id,
+            "mrcall",
         )
         if not creds or not creds.get("access_token"):
             return "MrCall not connected. Run zylch init."
@@ -395,10 +390,7 @@ def _send_sms(
 
         from zylch.config import settings
 
-        url = (
-            f"{settings.mrcall_base_url.rstrip('/')}"
-            f"/mrcall/v1/sms/send"
-        )
+        url = f"{settings.mrcall_base_url.rstrip('/')}" f"/mrcall/v1/sms/send"
         response = httpx.post(
             url,
             headers={
@@ -437,21 +429,14 @@ def _read_document(args: Dict) -> str:
         defaults.append(profile_dir)
     doc_paths = os.environ.get("DOCUMENT_PATHS", "")
     if doc_paths:
-        configured = [
-            os.path.expanduser(p.strip())
-            for p in doc_paths.split(",")
-            if p.strip()
-        ]
+        configured = [os.path.expanduser(p.strip()) for p in doc_paths.split(",") if p.strip()]
         paths = [p for p in configured if os.path.isdir(p)]
         if not paths:
             paths = [p for p in defaults if os.path.isdir(p)]
     else:
         paths = [p for p in defaults if os.path.isdir(p)]
     if not paths:
-        return (
-            "No document folders found."
-            " Add DOCUMENT_PATHS to your profile .env"
-        )
+        return "No document folders found." " Add DOCUMENT_PATHS to your profile .env"
 
     found = []
     for base in paths:
@@ -459,19 +444,13 @@ def _read_document(args: Dict) -> str:
         found.extend(glob.glob(pattern, recursive=True))
 
     if not found:
-        return (
-            f"No file matching '{filename}' in:"
-            f" {', '.join(paths)}"
-        )
+        return f"No file matching '{filename}' in:" f" {', '.join(paths)}"
 
     path = found[0]
     ext = os.path.splitext(path)[1].lower()
 
     if ext == ".pdf":
-        return (
-            f"Found PDF: {path}\n"
-            f"Use run_python to read it with pypdf."
-        )
+        return f"Found PDF: {path}\n" f"Use run_python to read it with pypdf."
     elif ext in (".txt", ".md", ".csv", ".json", ".xml"):
         try:
             with open(path, "r", errors="replace") as f:
@@ -480,10 +459,7 @@ def _read_document(args: Dict) -> str:
         except Exception as e:
             return f"Could not read {path}: {e}"
     else:
-        return (
-            f"Found: {path} ({ext})\n"
-            f"Use run_python to process this file."
-        )
+        return f"Found: {path} ({ext})\n" f"Use run_python to process this file."
 
 
 # ─── Web search ──────────────────────────────────────
@@ -502,7 +478,8 @@ def _web_search(args: Dict) -> str:
 
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         provider = os.environ.get(
-            "SYSTEM_LLM_PROVIDER", "anthropic",
+            "SYSTEM_LLM_PROVIDER",
+            "anthropic",
         )
         if not api_key:
             return "No API key for web search"
@@ -510,7 +487,8 @@ def _web_search(args: Dict) -> str:
         # Use Sonnet for web search (cheaper, fast enough)
         model = "claude-sonnet-4-20250514"
         client = LLMClient(
-            api_key=api_key, provider=provider,
+            api_key=api_key,
+            provider=provider,
             model=model,
         )
         response = client.create_message_sync(
@@ -518,9 +496,7 @@ def _web_search(args: Dict) -> str:
             messages=[
                 {
                     "role": "user",
-                    "content": (
-                        f"Search the web and answer: {query}"
-                    ),
+                    "content": (f"Search the web and answer: {query}"),
                 },
             ],
             max_tokens=1000,

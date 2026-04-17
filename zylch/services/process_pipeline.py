@@ -16,7 +16,9 @@ console = Console()
 
 
 async def handle_process(
-    args: list, config: ToolConfig, owner_id: str,
+    args: list,
+    config: ToolConfig,
+    owner_id: str,
 ) -> str:
     """Run the full pipeline: sync, memory extraction, task detection.
 
@@ -50,9 +52,7 @@ async def handle_process(
             try:
                 days_back = int(args[i + 1])
             except ValueError:
-                return (
-                    f"Invalid --days value: {args[i + 1]}"
-                )
+                return f"Invalid --days value: {args[i + 1]}"
 
     store = Storage.get_instance()
 
@@ -60,42 +60,26 @@ async def handle_process(
     if force:
         store.reset_memory_processing_timestamps(owner_id)
         store.reset_task_processing_timestamps(owner_id)
-        console.print(
-            "[dim]Force mode: reset all processing flags[/dim]"
-        )
+        console.print("[dim]Force mode: reset all processing flags[/dim]")
 
     # --- Step 1: Sync emails via IMAP ---
-    console.print(
-        "\n[bold cyan][1/5] Syncing emails...[/bold cyan]"
-    )
+    console.print("\n[bold cyan][1/5] Syncing emails...[/bold cyan]")
     try:
-        sync_result = await _run_sync(
-            owner_id, store, days_back
-        )
+        sync_result = await _run_sync(owner_id, store, days_back)
         new = sync_result.get("new_messages", 0)
-        total = store.get_email_stats(owner_id).get(
-            "total_emails", 0
-        )
-        console.print(
-            f"  +{new} new emails ({total} total)"
-        )
+        total = store.get_email_stats(owner_id).get("total_emails", 0)
+        console.print(f"  +{new} new emails ({total} total)")
     except Exception as e:
-        logger.error(
-            f"[/process] sync failed: {e}", exc_info=True
-        )
+        logger.error(f"[/process] sync failed: {e}", exc_info=True)
         console.print(f"[red]  Sync failed: {e}[/red]")
         return f"Sync failed: {e}"
 
     # --- Step 2: Sync WhatsApp ---
-    console.print(
-        "\n[bold cyan][2/5] Syncing WhatsApp...[/bold cyan]"
-    )
+    console.print("\n[bold cyan][2/5] Syncing WhatsApp...[/bold cyan]")
     try:
         wa_result = _run_whatsapp_sync(owner_id, store)
         if wa_result.get("skipped"):
-            console.print(
-                f"  Skipped: {wa_result.get('reason', 'not configured')}"
-            )
+            console.print(f"  Skipped: {wa_result.get('reason', 'not configured')}")
         else:
             console.print(
                 f"  {wa_result.get('contacts', 0)} contacts,"
@@ -106,93 +90,61 @@ async def handle_process(
             f"[/process] WhatsApp sync failed: {e}",
             exc_info=True,
         )
-        console.print(
-            f"[yellow]  WhatsApp sync failed: {e}[/yellow]"
-        )
+        console.print(f"[yellow]  WhatsApp sync failed: {e}[/yellow]")
 
     # --- Step 3: Memory extraction ---
-    pending_mem = len(
-        store.get_unprocessed_emails(owner_id)
-    )
+    pending_mem = len(store.get_unprocessed_emails(owner_id))
     if pending_mem > 0:
         console.print(
-            f"\n[bold cyan][3/5] Extracting memory"
-            f" from {pending_mem} emails...[/bold cyan]"
+            f"\n[bold cyan][3/5] Extracting memory" f" from {pending_mem} emails...[/bold cyan]"
         )
         try:
-            mem_count = await _run_memory(
-                owner_id, store
-            )
-            console.print(
-                f"  {mem_count}/{pending_mem} emails"
-                f" processed"
-            )
+            mem_count = await _run_memory(owner_id, store)
+            console.print(f"  {mem_count}/{pending_mem} emails" f" processed")
         except Exception as e:
             logger.error(
                 f"[/process] memory failed: {e}",
                 exc_info=True,
             )
-            console.print(
-                f"[red]  Memory extraction failed:"
-                f" {e}[/red]"
-            )
+            console.print(f"[red]  Memory extraction failed:" f" {e}[/red]")
     else:
-        console.print(
-            "\n[bold cyan][3/5] Memory[/bold cyan]"
-            " — nothing to process"
-        )
+        console.print("\n[bold cyan][3/5] Memory[/bold cyan]" " — nothing to process")
 
     # --- Step 3: Task detection ---
-    pending_tasks = len(
-        store.get_unprocessed_emails_for_task(owner_id)
-    )
+    pending_tasks = len(store.get_unprocessed_emails_for_task(owner_id))
     # If no pending emails AND no open tasks, reprocess recent emails
     # (handles transition from old code that deleted all tasks)
     if pending_tasks == 0:
         open_tasks = store.get_task_items(owner_id, action_required=True)
         total_emails = store.get_email_stats(owner_id).get("total_emails", 0)
         if len(open_tasks) == 0 and total_emails > 0:
-            console.print(
-                "  [dim]No tasks found — reprocessing"
-                " recent emails...[/dim]"
-            )
+            console.print("  [dim]No tasks found — reprocessing" " recent emails...[/dim]")
             store.reset_processing_timestamps_for_period(
-                owner_id, days_back=days_back,
-                reset_memory=False, reset_task=True,
+                owner_id,
+                days_back=days_back,
+                reset_memory=False,
+                reset_task=True,
             )
-            pending_tasks = len(
-                store.get_unprocessed_emails_for_task(owner_id)
-            )
+            pending_tasks = len(store.get_unprocessed_emails_for_task(owner_id))
     if pending_tasks > 0:
         console.print(
-            f"\n[bold cyan][4/5] Detecting tasks"
-            f" in {pending_tasks} emails...[/bold cyan]"
+            f"\n[bold cyan][4/5] Detecting tasks" f" in {pending_tasks} emails...[/bold cyan]"
         )
         try:
-            task_result = await _run_tasks(
-                owner_id, store
-            )
+            task_result = await _run_tasks(owner_id, store)
             console.print(f"  {task_result}")
         except Exception as e:
             logger.error(
                 f"[/process] task detection failed: {e}",
                 exc_info=True,
             )
-            console.print(
-                f"[red]  Task detection failed:"
-                f" {e}[/red]"
-            )
+            console.print(f"[red]  Task detection failed:" f" {e}[/red]")
     else:
-        console.print(
-            "\n[bold cyan][4/5] Tasks[/bold cyan]"
-            " — nothing to process"
-        )
+        console.print("\n[bold cyan][4/5] Tasks[/bold cyan]" " — nothing to process")
 
     # --- Step 4: Show tasks ---
 
-    console.print(
-        "\n[bold cyan][5/5] Your action items:[/bold cyan]"
-    )
+    console.print("\n[bold cyan][5/5] Your action items:[/bold cyan]")
     from zylch.services.command_handlers import handle_tasks
 
     try:
@@ -206,7 +158,9 @@ async def handle_process(
 
 
 async def _run_sync(
-    owner_id: str, store, days_back: int,
+    owner_id: str,
+    store,
+    days_back: int,
 ) -> dict:
     """Run email sync (awaitable, no nested event loop)."""
     from zylch.email.imap_client import IMAPClient
@@ -215,22 +169,15 @@ async def _run_sync(
     email_addr = os.environ.get("EMAIL_ADDRESS", "")
     email_pass = os.environ.get("EMAIL_PASSWORD", "")
     if not email_addr or not email_pass:
-        raise ValueError(
-            "Email not configured."
-            " Run 'zylch init' first."
-        )
+        raise ValueError("Email not configured." " Run 'zylch init' first.")
 
     email_client = IMAPClient(
         email_addr=email_addr,
         password=email_pass,
         imap_host=os.environ.get("IMAP_HOST") or None,
-        imap_port=(
-            int(os.environ.get("IMAP_PORT", "0")) or None
-        ),
+        imap_port=(int(os.environ.get("IMAP_PORT", "0")) or None),
         smtp_host=os.environ.get("SMTP_HOST") or None,
-        smtp_port=(
-            int(os.environ.get("SMTP_PORT", "0")) or None
-        ),
+        smtp_port=(int(os.environ.get("SMTP_PORT", "0")) or None),
     )
 
     sync_service = SyncService(
@@ -249,14 +196,13 @@ async def _run_sync(
     )
 
     if not result.get("success"):
-        raise RuntimeError(
-            result.get("error", "Sync failed")
-        )
+        raise RuntimeError(result.get("error", "Sync failed"))
     return result
 
 
 def _run_whatsapp_sync(
-    owner_id: str, store,
+    owner_id: str,
+    store,
 ) -> dict:
     """Connect to WhatsApp, fetch history + contacts, disconnect.
 
@@ -342,14 +288,9 @@ async def _run_memory(owner_id: str, store) -> int:
     )
     from zylch.workers.memory import MemoryWorker
 
-    llm_provider, api_key = get_active_llm_provider(
-        owner_id
-    )
+    llm_provider, api_key = get_active_llm_provider(owner_id)
     if not api_key:
-        raise ValueError(
-            "No API key configured."
-            " Check ANTHROPIC_API_KEY in your profile."
-        )
+        raise ValueError("No API key configured." " Check ANTHROPIC_API_KEY in your profile.")
 
     worker = MemoryWorker(
         storage=store,
@@ -360,9 +301,7 @@ async def _run_memory(owner_id: str, store) -> int:
 
     if not worker.has_custom_prompt():
         # Auto-train memory agent on first run
-        console.print(
-            "  [dim]First run — training memory agent...[/dim]"
-        )
+        console.print("  [dim]First run — training memory agent...[/dim]")
         await _auto_train_memory(owner_id, store, api_key, llm_provider)
         # Reset cache so worker picks up the new prompt
         worker._custom_prompt_loaded = False
@@ -378,14 +317,9 @@ async def _run_tasks(owner_id: str, store) -> str:
     )
     from zylch.workers.task_creation import TaskWorker
 
-    llm_provider, api_key = get_active_llm_provider(
-        owner_id
-    )
+    llm_provider, api_key = get_active_llm_provider(owner_id)
     if not api_key:
-        raise ValueError(
-            "No API key configured."
-            " Check ANTHROPIC_API_KEY in your profile."
-        )
+        raise ValueError("No API key configured." " Check ANTHROPIC_API_KEY in your profile.")
 
     user_email = os.environ.get("EMAIL_ADDRESS", "")
 
@@ -400,12 +334,13 @@ async def _run_tasks(owner_id: str, store) -> str:
     # Auto-train task prompt if missing
     prompt = worker._get_task_prompt()
     if not prompt:
-        console.print(
-            "  [dim]First run — training task agent...[/dim]"
-        )
+        console.print("  [dim]First run — training task agent...[/dim]")
         await _auto_train_tasks(
-            owner_id, store, api_key,
-            llm_provider, user_email,
+            owner_id,
+            store,
+            api_key,
+            llm_provider,
+            user_email,
         )
         # Reset cache so worker picks up the new prompt
         worker._task_prompt = None
@@ -417,46 +352,51 @@ async def _run_tasks(owner_id: str, store) -> str:
         return "Task training produced no prompt — try `/agent task train email`"
 
     tasks, _ = await worker.get_tasks(refresh=True)
-    action_count = sum(
-        1
-        for t in (tasks or [])
-        if t.get("action_required")
-    )
+    action_count = sum(1 for t in (tasks or []) if t.get("action_required"))
     return f"{action_count} action items detected"
 
 
 async def _auto_train_memory(
-    owner_id: str, store, api_key: str, llm_provider: str,
+    owner_id: str,
+    store,
+    api_key: str,
+    llm_provider: str,
 ):
     """Auto-train memory extraction agent (first run)."""
     from zylch.agents.trainers import EmailMemoryAgentTrainer
 
     user_email = os.environ.get("EMAIL_ADDRESS", "")
     builder = EmailMemoryAgentTrainer(
-        store, owner_id, api_key, user_email, llm_provider,
+        store,
+        owner_id,
+        api_key,
+        user_email,
+        llm_provider,
     )
-    agent_prompt, metadata = (
-        await builder.build_memory_email_prompt()
-    )
+    agent_prompt, metadata = await builder.build_memory_email_prompt()
     if not agent_prompt or not agent_prompt.strip():
         console.print(
-            "  [yellow]Memory training produced empty"
-            " prompt — will retry next run[/yellow]",
+            "  [yellow]Memory training produced empty" " prompt — will retry next run[/yellow]",
         )
         return
     store.store_agent_prompt(
-        owner_id, "memory_email", agent_prompt, metadata,
+        owner_id,
+        "memory_email",
+        agent_prompt,
+        metadata,
     )
     threads = metadata.get("threads_analyzed", 0)
     console.print(
-        f"  [dim]Memory agent trained"
-        f" ({threads} threads analyzed)[/dim]",
+        f"  [dim]Memory agent trained" f" ({threads} threads analyzed)[/dim]",
     )
 
 
 async def _auto_train_tasks(
-    owner_id: str, store, api_key: str,
-    llm_provider: str, user_email: str,
+    owner_id: str,
+    store,
+    api_key: str,
+    llm_provider: str,
+    user_email: str,
 ):
     """Auto-train task detection agent (first run)."""
     from zylch.agents.trainers.task_email import (
@@ -464,20 +404,25 @@ async def _auto_train_tasks(
     )
 
     trainer = EmailTaskAgentTrainer(
-        store, owner_id, api_key, user_email, llm_provider,
+        store,
+        owner_id,
+        api_key,
+        user_email,
+        llm_provider,
     )
     prompt, metadata = await trainer.build_task_prompt()
     if not prompt or not prompt.strip():
         console.print(
-            "  [yellow]Task training produced empty prompt"
-            " — will retry next run[/yellow]",
+            "  [yellow]Task training produced empty prompt" " — will retry next run[/yellow]",
         )
         return
     store.store_agent_prompt(
-        owner_id, "task_email", prompt, metadata,
+        owner_id,
+        "task_email",
+        prompt,
+        metadata,
     )
     threads = metadata.get("threads_analyzed", 0)
     console.print(
-        f"  [dim]Task agent trained"
-        f" ({threads} threads analyzed)[/dim]",
+        f"  [dim]Task agent trained" f" ({threads} threads analyzed)[/dim]",
     )

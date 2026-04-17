@@ -1,8 +1,7 @@
 """Tests for ToolFactory - centralized tool creation and initialization."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
-from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from zylch.tools.factory import ToolFactory
 from zylch.tools.config import ToolConfig
@@ -17,15 +16,12 @@ def mock_config():
         # LLM Provider
         llm_provider="anthropic",
         anthropic_api_key="test_anthropic_key",
-
         # Optional services
         pipedrive_api_token="",
         sendgrid_api_key="",
         sendgrid_from_email="",
-
         # My emails
         my_emails="test@example.com",
-
         # Multi-tenant (required for Google clients)
         owner_id="test_owner_123",
         user_email="test@example.com",
@@ -84,17 +80,21 @@ async def test_create_all_tools_success(
     mock_gmail_client,
     mock_calendar_client,
     mock_email_archive,
-    mock_email_sync
+    mock_email_sync,
 ):
     """Test successful creation of all tools."""
 
-    with patch('zylch.tools.factory.StarChatClient', return_value=mock_starchat_client), \
-         patch('zylch.tools.factory.GmailClient', return_value=mock_gmail_client), \
-         patch('zylch.tools.factory.GoogleCalendarClient', return_value=mock_calendar_client), \
-         patch('zylch.tools.factory.EmailArchiveManager', return_value=mock_email_archive), \
-         patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync):
+    with (
+        patch("zylch.tools.factory.StarChatClient", return_value=mock_starchat_client),
+        patch("zylch.tools.factory.GmailClient", return_value=mock_gmail_client),
+        patch("zylch.tools.factory.GoogleCalendarClient", return_value=mock_calendar_client),
+        patch("zylch.tools.factory.EmailArchiveManager", return_value=mock_email_archive),
+        patch("zylch.tools.factory.EmailSyncManager", return_value=mock_email_sync),
+    ):
 
-        result = await ToolFactory.create_all_tools(mock_config, current_business_id="test_business_123")
+        result = await ToolFactory.create_all_tools(
+            mock_config, current_business_id="test_business_123"
+        )
         tools, session_state = result
 
         # Verify we got tools (number may vary based on available services)
@@ -115,7 +115,7 @@ async def test_create_all_tools_with_pipedrive(
     mock_gmail_client,
     mock_calendar_client,
     mock_email_archive,
-    mock_email_sync
+    mock_email_sync,
 ):
     """Test tool creation with Pipedrive enabled."""
 
@@ -126,14 +126,18 @@ async def test_create_all_tools_with_pipedrive(
     mock_pipedrive = MagicMock()
     mock_pipedrive.search_person = AsyncMock(return_value=[])
 
-    with patch('zylch.tools.factory.StarChatClient', return_value=mock_starchat_client), \
-         patch('zylch.tools.factory.GmailClient', return_value=mock_gmail_client), \
-         patch('zylch.tools.factory.GoogleCalendarClient', return_value=mock_calendar_client), \
-         patch('zylch.tools.factory.EmailArchiveManager', return_value=mock_email_archive), \
-         patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync), \
-         patch('zylch.tools.factory.PipedriveClient', return_value=mock_pipedrive):
+    with (
+        patch("zylch.tools.factory.StarChatClient", return_value=mock_starchat_client),
+        patch("zylch.tools.factory.GmailClient", return_value=mock_gmail_client),
+        patch("zylch.tools.factory.GoogleCalendarClient", return_value=mock_calendar_client),
+        patch("zylch.tools.factory.EmailArchiveManager", return_value=mock_email_archive),
+        patch("zylch.tools.factory.EmailSyncManager", return_value=mock_email_sync),
+        patch("zylch.tools.factory.PipedriveClient", return_value=mock_pipedrive),
+    ):
 
-        result = await ToolFactory.create_all_tools(mock_config, current_business_id="test_business_123")
+        result = await ToolFactory.create_all_tools(
+            mock_config, current_business_id="test_business_123"
+        )
         tools, session_state = result
 
         # Verify we got tools (with Pipedrive enabled, should have more tools)
@@ -150,15 +154,17 @@ async def test_create_all_tools_without_business_id(
     mock_gmail_client,
     mock_calendar_client,
     mock_email_archive,
-    mock_email_sync
+    mock_email_sync,
 ):
     """Test tool creation without current_business_id (should use config default)."""
 
-    with patch('zylch.tools.factory.StarChatClient', return_value=mock_starchat_client), \
-         patch('zylch.tools.factory.GmailClient', return_value=mock_gmail_client), \
-         patch('zylch.tools.factory.GoogleCalendarClient', return_value=mock_calendar_client), \
-         patch('zylch.tools.factory.EmailArchiveManager', return_value=mock_email_archive), \
-         patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync):
+    with (
+        patch("zylch.tools.factory.StarChatClient", return_value=mock_starchat_client),
+        patch("zylch.tools.factory.GmailClient", return_value=mock_gmail_client),
+        patch("zylch.tools.factory.GoogleCalendarClient", return_value=mock_calendar_client),
+        patch("zylch.tools.factory.EmailArchiveManager", return_value=mock_email_archive),
+        patch("zylch.tools.factory.EmailSyncManager", return_value=mock_email_sync),
+    ):
 
         result = await ToolFactory.create_all_tools(mock_config, current_business_id=None)
         tools, session_state = result
@@ -187,15 +193,17 @@ async def test_tool_categories(
     mock_gmail_client,
     mock_calendar_client,
     mock_email_archive,
-    mock_email_sync
+    mock_email_sync,
 ):
     """Test that tools are created in the correct categories."""
 
-    with patch('zylch.tools.factory.StarChatClient', return_value=mock_starchat_client), \
-         patch('zylch.tools.factory.GmailClient', return_value=mock_gmail_client), \
-         patch('zylch.tools.factory.GoogleCalendarClient', return_value=mock_calendar_client), \
-         patch('zylch.tools.factory.EmailArchiveManager', return_value=mock_email_archive), \
-         patch('zylch.tools.factory.EmailSyncManager', return_value=mock_email_sync):
+    with (
+        patch("zylch.tools.factory.StarChatClient", return_value=mock_starchat_client),
+        patch("zylch.tools.factory.GmailClient", return_value=mock_gmail_client),
+        patch("zylch.tools.factory.GoogleCalendarClient", return_value=mock_calendar_client),
+        patch("zylch.tools.factory.EmailArchiveManager", return_value=mock_email_archive),
+        patch("zylch.tools.factory.EmailSyncManager", return_value=mock_email_sync),
+    ):
 
         result = await ToolFactory.create_all_tools(mock_config)
         tools, session_state = result
@@ -237,7 +245,9 @@ async def test_tool_categories(
 async def test_error_handling_starchat_failure(mock_config):
     """Test error handling when StarChat client fails to initialize."""
 
-    with patch('zylch.tools.factory.StarChatClient', side_effect=Exception("StarChat connection failed")):
+    with patch(
+        "zylch.tools.factory.StarChatClient", side_effect=Exception("StarChat connection failed")
+    ):
 
         with pytest.raises(Exception) as exc_info:
             await ToolFactory.create_all_tools(mock_config)
@@ -249,8 +259,10 @@ async def test_error_handling_starchat_failure(mock_config):
 async def test_error_handling_gmail_failure(mock_config, mock_starchat_client):
     """Test error handling when Gmail client fails to initialize."""
 
-    with patch('zylch.tools.factory.StarChatClient', return_value=mock_starchat_client), \
-         patch('zylch.tools.factory.GmailClient', side_effect=Exception("Gmail auth failed")):
+    with (
+        patch("zylch.tools.factory.StarChatClient", return_value=mock_starchat_client),
+        patch("zylch.tools.factory.GmailClient", side_effect=Exception("Gmail auth failed")),
+    ):
 
         with pytest.raises(Exception) as exc_info:
             await ToolFactory.create_all_tools(mock_config)
@@ -266,7 +278,7 @@ async def test_config_from_settings():
     populated from settings - they're fetched from Supabase via from_settings_with_owner().
     """
 
-    with patch('zylch.tools.config.settings') as mock_settings:
+    with patch("zylch.tools.config.settings") as mock_settings:
         # Set up mock settings (only non-BYOK fields that ToolConfig reads)
         mock_settings.my_emails = "me@example.com"
         mock_settings.owner_id = "test_owner"

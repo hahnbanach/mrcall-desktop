@@ -1,7 +1,7 @@
 """Tests for hybrid search engine."""
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 import numpy as np
 
 from zylch_memory.hybrid_search import HybridSearchEngine, SearchResult
@@ -46,10 +46,12 @@ class TestHybridSearchEngine:
                 "fts_score": 0.8,
                 "semantic_score": 0.7,
                 "hybrid_score": 0.75,
-                "events": []
+                "events": [],
             }
         ]
-        mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
+        mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = (
+            []
+        )
 
         results = search_engine.search("test", "query")
         assert len(results) == 1
@@ -66,10 +68,12 @@ class TestHybridSearchEngine:
                 "fts_score": 0.8,
                 "semantic_score": 0.7,
                 "hybrid_score": 0.75,  # Above 0.65
-                "events": []
+                "events": [],
             }
         ]
-        mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
+        mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = (
+            []
+        )
 
         result = search_engine.find_for_reconsolidation("owner", "content", "namespace")
         assert result is not None
@@ -85,10 +89,12 @@ class TestHybridSearchEngine:
                 "fts_score": 0.3,
                 "semantic_score": 0.3,
                 "hybrid_score": 0.3,  # Below 0.65
-                "events": []
+                "events": [],
             }
         ]
-        mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
+        mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = (
+            []
+        )
 
         result = search_engine.find_for_reconsolidation("owner", "content", "namespace")
         assert result is None

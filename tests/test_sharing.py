@@ -1,10 +1,7 @@
 """Tests for the intelligence sharing system."""
 
-import json
 import pytest
-import tempfile
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 from zylch.sharing.authorization import SharingAuthorizationManager
 from zylch.sharing.intel_share import IntelShareManager, SharedIntel
@@ -22,9 +19,7 @@ class TestSharingAuthorizationManager:
     def test_register_user(self, auth_manager):
         """Test user registration."""
         result = auth_manager.register_user(
-            owner_id="mario_owner",
-            email="mario@azienda.com",
-            display_name="Mario Rossi"
+            owner_id="mario_owner", email="mario@azienda.com", display_name="Mario Rossi"
         )
         assert result is True
 
@@ -37,9 +32,7 @@ class TestSharingAuthorizationManager:
     def test_register_user_case_insensitive(self, auth_manager):
         """Test that email lookup is case-insensitive."""
         auth_manager.register_user(
-            owner_id="mario_owner",
-            email="MARIO@Azienda.COM",
-            display_name="Mario Rossi"
+            owner_id="mario_owner", email="MARIO@Azienda.COM", display_name="Mario Rossi"
         )
 
         user = auth_manager.get_user_by_email("mario@azienda.com")
@@ -52,8 +45,7 @@ class TestSharingAuthorizationManager:
         auth_manager.register_user("luigi_owner", "luigi@azienda.com", "Luigi")
 
         success, msg = auth_manager.register_recipient(
-            sender_email="mario@azienda.com",
-            recipient_email="luigi@azienda.com"
+            sender_email="mario@azienda.com", recipient_email="luigi@azienda.com"
         )
 
         assert success is True
@@ -64,8 +56,7 @@ class TestSharingAuthorizationManager:
         auth_manager.register_user("mario_owner", "mario@azienda.com", "Mario")
 
         success, msg = auth_manager.register_recipient(
-            sender_email="mario@azienda.com",
-            recipient_email="unknown@other.com"
+            sender_email="mario@azienda.com", recipient_email="unknown@other.com"
         )
 
         assert success is False
@@ -79,8 +70,7 @@ class TestSharingAuthorizationManager:
 
         # Mario registers Luigi as recipient
         success, _ = auth_manager.register_recipient(
-            sender_email="mario@azienda.com",
-            recipient_email="luigi@azienda.com"
+            sender_email="mario@azienda.com", recipient_email="luigi@azienda.com"
         )
         assert success
 
@@ -90,8 +80,7 @@ class TestSharingAuthorizationManager:
 
         # Luigi accepts
         success, msg = auth_manager.accept_authorization(
-            recipient_email="luigi@azienda.com",
-            sender_email="mario@azienda.com"
+            recipient_email="luigi@azienda.com", sender_email="mario@azienda.com"
         )
         assert success
         assert "Accettato" in msg
@@ -112,8 +101,7 @@ class TestSharingAuthorizationManager:
 
         # Revoke
         success, _ = auth_manager.revoke_authorization(
-            recipient_email="luigi@azienda.com",
-            sender_email="mario@azienda.com"
+            recipient_email="luigi@azienda.com", sender_email="mario@azienda.com"
         )
         assert success
 
@@ -153,7 +141,7 @@ class TestSharingAuthorizationManager:
             sender_email="mario@azienda.com",
             recipient_email="luigi@azienda.com",
             intel_context="Marco Ferrari ha firmato il contratto",
-            identifiers={"email": "marco@ferrari.it", "name": "Marco Ferrari"}
+            identifiers={"email": "marco@ferrari.it", "name": "Marco Ferrari"},
         )
         assert success
 
@@ -188,10 +176,7 @@ class TestIntelShareManager:
     @pytest.fixture
     def intel_manager(self, mock_memory, auth_manager):
         """Create intel share manager."""
-        return IntelShareManager(
-            zylch_memory=mock_memory,
-            auth_manager=auth_manager
-        )
+        return IntelShareManager(zylch_memory=mock_memory, auth_manager=auth_manager)
 
     def test_share_intel_success(self, intel_manager, auth_manager):
         """Test successful intel sharing."""
@@ -207,7 +192,7 @@ class TestIntelShareManager:
             recipient_email="luigi@azienda.com",
             context="Marco Ferrari ha firmato il contratto",
             identifiers={"email": "marco@ferrari.it", "name": "Marco Ferrari"},
-            sender_display_name="Mario"
+            sender_display_name="Mario",
         )
 
         assert success
@@ -255,7 +240,7 @@ class TestIntelShareManager:
             sender_email="mario@azienda.com",
             recipient_email="luigi@azienda.com",
             intel_context="Marco Ferrari ha firmato il contratto",
-            identifiers={"email": "marco@ferrari.it"}
+            identifiers={"email": "marco@ferrari.it"},
         )
 
         # Accept authorization
@@ -265,7 +250,7 @@ class TestIntelShareManager:
         processed = intel_manager.process_accepted_authorization(
             recipient_owner_id="luigi_owner",
             recipient_email="luigi@azienda.com",
-            sender_email="mario@azienda.com"
+            sender_email="mario@azienda.com",
         )
 
         assert processed == 1
@@ -313,7 +298,7 @@ class TestSharedIntel:
             sender_display_name="Mario",
             shared_at="2025-11-28T15:00:00Z",
             confidence=1.0,
-            similarity=0.95
+            similarity=0.95,
         )
 
         d = intel.to_dict()
@@ -345,7 +330,7 @@ class TestSharingTools:
         manager.get_user_by_email.return_value = {
             "owner_id": "luigi_owner",
             "email": "luigi@azienda.com",
-            "display_name": "Luigi"
+            "display_name": "Luigi",
         }
         manager.get_pending_requests.return_value = []
         return manager
@@ -359,14 +344,14 @@ class TestSharingTools:
             auth_manager=mock_auth_manager,
             owner_id="mario_owner",
             user_email="mario@azienda.com",
-            user_display_name="Mario"
+            user_display_name="Mario",
         )
 
         result = await tool.execute(
             recipient_email="luigi@azienda.com",
             intel="Marco Ferrari ha firmato il contratto",
             contact_name="Marco Ferrari",
-            contact_email="marco@ferrari.it"
+            contact_email="marco@ferrari.it",
         )
 
         assert result.status.value == "success"
@@ -384,19 +369,17 @@ class TestSharingTools:
                 sender_owner_id="other_owner",
                 sender_email="other@email.com",
                 sender_display_name="Other",
-                shared_at="2025-11-28T15:00:00Z"
+                shared_at="2025-11-28T15:00:00Z",
             )
         ]
 
         tool = GetSharedIntelTool(
             intel_share_manager=mock_intel_manager,
             owner_id="mario_owner",
-            user_email="mario@azienda.com"
+            user_email="mario@azienda.com",
         )
 
-        result = await tool.execute(
-            contact_email="test@test.com"
-        )
+        result = await tool.execute(contact_email="test@test.com")
 
         assert result.status.value == "success"
         assert result.data["count"] == 1
@@ -405,11 +388,13 @@ class TestSharingTools:
         """Test AcceptShareRequestTool execution."""
         from zylch.tools.sharing_tools import AcceptShareRequestTool
 
-        mock_auth_manager.get_pending_requests.return_value = [{
-            "sender_email": "other@email.com",
-            "sender_display_name": "Other",
-            "intel_context": "Test intel"
-        }]
+        mock_auth_manager.get_pending_requests.return_value = [
+            {
+                "sender_email": "other@email.com",
+                "sender_display_name": "Other",
+                "intel_context": "Test intel",
+            }
+        ]
         mock_auth_manager.accept_authorization.return_value = (True, "Accettato")
         mock_intel_manager.process_accepted_authorization.return_value = 1
 
@@ -417,7 +402,7 @@ class TestSharingTools:
             intel_share_manager=mock_intel_manager,
             auth_manager=mock_auth_manager,
             owner_id="mario_owner",
-            user_email="mario@azienda.com"
+            user_email="mario@azienda.com",
         )
 
         result = await tool.execute()

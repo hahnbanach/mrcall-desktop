@@ -2,7 +2,6 @@
 
 from typing import Awaitable, Callable, Dict, Any, Optional, List
 import logging
-import re
 import shlex
 import time
 
@@ -106,6 +105,7 @@ class ChatService:
         """Lazy initialize semantic command matcher."""
         if self._command_matcher is None:
             from zylch.services.command_matcher import SemanticCommandMatcher
+
             self._command_matcher = SemanticCommandMatcher()
         return self._command_matcher
 
@@ -122,7 +122,7 @@ class ChatService:
             Matched command (e.g., "/sync") or None if no match
         """
         # Skip if already a slash command
-        if user_message.strip().startswith('/'):
+        if user_message.strip().startswith("/"):
             return None
 
         try:
@@ -180,19 +180,14 @@ class ChatService:
             notifications = self.storage.get_unread_notifications(user_id)
             if notifications:
                 notification_banner = self._format_notifications(notifications)
-                self.storage.mark_notifications_read(
-                    user_id,
-                    [n['id'] for n in notifications]
-                )
+                self.storage.mark_notifications_read(user_id, [n["id"] for n in notifications])
         except Exception as e:
             logger.warning(f"Failed to check notifications: {e}")
 
         # Auto-sync: if last email sync was >24h ago, trigger background
         try:
             if user_id not in ChatService._auto_sync_triggered:
-                notification_banner = self._check_auto_sync(
-                    user_id, notification_banner
-                )
+                notification_banner = self._check_auto_sync(user_id, notification_banner)
         except Exception as e:
             logger.warning(f"[AUTO-SYNC] Check failed: {e}")
 
@@ -201,18 +196,26 @@ class ChatService:
             if context and context.get("source") == "mrcall_dashboard":
                 if ToolFactory._session_state:
                     ToolFactory._session_state.sandbox_mode = "mrcall"
-                    logger.debug(f"[Sandbox] Session sandbox_mode=mrcall (source=mrcall_dashboard)")
+                    logger.debug("[Sandbox] Session sandbox_mode=mrcall (source=mrcall_dashboard)")
 
             # Check if we're in task mode or MrCall config mode FIRST (before semantic matching)
-            is_in_task_mode = ToolFactory._session_state and ToolFactory._session_state.is_task_mode()
-            is_in_mrcall_config_mode = ToolFactory._session_state and ToolFactory._session_state.is_mrcall_config_mode()
+            is_in_task_mode = (
+                ToolFactory._session_state and ToolFactory._session_state.is_task_mode()
+            )
+            is_in_mrcall_config_mode = (
+                ToolFactory._session_state and ToolFactory._session_state.is_mrcall_config_mode()
+            )
 
             # SEMANTIC COMMAND MATCHING - Only when NOT in task mode or MrCall config mode
             # In these modes, agents handle natural language directly
             # (e.g., "send it" should be understood as confirmation, not transformed to "/email send")
             # Also skip for messages that already start with /mrcall (prevent rewriting valid slash commands)
-            starts_with_slash_command = user_message.strip().startswith('/mrcall')
-            if not is_in_task_mode and not is_in_mrcall_config_mode and not starts_with_slash_command:
+            starts_with_slash_command = user_message.strip().startswith("/mrcall")
+            if (
+                not is_in_task_mode
+                and not is_in_mrcall_config_mode
+                and not starts_with_slash_command
+            ):
                 matched_command = self._match_semantic_command(user_message)
                 if matched_command:
                     logger.info(f"Semantic match: '{user_message}' -> {matched_command}")
@@ -222,11 +225,16 @@ class ChatService:
 
             # TASK DETAIL PATTERN - Match "more on #N", "details #N", "show #N", "task #N"
             import re
-            task_detail_match = re.match(r'(?:more\s+(?:on|about)|details?|show|task)\s*#?(\d+)', user_message.lower().strip())
+
+            task_detail_match = re.match(
+                r"(?:more\s+(?:on|about)|details?|show|task)\s*#?(\d+)",
+                user_message.lower().strip(),
+            )
             if task_detail_match:
                 task_num = int(task_detail_match.group(1))
                 logger.info(f"Task detail match: '{user_message}' -> task #{task_num}")
                 from zylch.services.command_handlers import handle_task_detail
+
                 owner_id = (context.get("user_id") if context else None) or user_id
                 response_text = await handle_task_detail(task_num, owner_id)
                 return {
@@ -236,17 +244,20 @@ class ChatService:
                         "execution_time_ms": round((time.time() - start_time) * 1000, 2),
                         "command": "task_detail",
                         "task_num": task_num,
-                        "instant": True
+                        "instant": True,
                     },
-                    "session_id": session_id
+                    "session_id": session_id,
                 }
 
             # TASK CLOSE PATTERN - Match "close #N", "done #N", "complete #N", "finish #N"
-            task_close_match = re.match(r'(?:close|done|complete|finish)\s*#?(\d+)', user_message.lower().strip())
+            task_close_match = re.match(
+                r"(?:close|done|complete|finish)\s*#?(\d+)", user_message.lower().strip()
+            )
             if task_close_match:
                 task_num = int(task_close_match.group(1))
                 logger.info(f"Task close match: '{user_message}' -> close task #{task_num}")
                 from zylch.services.command_handlers import handle_task_close
+
                 owner_id = (context.get("user_id") if context else None) or user_id
                 response_text = await handle_task_close(task_num, owner_id)
                 return {
@@ -256,33 +267,36 @@ class ChatService:
                         "execution_time_ms": round((time.time() - start_time) * 1000, 2),
                         "command": "task_close",
                         "task_num": task_num,
-                        "instant": True
+                        "instant": True,
                     },
-                    "session_id": session_id
+                    "session_id": session_id,
                 }
 
             # TASK MODE COMMANDS - /tasks open <ID> and /tasks exit
-            task_open_match = re.match(r'^/tasks\s+open\s+(\S+)', user_message.strip(), re.IGNORECASE)
-            task_exit_match = re.match(r'^/tasks\s+exit\b', user_message.strip(), re.IGNORECASE)
+            task_open_match = re.match(
+                r"^/tasks\s+open\s+(\S+)", user_message.strip(), re.IGNORECASE
+            )
+            task_exit_match = re.match(r"^/tasks\s+exit\b", user_message.strip(), re.IGNORECASE)
 
             if task_exit_match:
                 # Exit task mode
                 if ToolFactory._session_state and ToolFactory._session_state.is_task_mode():
-                    task_id = ToolFactory._session_state.get_task_id()
                     ToolFactory._session_state.exit_task_mode()
                     self._task_orchestrator = None  # Clear orchestrator
-                    response_text = f"✅ Exited task mode.\n\nReturning to normal chat. Use `/tasks` to see your task list."
+                    response_text = "✅ Exited task mode.\n\nReturning to normal chat. Use `/tasks` to see your task list."
                 else:
-                    response_text = "⚠️ Not currently in task mode. Use `/tasks open <ID>` to enter task mode."
+                    response_text = (
+                        "⚠️ Not currently in task mode. Use `/tasks open <ID>` to enter task mode."
+                    )
                 return {
                     "response": self._prepend_notification(response_text, notification_banner),
                     "tool_calls": [],
                     "metadata": {
                         "execution_time_ms": round((time.time() - start_time) * 1000, 2),
                         "command": "tasks_exit",
-                        "instant": True
+                        "instant": True,
                     },
-                    "session_id": session_id
+                    "session_id": session_id,
                 }
 
             if task_open_match:
@@ -296,36 +310,43 @@ class ChatService:
                     "metadata": {
                         "execution_time_ms": round((time.time() - start_time) * 1000, 2),
                         "command": "tasks_open",
-                        "instant": True
+                        "instant": True,
                     },
-                    "session_id": session_id
+                    "session_id": session_id,
                 }
 
             # TASK MODE ROUTING - If in task mode, route to TaskOrchestratorAgent
             if ToolFactory._session_state and ToolFactory._session_state.is_task_mode():
                 owner_id = (context.get("user_id") if context else None) or user_id
-                response_text = await self._process_task_mode_message(user_message, owner_id, context)
+                response_text = await self._process_task_mode_message(
+                    user_message, owner_id, context
+                )
                 return {
                     "response": self._prepend_notification(response_text, notification_banner),
                     "tool_calls": [],
                     "metadata": {
                         "execution_time_ms": round((time.time() - start_time) * 1000, 2),
                         "task_mode": True,
-                        "task_id": ToolFactory._session_state.get_task_id()
+                        "task_id": ToolFactory._session_state.get_task_id(),
                     },
-                    "session_id": session_id
+                    "session_id": session_id,
                 }
 
             # MRCALL CONFIG MODE COMMANDS - /mrcall open [ID] and /mrcall exit
-            mrcall_open_match = re.match(r'^/mrcall\s+open(?:\s+(\S+))?\s*$', user_message.strip(), re.IGNORECASE)
-            mrcall_exit_match = re.match(r'^/mrcall\s+exit\b', user_message.strip(), re.IGNORECASE)
+            mrcall_open_match = re.match(
+                r"^/mrcall\s+open(?:\s+(\S+))?\s*$", user_message.strip(), re.IGNORECASE
+            )
+            mrcall_exit_match = re.match(r"^/mrcall\s+exit\b", user_message.strip(), re.IGNORECASE)
 
             if mrcall_exit_match:
                 # 🛡️ SANDBOX GATE - Block exit in mrcall sandbox (user must stay in config mode)
-                sandbox_mode = ToolFactory._session_state.sandbox_mode if ToolFactory._session_state else None
+                sandbox_mode = (
+                    ToolFactory._session_state.sandbox_mode if ToolFactory._session_state else None
+                )
                 if sandbox_mode == "mrcall":
                     from zylch.services.sandbox_service import get_sandbox_blocked_response
-                    logger.info(f"[Sandbox:mrcall] Blocked /mrcall exit")
+
+                    logger.info("[Sandbox:mrcall] Blocked /mrcall exit")
                     return {
                         "response": get_sandbox_blocked_response(sandbox_mode),
                         "tool_calls": [],
@@ -333,16 +354,21 @@ class ChatService:
                             "execution_time_ms": round((time.time() - start_time) * 1000, 2),
                             "command": "mrcall_exit",
                             "blocked_by_sandbox": True,
-                            "instant": True
+                            "instant": True,
                         },
-                        "session_id": session_id
+                        "session_id": session_id,
                     }
 
                 # Exit MrCall config mode
-                if ToolFactory._session_state and ToolFactory._session_state.is_mrcall_config_mode():
+                if (
+                    ToolFactory._session_state
+                    and ToolFactory._session_state.is_mrcall_config_mode()
+                ):
                     ToolFactory._session_state.exit_mrcall_config_mode()
                     self._mrcall_orchestrator = None  # Clear orchestrator
-                    response_text = "✅ Exited MrCall configuration mode.\n\nReturning to normal chat."
+                    response_text = (
+                        "✅ Exited MrCall configuration mode.\n\nReturning to normal chat."
+                    )
                 else:
                     response_text = "⚠️ Not currently in MrCall config mode. Use `/mrcall open` to enter config mode."
                 return {
@@ -351,46 +377,50 @@ class ChatService:
                     "metadata": {
                         "execution_time_ms": round((time.time() - start_time) * 1000, 2),
                         "command": "mrcall_exit",
-                        "instant": True
+                        "instant": True,
                     },
-                    "session_id": session_id
+                    "session_id": session_id,
                 }
 
             if mrcall_open_match:
                 # Enter MrCall config mode
                 business_id_input = mrcall_open_match.group(1)  # Optional business ID
                 owner_id = (context.get("user_id") if context else None) or user_id
-                response_text = await self._enter_mrcall_config_mode(business_id_input, owner_id, context)
+                response_text = await self._enter_mrcall_config_mode(
+                    business_id_input, owner_id, context
+                )
                 return {
                     "response": self._prepend_notification(response_text, notification_banner),
                     "tool_calls": [],
                     "metadata": {
                         "execution_time_ms": round((time.time() - start_time) * 1000, 2),
                         "command": "mrcall_open",
-                        "instant": True
+                        "instant": True,
                     },
-                    "session_id": session_id
+                    "session_id": session_id,
                 }
 
             # MRCALL CONFIG MODE ROUTING - If in MrCall config mode, route to MrCallOrchestratorAgent
             # BUT exclude slash commands - they should go to their normal handlers (e.g., /agent mrcall train)
             if ToolFactory._session_state and ToolFactory._session_state.is_mrcall_config_mode():
-                if not user_message.strip().startswith('/'):  # Only route free-form messages
+                if not user_message.strip().startswith("/"):  # Only route free-form messages
                     owner_id = (context.get("user_id") if context else None) or user_id
-                    response_text = await self._process_mrcall_config_message(user_message, owner_id, context)
+                    response_text = await self._process_mrcall_config_message(
+                        user_message, owner_id, context
+                    )
                     return {
                         "response": self._prepend_notification(response_text, notification_banner),
                         "tool_calls": [],
                         "metadata": {
                             "execution_time_ms": round((time.time() - start_time) * 1000, 2),
                             "mrcall_config_mode": True,
-                            "business_id": ToolFactory._session_state.get_mrcall_config_business_id()
+                            "business_id": ToolFactory._session_state.get_mrcall_config_business_id(),
                         },
-                        "session_id": session_id
+                        "session_id": session_id,
                     }
 
             # INTERCEPT SLASH COMMANDS - NEVER SEND TO ANTHROPIC
-            if user_message.strip().startswith('/'):
+            if user_message.strip().startswith("/"):
                 from zylch.services.command_handlers import COMMAND_HANDLERS, COMMAND_HELP
 
                 # Use shlex to properly handle quoted strings
@@ -402,17 +432,19 @@ class ChatService:
                     return {
                         "response": f"❌ **Malformed command**: {e}\n\nCheck your quotes are properly closed.",
                         "tool_calls": [],
-                        "metadata": {"error": True}
+                        "metadata": {"error": True},
                     }
 
                 cmd = parts[0].lower()
                 args = parts[1:] if len(parts) > 1 else []
                 execution_time_ms = (time.time() - start_time) * 1000
 
-                logger.debug(f"[CMD] Parsed command: cmd={cmd}, args={args}, '--help' in args={'--help' in args}, cmd in COMMAND_HELP={cmd in COMMAND_HELP}")
+                logger.debug(
+                    f"[CMD] Parsed command: cmd={cmd}, args={args}, '--help' in args={'--help' in args}, cmd in COMMAND_HELP={cmd in COMMAND_HELP}"
+                )
 
                 # Check --help first (before dispatching to handler)
-                if '--help' in args and cmd in COMMAND_HELP:
+                if "--help" in args and cmd in COMMAND_HELP:
                     help_info = COMMAND_HELP[cmd]
                     response_text = f"**{help_info['summary']}**\n\n**Usage:** `{help_info['usage']}`\n\n{help_info['description']}"
                     return {
@@ -422,30 +454,40 @@ class ChatService:
                             "execution_time_ms": round((time.time() - start_time) * 1000, 2),
                             "command": cmd,
                             "help": True,
-                            "instant": True
+                            "instant": True,
                         },
-                        "session_id": session_id
+                        "session_id": session_id,
                     }
 
                 # Check if command is implemented
                 if cmd in COMMAND_HANDLERS:
                     # 🛡️ SANDBOX GATE - Block execution of non-allowed commands
-                    sandbox_mode = ToolFactory._session_state.sandbox_mode if ToolFactory._session_state else None
+                    sandbox_mode = (
+                        ToolFactory._session_state.sandbox_mode
+                        if ToolFactory._session_state
+                        else None
+                    )
                     if sandbox_mode:
-                        from zylch.services.sandbox_service import is_command_allowed_in_sandbox, get_sandbox_blocked_response
+                        from zylch.services.sandbox_service import (
+                            is_command_allowed_in_sandbox,
+                            get_sandbox_blocked_response,
+                        )
+
                         if not is_command_allowed_in_sandbox(cmd, args, sandbox_mode):
                             logger.info(f"[Sandbox:{sandbox_mode}] Blocked command: {cmd} {args}")
                             return {
                                 "response": get_sandbox_blocked_response(sandbox_mode),
                                 "tool_calls": [],
                                 "metadata": {
-                                    "execution_time_ms": round((time.time() - start_time) * 1000, 2),
+                                    "execution_time_ms": round(
+                                        (time.time() - start_time) * 1000, 2
+                                    ),
                                     "command": cmd,
                                     "blocked_by_sandbox": True,
                                     "sandbox_mode": sandbox_mode,
-                                    "instant": True
+                                    "instant": True,
                                 },
-                                "session_id": session_id
+                                "session_id": session_id,
                             }
 
                     handler = COMMAND_HANDLERS[cmd]
@@ -453,41 +495,43 @@ class ChatService:
                     # Get owner_id and email from context
                     owner_id = (context.get("user_id") if context else None) or user_id
                     user_email = context.get("email") if context else None
-                    logger.info(f"Command {cmd}: owner_id={owner_id}, user_email={user_email}, context={context}")
+                    logger.info(
+                        f"Command {cmd}: owner_id={owner_id}, user_email={user_email}, context={context}"
+                    )
 
                     # Call handler based on required parameters
-                    if cmd == '/sync':
+                    if cmd == "/sync":
                         # /sync needs config and owner_id
                         config = ToolConfig.from_settings()
                         response_text = await handler(args, config, owner_id)
-                    elif cmd == '/tasks':
+                    elif cmd == "/tasks":
                         # /tasks only needs args and owner_id
                         response_text = await handler(args, owner_id)
-                    elif cmd in ['/memory', '/email', '/train', '/agent']:
+                    elif cmd in ["/memory", "/email", "/train", "/agent"]:
                         # /memory, /email, /train, /agent need config with BYOK credentials
                         config = ToolConfig.from_settings_with_owner(owner_id)
-                        if cmd == '/agent':
+                        if cmd == "/agent":
                             # /agent mrcall needs context + conversation history
                             if context is None:
                                 context = {}
-                            context['_conversation_history'] = conversation_history
+                            context["_conversation_history"] = conversation_history
                             response_text = await handler(args, config, owner_id, context)
                         else:
                             response_text = await handler(args, config, owner_id)
-                    elif cmd == '/mrcall':
+                    elif cmd == "/mrcall":
                         # /mrcall needs args, owner_id, email, and context (for dashboard detection)
                         response_text = await handler(args, owner_id, user_email, context)
-                    elif cmd in ['/share', '/revoke', '/connect']:
+                    elif cmd in ["/share", "/revoke", "/connect"]:
                         # These need args, owner_id, and optionally email
                         response_text = await handler(args, owner_id, user_email)
-                    elif cmd in ['/stats', '/jobs', '/reset', '/tutorial']:
+                    elif cmd in ["/stats", "/jobs", "/reset", "/tutorial"]:
                         # These need args and owner_id
                         response_text = await handler(args, owner_id)
-                    elif cmd == '/calendar':
+                    elif cmd == "/calendar":
                         # /calendar needs args, config, and owner_id
                         config = ToolConfig.from_settings_with_owner(owner_id)
                         response_text = await handler(args, config, owner_id)
-                    elif cmd in ['/model', '/help', '/clear', '/echo']:
+                    elif cmd in ["/model", "/help", "/clear", "/echo"]:
                         # These only need args (or nothing)
                         response_text = await handler(args) if args else await handler()
                     else:
@@ -497,10 +541,10 @@ class ChatService:
                     metadata = {
                         "execution_time_ms": round((time.time() - start_time) * 1000, 2),
                         "command": cmd,
-                        "instant": True
+                        "instant": True,
                     }
                     # Extract pending_changes stored by _handle_mrcall_agent_run
-                    pending_changes = context.pop('_pending_changes', None) if context else None
+                    pending_changes = context.pop("_pending_changes", None) if context else None
                     if pending_changes:
                         metadata["pending_changes"] = pending_changes
 
@@ -508,29 +552,39 @@ class ChatService:
                         "response": self._prepend_notification(response_text, notification_banner),
                         "tool_calls": [],
                         "metadata": metadata,
-                        "session_id": session_id
+                        "session_id": session_id,
                     }
 
                 # Return error for unknown commands
-                error_response = f"❌ **Command not found:** `{cmd}`\n\nUse `/help` to see available commands."
+                error_response = (
+                    f"❌ **Command not found:** `{cmd}`\n\nUse `/help` to see available commands."
+                )
                 return {
                     "response": self._prepend_notification(error_response, notification_banner),
                     "tool_calls": [],
                     "metadata": {
                         "execution_time_ms": round(execution_time_ms, 2),
                         "command": cmd,
-                        "instant": True
+                        "instant": True,
                     },
-                    "session_id": session_id
+                    "session_id": session_id,
                 }
 
             # 🛡️ SANDBOX GATE - Block free-form chat if sandboxed and NOT in appropriate mode
-            sandbox_mode = ToolFactory._session_state.sandbox_mode if ToolFactory._session_state else None
+            sandbox_mode = (
+                ToolFactory._session_state.sandbox_mode if ToolFactory._session_state else None
+            )
             if sandbox_mode:
                 # For MrCall sandbox, require mrcall_config_mode for free-form chat
-                if sandbox_mode == "mrcall" and not ToolFactory._session_state.is_mrcall_config_mode():
+                if (
+                    sandbox_mode == "mrcall"
+                    and not ToolFactory._session_state.is_mrcall_config_mode()
+                ):
                     from zylch.services.sandbox_service import get_sandbox_freeform_blocked_response
-                    logger.info(f"[Sandbox:{sandbox_mode}] Blocked free-form chat (not in config mode)")
+
+                    logger.info(
+                        f"[Sandbox:{sandbox_mode}] Blocked free-form chat (not in config mode)"
+                    )
                     return {
                         "response": get_sandbox_freeform_blocked_response(sandbox_mode),
                         "tool_calls": [],
@@ -538,9 +592,9 @@ class ChatService:
                             "execution_time_ms": round((time.time() - start_time) * 1000, 2),
                             "blocked_by_sandbox": True,
                             "sandbox_mode": sandbox_mode,
-                            "reason": "not_in_config_mode"
+                            "reason": "not_in_config_mode",
                         },
-                        "session_id": session_id
+                        "session_id": session_id,
                     }
 
             # Ensure agent is initialized with user's owner_id for per-user tools
@@ -558,7 +612,9 @@ class ChatService:
             # Restore conversation history if provided
             # This allows the agent to maintain context across API calls
             if conversation_history:
-                logger.info(f"Restoring conversation history ({len(conversation_history)} messages)")
+                logger.info(
+                    f"Restoring conversation history ({len(conversation_history)} messages)"
+                )
                 self.agent.set_history(conversation_history)
             else:
                 # Clear history for new conversation
@@ -581,7 +637,7 @@ class ChatService:
                 "metadata": {
                     "execution_time_ms": round(execution_time_ms, 2),
                     "tools_available": len(self.agent.tools),
-                }
+                },
             }
 
             if session_id:
@@ -602,9 +658,9 @@ class ChatService:
                 "metadata": {
                     "execution_time_ms": round(execution_time_ms, 2),
                     "error": "MISSING_CREDENTIALS",
-                    "error_detail": str(e)
+                    "error_detail": str(e),
                 },
-                "session_id": session_id if session_id else None
+                "session_id": session_id if session_id else None,
             }
 
         except LLMAuthenticationError as e:
@@ -619,9 +675,9 @@ class ChatService:
                 "metadata": {
                     "execution_time_ms": round(execution_time_ms, 2),
                     "error": "AUTHENTICATION_ERROR",
-                    "error_detail": "Invalid API key"
+                    "error_detail": "Invalid API key",
                 },
-                "session_id": session_id if session_id else None
+                "session_id": session_id if session_id else None,
             }
 
         except LLMRateLimitError as e:
@@ -636,9 +692,9 @@ class ChatService:
                 "metadata": {
                     "execution_time_ms": round(execution_time_ms, 2),
                     "error": "RATE_LIMIT_ERROR",
-                    "error_detail": str(e)
+                    "error_detail": str(e),
                 },
-                "session_id": session_id if session_id else None
+                "session_id": session_id if session_id else None,
             }
 
         except LLMConnectionError as e:
@@ -653,9 +709,9 @@ class ChatService:
                 "metadata": {
                     "execution_time_ms": round(execution_time_ms, 2),
                     "error": "CONNECTION_ERROR",
-                    "error_detail": str(e)
+                    "error_detail": str(e),
                 },
-                "session_id": session_id if session_id else None
+                "session_id": session_id if session_id else None,
             }
 
         except Exception as e:
@@ -670,9 +726,9 @@ class ChatService:
                 "metadata": {
                     "execution_time_ms": round(execution_time_ms, 2),
                     "error": "INTERNAL_ERROR",
-                    "error_detail": str(e)
+                    "error_detail": str(e),
                 },
-                "session_id": session_id if session_id else None
+                "session_id": session_id if session_id else None,
             }
 
     def get_agent_info(self) -> Dict[str, Any]:
@@ -687,12 +743,7 @@ class ChatService:
             }
         """
         if not self._initialized or not self.agent:
-            return {
-                "initialized": False,
-                "tools_count": 0,
-                "tools": [],
-                "model_info": {}
-            }
+            return {"initialized": False, "tools_count": 0, "tools": [], "model_info": {}}
 
         tool_names = [tool.name for tool in self.agent.tools]
 
@@ -702,7 +753,7 @@ class ChatService:
             "tools": tool_names,
             "model_info": {
                 "default_model": settings.default_model,
-            }
+            },
         }
 
     def _format_notifications(self, notifications: List[Dict[str, Any]]) -> str:
@@ -714,10 +765,10 @@ class ChatService:
         Returns:
             Formatted markdown string
         """
-        icons = {'info': 'ℹ️', 'warning': '⚠️', 'error': '❌'}
+        icons = {"info": "ℹ️", "warning": "⚠️", "error": "❌"}
         lines = []
         for n in notifications:
-            icon = icons.get(n.get('notification_type', 'info'), 'ℹ️')
+            icon = icons.get(n.get("notification_type", "info"), "ℹ️")
             lines.append(f"{icon} {n['message']}")
         return "\n".join(lines)
 
@@ -745,9 +796,7 @@ class ChatService:
                 session.query(OAuthToken)
                 .filter(
                     OAuthToken.owner_id == owner_id,
-                    OAuthToken.provider.in_(
-                        ["google", "microsoft"]
-                    ),
+                    OAuthToken.provider.in_(["google", "microsoft"]),
                     OAuthToken.connection_status == "connected",
                 )
                 .first()
@@ -787,9 +836,7 @@ class ChatService:
             )
 
             if job["status"] == "pending":
-                llm_provider, api_key = get_active_llm_provider(
-                    owner_id
-                )
+                llm_provider, api_key = get_active_llm_provider(owner_id)
                 executor = JobExecutor(storage)
                 asyncio.create_task(
                     executor.execute_job(
@@ -800,28 +847,17 @@ class ChatService:
                     )
                 )
                 logger.info(
-                    f"[AUTO-SYNC] Background job {job['id']} "
-                    f"scheduled for owner_id={owner_id}"
+                    f"[AUTO-SYNC] Background job {job['id']} " f"scheduled for owner_id={owner_id}"
                 )
-                sync_note = (
-                    "🔄 Auto-syncing emails in the background "
-                    "(last sync was >24h ago)."
-                )
+                sync_note = "🔄 Auto-syncing emails in the background " "(last sync was >24h ago)."
                 if notification_banner:
-                    notification_banner = (
-                        f"{notification_banner}\n{sync_note}"
-                    )
+                    notification_banner = f"{notification_banner}\n{sync_note}"
                 else:
                     notification_banner = sync_note
             elif job["status"] == "running":
-                logger.info(
-                    f"[AUTO-SYNC] Sync already running "
-                    f"for owner_id={owner_id}"
-                )
+                logger.info(f"[AUTO-SYNC] Sync already running " f"for owner_id={owner_id}")
         except Exception as e:
-            logger.warning(
-                f"[AUTO-SYNC] Failed to create job: {e}"
-            )
+            logger.warning(f"[AUTO-SYNC] Failed to create job: {e}")
 
         ChatService._auto_sync_triggered.add(owner_id)
         return notification_banner
@@ -850,12 +886,14 @@ class ChatService:
         Returns:
             Response message indicating success or failure
         """
-        logger.debug(f"[/tasks open] _enter_task_mode called: task_id_input={task_id_input}, owner_id={owner_id}")
+        logger.debug(
+            f"[/tasks open] _enter_task_mode called: task_id_input={task_id_input}, owner_id={owner_id}"
+        )
         logger.debug(f"[/tasks open] ToolFactory._session_state={ToolFactory._session_state}")
 
         try:
             # Find task by ID (exact or prefix match)
-            logger.debug(f"[/tasks open] Calling _get_task_by_id...")
+            logger.debug("[/tasks open] Calling _get_task_by_id...")
             task = await self._get_task_by_id(task_id_input, owner_id)
             logger.debug(f"[/tasks open] _get_task_by_id returned: task={task}")
 
@@ -868,19 +906,22 @@ Use `/tasks` to see available tasks with their IDs."""
             # Enter task mode in session state
             # If session_state doesn't exist yet (agent not initialized), create a minimal one
             if not ToolFactory._session_state:
-                logger.debug("[/tasks open] ToolFactory._session_state is None, creating minimal SessionState")
+                logger.debug(
+                    "[/tasks open] ToolFactory._session_state is None, creating minimal SessionState"
+                )
                 from zylch.tools.factory import SessionState
+
                 ToolFactory._session_state = SessionState()
 
             logger.debug(f"[/tasks open] Entering task mode with task_id={task['id']}")
-            ToolFactory._session_state.enter_task_mode(task['id'], task)
-            logger.debug(f"[/tasks open] Task mode entered successfully")
+            ToolFactory._session_state.enter_task_mode(task["id"], task)
+            logger.debug("[/tasks open] Task mode entered successfully")
 
             # Format task details for display
-            contact = task.get('contact_name') or task.get('contact_email', 'Unknown')
-            action = task.get('suggested_action', 'No action suggested')
-            urgency = task.get('urgency', 'medium')
-            urgency_icon = {'high': '🔴', 'medium': '🟡', 'low': '🟢'}.get(urgency, '⚪')
+            contact = task.get("contact_name") or task.get("contact_email", "Unknown")
+            action = task.get("suggested_action", "No action suggested")
+            urgency = task.get("urgency", "medium")
+            urgency_icon = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(urgency, "⚪")
 
             return f"""**🎯 Entered Task Mode**
 
@@ -918,19 +959,24 @@ What would you like to do?"""
         try:
             with get_session() as session:
                 # First try exact match
-                task = session.query(TaskItem).filter(
-                    TaskItem.owner_id == owner_id,
-                    TaskItem.id == task_id_input
-                ).first()
+                task = (
+                    session.query(TaskItem)
+                    .filter(TaskItem.owner_id == owner_id, TaskItem.id == task_id_input)
+                    .first()
+                )
 
                 if task:
                     return task.to_dict()
 
                 # Try prefix match (ID starts with input)
-                task = session.query(TaskItem).filter(
-                    TaskItem.owner_id == owner_id,
-                    sa_cast(TaskItem.id, SAText).ilike(f'{task_id_input}%')
-                ).first()
+                task = (
+                    session.query(TaskItem)
+                    .filter(
+                        TaskItem.owner_id == owner_id,
+                        sa_cast(TaskItem.id, SAText).ilike(f"{task_id_input}%"),
+                    )
+                    .first()
+                )
 
                 if task:
                     return task.to_dict()
@@ -942,10 +988,7 @@ What would you like to do?"""
             return None
 
     async def _process_task_mode_message(
-        self,
-        user_message: str,
-        owner_id: str,
-        context: Optional[Dict[str, Any]] = None
+        self, user_message: str, owner_id: str, context: Optional[Dict[str, Any]] = None
     ) -> str:
         """Process a message while in task mode.
 
@@ -976,13 +1019,12 @@ What would you like to do?"""
                     api_key=api_key,
                     provider=llm_provider,
                     storage=self.storage,
-                    starchat_client=ToolFactory._starchat_client
+                    starchat_client=ToolFactory._starchat_client,
                 )
 
             # Process message through orchestrator
             response = await self._task_orchestrator.process_message(
-                user_message=user_message,
-                context=context
+                user_message=user_message, context=context
             )
 
             return response
@@ -995,7 +1037,7 @@ What would you like to do?"""
         self,
         business_id_input: Optional[str],
         owner_id: str,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Enter MrCall configuration mode.
 
@@ -1009,13 +1051,16 @@ What would you like to do?"""
         """
         is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
         firebase_token = context.get("firebase_token") if context else None
-        logger.debug(f"[/mrcall open] _enter_mrcall_config_mode: business_id_input={business_id_input}, owner_id={owner_id}, is_dashboard={is_dashboard}, firebase_token={'present' if firebase_token else 'absent'}")
+        logger.debug(
+            f"[/mrcall open] _enter_mrcall_config_mode: business_id_input={business_id_input}, owner_id={owner_id}, is_dashboard={is_dashboard}, firebase_token={'present' if firebase_token else 'absent'}"
+        )
 
         try:
             # Check MrCall connection - OAuth credentials or dashboard Firebase token
             from zylch.api.token_storage import get_mrcall_credentials
+
             mrcall_creds = get_mrcall_credentials(owner_id)
-            has_oauth = mrcall_creds and mrcall_creds.get('access_token')
+            has_oauth = mrcall_creds and mrcall_creds.get("access_token")
 
             if not has_oauth and not (is_dashboard and firebase_token):
                 return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
@@ -1025,7 +1070,9 @@ What would you like to do?"""
                 business_id = business_id_input
                 # Auto-link business_id so subsequent commands work without /mrcall link
                 self.storage.set_mrcall_link(owner_id, business_id)
-                logger.info(f"[/mrcall open] Auto-linked business_id={business_id} for owner={owner_id}")
+                logger.info(
+                    f"[/mrcall open] Auto-linked business_id={business_id} for owner={owner_id}"
+                )
             else:
                 business_id = self.storage.get_mrcall_link(owner_id)
 
@@ -1035,18 +1082,23 @@ What would you like to do?"""
             # Create session state if needed
             if not ToolFactory._session_state:
                 from zylch.tools.factory import SessionState
+
                 ToolFactory._session_state = SessionState()
 
             # Get LLM credentials (with system-level fallback)
             from zylch.api.token_storage import get_active_llm_provider
+
             llm_provider, api_key = get_active_llm_provider(owner_id)
             if not api_key:
                 # System-level fallback for integrations (e.g., MrCall dashboard users)
                 from zylch.config import settings
                 from zylch.llm.providers import get_system_llm_credentials
+
                 llm_provider, api_key = get_system_llm_credentials()
                 if api_key:
-                    logger.info(f"[/mrcall open] Using system-level {llm_provider} API key for owner={owner_id}")
+                    logger.info(
+                        f"[/mrcall open] Using system-level {llm_provider} API key for owner={owner_id}"
+                    )
             if not api_key or not llm_provider:
                 return "❌ LLM API key required. Run `/connect anthropic` to set up."
 
@@ -1057,9 +1109,12 @@ What would you like to do?"""
                     # Priority over OAuth because Firebase gives full read+write
                     from zylch.config import settings
                     from zylch.tools.starchat import StarChatClient
-                    logger.info(f"[/mrcall open] Creating StarChat client with Firebase token for dashboard user owner={owner_id}")
+
+                    logger.info(
+                        f"[/mrcall open] Creating StarChat client with Firebase token for dashboard user owner={owner_id}"
+                    )
                     ToolFactory._starchat_client = StarChatClient(
-                        base_url=settings.mrcall_base_url.rstrip('/'),
+                        base_url=settings.mrcall_base_url.rstrip("/"),
                         auth_type="firebase",
                         jwt_token=firebase_token,
                         realm=settings.mrcall_realm,
@@ -1069,17 +1124,19 @@ What would you like to do?"""
                 elif has_oauth:
                     # CLI/non-dashboard flow: use OAuth
                     from zylch.tools.starchat import create_starchat_client
+
                     ToolFactory._starchat_client = await create_starchat_client(owner_id)
 
             # Create orchestrator
             from zylch.agents.mrcall_orchestrator_agent import MrCallOrchestratorAgent
+
             self._mrcall_orchestrator = MrCallOrchestratorAgent(
                 session_state=ToolFactory._session_state,
                 owner_id=owner_id,
                 api_key=api_key,
                 provider=llm_provider,
                 storage=self.storage,
-                starchat_client=ToolFactory._starchat_client
+                starchat_client=ToolFactory._starchat_client,
             )
 
             # Enter session (may auto-train)
@@ -1097,10 +1154,7 @@ What would you like to do?"""
             return f"❌ **Error:** {str(e)}"
 
     async def _process_mrcall_config_message(
-        self,
-        user_message: str,
-        owner_id: str,
-        context: Optional[Dict[str, Any]] = None
+        self, user_message: str, owner_id: str, context: Optional[Dict[str, Any]] = None
     ) -> str:
         """Process a message in MrCall config mode.
 
@@ -1117,11 +1171,11 @@ What would you like to do?"""
         """
         try:
             # Lazy-init conversation history
-            if not hasattr(self, '_mrcall_history'):
+            if not hasattr(self, "_mrcall_history"):
                 self._mrcall_history = []
 
             # Get or create MrCallAgent directly (skip orchestrator)
-            if not hasattr(self, '_mrcall_agent') or self._mrcall_agent is None:
+            if not hasattr(self, "_mrcall_agent") or self._mrcall_agent is None:
                 logger.info("[MrCallConfigMode] Creating MrCallAgent directly")
                 from zylch.api.token_storage import get_active_llm_provider
                 from zylch.agents.mrcall_agent import MrCallAgent
@@ -1129,6 +1183,7 @@ What would you like to do?"""
                 llm_provider, api_key = get_active_llm_provider(owner_id)
                 if not api_key:
                     from zylch.llm.providers import get_system_llm_credentials
+
                     llm_provider, api_key = get_system_llm_credentials()
                 if not api_key or not llm_provider:
                     return "❌ LLM API key required. Run `/connect anthropic` to set up."
@@ -1151,13 +1206,13 @@ What would you like to do?"""
             )
 
             # Extract response text
-            r = result.get('result', {})
+            r = result.get("result", {})
             if isinstance(r, dict):
-                response = r.get('response_text', '') or r.get('response', '')
+                response = r.get("response_text", "") or r.get("response", "")
             else:
                 response = str(r) if r else "No result returned."
 
-            if result.get('error'):
+            if result.get("error"):
                 response = f"❌ {result['error']}"
 
             self._mrcall_history.append({"role": "assistant", "content": response})

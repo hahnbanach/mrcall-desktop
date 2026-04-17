@@ -38,9 +38,7 @@ class GetTasksTool(Tool):
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data={},
-                message=(
-                    "No owner_id available. Please log in first."
-                ),
+                message=("No owner_id available. Please log in first."),
             )
 
         try:
@@ -59,19 +57,11 @@ class GetTasksTool(Tool):
             urgency_order = {"high": 0, "medium": 1, "low": 2}
             tasks = sorted(
                 tasks,
-                key=lambda t: urgency_order.get(
-                    t.get("urgency"), 9
-                ),
+                key=lambda t: urgency_order.get(t.get("urgency"), 9),
             )
 
-            high_medium = [
-                t
-                for t in tasks
-                if t.get("urgency") in ("high", "medium")
-            ]
-            low = [
-                t for t in tasks if t.get("urgency") == "low"
-            ]
+            high_medium = [t for t in tasks if t.get("urgency") in ("high", "medium")]
+            low = [t for t in tasks if t.get("urgency") == "low"]
             tasks = high_medium + low
 
             if not tasks:
@@ -89,24 +79,12 @@ class GetTasksTool(Tool):
                     "medium": "\U0001f7e1",
                     "low": "\U0001f7e2",
                 }.get(urgency, "\u26aa")
-                contact = (
-                    task.get("contact_email")
-                    or task.get("contact_name")
-                    or "Unknown"
-                )
+                contact = task.get("contact_email") or task.get("contact_name") or "Unknown"
                 action = task.get("suggested_action", "Review")
-                lines.append(
-                    f"{i}. {icon} **{contact}** - {action}"
-                )
+                lines.append(f"{i}. {icon} **{contact}** - {action}")
 
-            message = (
-                f"**Tasks requiring action ({len(tasks)}):**"
-                "\n\n" + "\n".join(lines)
-            )
-            message += (
-                "\n\nUse 'more on #N' to see details"
-                " for a specific task."
-            )
+            message = f"**Tasks requiring action ({len(tasks)}):**" "\n\n" + "\n".join(lines)
+            message += "\n\nUse 'more on #N' to see details" " for a specific task."
 
             return ToolResult(
                 status=ToolStatus.SUCCESS,
@@ -136,9 +114,7 @@ class GetTasksTool(Tool):
                 "properties": {
                     "days_back": {
                         "type": "integer",
-                        "description": (
-                            "Days to look back (default 7)"
-                        ),
+                        "description": ("Days to look back (default 7)"),
                         "default": 7,
                     },
                 },
@@ -200,10 +176,7 @@ class SearchLocalMemoryTool(Tool):
 
         try:
             if self.search_engine:
-                contacts_namespace = (
-                    f"{self.owner_id}"
-                    f":{self.zylch_assistant_id}:contacts"
-                )
+                contacts_namespace = f"{self.owner_id}" f":{self.zylch_assistant_id}:contacts"
 
                 results = self.search_engine.search(
                     owner_id=self.owner_id,
@@ -220,8 +193,7 @@ class SearchLocalMemoryTool(Tool):
                             "query": query,
                         },
                         message=(
-                            f"No contacts found for '{query}'."
-                            " Proceed with remote searches."
+                            f"No contacts found for '{query}'." " Proceed with remote searches."
                         ),
                     )
 
@@ -232,26 +204,15 @@ class SearchLocalMemoryTool(Tool):
                     person_data = {
                         "namespace": r.namespace,
                         "content": r.content,
-                        "hybrid_score": round(
-                            r.hybrid_score, 2
-                        ),
-                        "fts_score": (
-                            round(r.fts_score, 2)
-                            if r.fts_score
-                            else None
-                        ),
+                        "hybrid_score": round(r.hybrid_score, 2),
+                        "fts_score": (round(r.fts_score, 2) if r.fts_score else None),
                         "semantic_score": (
-                            round(r.semantic_score, 2)
-                            if r.semantic_score
-                            else None
+                            round(r.semantic_score, 2) if r.semantic_score else None
                         ),
                     }
 
                     formatted_results.append(person_data)
-                    output.append(
-                        f"\n**{r.namespace}**"
-                        f" (score: {r.hybrid_score:.2f})"
-                    )
+                    output.append(f"\n**{r.namespace}**" f" (score: {r.hybrid_score:.2f})")
                     output.append(person_data["content"])
 
                 return ToolResult(
@@ -268,10 +229,7 @@ class SearchLocalMemoryTool(Tool):
             return ToolResult(
                 status=ToolStatus.SUCCESS,
                 data={"not_found": True},
-                message=(
-                    "Search engine not initialized."
-                    " Proceed with remote searches."
-                ),
+                message=("Search engine not initialized." " Proceed with remote searches."),
             )
 
         except Exception as e:
@@ -279,10 +237,7 @@ class SearchLocalMemoryTool(Tool):
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data={"not_found": True},
-                error=(
-                    f"Error searching local memory: {e}."
-                    " Proceed with remote searches."
-                ),
+                error=(f"Error searching local memory: {e}." " Proceed with remote searches."),
             )
 
     def get_schema(self):
@@ -302,8 +257,7 @@ class SearchLocalMemoryTool(Tool):
                     "query": {
                         "type": "string",
                         "description": (
-                            "Search query: email address,"
-                            " phone number, or person name"
+                            "Search query: email address," " phone number, or person name"
                         ),
                     },
                 },
@@ -315,14 +269,11 @@ class SearchLocalMemoryTool(Tool):
 class GetContactTool(Tool):
     """Retrieve saved contact from MrCall assistant."""
 
-    def __init__(
-        self, starchat_client, session_state: SessionState
-    ):
+    def __init__(self, starchat_client, session_state: SessionState):
         super().__init__(
             name="get_contact",
             description=(
-                "Retrieve a saved contact from the selected"
-                " MrCall assistant's contact list"
+                "Retrieve a saved contact from the selected" " MrCall assistant's contact list"
             ),
         )
         self.starchat = starchat_client
@@ -338,38 +289,26 @@ class GetContactTool(Tool):
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
-                error=(
-                    "No MrCall assistant selected."
-                    " Use /mrcall <id> to select one."
-                ),
+                error=("No MrCall assistant selected." " Use /mrcall <id> to select one."),
             )
 
         try:
             if contact_id:
-                contact = await self.starchat.get_contact(
-                    contact_id
-                )
+                contact = await self.starchat.get_contact(contact_id)
                 if not contact:
                     return ToolResult(
                         status=ToolStatus.ERROR,
                         data=None,
-                        error=(
-                            f"Contact not found: {contact_id}"
-                        ),
+                        error=(f"Contact not found: {contact_id}"),
                     )
                 return ToolResult(
                     status=ToolStatus.SUCCESS,
                     data=contact,
-                    message=(
-                        f"Retrieved contact: {contact_id}"
-                    ),
+                    message=(f"Retrieved contact: {contact_id}"),
                 )
 
             if email:
-                logger.info(
-                    f"Calling search_contacts with"
-                    f" business_id={business_id}"
-                )
+                logger.info(f"Calling search_contacts with" f" business_id={business_id}")
                 contacts = await self.starchat.search_contacts(
                     email=email,
                     business_id=business_id,
@@ -378,54 +317,32 @@ class GetContactTool(Tool):
                     return ToolResult(
                         status=ToolStatus.SUCCESS,
                         data=None,
-                        message=(
-                            f"No contact found with"
-                            f" email: {email}"
-                        ),
+                        message=(f"No contact found with" f" email: {email}"),
                     )
 
                 first_contact = contacts[0]
                 count = len(contacts)
 
-                logger.info(
-                    f"DEBUG: first_contact type:"
-                    f" {type(first_contact)}"
-                )
+                logger.info(f"DEBUG: first_contact type:" f" {type(first_contact)}")
                 logger.info(
                     f"DEBUG: has 'variables':"
                     f" {'variables' in first_contact if isinstance(first_contact, dict) else 'N/A'}"
                 )
 
-                if (
-                    isinstance(first_contact, dict)
-                    and "variables" in first_contact
-                ):
+                if isinstance(first_contact, dict) and "variables" in first_contact:
                     logger.info(
-                        f"DEBUG: variables keys:"
-                        f" {list(first_contact['variables'].keys())}"
+                        f"DEBUG: variables keys:" f" {list(first_contact['variables'].keys())}"
                     )
-                    last_enriched = first_contact[
-                        "variables"
-                    ].get("LAST_ENRICHED")
-                    logger.info(
-                        f"DEBUG: LAST_ENRICHED value:"
-                        f" {last_enriched}"
-                    )
+                    last_enriched = first_contact["variables"].get("LAST_ENRICHED")
+                    logger.info(f"DEBUG: LAST_ENRICHED value:" f" {last_enriched}")
                     if last_enriched:
                         try:
                             from datetime import (
                                 datetime,
-                                timedelta,
                             )
 
-                            enriched_time = (
-                                datetime.fromisoformat(
-                                    last_enriched
-                                )
-                            )
-                            age_hours = (
-                                datetime.now() - enriched_time
-                            ).total_seconds() / 3600
+                            enriched_time = datetime.fromisoformat(last_enriched)
+                            age_hours = (datetime.now() - enriched_time).total_seconds() / 3600
 
                             if age_hours < 24:
                                 if count > 1:
@@ -451,24 +368,14 @@ class GetContactTool(Tool):
 
                 return ToolResult(
                     status=ToolStatus.SUCCESS,
-                    data=(
-                        first_contact
-                        if count == 1
-                        else contacts
-                    ),
-                    message=(
-                        f"Found {count} contact(s)"
-                        f" matching email: {email}"
-                    ),
+                    data=(first_contact if count == 1 else contacts),
+                    message=(f"Found {count} contact(s)" f" matching email: {email}"),
                 )
 
             return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
-                error=(
-                    "Must provide either email or contact_id"
-                    " to search"
-                ),
+                error=("Must provide either email or contact_id" " to search"),
             )
 
         except Exception as e:
@@ -495,15 +402,11 @@ class GetContactTool(Tool):
                 "properties": {
                     "email": {
                         "type": "string",
-                        "description": (
-                            "Email address to search for"
-                        ),
+                        "description": ("Email address to search for"),
                     },
                     "contact_id": {
                         "type": "string",
-                        "description": (
-                            "Contact ID to retrieve (if known)"
-                        ),
+                        "description": ("Contact ID to retrieve (if known)"),
                     },
                 },
             },
@@ -517,14 +420,11 @@ class GetWhatsAppContactsTool(Tool):
     See docs/features/WHATSAPP_INTEGRATION_TODO.md.
     """
 
-    def __init__(
-        self, starchat_client, session_state: SessionState
-    ):
+    def __init__(self, starchat_client, session_state: SessionState):
         super().__init__(
             name="get_whatsapp_contacts",
             description=(
-                "Get WhatsApp contacts (not yet available"
-                " — use /connect whatsapp first)"
+                "Get WhatsApp contacts (not yet available" " — use /connect whatsapp first)"
             ),
         )
         self.session_state = session_state
@@ -555,8 +455,7 @@ class GetWhatsAppContactsTool(Tool):
                     "days_back": {
                         "type": "integer",
                         "description": (
-                            "Number of days to look back for"
-                            " WhatsApp messages (default: 30)"
+                            "Number of days to look back for" " WhatsApp messages (default: 30)"
                         ),
                         "default": 30,
                     },

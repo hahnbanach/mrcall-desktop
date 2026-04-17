@@ -44,5 +44,6 @@ def ensure_zylch_dir():
     """Create ~/.zylch/ directory if it doesn't exist."""
     os.makedirs(ZYLCH_DIR, exist_ok=True)
 
+
 # Keep ENV_PATH for backward compat (used nowhere critical now)
 ENV_PATH = os.path.join(ZYLCH_DIR, ".env")

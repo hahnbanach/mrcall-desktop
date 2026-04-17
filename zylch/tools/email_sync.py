@@ -3,7 +3,7 @@
 import json
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
@@ -31,27 +31,27 @@ def clean_html(html: str) -> str:
         return ""
 
     # Quick check - if no HTML tags, return as-is
-    if '<' not in html:
+    if "<" not in html:
         return html
 
     try:
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = BeautifulSoup(html, "html.parser")
 
         # Remove style, script, head tags entirely (including contents)
-        for tag in soup(['style', 'script', 'head', 'meta', 'link']):
+        for tag in soup(["style", "script", "head", "meta", "link"]):
             tag.decompose()
 
         # Get text, collapse whitespace
-        text = soup.get_text(separator=' ', strip=True)
+        text = soup.get_text(separator=" ", strip=True)
 
         # Collapse multiple spaces/newlines
-        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r"\s+", " ", text)
 
         return text.strip()
     except Exception as e:
         # Fallback: simple regex strip (log the failure)
         logger.warning(f"HTML parsing failed, using regex fallback: {e}")
-        return re.sub(r'<[^>]+>', '', html)
+        return re.sub(r"<[^>]+>", "", html)
 
 
 class EmailSyncManager:
@@ -67,7 +67,7 @@ class EmailSyncManager:
         provider: str,
         days_back: int = 30,
         owner_id: str = "",
-        supabase_storage: Optional['Storage'] = None,
+        supabase_storage: Optional["Storage"] = None,
     ):
         """Initialize email sync manager.
 
@@ -104,7 +104,9 @@ class EmailSyncManager:
         """Save analyzed threads. No-op - full cache is saved elsewhere."""
         pass
 
-    def sync_emails(self, force_full: bool = False, days_back: Optional[int] = None) -> Dict[str, Any]:
+    def sync_emails(
+        self, force_full: bool = False, days_back: Optional[int] = None
+    ) -> Dict[str, Any]:
         """Build intelligence cache from email archive.
 
         CHANGED: Now reads from archive instead of Gmail directly.
@@ -127,7 +129,7 @@ class EmailSyncManager:
             days_back = 30
 
         logger.info(f"📊 Intelligence window: last {days_back} days")
-        logger.info(f"⏱️  Reading from local archive (fast)...")
+        logger.info("⏱️  Reading from local archive (fast)...")
 
         # Get recent threads from archive (NOT Gmail)
         try:
@@ -164,26 +166,28 @@ class EmailSyncManager:
         for thread_id, thread_messages in threads_map.items():
             # Sort by date (newest last) - MUST use datetime parsing, NOT alphabetic sort!
             # "Thu, 20 Nov" would come BEFORE "Wed, 19 Nov" alphabetically (T < W)
-            thread_messages.sort(key=lambda m: self._parse_email_date_for_sort(m.get('date', '')))
+            thread_messages.sort(key=lambda m: self._parse_email_date_for_sort(m.get("date", "")))
             last_message = thread_messages[-1]
 
             # Check if thread needs re-analysis
-            existing = cache['threads'].get(thread_id)
+            existing = cache["threads"].get(thread_id)
             needs_analysis = True
 
             # ALWAYS preserve manually closed threads
-            if existing and existing.get('manually_closed'):
+            if existing and existing.get("manually_closed"):
                 logger.debug(f"Preserving manually closed thread: {thread_id}")
                 needs_analysis = False
 
             if existing and not force_full and needs_analysis:
                 # Skip if: same message count AND same last message ID
-                existing_email_count = existing.get('email_count', 0)
+                existing_email_count = existing.get("email_count", 0)
                 current_msg_count = len(thread_messages)
-                existing_last_id = existing.get('last_email', {}).get('id')
-                current_last_id = last_message.get('id')
+                existing_last_id = existing.get("last_email", {}).get("id")
+                current_last_id = last_message.get("id")
 
-                logger.debug(f"Thread {thread_id}: existing_count={existing_email_count}, current_count={current_msg_count}, existing_last_id={existing_last_id}, current_last_id={current_last_id}")
+                logger.debug(
+                    f"Thread {thread_id}: existing_count={existing_email_count}, current_count={current_msg_count}, existing_last_id={existing_last_id}, current_last_id={current_last_id}"
+                )
 
                 # Skip if message count matches AND either:
                 # - last_email_id matches, OR
@@ -199,7 +203,9 @@ class EmailSyncManager:
                     else:
                         logger.debug(f"Re-analyzing thread {thread_id} (last_id mismatch)")
                 else:
-                    logger.debug(f"Re-analyzing thread {thread_id} (count mismatch: {existing_email_count} vs {current_msg_count})")
+                    logger.debug(
+                        f"Re-analyzing thread {thread_id} (count mismatch: {existing_email_count} vs {current_msg_count})"
+                    )
 
             if not needs_analysis:
                 processed += 1
@@ -208,7 +214,7 @@ class EmailSyncManager:
             # Analyze thread with Sonnet
             try:
                 thread_data = self._analyze_thread(thread_id, last_message, thread_messages)
-                cache['threads'][thread_id] = thread_data
+                cache["threads"][thread_id] = thread_data
                 analyzed_threads[thread_id] = thread_data  # Track for saving
 
                 if existing:
@@ -220,7 +226,9 @@ class EmailSyncManager:
 
                 # Save analyzed threads every 10 (incremental save for safety)
                 if len(analyzed_threads) % 10 == 0:
-                    logger.info(f"Progress: {processed}/{len(threads_map)} threads processed, {len(analyzed_threads)} analyzed...")
+                    logger.info(
+                        f"Progress: {processed}/{len(threads_map)} threads processed, {len(analyzed_threads)} analyzed..."
+                    )
                     self._save_analyzed_threads(analyzed_threads)
 
             except Exception as e:
@@ -232,7 +240,6 @@ class EmailSyncManager:
             self._save_analyzed_threads(analyzed_threads)
             logger.info(f"Saved {len(analyzed_threads)} analyzed threads to Supabase")
 
-
         # Count total messages
         total_messages = sum(len(msgs) for msgs in threads_map.values())
 
@@ -241,7 +248,7 @@ class EmailSyncManager:
             "total_threads": len(threads_map),
             "new_threads": new_threads,
             "updated_threads": updated_threads,
-            "cache_size": len(cache['threads'])
+            "cache_size": len(cache["threads"]),
         }
 
     def _convert_archive_message(self, archive_msg: Dict[str, Any]) -> Dict[str, Any]:
@@ -254,29 +261,30 @@ class EmailSyncManager:
             Message in cache format (Gmail-like)
         """
         # Build "from" field in "Name <email>" format
-        from_field = archive_msg.get('from_email', '')
-        if archive_msg.get('from_name'):
+        from_field = archive_msg.get("from_email", "")
+        if archive_msg.get("from_name"):
             from_field = f"{archive_msg['from_name']} <{from_field}>"
 
         return {
-            'id': archive_msg['id'],
-            'thread_id': archive_msg['thread_id'],
-            'from': from_field,
-            'to': archive_msg.get('to_email', ''),
-            'cc': archive_msg.get('cc_email', ''),
-            'subject': archive_msg.get('subject', ''),
-            'date': archive_msg.get('date', ''),
-            'snippet': archive_msg.get('snippet', ''),
-            'body': archive_msg.get('body_plain', ''),
-            'labels': json.loads(archive_msg.get('labels', '[]')) if isinstance(archive_msg.get('labels'), str) else archive_msg.get('labels', []),
-            'is_auto_reply': archive_msg.get('is_auto_reply', False),
+            "id": archive_msg["id"],
+            "thread_id": archive_msg["thread_id"],
+            "from": from_field,
+            "to": archive_msg.get("to_email", ""),
+            "cc": archive_msg.get("cc_email", ""),
+            "subject": archive_msg.get("subject", ""),
+            "date": archive_msg.get("date", ""),
+            "snippet": archive_msg.get("snippet", ""),
+            "body": archive_msg.get("body_plain", ""),
+            "labels": (
+                json.loads(archive_msg.get("labels", "[]"))
+                if isinstance(archive_msg.get("labels"), str)
+                else archive_msg.get("labels", [])
+            ),
+            "is_auto_reply": archive_msg.get("is_auto_reply", False),
         }
 
     def _analyze_thread(
-        self,
-        thread_id: str,
-        last_message: Dict[str, Any],
-        all_messages: List[Dict[str, Any]]
+        self, thread_id: str, last_message: Dict[str, Any], all_messages: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """Analyze email thread with LLM.
 
@@ -289,16 +297,16 @@ class EmailSyncManager:
             Thread data with analysis
         """
         # Early-exit for auto-reply threads - skip Claude analysis to save API costs
-        if last_message.get('is_auto_reply'):
+        if last_message.get("is_auto_reply"):
             logger.debug(f"Thread {thread_id}: skipping analysis - last message is auto-reply")
             return self._build_auto_reply_thread_data(thread_id, last_message, all_messages)
 
         # Extract participants (from, to, cc)
         participants = set()
         for msg in all_messages:
-            from_addr = self._extract_email(msg.get('from', ''))
-            to_addrs = self._extract_emails(msg.get('to', ''))
-            cc_addrs = self._extract_emails(msg.get('cc', ''))
+            from_addr = self._extract_email(msg.get("from", ""))
+            to_addrs = self._extract_emails(msg.get("to", ""))
+            cc_addrs = self._extract_emails(msg.get("cc", ""))
 
             if from_addr:
                 participants.add(from_addr)
@@ -316,54 +324,51 @@ class EmailSyncManager:
         # Build thread data
         thread_data = {
             "thread_id": thread_id,
-            "subject": last_message.get('subject', '(No subject)'),
+            "subject": last_message.get("subject", "(No subject)"),
             "participants": list(participants),
             "email_count": len(all_messages),
             "last_updated": datetime.now(timezone.utc).isoformat(),
-            "open": analysis.get('open', False),
-            "expected_action": analysis.get('expected_action'),
+            "open": analysis.get("open", False),
+            "expected_action": analysis.get("expected_action"),
             "last_email": {
-                "id": last_message.get('id'),
-                "from": last_message.get('from'),
-                "to": last_message.get('to'),
-                "cc": last_message.get('cc', ''),
-                "date": last_message.get('date'),
-                "body": last_message.get('body', '')
+                "id": last_message.get("id"),
+                "from": last_message.get("from"),
+                "to": last_message.get("to"),
+                "cc": last_message.get("cc", ""),
+                "date": last_message.get("date"),
+                "body": last_message.get("body", ""),
             },
-            "summary": analysis.get('summary', '')
+            "summary": analysis.get("summary", ""),
         }
 
         # Add fields for relationship intelligence
         # requires_action: True if ANY action needed (answer OR reminder OR anything)
         # The only case where requires_action = False is when expected_action = null (closed)
-        thread_data['requires_action'] = analysis.get('expected_action') is not None
+        thread_data["requires_action"] = analysis.get("expected_action") is not None
 
         # last_message_date: for gap analysis timing
-        thread_data['last_message_date'] = last_message.get('date', '')
+        thread_data["last_message_date"] = last_message.get("date", "")
 
         # priority_score: simple heuristic based on keywords and expected_action
         # TODO: could use AI to determine priority, but for now use simple rules
         priority = 5  # default medium priority
-        if thread_data['requires_action']:
+        if thread_data["requires_action"]:
             priority = 7  # high priority if requires answer
 
-        subject_lower = last_message.get('subject', '').lower()
-        body_lower = last_message.get('body', '').lower()
+        subject_lower = last_message.get("subject", "").lower()
+        body_lower = last_message.get("body", "").lower()
 
         # Boost priority for urgent keywords
-        urgent_keywords = ['urgent', 'asap', 'importante', 'subito', 'immediately', 'critico']
+        urgent_keywords = ["urgent", "asap", "importante", "subito", "immediately", "critico"]
         if any(kw in subject_lower or kw in body_lower for kw in urgent_keywords):
             priority = min(10, priority + 2)
 
-        thread_data['priority_score'] = priority
+        thread_data["priority_score"] = priority
 
         return thread_data
 
     def _build_auto_reply_thread_data(
-        self,
-        thread_id: str,
-        last_message: Dict[str, Any],
-        all_messages: List[Dict[str, Any]]
+        self, thread_id: str, last_message: Dict[str, Any], all_messages: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """Build thread data for auto-reply messages without Claude analysis.
 
@@ -383,9 +388,9 @@ class EmailSyncManager:
         # Extract participants
         participants = set()
         for msg in all_messages:
-            from_addr = self._extract_email(msg.get('from', ''))
-            to_addrs = self._extract_emails(msg.get('to', ''))
-            cc_addrs = self._extract_emails(msg.get('cc', ''))
+            from_addr = self._extract_email(msg.get("from", ""))
+            to_addrs = self._extract_emails(msg.get("to", ""))
+            cc_addrs = self._extract_emails(msg.get("cc", ""))
             if from_addr:
                 participants.add(from_addr)
             participants.update(to_addrs)
@@ -393,31 +398,29 @@ class EmailSyncManager:
 
         return {
             "thread_id": thread_id,
-            "subject": last_message.get('subject', '(No subject)'),
+            "subject": last_message.get("subject", "(No subject)"),
             "participants": list(participants),
             "email_count": len(all_messages),
             "last_updated": datetime.now(timezone.utc).isoformat(),
             "open": True,  # Auto-reply doesn't close the thread
             "expected_action": "answer",  # Someone still needs to respond
             "last_email": {
-                "id": last_message.get('id'),
-                "from": last_message.get('from'),
-                "to": last_message.get('to'),
-                "cc": last_message.get('cc', ''),
-                "date": last_message.get('date'),
-                "body": last_message.get('body', '')
+                "id": last_message.get("id"),
+                "from": last_message.get("from"),
+                "to": last_message.get("to"),
+                "cc": last_message.get("cc", ""),
+                "date": last_message.get("date"),
+                "body": last_message.get("body", ""),
             },
             "summary": "Auto-reply detected - thread awaiting human response",
             "requires_action": True,  # Thread still needs attention
-            "last_message_date": last_message.get('date', ''),
+            "last_message_date": last_message.get("date", ""),
             "priority_score": 3,  # Low priority - auto-reply itself isn't urgent
             "is_auto_reply": True,  # Flag for downstream processing
         }
 
     def _agent_analyze(
-        self,
-        last_message: Dict[str, Any],
-        all_messages: List[Dict[str, Any]]
+        self, last_message: Dict[str, Any], all_messages: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """Use Claude to analyze email thread and detect tasks.
 
@@ -433,22 +436,19 @@ class EmailSyncManager:
         # Prepare context for analysis
         # Include full body with quoted replies for conversation context
         # Clean HTML to reduce tokens and improve analysis
-        raw_body = last_message.get('body', '')
+        raw_body = last_message.get("body", "")
         body = clean_html(raw_body)
 
-        from_addr = last_message.get('from', '')
-        subject = last_message.get('subject', '')
+        from_addr = last_message.get("from", "")
+        subject = last_message.get("subject", "")
 
         # Load prompt template from file
-        prompt_path = Path(__file__).parent.parent / 'prompts' / 'email_thread_classify.txt'
-        with open(prompt_path, 'r') as f:
+        prompt_path = Path(__file__).parent.parent / "prompts" / "email_thread_classify.txt"
+        with open(prompt_path, "r") as f:
             prompt_template = f.read()
 
         prompt = prompt_template.format(
-            subject=subject,
-            from_addr=from_addr,
-            message_count=len(all_messages),
-            body=body
+            subject=subject, from_addr=from_addr, message_count=len(all_messages), body=body
         )
 
         # Define tool for structured output
@@ -460,20 +460,20 @@ class EmailSyncManager:
                 "properties": {
                     "summary": {
                         "type": "string",
-                        "description": "Brief summary of what user needs to do (1-2 sentences in English)"
+                        "description": "Brief summary of what user needs to do (1-2 sentences in English)",
                     },
                     "open": {
                         "type": "boolean",
-                        "description": "True if user has a pending task, False if conversation is concluded"
+                        "description": "True if user has a pending task, False if conversation is concluded",
                     },
                     "expected_action": {
                         "type": ["string", "null"],
                         "enum": ["answer", "reminder", None],
-                        "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed"
-                    }
+                        "description": "Type of action: 'answer' if user needs to reply, 'reminder' if user promised something, null if no action needed",
+                    },
                 },
-                "required": ["summary", "open", "expected_action"]
-            }
+                "required": ["summary", "open", "expected_action"],
+            },
         }
 
         try:
@@ -481,7 +481,7 @@ class EmailSyncManager:
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=800,
                 tools=[classify_tool],
-                tool_choice={"type": "tool", "name": "classify_thread"}
+                tool_choice={"type": "tool", "name": "classify_thread"},
             )
 
             # Extract tool use result
@@ -500,9 +500,9 @@ class EmailSyncManager:
         except Exception as e:
             logger.warning(f"Thread analysis failed: {e}, using fallback")
             return {
-                "summary": last_message.get('snippet', ''),
+                "summary": last_message.get("snippet", ""),
                 "open": True,
-                "expected_action": None
+                "expected_action": None,
             }
 
     def _estimate_sync_time(self, days_back: int) -> int:
@@ -537,9 +537,9 @@ class EmailSyncManager:
         if not email_field:
             return None
 
-        if '<' in email_field and '>' in email_field:
+        if "<" in email_field and ">" in email_field:
             # Format: "Name <email@example.com>"
-            return email_field.split('<')[1].split('>')[0].strip()
+            return email_field.split("<")[1].split(">")[0].strip()
         else:
             # Already just email
             return email_field.strip()
@@ -549,9 +549,9 @@ class EmailSyncManager:
         if not from_field:
             return None
 
-        if '<' in from_field:
+        if "<" in from_field:
             # Format: "Name <email@example.com>"
-            name = from_field.split('<')[0].strip().strip('"')
+            name = from_field.split("<")[0].strip().strip('"')
             return name if name else None
         else:
             # No name, just email
@@ -571,7 +571,7 @@ class EmailSyncManager:
 
         emails = set()
         # Split by comma (handles multiple recipients)
-        parts = email_field.split(',')
+        parts = email_field.split(",")
         for part in parts:
             email = self._extract_email(part.strip())
             if email:
@@ -597,7 +597,7 @@ class EmailSyncManager:
         except Exception as rfc_error:
             # Fallback: try ISO format
             try:
-                dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
                 return dt.replace(tzinfo=None)
             except Exception as iso_error:
                 raise ValueError(
@@ -609,7 +609,7 @@ class EmailSyncManager:
         self,
         query: Optional[str] = None,
         open_only: bool = False,
-        expected_action: Optional[str] = None
+        expected_action: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Search cached email threads.
 
@@ -622,29 +622,30 @@ class EmailSyncManager:
             List of matching threads
         """
         cache = self._load_cache()
-        threads = list(cache['threads'].values())
+        threads = list(cache["threads"].values())
 
         # Filter by open status
         if open_only:
-            threads = [t for t in threads if t.get('open')]
+            threads = [t for t in threads if t.get("open")]
 
         # Filter by expected action
         if expected_action:
-            threads = [t for t in threads if t.get('expected_action') == expected_action]
+            threads = [t for t in threads if t.get("expected_action") == expected_action]
 
         # Search query (subject, summary, participants, sender)
         if query:
             query_lower = query.lower()
             threads = [
-                t for t in threads
-                if query_lower in t.get('subject', '').lower()
-                or query_lower in t.get('summary', '').lower()
-                or any(query_lower in p.lower() for p in t.get('participants', []))
-                or query_lower in t.get('last_email', {}).get('from', '').lower()
+                t
+                for t in threads
+                if query_lower in t.get("subject", "").lower()
+                or query_lower in t.get("summary", "").lower()
+                or any(query_lower in p.lower() for p in t.get("participants", []))
+                or query_lower in t.get("last_email", {}).get("from", "").lower()
             ]
 
         # Sort by last_updated (newest first)
-        threads.sort(key=lambda t: t.get('last_updated', ''), reverse=True)
+        threads.sort(key=lambda t: t.get("last_updated", ""), reverse=True)
 
         return threads
 
@@ -655,39 +656,31 @@ class EmailSyncManager:
             Dict with oldest_email, newest_email, thread_count
         """
         cache = self._load_cache()
-        threads = list(cache['threads'].values())
+        threads = list(cache["threads"].values())
 
         if not threads:
-            return {
-                'oldest_email': None,
-                'newest_email': None,
-                'thread_count': 0
-            }
+            return {"oldest_email": None, "newest_email": None, "thread_count": 0}
 
         # Extract dates from threads
         dates = []
         for t in threads:
-            last_email = t.get('last_email', {})
-            date_str = last_email.get('date')
+            last_email = t.get("last_email", {})
+            date_str = last_email.get("date")
             if date_str:
                 parsed = self._parse_email_date_for_sort(date_str)
                 if parsed != datetime.min:
                     dates.append(parsed)
 
         if not dates:
-            return {
-                'oldest_email': None,
-                'newest_email': None,
-                'thread_count': len(threads)
-            }
+            return {"oldest_email": None, "newest_email": None, "thread_count": len(threads)}
 
         oldest = min(dates)
         newest = max(dates)
 
         return {
-            'oldest_email': oldest.strftime('%Y-%m-%d'),
-            'newest_email': newest.strftime('%Y-%m-%d'),
-            'thread_count': len(threads)
+            "oldest_email": oldest.strftime("%Y-%m-%d"),
+            "newest_email": newest.strftime("%Y-%m-%d"),
+            "thread_count": len(threads),
         }
 
     def mark_thread_closed(self, thread_id: str) -> bool:
@@ -701,14 +694,14 @@ class EmailSyncManager:
         """
         cache = self._load_cache()
 
-        if thread_id not in cache['threads']:
+        if thread_id not in cache["threads"]:
             logger.warning(f"Thread {thread_id} not found in cache")
             return False
 
         # Update thread status
-        cache['threads'][thread_id]['open'] = False
-        cache['threads'][thread_id]['expected_action'] = None
-        cache['threads'][thread_id]['closed_at'] = datetime.now(timezone.utc).isoformat()
+        cache["threads"][thread_id]["open"] = False
+        cache["threads"][thread_id]["expected_action"] = None
+        cache["threads"][thread_id]["closed_at"] = datetime.now(timezone.utc).isoformat()
 
         # Save cache
         self._save_cache(cache)
@@ -729,32 +722,28 @@ class EmailSyncManager:
         closed_count = 0
         matched_threads = []
 
-        for thread_id, thread in cache['threads'].items():
-            thread_subject = thread.get('subject', '').lower()
+        for thread_id, thread in cache["threads"].items():
+            thread_subject = thread.get("subject", "").lower()
 
             # Check if any subject keyword matches
             for subject_keyword in subjects:
                 if subject_keyword.lower() in thread_subject:
-                    thread['open'] = False
-                    thread['expected_action'] = None
-                    thread['closed_at'] = datetime.now(timezone.utc).isoformat()
-                    thread['manually_closed'] = True  # Mark as manually closed to prevent reopening
-                    thread['requires_action'] = False
+                    thread["open"] = False
+                    thread["expected_action"] = None
+                    thread["closed_at"] = datetime.now(timezone.utc).isoformat()
+                    thread["manually_closed"] = True  # Mark as manually closed to prevent reopening
+                    thread["requires_action"] = False
                     closed_count += 1
-                    matched_threads.append({
-                        'thread_id': thread_id,
-                        'subject': thread.get('subject')
-                    })
+                    matched_threads.append(
+                        {"thread_id": thread_id, "subject": thread.get("subject")}
+                    )
                     break
 
         if closed_count > 0:
             self._save_cache(cache)
             logger.info(f"✅ Marked {closed_count} threads as closed")
 
-        return {
-            'closed_count': closed_count,
-            'threads': matched_threads
-        }
+        return {"closed_count": closed_count, "threads": matched_threads}
 
     def get_stats(self) -> Dict[str, Any]:
         """Get email cache statistics.
@@ -763,17 +752,17 @@ class EmailSyncManager:
             Stats about cached threads
         """
         cache = self._load_cache()
-        threads = list(cache['threads'].values())
+        threads = list(cache["threads"].values())
 
-        open_threads = [t for t in threads if t.get('open')]
-        need_answer = [t for t in open_threads if t.get('expected_action') == 'answer']
-        need_reminder = [t for t in open_threads if t.get('expected_action') == 'reminder']
+        open_threads = [t for t in threads if t.get("open")]
+        need_answer = [t for t in open_threads if t.get("expected_action") == "answer"]
+        need_reminder = [t for t in open_threads if t.get("expected_action") == "reminder"]
 
         return {
-            "last_sync": cache.get('last_sync'),
+            "last_sync": cache.get("last_sync"),
             "total_threads": len(threads),
             "open_threads": len(open_threads),
             "need_answer": len(need_answer),
             "need_reminder": len(need_reminder),
-            "closed_threads": len(threads) - len(open_threads)
+            "closed_threads": len(threads) - len(open_threads),
         }

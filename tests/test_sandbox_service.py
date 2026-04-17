@@ -24,90 +24,84 @@ class TestIsCommandAllowedInSandbox:
 
     # ========== MRCALL SANDBOX - ALLOWED COMMANDS ==========
 
-    @pytest.mark.parametrize("cmd,args", [
-        # /help is always allowed
-        ("/help", []),
-        ("/HELP", []),  # case insensitive
-
-        # /mrcall is always allowed (all subcommands)
-        ("/mrcall", []),
-        ("/mrcall", ["open", "abc123"]),
-        ("/mrcall", ["list"]),
-        ("/mrcall", ["variables"]),
-        ("/mrcall", ["show"]),
-        ("/mrcall", ["close"]),
-        ("/mrcall", ["config", "greeting", "Hello"]),
-        ("/MRCALL", ["list"]),  # case insensitive
-
-        # /agent mrcall is allowed
-        ("/agent", ["mrcall", "train"]),
-        ("/agent", ["mrcall", "run"]),
-        ("/agent", ["mrcall", "show"]),
-        ("/agent", ["mrcall", "reset"]),
-        ("/agent", ["MRCALL", "train"]),  # case insensitive subcommand
-        ("/AGENT", ["mrcall", "train"]),  # case insensitive command
-    ])
+    @pytest.mark.parametrize(
+        "cmd,args",
+        [
+            # /help is always allowed
+            ("/help", []),
+            ("/HELP", []),  # case insensitive
+            # /mrcall is always allowed (all subcommands)
+            ("/mrcall", []),
+            ("/mrcall", ["open", "abc123"]),
+            ("/mrcall", ["list"]),
+            ("/mrcall", ["variables"]),
+            ("/mrcall", ["show"]),
+            ("/mrcall", ["close"]),
+            ("/mrcall", ["config", "greeting", "Hello"]),
+            ("/MRCALL", ["list"]),  # case insensitive
+            # /agent mrcall is allowed
+            ("/agent", ["mrcall", "train"]),
+            ("/agent", ["mrcall", "run"]),
+            ("/agent", ["mrcall", "show"]),
+            ("/agent", ["mrcall", "reset"]),
+            ("/agent", ["MRCALL", "train"]),  # case insensitive subcommand
+            ("/AGENT", ["mrcall", "train"]),  # case insensitive command
+        ],
+    )
     def test_mrcall_sandbox_allowed_commands(self, cmd, args):
         """Verify allowed commands pass the mrcall sandbox check."""
         assert is_command_allowed_in_sandbox(cmd, args, SANDBOX_MODE_MRCALL) is True
 
     # ========== MRCALL SANDBOX - BLOCKED COMMANDS ==========
 
-    @pytest.mark.parametrize("cmd,args", [
-        # Email commands
-        ("/email", []),
-        ("/email", ["list"]),
-        ("/email", ["create"]),
-        ("/email", ["send"]),
-        ("/email", ["search", "test"]),
-
-        # Calendar commands
-        ("/calendar", []),
-        ("/calendar", ["today"]),
-        ("/calendar", ["7"]),
-
-        # Tasks commands
-        ("/tasks", []),
-        ("/tasks", ["add", "Buy milk"]),
-        ("/tasks", ["list"]),
-
-        # Memory commands
-        ("/memory", []),
-        ("/memory", ["search", "coffee"]),
-        ("/memory", ["store", "test"]),
-
-        # Sync commands
-        ("/sync", []),
-        ("/sync", ["status"]),
-        ("/sync", ["--days", "30"]),
-
-        # Connect commands
-        ("/connect", []),
-        ("/connect", ["google"]),
-        ("/connect", ["mrcall"]),
-
-        # Stats and jobs
-        ("/stats", []),
-        ("/jobs", []),
-        ("/jobs", ["status"]),
-
-        # Reset
-        ("/reset", []),
-
-        # Share/revoke
-        ("/share", ["test@example.com"]),
-        ("/revoke", ["test@example.com"]),
-
-        # /agent with non-mrcall subcommand
-        ("/agent", []),  # no subcommand
-        ("/agent", ["other", "train"]),
-        ("/agent", ["email", "train"]),
-        ("/agent", ["zylch", "train"]),
-
-        # Unknown commands
-        ("/unknown", []),
-        ("/foo", ["bar"]),
-    ])
+    @pytest.mark.parametrize(
+        "cmd,args",
+        [
+            # Email commands
+            ("/email", []),
+            ("/email", ["list"]),
+            ("/email", ["create"]),
+            ("/email", ["send"]),
+            ("/email", ["search", "test"]),
+            # Calendar commands
+            ("/calendar", []),
+            ("/calendar", ["today"]),
+            ("/calendar", ["7"]),
+            # Tasks commands
+            ("/tasks", []),
+            ("/tasks", ["add", "Buy milk"]),
+            ("/tasks", ["list"]),
+            # Memory commands
+            ("/memory", []),
+            ("/memory", ["search", "coffee"]),
+            ("/memory", ["store", "test"]),
+            # Sync commands
+            ("/sync", []),
+            ("/sync", ["status"]),
+            ("/sync", ["--days", "30"]),
+            # Connect commands
+            ("/connect", []),
+            ("/connect", ["google"]),
+            ("/connect", ["mrcall"]),
+            # Stats and jobs
+            ("/stats", []),
+            ("/jobs", []),
+            ("/jobs", ["status"]),
+            # Reset
+            ("/reset", []),
+            # Share/revoke
+            ("/share", ["test@example.com"]),
+            ("/revoke", ["test@example.com"]),
+            # /agent with non-mrcall subcommand
+            ("/agent", []),  # no subcommand
+            ("/agent", ["other", "train"]),
+            ("/agent", ["email", "train"]),
+            ("/agent", ["zylch", "train"]),
+            # Unknown commands
+            ("/unknown", []),
+            ("/foo", ["bar"]),
+        ],
+    )
     def test_mrcall_sandbox_blocked_commands(self, cmd, args):
         """Verify blocked commands fail the mrcall sandbox check."""
         assert is_command_allowed_in_sandbox(cmd, args, SANDBOX_MODE_MRCALL) is False

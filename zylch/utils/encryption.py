@@ -18,7 +18,6 @@ Usage:
 
 import logging
 import os
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +45,13 @@ def _get_fernet():
     _encryption_checked = True
 
     # Try environment variable first
-    encryption_key = os.environ.get('ENCRYPTION_KEY')
+    encryption_key = os.environ.get("ENCRYPTION_KEY")
 
     # Fall back to settings
     if not encryption_key:
         try:
             from zylch.config import settings
+
             encryption_key = settings.encryption_key
         except Exception as e:
             logger.warning(f"Failed to load settings for encryption key: {e}")
@@ -63,6 +63,7 @@ def _get_fernet():
 
     try:
         from cryptography.fernet import Fernet
+
         _fernet = Fernet(encryption_key.encode())
         _encryption_available = True
         logger.info("Encryption enabled for sensitive data")
@@ -142,6 +143,7 @@ def generate_key() -> str:
         Base64-encoded Fernet key
     """
     from cryptography.fernet import Fernet
+
     return Fernet.generate_key().decode()
 
 
@@ -160,4 +162,4 @@ def is_encrypted(value: str) -> bool:
         return False
     # Fernet tokens are base64 and start with specific bytes
     # They're also fairly long (minimum ~100 chars for short plaintext)
-    return value.startswith('gAAA') and len(value) > 80
+    return value.startswith("gAAA") and len(value) > 80

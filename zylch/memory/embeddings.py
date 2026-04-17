@@ -60,8 +60,7 @@ class EmbeddingEngine:
         test_embedding = list(self.model.embed(["test"]))[0]
         actual_dim = len(test_embedding)
         logger.debug(
-            f"[EmbeddingEngine] dimensionality check: "
-            f"expected={self.dim}, actual={actual_dim}"
+            f"[EmbeddingEngine] dimensionality check: " f"expected={self.dim}, actual={actual_dim}"
         )
         if actual_dim != self.dim:
             logger.warning(
@@ -71,10 +70,7 @@ class EmbeddingEngine:
             )
             self.dim = actual_dim
 
-        logger.info(
-            f"Embedding engine ready: model={self.model_name}, "
-            f"dim={self.dim}"
-        )
+        logger.info(f"Embedding engine ready: model={self.model_name}, " f"dim={self.dim}")
 
     def encode(self, text: Union[str, List[str]]) -> np.ndarray:
         """Generate embedding(s) for text.
@@ -87,17 +83,11 @@ class EmbeddingEngine:
             or (n, dim) for batch
         """
         if isinstance(text, str):
-            logger.debug(
-                f"[EmbeddingEngine] encode single text "
-                f"(len={len(text)})"
-            )
+            logger.debug(f"[EmbeddingEngine] encode single text " f"(len={len(text)})")
             embedding = list(self.model.embed([text]))[0]
             return np.array(embedding, dtype=np.float32)
         else:
-            logger.debug(
-                f"[EmbeddingEngine] encode batch "
-                f"(n={len(text)})"
-            )
+            logger.debug(f"[EmbeddingEngine] encode batch " f"(n={len(text)})")
             embeddings = list(
                 self.model.embed(
                     text,

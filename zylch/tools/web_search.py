@@ -26,7 +26,7 @@ class WebSearchTool(Tool):
     def __init__(self, api_key: str, provider: str):
         super().__init__(
             name="web_search",
-            description="Search the web for current information. Use when user explicitly asks to search online or needs up-to-date information."
+            description="Search the web for current information. Use when user explicitly asks to search online or needs up-to-date information.",
         )
         self.provider = provider
         self.api_key = api_key
@@ -41,18 +41,23 @@ class WebSearchTool(Tool):
             self.web_search_provider = provider
             if provider == "anthropic":
                 import anthropic
+
                 self.client = anthropic.Anthropic(api_key=api_key)
             elif provider == "openai":
                 from openai import OpenAI
+
                 self.client = OpenAI(api_key=api_key)
         else:
             # Fallback: use OpenAI for web search if system key available
             if settings.openai_api_key:
                 from openai import OpenAI
+
                 self.client = OpenAI(api_key=settings.openai_api_key)
                 self.web_search_provider = "openai"
                 self.supports_web_search = True
-                logger.info(f"Web search: falling back to OpenAI (provider {provider} has no native web search)")
+                logger.info(
+                    f"Web search: falling back to OpenAI (provider {provider} has no native web search)"
+                )
 
     async def execute(
         self,
@@ -77,14 +82,14 @@ class WebSearchTool(Tool):
                 error=(
                     f"Web search is not available with {self.provider}. "
                     f"Set OPENAI_API_KEY in .env for web search fallback, or use Anthropic/OpenAI."
-                )
+                ),
             )
 
         try:
             # Build enhanced query
             search_query = query
             if email:
-                domain = email.split('@')[1] if '@' in email else ''
+                domain = email.split("@")[1] if "@" in email else ""
                 if domain:
                     search_query += f" {domain}"
             if company:
@@ -100,16 +105,12 @@ class WebSearchTool(Tool):
                 return ToolResult(
                     status=ToolStatus.ERROR,
                     data=None,
-                    error=f"Web search not implemented for provider: {self.web_search_provider}"
+                    error=f"Web search not implemented for provider: {self.web_search_provider}",
                 )
 
         except Exception as e:
             logger.error(f"Web search failed ({self.web_search_provider}): {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=str(e)
-            )
+            return ToolResult(status=ToolStatus.ERROR, data=None, error=str(e))
 
     async def _search_openai(
         self,
@@ -129,15 +130,17 @@ class WebSearchTool(Tool):
         citations = []
 
         for item in response.output:
-            if getattr(item, 'type', None) == 'message':
-                for content_block in getattr(item, 'content', []):
-                    if getattr(content_block, 'type', None) == 'output_text':
-                        for annotation in getattr(content_block, 'annotations', []):
-                            if getattr(annotation, 'type', None) == 'url_citation':
-                                citations.append({
-                                    'url': getattr(annotation, 'url', ''),
-                                    'title': getattr(annotation, 'title', ''),
-                                })
+            if getattr(item, "type", None) == "message":
+                for content_block in getattr(item, "content", []):
+                    if getattr(content_block, "type", None) == "output_text":
+                        for annotation in getattr(content_block, "annotations", []):
+                            if getattr(annotation, "type", None) == "url_citation":
+                                citations.append(
+                                    {
+                                        "url": getattr(annotation, "url", ""),
+                                        "title": getattr(annotation, "title", ""),
+                                    }
+                                )
 
         return ToolResult(
             status=ToolStatus.SUCCESS,
@@ -148,7 +151,7 @@ class WebSearchTool(Tool):
                 "email": email,
                 "company": company,
             },
-            message=f"Found web information for: {search_query}"
+            message=f"Found web information for: {search_query}",
         )
 
     async def _search_anthropic(
@@ -161,31 +164,37 @@ class WebSearchTool(Tool):
         response = self.client.messages.create(
             model=settings.anthropic_model,
             max_tokens=2048,
-            tools=[{
-                "type": "web_search_20250305",
-                "name": "web_search",
-                "max_uses": 3,
-            }],
-            messages=[{
-                "role": "user",
-                "content": f"Search the web for: {search_query}\n\nProvide a concise summary of the findings with relevant details. Include citations to sources.",
-            }]
+            tools=[
+                {
+                    "type": "web_search_20250305",
+                    "name": "web_search",
+                    "max_uses": 3,
+                }
+            ],
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"Search the web for: {search_query}\n\nProvide a concise summary of the findings with relevant details. Include citations to sources.",
+                }
+            ],
         )
 
         search_results = ""
         citations = []
 
         for block in response.content:
-            if hasattr(block, 'text'):
+            if hasattr(block, "text"):
                 search_results += block.text
-            if hasattr(block, 'type') and block.type == 'web_search_tool_result':
-                if hasattr(block, 'content'):
+            if hasattr(block, "type") and block.type == "web_search_tool_result":
+                if hasattr(block, "content"):
                     for result in block.content:
-                        if hasattr(result, 'url') and hasattr(result, 'title'):
-                            citations.append({
-                                'url': result.url,
-                                'title': result.title,
-                            })
+                        if hasattr(result, "url") and hasattr(result, "title"):
+                            citations.append(
+                                {
+                                    "url": result.url,
+                                    "title": result.title,
+                                }
+                            )
 
         return ToolResult(
             status=ToolStatus.SUCCESS,
@@ -196,7 +205,7 @@ class WebSearchTool(Tool):
                 "email": email,
                 "company": company,
             },
-            message=f"Found web information for: {search_query}"
+            message=f"Found web information for: {search_query}",
         )
 
     def get_schema(self) -> Dict[str, Any]:
@@ -209,17 +218,17 @@ class WebSearchTool(Tool):
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Search query (e.g., 'OpenAI pricing 2025' or 'QBitSoft beach management software')"
+                        "description": "Search query (e.g., 'OpenAI pricing 2025' or 'QBitSoft beach management software')",
                     },
                     "email": {
                         "type": "string",
-                        "description": "Email address for context - domain will be added to search (optional)"
+                        "description": "Email address for context - domain will be added to search (optional)",
                     },
                     "company": {
                         "type": "string",
-                        "description": "Company name for context (optional)"
-                    }
+                        "description": "Company name for context (optional)",
+                    },
                 },
-                "required": ["query"]
-            }
+                "required": ["query"],
+            },
         }

@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 import logging
-from typing import Dict, Tuple, List, Optional, Any
+from typing import Dict, Tuple, List, Any
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,7 @@ class TriageAnonymizer:
         try:
             from presidio_analyzer import AnalyzerEngine
             from presidio_anonymizer import AnonymizerEngine
+
             self.analyzer = AnalyzerEngine()
             self.anonymizer = AnonymizerEngine()
             self.use_presidio = True
@@ -54,29 +55,15 @@ class TriageAnonymizer:
     def _init_regex_patterns(self):
         """Fallback regex patterns for common PII."""
         self.patterns = {
-            'EMAIL': re.compile(
-                r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
-                re.IGNORECASE
-            ),
-            'PHONE': re.compile(
-                r'(?:\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}'
-            ),
-            'URL': re.compile(
-                r'https?://[^\s<>"{}|\\^`\[\]]+',
-                re.IGNORECASE
-            ),
-            'IP_ADDRESS': re.compile(
-                r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
-            ),
-            'CREDIT_CARD': re.compile(
-                r'\b(?:\d{4}[-\s]?){3}\d{4}\b'
-            ),
-            'SSN': re.compile(
-                r'\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b'
-            ),
+            "EMAIL": re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", re.IGNORECASE),
+            "PHONE": re.compile(r"(?:\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}"),
+            "URL": re.compile(r'https?://[^\s<>"{}|\\^`\[\]]+', re.IGNORECASE),
+            "IP_ADDRESS": re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+            "CREDIT_CARD": re.compile(r"\b(?:\d{4}[-\s]?){3}\d{4}\b"),
+            "SSN": re.compile(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"),
             # Date patterns (to preserve context but anonymize specific dates)
-            'DATE': re.compile(
-                r'\b(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b'
+            "DATE": re.compile(
+                r"\b(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\b"
             ),
         }
 
@@ -103,19 +90,23 @@ class TriageAnonymizer:
 
     def _anonymize_with_presidio(self, text: str) -> Tuple[str, Dict[str, List[str]]]:
         """Use Presidio for comprehensive PII detection."""
-        from presidio_analyzer import AnalyzerEngine
-        from presidio_anonymizer import AnonymizerEngine
-        from presidio_anonymizer.entities import OperatorConfig
 
         # Analyze for PII
         results = self.analyzer.analyze(
             text=text,
             language=self.language,
             entities=[
-                "EMAIL_ADDRESS", "PHONE_NUMBER", "PERSON", "LOCATION",
-                "DATE_TIME", "ORGANIZATION", "CREDIT_CARD", "IBAN_CODE",
-                "IP_ADDRESS", "URL"
-            ]
+                "EMAIL_ADDRESS",
+                "PHONE_NUMBER",
+                "PERSON",
+                "LOCATION",
+                "DATE_TIME",
+                "ORGANIZATION",
+                "CREDIT_CARD",
+                "IBAN_CODE",
+                "IP_ADDRESS",
+                "URL",
+            ],
         )
 
         # Build entity map and track replacements
@@ -128,7 +119,7 @@ class TriageAnonymizer:
         anonymized_text = text
         for result in results:
             entity_type = result.entity_type
-            original_value = text[result.start:result.end]
+            original_value = text[result.start : result.end]
 
             # Track original values
             if entity_type not in entity_map:
@@ -144,9 +135,7 @@ class TriageAnonymizer:
 
             # Replace in text
             anonymized_text = (
-                anonymized_text[:result.start] +
-                placeholder +
-                anonymized_text[result.end:]
+                anonymized_text[: result.start] + placeholder + anonymized_text[result.end :]
             )
 
         return anonymized_text, entity_map
@@ -177,9 +166,7 @@ class TriageAnonymizer:
 
                 # Replace in text
                 anonymized_text = (
-                    anonymized_text[:match.start()] +
-                    placeholder +
-                    anonymized_text[match.end():]
+                    anonymized_text[: match.start()] + placeholder + anonymized_text[match.end() :]
                 )
 
         return anonymized_text, entity_map
@@ -208,49 +195,49 @@ class TriageAnonymizer:
         # Anonymize thread-level fields
         anonymized_thread = {}
 
-        if 'subject' in thread:
-            anon_subject, entities = self.anonymize(thread['subject'])
-            anonymized_thread['subject'] = anon_subject
+        if "subject" in thread:
+            anon_subject, entities = self.anonymize(thread["subject"])
+            anonymized_thread["subject"] = anon_subject
             merge_entities(entities)
 
         # Anonymize messages
-        if 'messages' in thread:
+        if "messages" in thread:
             anonymized_messages = []
-            for msg in thread['messages']:
+            for msg in thread["messages"]:
                 anon_msg = {}
 
                 # Anonymize body
-                if 'body' in msg:
-                    anon_body, entities = self.anonymize(msg['body'])
-                    anon_msg['body'] = anon_body
+                if "body" in msg:
+                    anon_body, entities = self.anonymize(msg["body"])
+                    anon_msg["body"] = anon_body
                     merge_entities(entities)
 
                 # Anonymize from/to (keep structure but anonymize values)
-                if 'from' in msg:
-                    anon_from, entities = self.anonymize(msg['from'])
-                    anon_msg['from'] = anon_from
+                if "from" in msg:
+                    anon_from, entities = self.anonymize(msg["from"])
+                    anon_msg["from"] = anon_from
                     merge_entities(entities)
 
-                if 'to' in msg:
-                    anon_to, entities = self.anonymize(msg['to'])
-                    anon_msg['to'] = anon_to
+                if "to" in msg:
+                    anon_to, entities = self.anonymize(msg["to"])
+                    anon_msg["to"] = anon_to
                     merge_entities(entities)
 
                 # Copy non-PII fields
-                for key in ['date', 'labels', 'is_auto_reply']:
+                for key in ["date", "labels", "is_auto_reply"]:
                     if key in msg:
                         anon_msg[key] = msg[key]
 
                 anonymized_messages.append(anon_msg)
 
-            anonymized_thread['messages'] = anonymized_messages
+            anonymized_thread["messages"] = anonymized_messages
 
         # Copy non-PII thread metadata
-        for key in ['thread_id', 'message_count', 'has_attachments']:
+        for key in ["thread_id", "message_count", "has_attachments"]:
             if key in thread:
                 anonymized_thread[key] = thread[key]
 
-        anonymized_thread['_entity_map'] = all_entities
+        anonymized_thread["_entity_map"] = all_entities
 
         return anonymized_thread
 
@@ -267,7 +254,7 @@ def create_sample_hash(anonymized_content: Any) -> str:
     """
     if isinstance(anonymized_content, dict):
         # Remove entity map before hashing (only hash actual content)
-        content_copy = {k: v for k, v in anonymized_content.items() if k != '_entity_map'}
+        content_copy = {k: v for k, v in anonymized_content.items() if k != "_entity_map"}
         content_str = json.dumps(content_copy, sort_keys=True)
     else:
         content_str = str(anonymized_content)

@@ -134,8 +134,7 @@ def _delete_profile_interactive(profiles: list[str]):
         db_size = f" ({mb:.1f} MB database)"
 
     if click.confirm(
-        f"\nDelete profile '{name}'{db_size}?"
-        f" This cannot be undone",
+        f"\nDelete profile '{name}'{db_size}?" f" This cannot be undone",
         default=False,
     ):
         delete_profile(name)
@@ -177,25 +176,23 @@ def _run_wizard(env: dict, profile_name: str | None):
         default=existing_provider,
     )
 
-    api_key_var = (
-        "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
-    )
+    api_key_var = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
     existing_key = env.get(api_key_var, "")
     api_key = _prompt_with_existing(
-        f"{provider.title()} API key", existing_key, hide=True,
+        f"{provider.title()} API key",
+        existing_key,
+        hide=True,
     )
 
     logger.debug(
-        f"[init] provider={provider},"
-        f" key={'present' if api_key else 'absent'}",
+        f"[init] provider={provider}," f" key={'present' if api_key else 'absent'}",
     )
 
     # ─── 2. Email (IMAP) ─────────────────────────────────────
 
     click.echo("\n2. Email (IMAP)")
     click.echo(
-        "   Connect your email to sync messages"
-        " and detect tasks.\n",
+        "   Connect your email to sync messages" " and detect tasks.\n",
     )
 
     existing_email = env.get("EMAIL_ADDRESS", "")
@@ -228,9 +225,7 @@ def _run_wizard(env: dict, profile_name: str | None):
     imap_host = env.get("IMAP_HOST", "")
     smtp_host = env.get("SMTP_HOST", "")
     if email and not imap_host:
-        domain = (
-            email.split("@")[-1].lower() if "@" in email else ""
-        )
+        domain = email.split("@")[-1].lower() if "@" in email else ""
         preset = IMAP_PRESETS.get(domain)
         if preset:
             imap_host, _, smtp_host, _ = preset
@@ -243,9 +238,13 @@ def _run_wizard(env: dict, profile_name: str | None):
             )
             provider_choice = click.prompt(
                 "  Email provider",
-                type=click.Choice([
-                    "google", "outlook", "other",
-                ]),
+                type=click.Choice(
+                    [
+                        "google",
+                        "outlook",
+                        "other",
+                    ]
+                ),
                 default="google",
             )
             if provider_choice == "google":
@@ -271,41 +270,40 @@ def _run_wizard(env: dict, profile_name: str | None):
                 )
 
     logger.debug(
-        f"[init] email={email},"
-        f" password={'present' if password else 'absent'}",
+        f"[init] email={email}," f" password={'present' if password else 'absent'}",
     )
 
     # ─── 3. WhatsApp (neonize) ────────────────────────────────
 
     click.echo("\n3. WhatsApp")
     click.echo(
-        "   Connect via QR code to sync"
-        " WhatsApp messages.\n",
+        "   Connect via QR code to sync" " WhatsApp messages.\n",
     )
 
     # Check per-profile WA session (or legacy global)
     _profile_name = email or profile_name or "default"
-    _wa_profile_path = Path(
-        get_profile_dir(_profile_name),
-    ) / "whatsapp.db"
+    _wa_profile_path = (
+        Path(
+            get_profile_dir(_profile_name),
+        )
+        / "whatsapp.db"
+    )
     _wa_global_path = Path(
         os.path.expanduser("~/.zylch/whatsapp.db"),
     )
-    wa_db = (
-        _wa_profile_path
-        if _wa_profile_path.exists()
-        else _wa_global_path
-    )
+    wa_db = _wa_profile_path if _wa_profile_path.exists() else _wa_global_path
     wa_connected = wa_db.exists()
 
     if wa_connected:
         click.echo("  WhatsApp: connected (session exists)")
         if click.confirm(
-            "  Reset WhatsApp connection?", default=False,
+            "  Reset WhatsApp connection?",
+            default=False,
         ):
             _connect_whatsapp_qr()
     elif click.confirm(
-        "  Connect WhatsApp now?", default=True,
+        "  Connect WhatsApp now?",
+        default=True,
     ):
         _connect_whatsapp_qr()
     else:
@@ -323,8 +321,7 @@ def _run_wizard(env: dict, profile_name: str | None):
 
     if existing_tg_token:
         if click.confirm(
-            f"  Telegram bot: configured"
-            f" ({_mask(existing_tg_token)}) — keep?",
+            f"  Telegram bot: configured" f" ({_mask(existing_tg_token)}) — keep?",
             default=True,
         ):
             tg_token = existing_tg_token
@@ -332,7 +329,8 @@ def _run_wizard(env: dict, profile_name: str | None):
         else:
             tg_token, tg_user_id = _prompt_telegram()
     elif click.confirm(
-        "  Connect Telegram bot?", default=False,
+        "  Connect Telegram bot?",
+        default=False,
     ):
         tg_token, tg_user_id = _prompt_telegram()
     else:
@@ -363,17 +361,15 @@ def _run_wizard(env: dict, profile_name: str | None):
         )
         if already_authed:
             click.echo(
-                f"  MrCall: connected"
-                f" (client {_mask(existing_client_id)})",
+                f"  MrCall: connected" f" (client {_mask(existing_client_id)})",
             )
             if click.confirm(
-                "  Reconnect MrCall?", default=False,
+                "  Reconnect MrCall?",
+                default=False,
             ):
-                mrcall_client_id, mrcall_client_secret = (
-                    _prompt_mrcall_creds(
-                        existing_client_id,
-                        existing_client_secret,
-                    )
+                mrcall_client_id, mrcall_client_secret = _prompt_mrcall_creds(
+                    existing_client_id,
+                    existing_client_secret,
                 )
                 mrcall_connected = _run_mrcall_oauth(
                     email or "local-user",
@@ -384,15 +380,12 @@ def _run_wizard(env: dict, profile_name: str | None):
                 mrcall_connected = True
         else:
             click.echo(
-                "  MrCall: credentials present"
-                " but not authorized",
+                "  MrCall: credentials present" " but not authorized",
             )
             mrcall_client_id = existing_client_id
             mrcall_client_secret = existing_client_secret
     elif click.confirm("  Connect MrCall?", default=False):
-        mrcall_client_id, mrcall_client_secret = (
-            _prompt_mrcall_creds("", "")
-        )
+        mrcall_client_id, mrcall_client_secret = _prompt_mrcall_creds("", "")
     else:
         click.echo("  Skipped.")
 
@@ -404,8 +397,7 @@ def _run_wizard(env: dict, profile_name: str | None):
 
     click.echo("\n6. Personal Data (optional)")
     click.echo(
-        "   Zylch uses this to fill forms,"
-        " draft emails, etc.\n",
+        "   Zylch uses this to fill forms," " draft emails, etc.\n",
     )
 
     personal_fields = {
@@ -430,7 +422,8 @@ def _run_wizard(env: dict, profile_name: str | None):
                 personal_data[key] = existing_val
             else:
                 val = click.prompt(
-                    f"  {label}", default="",
+                    f"  {label}",
+                    default="",
                     show_default=False,
                 )
                 if val:
@@ -438,7 +431,8 @@ def _run_wizard(env: dict, profile_name: str | None):
         else:
             val = click.prompt(
                 f"  {label} (Enter to skip)",
-                default="", show_default=False,
+                default="",
+                show_default=False,
             )
             if val:
                 personal_data[key] = val
@@ -447,8 +441,7 @@ def _run_wizard(env: dict, profile_name: str | None):
 
     click.echo("\n7. Document Folders (optional)")
     click.echo(
-        "   Zylch can read your documents"
-        " (visure, ID, contracts) to fill forms.\n",
+        "   Zylch can read your documents" " (visure, ID, contracts) to fill forms.\n",
     )
 
     existing_doc_paths = env.get("DOCUMENT_PATHS", "")
@@ -467,8 +460,7 @@ def _run_wizard(env: dict, profile_name: str | None):
 
     click.echo("\n8. Personal Notes (optional)")
     click.echo(
-        "   Anything you want Zylch to know about you.\n"
-        "   e.g. preferences, context, style.\n",
+        "   Anything you want Zylch to know about you.\n" "   e.g. preferences, context, style.\n",
     )
 
     existing_notes = env.get("USER_NOTES", "")
@@ -513,16 +505,14 @@ def _run_wizard(env: dict, profile_name: str | None):
     if is_edit and profile_name and new_profile_name != profile_name:
         if profile_exists(new_profile_name):
             if not click.confirm(
-                f"\nProfile '{new_profile_name}'"
-                f" already exists. Overwrite?",
+                f"\nProfile '{new_profile_name}'" f" already exists. Overwrite?",
             ):
                 click.echo("Cancelled.")
                 return
         delete_profile(profile_name)
     elif not is_edit and profile_exists(new_profile_name):
         if not click.confirm(
-            f"\nProfile '{new_profile_name}'"
-            f" already exists. Overwrite?",
+            f"\nProfile '{new_profile_name}'" f" already exists. Overwrite?",
         ):
             click.echo("Cancelled.")
             return
@@ -658,14 +648,12 @@ def _run_wizard(env: dict, profile_name: str | None):
     if sys.platform == "win32":
         click.echo("\n10. Automatic Updates")
         click.echo(
-            "   Not available on Windows yet."
-            " Run 'zylch update' manually.",
+            "   Not available on Windows yet." " Run 'zylch update' manually.",
         )
     else:
         click.echo("\n10. Automatic Updates (optional)")
         click.echo(
-            "   Keep Zylch updated every 10 minutes"
-            " in background.\n",
+            "   Keep Zylch updated every 10 minutes" " in background.\n",
         )
         if click.confirm("  Enable?", default=True):
             _setup_crontab(new_profile_name, profile_dir)
@@ -699,17 +687,14 @@ def _run_wizard(env: dict, profile_name: str | None):
 
     click.echo("\nNext steps:")
     click.echo(
-        f"  zylch -p {new_profile_name} update"
-        f"    Sync + analyze + detect tasks",
+        f"  zylch -p {new_profile_name} update" f"    Sync + analyze + detect tasks",
     )
     click.echo(
-        f"  zylch -p {new_profile_name}"
-        f"           Start interactive chat",
+        f"  zylch -p {new_profile_name}" f"           Start interactive chat",
     )
     if tg_token:
         click.echo(
-            f"  zylch telegram"
-            f"                Start Telegram bot",
+            "  zylch telegram" "                Start Telegram bot",
         )
 
 
@@ -722,8 +707,7 @@ def _prompt_multiline(label: str) -> str:
     Type lines, empty line to finish. Enter to skip entirely.
     """
     click.echo(
-        f"  {label} (type lines, empty line to finish,"
-        f" Enter to skip):",
+        f"  {label} (type lines, empty line to finish," f" Enter to skip):",
     )
     lines = []
     while True:
@@ -742,24 +726,20 @@ def _setup_crontab(profile_name: str, profile_dir: str):
     zylch_path = shutil.which("zylch")
     if not zylch_path:
         click.echo(
-            "  [Warning] zylch not found in PATH."
-            " Add crontab manually.",
+            "  [Warning] zylch not found in PATH." " Add crontab manually.",
         )
         return
 
     log_path = os.path.join(profile_dir, "cron.log")
-    entry = (
-        f'*/10 * * * * {zylch_path}'
-        f' -p "{profile_name}" update'
-        f' >> "{log_path}" 2>&1'
-    )
+    entry = f"*/10 * * * * {zylch_path}" f' -p "{profile_name}" update' f' >> "{log_path}" 2>&1'
     marker = f"zylch.*{profile_name}.*update"
 
     # Read existing crontab
     try:
         result = subprocess.run(
             ["crontab", "-l"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         existing = result.stdout
     except Exception:
@@ -767,6 +747,7 @@ def _setup_crontab(profile_name: str, profile_dir: str):
 
     # Check if already present
     import re
+
     if re.search(marker, existing):
         click.echo("  Already configured.")
         return
@@ -776,9 +757,11 @@ def _setup_crontab(profile_name: str, profile_dir: str):
     try:
         subprocess.run(
             ["crontab", "-"],
-            input=new_crontab, text=True, check=True,
+            input=new_crontab,
+            text=True,
+            check=True,
         )
-        click.echo(f"  Crontab added: every 10 minutes")
+        click.echo("  Crontab added: every 10 minutes")
         click.echo(f"  Log: {log_path}")
     except Exception as e:
         click.echo(f"  [Warning] Failed to set crontab: {e}")
@@ -796,7 +779,9 @@ def _prompt_document_paths() -> str:
     )
     while True:
         path = click.prompt(
-            "  Path", default="", show_default=False,
+            "  Path",
+            default="",
+            show_default=False,
         )
         if not path:
             break
@@ -808,8 +793,7 @@ def _prompt_document_paths() -> str:
             click.echo(f"    Added: {clean}")
         else:
             click.echo(
-                f"    [Warning] '{path}' not found,"
-                f" added anyway",
+                f"    [Warning] '{path}' not found," f" added anyway",
             )
             paths.append(path.strip())
 
@@ -831,7 +815,8 @@ def _prompt_telegram() -> tuple:
     )
     token = click.prompt("  Bot token", hide_input=True)
     user_id = click.prompt(
-        "  Your Telegram user ID (for security)", default="",
+        "  Your Telegram user ID (for security)",
+        default="",
     )
     return token, user_id
 
@@ -882,8 +867,7 @@ def _connect_whatsapp_qr():
             return
 
         click.echo(
-            "\n  Open WhatsApp → Settings"
-            " → Linked Devices → Link a Device\n",
+            "\n  Open WhatsApp → Settings" " → Linked Devices → Link a Device\n",
         )
         click.echo(qr_text[0])
         click.echo("  Waiting for scan (60s)...")
@@ -892,8 +876,7 @@ def _connect_whatsapp_qr():
             click.echo("  WhatsApp connected!")
         else:
             click.echo(
-                "  Timeout. Run /connect whatsapp later"
-                " to retry.",
+                "  Timeout. Run /connect whatsapp later" " to retry.",
             )
     finally:
         # Don't call disconnect() — the daemon thread will die
@@ -903,18 +886,22 @@ def _connect_whatsapp_qr():
 
 
 def _prompt_mrcall_creds(
-    existing_id: str, existing_secret: str,
+    existing_id: str,
+    existing_secret: str,
 ) -> tuple:
     """Prompt for MrCall OAuth2 client credentials."""
     click.echo(
-        "  You need a client_id and client_secret"
-        " from your MrCall admin.\n",
+        "  You need a client_id and client_secret" " from your MrCall admin.\n",
     )
     client_id = _prompt_with_existing(
-        "Client ID", existing_id, hide=False,
+        "Client ID",
+        existing_id,
+        hide=False,
     )
     client_secret = _prompt_with_existing(
-        "Client secret", existing_secret, hide=True,
+        "Client secret",
+        existing_secret,
+        hide=True,
     )
     return client_id, client_secret
 
@@ -938,7 +925,6 @@ def _run_mrcall_oauth(owner_id: str) -> bool:
         return True
     else:
         click.echo(
-            "  MrCall authorization failed."
-            " Try /connect mrcall later.",
+            "  MrCall authorization failed." " Try /connect mrcall later.",
         )
         return False

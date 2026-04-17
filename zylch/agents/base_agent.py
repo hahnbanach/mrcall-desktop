@@ -24,16 +24,10 @@ class SpecializedAgent:
     """Base class for multi-tool agent runners with shared initialization and methods."""
 
     # Subclasses must define these
-    PROMPT_KEY: str = ''  # Key in agent_prompts table
+    PROMPT_KEY: str = ""  # Key in agent_prompts table
     TOOLS: List[Dict[str, Any]] = []  # Tool schemas for LLM
 
-    def __init__(
-        self,
-        storage: Storage,
-        owner_id: str,
-        api_key: str,
-        provider: str = "anthropic"
-    ):
+    def __init__(self, storage: Storage, owner_id: str, api_key: str, provider: str = "anthropic"):
         """Initialize base agent with common configuration.
 
         Args:
@@ -52,9 +46,9 @@ class SpecializedAgent:
         config = MemoryConfig()
         embedding_engine = EmbeddingEngine(config)
         from zylch.storage.database import get_session
+
         self.search_engine = HybridSearchEngine(
-            get_session=get_session,
-            embedding_engine=embedding_engine
+            get_session=get_session, embedding_engine=embedding_engine
         )
 
         # Cache for trained prompt (lazy loaded)
@@ -76,10 +70,7 @@ class SpecializedAgent:
                 logger.warning(f"{self.__class__.__name__} has no PROMPT_KEY defined")
                 self._trained_prompt = None
             else:
-                self._trained_prompt = self.storage.get_agent_prompt(
-                    self.owner_id,
-                    self.PROMPT_KEY
-                )
+                self._trained_prompt = self.storage.get_agent_prompt(self.owner_id, self.PROMPT_KEY)
 
             self._prompt_loaded = True
 
@@ -100,11 +91,7 @@ class SpecializedAgent:
             self._get_trained_prompt()
         return self._trained_prompt is not None
 
-    async def _gather_context(
-        self,
-        instructions: str,
-        **kwargs
-    ) -> str:
+    async def _gather_context(self, instructions: str, **kwargs) -> str:
         """Gather context for the agent. Override in subclasses for custom logic.
 
         Args:
@@ -117,10 +104,7 @@ class SpecializedAgent:
         # Default: run hybrid search with instructions
         namespace = f"user:{self.owner_id}"
         results = self.search_engine.search(
-            owner_id=self.owner_id,
-            query=instructions,
-            namespace=namespace,
-            limit=10
+            owner_id=self.owner_id, query=instructions, namespace=namespace, limit=10
         )
 
         if not results:
@@ -145,23 +129,23 @@ class SpecializedAgent:
             Dict with tool results and metadata
         """
         result = {
-            'tool_used': None,
-            'tool_input': {},
-            'text_response': None,
-            'raw_response': response
+            "tool_used": None,
+            "tool_input": {},
+            "text_response": None,
+            "raw_response": response,
         }
 
         if response.stop_reason == "tool_use":
             for block in response.content:
-                if hasattr(block, 'input'):  # ToolUseBlock
-                    result['tool_used'] = block.name
-                    result['tool_input'] = block.input
+                if hasattr(block, "input"):  # ToolUseBlock
+                    result["tool_used"] = block.name
+                    result["tool_input"] = block.input
                     break
         else:
             # No tool called - extract text response
             for block in response.content:
-                if hasattr(block, 'text'):  # TextBlock
-                    result['text_response'] = block.text
+                if hasattr(block, "text"):  # TextBlock
+                    result["text_response"] = block.text
                     break
 
         return result
@@ -212,14 +196,11 @@ INSTRUCTIONS: {instructions}"""
         # Call LLM with tools
         if self.TOOLS:
             response = await self.llm.create_message(
-                messages=[{"role": "user", "content": prompt}],
-                tools=self.TOOLS,
-                max_tokens=2000
+                messages=[{"role": "user", "content": prompt}], tools=self.TOOLS, max_tokens=2000
             )
         else:
             response = await self.llm.create_message(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=2000
+                messages=[{"role": "user", "content": prompt}], max_tokens=2000
             )
 
         # Handle response

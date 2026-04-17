@@ -2,9 +2,6 @@
 
 import json
 import pytest
-import tempfile
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -16,6 +13,7 @@ class TestWebhookEndpoints:
     def client(self):
         """Create test client."""
         from zylch.api.main import app
+
         return TestClient(app)
 
     def test_health_endpoint(self, client):
@@ -34,7 +32,7 @@ class TestWebhookEndpoints:
             "caller_name": "Mario Rossi",
             "direction": "inbound",
             "duration_seconds": 120,
-            "transcript": "Ciao, volevo informazioni sul prodotto..."
+            "transcript": "Ciao, volevo informazioni sul prodotto...",
         }
 
         response = client.post("/webhooks/starchat", json=payload)
@@ -49,14 +47,14 @@ class TestWebhookEndpoints:
                 "event": "delivered",
                 "email": "test@example.com",
                 "timestamp": 1701388800,
-                "sg_message_id": "msg_123"
+                "sg_message_id": "msg_123",
             },
             {
                 "event": "open",
                 "email": "test@example.com",
                 "timestamp": 1701389000,
-                "sg_event_id": "evt_456"
-            }
+                "sg_event_id": "evt_456",
+            },
         ]
 
         response = client.post("/webhooks/sendgrid", json=events)
@@ -69,9 +67,9 @@ class TestWebhookEndpoints:
         payload = {
             "message": {
                 "data": "eyJ0ZXN0IjogdHJ1ZX0=",  # base64 of {"test": true}
-                "messageId": "msg_789"
+                "messageId": "msg_789",
             },
-            "subscription": "projects/test/subscriptions/gmail-push"
+            "subscription": "projects/test/subscriptions/gmail-push",
         }
 
         response = client.post("/webhooks/gmail/push", json=payload)
@@ -80,11 +78,7 @@ class TestWebhookEndpoints:
 
     def test_vonage_status_webhook(self, client):
         """Test Vonage SMS status webhook."""
-        payload = {
-            "message_uuid": "sms_123",
-            "to": "+393331234567",
-            "status": "delivered"
-        }
+        payload = {"message_uuid": "sms_123", "to": "+393331234567", "status": "delivered"}
 
         response = client.post("/webhooks/vonage/status", json=payload)
         assert response.status_code == 200
@@ -96,7 +90,7 @@ class TestWebhookEndpoints:
             "messageId": "in_456",
             "msisdn": "+393331234567",
             "to": "+393009876543",
-            "text": "Ciao, conferma appuntamento"
+            "text": "Ciao, conferma appuntamento",
         }
 
         response = client.post("/webhooks/vonage/inbound", json=payload)
@@ -136,7 +130,7 @@ class TestWebhookEndpoints:
         response = client.post(
             "/webhooks/starchat",
             content="invalid json",
-            headers={"Content-Type": "application/json"}
+            headers={"Content-Type": "application/json"},
         )
         assert response.status_code == 400
 
@@ -148,6 +142,7 @@ class TestWebhookEventStore:
     def store(self, tmp_path):
         """Create store with temp database."""
         from zylch.services.webhook_processor import WebhookEventStore
+
         return WebhookEventStore(db_path=tmp_path / "test_webhooks.db")
 
     def test_store_event(self, store):
@@ -157,36 +152,25 @@ class TestWebhookEventStore:
             source="starchat",
             event_type="call_ended",
             payload={"test": True},
-            owner_id="owner_1"
+            owner_id="owner_1",
         )
         assert row_id > 0
 
     def test_duplicate_event_ignored(self, store):
         """Test that duplicate events are ignored."""
         store.store_event(
-            event_id="dup_123",
-            source="starchat",
-            event_type="call_ended",
-            payload={"test": True}
+            event_id="dup_123", source="starchat", event_type="call_ended", payload={"test": True}
         )
 
         # Try to store same event again
         row_id = store.store_event(
-            event_id="dup_123",
-            source="starchat",
-            event_type="call_ended",
-            payload={"test": True}
+            event_id="dup_123", source="starchat", event_type="call_ended", payload={"test": True}
         )
         assert row_id == 0  # Duplicate ignored
 
     def test_mark_processed(self, store):
         """Test marking event as processed."""
-        store.store_event(
-            event_id="proc_123",
-            source="sendgrid",
-            event_type="open",
-            payload={}
-        )
+        store.store_event(event_id="proc_123", source="sendgrid", event_type="open", payload={})
 
         store.mark_processed("proc_123")
 
@@ -198,12 +182,7 @@ class TestWebhookEventStore:
 
     def test_mark_processed_with_error(self, store):
         """Test marking event as processed with error."""
-        store.store_event(
-            event_id="err_123",
-            source="gmail",
-            event_type="push",
-            payload={}
-        )
+        store.store_event(event_id="err_123", source="gmail", event_type="push", payload={})
 
         store.mark_processed("err_123", error="Test error")
 
@@ -218,7 +197,7 @@ class TestWebhookEventStore:
             engagement_type="email_open",
             contact_email="test@example.com",
             data={"ip": "1.2.3.4"},
-            owner_id="owner_1"
+            owner_id="owner_1",
         )
         # No error = success
 
@@ -276,7 +255,7 @@ class TestWebhookProcessor:
             "caller_number": "+393331234567",
             "caller_name": "Mario Rossi",
             "duration_seconds": 120,
-            "transcript": "Test transcript"
+            "transcript": "Test transcript",
         }
 
         await processor.process_starchat_event(payload)
@@ -293,7 +272,7 @@ class TestWebhookProcessor:
             "event": "open",
             "email": "test@example.com",
             "timestamp": 1701388800,
-            "sg_event_id": "sg_123"
+            "sg_event_id": "sg_123",
         }
 
         await processor.process_sendgrid_event(payload)
@@ -308,10 +287,7 @@ class TestWebhookProcessor:
 
         data = base64.b64encode(json.dumps({"emailAddress": "test@gmail.com"}).encode()).decode()
 
-        payload = {
-            "data": data,
-            "message_id": "gmail_123"
-        }
+        payload = {"data": data, "message_id": "gmail_123"}
 
         await processor.process_gmail_push(payload)
 
@@ -321,11 +297,7 @@ class TestWebhookProcessor:
     @pytest.mark.asyncio
     async def test_process_vonage_event(self, processor):
         """Test processing Vonage SMS event."""
-        payload = {
-            "message_uuid": "vonage_123",
-            "to": "+393331234567",
-            "status": "delivered"
-        }
+        payload = {"message_uuid": "vonage_123", "to": "+393331234567", "status": "delivered"}
 
         await processor.process_vonage_event(payload)
 
@@ -335,11 +307,7 @@ class TestWebhookProcessor:
     @pytest.mark.asyncio
     async def test_process_vonage_inbound(self, processor):
         """Test processing inbound SMS."""
-        payload = {
-            "messageId": "in_123",
-            "msisdn": "+393331234567",
-            "text": "Test reply"
-        }
+        payload = {"messageId": "in_123", "msisdn": "+393331234567", "text": "Test reply"}
 
         await processor.process_vonage_inbound(payload)
 

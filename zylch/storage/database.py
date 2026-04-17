@@ -18,6 +18,7 @@ from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 
 logger = logging.getLogger(__name__)
 
+
 def _resolve_db_path() -> str:
     """Resolve DB path: profile-aware or legacy default."""
     env_path = os.environ.get("ZYLCH_DB_PATH")
@@ -25,11 +26,13 @@ def _resolve_db_path() -> str:
         return env_path
     return os.path.join(os.path.expanduser("~/.zylch"), "zylch.db")
 
+
 DB_DIR = os.path.expanduser("~/.zylch")  # legacy compat
 
 
 class Base(DeclarativeBase):
     """Base class for all ORM models."""
+
     pass
 
 
@@ -105,6 +108,7 @@ def get_session() -> Generator[Session, None, None]:
 def init_db():
     """Create all tables if they don't exist."""
     from zylch.storage.models import Base as _Base  # noqa: F811
+
     engine = get_engine()
     _Base.metadata.create_all(engine)
     logger.info(f"Database initialized at {_resolve_db_path()}")

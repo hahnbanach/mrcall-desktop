@@ -83,12 +83,11 @@ class MemoryWorker:
         """
         if not self._custom_prompt_loaded:
             raw = self.storage.get_agent_prompt(
-                self.owner_id, "memory_email",
+                self.owner_id,
+                "memory_email",
             )
             # Treat empty string as None
-            self._custom_prompt = (
-                raw if raw and raw.strip() else None
-            )
+            self._custom_prompt = raw if raw and raw.strip() else None
             self._custom_prompt_loaded = True
 
             if self._custom_prompt:
@@ -229,7 +228,9 @@ class MemoryWorker:
             )
 
     async def process_batch(
-        self, emails: List[Dict], concurrency: int = 5,
+        self,
+        emails: List[Dict],
+        concurrency: int = 5,
     ) -> int:
         """Process batch of emails with parallel LLM calls.
 
@@ -246,8 +247,7 @@ class MemoryWorker:
         import asyncio
 
         logger.info(
-            f"Processing batch of {len(emails)} emails"
-            f" (concurrency={concurrency})",
+            f"Processing batch of {len(emails)} emails" f" (concurrency={concurrency})",
         )
         sem = asyncio.Semaphore(concurrency)
         processed = 0
@@ -269,8 +269,7 @@ class MemoryWorker:
                     failures += 1
                     if failures >= 3:
                         logger.error(
-                            "3 consecutive failures — stopping"
-                            " batch (check API key)",
+                            "3 consecutive failures — stopping" " batch (check API key)",
                         )
                         stop = True
 
@@ -279,19 +278,17 @@ class MemoryWorker:
             return_exceptions=True,
         )
         logger.info(
-            f"Batch complete:"
-            f" {processed}/{len(emails)} processed",
+            f"Batch complete:" f" {processed}/{len(emails)} processed",
         )
         return processed
 
     def _format_email_data(
-        self, email: Dict, contact_email: str,
+        self,
+        email: Dict,
+        contact_email: str,
     ) -> str:
         """Format email fields as plain text for LLM."""
-        body = (
-            email.get("body_plain", "")
-            or email.get("snippet", "")
-        )
+        body = email.get("body_plain", "") or email.get("snippet", "")
         cc_raw = email.get("cc_email") or email.get("cc") or []
         if isinstance(cc_raw, list):
             cc = ", ".join(cc_raw) if cc_raw else "(none)"
@@ -335,7 +332,8 @@ class MemoryWorker:
                 return []
 
             email_data = self._format_email_data(
-                email, contact_email,
+                email,
+                contact_email,
             )
 
             # Try cached system prompt approach first.
@@ -344,8 +342,12 @@ class MemoryWorker:
             try:
                 # Test if prompt has format placeholders
                 prompt_template.format(
-                    from_email="", to_email="", cc_email="",
-                    subject="", date="", body="",
+                    from_email="",
+                    to_email="",
+                    cc_email="",
+                    subject="",
+                    date="",
+                    body="",
                     contact_email="",
                 )
                 # Has placeholders → legacy prompt, format inline
@@ -359,10 +361,7 @@ class MemoryWorker:
                     cc_email=email_data.split("\n")[2][4:],
                     subject=email.get("subject", "(no subject)"),
                     date=email.get("date", "unknown"),
-                    body=(
-                        email.get("body_plain", "")
-                        or email.get("snippet", "")
-                    ),
+                    body=(email.get("body_plain", "") or email.get("snippet", "")),
                     contact_email=contact_email,
                 )
                 response = self.client.create_message_sync(
@@ -387,10 +386,7 @@ class MemoryWorker:
                     messages=[
                         {
                             "role": "user",
-                            "content": (
-                                "Analyze this email:\n\n"
-                                + email_data
-                            ),
+                            "content": ("Analyze this email:\n\n" + email_data),
                         },
                     ],
                     max_tokens=1024,
@@ -713,10 +709,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
             else:
                 consecutive_failures += 1
                 if consecutive_failures >= 3:
-                    logger.error(
-                        "3 consecutive failures — stopping"
-                        " batch (check API key)"
-                    )
+                    logger.error("3 consecutive failures — stopping" " batch (check API key)")
                     break
 
         logger.info(f"MrCall batch complete: {processed}/{len(conversations)} processed")

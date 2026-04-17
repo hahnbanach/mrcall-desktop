@@ -63,10 +63,7 @@ def format_approval_preview(tool_name: str, args: Dict) -> str:
             f"{args.get('message', '')}"
         )
     if tool_name == "send_sms":
-        return (
-            f"**Send SMS**\nTo: {args.get('phone_number', '')}\n\n"
-            f"{args.get('message', '')}"
-        )
+        return f"**Send SMS**\nTo: {args.get('phone_number', '')}\n\n" f"{args.get('message', '')}"
     if tool_name == "run_python":
         return (
             f"**Run Python**\n_{args.get('description', '')}_\n\n"
@@ -123,14 +120,14 @@ class TaskExecutor:
         """Resolve a pending approval. Returns True if accepted."""
         fut = self._pending.get(tool_use_id)
         if fut is None or fut.done():
-            logger.warning(
-                f"[executor] approve({tool_use_id}) -> no pending future"
-            )
+            logger.warning(f"[executor] approve({tool_use_id}) -> no pending future")
             return False
-        fut.set_result({
-            "approved": approved,
-            "edited_input": edited_input,
-        })
+        fut.set_result(
+            {
+                "approved": approved,
+                "edited_input": edited_input,
+            }
+        )
         return True
 
     async def run(self) -> AsyncIterator[Dict[str, Any]]:
@@ -186,12 +183,14 @@ class TaskExecutor:
                         tool_name = block.name
                         tool_input = dict(block.input or {})
                         tool_id = block.id
-                        assistant_content.append({
-                            "type": "tool_use",
-                            "id": tool_id,
-                            "name": tool_name,
-                            "input": tool_input,
-                        })
+                        assistant_content.append(
+                            {
+                                "type": "tool_use",
+                                "id": tool_id,
+                                "name": tool_name,
+                                "input": tool_input,
+                            }
+                        )
 
                         approved = True
                         if tool_name in APPROVAL_TOOLS:
@@ -204,7 +203,8 @@ class TaskExecutor:
                                 "name": tool_name,
                                 "input": tool_input,
                                 "preview": format_approval_preview(
-                                    tool_name, tool_input,
+                                    tool_name,
+                                    tool_input,
                                 ),
                             }
                             decision = await fut
@@ -216,9 +216,7 @@ class TaskExecutor:
                                 # Reflect the edit in the recorded
                                 # assistant message so the model sees
                                 # what actually ran.
-                                assistant_content[-1]["input"] = (
-                                    tool_input
-                                )
+                                assistant_content[-1]["input"] = tool_input
 
                         if not approved:
                             output = "User declined this action."
@@ -233,16 +231,16 @@ class TaskExecutor:
                                     self._owner_id,
                                 )
                             except Exception as e:
-                                logger.exception(
-                                    f"[executor] tool {tool_name} failed"
-                                )
+                                logger.exception(f"[executor] tool {tool_name} failed")
                                 output = f"Tool error: {e}"
 
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": tool_id,
-                            "content": output,
-                        })
+                        tool_results.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": tool_id,
+                                "content": output,
+                            }
+                        )
                         yield {
                             "type": "tool_result",
                             "tool_use_id": tool_id,

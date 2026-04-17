@@ -28,9 +28,7 @@ class IntentRouter:
         self.skill_registry = skill_registry
 
     async def classify_intent(
-        self,
-        user_input: str,
-        conversation_history: Optional[List] = None
+        self, user_input: str, conversation_history: Optional[List] = None
     ) -> Dict[str, Any]:
         """
         Classify user intent using configured model.
@@ -79,10 +77,7 @@ Rules:
                 model=self.router_model,
                 max_tokens=500,
                 temperature=0,
-                messages=[{
-                    "role": "user",
-                    "content": classification_prompt
-                }]
+                messages=[{"role": "user", "content": classification_prompt}],
             )
 
             # Parse JSON response
@@ -114,5 +109,5 @@ Rules:
                 "context_skills": [],
                 "params": {"query": user_input},
                 "confidence": 0.3,
-                "error": str(e)
+                "error": str(e),
             }

@@ -13,20 +13,21 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict
+
+if TYPE_CHECKING:
+    from zylch.storage import Storage
+    from zylch.workers import MemoryWorker
 
 logger = logging.getLogger(__name__)
 
 # Configurable via env var
 MAX_WORKERS = int(os.environ.get("BACKGROUND_JOB_WORKERS", "4"))
-_executor = ThreadPoolExecutor(
-    max_workers=MAX_WORKERS, thread_name_prefix="bg_job"
-)
+_executor = ThreadPoolExecutor(max_workers=MAX_WORKERS, thread_name_prefix="bg_job")
 
 # Regex to strip UUIDs so dedup matching works across jobs
 _UUID_RE = re.compile(
-    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}"
-    r"-[0-9a-f]{4}-[0-9a-f]{12}",
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}" r"-[0-9a-f]{4}-[0-9a-f]{12}",
     re.IGNORECASE,
 )
 
@@ -38,18 +39,16 @@ def _normalize_error(raw: str) -> str:
     - UUIDs are stripped so different job IDs don't break dedup.
     """
     if "API key required" in raw or "api key required" in raw.lower():
-        return (
-            "Background jobs require an API key. "
-            "Run `/connect` to configure."
-        )
+        return "Background jobs require an API key. " "Run `/connect` to configure."
     # Strip job-specific UUIDs for generic errors
     cleaned = _UUID_RE.sub("<id>", raw)
     return f"Background job failed: {cleaned}"
 
+
 logger.info(f"Background job executor initialized with {MAX_WORKERS} workers")
 
 
-def _should_stop_job(storage: 'Storage', job_id: str, owner_id: str) -> bool:
+def _should_stop_job(storage: "Storage", job_id: str, owner_id: str) -> bool:
     """Check if job was stopped (status changed from running).
 
     Call this periodically in worker loops to detect user-initiated stop.
@@ -66,33 +65,31 @@ def _should_stop_job(storage: 'Storage', job_id: str, owner_id: str) -> bool:
         job = storage.get_background_job(job_id, owner_id)
         if job is None:
             return True
-        return job.get('status') != 'running'
+        return job.get("status") != "running"
     except Exception as e:
         # Transient HTTP errors (connection pool contention, network blips)
         # should not kill the job — assume still running and continue
-        logger.warning(f"[_should_stop_job] Failed to check job {job_id}: {e} — assuming still running")
+        logger.warning(
+            f"[_should_stop_job] Failed to check job {job_id}: {e} — assuming still running"
+        )
         return False
 
 
 class JobExecutor:
     """Executes background jobs in thread pool."""
 
-    def __init__(self, storage: 'Storage'):
+    def __init__(self, storage: "Storage"):
         """Initialize executor.
 
         Args:
             storage: Storage instance for DB operations
         """
         from zylch.storage import Storage
+
         self.storage: Storage = storage
 
     async def execute_job(
-        self,
-        job_id: str,
-        owner_id: str,
-        api_key: str,
-        llm_provider: str,
-        user_email: str = ""
+        self, job_id: str, owner_id: str, api_key: str, llm_provider: str, user_email: str = ""
     ) -> None:
         """Entry point: claim job and dispatch to appropriate handler.
 
@@ -123,8 +120,13 @@ class JobExecutor:
                 job_params = job.get("params", {})
                 chain_task = bool(job_params.get("chain_task", False))
                 await self._execute_memory_process(
-                    job_id, owner_id, channel, api_key, llm_provider,
-                    chain_task=chain_task, user_email=user_email
+                    job_id,
+                    owner_id,
+                    channel,
+                    api_key,
+                    llm_provider,
+                    chain_task=chain_task,
+                    user_email=user_email,
                 )
             elif job_type == "task_process":
                 await self._execute_task_process(
@@ -136,8 +138,14 @@ class JobExecutor:
                 days_back = int(days_back_raw) if days_back_raw is not None else 30
                 force = bool(job_params.get("force", False))
                 await self._execute_sync(
-                    job_id, owner_id, channel, api_key, llm_provider,
-                    days_back=days_back, force=force, user_email=user_email
+                    job_id,
+                    owner_id,
+                    channel,
+                    api_key,
+                    llm_provider,
+                    days_back=days_back,
+                    force=force,
+                    user_email=user_email,
                 )
             elif job_type == "task_train":
                 await self._execute_task_train(
@@ -146,20 +154,26 @@ class JobExecutor:
             elif job_type == "mrcall_train":
                 job_params = job.get("params", {})
                 await self._execute_mrcall_train(
-                    job_id, owner_id, channel, api_key, llm_provider,
-                    user_email, job_params
+                    job_id, owner_id, channel, api_key, llm_provider, user_email, job_params
                 )
             elif job_type == "email_train":
                 job_params = job.get("params", {})
                 await self._execute_email_train(
-                    job_id, owner_id, api_key, llm_provider,
-                    job_params.get("user_email", user_email)
+                    job_id,
+                    owner_id,
+                    api_key,
+                    llm_provider,
+                    job_params.get("user_email", user_email),
                 )
             elif job_type == "memory_train":
                 job_params = job.get("params", {})
                 await self._execute_memory_train(
-                    job_id, owner_id, channel, api_key, llm_provider,
-                    job_params.get("user_email", user_email)
+                    job_id,
+                    owner_id,
+                    channel,
+                    api_key,
+                    llm_provider,
+                    job_params.get("user_email", user_email),
                 )
             else:
                 raise ValueError(f"Unknown job type: {job_type}")
@@ -168,14 +182,8 @@ class JobExecutor:
             logger.exception(f"Job {job_id} failed: {e}")
             self.storage.fail_background_job(job_id, str(e))
             error_msg = _normalize_error(str(e))
-            logger.debug(
-                f"[job_executor] normalized error: {error_msg}"
-            )
-            self.storage.create_notification(
-                owner_id,
-                error_msg,
-                "error"
-            )
+            logger.debug(f"[job_executor] normalized error: {error_msg}")
+            self.storage.create_notification(owner_id, error_msg, "error")
 
     async def _execute_memory_process(
         self,
@@ -185,7 +193,7 @@ class JobExecutor:
         api_key: str,
         llm_provider: str,
         chain_task: bool = False,
-        user_email: str = ""
+        user_email: str = "",
     ) -> None:
         """Execute memory processing in thread pool.
 
@@ -206,14 +214,11 @@ class JobExecutor:
             from zylch.workers import MemoryWorker
 
             worker = MemoryWorker(
-                storage=storage,
-                owner_id=owner_id,
-                api_key=api_key,
-                provider=llm_provider
+                storage=storage, owner_id=owner_id, api_key=api_key, provider=llm_provider
             )
 
             # Check if user has custom prompt for requested channel
-            if channel in ['email', 'all'] and not worker.has_custom_prompt():
+            if channel in ["email", "all"] and not worker.has_custom_prompt():
                 raise ValueError(
                     "No personalized extraction agent found for email. "
                     "Run `/agent memory train email` first."
@@ -224,11 +229,11 @@ class JobExecutor:
             mrcall_count = 0
 
             # Determine channels to process
-            if channel == 'all':
+            if channel == "all":
                 channels = ["email", "calendar", "mrcall"]
-            elif channel == 'email':
+            elif channel == "email":
                 channels = ["email", "calendar"]  # email includes calendar
-            elif channel == 'mrcall':
+            elif channel == "mrcall":
                 channels = ["mrcall"]
             else:
                 channels = [channel]
@@ -243,7 +248,9 @@ class JobExecutor:
                     try:
                         items = storage.get_unprocessed_mrcall_conversations(owner_id)
                     except Exception as e:
-                        logger.warning(f"[memory_process] mrcall channel unavailable (table may not exist): {e}")
+                        logger.warning(
+                            f"[memory_process] mrcall channel unavailable (table may not exist): {e}"
+                        )
                         continue
                 else:
                     continue
@@ -263,18 +270,22 @@ class JobExecutor:
                         job_id, 0, 0, total, f"Processing {ch}: 0/{total}"
                     )
                 except Exception as e:
-                    logger.warning(f"[memory_process] Failed to set initial progress: {e} — continuing")
+                    logger.warning(
+                        f"[memory_process] Failed to set initial progress: {e} — continuing"
+                    )
 
                 for i, item in enumerate(items):
                     # Check if user stopped the job BEFORE processing
                     if _should_stop_job(storage, job_id, owner_id):
-                        logger.info(f"Job {job_id} was stopped by user at item {i}/{total}, exiting")
+                        logger.info(
+                            f"Job {job_id} was stopped by user at item {i}/{total}, exiting"
+                        )
                         return {
                             "email_count": email_count,
                             "calendar_count": calendar_count,
                             "mrcall_count": mrcall_count,
                             "channels": channels,
-                            "stopped": True
+                            "stopped": True,
                         }
 
                     # Process item (sync, blocking - OK in thread)
@@ -292,8 +303,7 @@ class JobExecutor:
                         err_str = str(e).lower()
                         if "401" in err_str or "authentication" in err_str:
                             logger.error(
-                                f"Auth error processing {ch}"
-                                f" — stopping (check API key): {e}"
+                                f"Auth error processing {ch}" f" — stopping (check API key): {e}"
                             )
                             raise
                         logger.error(f"Failed to process {ch} item: {e}")
@@ -302,17 +312,18 @@ class JobExecutor:
                     pct = int((i + 1) / total * 100) if total > 0 else 100
                     try:
                         storage.update_background_job_progress(
-                            job_id, pct, i + 1, total,
-                            f"Processing {ch}: {i + 1}/{total}"
+                            job_id, pct, i + 1, total, f"Processing {ch}: {i + 1}/{total}"
                         )
                     except Exception as e:
-                        logger.warning(f"[memory_process] Failed to update progress: {e} — continuing")
+                        logger.warning(
+                            f"[memory_process] Failed to update progress: {e} — continuing"
+                        )
 
             return {
                 "email_count": email_count,
                 "calendar_count": calendar_count,
                 "mrcall_count": mrcall_count,
-                "channels": channels
+                "channels": channels,
             }
 
         # Execute in thread pool
@@ -321,15 +332,19 @@ class JobExecutor:
 
         # Don't complete if job was stopped (user will cancel it)
         if result.get("stopped"):
-            total = result.get('email_count', 0) + result.get('calendar_count', 0) + result.get('mrcall_count', 0)
+            total = (
+                result.get("email_count", 0)
+                + result.get("calendar_count", 0)
+                + result.get("mrcall_count", 0)
+            )
             logger.info(f"Job {job_id} stopped after processing {total} items")
             return
 
         # Complete job
         self.storage.complete_background_job(job_id, result)
-        email_count = result.get('email_count', 0)
-        calendar_count = result.get('calendar_count', 0)
-        mrcall_count = result.get('mrcall_count', 0)
+        email_count = result.get("email_count", 0)
+        calendar_count = result.get("calendar_count", 0)
+        mrcall_count = result.get("mrcall_count", 0)
         msg = f"Memory processing complete: {email_count} emails"
         if calendar_count > 0:
             msg += f", {calendar_count} calendar events"
@@ -339,7 +354,7 @@ class JobExecutor:
 
         # Chain task processing after memory is done (blobs must exist before task analysis)
         if chain_task:
-            logger.info(f"[SYNC-CHAIN] Memory complete, now chaining task_process")
+            logger.info("[SYNC-CHAIN] Memory complete, now chaining task_process")
             await self._chain_task_processing(owner_id, api_key, llm_provider, user_email)
 
     async def _execute_task_process(
@@ -349,7 +364,7 @@ class JobExecutor:
         channel: str,
         api_key: str,
         llm_provider: str,
-        user_email: str
+        user_email: str,
     ) -> None:
         """Execute task detection in thread pool.
 
@@ -365,19 +380,23 @@ class JobExecutor:
 
         # Refresh task prompt before spawning the thread
         self.storage.update_background_job_progress(
-            job_id, 0, 0, 1,
+            job_id,
+            0,
+            0,
+            1,
             "Generating task detection prompt (LLM call)...",
         )
-        has_prompt = await self._refresh_task_prompt(
-            owner_id, api_key, llm_provider, user_email
-        )
+        has_prompt = await self._refresh_task_prompt(owner_id, api_key, llm_provider, user_email)
         if not has_prompt:
             raise ValueError(
-                "Could not generate task detection prompt."
-                " Check LLM API key and email data."
+                "Could not generate task detection prompt." " Check LLM API key and email data."
             )
         self.storage.update_background_job_progress(
-            job_id, 5, 0, 1, "Prompt ready. Loading emails...",
+            job_id,
+            5,
+            0,
+            1,
+            "Prompt ready. Loading emails...",
         )
 
         def _sync_process() -> Dict[str, Any]:
@@ -389,7 +408,7 @@ class JobExecutor:
                 owner_id=owner_id,
                 api_key=api_key,
                 provider=llm_provider,
-                user_email=user_email
+                user_email=user_email,
             )
 
             email_count = 0
@@ -420,15 +439,22 @@ class JobExecutor:
                 # Pre-compute calendar context cache for all unique contacts (N+1 fix)
                 calendar_cache: Dict[str, str] = {}
                 if ch == "email":
-                    contact_emails = list(set(
-                        item.get('from_email', '').lower()
-                        for item in items
-                        if item.get('from_email')
-                    ))
-                    logger.info(f"Pre-computing calendar context for {len(contact_emails)} unique contacts")
+                    contact_emails = list(
+                        set(
+                            item.get("from_email", "").lower()
+                            for item in items
+                            if item.get("from_email")
+                        )
+                    )
+                    logger.info(
+                        f"Pre-computing calendar context for {len(contact_emails)} unique contacts"
+                    )
                     try:
                         storage.update_background_job_progress(
-                            job_id, 8, 0, total,
+                            job_id,
+                            8,
+                            0,
+                            total,
                             f"Loading calendar context for {len(contact_emails)} contacts...",
                         )
                     except Exception:
@@ -441,18 +467,22 @@ class JobExecutor:
                         job_id, 0, 0, total, f"Detecting tasks from {ch}: 0/{total}"
                     )
                 except Exception as e:
-                    logger.warning(f"[task_process] Failed to set initial progress: {e} — continuing")
+                    logger.warning(
+                        f"[task_process] Failed to set initial progress: {e} — continuing"
+                    )
 
                 for i, item in enumerate(items):
                     # Check if user stopped the job BEFORE processing
                     if _should_stop_job(storage, job_id, owner_id):
-                        logger.info(f"Job {job_id} was stopped by user at item {i}/{total}, exiting")
+                        logger.info(
+                            f"Job {job_id} was stopped by user at item {i}/{total}, exiting"
+                        )
                         return {
                             "email_count": email_count,
                             "calendar_count": calendar_count,
                             "actions_found": action_count,
                             "channels": channels,
-                            "stopped": True
+                            "stopped": True,
                         }
 
                     try:
@@ -468,8 +498,7 @@ class JobExecutor:
                         err_str = str(e).lower()
                         if "401" in err_str or "authentication" in err_str:
                             logger.error(
-                                f"Auth error in task {ch}"
-                                f" — stopping (check API key): {e}"
+                                f"Auth error in task {ch}" f" — stopping (check API key): {e}"
                             )
                             raise
                         logger.error(f"Failed to analyze {ch} item: {e}")
@@ -478,17 +507,18 @@ class JobExecutor:
                     pct = int((i + 1) / total * 100) if total > 0 else 100
                     try:
                         storage.update_background_job_progress(
-                            job_id, pct, i + 1, total,
-                            f"Detecting tasks from {ch}: {i + 1}/{total}"
+                            job_id, pct, i + 1, total, f"Detecting tasks from {ch}: {i + 1}/{total}"
                         )
                     except Exception as e:
-                        logger.warning(f"[task_process] Failed to update progress: {e} — continuing")
+                        logger.warning(
+                            f"[task_process] Failed to update progress: {e} — continuing"
+                        )
 
             return {
                 "email_count": email_count,
                 "calendar_count": calendar_count,
                 "actions_found": action_count,
-                "channels": channels
+                "channels": channels,
             }
 
         loop = asyncio.get_event_loop()
@@ -496,14 +526,14 @@ class JobExecutor:
 
         # Don't complete if job was stopped (user will cancel it)
         if result.get("stopped"):
-            total = result.get('email_count', 0) + result.get('calendar_count', 0)
+            total = result.get("email_count", 0) + result.get("calendar_count", 0)
             logger.info(f"Job {job_id} stopped after processing {total} items")
             return
 
         self.storage.complete_background_job(job_id, result)
-        email_count = result.get('email_count', 0)
-        calendar_count = result.get('calendar_count', 0)
-        actions = result.get('actions_found', 0)
+        email_count = result.get("email_count", 0)
+        calendar_count = result.get("calendar_count", 0)
+        actions = result.get("actions_found", 0)
         msg = f"Task detection complete: {actions} tasks found from {email_count} emails"
         if calendar_count > 0:
             msg += f", {calendar_count} calendar events"
@@ -516,7 +546,7 @@ class JobExecutor:
         channel: str,
         api_key: str,
         llm_provider: str,
-        user_email: str
+        user_email: str,
     ) -> None:
         """Execute task agent training in thread pool.
 
@@ -545,7 +575,7 @@ class JobExecutor:
             total_threads = 0
 
             for ch in channels_to_train:
-                if ch == 'email':
+                if ch == "email":
                     emails = storage.get_emails(owner_id, limit=1)
                     if not emails:
                         results.append("📧 Email: No emails found - skipped")
@@ -570,8 +600,8 @@ class JobExecutor:
                     finally:
                         loop.close()
 
-                    storage.store_agent_prompt(owner_id, 'task_email', agent_prompt, metadata)
-                    threads = metadata.get('threads_analyzed', 0)
+                    storage.store_agent_prompt(owner_id, "task_email", agent_prompt, metadata)
+                    threads = metadata.get("threads_analyzed", 0)
                     total_threads += threads
                     results.append(f"📧 Agent created ({threads} threads analyzed, calendar-aware)")
 
@@ -579,15 +609,13 @@ class JobExecutor:
                         job_id, 90, 1, 1, "Saving agent prompt..."
                     )
 
-                elif ch == 'calendar':
+                elif ch == "calendar":
                     # Calendar uses the email-trained agent (with calendar context injection)
-                    results.append("📅 Calendar: Using email agent (calendar context auto-injected)")
+                    results.append(
+                        "📅 Calendar: Using email agent (calendar context auto-injected)"
+                    )
 
-            return {
-                "results": results,
-                "threads_analyzed": total_threads,
-                "channel": channel
-            }
+            return {"results": results, "threads_analyzed": total_threads, "channel": channel}
 
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(_executor, _sync_train)
@@ -607,7 +635,7 @@ class JobExecutor:
             f"**Task Agent Training Complete**\n\n{results_text}\n\n"
             f"Run `/agent task show {channel_display}` to review or "
             f"`/agent task process {channel_display}` to detect tasks.",
-            "info"
+            "info",
         )
 
     async def _execute_mrcall_train(
@@ -646,8 +674,11 @@ class JobExecutor:
                 return {"stopped": True}
 
             storage.update_background_job_progress(
-                job_id, progress_pct=10, items_processed=0,
-                total_items=1, status_message="Starting MrCall training..."
+                job_id,
+                progress_pct=10,
+                items_processed=0,
+                total_items=1,
+                status_message="Starting MrCall training...",
             )
 
             # Extract params
@@ -669,8 +700,14 @@ class JobExecutor:
             try:
                 result_msg = loop.run_until_complete(
                     _handle_mrcall_agent_train(
-                        storage, owner_id, api_key, llm_provider, user_email,
-                        feature=feature, context=context, force=force,
+                        storage,
+                        owner_id,
+                        api_key,
+                        llm_provider,
+                        user_email,
+                        feature=feature,
+                        context=context,
+                        force=force,
                         job_id=job_id,
                     )
                 )
@@ -693,9 +730,7 @@ class JobExecutor:
 
         self.storage.complete_background_job(job_id, result)
         self.storage.create_notification(
-            owner_id,
-            "MrCall training complete. Your assistant has been updated.",
-            "info"
+            owner_id, "MrCall training complete. Your assistant has been updated.", "info"
         )
 
     async def _execute_email_train(
@@ -711,6 +746,7 @@ class JobExecutor:
 
         def _sync_train() -> dict:
             from zylch.services.command_handlers import _handle_emailer_train
+
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
@@ -726,9 +762,7 @@ class JobExecutor:
 
         self.storage.complete_background_job(job_id, result)
         self.storage.create_notification(
-            owner_id,
-            "Email agent training complete. Your writing style has been learned.",
-            "info"
+            owner_id, "Email agent training complete. Your writing style has been learned.", "info"
         )
 
     async def _execute_memory_train(
@@ -745,11 +779,14 @@ class JobExecutor:
 
         def _sync_train() -> dict:
             from zylch.services.command_handlers import _handle_memory_train
+
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
                 result_msg = loop.run_until_complete(
-                    _handle_memory_train(storage, owner_id, channel, api_key, llm_provider, user_email)
+                    _handle_memory_train(
+                        storage, owner_id, channel, api_key, llm_provider, user_email
+                    )
                 )
             finally:
                 loop.close()
@@ -759,11 +796,7 @@ class JobExecutor:
         result = await loop.run_in_executor(_executor, _sync_train)
 
         self.storage.complete_background_job(job_id, result)
-        self.storage.create_notification(
-            owner_id,
-            f"Memory training complete ({channel}).",
-            "info"
-        )
+        self.storage.create_notification(owner_id, f"Memory training complete ({channel}).", "info")
 
     async def _execute_sync(
         self,
@@ -774,7 +807,7 @@ class JobExecutor:
         llm_provider: str,
         days_back: int = 30,
         force: bool = False,
-        user_email: str = ""
+        user_email: str = "",
     ) -> None:
         """Execute email/calendar sync in thread pool.
 
@@ -822,7 +855,6 @@ class JobExecutor:
                 smtp_host=_os.environ.get("SMTP_HOST") or None,
                 smtp_port=int(_os.environ.get("SMTP_PORT", "0")) or None,
             )
-            user_email_addr = email_addr
 
             logger.info(f"[SYNC] Using IMAP for {email_addr}")
 
@@ -838,13 +870,18 @@ class JobExecutor:
             # Progress callback: updates the background job status
             def _on_progress(pct: int, message: str):
                 storage.update_background_job_progress(
-                    job_id, pct, 0, 1, message,
+                    job_id,
+                    pct,
+                    0,
+                    1,
+                    message,
                 )
 
             _on_progress(5, "Connecting to IMAP...")
 
             # Run sync
             import asyncio
+
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
@@ -863,12 +900,9 @@ class JobExecutor:
                     job_id, 90, 0, 1, "Resetting processing timestamps (force mode)..."
                 )
                 reset_counts = storage.reset_processing_timestamps_for_period(
-                    owner_id=owner_id,
-                    days_back=days_back,
-                    reset_memory=True,
-                    reset_task=True
+                    owner_id=owner_id, days_back=days_back, reset_memory=True, reset_task=True
                 )
-                results['force_reset'] = reset_counts
+                results["force_reset"] = reset_counts
                 logger.info(f"[SYNC] Force mode: reset processing timestamps: {reset_counts}")
 
             return results
@@ -884,43 +918,43 @@ class JobExecutor:
         self.storage.complete_background_job(job_id, result)
 
         # Create notification with summary
-        email_data = result.get('email_sync', {})
-        cal_data = result.get('calendar_sync', {})
-        pipedrive_data = result.get('pipedrive_sync', {})
+        email_data = result.get("email_sync", {})
+        cal_data = result.get("calendar_sync", {})
+        pipedrive_data = result.get("pipedrive_sync", {})
 
         msg_parts = []
-        if email_data.get('success'):
+        if email_data.get("success"):
             msg_parts.append(f"+{email_data.get('new_messages', 0)} emails")
-        if cal_data.get('success'):
+        if cal_data.get("success"):
             msg_parts.append(f"{cal_data.get('new_events', 0)} calendar events")
-        if pipedrive_data.get('success') and not pipedrive_data.get('skipped'):
+        if pipedrive_data.get("success") and not pipedrive_data.get("skipped"):
             msg_parts.append(f"{pipedrive_data.get('deals_synced', 0)} deals")
 
         # MrCall status
-        mrcall_data = result.get('mrcall_sync', {})
-        if mrcall_data.get('success') and not mrcall_data.get('skipped'):
+        mrcall_data = result.get("mrcall_sync", {})
+        if mrcall_data.get("success") and not mrcall_data.get("skipped"):
             msg_parts.append(f"{mrcall_data.get('synced', 0)} calls")
-        elif not mrcall_data.get('success') and not mrcall_data.get('skipped'):
+        elif not mrcall_data.get("success") and not mrcall_data.get("skipped"):
             # Auth failed or API error - show warning
-            error = mrcall_data.get('error', 'Unknown error')
-            if '401' in str(error):
+            error = mrcall_data.get("error", "Unknown error")
+            if "401" in str(error):
                 msg_parts.append("MrCall: auth expired (run /connect mrcall)")
             else:
                 msg_parts.append(f"MrCall: {error}")
 
         msg = f"Sync complete: {', '.join(msg_parts)}" if msg_parts else "Sync complete"
         if force:
-            reset_info = result.get('force_reset', {})
-            emails_reset = reset_info.get('emails_memory_reset', 0) + reset_info.get('emails_task_reset', 0)
+            reset_info = result.get("force_reset", {})
+            emails_reset = reset_info.get("emails_memory_reset", 0) + reset_info.get(
+                "emails_task_reset", 0
+            )
             if emails_reset > 0:
                 msg += f" (force: {reset_info.get('emails_memory_reset', 0)} emails reset for reprocessing)"
 
         self.storage.create_notification(owner_id, msg, "info")
 
         # Auto-chain memory_process + task_process if agents are trained
-        await self._chain_processing_after_sync(
-            owner_id, api_key, llm_provider, user_email
-        )
+        await self._chain_processing_after_sync(owner_id, api_key, llm_provider, user_email)
 
     async def _refresh_task_prompt(
         self,
@@ -943,9 +977,7 @@ class JobExecutor:
                 EmailTaskAgentTrainer,
             )
 
-            existing_prompt = storage.get_agent_prompt(
-                owner_id, "task_email"
-            )
+            existing_prompt = storage.get_agent_prompt(owner_id, "task_email")
             logger.debug(
                 f"[_refresh_task_prompt] owner={owner_id},"
                 f" existing_prompt="
@@ -955,21 +987,12 @@ class JobExecutor:
             # Resolve updated_at from prompt metadata
             updated_at = None
             if existing_prompt:
-                meta = storage.get_agent_prompt_metadata(
-                    owner_id, "task_email"
-                )
+                meta = storage.get_agent_prompt_metadata(owner_id, "task_email")
                 if meta and meta.get("updated_at"):
-                    updated_at = datetime.fromisoformat(
-                        meta["updated_at"]
-                    )
+                    updated_at = datetime.fromisoformat(meta["updated_at"])
                     if updated_at.tzinfo is None:
-                        updated_at = updated_at.replace(
-                            tzinfo=timezone.utc
-                        )
-                logger.debug(
-                    f"[_refresh_task_prompt]"
-                    f" updated_at={updated_at}"
-                )
+                        updated_at = updated_at.replace(tzinfo=timezone.utc)
+                logger.debug(f"[_refresh_task_prompt]" f" updated_at={updated_at}")
 
             trainer = EmailTaskAgentTrainer(
                 storage=storage,
@@ -992,9 +1015,7 @@ class JobExecutor:
                 loop.close()
 
             if new_prompt is not None:
-                storage.store_agent_prompt(
-                    owner_id, "task_email", new_prompt, meta
-                )
+                storage.store_agent_prompt(owner_id, "task_email", new_prompt, meta)
                 logger.info(
                     f"[_refresh_task_prompt] Stored"
                     f" updated prompt for {owner_id}"
@@ -1002,35 +1023,22 @@ class JobExecutor:
                 )
 
             # Return True if any prompt exists now
-            has_prompt = (
-                new_prompt is not None
-                or existing_prompt is not None
-            )
-            logger.debug(
-                f"[_refresh_task_prompt]"
-                f" has_prompt={has_prompt}"
-            )
+            has_prompt = new_prompt is not None or existing_prompt is not None
+            logger.debug(f"[_refresh_task_prompt]" f" has_prompt={has_prompt}")
             return has_prompt
 
         try:
             loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(
-                _executor, _sync_refresh
-            )
+            return await loop.run_in_executor(_executor, _sync_refresh)
         except Exception as e:
             logger.error(
-                f"[_refresh_task_prompt] Failed for"
-                f" {owner_id}: {e}",
+                f"[_refresh_task_prompt] Failed for" f" {owner_id}: {e}",
                 exc_info=True,
             )
             return False
 
     async def _chain_processing_after_sync(
-        self,
-        owner_id: str,
-        api_key: str,
-        llm_provider: str,
-        user_email: str
+        self, owner_id: str, api_key: str, llm_provider: str, user_email: str
     ) -> None:
         """Auto-chain memory processing after sync completes.
 
@@ -1049,11 +1057,7 @@ class JobExecutor:
         storage = self.storage
 
         # Check if memory agent is trained
-        has_memory_agent = (
-            storage.get_agent_prompt(
-                owner_id, 'memory_email'
-            ) is not None
-        )
+        has_memory_agent = storage.get_agent_prompt(owner_id, "memory_email") is not None
 
         if not has_memory_agent:
             logger.debug(
@@ -1061,9 +1065,7 @@ class JobExecutor:
                 f" {owner_id}, skipping memory processing"
             )
             # Even without memory agent, try task processing
-            await self._chain_task_processing(
-                owner_id, api_key, llm_provider, user_email
-            )
+            await self._chain_task_processing(owner_id, api_key, llm_provider, user_email)
             return
 
         # Check API key before starting LLM-dependent processing
@@ -1088,25 +1090,23 @@ class JobExecutor:
                 owner_id=owner_id,
                 job_type="memory_process",
                 channel="all",
-                params={"chain_task": True}
+                params={"chain_task": True},
             )
             if job["status"] == "pending":
-                logger.info(f"[SYNC-CHAIN] Chaining memory_process job {job['id']} (will chain task_process after)")
-                asyncio.create_task(self.execute_job(
-                    job["id"], owner_id, api_key, llm_provider, user_email
-                ))
+                logger.info(
+                    f"[SYNC-CHAIN] Chaining memory_process job {job['id']} (will chain task_process after)"
+                )
+                asyncio.create_task(
+                    self.execute_job(job["id"], owner_id, api_key, llm_provider, user_email)
+                )
             else:
                 logger.info(f"[SYNC-CHAIN] memory_process job already {job['status']}")
         else:
-            logger.info(f"[SYNC-CHAIN] No unprocessed emails for memory, trying task chain directly")
+            logger.info("[SYNC-CHAIN] No unprocessed emails for memory, trying task chain directly")
             await self._chain_task_processing(owner_id, api_key, llm_provider, user_email)
 
     async def _chain_task_processing(
-        self,
-        owner_id: str,
-        api_key: str,
-        llm_provider: str,
-        user_email: str
+        self, owner_id: str, api_key: str, llm_provider: str, user_email: str
     ) -> None:
         """Chain task processing (called after memory processing completes).
 
@@ -1121,14 +1121,11 @@ class JobExecutor:
         # Refresh (or generate) task prompt before processing
         if not api_key:
             logger.debug(
-                f"[SYNC-CHAIN] No API key for {owner_id},"
-                f" skipping task prompt refresh"
+                f"[SYNC-CHAIN] No API key for {owner_id}," f" skipping task prompt refresh"
             )
             return
 
-        has_prompt = await self._refresh_task_prompt(
-            owner_id, api_key, llm_provider, user_email
-        )
+        has_prompt = await self._refresh_task_prompt(owner_id, api_key, llm_provider, user_email)
         if not has_prompt:
             logger.info(
                 f"[SYNC-CHAIN] No task prompt available"
@@ -1137,31 +1134,28 @@ class JobExecutor:
             )
             return
 
-        unprocessed_task_emails = (
-            storage.get_unprocessed_emails_for_task(owner_id)
-        )
+        unprocessed_task_emails = storage.get_unprocessed_emails_for_task(owner_id)
         if unprocessed_task_emails:
             job = storage.create_background_job(
-                owner_id=owner_id,
-                job_type="task_process",
-                channel="all"
+                owner_id=owner_id, job_type="task_process", channel="all"
             )
             if job["status"] == "pending":
                 logger.info(f"[SYNC-CHAIN] Chaining task_process job {job['id']}")
-                asyncio.create_task(self.execute_job(
-                    job["id"], owner_id, api_key, llm_provider, user_email
-                ))
+                asyncio.create_task(
+                    self.execute_job(job["id"], owner_id, api_key, llm_provider, user_email)
+                )
             else:
                 logger.info(f"[SYNC-CHAIN] task_process job already {job['status']}")
         else:
-            logger.info(f"[SYNC-CHAIN] No unprocessed emails for tasks, skipping")
+            logger.info("[SYNC-CHAIN] No unprocessed emails for tasks, skipping")
 
 
 # =============================================================================
 # Sync wrapper functions (called from thread pool)
 # =============================================================================
 
-def _process_email_sync(worker: 'MemoryWorker', email: Dict) -> bool:
+
+def _process_email_sync(worker: "MemoryWorker", email: Dict) -> bool:
     """Sync version of MemoryWorker.process_email.
 
     Runs the same logic but without async/await.
@@ -1174,7 +1168,6 @@ def _process_email_sync(worker: 'MemoryWorker', email: Dict) -> bool:
     Returns:
         True if processed successfully
     """
-    from zylch.workers import MemoryWorker
 
     email_id = email.get("id", "unknown")
     logger.info(f"[memory_process] START email {email_id} from={email.get('from_email', '?')}")
@@ -1212,18 +1205,19 @@ def _process_email_sync(worker: 'MemoryWorker', email: Dict) -> bool:
     except Exception as e:
         logger.error(
             f"[memory_process] FAILED email {email_id} - NOT marked as processed, "
-            f"will be retried on resume: {e}", exc_info=True
+            f"will be retried on resume: {e}",
+            exc_info=True,
         )
         return False
 
 
 def _upsert_entity_sync(
-    worker: 'MemoryWorker',
+    worker: "MemoryWorker",
     entity_content: str,
     event_desc: str,
     email_id: str,
     entity_num: int,
-    total_entities: int
+    total_entities: int,
 ) -> None:
     """Sync version of MemoryWorker._upsert_entity.
 
@@ -1239,10 +1233,7 @@ def _upsert_entity_sync(
 
     # Get top 3 candidates above threshold
     existing_blobs = worker.hybrid_search.find_candidates_for_reconsolidation(
-        owner_id=worker.owner_id,
-        content=entity_content,
-        namespace=worker.namespace,
-        limit=3
+        owner_id=worker.owner_id, content=entity_content, namespace=worker.namespace, limit=3
     )
 
     upserted = False
@@ -1252,7 +1243,7 @@ def _upsert_entity_sync(
         merged_content = worker.llm_merge.merge(existing.content, entity_content)
 
         # If LLM says INSERT (entities don't match), try next candidate
-        if 'INSERT' in merged_content.upper() and len(merged_content) < 10:
+        if "INSERT" in merged_content.upper() and len(merged_content) < 10:
             logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
             continue
 
@@ -1261,7 +1252,7 @@ def _upsert_entity_sync(
             blob_id=existing.blob_id,
             owner_id=worker.owner_id,
             content=merged_content,
-            event_description=event_desc
+            event_description=event_desc,
         )
         logger.info(f"Reconsolidated blob {existing.blob_id} with email {email_id}")
         upserted = True
@@ -1273,12 +1264,12 @@ def _upsert_entity_sync(
             owner_id=worker.owner_id,
             namespace=worker.namespace,
             content=entity_content,
-            event_description=event_desc
+            event_description=event_desc,
         )
         logger.info(f"Created new blob {blob['id']} from email {email_id}")
 
 
-def _process_calendar_event_sync(worker: 'MemoryWorker', event: Dict) -> bool:
+def _process_calendar_event_sync(worker: "MemoryWorker", event: Dict) -> bool:
     """Sync version of MemoryWorker.process_calendar_event.
 
     Args:
@@ -1301,9 +1292,7 @@ def _process_calendar_event_sync(worker: 'MemoryWorker', event: Dict) -> bool:
 
         # Search for existing blob
         existing = worker.hybrid_search.find_for_reconsolidation(
-            owner_id=worker.owner_id,
-            content=facts,
-            namespace=worker.namespace
+            owner_id=worker.owner_id, content=facts, namespace=worker.namespace
         )
 
         event_desc = f"Extracted from calendar event '{event.get('summary', '')}' ({event.get('start_time', '')})"
@@ -1315,7 +1304,7 @@ def _process_calendar_event_sync(worker: 'MemoryWorker', event: Dict) -> bool:
                 blob_id=existing.blob_id,
                 owner_id=worker.owner_id,
                 content=merged_content,
-                event_description=event_desc
+                event_description=event_desc,
             )
             logger.info(f"Reconsolidated blob {existing.blob_id} with event {event_id}")
         else:
@@ -1324,7 +1313,7 @@ def _process_calendar_event_sync(worker: 'MemoryWorker', event: Dict) -> bool:
                 owner_id=worker.owner_id,
                 namespace=worker.namespace,
                 content=facts,
-                event_description=event_desc
+                event_description=event_desc,
             )
             logger.info(f"Created new blob {blob['id']} from event {event_id}")
 
@@ -1336,7 +1325,7 @@ def _process_calendar_event_sync(worker: 'MemoryWorker', event: Dict) -> bool:
         return False
 
 
-def _process_mrcall_sync(worker: 'MemoryWorker', conversation: Dict) -> bool:
+def _process_mrcall_sync(worker: "MemoryWorker", conversation: Dict) -> bool:
     """Sync version of MemoryWorker.process_mrcall_conversation.
 
     Args:
@@ -1358,13 +1347,17 @@ def _process_mrcall_sync(worker: 'MemoryWorker', conversation: Dict) -> bool:
             return True
 
         # Process each entity
-        contact_phone = conversation.get('contact_phone', 'unknown')
-        contact_name = conversation.get('contact_name', 'unknown')
-        call_date = conversation.get('call_started_at', 'unknown')
-        event_desc = f"Extracted from phone call with {contact_name} ({contact_phone}) on {call_date}"
+        contact_phone = conversation.get("contact_phone", "unknown")
+        contact_name = conversation.get("contact_name", "unknown")
+        call_date = conversation.get("call_started_at", "unknown")
+        event_desc = (
+            f"Extracted from phone call with {contact_name} ({contact_phone}) on {call_date}"
+        )
 
         for i, entity_content in enumerate(entities):
-            _upsert_mrcall_entity_sync(worker, entity_content, event_desc, conv_id, i + 1, len(entities))
+            _upsert_mrcall_entity_sync(
+                worker, entity_content, event_desc, conv_id, i + 1, len(entities)
+            )
 
         # Mark as processed
         worker.storage.mark_mrcall_memory_processed(worker.owner_id, conv_id)
@@ -1376,12 +1369,12 @@ def _process_mrcall_sync(worker: 'MemoryWorker', conversation: Dict) -> bool:
 
 
 def _upsert_mrcall_entity_sync(
-    worker: 'MemoryWorker',
+    worker: "MemoryWorker",
     entity_content: str,
     event_desc: str,
     conv_id: str,
     entity_num: int,
-    total_entities: int
+    total_entities: int,
 ) -> None:
     """Sync version of MemoryWorker._upsert_mrcall_entity.
 
@@ -1397,10 +1390,7 @@ def _upsert_mrcall_entity_sync(
 
     # Get top 3 candidates above threshold
     existing_blobs = worker.hybrid_search.find_candidates_for_reconsolidation(
-        owner_id=worker.owner_id,
-        content=entity_content,
-        namespace=worker.namespace,
-        limit=3
+        owner_id=worker.owner_id, content=entity_content, namespace=worker.namespace, limit=3
     )
 
     upserted = False
@@ -1410,7 +1400,7 @@ def _upsert_mrcall_entity_sync(
         merged_content = worker.llm_merge.merge(existing.content, entity_content)
 
         # If LLM says INSERT (entities don't match), try next candidate
-        if 'INSERT' in merged_content.upper() and len(merged_content) < 10:
+        if "INSERT" in merged_content.upper() and len(merged_content) < 10:
             logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
             continue
 
@@ -1419,7 +1409,7 @@ def _upsert_mrcall_entity_sync(
             blob_id=existing.blob_id,
             owner_id=worker.owner_id,
             content=merged_content,
-            event_description=event_desc
+            event_description=event_desc,
         )
         logger.info(f"Reconsolidated blob {existing.blob_id} with conversation {conv_id}")
         upserted = True
@@ -1431,7 +1421,6 @@ def _upsert_mrcall_entity_sync(
             owner_id=worker.owner_id,
             namespace=worker.namespace,
             content=entity_content,
-            event_description=event_desc
+            event_description=event_desc,
         )
         logger.info(f"Created new blob {blob['id']} from conversation {conv_id}")
-

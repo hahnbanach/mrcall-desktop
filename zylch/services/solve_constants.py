@@ -31,10 +31,7 @@ RULES:
 SOLVE_TOOLS = [
     {
         "name": "search_emails",
-        "description": (
-            "Search the user's email archive."
-            " Returns matching emails."
-        ),
+        "description": ("Search the user's email archive." " Returns matching emails."),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -50,9 +47,7 @@ SOLVE_TOOLS = [
     },
     {
         "name": "search_memory",
-        "description": (
-            "Search contact memory for info about a person or company."
-        ),
+        "description": ("Search contact memory for info about a person or company."),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -66,9 +61,7 @@ SOLVE_TOOLS = [
     },
     {
         "name": "draft_email",
-        "description": (
-            "Draft an email reply. The user will review before sending."
-        ),
+        "description": ("Draft an email reply. The user will review before sending."),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -116,15 +109,11 @@ SOLVE_TOOLS = [
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": (
-                        "Name or keyword to find the memory entry to update"
-                    ),
+                    "description": ("Name or keyword to find the memory entry to update"),
                 },
                 "new_content": {
                     "type": "string",
-                    "description": (
-                        "The corrected full content (replaces existing)"
-                    ),
+                    "description": ("The corrected full content (replaces existing)"),
                 },
             },
             "required": ["query", "new_content"],
@@ -132,9 +121,7 @@ SOLVE_TOOLS = [
     },
     {
         "name": "send_email",
-        "description": (
-            "Send an email via SMTP. User approves before sending."
-        ),
+        "description": ("Send an email via SMTP. User approves before sending."),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -161,10 +148,7 @@ SOLVE_TOOLS = [
             "properties": {
                 "email_id": {
                     "type": "string",
-                    "description": (
-                        "Email ID (UUID from search_emails,"
-                        " NOT the subject line)"
-                    ),
+                    "description": ("Email ID (UUID from search_emails," " NOT the subject line)"),
                 },
             },
             "required": ["email_id"],
@@ -204,9 +188,7 @@ SOLVE_TOOLS = [
     },
     {
         "name": "send_whatsapp",
-        "description": (
-            "Send a WhatsApp message. User approves before sending."
-        ),
+        "description": ("Send a WhatsApp message. User approves before sending."),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -221,9 +203,7 @@ SOLVE_TOOLS = [
     },
     {
         "name": "send_sms",
-        "description": (
-            "Send an SMS via MrCall/StarChat. User approves before sending."
-        ),
+        "description": ("Send an SMS via MrCall/StarChat. User approves before sending."),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -290,8 +270,7 @@ def build_task_context(task: dict, store, owner_id: str) -> str:
     parts.append(f"URGENCY: {task.get('urgency', '')}")
     parts.append(f"REASON: {task.get('reason', '')}")
     parts.append(
-        f"CONTACT: {task.get('contact_name', '')}"
-        f" ({task.get('contact_email', '')})",
+        f"CONTACT: {task.get('contact_name', '')}" f" ({task.get('contact_email', '')})",
     )
 
     event_id = task.get("event_id")
@@ -302,9 +281,7 @@ def build_task_context(task: dict, store, owner_id: str) -> str:
             parts.append(f"From: {email.get('from_email', '')}")
             parts.append(f"Subject: {email.get('subject', '')}")
             parts.append(f"Date: {email.get('date', '')}")
-            body = (
-                email.get("body_plain", "") or email.get("snippet", "")
-            )
+            body = email.get("body_plain", "") or email.get("snippet", "")
             if body:
                 parts.append(f"\n{body}")
 
@@ -317,11 +294,7 @@ def build_task_context(task: dict, store, owner_id: str) -> str:
 
             with get_session() as session:
                 for bid in blob_ids:
-                    blob = (
-                        session.query(Blob)
-                        .filter_by(id=str(bid), owner_id=owner_id)
-                        .first()
-                    )
+                    blob = session.query(Blob).filter_by(id=str(bid), owner_id=owner_id).first()
                     if blob and blob.content:
                         parts.append("\n--- CONTACT MEMORY ---")
                         parts.append(blob.content)

@@ -53,9 +53,7 @@ class LLMResponse:
     def _parse_response(self):
         """Parse into Anthropic-compatible format."""
         # Anthropic native: has .stop_reason and .content as list
-        if hasattr(self._raw, "stop_reason") and hasattr(
-            self._raw, "content"
-        ):
+        if hasattr(self._raw, "stop_reason") and hasattr(self._raw, "content"):
             if isinstance(self._raw.content, list):
                 for block in self._raw.content:
                     if hasattr(block, "type"):
@@ -64,11 +62,7 @@ class LLMResponse:
                                 TextBlock(text=block.text),
                             )
                         elif block.type == "tool_use":
-                            inp = (
-                                block.input
-                                if isinstance(block.input, dict)
-                                else {}
-                            )
+                            inp = block.input if isinstance(block.input, dict) else {}
                             self._content.append(
                                 ToolUseBlock(
                                     id=block.id,
@@ -76,16 +70,11 @@ class LLMResponse:
                                     input=inp,
                                 ),
                             )
-                self._stop_reason = (
-                    self._raw.stop_reason or "end_turn"
-                )
+                self._stop_reason = self._raw.stop_reason or "end_turn"
                 return
 
         # OpenAI format: has .choices[0].message
-        if (
-            not hasattr(self._raw, "choices")
-            or not self._raw.choices
-        ):
+        if not hasattr(self._raw, "choices") or not self._raw.choices:
             return
 
         choice = self._raw.choices[0]
@@ -94,10 +83,7 @@ class LLMResponse:
         if message.content:
             self._content.append(TextBlock(text=message.content))
 
-        if (
-            hasattr(message, "tool_calls")
-            and message.tool_calls
-        ):
+        if hasattr(message, "tool_calls") and message.tool_calls:
             for tc in message.tool_calls:
                 try:
                     args = json.loads(tc.function.arguments)
@@ -114,9 +100,7 @@ class LLMResponse:
         elif choice.finish_reason == "stop":
             self._stop_reason = "end_turn"
         else:
-            self._stop_reason = (
-                choice.finish_reason or "end_turn"
-            )
+            self._stop_reason = choice.finish_reason or "end_turn"
 
     @property
     def content(self) -> List[Union[TextBlock, ToolUseBlock]]:
@@ -136,11 +120,15 @@ class LLMResponse:
             u = self._raw.usage
             return {
                 "input_tokens": getattr(
-                    u, "input_tokens", 0,
+                    u,
+                    "input_tokens",
+                    0,
                 )
                 or getattr(u, "prompt_tokens", 0),
                 "output_tokens": getattr(
-                    u, "output_tokens", 0,
+                    u,
+                    "output_tokens",
+                    0,
                 )
                 or getattr(u, "completion_tokens", 0),
             }
@@ -167,8 +155,7 @@ class LLMClient:
     ):
         if provider not in PROVIDER_MODELS:
             raise ValueError(
-                f"Unknown provider: {provider}. "
-                f"Supported: {', '.join(PROVIDER_MODELS.keys())}"
+                f"Unknown provider: {provider}. " f"Supported: {', '.join(PROVIDER_MODELS.keys())}"
             )
 
         self.api_key = api_key
@@ -189,12 +176,12 @@ class LLMClient:
             raise ValueError(f"Unsupported provider: {provider}")
 
         logger.info(
-            f"Initialized LLMClient with"
-            f" provider={provider}, model={self.model}",
+            f"Initialized LLMClient with" f" provider={provider}, model={self.model}",
         )
 
     def _convert_tools_to_openai_format(
-        self, tools: Optional[List[Dict[str, Any]]],
+        self,
+        tools: Optional[List[Dict[str, Any]]],
     ) -> Optional[List[Dict[str, Any]]]:
         """Convert Anthropic tool format to OpenAI format."""
         if not tools:
@@ -210,10 +197,12 @@ class LLMClient:
                         "function": {
                             "name": tool.get("name", ""),
                             "description": tool.get(
-                                "description", "",
+                                "description",
+                                "",
                             ),
                             "parameters": tool.get(
-                                "input_schema", {},
+                                "input_schema",
+                                {},
                             ),
                         },
                     }
@@ -221,7 +210,8 @@ class LLMClient:
         return openai_tools
 
     def _convert_tool_choice(
-        self, tool_choice: Optional[Dict[str, Any]],
+        self,
+        tool_choice: Optional[Dict[str, Any]],
     ) -> Optional[Union[str, Dict[str, Any]]]:
         """Convert Anthropic tool_choice to OpenAI format."""
         if not tool_choice:
@@ -241,7 +231,8 @@ class LLMClient:
         return "auto"
 
     def _convert_messages_to_openai_format(
-        self, messages: List[Dict[str, Any]],
+        self,
+        messages: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """Convert Anthropic-style messages to OpenAI format.
 
@@ -255,10 +246,7 @@ class LLMClient:
             # Tool results (Anthropic: user message with tool_result)
             if role == "user" and isinstance(content, list):
                 tool_results = [
-                    c
-                    for c in content
-                    if isinstance(c, dict)
-                    and c.get("type") == "tool_result"
+                    c for c in content if isinstance(c, dict) and c.get("type") == "tool_result"
                 ]
                 if tool_results:
                     for result in tool_results:
@@ -269,7 +257,8 @@ class LLMClient:
                             {
                                 "role": "tool",
                                 "tool_call_id": result.get(
-                                    "tool_use_id", "",
+                                    "tool_use_id",
+                                    "",
                                 ),
                                 "content": str(rc),
                             }
@@ -278,7 +267,8 @@ class LLMClient:
 
             # Assistant messages with tool_use blocks
             if role == "assistant" and isinstance(
-                content, list,
+                content,
+                list,
             ):
                 text_parts = []
                 tool_calls = []
@@ -291,11 +281,13 @@ class LLMClient:
                                     "type": "function",
                                     "function": {
                                         "name": block.get(
-                                            "name", "",
+                                            "name",
+                                            "",
                                         ),
                                         "arguments": json.dumps(
                                             block.get(
-                                                "input", {},
+                                                "input",
+                                                {},
                                             ),
                                         ),
                                     },
@@ -376,6 +368,7 @@ class LLMClient:
         **kwargs,
     ) -> Any:
         """Call Anthropic SDK directly."""
+
         # Coerce any SDK block objects (TextBlock/ToolUseBlock) lingering
         # in messages to plain dicts — otherwise anthropic's request JSON
         # serializer raises "Object of type TextBlock is not JSON
@@ -428,8 +421,7 @@ class LLMClient:
 
         num_tools = len(tools) if tools else 0
         logger.debug(
-            f"anthropic request: model={model},"
-            f" messages={len(messages)}, tools={num_tools}",
+            f"anthropic request: model={model}," f" messages={len(messages)}, tools={num_tools}",
         )
 
         return self._client.messages.create(**request_kwargs)
@@ -505,13 +497,25 @@ class LLMClient:
 
         if self.provider == "anthropic":
             response = self._call_anthropic(
-                messages, system, tools, tool_choice,
-                max_tokens, temperature, model_name, **kwargs,
+                messages,
+                system,
+                tools,
+                tool_choice,
+                max_tokens,
+                temperature,
+                model_name,
+                **kwargs,
             )
         elif self.provider == "openai":
             response = self._call_openai(
-                messages, system, tools, tool_choice,
-                max_tokens, temperature, model_name, **kwargs,
+                messages,
+                system,
+                tools,
+                tool_choice,
+                max_tokens,
+                temperature,
+                model_name,
+                **kwargs,
             )
         else:
             raise ValueError(
