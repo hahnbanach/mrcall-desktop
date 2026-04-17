@@ -499,7 +499,7 @@ class TaskWorker:
                 existing_task_context = "\n".join(lines)
 
             trigger_body_raw = email.get("body_plain") or email.get("snippet", "")
-            trigger_body_clean = _strip_quoted(trigger_body_raw) or trigger_body_raw
+            trigger_body_clean = _strip_quoted(trigger_body_raw, cap=1500) or trigger_body_raw
             event_data = {
                 "id": email.get("id"),
                 "from_email": email.get("from_email"),
