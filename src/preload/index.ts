@@ -16,6 +16,18 @@ ipcRenderer.on('sidecar:stderr', (_e, chunk: string) => {
   }
 })
 
+type MenuCb = () => void
+const openProfilePickerListeners = new Set<MenuCb>()
+ipcRenderer.on('menu:openProfilePicker', () => {
+  for (const cb of openProfilePickerListeners) {
+    try {
+      cb()
+    } catch (e) {
+      console.error('[preload] openProfilePicker handler error', e)
+    }
+  }
+})
+
 ipcRenderer.on('rpc:notification', (_e, msg: { method: string; params: unknown }) => {
   const set = listeners.get(msg.method)
   if (!set) return
@@ -79,6 +91,13 @@ const api = {
   profile: {
     current: (): Promise<string> => ipcRenderer.invoke('profile:current') as Promise<string>
   },
+  profiles: {
+    list: (): Promise<string[]> => ipcRenderer.invoke('profiles:list') as Promise<string[]>
+  },
+  window: {
+    openForProfile: (email: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('window:openForProfile', email) as Promise<{ ok: boolean }>
+  },
   narration: {
     summarize: (lines: string[], context: string = '') =>
       call<{ text: string }>('narration.summarize', { lines, context }, 15000),
@@ -124,6 +143,12 @@ const api = {
     stderrListeners.add(cb)
     return () => {
       stderrListeners.delete(cb)
+    }
+  },
+  onOpenProfilePicker: (cb: MenuCb): (() => void) => {
+    openProfilePickerListeners.add(cb)
+    return () => {
+      openProfilePickerListeners.delete(cb)
     }
   }
 }

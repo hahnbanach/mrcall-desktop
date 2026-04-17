@@ -72,6 +72,12 @@ export interface ZylchAPI {
   profile: {
     current: () => Promise<string>
   }
+  profiles: {
+    list: () => Promise<string[]>
+  }
+  window: {
+    openForProfile: (email: string) => Promise<{ ok: boolean }>
+  }
   narration: {
     summarize: (lines: string[], context?: string) => Promise<{ text: string }>
     predict: (message: string, context?: string) => Promise<{ text: string }>
@@ -99,6 +105,7 @@ export interface ZylchAPI {
   }
   onNotification: (method: string, cb: (params: any) => void) => () => void
   onStderr: (cb: (chunk: string) => void) => () => void
+  onOpenProfilePicker: (cb: () => void) => () => void
 }
 
 declare global {
