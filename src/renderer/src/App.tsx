@@ -1,18 +1,18 @@
 import { useState } from 'react'
 import Dashboard from './views/Dashboard'
 import Chat from './views/Chat'
-import Sync from './views/Sync'
+import Update from './views/Update'
 import { ConversationsProvider } from './store/conversations'
 import './types'
 
-type View = 'dashboard' | 'chat' | 'sync'
+type View = 'dashboard' | 'chat' | 'update'
 
 export default function App() {
   const [view, setView] = useState<View>('dashboard')
   const tabs: { id: View; label: string }[] = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'chat', label: 'Chat' },
-    { id: 'sync', label: 'Sync' }
+    { id: 'update', label: 'Update' }
   ]
   return (
     <ConversationsProvider>
@@ -41,7 +41,7 @@ export default function App() {
           {view === 'chat' && (
             <Chat onGoToDashboard={() => setView('dashboard')} />
           )}
-          {view === 'sync' && <Sync />}
+          {view === 'update' && <Update />}
         </main>
       </div>
     </ConversationsProvider>

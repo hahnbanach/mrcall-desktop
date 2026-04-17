@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-export default function Sync() {
+export default function Update() {
   const [running, setRunning] = useState(false)
   const [pct, setPct] = useState(0)
   const [message, setMessage] = useState<string>('')
@@ -20,13 +20,13 @@ export default function Sync() {
     setMessage('Starting…')
     setResult(null)
     setError(null)
-    const unsub = window.zylch.onNotification('sync.progress', (p: any) => {
+    const unsub = window.zylch.onNotification('update.progress', (p: any) => {
       if (typeof p?.pct === 'number') setPct(p.pct)
       if (typeof p?.message === 'string') setMessage(p.message)
     })
     unsubRef.current = unsub
     try {
-      const r = await window.zylch.sync.run()
+      const r = await window.zylch.update.run()
       setResult(r)
       setPct(100)
       setMessage('Done')
@@ -41,13 +41,13 @@ export default function Sync() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Sync</h1>
+      <h1 className="text-2xl font-semibold mb-4">Update</h1>
       <button
         onClick={run}
         disabled={running}
         className="px-4 py-2 bg-slate-900 text-white rounded disabled:bg-slate-400"
       >
-        {running ? 'Syncing…' : 'Sync now'}
+        {running ? 'Updating…' : 'Update now'}
       </button>
 
       {(running || pct > 0) && (

@@ -29,7 +29,7 @@ export interface ZylchAPI {
     ) => Promise<any>
     approve: (tool_use_id: string, approved: boolean) => Promise<{ ok: boolean }>
   }
-  sync: {
+  update: {
     run: () => Promise<any>
   }
   onNotification: (method: string, cb: (params: any) => void) => () => void
