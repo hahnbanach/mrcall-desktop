@@ -39,7 +39,12 @@ export interface ZylchAPI {
   update: {
     run: () => Promise<any>
   }
+  narration: {
+    summarize: (lines: string[], context?: string) => Promise<{ text: string }>
+    predict: (message: string, context?: string) => Promise<{ text: string }>
+  }
   onNotification: (method: string, cb: (params: any) => void) => () => void
+  onStderr: (cb: (chunk: string) => void) => () => void
 }
 
 declare global {

@@ -70,7 +70,9 @@ const api = {
   },
   narration: {
     summarize: (lines: string[], context: string = '') =>
-      call<{ text: string }>('narration.summarize', { lines, context }, 15000)
+      call<{ text: string }>('narration.summarize', { lines, context }, 15000),
+    predict: (message: string, context: string = '') =>
+      call<{ text: string }>('narration.predict', { message, context }, 15000)
   },
   onNotification: (method: string, cb: NotifyCb): (() => void) => {
     let set = listeners.get(method)

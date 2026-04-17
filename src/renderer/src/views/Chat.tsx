@@ -23,6 +23,7 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [completing, setCompleting] = useState(false)
   const [inputHeight, setInputHeight] = useState(160)
+  const [narrationSeed, setNarrationSeed] = useState<string>('')
 
   // Build context for narration: prefer the user's current draft, else the
   // last user message in history. Kept short (Haiku caps at 200 chars).
@@ -35,7 +36,7 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
     }
     return ''
   })()
-  const narration = useNarration(!!active.busy, narrationContext)
+  const narration = useNarration(!!active.busy, narrationContext, narrationSeed)
 
   const startResize = (e: React.MouseEvent): void => {
     const startY = e.clientY
@@ -82,13 +83,23 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
     }
   }, [setPendingApproval])
 
-  const send = async () => {
+  const send = async (): Promise<void> => {
     const text = active.draftInput.trim()
     if (!text || active.busy) return
     setDraftInput(active.id, '')
     appendUser(active.id, text)
+    setNarrationSeed('Sto pensando alla tua richiesta.')
     setBusy(active.id, true)
     const historySnapshot = active.history.map((m) => ({ role: m.role, content: m.content }))
+    window.zylch.narration
+      .predict(text, '')
+      .then((r) => {
+        const t = (r && typeof r.text === 'string' ? r.text.trim() : '') || ''
+        if (t) setNarrationSeed(t)
+      })
+      .catch(() => {
+        /* fallback seed already set */
+      })
     try {
       const res = await window.zylch.chat.send(text, historySnapshot, {
         conversationId: active.id,
@@ -101,6 +112,7 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
       appendAssistant(active.id, '**Error:** ' + (e.message || String(e)))
     } finally {
       setBusy(active.id, false)
+      setNarrationSeed('')
     }
   }
 
@@ -212,13 +224,9 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
             </div>
           ))}
           {active.busy && !active.pendingApproval && (
-            narration ? (
-              <div className="text-slate-500 italic text-sm whitespace-pre-wrap">
-                {narration}
-              </div>
-            ) : (
-              <div className="text-slate-500 text-sm">Zylch sta pensando…</div>
-            )
+            <div className="text-slate-500 italic text-sm whitespace-pre-wrap">
+              {narration || 'Sto pensando alla tua richiesta.'}
+            </div>
           )}
 
           {active.pendingApproval && (
