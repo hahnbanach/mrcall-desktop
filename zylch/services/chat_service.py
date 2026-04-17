@@ -620,6 +620,38 @@ class ChatService:
                 # Clear history for new conversation
                 self.agent.clear_history()
 
+            # TASK CONTEXT INJECTION — if caller passed task_id / email_id in
+            # context (e.g. desktop's "Solve" button), inject them as an
+            # explicit prefix on the user message so the LLM uses them
+            # directly with read_email / download_attachment instead of
+            # guessing via search_emails. We inject into the user_message
+            # (not system — the system prompt is cached) so the IDs are
+            # present in this specific turn.
+            task_id_ctx = agent_context.get("task_id") if isinstance(agent_context, dict) else None
+            email_id_ctx = (
+                agent_context.get("email_id") if isinstance(agent_context, dict) else None
+            )
+            if task_id_ctx or email_id_ctx:
+                id_lines: List[str] = []
+                if task_id_ctx:
+                    id_lines.append(f"task_id={task_id_ctx}")
+                if email_id_ctx:
+                    id_lines.append(f"source_email_id={email_id_ctx}")
+                prefix = (
+                    "[TASK CONTEXT: "
+                    + ", ".join(id_lines)
+                    + "]\n"
+                    + "Use these identifiers DIRECTLY with tools like read_email "
+                    + "and download_attachment (pass email_id=<source_email_id>). "
+                    + "Do NOT call search_emails or search_provider_emails — "
+                    + "the email is already identified.\n\n"
+                )
+                logger.info(
+                    f"[TaskContext] Injecting task_id={task_id_ctx} "
+                    f"email_id={email_id_ctx} into user_message"
+                )
+                user_message = prefix + user_message
+
             # Process message through agent
             logger.info(f"Processing message for user {user_id}: {user_message}")
             response = await self.agent.process_message(
