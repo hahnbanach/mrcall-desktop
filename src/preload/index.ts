@@ -76,6 +76,9 @@ const api = {
     select: (): Promise<string[]> =>
       ipcRenderer.invoke('dialog:selectFiles') as Promise<string[]>
   },
+  profile: {
+    current: (): Promise<string> => ipcRenderer.invoke('profile:current') as Promise<string>
+  },
   narration: {
     summarize: (lines: string[], context: string = '') =>
       call<{ text: string }>('narration.summarize', { lines, context }, 15000),
