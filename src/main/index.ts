@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'path'
 import { SidecarClient } from './sidecar'
 
@@ -72,6 +72,17 @@ function registerIpc(): void {
     if (!sidecar) throw new Error('sidecar not started')
     const effective = timeout ?? METHOD_TIMEOUTS[method] ?? 60000
     return sidecar.call(method, params, effective)
+  })
+
+  // File picker for chat attachments. Returns absolute paths (possibly empty
+  // if the user cancelled). Electron resolves paths already.
+  ipcMain.handle('dialog:selectFiles', async (): Promise<string[]> => {
+    if (!mainWindow) return []
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile', 'multiSelections']
+    })
+    if (result.canceled) return []
+    return result.filePaths
   })
 }
 

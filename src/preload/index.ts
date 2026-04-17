@@ -68,6 +68,10 @@ const api = {
   update: {
     run: () => call<any>('update.run', {}, 600000)
   },
+  files: {
+    select: (): Promise<string[]> =>
+      ipcRenderer.invoke('dialog:selectFiles') as Promise<string[]>
+  },
   narration: {
     summarize: (lines: string[], context: string = '') =>
       call<{ text: string }>('narration.summarize', { lines, context }, 15000),
