@@ -68,6 +68,10 @@ const api = {
   update: {
     run: () => call<any>('update.run', {}, 600000)
   },
+  emails: {
+    listByThread: (threadId: string) =>
+      call<any>('emails.list_by_thread', { thread_id: threadId }, 60000)
+  },
   files: {
     select: (): Promise<string[]> =>
       ipcRenderer.invoke('dialog:selectFiles') as Promise<string[]>

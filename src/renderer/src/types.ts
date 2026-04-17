@@ -12,7 +12,31 @@ export interface ZylchTask {
   created_at: string
   analyzed_at?: string
   completed_at?: string | null
-  sources: { emails: string[]; blobs: string[]; calendar_events: string[] }
+  sources: {
+    emails: string[]
+    blobs: string[]
+    calendar_events: string[]
+    thread_id?: string | null
+  }
+}
+
+export interface ThreadEmail {
+  id: string
+  from_email: string
+  from_name: string
+  to_email: string
+  cc_email: string
+  date: string
+  subject: string
+  body_plain: string
+  is_auto_reply: boolean
+  is_user_sent: boolean
+  has_attachments: boolean
+  attachment_filenames: string[]
+}
+
+export interface EmailThreadResult {
+  emails: ThreadEmail[]
 }
 
 export interface ZylchAPI {
@@ -38,6 +62,9 @@ export interface ZylchAPI {
   }
   update: {
     run: () => Promise<any>
+  }
+  emails: {
+    listByThread: (threadId: string) => Promise<EmailThreadResult>
   }
   files: {
     select: () => Promise<string[]>
