@@ -258,6 +258,7 @@ class Draft(DictMixin, Base):
     sent_at = Column(DateTime)
     sent_message_id = Column(Text)
     error_message = Column(Text)
+    attachment_paths = Column(JSON, default=list)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow)
 

@@ -620,10 +620,11 @@ class ChatService:
                 # Clear history for new conversation
                 self.agent.clear_history()
 
-            # TASK CONTEXT INJECTION — if caller passed task_id / email_id in
-            # context (e.g. desktop's "Solve" button), inject them as an
-            # explicit prefix on the user message so the LLM uses them
-            # directly with read_email / download_attachment instead of
+            # TASK CONTEXT INJECTION — if caller passed task_id / email_id /
+            # attachment_paths in context (e.g. desktop's "Solve" button or
+            # the chat paperclip picker), inject them as an explicit prefix
+            # on the user message so the LLM uses them directly with
+            # read_email / download_attachment / create_draft instead of
             # guessing via search_emails. We inject into the user_message
             # (not system — the system prompt is cached) so the IDs are
             # present in this specific turn.
@@ -631,12 +632,26 @@ class ChatService:
             email_id_ctx = (
                 agent_context.get("email_id") if isinstance(agent_context, dict) else None
             )
-            if task_id_ctx or email_id_ctx:
+            attachment_paths_ctx = (
+                agent_context.get("attachment_paths") if isinstance(agent_context, dict) else None
+            )
+            if not isinstance(attachment_paths_ctx, list):
+                attachment_paths_ctx = None
+            if task_id_ctx or email_id_ctx or attachment_paths_ctx:
                 id_lines: List[str] = []
                 if task_id_ctx:
                     id_lines.append(f"task_id={task_id_ctx}")
                 if email_id_ctx:
                     id_lines.append(f"source_email_id={email_id_ctx}")
+                if attachment_paths_ctx:
+                    id_lines.append(f"attachment_paths={attachment_paths_ctx}")
+                extra = ""
+                if attachment_paths_ctx:
+                    extra = (
+                        " When calling create_draft, pass"
+                        f" attachment_paths={attachment_paths_ctx} exactly"
+                        " as provided so these files are attached on send."
+                    )
                 prefix = (
                     "[TASK CONTEXT: "
                     + ", ".join(id_lines)
@@ -644,11 +659,15 @@ class ChatService:
                     + "Use these identifiers DIRECTLY with tools like read_email "
                     + "and download_attachment (pass email_id=<source_email_id>). "
                     + "Do NOT call search_emails or search_provider_emails — "
-                    + "the email is already identified.\n\n"
+                    + "the email is already identified."
+                    + extra
+                    + "\n\n"
                 )
                 logger.info(
                     f"[TaskContext] Injecting task_id={task_id_ctx} "
-                    f"email_id={email_id_ctx} into user_message"
+                    f"email_id={email_id_ctx} "
+                    f"attachments={len(attachment_paths_ctx) if attachment_paths_ctx else 0} "
+                    f"into user_message"
                 )
                 user_message = prefix + user_message
 

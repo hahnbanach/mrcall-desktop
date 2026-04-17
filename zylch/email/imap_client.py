@@ -6,9 +6,12 @@ IMAP + app password. Works with any IMAP provider.
 
 import imaplib
 import logging
+import mimetypes
+import os
 import smtplib
 import email as email_lib
 from email.header import decode_header
+from email.message import EmailMessage
 from email.mime.text import MIMEText
 from email.utils import formatdate, make_msgid, parseaddr
 from typing import Any, Dict, List, Optional
@@ -733,6 +736,7 @@ class IMAPClient:
         cc: Optional[str] = None,
         in_reply_to: Optional[str] = None,
         references: Optional[str] = None,
+        attachment_paths: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Send email via SMTP.
 
@@ -743,13 +747,27 @@ class IMAPClient:
             cc: CC addresses (comma-separated)
             in_reply_to: Message-ID for reply threading
             references: References header for threading
+            attachment_paths: Optional list of local file paths to attach.
+                When present, the message is built as a multipart using
+                ``email.message.EmailMessage``; when absent, legacy
+                ``MIMEText`` is used for backwards compatibility.
 
         Returns:
             Dict with message_id of sent email
         """
-        logger.debug(f"[SMTP] send(to={to}, subject={subject})")
+        logger.debug(
+            f"[SMTP] send(to={to}, subject={subject},"
+            f" attachments={len(attachment_paths or [])})"
+        )
 
-        msg = MIMEText(body, "plain", "utf-8")
+        has_attachments = bool(attachment_paths)
+        msg: Any
+        if has_attachments:
+            msg = EmailMessage()
+            msg.set_content(body)
+        else:
+            msg = MIMEText(body, "plain", "utf-8")
+
         msg["From"] = self.email_addr
         msg["To"] = to
         msg["Subject"] = subject
@@ -763,6 +781,24 @@ class IMAPClient:
         if references:
             msg["References"] = references
 
+        if has_attachments:
+            for path in attachment_paths or []:
+                if not os.path.isfile(path):
+                    raise FileNotFoundError(f"Attachment not found: {path}")
+                ctype, _ = mimetypes.guess_type(path)
+                if ctype is None:
+                    maintype, subtype = "application", "octet-stream"
+                else:
+                    maintype, subtype = ctype.split("/", 1)
+                with open(path, "rb") as fh:
+                    data = fh.read()
+                msg.add_attachment(
+                    data,
+                    maintype=maintype,
+                    subtype=subtype,
+                    filename=os.path.basename(path),
+                )
+
         # Collect all recipients
         recipients = [addr.strip() for addr in to.split(",")]
         if cc:
@@ -774,11 +810,16 @@ class IMAPClient:
                 smtp.starttls()
                 smtp.ehlo()
                 smtp.login(self.email_addr, self.password)
-                smtp.sendmail(
-                    self.email_addr,
-                    recipients,
-                    msg.as_string(),
-                )
+                if has_attachments:
+                    # EmailMessage: use send_message so envelope headers are
+                    # handled consistently with multipart payloads.
+                    smtp.send_message(msg, self.email_addr, recipients)
+                else:
+                    smtp.sendmail(
+                        self.email_addr,
+                        recipients,
+                        msg.as_string(),
+                    )
 
             sent_id = msg["Message-ID"]
             logger.info(f"[SMTP] Email sent to {to}: {subject} " f"(id={sent_id})")
@@ -799,6 +840,7 @@ class IMAPClient:
         in_reply_to: Optional[str] = None,
         references: Optional[str] = None,
         thread_id: Optional[str] = None,
+        attachment_paths: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Send email (GmailClient-compatible interface).
 
@@ -813,6 +855,7 @@ class IMAPClient:
             in_reply_to: Message-ID for threading
             references: References header for threading
             thread_id: Ignored (IMAP uses Message-ID refs)
+            attachment_paths: Local file paths to attach.
 
         Returns:
             Dict with sent message info
@@ -824,6 +867,7 @@ class IMAPClient:
             cc=cc,
             in_reply_to=in_reply_to,
             references=references,
+            attachment_paths=attachment_paths,
         )
         return result
 
