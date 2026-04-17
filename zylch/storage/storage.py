@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from .database import get_session
@@ -373,31 +373,43 @@ class Storage:
         limit: int = 20,
         alpha: float = 0.5,
     ) -> List[Dict[str, Any]]:
-        """Search emails using LIKE (SQLite fallback).
+        """Search emails using LIKE with multi-token AND semantics.
+
+        The query is split on whitespace into tokens; each token must appear
+        (case-insensitive substring) in at least one of the searchable columns
+        (subject, body_plain, from_email, from_name, snippet). This makes
+        multi-word queries like "Aliprandi delega" match an email where the
+        surname is in ``from_name`` and "delega" is in the subject.
 
         FTS5 and vector search will be added in Stream E.
         """
         logger.debug(f"[search_emails] owner={owner_id} " f"query={query} limit={limit}")
-        like_pattern = f"%{query}%"
+        tokens = [t for t in (query or "").split() if t]
+        if not tokens:
+            logger.debug("[search_emails] empty query -> 0 results")
+            return []
+
+        searchable = (
+            Email.subject,
+            Email.body_plain,
+            Email.from_email,
+            Email.from_name,
+            Email.snippet,
+        )
+        token_clauses = [or_(*[col.ilike(f"%{tok}%") for col in searchable]) for tok in tokens]
         with get_session() as session:
             rows = (
                 session.query(Email)
                 .filter(
                     Email.owner_id == owner_id,
-                    or_(
-                        Email.subject.ilike(like_pattern),
-                        Email.body_plain.ilike(like_pattern),
-                        Email.from_email.ilike(like_pattern),
-                        Email.from_name.ilike(like_pattern),
-                        Email.snippet.ilike(like_pattern),
-                    ),
+                    and_(*token_clauses),
                 )
                 .order_by(Email.date_timestamp.desc())
                 .limit(limit)
                 .all()
             )
             results = [r.to_dict() for r in rows]
-            logger.debug(f"[search_emails] found={len(results)}")
+            logger.debug(f"[search_emails] tokens={tokens} found={len(results)}")
             return results
 
     def delete_email(self, owner_id: str, gmail_id: str) -> bool:
