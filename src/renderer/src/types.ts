@@ -20,6 +20,13 @@ export interface ZylchAPI {
     list: (p?: { include_completed?: boolean; include_skipped?: boolean }) => Promise<ZylchTask[]>
     complete: (task_id: string) => Promise<{ ok: boolean }>
     skip: (task_id: string) => Promise<{ ok: boolean }>
+    reanalyze: (task_id: string) => Promise<{
+      ok: boolean
+      action: 'kept' | 'closed' | 'updated'
+      reason: string
+      task_id: string
+      usage?: Record<string, unknown>
+    }>
   }
   chat: {
     send: (

@@ -19,6 +19,8 @@ export default function Dashboard({ onOpenChat }: Props = {}) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [updating, setUpdating] = useState<Set<string>>(new Set())
+  const [keptNotice, setKeptNotice] = useState<Record<string, string>>({})
 
   const load = async () => {
     setLoading(true)
@@ -51,6 +53,41 @@ export default function Dashboard({ onOpenChat }: Props = {}) {
       setTasks((t) => t.filter((x) => x.id !== id))
     } catch (e: any) {
       alert('Close failed: ' + e.message)
+    }
+  }
+  const onUpdate = async (id: string) => {
+    setUpdating((s) => new Set(s).add(id))
+    setKeptNotice((n) => {
+      if (!(id in n)) return n
+      const m = { ...n }
+      delete m[id]
+      return m
+    })
+    try {
+      const r = await window.zylch.tasks.reanalyze(id)
+      if (r.action === 'closed') {
+        setTasks((t) => t.filter((x) => x.id !== id))
+      } else if (r.action === 'updated') {
+        await load()
+      } else {
+        setKeptNotice((n) => ({ ...n, [id]: r.reason }))
+        setTimeout(() => {
+          setKeptNotice((n) => {
+            if (!(id in n)) return n
+            const m = { ...n }
+            delete m[id]
+            return m
+          })
+        }, 6000)
+      }
+    } catch (e: any) {
+      alert('Update failed: ' + e.message)
+    } finally {
+      setUpdating((s) => {
+        const n = new Set(s)
+        n.delete(id)
+        return n
+      })
     }
   }
   const toggle = (id: string) => {
@@ -163,7 +200,19 @@ export default function Dashboard({ onOpenChat }: Props = {}) {
                     >
                       Solve
                     </button>
+                    <button
+                      onClick={() => onUpdate(t.id)}
+                      disabled={updating.has(t.id)}
+                      className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {updating.has(t.id) ? 'Analyzing…' : 'Update'}
+                    </button>
                   </div>
+                  {keptNotice[t.id] && (
+                    <div className="mt-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-1.5">
+                      Task kept — {keptNotice[t.id]}
+                    </div>
+                  )}
                 </article>
               ))}
             </div>
