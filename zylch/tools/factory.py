@@ -44,6 +44,7 @@ from .gmail_tools import (
     EditDraftTool,
     UpdateDraftTool,
     SendDraftTool,
+    DeleteDraftTool,
 )
 from .email_sync_tools import (
     SyncEmailsTool,
@@ -408,6 +409,7 @@ class ToolFactory:
             EditDraftTool(storage, owner_id),
             UpdateDraftTool(storage, owner_id),
             SendDraftTool(imap_client, storage, owner_id),
+            DeleteDraftTool(storage, owner_id),
         ]
 
     @staticmethod
