@@ -921,6 +921,32 @@ class SendDraftTool(Tool):
                 sent_message.get("id", ""),
             )
 
+            # Persist the sent email so the thread view and task
+            # reanalysis reflect that the user replied. Best-effort:
+            # never block the send on a local-DB failure.
+            try:
+                from datetime import datetime, timezone
+
+                from zylch.api.token_storage import get_email
+
+                owner_email = get_email(self.owner_id) or ""
+                attachment_filenames = [os.path.basename(p) for p in (attachment_paths or [])]
+                self.storage.insert_sent_email(
+                    owner_id=self.owner_id,
+                    thread_id=draft.get("thread_id"),
+                    message_id=sent_message.get("id"),
+                    from_email=owner_email,
+                    to_email=to,
+                    cc=cc_addresses,
+                    subject=subject,
+                    body_plain=body,
+                    sent_at=datetime.now(timezone.utc),
+                    attachment_filenames=attachment_filenames,
+                    in_reply_to=in_reply_to,
+                )
+            except Exception as e:
+                logger.warning(f"[send_draft] persist failed (non-blocking): {e}")
+
             return ToolResult(
                 status=ToolStatus.SUCCESS,
                 data={"message_id": sent_message.get("id")},

@@ -528,6 +528,117 @@ class Storage:
             },
         )
 
+    def insert_sent_email(
+        self,
+        owner_id: str,
+        thread_id: Optional[str],
+        message_id: Optional[str],
+        from_email: str,
+        to_email: str,
+        cc: Optional[List[str]],
+        subject: str,
+        body_plain: str,
+        sent_at: datetime,
+        attachment_filenames: Optional[List[str]] = None,
+        in_reply_to: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Persist a just-sent email as a row in the `emails` table.
+
+        Best-effort: returns None on any failure (caller logs a warning).
+        Deduplicates by (owner_id, message_id_header). Derives thread_id
+        from `in_reply_to` when not provided.
+        """
+        try:
+            # Normalize sent_at to timezone-aware UTC for downstream display.
+            if sent_at.tzinfo is None:
+                sent_at = sent_at.replace(tzinfo=timezone.utc)
+            date_ts = int(sent_at.timestamp())
+
+            # Normalize cc list -> CSV string to match Email.cc_email shape.
+            cc_list = [c for c in (cc or []) if isinstance(c, str) and c.strip()]
+            cc_csv = ", ".join(cc_list)
+
+            # Flatten `to` to CSV if it came in as a list-like string; caller
+            # may pass "a@x, b@y" already. We don't split/rejoin here.
+            with get_session() as session:
+                # Dedup: if this message_id already exists for this owner,
+                # skip to avoid double-insert.
+                if message_id:
+                    existing = (
+                        session.query(Email)
+                        .filter(
+                            Email.owner_id == owner_id,
+                            Email.message_id_header == message_id,
+                        )
+                        .first()
+                    )
+                    if existing is not None:
+                        logger.debug(
+                            f"[insert_sent_email] skip: already exists " f"message_id={message_id}"
+                        )
+                        return existing.to_dict()
+
+                # Derive thread_id from in_reply_to -> existing email's
+                # message_id_header lookup, if not provided.
+                resolved_tid = (thread_id or "").strip()
+                if not resolved_tid and in_reply_to:
+                    parent = (
+                        session.query(Email)
+                        .filter(
+                            Email.owner_id == owner_id,
+                            Email.message_id_header == in_reply_to,
+                        )
+                        .first()
+                    )
+                    if parent and parent.thread_id:
+                        resolved_tid = parent.thread_id
+                if not resolved_tid:
+                    # Fallback: use message_id as its own thread anchor so the
+                    # row is still queryable. Never crash on None thread_id
+                    # (the column is NOT NULL).
+                    resolved_tid = message_id or "(sent-no-thread)"
+
+                # `gmail_id` is NOT NULL and uniquely constrained with
+                # owner_id. For local-only inserts of sent mail, reuse the
+                # SMTP Message-ID so we get natural dedup. Fall back to a
+                # synthetic value keyed on sent_at if Message-ID is absent.
+                gmail_id = message_id or f"local-sent-{date_ts}"
+
+                row = Email(
+                    owner_id=owner_id,
+                    gmail_id=gmail_id,
+                    thread_id=resolved_tid,
+                    from_email=from_email,
+                    from_name="",
+                    to_email=to_email,
+                    cc_email=cc_csv,
+                    subject=subject or "",
+                    date=sent_at,
+                    date_timestamp=date_ts,
+                    snippet=(body_plain or "")[:200],
+                    body_plain=body_plain or "",
+                    body_html=None,
+                    labels="[]",
+                    message_id_header=message_id,
+                    in_reply_to=in_reply_to,
+                    references=None,
+                    is_auto_reply=False,
+                    task_processed_at=None,
+                )
+                session.add(row)
+                session.flush()
+                result = row.to_dict()
+                logger.debug(
+                    f"[insert_sent_email] inserted id={row.id} "
+                    f"thread_id={resolved_tid} owner_id={owner_id} "
+                    f"message_id={message_id} "
+                    f"attachments={attachment_filenames or []}"
+                )
+                return result
+        except Exception as e:
+            logger.warning(f"[insert_sent_email] failed: {e}")
+            return None
+
     def get_email_stats(self, owner_id: str) -> Dict[str, Any]:
         """Get email archive statistics."""
         with get_session() as session:

@@ -562,6 +562,84 @@ async def narration_summarize(
         return {"text": ""}
 
 
+# ─── Emails ──────────────────────────────────────────────────
+
+
+async def emails_list_by_thread(
+    params: Dict[str, Any],
+    notify: NotifyFn,
+) -> Any:
+    """emails.list_by_thread(thread_id) -> {"emails": [...]}.
+
+    Returns the full thread in chronological order (date ASC) with a
+    provider-uniform shape. Dispatch:
+      - provider == 'imap'      -> local DB (Email table)
+      - provider == 'google'    -> GmailClient.threads.get (not available
+                                    in standalone repo; returns error)
+      - provider == 'microsoft' -> not implemented
+    """
+    from zylch.api.token_storage import get_email, get_provider
+    from zylch.storage.storage import Storage
+
+    thread_id = params.get("thread_id")
+    if not thread_id:
+        raise ValueError("thread_id is required")
+
+    owner_id = _owner_id()
+    provider = get_provider(owner_id)
+    user_email = (get_email(owner_id) or "").lower()
+    logger.debug(
+        f"[rpc] emails.list_by_thread owner_id={owner_id} "
+        f"provider={provider} thread_id={thread_id}"
+    )
+
+    if provider == "imap":
+        store = Storage.get_instance()
+        rows = store.get_thread_emails(owner_id=owner_id, thread_id=thread_id)
+        out = []
+        for r in rows:
+            from_email = (r.get("from_email") or "").strip()
+            date_val = r.get("date")
+            # `to_dict()` isoformats datetime columns.
+            date_iso = date_val if isinstance(date_val, str) else ""
+            out.append(
+                {
+                    "id": r.get("id") or "",
+                    "from_email": from_email,
+                    "from_name": r.get("from_name") or "",
+                    "to_email": r.get("to_email") or "",
+                    "cc_email": r.get("cc_email") or "",
+                    "date": date_iso,
+                    "subject": r.get("subject") or "",
+                    "body_plain": r.get("body_plain") or "",
+                    "is_auto_reply": bool(r.get("is_auto_reply")),
+                    "is_user_sent": bool(user_email and from_email.lower() == user_email),
+                    "has_attachments": False,
+                    "attachment_filenames": [],
+                }
+            )
+        logger.debug(
+            f"[rpc] emails.list_by_thread -> {len(out)} emails " f"(thread_id={thread_id})"
+        )
+        return {"emails": out}
+
+    if provider == "google":
+        # No GmailClient module exists in the standalone repo — every
+        # `from zylch.tools.gmail import GmailClient` is a broken import.
+        err = ValueError("Google provider: GmailClient not available in standalone build")
+        err.code = -32000  # type: ignore[attr-defined]
+        raise err
+
+    if provider == "microsoft":
+        err = ValueError("Microsoft provider not implemented yet for this call")
+        err.code = -32000  # type: ignore[attr-defined]
+        raise err
+
+    err = ValueError(f"Unknown provider: {provider!r}")
+    err.code = -32000  # type: ignore[attr-defined]
+    raise err
+
+
 async def narration_predict(
     params: Dict[str, Any],
     notify: NotifyFn,
@@ -679,4 +757,5 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "update.run": update_run,
     "narration.summarize": narration_summarize,
     "narration.predict": narration_predict,
+    "emails.list_by_thread": emails_list_by_thread,
 }
