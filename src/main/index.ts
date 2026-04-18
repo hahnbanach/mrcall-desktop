@@ -30,6 +30,13 @@ interface WindowEntry {
 const windowEntries = new Map<number, WindowEntry>()
 
 function listProfiles(): string[] {
+  // Enumerate every subdirectory of ~/.zylch/profiles. We deliberately do
+  // NOT require a `.env` file: profiles created via `zylch init` always
+  // have one, but the Settings tab can also write one back, so a missing
+  // .env is recoverable. Filtering it out here would silently hide the
+  // profile and confuse the user (Bug 1: the picker showed only one
+  // entry because — under some FS / permission scenarios — statSync on
+  // the .env raised and the catch swallowed the entry).
   const dir = join(homedir(), '.zylch', 'profiles')
   if (!existsSync(dir)) return []
   try {
@@ -37,13 +44,12 @@ function listProfiles(): string[] {
     const out: string[] = []
     for (const name of names) {
       const profileDir = join(dir, name)
-      const envPath = join(profileDir, '.env')
       try {
-        if (statSync(profileDir).isDirectory() && statSync(envPath).isFile()) {
+        if (statSync(profileDir).isDirectory()) {
           out.push(name)
         }
       } catch {
-        // skip non-dirs or missing .env
+        // skip non-dirs / unreadable entries
       }
     }
     return out
@@ -71,10 +77,29 @@ function spawnSidecar(profile: string, window: BrowserWindow): SidecarClient {
       window.webContents.send('sidecar:stderr', chunk)
     }
   })
-  sidecar.on('exit', () => {
-    console.error(`[main][w${window.id}] sidecar exited profile=${profile}`)
+  sidecar.on('exit', (info: { code: number | null; signal: NodeJS.Signals | null; classified?: { code: string; message: string; hint?: string } }) => {
+    console.error(`[main][w${window.id}] sidecar exited profile=${profile} code=${info?.code} signal=${info?.signal}`)
+    // Push a structured status event to the renderer so the
+    // SidecarStatusBanner can show a friendly explanation. We send the
+    // classified error object verbatim (code/message/hint).
+    if (!window.isDestroyed()) {
+      const payload = {
+        alive: false,
+        profile,
+        exitCode: info?.code ?? null,
+        ...(info?.classified ?? sidecar.classifyError())
+      }
+      window.webContents.send('sidecar:status', payload)
+    }
   })
   sidecar.start()
+  // Push an "alive" status as soon as the child is spawned so the banner
+  // can clear any prior error after a successful restart.
+  setTimeout(() => {
+    if (!window.isDestroyed() && sidecar.isAlive()) {
+      window.webContents.send('sidecar:status', { alive: true, profile })
+    }
+  }, 100)
   return sidecar
 }
 
@@ -182,7 +207,22 @@ function registerIpc(): void {
       throw new Error('no sidecar for this window')
     }
     const effective = timeout ?? METHOD_TIMEOUTS[method] ?? 60000
-    return entry.sidecar.call(method, params, effective)
+    try {
+      return await entry.sidecar.call(method, params, effective)
+    } catch (e) {
+      // If the sidecar is dead, decorate the error with the classified
+      // reason (e.g. "Profile X is already in use ...") instead of the
+      // bare "sidecar not running" / "sidecar exited" string. The
+      // renderer surfaces this verbatim.
+      if (!entry.sidecar.isAlive()) {
+        const cls = entry.sidecar.classifyError()
+        const err = new Error(cls.message)
+        ;(err as any).code = cls.code
+        ;(err as any).hint = cls.hint
+        throw err
+      }
+      throw e
+    }
   })
 
   // Returns the profile this window's sidecar was spawned with.
