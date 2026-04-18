@@ -116,7 +116,9 @@ const api = {
     current: (): Promise<string> => ipcRenderer.invoke('profile:current') as Promise<string>
   },
   profiles: {
-    list: (): Promise<string[]> => ipcRenderer.invoke('profiles:list') as Promise<string[]>
+    list: (): Promise<string[]> => ipcRenderer.invoke('profiles:list') as Promise<string[]>,
+    create: (email: string, values: Record<string, string>) =>
+      call<{ ok: boolean; profile: string }>('profiles.create', { email, values }, 30000)
   },
   window: {
     openForProfile: (email: string): Promise<{ ok: boolean }> =>

@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import { useConversations, type Approval } from '../store/conversations'
 import { useNarration } from '../hooks/useNarration'
 import ChatComposer, { type ChatComposerTaskContext } from '../components/ChatComposer'
+import { errorMessage, isProfileLockedError, showError } from '../lib/errors'
 
 interface Props {
   onGoToDashboard?: () => void
@@ -98,8 +99,13 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
       const content =
         (res && (res.response || res.message || res.content)) || JSON.stringify(res, null, 2)
       appendAssistant(active.id, content)
-    } catch (e: any) {
-      appendAssistant(active.id, '**Error:** ' + (e.message || String(e)))
+    } catch (e: unknown) {
+      // Profile-locked: the SidecarStatusBanner is already shouting
+      // about it; appending an "Error: …" assistant bubble would be
+      // duplicate noise.
+      if (!isProfileLockedError(e)) {
+        appendAssistant(active.id, '**Error:** ' + errorMessage(e))
+      }
       throw e
     } finally {
       setBusy(active.id, false)
@@ -113,8 +119,10 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
     setPendingApproval(active.id, null)
     try {
       await window.zylch.chat.approve(pending.toolUseId, approved)
-    } catch (e: any) {
-      appendAssistant(active.id, '**Approval error:** ' + (e.message || String(e)))
+    } catch (e: unknown) {
+      if (!isProfileLockedError(e)) {
+        appendAssistant(active.id, '**Approval error:** ' + errorMessage(e))
+      }
     }
   }
 
@@ -126,8 +134,8 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
       const id = active.id
       closeConversation(id)
       onGoToDashboard?.()
-    } catch (e: any) {
-      alert('Complete failed: ' + (e.message || String(e)))
+    } catch (e: unknown) {
+      showError(e, 'Complete failed:')
     } finally {
       setCompleting(false)
     }

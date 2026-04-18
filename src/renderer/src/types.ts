@@ -74,6 +74,10 @@ export interface ZylchAPI {
   }
   profiles: {
     list: () => Promise<string[]>
+    create: (
+      email: string,
+      values: Record<string, string>
+    ) => Promise<{ ok: boolean; profile: string }>
   }
   window: {
     openForProfile: (email: string) => Promise<{ ok: boolean }>

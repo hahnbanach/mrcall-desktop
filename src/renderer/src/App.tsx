@@ -8,6 +8,7 @@ import { ConversationsProvider } from './store/conversations'
 import { ThreadProvider, useThread } from './store/thread'
 import { profileColor } from './lib/profileColor'
 import type { SidecarStatusEvent } from './types'
+import { errorMessage, isProfileLockedError } from './lib/errors'
 import './types'
 
 type View = 'dashboard' | 'chat' | 'emails' | 'update' | 'settings'
@@ -88,7 +89,13 @@ function ProfilePickerDialog({
         if (!cancelled) setProfiles(list)
       })
       .catch((e) => {
-        if (!cancelled) setError(String(e))
+        if (cancelled) return
+        // Profile-locked: covered by the top banner; don't double up.
+        if (isProfileLockedError(e)) {
+          setError(null)
+        } else {
+          setError(errorMessage(e))
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -109,7 +116,11 @@ function ProfilePickerDialog({
       }
       onClose()
     } catch (e) {
-      setError(String(e))
+      if (isProfileLockedError(e)) {
+        setError(null)
+      } else {
+        setError(errorMessage(e))
+      }
     }
   }
 
