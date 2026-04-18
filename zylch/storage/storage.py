@@ -117,6 +117,8 @@ class Storage:
             "message_id_header": email.get("message_id_header"),
             "in_reply_to": email.get("in_reply_to"),
             "references": email.get("references"),
+            "has_attachments": bool(email.get("has_attachments")),
+            "attachment_filenames": list(email.get("attachment_filenames") or []),
             "updated_at": datetime.now(timezone.utc),
         }
         if embedding is not None:
@@ -190,6 +192,8 @@ class Storage:
                 "in_reply_to": email.get("in_reply_to"),
                 "references": email.get("references"),
                 "is_auto_reply": email.get("is_auto_reply", False),
+                "has_attachments": bool(email.get("has_attachments")),
+                "attachment_filenames": list(email.get("attachment_filenames") or []),
                 "updated_at": datetime.now(timezone.utc),
             }
             if embedding is not None:
@@ -604,6 +608,7 @@ class Storage:
                 # synthetic value keyed on sent_at if Message-ID is absent.
                 gmail_id = message_id or f"local-sent-{date_ts}"
 
+                attachment_list = list(attachment_filenames or [])
                 row = Email(
                     owner_id=owner_id,
                     gmail_id=gmail_id,
@@ -624,6 +629,8 @@ class Storage:
                     references=None,
                     is_auto_reply=False,
                     task_processed_at=None,
+                    has_attachments=bool(attachment_list),
+                    attachment_filenames=attachment_list,
                 )
                 session.add(row)
                 session.flush()

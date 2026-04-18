@@ -101,6 +101,49 @@ def _decode_header_value(raw: Optional[str]) -> str:
     return "".join(decoded_parts)
 
 
+def _extract_attachment_filenames(
+    msg: email_lib.message.Message,
+) -> List[str]:
+    """Walk a parsed MIME message and collect attachment filenames.
+
+    Recognizes a part as an attachment when it has a
+    ``Content-Disposition: attachment`` header OR when it carries a
+    ``filename`` parameter (covers some inline images sent with a name).
+    Filenames are RFC 2047-decoded. Parts without a usable filename are
+    skipped — we only surface things the user could meaningfully see.
+
+    Returns:
+        List of filename strings (may be empty).
+    """
+    if not msg.is_multipart():
+        # Single-part messages can still be a bare attachment, but in
+        # practice IMAP-delivered mail uses multipart for that. Keep
+        # the simple case simple.
+        disp = str(msg.get("Content-Disposition", ""))
+        if "attachment" in disp.lower():
+            name = msg.get_filename()
+            if name:
+                return [_decode_header_value(name)]
+        return []
+
+    names: List[str] = []
+    for part in msg.walk():
+        # Skip the multipart wrappers themselves.
+        if part.get_content_maintype() == "multipart":
+            continue
+        disp = str(part.get("Content-Disposition", "")).lower()
+        filename = part.get_filename()
+        is_attachment = "attachment" in disp or bool(filename)
+        if not is_attachment:
+            continue
+        if not filename:
+            # Attachment-disposed part without a filename — skip rather
+            # than invent one; the LLM only needs human-meaningful names.
+            continue
+        names.append(_decode_header_value(filename))
+    return names
+
+
 def _extract_plain_body(
     msg: email_lib.message.Message,
 ) -> tuple:
@@ -350,6 +393,11 @@ class IMAPClient:
         # Extract body
         body_plain, body_html = _extract_plain_body(msg)
 
+        # Attachment metadata — filenames only, no bytes. The LLM and the
+        # desktop Email tab need to know what files are present without
+        # paying for a re-fetch via fetch_attachments().
+        attachment_filenames = _extract_attachment_filenames(msg)
+
         # Thread ID: use References chain or Message-ID
         thread_id = ""
         if references_raw:
@@ -378,6 +426,9 @@ class IMAPClient:
             "in_reply_to": (in_reply_to.strip() if in_reply_to else ""),
             "references": (references_raw.strip() if references_raw else ""),
             "snippet": body_plain or body_html or "",
+            # Attachment metadata. NEVER includes raw bytes — only filenames.
+            "has_attachments": bool(attachment_filenames),
+            "attachment_filenames": attachment_filenames,
             # Auto-reply detection headers
             "auto_submitted": msg.get("Auto-Submitted", ""),
             "x_autoreply": msg.get("X-Autoreply", ""),

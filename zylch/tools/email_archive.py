@@ -315,6 +315,10 @@ class EmailArchiveManager:
             "in_reply_to": msg.get("in_reply_to", ""),
             "references": msg.get("references", ""),
             "is_auto_reply": is_auto_reply,
+            # Attachment metadata is parsed by IMAPClient._fetch_one and
+            # threaded through here so store_emails_batch can persist it.
+            "has_attachments": bool(msg.get("has_attachments")),
+            "attachment_filenames": list(msg.get("attachment_filenames") or []),
         }
 
     def get_thread_messages(

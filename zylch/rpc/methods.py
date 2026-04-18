@@ -628,6 +628,25 @@ async def emails_list_by_thread(
             date_iso = date_val if isinstance(date_val, str) else ""
             body_raw = r.get("body_plain") or ""
             body_clean = strip_quoted(body_raw, cap=None) if body_raw else ""
+            # Attachment metadata persisted by IMAPClient at sync time
+            # (see imap_client._extract_attachment_filenames). JSON column
+            # may come back as a list or, on legacy rows, a JSON-encoded
+            # string — normalize both.
+            raw_attach = r.get("attachment_filenames")
+            if isinstance(raw_attach, list):
+                attach_names = [str(n) for n in raw_attach if n]
+            elif isinstance(raw_attach, str) and raw_attach.strip():
+                try:
+                    import json as _json
+
+                    decoded = _json.loads(raw_attach)
+                    attach_names = (
+                        [str(n) for n in decoded if n] if isinstance(decoded, list) else []
+                    )
+                except Exception:
+                    attach_names = []
+            else:
+                attach_names = []
             out.append(
                 {
                     "id": r.get("id") or "",
@@ -640,8 +659,8 @@ async def emails_list_by_thread(
                     "body_plain": body_clean,
                     "is_auto_reply": bool(r.get("is_auto_reply")),
                     "is_user_sent": bool(user_email and from_email.lower() == user_email),
-                    "has_attachments": False,
-                    "attachment_filenames": [],
+                    "has_attachments": bool(r.get("has_attachments")) or bool(attach_names),
+                    "attachment_filenames": attach_names,
                 }
             )
         logger.debug(

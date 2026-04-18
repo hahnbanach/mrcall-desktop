@@ -17,16 +17,28 @@ logger = logging.getLogger(__name__)
 
 
 def _collect_attachment_filenames(email_row: Dict[str, Any]) -> List[str]:
-    """Best-effort extraction of attachment filenames from an email row.
+    """Read the persisted attachment filename list off the email row.
 
-    The current schema doesn't maintain a normalized attachments table, so we
-    walk the raw MIME structure embedded in ``body_html``/``body_plain`` only
-    if nothing better is available. In practice the storage layer doesn't
-    persist attachment metadata today, so this returns an empty list when
-    there's nothing to report — the caller should treat the list as advisory.
+    Populated at sync time by IMAPClient._fetch_one (incoming) and at send
+    time by Storage.insert_sent_email (outgoing). Older rows that pre-date
+    the column will return [] until the next full re-sync.
     """
-    # The emails table today stores headers + plaintext/html but not a list
-    # of attachments. If a future column is added, read it here.
+    raw = email_row.get("attachment_filenames")
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return [str(n) for n in raw if n]
+    # Defensive: SQLite JSON column normally hands us a list, but if a
+    # legacy row stored a JSON-encoded string, decode it.
+    if isinstance(raw, str):
+        import json
+
+        try:
+            decoded = json.loads(raw)
+        except Exception:
+            return []
+        if isinstance(decoded, list):
+            return [str(n) for n in decoded if n]
     return []
 
 
@@ -104,6 +116,10 @@ class ReadEmailTool(Tool):
             return result
 
         attachment_names = _collect_attachment_filenames(email)
+        # Trust the column when it's populated; fall back to the derived
+        # filenames list otherwise (covers legacy rows written before the
+        # column existed but re-synced into the parsed pipeline).
+        has_attachments = bool(email.get("has_attachments")) or bool(attachment_names)
 
         data = {
             "id": email.get("id"),
@@ -123,7 +139,7 @@ class ReadEmailTool(Tool):
             "body_plain": email.get("body_plain") or "",
             "body_html": email.get("body_html") or "",
             "is_auto_reply": _looks_like_auto_reply(email),
-            "has_attachments": bool(attachment_names),
+            "has_attachments": has_attachments,
             "attachment_filenames": attachment_names,
             "snippet": email.get("snippet") or "",
         }
