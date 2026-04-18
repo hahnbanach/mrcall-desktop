@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import Dashboard from './views/Dashboard'
-import Chat from './views/Chat'
+import Tasks from './views/Tasks'
+import Workspace from './views/Workspace'
 import Update from './views/Update'
-import Emails from './views/Emails'
 import Settings from './views/Settings'
 import NewProfileWizard from './views/NewProfileWizard'
 import { ConversationsProvider } from './store/conversations'
@@ -13,7 +12,7 @@ import type { SidecarStatusEvent } from './types'
 import { errorMessage, isProfileLockedError } from './lib/errors'
 import './types'
 
-type View = 'dashboard' | 'chat' | 'emails' | 'update' | 'settings'
+type View = 'tasks' | 'workspace' | 'update' | 'settings'
 
 // Banner shown at the top of the window when the sidecar is dead. The
 // most common case is a profile lock: the user opened a second window on
@@ -391,7 +390,7 @@ function ProfilesDropdown({
 }
 
 function AppInner(): JSX.Element {
-  const [view, setView] = useState<View>('dashboard')
+  const [view, setView] = useState<View>('tasks')
   const [profileEmail, setProfileEmail] = useState<string>('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [wizardOpen, setWizardOpen] = useState(false)
@@ -432,9 +431,8 @@ function AppInner(): JSX.Element {
   }, [])
 
   const tabs: { id: View; label: string }[] = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'chat', label: 'Chat' },
-    { id: 'emails', label: 'Email' },
+    { id: 'tasks', label: 'Task' },
+    { id: 'workspace', label: 'Workspace' },
     { id: 'update', label: 'Update' },
     { id: 'settings', label: 'Settings' }
   ]
@@ -502,18 +500,18 @@ function AppInner(): JSX.Element {
         </div>
       </nav>
       <main className="flex-1 overflow-auto">
-        {view === 'dashboard' && (
-          <Dashboard
-            onOpenChat={() => setView('chat')}
-            onOpenEmails={(threadId, taskId) => {
+        {view === 'tasks' && (
+          <Tasks
+            onOpenWorkspace={(threadId, taskId) => {
+              // Prime the thread store so Workspace's Source panel
+              // renders the right email thread for this task.
               setActiveThreadId(threadId)
-              setActiveTaskId(taskId ?? null)
-              setView('emails')
+              setActiveTaskId(taskId)
+              setView('workspace')
             }}
           />
         )}
-        {view === 'chat' && <Chat onGoToDashboard={() => setView('dashboard')} />}
-        {view === 'emails' && <Emails />}
+        {view === 'workspace' && <Workspace onGoToTasks={() => setView('tasks')} />}
         {view === 'update' && <Update />}
         {view === 'settings' && <Settings />}
       </main>

@@ -1,15 +1,32 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useConversations, type Approval } from '../store/conversations'
+import { useThread } from '../store/thread'
 import { useNarration } from '../hooks/useNarration'
 import ChatComposer, { type ChatComposerTaskContext } from '../components/ChatComposer'
+import ThreadPanel from '../components/ThreadPanel'
 import { errorMessage, isProfileLockedError, showError } from '../lib/errors'
 
 interface Props {
-  onGoToDashboard?: () => void
+  onGoToTasks?: () => void
 }
 
-export default function Chat({ onGoToDashboard }: Props = {}) {
+/**
+ * Workspace — unified conversation view (ex-Chat).
+ *
+ * Left sidebar: task conversations + "general".
+ * Right pane:
+ *   - Top: collapsible "Source" panel. Expanded by default when the
+ *     active conversation has a taskId + threadId; absent for "general".
+ *     For now we only render email threads; sourceType is plumbed
+ *     through ThreadPanel so a WhatsApp source can slot in later.
+ *   - Below: chat history + composer (same behaviour as the old Chat tab).
+ *
+ * Panel expanded/collapsed state is persisted per-conversation in a
+ * local Map so toggling once on a task conversation sticks for that
+ * task while you move around.
+ */
+export default function Workspace({ onGoToTasks }: Props = {}) {
   const {
     state,
     setActive,
@@ -20,12 +37,48 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
     setPendingApproval,
     setBusy
   } = useConversations()
+  const { activeThreadId, activeTaskId, setActiveThreadId, setActiveTaskId } = useThread()
 
   const active = state.conversations.find((c) => c.id === state.activeId)!
   const scrollRef = useRef<HTMLDivElement>(null)
   const [completing, setCompleting] = useState(false)
   const [narrationSeed, setNarrationSeed] = useState<string>('')
   const [lastUserText, setLastUserText] = useState<string>('')
+
+  // Per-conversation Source panel expansion state. Key: conversation.id.
+  // If a conversation isn't in the map, fall back to the default rule
+  // (expanded when taskId + threadId present, collapsed otherwise).
+  const [panelExpanded, setPanelExpanded] = useState<Record<string, boolean>>({})
+
+  // Thread ID to render in the Source panel. Priority:
+  //   1. The global `activeThreadId` if the active conversation's
+  //      taskId matches `activeTaskId` (i.e. this Workspace was just
+  //      opened from Tasks.tsx with a fresh thread).
+  //   2. task.sources.thread_id isn't on the Conversation type, so we
+  //      fall back to `activeThreadId` only when the task matches.
+  const sourceThreadId = (() => {
+    if (!active.taskId) return null
+    if (activeTaskId === active.taskId) return activeThreadId
+    return null
+  })()
+
+  // Keep thread-store in sync when the user switches conversation
+  // inside the sidebar. Without this, clicking on a different task
+  // conversation would leave the old thread in the Source panel.
+  useEffect(() => {
+    if (!active.taskId) {
+      // "general" — clear task context; leave threadId alone so a
+      // quick round-trip back to the task doesn't re-fetch.
+      if (activeTaskId !== null) setActiveTaskId(null)
+      return
+    }
+    if (activeTaskId !== active.taskId) {
+      setActiveTaskId(active.taskId)
+      // We don't know the threadId of an arbitrary task conversation
+      // (the sidebar doesn't carry it). Leave threadId untouched; the
+      // panel will be empty until the user re-opens the task from Tasks.
+    }
+  }, [active.id, active.taskId, activeTaskId, setActiveTaskId])
 
   // Build context for narration: prefer the last user message in history.
   const narrationContext = (() => {
@@ -133,13 +186,24 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
       await window.zylch.tasks.complete(active.taskId)
       const id = active.id
       closeConversation(id)
-      onGoToDashboard?.()
+      // Also clear thread-store state: the panel would otherwise still
+      // point at a closed task when the user returns.
+      setActiveThreadId(null)
+      setActiveTaskId(null)
+      onGoToTasks?.()
     } catch (e: unknown) {
       showError(e, 'Complete failed:')
     } finally {
       setCompleting(false)
     }
   }
+
+  // Decide panel expansion for the current conversation. User overrides
+  // stored in `panelExpanded` win; otherwise use the default rule.
+  const defaultExpanded = !!(active.taskId && sourceThreadId)
+  const isPanelExpanded = active.id in panelExpanded
+    ? panelExpanded[active.id]
+    : defaultExpanded
 
   return (
     <div className="flex h-full">
@@ -194,6 +258,21 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
             </button>
           )}
         </header>
+
+        {/* Source panel: email thread preview for task conversations.
+            Key by conversation id so React remounts and resets internal
+            state when the user switches to a different task. */}
+        {active.taskId && sourceThreadId && (
+          <ThreadPanel
+            key={`source-${active.id}`}
+            threadId={sourceThreadId}
+            sourceType="email"
+            initialExpanded={isPanelExpanded}
+            onToggle={(expanded) =>
+              setPanelExpanded((m) => ({ ...m, [active.id]: expanded }))
+            }
+          />
+        )}
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
           {active.history.length === 0 && !active.pendingApproval && (

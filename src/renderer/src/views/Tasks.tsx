@@ -5,8 +5,13 @@ import { useTasks } from '../store/tasks'
 import { showError } from '../lib/errors'
 
 interface Props {
-  onOpenChat?: () => void
-  onOpenEmails?: (threadId: string, taskId?: string) => void
+  /**
+   * Called when the user clicks "Open" on a task. The parent must
+   * switch the view to the Workspace. Upstream (App.tsx) also sets
+   * `activeThreadId` + `activeTaskId` on the thread store so the
+   * Source panel in Workspace can load the email thread.
+   */
+  onOpenWorkspace?: (threadId: string | null, taskId: string) => void
 }
 
 const URGENCY_ORDER = ['high', 'medium', 'low']
@@ -16,8 +21,8 @@ const URGENCY_STYLES: Record<string, string> = {
   low: 'bg-slate-100 text-slate-700 border-slate-300'
 }
 
-export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
-  const { openTaskChat, state: convState } = useConversations()
+export default function Tasks({ onOpenWorkspace }: Props = {}) {
+  const { openTaskChat, setActive, state: convState } = useConversations()
   // Tasks live in a shared store so Update.tsx can invalidate us after
   // a pipeline run. `refresh()` always hits the sidecar — there is no
   // memoization on this path.
@@ -143,6 +148,7 @@ export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
 
   const renderTask = (t: ZylchTask) => {
     const u = (t.urgency || 'low').toLowerCase()
+    const threadId = t.sources?.thread_id || null
     return (
       <article
         key={t.id}
@@ -193,34 +199,6 @@ export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
         )}
         <div className="flex gap-2 flex-wrap">
           <button
-            onClick={() => onSkip(t.id)}
-            className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
-          >
-            Skip
-          </button>
-          <button
-            onClick={() => onClose(t.id)}
-            className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded hover:bg-slate-700"
-          >
-            Close
-          </button>
-          <button
-            onClick={() => {
-              openTaskChat(t)
-              onOpenChat?.()
-            }}
-            className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
-          >
-            Solve
-          </button>
-          <button
-            onClick={() => onUpdate(t.id)}
-            disabled={updating.has(t.id)}
-            className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {updating.has(t.id) ? 'Analyzing…' : 'Update'}
-          </button>
-          <button
             onClick={() => onPin(t)}
             disabled={pinning.has(t.id)}
             title={t.pinned ? 'Unpin task' : 'Pin task to top'}
@@ -233,38 +211,45 @@ export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
           >
             {t.pinned ? '📌 Pinned' : '📌 Pin'}
           </button>
-          {(() => {
-            const tid = t.sources?.thread_id || null
-            const disabled = !tid
-            return (
-              <button
-                onClick={() => {
-                  if (tid) {
-                    // Ensure the same task conversation Solve uses
-                    // exists in the store, so the Email tab's
-                    // composer can post to the same conversation_id.
-                    // openTaskChat replaces the conversation in
-                    // place, which would clobber any history a
-                    // prior Solve had — only call it if the
-                    // conversation doesn't exist yet.
-                    const convId = `task-${t.id}`
-                    const exists = convState.conversations.some(
-                      (c) => c.id === convId
-                    )
-                    if (!exists) openTaskChat(t)
-                    onOpenEmails?.(tid, t.id)
-                  }
-                }}
-                disabled={disabled}
-                title={
-                  disabled ? 'No thread for this task' : 'Open thread'
-                }
-                className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Open
-              </button>
-            )
-          })()}
+          <button
+            onClick={() => onSkip(t.id)}
+            className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
+          >
+            Skip
+          </button>
+          <button
+            onClick={() => onClose(t.id)}
+            className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded hover:bg-slate-700"
+          >
+            Close
+          </button>
+          <button
+            onClick={() => onUpdate(t.id)}
+            disabled={updating.has(t.id)}
+            className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {updating.has(t.id) ? 'Analyzing…' : 'Update'}
+          </button>
+          <button
+            onClick={() => {
+              // Task conversation is `task-<id>` — openTaskChat creates
+              // it if missing (and seeds the first draft message).
+              // Don't overwrite an existing conversation: a prior Open
+              // may already have back-and-forth we must preserve.
+              const convId = `task-${t.id}`
+              const exists = convState.conversations.some((c) => c.id === convId)
+              if (!exists) {
+                openTaskChat(t)
+              } else {
+                setActive(convId)
+              }
+              onOpenWorkspace?.(threadId, t.id)
+            }}
+            className="px-3 py-1.5 text-sm bg-emerald-700 text-white rounded hover:bg-emerald-800"
+            title={threadId ? 'Open in workspace' : 'Open in workspace (no thread)'}
+          >
+            Open
+          </button>
         </div>
         {keptNotice[t.id] && (
           <div className="mt-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-1.5">
