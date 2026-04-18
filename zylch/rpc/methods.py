@@ -509,18 +509,117 @@ async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
 # ─── Update ──────────────────────────────────────────────────
 
 
+def _task_change_key(task: Dict[str, Any]) -> str:
+    """Return the field used to detect whether an open task was touched by
+    the pipeline. `TaskItem` has no `updated_at` column; `analyzed_at`
+    is rewritten each time the analyzer revisits a thread, so it is
+    the de-facto 'last changed' marker.
+    """
+    return str(task.get("analyzed_at") or "")
+
+
+def _truncate(s: Any, n: int) -> str:
+    s = "" if s is None else str(s)
+    if len(s) <= n:
+        return s
+    return s[: n - 1].rstrip() + "…"
+
+
+def _format_task_line(task: Dict[str, Any]) -> str:
+    """One bullet: **Contact**: reason (id prefix)."""
+    contact = task.get("contact_name") or task.get("contact_email") or "(unknown)"
+    reason = _truncate(task.get("reason") or task.get("suggested_action") or "", 200)
+    task_id = str(task.get("id") or "")
+    id_prefix = task_id[:8] if task_id else ""
+    suffix = f" ({id_prefix})" if id_prefix else ""
+    return f"- **{contact}**: {reason}{suffix}"
+
+
+def build_update_diff_summary(
+    before_open: Dict[str, str],
+    after_open_by_id: Dict[str, Dict[str, Any]],
+    closed_after: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Build the markdown summary + machine-readable diff for `update.run`.
+
+    Args:
+        before_open: {task_id: analyzed_at_iso} of tasks open BEFORE the
+            pipeline ran.
+        after_open_by_id: {task_id: task_dict} of tasks still open AFTER
+            the pipeline.
+        closed_after: {task_id: task_dict} of tasks that were in
+            `before_open` but are now completed.
+
+    Returns:
+        {"summary": markdown, "updated_tasks": {"created": [...],
+         "closed": [...], "updated": [...]}}
+    """
+    before_ids = set(before_open.keys())
+    after_ids = set(after_open_by_id.keys())
+
+    created_ids = sorted(after_ids - before_ids)
+    closed_ids = sorted(closed_after.keys())
+    updated_ids = sorted(
+        tid
+        for tid in (before_ids & after_ids)
+        if _task_change_key(after_open_by_id[tid]) != before_open.get(tid, "")
+    )
+
+    created_tasks = [after_open_by_id[tid] for tid in created_ids]
+    closed_tasks = [closed_after[tid] for tid in closed_ids]
+    updated_tasks = [after_open_by_id[tid] for tid in updated_ids]
+
+    if not created_ids and not closed_ids and not updated_ids:
+        summary = "**Update complete**\n\nNo changes this run."
+    else:
+        parts: list[str] = ["**Update complete**"]
+        if created_tasks:
+            parts.append("")
+            parts.append(f"🆕 Created ({len(created_tasks)}):")
+            parts.extend(_format_task_line(t) for t in created_tasks)
+        if closed_tasks:
+            parts.append("")
+            parts.append(f"✅ Closed ({len(closed_tasks)}):")
+            parts.extend(_format_task_line(t) for t in closed_tasks)
+        if updated_tasks:
+            parts.append("")
+            parts.append(f"✏️ Updated ({len(updated_tasks)}):")
+            parts.extend(_format_task_line(t) for t in updated_tasks)
+        summary = "\n".join(parts)
+
+    return {
+        "summary": summary,
+        "updated_tasks": {
+            "created": created_ids,
+            "closed": closed_ids,
+            "updated": updated_ids,
+        },
+    }
+
+
 async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """update.run() -> full pipeline result (sync + memory + tasks).
+    """update.run() -> pipeline result with a DIFF summary.
 
     Mirrors the CLI `zylch update` path: calls
-    `process_pipeline.handle_process([], config, owner_id)`.
+    `process_pipeline.handle_process([], config, owner_id)`, but
+    replaces the inner "dump every open task" summary with a diff of
+    THIS run (tasks created / closed / updated since we started).
 
     Emits coarse `update.progress` notifications at start (0%) and end
-    (100%). Phase-granularity progress is NOT available because
-    `handle_process` does not accept an `on_progress` callback —
-    adding that is a separate scope.
+    (100%).
+
+    Return shape:
+        {
+            "success": True,
+            "summary": "<markdown diff>",
+            "updated_tasks": {"created": [...], "closed": [...],
+                              "updated": [...]},
+        }
     """
     from zylch.services.process_pipeline import handle_process
+    from zylch.storage.database import get_session
+    from zylch.storage.models import TaskItem
+    from zylch.storage.storage import Storage
     from zylch.tools.config import ToolConfig
 
     owner_id = _owner_id()
@@ -540,6 +639,22 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
         except Exception as e:
             logger.warning(f"[rpc] update.progress notify failed: {e}")
 
+    store = Storage.get_instance()
+
+    # ── Snapshot BEFORE ──────────────────────────────────────
+    # Map {task_id: analyzed_at} of currently-open tasks. We use
+    # `analyzed_at` as the change-marker because `TaskItem` has no
+    # `updated_at` column and `analyzed_at` is rewritten on every
+    # re-analysis of the underlying thread.
+    try:
+        before_tasks = store.get_task_items(owner_id=owner_id, limit=10000)
+        before_open: Dict[str, str] = {
+            str(t.get("id")): _task_change_key(t) for t in before_tasks if t.get("id")
+        }
+    except Exception as e:
+        logger.warning(f"[rpc] update.run: before-snapshot failed, diff will be empty: {e}")
+        before_open = {}
+
     _emit(0, "Starting full pipeline…")
     # `handle_process` (and its inner `rich.Console()`) writes status to
     # stdout. stdout is the JSON-RPC wire for this sidecar, so we swap
@@ -554,17 +669,65 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
         config = ToolConfig.from_settings()
         sys.stdout = sys.stderr
         try:
-            summary = await handle_process([], config, owner_id)
+            # We intentionally discard the inner summary — it is the
+            # full open-tasks dump we are replacing.
+            await handle_process([], config, owner_id)
         finally:
             sys.stdout = real_stdout
     except Exception as e:
         logger.exception("[rpc] update.run failed")
         _emit(100, f"Failed: {e}")
         raise
+
+    # ── Snapshot AFTER ───────────────────────────────────────
+    try:
+        after_tasks = store.get_task_items(owner_id=owner_id, limit=10000)
+        after_open_by_id: Dict[str, Dict[str, Any]] = {
+            str(t.get("id")): t for t in after_tasks if t.get("id")
+        }
+    except Exception as e:
+        logger.warning(f"[rpc] update.run: after-snapshot failed: {e}")
+        after_open_by_id = {}
+
+    # Tasks that were open before but no longer appear in the open list
+    # — either completed or hard-deleted. Fetch those rows directly so
+    # we can present their contact/reason in the "Closed" section.
+    closed_after: Dict[str, Dict[str, Any]] = {}
+    missing_from_after = [tid for tid in before_open if tid not in after_open_by_id]
+    if missing_from_after:
+        try:
+            with get_session() as session:
+                rows = (
+                    session.query(TaskItem)
+                    .filter(
+                        TaskItem.owner_id == owner_id,
+                        TaskItem.id.in_(missing_from_after),
+                        TaskItem.completed_at.isnot(None),
+                    )
+                    .all()
+                )
+                for r in rows:
+                    d = r.to_dict()
+                    tid = str(d.get("id") or "")
+                    if tid:
+                        closed_after[tid] = d
+        except Exception as e:
+            logger.warning(f"[rpc] update.run: closed-lookup failed: {e}")
+
+    diff = build_update_diff_summary(before_open, after_open_by_id, closed_after)
     _emit(100, "Done")
 
-    logger.debug("[rpc] update.run -> ok (summary_len=%d)", len(summary or ""))
-    return {"success": True, "summary": summary or ""}
+    logger.debug(
+        "[rpc] update.run -> diff created=%d closed=%d updated=%d",
+        len(diff["updated_tasks"]["created"]),
+        len(diff["updated_tasks"]["closed"]),
+        len(diff["updated_tasks"]["updated"]),
+    )
+    return {
+        "success": True,
+        "summary": diff["summary"],
+        "updated_tasks": diff["updated_tasks"],
+    }
 
 
 # ─── Narration ───────────────────────────────────────────────
