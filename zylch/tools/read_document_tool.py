@@ -20,14 +20,20 @@ TEXT_EXTS = (".txt", ".md", ".csv", ".json", ".xml", ".log", ".yaml", ".yml")
 
 
 def _collect_search_paths() -> List[str]:
-    """Platform-aware document search paths."""
+    """Platform-aware document search paths.
+
+    `~/Downloads` is ALWAYS included (implicitly), even when DOCUMENT_PATHS
+    is set — that's where `download_attachment` places its output, so
+    `read_document` must be able to find those files without extra config.
+    """
     home = os.path.expanduser("~")
     profile_dir = os.environ.get("ZYLCH_PROFILE_DIR", "")
+    downloads = os.path.join(home, "Downloads")
 
     defaults = [
         os.path.join(home, "gdrive-shared"),
         os.path.join(home, "Documents"),
-        os.path.join(home, "Downloads"),
+        downloads,
         "/tmp/zylch/attachments",
         "/tmp/zylch",
     ]
@@ -42,6 +48,10 @@ def _collect_search_paths() -> List[str]:
             paths = [p for p in defaults if os.path.isdir(p)]
     else:
         paths = [p for p in defaults if os.path.isdir(p)]
+
+    # Ensure ~/Downloads is always in the search set (idempotent).
+    if os.path.isdir(downloads) and downloads not in paths:
+        paths.append(downloads)
 
     return paths
 

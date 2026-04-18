@@ -45,6 +45,23 @@ class ChatBusyError(Exception):
 _pending_approvals: Dict[str, asyncio.Future] = {}
 # conversation_id -> asyncio.Task running the current chat.send
 _active_chats: Dict[str, asyncio.Task] = {}
+# conversation_id -> set[tool_name] of tools auto-approved for the rest of
+# this conversation. Populated when the user picks "Allow for session" on
+# an approval prompt; consulted before notifying the desktop.
+_session_auto_approvals: Dict[str, set] = {}
+# tool_use_id -> (conversation_id, tool_name). Populated when we notify
+# the desktop of a pending approval; used by chat.approve to attribute a
+# "session" grant to the right conversation + tool without trusting the
+# client to send them again.
+_approval_meta: Dict[str, tuple] = {}
+
+
+def _should_auto_approve(conversation_id: str, tool_name: str) -> bool:
+    """Return True if `tool_name` was whitelisted for `conversation_id`
+    via a prior `chat.approve(mode="session")`.
+    """
+    allowed = _session_auto_approvals.get(conversation_id)
+    return bool(allowed and tool_name in allowed)
 
 
 def _approval_preview(tool_name: str, tool_input: Dict[str, Any]) -> str:
@@ -365,9 +382,21 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
         tool_name: str,
         tool_input: Dict[str, Any],
     ) -> bool:
+        # Session-level auto-approval: if the user previously picked
+        # "Allow for session" on this tool in this conversation, skip the
+        # prompt entirely.
+        if _should_auto_approve(conversation_id, tool_name):
+            logger.debug(
+                f"[approval] auto-approved by session: tool={tool_name} " f"conv={conversation_id}"
+            )
+            return True
+
         loop = asyncio.get_event_loop()
         fut: asyncio.Future = loop.create_future()
         _pending_approvals[tool_use_id] = fut
+        # Remember which conversation owns this tool_use so chat.approve
+        # can attribute a session-mode grant to the right conversation.
+        _approval_meta[tool_use_id] = (conversation_id, tool_name)
         preview = _approval_preview(tool_name, tool_input)
         try:
             input_keys = list((tool_input or {}).keys())
@@ -399,6 +428,7 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
             approved = False
         finally:
             _pending_approvals.pop(tool_use_id, None)
+            _approval_meta.pop(tool_use_id, None)
         logger.debug(f"[approval] tool={tool_name} approved={approved}")
         return bool(approved)
 
@@ -426,7 +456,16 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """chat.approve(tool_use_id, approved) -> {ok: true}.
+    """chat.approve(tool_use_id, mode | approved) -> {ok: true}.
+
+    Three modes:
+      - "once"    -> approve only this single tool call (default).
+      - "session" -> approve this call AND auto-approve future calls to
+                     the same tool_name within the same conversation.
+      - "deny"    -> reject this single tool call.
+
+    Back-compat: if `mode` is absent, the legacy `approved: bool` is
+    honored (`true` -> "once", `false` -> "deny").
 
     Unknown tool_use_id -> ValueError (maps to JSON-RPC -32602 via
     server's INVALID_PARAMS handling).
@@ -434,13 +473,34 @@ async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
     tool_use_id = params.get("tool_use_id")
     if not tool_use_id:
         raise ValueError("tool_use_id is required")
-    approved = bool(params.get("approved", False))
-    logger.debug(f"[rpc] chat.approve tool_use_id={tool_use_id} approved={approved}")
+
+    mode = params.get("mode")
+    if mode is None:
+        # Legacy path: `approved: bool`.
+        mode = "once" if bool(params.get("approved", False)) else "deny"
+    if mode not in ("once", "session", "deny"):
+        err = ValueError(f"invalid mode: {mode!r} (expected once|session|deny)")
+        err.code = -32602  # type: ignore[attr-defined]
+        raise err
+
+    approved = mode in ("once", "session")
+    logger.debug(
+        f"[rpc] chat.approve tool_use_id={tool_use_id} mode={mode} " f"approved={approved}"
+    )
+
     fut = _pending_approvals.pop(tool_use_id, None)
+    meta = _approval_meta.pop(tool_use_id, None)
     if fut is None:
         err = ValueError(f"no pending approval for tool_use_id={tool_use_id}")
         err.code = -32602  # type: ignore[attr-defined]
         raise err
+
+    if mode == "session" and meta is not None:
+        conv_id, tool_name = meta
+        allowed = _session_auto_approvals.setdefault(conv_id, set())
+        allowed.add(tool_name)
+        logger.debug(f"[approval] session-approval added: conv={conv_id} " f"tool={tool_name}")
+
     if not fut.done():
         fut.set_result(approved)
     return {"ok": True}
@@ -527,6 +587,22 @@ async def narration_summarize(
     if not isinstance(lines, list) or not lines:
         return {"text": ""}
 
+    # Layer 1 — pre-filter locally: drop init/startup/technical log lines
+    # before paying for a Haiku call. These produce narrations like "Sto
+    # inizializzando il client LLM…" which are noise to the user.
+    init_patterns = [
+        re.compile(r"initiali[sz]ing", re.IGNORECASE),
+        re.compile(r"\bstart(?:ing|up)\b", re.IGNORECASE),
+        re.compile(r"connect(?:ing|ed)\s+to", re.IGNORECASE),
+        re.compile(r"loading\s+model", re.IGNORECASE),
+        re.compile(r"spawn(?:ed|ing)", re.IGNORECASE),
+        re.compile(r"asyncio\."),
+        re.compile(r"\[rpc\]\s+server\s+(?:start|listening)", re.IGNORECASE),
+        re.compile(r"\bPRAGMA\b"),
+        re.compile(r"\bSELECT\s"),
+        re.compile(r"__init__"),
+    ]
+
     ansi = re.compile(r"\x1b\[[0-9;]*m")
     cleaned = []
     for ln in lines[-20:]:
@@ -535,16 +611,26 @@ async def narration_summarize(
             continue
         if " DEBUG " in s:
             continue
+        if any(p.search(s) for p in init_patterns):
+            continue
         cleaned.append(s[:300])
     if not cleaned:
         return {"text": ""}
 
     joined = "\n".join(cleaned)
+    # Layer 2 — tighter Haiku prompt: explicitly tell the model to ignore
+    # any remaining setup/SQL/startup noise and only narrate user-visible
+    # actions.
     system = (
         "Riassumi in una singola frase in italiano, in prima persona, "
         "al presente, max 80 caratteri, cosa Zylch sta facendo adesso "
         "in base alle righe di log fornite. Parla come Zylch stesso "
         "('Sto scaricando…', 'Sto cercando…', 'Sto componendo l'email…')."
+        " Ignora righe di log di inizializzazione, startup, loading, "
+        "connessione, query SQL interne. Concentrati SOLO su azioni "
+        "concrete che l'utente può capire: scaricare, cercare, inviare, "
+        "leggere, firmare. Se le righe contengono solo setup tecnico, "
+        "rispondi con 'Sto pensando alla tua richiesta.' (esatto). "
         " Se vedi un errore o warning importante, dillo in modo empatico "
         "e breve. Se non c'è niente di significativo, rispondi con una "
         "stringa vuota. Non aggiungere virgolette, prefissi, o spiegazioni."

@@ -102,6 +102,8 @@ You have access to:
   locally (default: the user's `~/Downloads` directory) and returns the file paths. Works for any
   IMAP-reachable provider (Gmail, Outlook/Exchange, PEC, Zoho, generic IMAP). The user's provider
   is transparent — you don't need to know or mention it.
+  Files you just downloaded via `download_attachment` live under `~/Downloads` — `read_document`
+  already searches there, so you can call `read_document(filename=...)` right after.
 - **Live provider fetch** (search_provider_emails, when available): Hits the email server directly
   over IMAP for messages that may not yet have been synced locally. Slower than `search_emails`;
   use only when the local store is suspected to be incomplete.
