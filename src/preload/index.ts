@@ -73,6 +73,8 @@ const api = {
       call<any[]>('tasks.list', params),
     complete: (task_id: string) => call<{ ok: boolean }>('tasks.complete', { task_id }),
     skip: (task_id: string) => call<{ ok: boolean }>('tasks.skip', { task_id }),
+    pin: (task_id: string, pinned: boolean) =>
+      call<{ ok: boolean }>('tasks.pin', { task_id, pinned }, 30000),
     reanalyze: (task_id: string) =>
       call<{
         ok: boolean
