@@ -142,6 +142,12 @@ def _apply_column_migrations(engine: Engine) -> None:
         # 2026-04-17: pinned tasks — pinned=True floats a task to the top of
         # `tasks.list` regardless of urgency. Toggled via `tasks.pin` RPC.
         ("task_items", "pinned", "BOOLEAN DEFAULT 0"),
+        # 2026-04-17: persisted attachment metadata on incoming/sent emails so
+        # `read_email` and the desktop Email tab can show which files are
+        # available without re-fetching the MIME from IMAP. Populated at sync
+        # time by IMAPClient._fetch_one and at send time by insert_sent_email.
+        ("emails", "has_attachments", "BOOLEAN DEFAULT 0"),
+        ("emails", "attachment_filenames", "JSON DEFAULT '[]'"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in migrations:

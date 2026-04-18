@@ -105,6 +105,8 @@ class Email(DictMixin, Base):
     embedding = Column(LargeBinary)
     task_processed_at = Column(DateTime)
     is_auto_reply = Column(Boolean, default=False)
+    has_attachments = Column(Boolean, default=False, nullable=False, index=True)
+    attachment_filenames = Column(JSON, default=list)
 
     __table_args__ = (
         UniqueConstraint(
