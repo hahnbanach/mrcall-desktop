@@ -786,6 +786,155 @@ async def settings_get(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"values": out}
 
 
+_EMAIL_REGEX = None
+
+
+def _is_valid_email(email: str) -> bool:
+    """Lightweight email check: must contain `@` and a dotted domain.
+
+    Deliberately permissive — RFC-strict validation belongs in the IMAP
+    handshake, not in the wizard. We just want to reject obvious junk
+    (empty / no `@` / no domain dot).
+    """
+    import re
+
+    global _EMAIL_REGEX
+    if _EMAIL_REGEX is None:
+        _EMAIL_REGEX = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+    return bool(_EMAIL_REGEX.match((email or "").strip()))
+
+
+async def profiles_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """profiles.create(email, values) -> {ok, profile} | error.
+
+    Creates a brand-new profile under `~/.zylch/profiles/<email>/` and
+    writes the supplied `values` dict into its `.env`. Validates:
+      - email shape (`@` + dotted domain)
+      - profile does NOT already exist
+      - all keys in `values` are part of the settings schema
+      - required obligatory fields are present (LLM provider + matching
+        API key + email address)
+
+    NEVER logs values — only key names and counts.
+    """
+    import os
+
+    from zylch.cli.profiles import get_profile_dir, profile_exists
+    from zylch.services.settings_io import _quote
+    from zylch.services.settings_schema import KNOWN_KEYS
+
+    email = (params.get("email") or "").strip()
+    values = params.get("values")
+
+    if not isinstance(values, dict):
+        err = ValueError("'values' must be an object {key: value}")
+        err.code = -32602  # type: ignore[attr-defined]
+        raise err
+
+    if not _is_valid_email(email):
+        err = ValueError(f"Invalid email address: {email!r}")
+        err.code = -32602  # type: ignore[attr-defined]
+        raise err
+
+    if profile_exists(email):
+        err = ValueError(f"Profile already exists: {email}")
+        err.code = -32602  # type: ignore[attr-defined]
+        raise err
+
+    profile_dir = get_profile_dir(email)
+    # Defensive: even if `.env` does not exist, the directory might (e.g.
+    # a half-written previous attempt). Still treat that as "exists" so
+    # we never clobber files belonging to another in-flight wizard.
+    if os.path.isdir(profile_dir):
+        err = ValueError(f"Profile directory already exists: {email}")
+        err.code = -32602  # type: ignore[attr-defined]
+        raise err
+
+    # Validate keys against the known schema.
+    cleaned: Dict[str, str] = {}
+    unknown: list[str] = []
+    for key, value in values.items():
+        if key not in KNOWN_KEYS:
+            unknown.append(key)
+            continue
+        if not isinstance(value, str):
+            value = "" if value is None else str(value)
+        cleaned[key] = value
+    if unknown:
+        err = ValueError(f"unknown setting keys: {sorted(unknown)}")
+        err.code = -32602  # type: ignore[attr-defined]
+        raise err
+
+    # Required fields. We require provider + matching API key + the
+    # email address (so the profile is actually usable). IMAP password
+    # is recommended but not strictly required — the UI marks it
+    # required, but server-side we let the user defer it.
+    provider = cleaned.get("SYSTEM_LLM_PROVIDER", "").strip().lower()
+    if provider not in ("anthropic", "openai"):
+        err = ValueError("SYSTEM_LLM_PROVIDER must be 'anthropic' or 'openai'")
+        err.code = -32602  # type: ignore[attr-defined]
+        raise err
+    if provider == "anthropic" and not cleaned.get("ANTHROPIC_API_KEY"):
+        err = ValueError("ANTHROPIC_API_KEY is required when provider=anthropic")
+        err.code = -32602  # type: ignore[attr-defined]
+        raise err
+    if provider == "openai" and not cleaned.get("OPENAI_API_KEY"):
+        err = ValueError("OPENAI_API_KEY is required when provider=openai")
+        err.code = -32602  # type: ignore[attr-defined]
+        raise err
+    if not cleaned.get("EMAIL_ADDRESS"):
+        # Force the email field to match the profile name so the .env is
+        # internally consistent.
+        cleaned["EMAIL_ADDRESS"] = email
+
+    logger.debug(
+        f"[rpc] profiles.create email={email} keys={sorted(cleaned.keys())}",
+    )
+
+    # Create the profile directory (mode 0o700 — same as zylch init).
+    try:
+        os.makedirs(profile_dir, mode=0o700, exist_ok=False)
+    except FileExistsError:
+        err = ValueError(f"Profile directory already exists: {email}")
+        err.code = -32602  # type: ignore[attr-defined]
+        raise err
+    except OSError as e:
+        err = RuntimeError(f"Failed to create profile dir: {e}")
+        raise err
+
+    # Write `.env` directly. We deliberately do NOT call
+    # `settings_io.update_env`, because that helper resolves the path
+    # from the *active* profile (this RPC runs inside an existing
+    # sidecar bound to a different profile). Instead we write the file
+    # ourselves with the same quoting semantics.
+    env_path = os.path.join(profile_dir, ".env")
+    lines: list[str] = ["# Created by Zylch desktop New Profile wizard\n"]
+    for key, value in cleaned.items():
+        lines.append(f"{key}={_quote(value)}\n")
+    fd = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+            f.flush()
+            os.fsync(f.fileno())
+    except Exception:
+        # Best-effort cleanup of the partial env file + dir.
+        try:
+            os.unlink(env_path)
+        except OSError:
+            pass
+        try:
+            os.rmdir(profile_dir)
+        except OSError:
+            pass
+        raise
+
+    logger.info(
+        f"[rpc] profiles.create -> created profile={email} keys={sorted(cleaned.keys())}",
+    )
+    return {"ok": True, "profile": email}
+
+
 async def settings_update(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """settings.update(updates: {key: value}) -> {ok, applied: [keys]}.
 
@@ -848,4 +997,5 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "settings.schema": settings_schema,
     "settings.get": settings_get,
     "settings.update": settings_update,
+    "profiles.create": profiles_create,
 }
