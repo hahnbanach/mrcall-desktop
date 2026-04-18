@@ -108,6 +108,29 @@ async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"ok": bool(ok)}
 
 
+async def tasks_pin(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """tasks.pin(task_id, pinned: bool) -> {ok: bool}.
+
+    Toggles the pinned flag on a task. Pinned tasks float to the top of
+    `tasks.list` regardless of urgency.
+    """
+    from zylch.storage.storage import Storage
+
+    task_id = params.get("task_id")
+    if not task_id:
+        raise ValueError("task_id is required")
+    if "pinned" not in params:
+        raise ValueError("pinned is required")
+    pinned = bool(params.get("pinned"))
+
+    owner_id = _owner_id()
+    logger.debug(f"[rpc] tasks.pin owner_id={owner_id} task_id={task_id} pinned={pinned}")
+    store = Storage.get_instance()
+    ok = store.set_task_pinned(owner_id=owner_id, task_id=task_id, pinned=pinned)
+    logger.debug(f"[rpc] tasks.pin -> {ok}")
+    return {"ok": bool(ok)}
+
+
 async def tasks_skip(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.skip(task_id) -> {ok: bool}.
 
@@ -985,6 +1008,7 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.list": tasks_list,
     "tasks.complete": tasks_complete,
     "tasks.skip": tasks_skip,
+    "tasks.pin": tasks_pin,
     "tasks.reanalyze": tasks_reanalyze,
     "tasks.solve": tasks_solve,
     "tasks.solve.approve": tasks_solve_approve,

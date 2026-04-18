@@ -139,6 +139,9 @@ def _apply_column_migrations(engine: Engine) -> None:
         # migration may lack them.
         ("drafts", "cc_addresses", "JSON DEFAULT '[]'"),
         ("drafts", "bcc_addresses", "JSON DEFAULT '[]'"),
+        # 2026-04-17: pinned tasks — pinned=True floats a task to the top of
+        # `tasks.list` regardless of urgency. Toggled via `tasks.pin` RPC.
+        ("task_items", "pinned", "BOOLEAN DEFAULT 0"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in migrations:
