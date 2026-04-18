@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { errorMessage, isProfileLockedError } from '../lib/errors'
+import NewProfileWizard from './NewProfileWizard'
 
 type FieldType = 'text' | 'password' | 'number' | 'select' | 'textarea'
 
@@ -26,6 +28,8 @@ export default function Settings(): JSX.Element {
     text: string
   }>({ kind: 'idle', text: '' })
   const [error, setError] = useState<string | null>(null)
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [createdToast, setCreatedToast] = useState<string | null>(null)
 
   // Load schema + values once on mount.
   useEffect(() => {
@@ -39,8 +43,14 @@ export default function Settings(): JSX.Element {
         if (cancelled) return
         setFields(schema.fields || [])
         setLoaded(current.values || {})
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || String(e))
+      } catch (e: unknown) {
+        if (!cancelled) {
+          if (isProfileLockedError(e)) {
+            setError(null)
+          } else {
+            setError(errorMessage(e))
+          }
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -114,8 +124,12 @@ export default function Settings(): JSX.Element {
           ? `Saved ${res.applied.length} field(s). Sidecar restarted.`
           : `Saved ${res.applied.length} field(s). Restart Zylch to apply.`
       })
-    } catch (e: any) {
-      setError(e?.message || String(e))
+    } catch (e: unknown) {
+      if (isProfileLockedError(e)) {
+        setError(null)
+      } else {
+        setError(errorMessage(e))
+      }
       setStatus({ kind: 'error', text: 'Save failed' })
     } finally {
       setSaving(false)
@@ -139,18 +153,45 @@ export default function Settings(): JSX.Element {
 
   return (
     <div className="p-6 max-w-3xl mx-auto pb-24">
-      <h1 className="text-2xl font-semibold mb-2">Settings</h1>
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="text-2xl font-semibold">Settings</h1>
+        <button
+          onClick={() => setWizardOpen(true)}
+          className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
+          title="Create a brand-new profile (opens a separate config form)"
+        >
+          + New Profile
+        </button>
+      </div>
       <p className="text-sm text-slate-600 mb-6">
         Edit the active profile&apos;s configuration. Secrets are masked — type a new value to
         replace, leave as <code className="text-xs bg-slate-100 px-1">{SECRET_PLACEHOLDER}</code> to
         keep the stored value.
       </p>
 
+      {createdToast && (
+        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded">
+          Profile <span className="font-mono">{createdToast}</span> created. Open it via{' '}
+          <span className="font-mono">+ New Window</span> in the top bar.
+        </div>
+      )}
+
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-800 rounded whitespace-pre-wrap">
           {error}
         </div>
       )}
+
+      <NewProfileWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onCreated={(email) => {
+          setWizardOpen(false)
+          setCreatedToast(email)
+          window.setTimeout(() => setCreatedToast(null), 6000)
+        }}
+      />
+
 
       {grouped.map(([group, items]) => (
         <section key={group} className="mb-6">

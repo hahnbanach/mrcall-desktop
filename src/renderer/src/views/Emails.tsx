@@ -5,6 +5,7 @@ import { useThread } from '../store/thread'
 import { useConversations, type Approval } from '../store/conversations'
 import ChatComposer, { type ChatComposerTaskContext } from '../components/ChatComposer'
 import { useNarration } from '../hooks/useNarration'
+import { errorMessage, isProfileLockedError } from '../lib/errors'
 
 function formatDate(iso: string): string {
   if (!iso) return ''
@@ -57,8 +58,12 @@ export default function Emails() {
       })
       .catch((e: unknown) => {
         if (cancelled) return
-        const msg = e instanceof Error ? e.message : String(e)
-        setError(msg)
+        // Profile lock: top banner already explains; no inline duplicate.
+        if (isProfileLockedError(e)) {
+          setError(null)
+        } else {
+          setError(errorMessage(e))
+        }
       })
       .finally(() => {
         if (cancelled) return
@@ -124,8 +129,10 @@ export default function Emails() {
       const content =
         (res && (res.response || res.message || res.content)) || JSON.stringify(res, null, 2)
       appendAssistant(conversation.id, content)
-    } catch (e: any) {
-      appendAssistant(conversation.id, '**Error:** ' + (e.message || String(e)))
+    } catch (e: unknown) {
+      if (!isProfileLockedError(e)) {
+        appendAssistant(conversation.id, '**Error:** ' + errorMessage(e))
+      }
       throw e
     } finally {
       setBusy(conversation.id, false)
@@ -139,8 +146,10 @@ export default function Emails() {
     setPendingApproval(conversation.id, null)
     try {
       await window.zylch.chat.approve(pending.toolUseId, approved)
-    } catch (e: any) {
-      appendAssistant(conversation.id, '**Approval error:** ' + (e.message || String(e)))
+    } catch (e: unknown) {
+      if (!isProfileLockedError(e)) {
+        appendAssistant(conversation.id, '**Approval error:** ' + errorMessage(e))
+      }
     }
   }
 

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import type { SidecarStatusEvent } from '../types'
+import { errorMessage, isProfileLockedError } from '../lib/errors'
 
 export default function Update() {
   const [running, setRunning] = useState(false)
@@ -6,7 +8,19 @@ export default function Update() {
   const [message, setMessage] = useState<string>('')
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  // Track sidecar liveness so we can disable the Update button (and
+  // its de-facto Retry behaviour) when the profile is locked. Without
+  // this the user can keep clicking "Update now", each click producing
+  // a fresh failed RPC and a flash of the (now-suppressed) toast.
+  const [sidecarLocked, setSidecarLocked] = useState(false)
   const unsubRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    const off = window.zylch.onSidecarStatus((s: SidecarStatusEvent) => {
+      setSidecarLocked(!s.alive && s.code === 'profile_locked')
+    })
+    return off
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -30,8 +44,15 @@ export default function Update() {
       setResult(r)
       setPct(100)
       setMessage('Done')
-    } catch (e: any) {
-      setError(e.message || String(e))
+    } catch (e: unknown) {
+      // Don't render the verbose RPC error inline when the sidecar is
+      // dead because of a profile lock — the top-of-window banner is
+      // already explaining it.
+      if (isProfileLockedError(e)) {
+        setError(null)
+      } else {
+        setError(errorMessage(e))
+      }
     } finally {
       unsub()
       unsubRef.current = null
@@ -44,7 +65,8 @@ export default function Update() {
       <h1 className="text-2xl font-semibold mb-4">Update</h1>
       <button
         onClick={run}
-        disabled={running}
+        disabled={running || sidecarLocked}
+        title={sidecarLocked ? 'Sidecar is locked — see banner above' : undefined}
         className="px-4 py-2 bg-slate-900 text-white rounded disabled:bg-slate-400"
       >
         {running ? 'Updating…' : 'Update now'}

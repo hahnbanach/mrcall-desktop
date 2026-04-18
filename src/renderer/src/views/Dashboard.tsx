@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ZylchTask } from '../types'
 import { useConversations } from '../store/conversations'
+import { errorMessage, isProfileLockedError, showError } from '../lib/errors'
 
 interface Props {
   onOpenChat?: () => void
@@ -29,8 +30,14 @@ export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
     try {
       const r = await window.zylch.tasks.list()
       setTasks(r)
-    } catch (e: any) {
-      setError(e.message || String(e))
+    } catch (e: unknown) {
+      // Profile-locked: the banner already explains; don't render a
+      // duplicate red error block here.
+      if (isProfileLockedError(e)) {
+        setError(null)
+      } else {
+        setError(errorMessage(e))
+      }
     } finally {
       setLoading(false)
     }
@@ -44,16 +51,16 @@ export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
     try {
       await window.zylch.tasks.skip(id)
       setTasks((t) => t.filter((x) => x.id !== id))
-    } catch (e: any) {
-      alert('Skip failed: ' + e.message)
+    } catch (e: unknown) {
+      showError(e, 'Skip failed:')
     }
   }
   const onClose = async (id: string) => {
     try {
       await window.zylch.tasks.complete(id)
       setTasks((t) => t.filter((x) => x.id !== id))
-    } catch (e: any) {
-      alert('Close failed: ' + e.message)
+    } catch (e: unknown) {
+      showError(e, 'Close failed:')
     }
   }
   const onUpdate = async (id: string) => {
@@ -81,8 +88,8 @@ export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
           })
         }, 6000)
       }
-    } catch (e: any) {
-      alert('Update failed: ' + e.message)
+    } catch (e: unknown) {
+      showError(e, 'Update failed:')
     } finally {
       setUpdating((s) => {
         const n = new Set(s)
