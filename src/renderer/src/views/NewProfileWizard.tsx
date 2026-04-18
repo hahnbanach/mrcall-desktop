@@ -4,9 +4,9 @@
  * The user fills in just the essential fields; the form posts them to
  * the backend via `window.zylch.profiles.create(email, values)`. On
  * success, the new profile is reachable from the top bar's
- * "+ New Window" picker. We intentionally do NOT auto-open a window
- * for the new profile — opening another window from inside Settings
- * is surprising; the user should choose when to switch.
+ * "Profiles" dropdown. We intentionally do NOT auto-open a window
+ * for the new profile — opening another window from the wizard is
+ * surprising; the user should choose when to switch.
  *
  * Field set kept tight on purpose: the schema has many optional
  * fields (Telegram allowed user, MrCall, personal data, notes, …)
