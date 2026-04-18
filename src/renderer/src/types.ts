@@ -60,7 +60,10 @@ export interface ZylchAPI {
       conversation_history?: unknown[],
       opts?: { conversationId?: string; context?: Record<string, unknown> }
     ) => Promise<any>
-    approve: (tool_use_id: string, approved: boolean) => Promise<{ ok: boolean }>
+    approve: (
+      tool_use_id: string,
+      approvedOrOpts?: boolean | { mode: 'once' | 'session' | 'deny' }
+    ) => Promise<{ ok: boolean }>
   }
   update: {
     run: () => Promise<any>

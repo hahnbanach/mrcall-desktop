@@ -113,12 +113,12 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
     }
   }
 
-  const onApproval = async (approved: boolean) => {
+  const onApproval = async (mode: 'once' | 'session' | 'deny') => {
     const pending = active.pendingApproval
     if (!pending) return
     setPendingApproval(active.id, null)
     try {
-      await window.zylch.chat.approve(pending.toolUseId, approved)
+      await window.zylch.chat.approve(pending.toolUseId, { mode })
     } catch (e: unknown) {
       if (!isProfileLockedError(e)) {
         appendAssistant(active.id, '**Approval error:** ' + errorMessage(e))
@@ -231,8 +231,9 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
           {active.pendingApproval && (
             <ApprovalCard
               approval={active.pendingApproval}
-              onApprove={() => onApproval(true)}
-              onDecline={() => onApproval(false)}
+              onApproveOnce={() => onApproval('once')}
+              onApproveSession={() => onApproval('session')}
+              onDecline={() => onApproval('deny')}
             />
           )}
         </div>
@@ -253,11 +254,13 @@ export default function Chat({ onGoToDashboard }: Props = {}) {
 
 function ApprovalCard({
   approval,
-  onApprove,
+  onApproveOnce,
+  onApproveSession,
   onDecline
 }: {
   approval: Approval
-  onApprove: () => void
+  onApproveOnce: () => void
+  onApproveSession: () => void
   onDecline: () => void
 }) {
   return (
@@ -287,18 +290,25 @@ function ApprovalCard({
           </div>
         ))}
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <button
-          onClick={onApprove}
+          onClick={onApproveOnce}
           className="px-3 py-1.5 text-sm bg-emerald-700 text-white rounded hover:bg-emerald-800"
         >
-          Approva e invia
+          Allow once
+        </button>
+        <button
+          onClick={onApproveSession}
+          className="px-3 py-1.5 text-sm bg-emerald-900 text-white rounded hover:bg-emerald-950"
+          title="Auto-approve this tool for the rest of this conversation"
+        >
+          Allow for session
         </button>
         <button
           onClick={onDecline}
           className="px-3 py-1.5 text-sm bg-slate-200 text-slate-800 rounded hover:bg-slate-300"
         >
-          Rifiuta
+          Deny
         </button>
       </div>
     </div>

@@ -100,8 +100,20 @@ const api = {
         },
         600000
       ),
-    approve: (tool_use_id: string, approved: boolean) =>
-      call<{ ok: boolean }>('chat.approve', { tool_use_id, approved })
+    approve: (
+      tool_use_id: string,
+      approvedOrOpts: boolean | { mode: 'once' | 'session' | 'deny' } = true
+    ) => {
+      // Back-compat: `approve(id, true/false)` still works. Preferred
+      // form is `approve(id, { mode: 'once' | 'session' | 'deny' })`.
+      const payload: Record<string, unknown> = { tool_use_id }
+      if (typeof approvedOrOpts === 'boolean') {
+        payload.approved = approvedOrOpts
+      } else {
+        payload.mode = approvedOrOpts.mode
+      }
+      return call<{ ok: boolean }>('chat.approve', payload)
+    }
   },
   update: {
     run: () => call<any>('update.run', {}, 600000)
