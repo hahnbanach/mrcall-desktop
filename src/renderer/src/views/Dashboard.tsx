@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { ZylchTask } from '../types'
 import { useConversations } from '../store/conversations'
-import { errorMessage, isProfileLockedError, showError } from '../lib/errors'
+import { useTasks } from '../store/tasks'
+import { showError } from '../lib/errors'
 
 interface Props {
   onOpenChat?: () => void
@@ -17,36 +18,15 @@ const URGENCY_STYLES: Record<string, string> = {
 
 export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
   const { openTaskChat, state: convState } = useConversations()
-  const [tasks, setTasks] = useState<ZylchTask[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // Tasks live in a shared store so Update.tsx can invalidate us after
+  // a pipeline run. `refresh()` always hits the sidecar — there is no
+  // memoization on this path.
+  const { tasks, loading, error, refresh, setTasks } = useTasks()
+  const load = refresh
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [updating, setUpdating] = useState<Set<string>>(new Set())
   const [pinning, setPinning] = useState<Set<string>>(new Set())
   const [keptNotice, setKeptNotice] = useState<Record<string, string>>({})
-
-  const load = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const r = await window.zylch.tasks.list()
-      setTasks(r)
-    } catch (e: unknown) {
-      // Profile-locked: the banner already explains; don't render a
-      // duplicate red error block here.
-      if (isProfileLockedError(e)) {
-        setError(null)
-      } else {
-        setError(errorMessage(e))
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    load()
-  }, [])
 
   const onPin = async (task: ZylchTask) => {
     const next = !task.pinned

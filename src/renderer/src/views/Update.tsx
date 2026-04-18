@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SidecarStatusEvent } from '../types'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
+import { useTasks } from '../store/tasks'
 
 export default function Update() {
   const [running, setRunning] = useState(false)
@@ -14,6 +15,9 @@ export default function Update() {
   // a fresh failed RPC and a flash of the (now-suppressed) toast.
   const [sidecarLocked, setSidecarLocked] = useState(false)
   const unsubRef = useRef<(() => void) | null>(null)
+  // Shared tasks store — we call `refresh()` after a successful run so
+  // Dashboard re-fetches instead of showing stale data.
+  const { refresh: refreshTasks } = useTasks()
 
   useEffect(() => {
     const off = window.zylch.onSidecarStatus((s: SidecarStatusEvent) => {
@@ -44,6 +48,10 @@ export default function Update() {
       setResult(r)
       setPct(100)
       setMessage('Done')
+      // Invalidate the Dashboard's cached tasks — the pipeline may
+      // have created, closed or updated rows. Fire-and-forget; do not
+      // let a refresh failure block the Update's success UI.
+      void refreshTasks()
     } catch (e: unknown) {
       // Don't render the verbose RPC error inline when the sidecar is
       // dead because of a profile lock — the top-of-window banner is
@@ -95,9 +103,15 @@ export default function Update() {
       {result && (
         <div className="mt-6">
           <h2 className="text-sm font-semibold uppercase text-slate-600 mb-2">Result</h2>
-          <pre className="p-3 bg-white border rounded text-xs whitespace-pre-wrap overflow-auto">
-            {JSON.stringify(result, null, 2)}
-          </pre>
+          {typeof result?.summary === 'string' && result.summary.length > 0 ? (
+            <div className="p-3 bg-white border rounded text-sm whitespace-pre-wrap">
+              {result.summary}
+            </div>
+          ) : (
+            <pre className="p-3 bg-white border rounded text-xs whitespace-pre-wrap overflow-auto">
+              {JSON.stringify(result, null, 2)}
+            </pre>
+          )}
         </div>
       )}
     </div>

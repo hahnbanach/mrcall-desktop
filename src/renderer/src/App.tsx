@@ -7,6 +7,7 @@ import Settings from './views/Settings'
 import NewProfileWizard from './views/NewProfileWizard'
 import { ConversationsProvider } from './store/conversations'
 import { ThreadProvider, useThread } from './store/thread'
+import { TasksProvider } from './store/tasks'
 import { profileColor } from './lib/profileColor'
 import type { SidecarStatusEvent } from './types'
 import { errorMessage, isProfileLockedError } from './lib/errors'
@@ -535,7 +536,9 @@ export default function App(): JSX.Element {
   return (
     <ConversationsProvider>
       <ThreadProvider>
-        <AppInner />
+        <TasksProvider>
+          <AppInner />
+        </TasksProvider>
       </ThreadProvider>
     </ConversationsProvider>
   )
