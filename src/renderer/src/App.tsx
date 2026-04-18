@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Dashboard from './views/Dashboard'
 import Chat from './views/Chat'
 import Update from './views/Update'
 import Emails from './views/Emails'
 import Settings from './views/Settings'
+import NewProfileWizard from './views/NewProfileWizard'
 import { ConversationsProvider } from './store/conversations'
 import { ThreadProvider, useThread } from './store/thread'
 import { profileColor } from './lib/profileColor'
@@ -237,10 +238,163 @@ function ProfilePickerDialog({
   )
 }
 
+// Lightweight dropdown listing all profiles. Click on a row opens a
+// new BrowserWindow bound to that profile via
+// `window.zylch.window.openForProfile(email)` — no intermediate modal.
+// The current profile is shown but disabled (clicking it would just
+// focus a duplicate). Reloads the profile list every time the menu is
+// opened, so a brand-new profile created via NewProfileWizard appears
+// without a manual refresh.
+function ProfilesDropdown({
+  currentEmail,
+  refreshKey
+}: {
+  currentEmail: string
+  refreshKey: number
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [profiles, setProfiles] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  // Load profiles whenever the menu opens or the parent signals a
+  // refresh (e.g. after the wizard creates a new profile while the
+  // menu happens to be open — unlikely but cheap to support).
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    window.zylch.profiles
+      .list()
+      .then((list) => {
+        if (!cancelled) setProfiles(list)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        if (isProfileLockedError(e)) {
+          setError(null)
+        } else {
+          setError(errorMessage(e))
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, refreshKey])
+
+  // Close on outside click or Escape.
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      const node = containerRef.current
+      if (node && !node.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const choose = async (email: string): Promise<void> => {
+    if (email === currentEmail) return
+    try {
+      const r = await window.zylch.window.openForProfile(email)
+      if (!r.ok) {
+        setError(`Failed to open window for ${email}`)
+        return
+      }
+      setOpen(false)
+    } catch (e) {
+      if (isProfileLockedError(e)) {
+        setError(null)
+      } else {
+        setError(errorMessage(e))
+      }
+    }
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        title="Open another profile in a new window"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="px-2 py-1 rounded text-xs border hover:bg-white/60"
+        style={{
+          borderColor: 'var(--profile-accent)',
+          color: 'var(--profile-accent)'
+        }}
+      >
+        Profiles {open ? '\u25B4' : '\u25BE'}
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 mt-1 min-w-[260px] bg-white border border-slate-200 rounded shadow-lg z-40 py-1"
+        >
+          {loading && (
+            <div className="px-3 py-2 text-xs text-slate-500">Loading profiles...</div>
+          )}
+          {error && (
+            <div className="px-3 py-2 text-xs text-red-600">{error}</div>
+          )}
+          {!loading && profiles.length === 0 && !error && (
+            <div className="px-3 py-2 text-xs text-slate-500">
+              No profiles found. Run <code>zylch init</code> first.
+            </div>
+          )}
+          {profiles.map((email) => {
+            const c = profileColor(email)
+            const isCurrent = email === currentEmail
+            return (
+              <button
+                key={email}
+                role="menuitem"
+                onClick={() => choose(email)}
+                disabled={isCurrent}
+                className={
+                  'w-full text-left px-3 py-2 text-xs flex items-center gap-2 ' +
+                  (isCurrent
+                    ? 'text-slate-400 cursor-default'
+                    : 'text-slate-700 hover:bg-slate-50')
+                }
+              >
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: c.css }}
+                />
+                <span className="font-mono truncate">{email}</span>
+                {isCurrent && (
+                  <span className="ml-auto text-[10px] uppercase tracking-wide">
+                    current
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AppInner(): JSX.Element {
   const [view, setView] = useState<View>('dashboard')
   const [profileEmail, setProfileEmail] = useState<string>('')
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [profilesRefreshKey, setProfilesRefreshKey] = useState(0)
   const { setActiveThreadId, setActiveTaskId } = useThread()
 
   // Resolve the active profile once on mount, derive the accent colour, and
@@ -316,17 +470,6 @@ function AppInner(): JSX.Element {
           )
         })}
         <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => setPickerOpen(true)}
-            title="Open another profile in a new window"
-            className="px-2 py-1 rounded text-xs border hover:bg-white/60"
-            style={{
-              borderColor: 'var(--profile-accent)',
-              color: 'var(--profile-accent)'
-            }}
-          >
-            + New Window
-          </button>
           {profileEmail && (
             <span
               className="text-xs font-mono px-2 py-1 rounded border"
@@ -340,6 +483,21 @@ function AppInner(): JSX.Element {
               {profileEmail}
             </span>
           )}
+          <button
+            onClick={() => setWizardOpen(true)}
+            title="Create a brand-new Zylch profile"
+            className="px-2 py-1 rounded text-xs border hover:bg-white/60"
+            style={{
+              borderColor: 'var(--profile-accent)',
+              color: 'var(--profile-accent)'
+            }}
+          >
+            + New Profile
+          </button>
+          <ProfilesDropdown
+            currentEmail={profileEmail}
+            refreshKey={profilesRefreshKey}
+          />
         </div>
       </nav>
       <main className="flex-1 overflow-auto">
@@ -358,6 +516,16 @@ function AppInner(): JSX.Element {
         {view === 'update' && <Update />}
         {view === 'settings' && <Settings />}
       </main>
+      <NewProfileWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onCreated={() => {
+          setWizardOpen(false)
+          // Bump key so the dropdown reloads its profile list next time
+          // it opens (cheap; no harm if it isn't currently open).
+          setProfilesRefreshKey((k) => k + 1)
+        }}
+      />
       <ProfilePickerDialog open={pickerOpen} onClose={() => setPickerOpen(false)} />
     </div>
   )
