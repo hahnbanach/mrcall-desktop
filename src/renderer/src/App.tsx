@@ -7,9 +7,59 @@ import Settings from './views/Settings'
 import { ConversationsProvider } from './store/conversations'
 import { ThreadProvider, useThread } from './store/thread'
 import { profileColor } from './lib/profileColor'
+import type { SidecarStatusEvent } from './types'
 import './types'
 
 type View = 'dashboard' | 'chat' | 'emails' | 'update' | 'settings'
+
+// Banner shown at the top of the window when the sidecar is dead. The
+// most common case is a profile lock: the user opened a second window on
+// a profile already in use, the Python child detected the lock and
+// exited immediately. Without this banner the user only sees a cryptic
+// "sidecar not running" toast on the next RPC.
+function SidecarStatusBanner(): JSX.Element | null {
+  const [status, setStatus] = useState<SidecarStatusEvent | null>(null)
+
+  useEffect(() => {
+    const off = window.zylch.onSidecarStatus((s) => {
+      // Clear the banner once we hear the sidecar is alive again.
+      if (s.alive) {
+        setStatus(null)
+      } else {
+        setStatus(s)
+      }
+    })
+    return off
+  }, [])
+
+  if (!status || status.alive) return null
+
+  const isLock = status.code === 'profile_locked'
+  const icon = isLock ? '[LOCK]' : '[!]'
+  return (
+    <div
+      role="alert"
+      className={
+        'flex items-center gap-3 px-4 py-2 text-sm border-b ' +
+        (isLock
+          ? 'bg-amber-50 border-amber-300 text-amber-900'
+          : 'bg-red-50 border-red-300 text-red-900')
+      }
+    >
+      <span className="font-mono text-xs">{icon}</span>
+      <div className="flex-1">
+        <div className="font-medium">{status.message}</div>
+        {status.hint && <div className="text-xs opacity-80">{status.hint}</div>}
+      </div>
+      <button
+        onClick={() => window.close()}
+        className="px-2 py-1 rounded border text-xs hover:bg-white/50"
+      >
+        Close window
+      </button>
+    </div>
+  )
+}
 
 // Small modal listing all available profiles. Clicking one opens a new
 // Electron BrowserWindow bound to that profile. If the profile is already
@@ -166,6 +216,7 @@ function AppInner(): JSX.Element {
   ]
   return (
     <div className="flex flex-col h-full">
+      <SidecarStatusBanner />
       <nav
         className="flex items-center gap-2 px-4 py-2 border-b"
         style={{

@@ -105,8 +105,20 @@ export interface ZylchAPI {
   }
   onNotification: (method: string, cb: (params: any) => void) => () => void
   onStderr: (cb: (chunk: string) => void) => () => void
+  onSidecarStatus: (cb: (status: SidecarStatusEvent) => void) => () => void
   onOpenProfilePicker: (cb: () => void) => () => void
 }
+
+export type SidecarStatusEvent =
+  | { alive: true; profile: string }
+  | {
+      alive: false
+      profile: string
+      exitCode: number | null
+      code: string
+      message: string
+      hint?: string
+    }
 
 declare global {
   interface Window {

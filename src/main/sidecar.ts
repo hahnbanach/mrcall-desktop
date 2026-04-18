@@ -19,6 +19,10 @@ export interface SidecarOptions {
  * - Line-buffers stdout, parses JSON-RPC 2.0.
  * - Dispatches responses by `id` to pending promises.
  * - Emits 'notification' events for server-initiated messages.
+ * - Keeps the last N lines of stderr in a ring so callers can build a
+ *   helpful error after the child dies (Bug 2: "sidecar not running" was
+ *   shown to the renderer with no context — now we attach the captured
+ *   reason via `lastError` and `lastStderrLines`).
  */
 export class SidecarClient extends EventEmitter {
   private proc: ChildProcessWithoutNullStreams | null = null
@@ -26,9 +30,60 @@ export class SidecarClient extends EventEmitter {
   private nextId = 1
   private buf = ''
   private dead = false
+  private stderrRing: string[] = []
+  private static readonly STDERR_RING_MAX = 50
+  // Set when the process exits with a non-zero status, or when we manage
+  // to extract a meaningful reason from the stderr ring.
+  lastError: string | null = null
+  lastExitCode: number | null = null
+  lastExitSignal: NodeJS.Signals | null = null
 
   constructor(private opts: SidecarOptions) {
     super()
+  }
+
+  isAlive(): boolean {
+    return !this.dead && this.proc !== null
+  }
+
+  lastStderrLines(): string[] {
+    return [...this.stderrRing]
+  }
+
+  /**
+   * Best-effort classification of the captured stderr. Returns a small
+   * structured object the renderer can present as a banner.
+   */
+  classifyError(): { code: string; message: string; hint?: string } {
+    const text = this.stderrRing.join('\n')
+    const lockMatch = text.match(/Profile '([^']+)' is already in use by another session/)
+    if (lockMatch) {
+      return {
+        code: 'profile_locked',
+        message: `Profile ${lockMatch[1]} is already in use by another Zylch window or CLI session.`,
+        hint: 'Close the other Zylch window (or stop the running zylch CLI) and try again.'
+      }
+    }
+    const tail = this.stderrRing
+      .filter((l) => l.trim().length > 0)
+      .slice(-3)
+      .join(' | ')
+      .trim()
+    if (this.lastExitCode !== null && this.lastExitCode !== 0) {
+      return {
+        code: 'sidecar_crashed',
+        message: tail
+          ? `Sidecar exited (code=${this.lastExitCode}): ${tail}`
+          : `Sidecar exited unexpectedly (code=${this.lastExitCode}).`
+      }
+    }
+    if (this.dead) {
+      return {
+        code: 'sidecar_not_running',
+        message: tail || 'Sidecar is not running.'
+      }
+    }
+    return { code: 'sidecar_not_running', message: 'Sidecar is not running.' }
   }
 
   start(): void {
@@ -46,17 +101,31 @@ export class SidecarClient extends EventEmitter {
     this.proc.stderr.on('data', (chunk: string) => {
       // zylch logs to stderr; mirror for debugging AND forward to renderer
       process.stderr.write(`[sidecar.stderr] ${chunk}`)
+      // Append each non-empty line to the ring buffer so we can build a
+      // helpful error after the child dies. Keep at most STDERR_RING_MAX
+      // lines.
+      for (const line of chunk.split('\n')) {
+        if (!line) continue
+        this.stderrRing.push(line)
+        if (this.stderrRing.length > SidecarClient.STDERR_RING_MAX) {
+          this.stderrRing.splice(0, this.stderrRing.length - SidecarClient.STDERR_RING_MAX)
+        }
+      }
       this.emit('stderr', chunk)
     })
     this.proc.on('exit', (code, signal) => {
       console.error(`[sidecar] exit code=${code} signal=${signal}`)
       this.dead = true
+      this.lastExitCode = code
+      this.lastExitSignal = signal
+      const cls = this.classifyError()
+      this.lastError = cls.message
       for (const [, p] of this.pending) {
         clearTimeout(p.timer)
-        p.reject(new Error(`sidecar exited (code=${code})`))
+        p.reject(new Error(`sidecar exited (code=${code}): ${cls.message}`))
       }
       this.pending.clear()
-      this.emit('exit', { code, signal })
+      this.emit('exit', { code, signal, classified: cls })
     })
     this.proc.on('error', (err) => {
       console.error('[sidecar] error', err)
@@ -100,7 +169,11 @@ export class SidecarClient extends EventEmitter {
 
   call<T = unknown>(method: string, params: unknown = {}, timeoutMs = 60000): Promise<T> {
     if (this.dead || !this.proc) {
-      return Promise.reject(new Error('sidecar not running'))
+      // Build the most informative message we can: the captured reason
+      // (if any) wins; fall back to the generic string. The renderer
+      // pattern-matches on substrings to render a friendlier banner.
+      const cls = this.classifyError()
+      return Promise.reject(new Error(cls.message || 'sidecar not running'))
     }
     const id = this.nextId++
     const req = { jsonrpc: '2.0', id, method, params }

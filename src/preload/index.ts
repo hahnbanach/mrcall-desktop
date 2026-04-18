@@ -16,6 +16,30 @@ ipcRenderer.on('sidecar:stderr', (_e, chunk: string) => {
   }
 })
 
+// Structured sidecar liveness/health events pushed by main when the
+// child process spawns or dies. The renderer renders a banner from this.
+export type SidecarStatusEvent =
+  | { alive: true; profile: string }
+  | {
+      alive: false
+      profile: string
+      exitCode: number | null
+      code: string
+      message: string
+      hint?: string
+    }
+type StatusCb = (status: SidecarStatusEvent) => void
+const statusListeners = new Set<StatusCb>()
+ipcRenderer.on('sidecar:status', (_e, status: SidecarStatusEvent) => {
+  for (const cb of statusListeners) {
+    try {
+      cb(status)
+    } catch (e) {
+      console.error('[preload] status handler error', e)
+    }
+  }
+})
+
 type MenuCb = () => void
 const openProfilePickerListeners = new Set<MenuCb>()
 ipcRenderer.on('menu:openProfilePicker', () => {
@@ -143,6 +167,12 @@ const api = {
     stderrListeners.add(cb)
     return () => {
       stderrListeners.delete(cb)
+    }
+  },
+  onSidecarStatus: (cb: StatusCb): (() => void) => {
+    statusListeners.add(cb)
+    return () => {
+      statusListeners.delete(cb)
     }
   },
   onOpenProfilePicker: (cb: MenuCb): (() => void) => {
