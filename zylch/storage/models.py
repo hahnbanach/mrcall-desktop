@@ -304,6 +304,7 @@ class TaskItem(DictMixin, Base):
     analyzed_at = Column(DateTime)
     completed_at = Column(DateTime)
     sources = Column(JSON, default=dict)
+    pinned = Column(Boolean, default=False, nullable=False, index=True)
 
     __table_args__ = (
         UniqueConstraint(

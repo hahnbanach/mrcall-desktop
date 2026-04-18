@@ -2096,7 +2096,7 @@ class Storage:
         action_required: Optional[bool] = None,
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        """Get uncompleted task items, sorted by urgency then analyzed_at."""
+        """Get uncompleted task items, sorted by pinned, urgency, analyzed_at."""
         try:
             with get_session() as session:
                 query = session.query(TaskItem).filter(
@@ -2106,12 +2106,22 @@ class Storage:
                 if action_required is not None:
                     query = query.filter(TaskItem.action_required == action_required)
 
-                rows = query.order_by(TaskItem.analyzed_at.desc()).limit(limit).all()
+                # DB-level: pinned DESC first, then analyzed_at DESC. Urgency
+                # bucketing is applied client-side via stable sort below so
+                # the existing critical/high/medium/low order remains intact.
+                rows = (
+                    query.order_by(
+                        TaskItem.pinned.desc(),
+                        TaskItem.analyzed_at.desc(),
+                    )
+                    .limit(limit)
+                    .all()
+                )
 
                 tasks = [r.to_dict() for r in rows]
 
-                # Sort by urgency: critical -> high -> medium -> low
-                # Stable sort preserves analyzed_at desc within each urgency
+                # Sort by pinned DESC, then urgency: critical -> high -> medium -> low.
+                # Stable sort preserves analyzed_at desc within each bucket.
                 urgency_order = {
                     "critical": -1,
                     "high": 0,
@@ -2119,12 +2129,32 @@ class Storage:
                     "low": 2,
                 }
                 tasks.sort(key=lambda t: urgency_order.get(t.get("urgency"), 9))
+                # pinned=True (1) sorts before pinned=False (0): negate for asc.
+                tasks.sort(key=lambda t: 0 if t.get("pinned") else 1)
 
                 return tasks
 
         except Exception as e:
             logger.error(f"Failed to get task items: {e}")
             return []
+
+    def set_task_pinned(self, owner_id: str, task_id: str, pinned: bool) -> bool:
+        """Set the pinned flag on a task. Returns True if a row was updated."""
+        try:
+            with get_session() as session:
+                count = (
+                    session.query(TaskItem)
+                    .filter(TaskItem.owner_id == owner_id, TaskItem.id == task_id)
+                    .update({"pinned": bool(pinned)})
+                )
+                logger.debug(
+                    f"set_task_pinned(owner_id={owner_id}, task_id={task_id}, "
+                    f"pinned={pinned}) -> updated={count}"
+                )
+                return count > 0
+        except Exception as e:
+            logger.error(f"Failed to set pinned on task {task_id}: {e}")
+            return False
 
     def task_item_exists(self, owner_id: str, event_type: str, event_id: str) -> bool:
         """Check if a task item already exists."""
