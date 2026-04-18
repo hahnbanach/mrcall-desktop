@@ -38,9 +38,24 @@ def _env_path() -> str:
 
 
 def _quote(value: str) -> str:
-    """Quote `value` for safe inclusion as `KEY=value` in a dotenv file."""
+    """Quote `value` for safe inclusion as `KEY=value` in a dotenv file.
+
+    Multi-line values are emitted as a double-quoted string with each
+    newline converted to the literal escape sequence `\\n` — python-dotenv
+    decodes that back to a real newline when reading, and the .env file
+    stays a single-line entry per key (safe to re-read without needing
+    multiline parser state).
+
+    Single-line values that contain shell-ish characters fall back to
+    `shlex.quote` (single-quoted), which is byte-exact.
+    """
     if value == "":
         return ""
+    if "\n" in value or "\r" in value:
+        # Escape embedded quotes and backslashes first, then linebreaks.
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        escaped = escaped.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n")
+        return f'"{escaped}"'
     if any(ch in _NEEDS_QUOTE for ch in value):
         return shlex.quote(value)
     return value
@@ -81,8 +96,25 @@ def read_env() -> Dict[str, str]:
                 continue
             key, raw = kv
             # Strip surrounding single or double quotes if present.
+            # Double-quoted values may contain `\n` / `\r` / `\t` / `\"`
+            # escape sequences (matching python-dotenv semantics); decode
+            # them so callers get the logical string back.
             if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("'", '"'):
+                quote_char = raw[0]
                 raw = raw[1:-1]
+                if quote_char == '"':
+                    # Decode escape sequences. Protect real `\\` first with
+                    # a placeholder, otherwise `\\n` on disk would decode
+                    # to a literal newline instead of the two chars `\n`.
+                    sentinel = "\x00__BS__\x00"
+                    raw = (
+                        raw.replace("\\\\", sentinel)
+                        .replace("\\n", "\n")
+                        .replace("\\r", "\r")
+                        .replace("\\t", "\t")
+                        .replace('\\"', '"')
+                        .replace(sentinel, "\\")
+                    )
             out[key] = raw
     return out
 
