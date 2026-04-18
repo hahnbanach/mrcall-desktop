@@ -22,6 +22,7 @@ export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [updating, setUpdating] = useState<Set<string>>(new Set())
+  const [pinning, setPinning] = useState<Set<string>>(new Set())
   const [keptNotice, setKeptNotice] = useState<Record<string, string>>({})
 
   const load = async () => {
@@ -47,6 +48,29 @@ export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
     load()
   }, [])
 
+  const onPin = async (task: ZylchTask) => {
+    const next = !task.pinned
+    // Optimistic update
+    setTasks((t) => t.map((x) => (x.id === task.id ? { ...x, pinned: next } : x)))
+    setPinning((s) => new Set(s).add(task.id))
+    try {
+      await window.zylch.tasks.pin(task.id, next)
+      // Refetch to get authoritative ordering from the backend
+      await load()
+    } catch (e: unknown) {
+      // Roll back the optimistic flip on failure
+      setTasks((t) =>
+        t.map((x) => (x.id === task.id ? { ...x, pinned: task.pinned } : x))
+      )
+      showError(e, 'Pin failed:')
+    } finally {
+      setPinning((s) => {
+        const n = new Set(s)
+        n.delete(task.id)
+        return n
+      })
+    }
+  }
   const onSkip = async (id: string) => {
     try {
       await window.zylch.tasks.skip(id)
@@ -121,10 +145,154 @@ export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
       </div>
     )
 
+  // Client-side safety sort: pinned tasks first, preserving the existing
+  // backend order as a stable tie-breaker. This protects optimistic updates
+  // from showing pinned tasks out of place between request and refetch.
+  const sortedTasks = [...tasks].sort(
+    (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)
+  )
+
+  const pinnedTasks = sortedTasks.filter((t) => t.pinned)
+  const unpinnedTasks = sortedTasks.filter((t) => !t.pinned)
+
   const grouped: Record<string, ZylchTask[]> = {}
-  for (const t of tasks) {
+  for (const t of unpinnedTasks) {
     const k = (t.urgency || 'low').toLowerCase()
     ;(grouped[k] ||= []).push(t)
+  }
+
+  const renderTask = (t: ZylchTask) => {
+    const u = (t.urgency || 'low').toLowerCase()
+    return (
+      <article
+        key={t.id}
+        className={
+          'bg-white border rounded-lg p-4 shadow-sm ' +
+          (t.pinned ? 'border-l-4 border-l-amber-400' : '')
+        }
+      >
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div className="flex items-center gap-2">
+            {t.pinned && (
+              <span
+                className="text-amber-600"
+                title="Pinned"
+                aria-label="Pinned"
+              >
+                📌
+              </span>
+            )}
+            <div className="text-sm text-slate-500">
+              {t.contact_name
+                ? `${t.contact_name} <${t.contact_email}>`
+                : t.contact_email}
+            </div>
+          </div>
+          <span
+            className={
+              'text-xs px-2 py-0.5 border rounded ' +
+              (URGENCY_STYLES[u] || URGENCY_STYLES.low)
+            }
+          >
+            {u}
+          </span>
+        </div>
+        <div className="text-slate-900 whitespace-pre-wrap mb-2">
+          {t.suggested_action}
+        </div>
+        <button
+          onClick={() => toggle(t.id)}
+          className="text-xs text-slate-500 hover:text-slate-800 mb-2"
+        >
+          {expanded.has(t.id) ? 'Hide reason' : 'Show reason'}
+        </button>
+        {expanded.has(t.id) && (
+          <div className="text-sm text-slate-700 whitespace-pre-wrap border-l-2 border-slate-200 pl-3 mb-3">
+            {t.reason}
+          </div>
+        )}
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => onSkip(t.id)}
+            className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
+          >
+            Skip
+          </button>
+          <button
+            onClick={() => onClose(t.id)}
+            className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded hover:bg-slate-700"
+          >
+            Close
+          </button>
+          <button
+            onClick={() => {
+              openTaskChat(t)
+              onOpenChat?.()
+            }}
+            className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
+          >
+            Solve
+          </button>
+          <button
+            onClick={() => onUpdate(t.id)}
+            disabled={updating.has(t.id)}
+            className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {updating.has(t.id) ? 'Analyzing…' : 'Update'}
+          </button>
+          <button
+            onClick={() => onPin(t)}
+            disabled={pinning.has(t.id)}
+            title={t.pinned ? 'Unpin task' : 'Pin task to top'}
+            className={
+              'px-3 py-1.5 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed ' +
+              (t.pinned
+                ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
+                : 'hover:bg-slate-100 text-slate-600')
+            }
+          >
+            {t.pinned ? '📌 Pinned' : '📌 Pin'}
+          </button>
+          {(() => {
+            const tid = t.sources?.thread_id || null
+            const disabled = !tid
+            return (
+              <button
+                onClick={() => {
+                  if (tid) {
+                    // Ensure the same task conversation Solve uses
+                    // exists in the store, so the Email tab's
+                    // composer can post to the same conversation_id.
+                    // openTaskChat replaces the conversation in
+                    // place, which would clobber any history a
+                    // prior Solve had — only call it if the
+                    // conversation doesn't exist yet.
+                    const convId = `task-${t.id}`
+                    const exists = convState.conversations.some(
+                      (c) => c.id === convId
+                    )
+                    if (!exists) openTaskChat(t)
+                    onOpenEmails?.(tid, t.id)
+                  }
+                }}
+                disabled={disabled}
+                title={
+                  disabled ? 'No thread for this task' : 'Open thread'
+                }
+                className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Open
+              </button>
+            )
+          })()}
+        </div>
+        {keptNotice[t.id] && (
+          <div className="mt-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-1.5">
+            Task kept — {keptNotice[t.id]}
+          </div>
+        )}
+      </article>
+    )
   }
 
   return (
@@ -141,6 +309,14 @@ export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
       {tasks.length === 0 && (
         <div className="text-slate-500">No tasks. All clear.</div>
       )}
+      {pinnedTasks.length > 0 && (
+        <section className="mb-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-700 mb-2">
+            📌 Pinned ({pinnedTasks.length})
+          </h2>
+          <div className="space-y-3">{pinnedTasks.map(renderTask)}</div>
+        </section>
+      )}
       {URGENCY_ORDER.map((u) => {
         const list = grouped[u]
         if (!list || list.length === 0) return null
@@ -149,113 +325,7 @@ export default function Dashboard({ onOpenChat, onOpenEmails }: Props = {}) {
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 mb-2">
               {u} ({list.length})
             </h2>
-            <div className="space-y-3">
-              {list.map((t) => (
-                <article
-                  key={t.id}
-                  className="bg-white border rounded-lg p-4 shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div>
-                      <div className="text-sm text-slate-500">
-                        {t.contact_name
-                          ? `${t.contact_name} <${t.contact_email}>`
-                          : t.contact_email}
-                      </div>
-                    </div>
-                    <span
-                      className={
-                        'text-xs px-2 py-0.5 border rounded ' +
-                        (URGENCY_STYLES[u] || URGENCY_STYLES.low)
-                      }
-                    >
-                      {u}
-                    </span>
-                  </div>
-                  <div className="text-slate-900 whitespace-pre-wrap mb-2">
-                    {t.suggested_action}
-                  </div>
-                  <button
-                    onClick={() => toggle(t.id)}
-                    className="text-xs text-slate-500 hover:text-slate-800 mb-2"
-                  >
-                    {expanded.has(t.id) ? 'Hide reason' : 'Show reason'}
-                  </button>
-                  {expanded.has(t.id) && (
-                    <div className="text-sm text-slate-700 whitespace-pre-wrap border-l-2 border-slate-200 pl-3 mb-3">
-                      {t.reason}
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => onSkip(t.id)}
-                      className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
-                    >
-                      Skip
-                    </button>
-                    <button
-                      onClick={() => onClose(t.id)}
-                      className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded hover:bg-slate-700"
-                    >
-                      Close
-                    </button>
-                    <button
-                      onClick={() => {
-                        openTaskChat(t)
-                        onOpenChat?.()
-                      }}
-                      className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
-                    >
-                      Solve
-                    </button>
-                    <button
-                      onClick={() => onUpdate(t.id)}
-                      disabled={updating.has(t.id)}
-                      className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {updating.has(t.id) ? 'Analyzing…' : 'Update'}
-                    </button>
-                    {(() => {
-                      const tid = t.sources?.thread_id || null
-                      const disabled = !tid
-                      return (
-                        <button
-                          onClick={() => {
-                            if (tid) {
-                              // Ensure the same task conversation Solve uses
-                              // exists in the store, so the Email tab's
-                              // composer can post to the same conversation_id.
-                              // openTaskChat replaces the conversation in
-                              // place, which would clobber any history a
-                              // prior Solve had — only call it if the
-                              // conversation doesn't exist yet.
-                              const convId = `task-${t.id}`
-                              const exists = convState.conversations.some(
-                                (c) => c.id === convId
-                              )
-                              if (!exists) openTaskChat(t)
-                              onOpenEmails?.(tid, t.id)
-                            }
-                          }}
-                          disabled={disabled}
-                          title={
-                            disabled ? 'No thread for this task' : 'Open thread'
-                          }
-                          className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Open
-                        </button>
-                      )
-                    })()}
-                  </div>
-                  {keptNotice[t.id] && (
-                    <div className="mt-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-1.5">
-                      Task kept — {keptNotice[t.id]}
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
+            <div className="space-y-3">{list.map(renderTask)}</div>
           </section>
         )
       })}

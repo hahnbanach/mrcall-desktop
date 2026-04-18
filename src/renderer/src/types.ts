@@ -12,6 +12,7 @@ export interface ZylchTask {
   created_at: string
   analyzed_at?: string
   completed_at?: string | null
+  pinned?: boolean
   sources: {
     emails: string[]
     blobs: string[]
@@ -44,6 +45,7 @@ export interface ZylchAPI {
     list: (p?: { include_completed?: boolean; include_skipped?: boolean }) => Promise<ZylchTask[]>
     complete: (task_id: string) => Promise<{ ok: boolean }>
     skip: (task_id: string) => Promise<{ ok: boolean }>
+    pin: (task_id: string, pinned: boolean) => Promise<{ ok: boolean }>
     reanalyze: (task_id: string) => Promise<{
       ok: boolean
       action: 'kept' | 'closed' | 'updated'
