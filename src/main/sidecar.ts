@@ -37,6 +37,13 @@ export class SidecarClient extends EventEmitter {
   lastError: string | null = null
   lastExitCode: number | null = null
   lastExitSignal: NodeJS.Signals | null = null
+  // Marker set by the main process via `markIntentionalRestart()` right
+  // before calling `stop()` as part of a Settings-driven restart. The exit
+  // handler reads this so it can classify the death as a benign
+  // "restarting" event instead of a crash, which prevents the
+  // SidecarStatusBanner from flashing red/amber for the ~1s gap between
+  // SIGTERM and the new child becoming alive.
+  private intentionalRestart = false
 
   constructor(private opts: SidecarOptions) {
     super()
@@ -44,6 +51,15 @@ export class SidecarClient extends EventEmitter {
 
   isAlive(): boolean {
     return !this.dead && this.proc !== null
+  }
+
+  /** Caller marks the upcoming stop() as part of a deliberate restart. */
+  markIntentionalRestart(): void {
+    this.intentionalRestart = true
+  }
+
+  isIntentionalRestart(): boolean {
+    return this.intentionalRestart
   }
 
   lastStderrLines(): string[] {
@@ -55,6 +71,15 @@ export class SidecarClient extends EventEmitter {
    * structured object the renderer can present as a banner.
    */
   classifyError(): { code: string; message: string; hint?: string } {
+    // If this death was triggered by an intentional restart (Settings →
+    // Save), report it as such so the renderer suppresses the red/amber
+    // crash banner and shows a small "Restarting…" indicator instead.
+    if (this.intentionalRestart) {
+      return {
+        code: 'restarting',
+        message: 'Restarting sidecar…'
+      }
+    }
     const text = this.stderrRing.join('\n')
     const lockMatch = text.match(/Profile '([^']+)' is already in use by another session/)
     if (lockMatch) {

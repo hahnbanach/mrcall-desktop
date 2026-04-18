@@ -18,20 +18,78 @@ type View = 'dashboard' | 'chat' | 'emails' | 'update' | 'settings'
 // a profile already in use, the Python child detected the lock and
 // exited immediately. Without this banner the user only sees a cryptic
 // "sidecar not running" toast on the next RPC.
+//
+// Restart UX (Settings → Save): the main process pushes a
+// `code: 'restarting'` event before killing the old child, so we render
+// a small blue "Restarting sidecar…" indicator instead of the red crash
+// banner. While in this state we ignore exit events (which would
+// otherwise race in and re-classify as crashed). If we don't see an
+// `alive:true` within RESTART_TIMEOUT_MS we fall back to whatever the
+// most recent status said, so a real boot failure still surfaces.
 function SidecarStatusBanner(): JSX.Element | null {
   const [status, setStatus] = useState<SidecarStatusEvent | null>(null)
+  const [restarting, setRestarting] = useState(false)
 
   useEffect(() => {
+    const RESTART_TIMEOUT_MS = 10_000
+    let restartTimer: ReturnType<typeof setTimeout> | null = null
+    let restartFlag = false
+
     const off = window.zylch.onSidecarStatus((s) => {
-      // Clear the banner once we hear the sidecar is alive again.
       if (s.alive) {
+        // Sidecar is up. Clear any restart spinner and any prior error.
+        if (restartTimer) {
+          clearTimeout(restartTimer)
+          restartTimer = null
+        }
+        restartFlag = false
+        setRestarting(false)
         setStatus(null)
-      } else {
-        setStatus(s)
+        return
       }
+      // alive === false branch
+      if (s.code === 'restarting') {
+        restartFlag = true
+        setRestarting(true)
+        setStatus(s)
+        if (restartTimer) clearTimeout(restartTimer)
+        // Safety net: if no `alive:true` arrives within 10s we assume
+        // the new child is wedged. Drop the spinner so the next status
+        // event (or a stale one) renders normally.
+        restartTimer = setTimeout(() => {
+          restartFlag = false
+          setRestarting(false)
+        }, RESTART_TIMEOUT_MS)
+        return
+      }
+      // Any other failure event: if we are mid-restart, swallow it —
+      // the old child's exit is expected and not a crash. Otherwise
+      // surface as the existing crash/lock banner.
+      if (restartFlag) return
+      setStatus(s)
     })
-    return off
+    return () => {
+      if (restartTimer) clearTimeout(restartTimer)
+      off()
+    }
   }, [])
+
+  // Restart spinner takes priority over any stale "exited" status.
+  if (restarting) {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex items-center gap-2 px-4 py-1.5 text-xs border-b bg-slate-100 border-slate-300 text-slate-700"
+      >
+        <span
+          aria-hidden="true"
+          className="inline-block w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"
+        />
+        <span>Restarting sidecar…</span>
+      </div>
+    )
+  }
 
   if (!status || status.alive) return null
 

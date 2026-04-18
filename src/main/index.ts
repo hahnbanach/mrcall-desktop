@@ -156,10 +156,33 @@ function createWindowForProfile(profile: string): BrowserWindow {
 
 // Restart the sidecar bound to a specific window. Used after
 // settings.update so the new .env values are picked up.
+//
+// Sequencing for the renderer:
+//   1. Push `sidecar:status` { alive:false, code:'restarting' } so the
+//      banner can show a small blue "Restarting sidecar…" indicator
+//      BEFORE the old child dies (otherwise the exit handler would race
+//      and the banner could briefly flash red).
+//   2. Mark the old client as an intentional restart, then stop() it.
+//      The exit handler in spawnSidecar() will see `intentionalRestart`
+//      and emit a benign "restarting" status instead of "crashed" /
+//      "profile_locked".
+//   3. Spawn the new child. spawnSidecar() emits `alive:true` ~100ms
+//      after spawn — the renderer treats that as the all-clear signal
+//      and dismisses the "Restarting…" banner.
 async function restartSidecarForWindow(win: BrowserWindow): Promise<boolean> {
   const entry = windowEntries.get(win.id)
   if (!entry) return false
   console.log(`[main][w${win.id}] restarting sidecar profile=${entry.profile}`)
+  if (!win.isDestroyed()) {
+    win.webContents.send('sidecar:status', {
+      alive: false,
+      profile: entry.profile,
+      exitCode: null,
+      code: 'restarting',
+      message: 'Restarting sidecar…'
+    })
+  }
+  entry.sidecar.markIntentionalRestart()
   entry.sidecar.stop()
   await new Promise((r) => setTimeout(r, 500))
   const sidecar = spawnSidecar(entry.profile, win)
