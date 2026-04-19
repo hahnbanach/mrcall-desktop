@@ -1,0 +1,68 @@
+import { useState } from 'react'
+
+// Minimal styling baked into the iframe srcDoc so email HTML renders
+// with a sane default and images never blow the reading pane wider
+// than its container. `base target="_blank"` makes any <a> open via
+// the Electron window-open handler, which routes to shell.openExternal.
+const IFRAME_CSS = [
+  'body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;',
+  'color:#1e293b;padding:0;margin:0;line-height:1.5;}',
+  'img{max-width:100%!important;height:auto!important;}',
+  'pre,code{white-space:pre-wrap;word-break:break-word;}',
+  'blockquote{border-left:3px solid #cbd5e1;margin:0.5em 0;',
+  'padding:0.25em 0.75em;color:#475569;}',
+  'table{max-width:100%;}'
+].join('')
+
+function buildSrcDoc(html: string): string {
+  return (
+    '<!DOCTYPE html><html><head>' +
+    '<meta charset="utf-8"/>' +
+    '<base target="_blank"/>' +
+    '<style>' +
+    IFRAME_CSS +
+    '</style>' +
+    '</head><body>' +
+    html +
+    '</body></html>'
+  )
+}
+
+const IFRAME_MAX_INITIAL_HEIGHT = 1200
+const IFRAME_MIN_HEIGHT = 80
+
+/**
+ * Isolates HTML email markup inside a fully-sandboxed iframe.
+ *
+ * sandbox="" disables scripts, forms, same-origin access, top-level
+ * navigation, plugins and popups — so even obviously hostile email HTML
+ * can't reach the renderer. referrerPolicy="no-referrer" prevents the
+ * parent URL leaking to tracking pixels. Height is measured once on
+ * load and capped at IFRAME_MAX_INITIAL_HEIGHT; the outer container is
+ * expected to handle scroll.
+ */
+export default function HtmlEmailBody({ html }: { html: string }): JSX.Element {
+  const [height, setHeight] = useState<number>(IFRAME_MIN_HEIGHT)
+  const handleLoad = (e: React.SyntheticEvent<HTMLIFrameElement>): void => {
+    try {
+      const doc = e.currentTarget.contentDocument
+      if (!doc || !doc.body) return
+      const measured = doc.body.scrollHeight + 16
+      const capped = Math.min(IFRAME_MAX_INITIAL_HEIGHT, Math.max(IFRAME_MIN_HEIGHT, measured))
+      setHeight(capped)
+    } catch {
+      /* cross-origin reads shouldn't happen with srcDoc + sandbox="" */
+    }
+  }
+  return (
+    <iframe
+      title="email-body"
+      sandbox=""
+      referrerPolicy="no-referrer"
+      loading="lazy"
+      srcDoc={buildSrcDoc(html)}
+      onLoad={handleLoad}
+      style={{ width: '100%', height, border: 0, display: 'block' }}
+    />
+  )
+}
