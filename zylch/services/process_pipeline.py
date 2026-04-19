@@ -7,12 +7,16 @@ before the next starts. Does NOT use the background job system.
 import logging
 import os
 
+import sys
+
 from rich.console import Console
 
 from zylch.tools.config import ToolConfig
 
 logger = logging.getLogger(__name__)
-console = Console()
+# stderr so the pipeline's progress output never collides with the
+# JSON-RPC stdout wire the sidecar uses.
+console = Console(file=sys.stderr)
 
 
 async def handle_process(

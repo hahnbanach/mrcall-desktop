@@ -660,24 +660,18 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
         before_open = {}
 
     _emit(0, "Starting full pipeline…")
-    # `handle_process` (and its inner `rich.Console()`) writes status to
-    # stdout. stdout is the JSON-RPC wire for this sidecar, so we swap
-    # sys.stdout -> sys.stderr for the duration of the pipeline to
-    # keep the wire clean. Notifications still go out via `notify`,
-    # which writes via the server's dedicated writer using the captured
-    # real-stdout reference.
-    import sys
-
-    real_stdout = sys.stdout
+    # Run the pipeline in a worker thread with its own event loop. The
+    # pipeline is declared async but internally does blocking work
+    # (IMAP, SQLAlchemy sync, FTS) that would otherwise starve the
+    # RPC server's main loop — meaning settings.schema, tasks.list,
+    # etc. can't respond for the 2+ minutes update.run takes. With
+    # to_thread the main loop stays free. process_pipeline.console now
+    # writes to stderr, so we no longer need to swap sys.stdout.
     try:
         config = ToolConfig.from_settings()
-        sys.stdout = sys.stderr
-        try:
-            # We intentionally discard the inner summary — it is the
-            # full open-tasks dump we are replacing.
-            await handle_process([], config, owner_id)
-        finally:
-            sys.stdout = real_stdout
+        # We intentionally discard the inner summary — it is the full
+        # open-tasks dump we are replacing with the diff below.
+        await asyncio.to_thread(asyncio.run, handle_process([], config, owner_id))
     except Exception as e:
         logger.exception("[rpc] update.run failed")
         _emit(100, f"Failed: {e}")
