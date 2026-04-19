@@ -499,21 +499,29 @@ function AppInner(): JSX.Element {
           />
         </div>
       </nav>
-      <main className="flex-1 overflow-auto">
-        {view === 'tasks' && (
+      {/* All views are always mounted; inactive ones are hidden. This
+          keeps in-flight state (e.g. Update's running spinner, Settings'
+          loaded schema) alive across tab switches so the user doesn't
+          come back to a view that's "Loading…" or has lost its progress. */}
+      <main className="flex-1 overflow-hidden relative">
+        <div className="absolute inset-0 overflow-auto" style={{ display: view === 'tasks' ? 'block' : 'none' }}>
           <Tasks
             onOpenWorkspace={(threadId, taskId) => {
-              // Prime the thread store so Workspace's Source panel
-              // renders the right email thread for this task.
               setActiveThreadId(threadId)
               setActiveTaskId(taskId)
               setView('workspace')
             }}
           />
-        )}
-        {view === 'workspace' && <Workspace onGoToTasks={() => setView('tasks')} />}
-        {view === 'update' && <Update />}
-        {view === 'settings' && <Settings />}
+        </div>
+        <div className="absolute inset-0 overflow-auto" style={{ display: view === 'workspace' ? 'block' : 'none' }}>
+          <Workspace onGoToTasks={() => setView('tasks')} />
+        </div>
+        <div className="absolute inset-0 overflow-auto" style={{ display: view === 'update' ? 'block' : 'none' }}>
+          <Update />
+        </div>
+        <div className="absolute inset-0 overflow-auto" style={{ display: view === 'settings' ? 'block' : 'none' }}>
+          <Settings />
+        </div>
       </main>
       <NewProfileWizard
         open={wizardOpen}
