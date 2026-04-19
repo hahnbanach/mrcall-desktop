@@ -7,6 +7,7 @@ export default function Update() {
   const [running, setRunning] = useState(false)
   const [pct, setPct] = useState(0)
   const [message, setMessage] = useState<string>('')
+  const [eta, setEta] = useState<string>('')
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   // Track sidecar liveness so we can disable the Update button (and
@@ -36,11 +37,13 @@ export default function Update() {
     setRunning(true)
     setPct(0)
     setMessage('Starting…')
+    setEta('')
     setResult(null)
     setError(null)
     const unsub = window.zylch.onNotification('update.progress', (p: any) => {
       if (typeof p?.pct === 'number') setPct(p.pct)
       if (typeof p?.message === 'string') setMessage(p.message)
+      if (typeof p?.eta === 'string' && p.eta) setEta(p.eta)
     })
     unsubRef.current = unsub
     try {
@@ -90,7 +93,13 @@ export default function Update() {
           </div>
           <div className="text-sm text-slate-600 mt-2">
             {pct}% — {message}
+            {eta && <span className="ml-2 text-slate-500">· ~{eta}</span>}
           </div>
+          {running && (
+            <div className="text-xs text-slate-500 mt-1">
+              Safe to close — progress is saved, will resume from where it left off.
+            </div>
+          )}
         </div>
       )}
 
