@@ -941,6 +941,11 @@ async def emails_list_by_thread(
             date_iso = date_val if isinstance(date_val, str) else ""
             body_raw = r.get("body_plain") or ""
             body_clean = strip_quoted(body_raw, cap=None) if body_raw else ""
+            # HTML body is returned raw: strip_quoted is a plain-text
+            # heuristic and would mangle tags. The renderer sandboxes
+            # the HTML inside an <iframe sandbox=""> so untrusted markup
+            # can't execute scripts or navigate the host.
+            body_html_raw = r.get("body_html") or ""
             # Attachment metadata persisted by IMAPClient at sync time
             # (see imap_client._extract_attachment_filenames). JSON column
             # may come back as a list or, on legacy rows, a JSON-encoded
@@ -970,6 +975,7 @@ async def emails_list_by_thread(
                     "date": date_iso,
                     "subject": r.get("subject") or "",
                     "body_plain": body_clean,
+                    "body_html": body_html_raw,
                     "is_auto_reply": bool(r.get("is_auto_reply")),
                     "is_user_sent": bool(user_email and from_email.lower() == user_email),
                     "has_attachments": bool(r.get("has_attachments")) or bool(attach_names),
