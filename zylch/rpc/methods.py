@@ -522,6 +522,60 @@ def _task_change_key(task: Dict[str, Any]) -> str:
     return str(task.get("analyzed_at") or "")
 
 
+def _estimate_update_eta(store, owner_id: str) -> str:
+    """Rough human-readable ETA for update.run based on how many emails
+    the pipeline will have to touch.
+
+    The real per-email time dominates: IMAP fetch + 2 LLM passes
+    (memory extraction, task detection). On a typical run each email
+    costs somewhere between 1 and 3 seconds wall clock. We don't try
+    to be precise — a coarse bucket is enough for the user to decide
+    whether to wait or go do something else.
+    """
+    from sqlalchemy import or_
+
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Email
+
+    try:
+        with get_session() as session:
+            # Pending = not yet memory-extracted OR not yet task-analyzed.
+            pending = (
+                session.query(Email)
+                .filter(Email.owner_id == owner_id)
+                .filter(
+                    or_(
+                        Email.memory_processed_at.is_(None),
+                        Email.task_processed_at.is_(None),
+                    )
+                )
+                .count()
+            )
+            # If the local store is empty this is a first-time sync: IMAP
+            # will pull the whole window (default 60 days) before the
+            # pipeline even starts counting, so nudge the estimate up.
+            total = session.query(Email).filter(Email.owner_id == owner_id).count()
+    except Exception as e:
+        logger.warning(f"[rpc] update ETA calc failed: {e}")
+        return "unknown"
+
+    first_run_bump = 0
+    if total == 0:
+        # Assume ~25 emails/day on a typical business inbox × 60 days.
+        first_run_bump = 1500
+
+    load = pending + first_run_bump
+    if load < 20:
+        return "under 1 minute"
+    if load < 100:
+        return "2-5 minutes"
+    if load < 500:
+        return "15-30 minutes"
+    if load < 2000:
+        return "1-2 hours"
+    return "2+ hours (first sync — grab a coffee)"
+
+
 def _truncate(s: Any, n: int) -> str:
     s = "" if s is None else str(s)
     if len(s) <= n:
@@ -659,7 +713,19 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
         logger.warning(f"[rpc] update.run: before-snapshot failed, diff will be empty: {e}")
         before_open = {}
 
-    _emit(0, "Starting full pipeline…")
+    # Rough ETA from the number of emails the pipeline will have to
+    # touch (unprocessed memory + unprocessed tasks). Not a real
+    # estimator — just enough to tell the user "quick" vs "go walk
+    # the dog" vs "first sync, clear your afternoon".
+    eta_text = _estimate_update_eta(store, owner_id)
+    try:
+        notify(
+            "update.progress",
+            {"pct": 0, "message": "Starting full pipeline…", "eta": eta_text},
+        )
+    except Exception as e:
+        logger.warning(f"[rpc] update.progress eta notify failed: {e}")
+
     # Run the pipeline in a worker thread with its own event loop. The
     # pipeline is declared async but internally does blocking work
     # (IMAP, SQLAlchemy sync, FTS) that would otherwise starve the
