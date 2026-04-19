@@ -1,0 +1,591 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { InboxThread, ThreadEmail } from '../types'
+import { errorMessage, isProfileLockedError } from '../lib/errors'
+import EmailComposeModal, { ComposeSeed } from './EmailComposeModal'
+
+type Folder = 'inbox' | 'drafts' | 'sent'
+
+function formatShortDate(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const now = new Date()
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  if (sameDay) return d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+  const sameYear = d.getFullYear() === now.getFullYear()
+  if (sameYear)
+    return d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })
+  return d.toLocaleDateString('it-IT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit'
+  })
+}
+
+function formatFullDate(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleString('it-IT')
+}
+
+/**
+ * Email view — Superhuman-lite 3-column layout.
+ *
+ * Column 1 (180px):  sub-sidebar — Inbox / Drafts / Sent (badge on Drafts)
+ * Column 2 (320px):  thread list for the active folder
+ * Column 3 (flex):   reading pane (loads via emails.list_by_thread)
+ *
+ * Keyboard (when focus is not in INPUT/TEXTAREA):
+ *   J / ArrowDown  — next thread
+ *   K / ArrowUp    — prev thread
+ *   Enter          — scroll selected into view (no-op otherwise in 3-col layout)
+ *   R              — reply compose (pre-populated)
+ *   C              — blank compose
+ */
+export default function Email(): JSX.Element {
+  const [folder, setFolder] = useState<Folder>('inbox')
+  const [threads, setThreads] = useState<InboxThread[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [pinning, setPinning] = useState<Set<string>>(new Set())
+  const [compose, setCompose] = useState<ComposeSeed | null>(null)
+  const [draftsCount, setDraftsCount] = useState<number>(0)
+
+  const listRef = useRef<HTMLDivElement | null>(null)
+
+  // ─── data ─────────────────────────────────────────────────────────
+  const PAGE_SIZE = 50
+
+  const loadFolder = useCallback(
+    async (target: Folder, append = false) => {
+      setLoading(true)
+      setError(null)
+      try {
+        if (target === 'inbox') {
+          const r = await window.zylch.emails.listInbox({
+            limit: PAGE_SIZE,
+            offset: append ? threads.length : 0
+          })
+          setThreads((prev) => (append ? [...prev, ...r.threads] : r.threads))
+          setHasMore(r.threads.length === PAGE_SIZE)
+        } else if (target === 'sent') {
+          const r = await window.zylch.emails.listSent({
+            limit: PAGE_SIZE,
+            offset: append ? threads.length : 0
+          })
+          setThreads((prev) => (append ? [...prev, ...r.threads] : r.threads))
+          setHasMore(r.threads.length === PAGE_SIZE)
+        } else {
+          // Drafts use the existing chat-side endpoint — no dedicated RPC
+          // is exposed for the desktop today. We just surface the count,
+          // and the user edits drafts via the chat flow. The middle column
+          // shows a stub; clicking a draft in the future could reuse the
+          // compose modal pre-populated.
+          setThreads([])
+          setHasMore(false)
+        }
+      } catch (e: unknown) {
+        if (!isProfileLockedError(e)) setError(errorMessage(e))
+      } finally {
+        setLoading(false)
+      }
+    },
+    [threads.length]
+  )
+
+  // Initial load + folder change.
+  useEffect(() => {
+    setSelectedId(null)
+    setThreads([])
+    void loadFolder(folder, false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folder])
+
+  // Drafts badge: refresh on mount + every 30s. Uses the existing
+  // tasks.list RPC? No — there's no public list_drafts RPC yet. Rather
+  // than add one in this round, we derive a best-effort count from the
+  // chat pipeline's narration output. To stay within the "no new deps,
+  // no new RPC beyond spec" constraint, we just leave this at 0 until
+  // a future round wires up drafts.list. Keeps the UI element visible.
+  useEffect(() => {
+    setDraftsCount(0)
+  }, [])
+
+  // ─── selection ────────────────────────────────────────────────────
+  const selectedIndex = useMemo(() => {
+    if (!selectedId) return -1
+    return threads.findIndex((t) => t.thread_id === selectedId)
+  }, [threads, selectedId])
+
+  const selected = selectedIndex >= 0 ? threads[selectedIndex] : null
+
+  const selectByIndex = useCallback(
+    (idx: number) => {
+      if (idx < 0 || idx >= threads.length) return
+      const t = threads[idx]
+      setSelectedId(t.thread_id)
+      // Optimistically clear unread on open; fire-and-forget mark_read.
+      if (t.unread) {
+        setThreads((prev) =>
+          prev.map((x) => (x.thread_id === t.thread_id ? { ...x, unread: false } : x))
+        )
+      }
+      window.zylch.emails.markRead(t.thread_id).catch(() => {
+        /* fire-and-forget */
+      })
+      // Scroll selected card into view in the list column.
+      requestAnimationFrame(() => {
+        const node = listRef.current?.querySelector<HTMLElement>(
+          `[data-thread-id="${CSS.escape(t.thread_id)}"]`
+        )
+        node?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      })
+    },
+    [threads]
+  )
+
+  // ─── pin ───────────────────────────────────────────────────────────
+  const onPin = useCallback(
+    async (thread: InboxThread, evt?: React.MouseEvent) => {
+      evt?.stopPropagation()
+      const next = !thread.pinned
+      setPinning((s) => new Set(s).add(thread.thread_id))
+      // Optimistic update.
+      setThreads((prev) =>
+        prev.map((t) => (t.thread_id === thread.thread_id ? { ...t, pinned: next } : t))
+      )
+      try {
+        await window.zylch.emails.pin(thread.thread_id, next)
+        // Re-fetch to get authoritative ordering.
+        await loadFolder(folder, false)
+      } catch (e: unknown) {
+        // Roll back.
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.thread_id === thread.thread_id ? { ...t, pinned: thread.pinned } : t
+          )
+        )
+        if (!isProfileLockedError(e)) setError(errorMessage(e))
+      } finally {
+        setPinning((s) => {
+          const n = new Set(s)
+          n.delete(thread.thread_id)
+          return n
+        })
+      }
+    },
+    [folder, loadFolder]
+  )
+
+  // ─── keyboard shortcuts ───────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const active = document.activeElement
+      const tag = active?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (active as HTMLElement)?.isContentEditable) {
+        return
+      }
+      // Don't hijack shortcuts while the compose modal is open.
+      if (compose) return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      switch (e.key) {
+        case 'j':
+        case 'J':
+        case 'ArrowDown':
+          e.preventDefault()
+          selectByIndex(Math.min(threads.length - 1, (selectedIndex < 0 ? 0 : selectedIndex + 1)))
+          break
+        case 'k':
+        case 'K':
+        case 'ArrowUp':
+          e.preventDefault()
+          selectByIndex(Math.max(0, selectedIndex - 1))
+          break
+        case 'Enter':
+          if (selectedIndex >= 0) selectByIndex(selectedIndex)
+          break
+        case 'r':
+        case 'R':
+          if (selected) {
+            const existingTo = selected.from_email || ''
+            const subj = selected.subject?.startsWith('Re:')
+              ? selected.subject
+              : `Re: ${selected.subject || ''}`
+            setCompose({
+              to: existingTo,
+              subject: subj,
+              body: '',
+              thread_id: selected.thread_id,
+              in_reply_to: selected.last_email_id
+            })
+          }
+          break
+        case 'c':
+        case 'C':
+          setCompose({ to: '', subject: '', body: '' })
+          break
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [threads, selectedIndex, selected, selectByIndex, compose])
+
+  // ─── rendering ────────────────────────────────────────────────────
+  const folders: Array<{ id: Folder; label: string; badge?: number }> = [
+    { id: 'inbox', label: 'Inbox' },
+    { id: 'drafts', label: 'Drafts', badge: draftsCount },
+    { id: 'sent', label: 'Sent' }
+  ]
+
+  return (
+    <div className="flex h-full">
+      {/* Col 1: folder list */}
+      <aside className="w-[180px] shrink-0 border-r bg-slate-50 flex flex-col">
+        <button
+          onClick={() => setCompose({ to: '', subject: '', body: '' })}
+          className="m-3 px-3 py-2 rounded text-sm font-medium text-white"
+          style={{ backgroundColor: 'var(--profile-accent)' }}
+        >
+          ✎ Compose
+        </button>
+        <nav className="flex flex-col px-2 gap-1">
+          {folders.map((f) => {
+            const active = folder === f.id
+            return (
+              <button
+                key={f.id}
+                onClick={() => setFolder(f.id)}
+                className={
+                  'flex items-center justify-between px-3 py-1.5 rounded text-sm transition-colors ' +
+                  (active
+                    ? 'text-white'
+                    : 'text-slate-700 hover:bg-slate-200')
+                }
+                style={active ? { backgroundColor: 'var(--profile-accent)' } : undefined}
+              >
+                <span>{f.label}</span>
+                {f.badge != null && f.badge > 0 && (
+                  <span
+                    className={
+                      'text-xs rounded-full px-2 py-0.5 ' +
+                      (active
+                        ? 'bg-white/25 text-white'
+                        : 'bg-slate-200 text-slate-700')
+                    }
+                  >
+                    {f.badge}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </nav>
+      </aside>
+
+      {/* Col 2: thread list */}
+      <section
+        ref={listRef}
+        className="w-[320px] shrink-0 border-r bg-white overflow-y-auto"
+      >
+        {loading && threads.length === 0 && (
+          <div className="p-4 text-sm text-slate-500">Loading…</div>
+        )}
+        {error && (
+          <div className="p-4 text-sm text-red-700">Failed: {error}</div>
+        )}
+        {!loading && !error && threads.length === 0 && folder !== 'drafts' && (
+          <div className="p-4 text-sm text-slate-500">No threads.</div>
+        )}
+        {folder === 'drafts' && (
+          <div className="p-4 text-sm text-slate-500">
+            Drafts live in the chat flow for now. Use Compose to create a new
+            one.
+          </div>
+        )}
+        <ul className="flex flex-col">
+          {threads.map((t) => {
+            const isSel = t.thread_id === selectedId
+            const who = t.from_name?.trim() || t.from_email || '(no sender)'
+            return (
+              <li
+                key={t.thread_id}
+                data-thread-id={t.thread_id}
+                onClick={() => {
+                  const idx = threads.findIndex((x) => x.thread_id === t.thread_id)
+                  selectByIndex(idx)
+                }}
+                className={
+                  'group relative px-3 py-2 border-b cursor-pointer select-none ' +
+                  (isSel
+                    ? 'bg-[color:var(--profile-accent-soft)] '
+                    : 'hover:bg-slate-50 ') +
+                  (t.pinned ? 'border-l-4 ' : 'border-l-4 border-l-transparent ')
+                }
+                style={
+                  t.pinned
+                    ? { borderLeftColor: 'var(--profile-accent)' }
+                    : undefined
+                }
+              >
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                  <div
+                    className={
+                      'text-sm truncate min-w-0 ' +
+                      (t.unread ? 'font-semibold text-slate-900' : 'text-slate-700')
+                    }
+                  >
+                    {t.pinned && (
+                      <span className="mr-1" title="Pinned">
+                        📌
+                      </span>
+                    )}
+                    {who}
+                  </div>
+                  <div className="text-xs text-slate-500 whitespace-nowrap shrink-0">
+                    {formatShortDate(t.date)}
+                  </div>
+                </div>
+                <div
+                  className={
+                    'text-sm truncate ' +
+                    (t.unread ? 'font-medium text-slate-800' : 'text-slate-700')
+                  }
+                >
+                  {t.subject || '(no subject)'}
+                  {t.message_count > 1 && (
+                    <span className="text-xs text-slate-400 ml-1">
+                      ({t.message_count})
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-slate-500 truncate">{t.snippet}</div>
+                {/* Pin button (visible on hover) */}
+                <button
+                  onClick={(e) => onPin(t, e)}
+                  disabled={pinning.has(t.thread_id)}
+                  title={t.pinned ? 'Unpin thread' : 'Pin thread'}
+                  className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 focus:opacity-100 text-sm px-1 py-0.5 rounded bg-white/80 border border-slate-200 hover:bg-white disabled:opacity-50"
+                >
+                  📌
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+        {hasMore && (
+          <div className="p-3 text-center">
+            <button
+              onClick={() => void loadFolder(folder, true)}
+              disabled={loading}
+              className="px-3 py-1.5 text-sm border rounded hover:bg-slate-50 disabled:opacity-50"
+            >
+              {loading ? 'Loading…' : 'Load more'}
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* Col 3: reading pane */}
+      <section className="flex-1 min-w-0 flex flex-col bg-white">
+        {!selected && (
+          <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
+            Select a thread
+          </div>
+        )}
+        {selected && (
+          <ThreadReadingPane
+            thread={selected}
+            onReply={() => {
+              setCompose({
+                to: selected.from_email || '',
+                subject: selected.subject?.startsWith('Re:')
+                  ? selected.subject
+                  : `Re: ${selected.subject || ''}`,
+                body: '',
+                thread_id: selected.thread_id,
+                in_reply_to: selected.last_email_id
+              })
+            }}
+            onPin={() => onPin(selected)}
+            pinning={pinning.has(selected.thread_id)}
+          />
+        )}
+      </section>
+
+      {compose && (
+        <EmailComposeModal
+          open={!!compose}
+          seed={compose}
+          onClose={() => setCompose(null)}
+          onAfterSend={() => {
+            setCompose(null)
+            // If we sent from the current thread, refresh list for read state.
+            void loadFolder(folder, false)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Reading pane — fetches the full thread via emails.list_by_thread and
+ * renders it newest-first (mirroring the Workspace ThreadPanel style).
+ */
+function ThreadReadingPane({
+  thread,
+  onReply,
+  onPin,
+  pinning
+}: {
+  thread: InboxThread
+  onReply: () => void
+  onPin: () => void
+  pinning: boolean
+}): JSX.Element {
+  const [emails, setEmails] = useState<ThreadEmail[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    setEmails([])
+    window.zylch.emails
+      .listByThread(thread.thread_id)
+      .then((r) => {
+        if (cancelled) return
+        // Newest first.
+        setEmails(r.emails.slice().reverse())
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return
+        if (!isProfileLockedError(e)) setError(errorMessage(e))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [thread.thread_id])
+
+  return (
+    <>
+      <header className="border-b px-4 py-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold truncate">
+            {thread.subject || '(no subject)'}
+          </h2>
+          <div className="text-xs text-slate-500">
+            {emails.length || thread.message_count} messages
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={onReply}
+            className="px-3 py-1.5 text-sm text-white rounded"
+            style={{ backgroundColor: 'var(--profile-accent)' }}
+          >
+            Reply
+          </button>
+          <button
+            disabled
+            title="Forward (coming soon)"
+            className="px-3 py-1.5 text-sm border rounded text-slate-400 cursor-not-allowed"
+          >
+            Forward
+          </button>
+          <button
+            onClick={onPin}
+            disabled={pinning}
+            title={thread.pinned ? 'Unpin' : 'Pin'}
+            className={
+              'px-2 py-1.5 text-sm border rounded hover:bg-slate-50 disabled:opacity-50 ' +
+              (thread.pinned ? 'bg-amber-50 border-amber-300' : '')
+            }
+          >
+            📌
+          </button>
+          <button
+            disabled
+            title="Archive (coming soon)"
+            className="px-3 py-1.5 text-sm border rounded text-slate-400 cursor-not-allowed"
+          >
+            Archive
+          </button>
+        </div>
+      </header>
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {loading && <div className="text-sm text-slate-500">Loading thread…</div>}
+        {error && <div className="text-sm text-red-700">Failed: {error}</div>}
+        {!loading && !error && emails.length === 0 && (
+          <div className="text-sm text-slate-500">No messages.</div>
+        )}
+        {emails.map((e) => (
+          <article
+            key={e.id}
+            className={
+              'border rounded-lg p-3 shadow-sm bg-white ' +
+              (e.is_user_sent ? 'border-l-4 border-l-emerald-500' : '')
+            }
+          >
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <div className="text-sm text-slate-900 min-w-0 break-words">
+                {e.is_user_sent && (
+                  <span className="inline-block text-xs px-2 py-0.5 mr-2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    You →
+                  </span>
+                )}
+                {e.is_auto_reply && (
+                  <span className="inline-block text-xs px-2 py-0.5 mr-2 rounded bg-slate-100 text-slate-600 border border-slate-300">
+                    auto
+                  </span>
+                )}
+                <span className="font-medium">
+                  {e.from_name ? `${e.from_name} ` : ''}
+                  <span className="text-slate-500">&lt;{e.from_email}&gt;</span>
+                </span>
+              </div>
+              <div className="text-xs text-slate-500 whitespace-nowrap">
+                {formatFullDate(e.date)}
+              </div>
+            </div>
+            <div className="text-xs text-slate-500 mb-2 break-words">
+              <span>To: {e.to_email || '—'}</span>
+              {e.cc_email && <span> · Cc: {e.cc_email}</span>}
+            </div>
+            <pre className="text-sm text-slate-900 whitespace-pre-wrap break-words font-sans select-text m-0">
+              {e.body_plain}
+            </pre>
+            {(e.has_attachments || e.attachment_filenames.length > 0) && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {e.attachment_filenames.length > 0
+                  ? e.attachment_filenames.map((name, i) => (
+                      <span
+                        key={i}
+                        className="text-xs px-2 py-0.5 rounded border border-slate-300 bg-slate-50 text-slate-700"
+                      >
+                        📎 {name}
+                      </span>
+                    ))
+                  : (
+                      <span className="text-xs px-2 py-0.5 rounded border border-slate-300 bg-slate-50 text-slate-700">
+                        📎 attachment
+                      </span>
+                    )}
+              </div>
+            )}
+          </article>
+        ))}
+      </div>
+    </>
+  )
+}

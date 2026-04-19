@@ -3,6 +3,7 @@ import Tasks from './views/Tasks'
 import Workspace from './views/Workspace'
 import Update from './views/Update'
 import Settings from './views/Settings'
+import Email from './views/Email'
 import NewProfileWizard from './views/NewProfileWizard'
 import { ConversationsProvider } from './store/conversations'
 import { ThreadProvider, useThread } from './store/thread'
@@ -12,7 +13,7 @@ import type { SidecarStatusEvent } from './types'
 import { errorMessage, isProfileLockedError } from './lib/errors'
 import './types'
 
-type View = 'tasks' | 'workspace' | 'update' | 'settings'
+type View = 'tasks' | 'workspace' | 'email' | 'update' | 'settings'
 
 // Banner shown at the top of the window when the sidecar is dead. The
 // most common case is a profile lock: the user opened a second window on
@@ -330,18 +331,19 @@ function ProfilesDropdown({
         title="Open another profile in a new window"
         aria-haspopup="menu"
         aria-expanded={open}
-        className="px-2 py-1 rounded text-xs border hover:bg-white/60"
+        className="px-2 py-1 rounded text-xs border hover:bg-white/60 text-left flex items-center justify-between"
         style={{
           borderColor: 'var(--profile-accent)',
           color: 'var(--profile-accent)'
         }}
       >
-        Profiles {open ? '\u25B4' : '\u25BE'}
+        <span>Profiles</span>
+        <span>{open ? '\u25B4' : '\u25BE'}</span>
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute right-0 mt-1 min-w-[260px] bg-white border border-slate-200 rounded shadow-lg z-40 py-1"
+          className="absolute left-0 bottom-full mb-1 min-w-[220px] bg-white border border-slate-200 rounded shadow-lg z-40 py-1"
         >
           {loading && (
             <div className="px-3 py-2 text-xs text-slate-500">Loading profiles...</div>
@@ -395,6 +397,10 @@ function AppInner(): JSX.Element {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [profilesRefreshKey, setProfilesRefreshKey] = useState(0)
+  // Email address is required to render the Email nav item (we hide it
+  // rather than showing a broken tab when the profile isn't set up for
+  // IMAP). Loaded once via settings.get().
+  const [hasEmailConfigured, setHasEmailConfigured] = useState<boolean>(false)
   const { setActiveThreadId, setActiveTaskId } = useThread()
 
   // Resolve the active profile once on mount, derive the accent colour, and
@@ -430,99 +436,85 @@ function AppInner(): JSX.Element {
     return off
   }, [])
 
-  const tabs: { id: View; label: string }[] = [
-    { id: 'tasks', label: 'Task' },
-    { id: 'workspace', label: 'Workspace' },
-    { id: 'update', label: 'Update' },
-    { id: 'settings', label: 'Settings' }
-  ]
+  // Detect whether this profile has EMAIL_ADDRESS configured; gates the
+  // Email sidebar item. Runs once on mount — a profile edit reloads the
+  // sidecar which remounts this whole tree.
+  useEffect(() => {
+    let cancelled = false
+    window.zylch.settings
+      .get()
+      .then((r) => {
+        if (cancelled) return
+        const addr = (r.values?.EMAIL_ADDRESS || '').trim()
+        setHasEmailConfigured(!!addr)
+      })
+      .catch(() => {
+        /* non-fatal — leave Email hidden */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
     <div className="flex flex-col h-full">
       <SidecarStatusBanner />
-      <nav
-        className="flex items-center gap-2 px-4 py-2 border-b"
-        style={{
-          backgroundColor: 'var(--profile-accent-soft)',
-          borderBottomColor: 'var(--profile-accent)',
-          borderBottomWidth: 2
-        }}
-      >
-        <span className="font-semibold text-lg mr-6">Zylch</span>
-        {tabs.map((t) => {
-          const active = view === t.id
-          return (
-            <button
-              key={t.id}
-              onClick={() => setView(t.id)}
-              className={
-                'px-3 py-1.5 rounded text-sm transition-colors ' +
-                (active ? 'text-white' : 'text-slate-700 hover:bg-white/60')
-              }
-              style={
-                active
-                  ? { backgroundColor: 'var(--profile-accent)' }
-                  : undefined
-              }
-            >
-              {t.label}
-            </button>
-          )
-        })}
-        <div className="ml-auto flex items-center gap-2">
-          {profileEmail && (
-            <span
-              className="text-xs font-mono px-2 py-1 rounded border"
-              style={{
-                backgroundColor: 'var(--profile-accent-soft)',
-                borderColor: 'var(--profile-accent)',
-                color: 'var(--profile-accent)'
-              }}
-              title="Active profile"
-            >
-              {profileEmail}
-            </span>
-          )}
-          <button
-            onClick={() => setWizardOpen(true)}
-            title="Create a brand-new Zylch profile"
-            className="px-2 py-1 rounded text-xs border hover:bg-white/60"
-            style={{
-              borderColor: 'var(--profile-accent)',
-              color: 'var(--profile-accent)'
-            }}
+      <div className="flex flex-1 min-h-0">
+        <Sidebar
+          view={view}
+          setView={setView}
+          profileEmail={profileEmail}
+          hasEmailConfigured={hasEmailConfigured}
+          onNewProfile={() => setWizardOpen(true)}
+          onOpenProfilePicker={() => setPickerOpen(true)}
+          profilesRefreshKey={profilesRefreshKey}
+        />
+        {/* All views are always mounted; inactive ones are hidden. This
+            keeps in-flight state (e.g. Update's running spinner,
+            Settings' loaded schema) alive across tab switches so the
+            user doesn't come back to a view that's "Loading…" or has
+            lost its progress. */}
+        <main className="flex-1 overflow-hidden relative">
+          <div
+            className="absolute inset-0 overflow-auto"
+            style={{ display: view === 'tasks' ? 'block' : 'none' }}
           >
-            + New Profile
-          </button>
-          <ProfilesDropdown
-            currentEmail={profileEmail}
-            refreshKey={profilesRefreshKey}
-          />
-        </div>
-      </nav>
-      {/* All views are always mounted; inactive ones are hidden. This
-          keeps in-flight state (e.g. Update's running spinner, Settings'
-          loaded schema) alive across tab switches so the user doesn't
-          come back to a view that's "Loading…" or has lost its progress. */}
-      <main className="flex-1 overflow-hidden relative">
-        <div className="absolute inset-0 overflow-auto" style={{ display: view === 'tasks' ? 'block' : 'none' }}>
-          <Tasks
-            onOpenWorkspace={(threadId, taskId) => {
-              setActiveThreadId(threadId)
-              setActiveTaskId(taskId)
-              setView('workspace')
-            }}
-          />
-        </div>
-        <div className="absolute inset-0 overflow-auto" style={{ display: view === 'workspace' ? 'block' : 'none' }}>
-          <Workspace onGoToTasks={() => setView('tasks')} />
-        </div>
-        <div className="absolute inset-0 overflow-auto" style={{ display: view === 'update' ? 'block' : 'none' }}>
-          <Update />
-        </div>
-        <div className="absolute inset-0 overflow-auto" style={{ display: view === 'settings' ? 'block' : 'none' }}>
-          <Settings />
-        </div>
-      </main>
+            <Tasks
+              onOpenWorkspace={(threadId, taskId) => {
+                setActiveThreadId(threadId)
+                setActiveTaskId(taskId)
+                setView('workspace')
+              }}
+            />
+          </div>
+          <div
+            className="absolute inset-0 overflow-auto"
+            style={{ display: view === 'workspace' ? 'block' : 'none' }}
+          >
+            <Workspace onGoToTasks={() => setView('tasks')} />
+          </div>
+          {hasEmailConfigured && (
+            <div
+              className="absolute inset-0 overflow-hidden"
+              style={{ display: view === 'email' ? 'block' : 'none' }}
+            >
+              <Email />
+            </div>
+          )}
+          <div
+            className="absolute inset-0 overflow-auto"
+            style={{ display: view === 'update' ? 'block' : 'none' }}
+          >
+            <Update />
+          </div>
+          <div
+            className="absolute inset-0 overflow-auto"
+            style={{ display: view === 'settings' ? 'block' : 'none' }}
+          >
+            <Settings />
+          </div>
+        </main>
+      </div>
       <NewProfileWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
@@ -535,6 +527,168 @@ function AppInner(): JSX.Element {
       />
       <ProfilePickerDialog open={pickerOpen} onClose={() => setPickerOpen(false)} />
     </div>
+  )
+}
+
+/**
+ * Sidebar — left-aligned primary navigation. Replaces the previous top
+ * nav bar. Layout (top → bottom):
+ *   - profile badge + "+ New Window" button
+ *   - nav items (Task / Email [gated] / WhatsApp [placeholder] / MrCall [placeholder])
+ *   - divider
+ *   - Update / Settings
+ *   - profiles footer
+ */
+function Sidebar({
+  view,
+  setView,
+  profileEmail,
+  hasEmailConfigured,
+  onNewProfile,
+  onOpenProfilePicker,
+  profilesRefreshKey
+}: {
+  view: View
+  setView: (v: View) => void
+  profileEmail: string
+  hasEmailConfigured: boolean
+  onNewProfile: () => void
+  onOpenProfilePicker: () => void
+  profilesRefreshKey: number
+}): JSX.Element {
+  type NavItem = {
+    id: View
+    label: string
+    icon: string
+    disabled?: boolean
+    disabledTitle?: string
+    hidden?: boolean
+  }
+
+  const primary: NavItem[] = [
+    { id: 'tasks', label: 'Task', icon: '📋' },
+    {
+      id: 'email',
+      label: 'Email',
+      icon: '📧',
+      hidden: !hasEmailConfigured
+    },
+    {
+      // placeholder — not yet wired; clicking does nothing.
+      id: 'tasks',
+      label: 'WhatsApp',
+      icon: '💬',
+      disabled: true,
+      disabledTitle: 'Not connected'
+    },
+    {
+      id: 'tasks',
+      label: 'MrCall',
+      icon: '📞',
+      disabled: true,
+      disabledTitle: 'Not connected'
+    }
+  ]
+
+  const secondary: NavItem[] = [
+    { id: 'update', label: 'Update', icon: '🔄' },
+    { id: 'settings', label: 'Settings', icon: '⚙' }
+  ]
+
+  const renderItem = (item: NavItem, key: string): JSX.Element | null => {
+    if (item.hidden) return null
+    const active = !item.disabled && view === item.id
+    return (
+      <button
+        key={key}
+        onClick={() => {
+          if (item.disabled) return
+          setView(item.id)
+        }}
+        title={item.disabled ? item.disabledTitle : undefined}
+        disabled={item.disabled}
+        className={
+          'flex items-center gap-2 px-3 py-2 rounded text-sm text-left transition-colors ' +
+          (item.disabled
+            ? 'text-slate-400 cursor-not-allowed'
+            : active
+              ? 'text-white'
+              : 'text-slate-700 hover:bg-white/60')
+        }
+        style={active ? { backgroundColor: 'var(--profile-accent)' } : undefined}
+      >
+        <span aria-hidden="true" className="w-5 text-center">
+          {item.icon}
+        </span>
+        <span className="truncate">{item.label}</span>
+      </button>
+    )
+  }
+
+  return (
+    <aside
+      className="w-[220px] shrink-0 border-r flex flex-col"
+      style={{ backgroundColor: 'var(--profile-accent-soft)' }}
+    >
+      <header className="px-3 py-3 border-b border-black/5 flex flex-col gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="inline-block w-3 h-3 rounded-full shrink-0"
+            style={{ backgroundColor: 'var(--profile-accent)' }}
+            aria-hidden="true"
+          />
+          <span className="font-semibold text-base truncate">Zylch</span>
+        </div>
+        {profileEmail && (
+          <div
+            className="text-[11px] font-mono truncate px-2 py-1 rounded border"
+            style={{
+              borderColor: 'var(--profile-accent)',
+              color: 'var(--profile-accent)',
+              backgroundColor: 'white'
+            }}
+            title={profileEmail}
+          >
+            {profileEmail}
+          </div>
+        )}
+        <button
+          onClick={onOpenProfilePicker}
+          title="Open another profile in a new window"
+          className="px-2 py-1 rounded text-xs border hover:bg-white/60"
+          style={{
+            borderColor: 'var(--profile-accent)',
+            color: 'var(--profile-accent)'
+          }}
+        >
+          + New Window
+        </button>
+      </header>
+
+      <nav className="flex-1 overflow-y-auto px-2 py-3 flex flex-col gap-1">
+        {primary.map((it, i) => renderItem(it, `p-${i}`))}
+        <div className="h-px bg-black/10 my-2 mx-1" />
+        {secondary.map((it, i) => renderItem(it, `s-${i}`))}
+      </nav>
+
+      <footer className="border-t border-black/5 px-2 py-2 flex flex-col gap-1.5">
+        <button
+          onClick={onNewProfile}
+          title="Create a brand-new Zylch profile"
+          className="px-2 py-1 rounded text-xs border hover:bg-white/60 text-left"
+          style={{
+            borderColor: 'var(--profile-accent)',
+            color: 'var(--profile-accent)'
+          }}
+        >
+          + New Profile
+        </button>
+        <ProfilesDropdown
+          currentEmail={profileEmail}
+          refreshKey={profilesRefreshKey}
+        />
+      </footer>
+    </aside>
   )
 }
 
