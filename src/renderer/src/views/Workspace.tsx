@@ -51,12 +51,15 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
   const [panelExpanded, setPanelExpanded] = useState<Record<string, boolean>>({})
 
   // Thread ID to render in the Source panel. Priority:
-  //   1. The global `activeThreadId` if the active conversation's
-  //      taskId matches `activeTaskId` (i.e. this Workspace was just
-  //      opened from Tasks.tsx with a fresh thread).
-  //   2. task.sources.thread_id isn't on the Conversation type, so we
-  //      fall back to `activeThreadId` only when the task matches.
+  //   1. A thread-only conversation carries the id via the `thread-`
+  //      prefix contract (set by `openThreadChat` in Email view) — use
+  //      that first so switching sidebar conversations always shows the
+  //      right thread, without relying on the thread store.
+  //   2. Otherwise, for task-backed conversations, the global
+  //      `activeThreadId` is the thread Tasks.tsx opened us with (when
+  //      the task matches `activeTaskId`).
   const sourceThreadId = (() => {
+    if (active.id.startsWith('thread-')) return active.id.slice('thread-'.length)
     if (!active.taskId) return null
     if (activeTaskId === active.taskId) return activeThreadId
     return null
@@ -199,8 +202,9 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
   }
 
   // Decide panel expansion for the current conversation. User overrides
-  // stored in `panelExpanded` win; otherwise use the default rule.
-  const defaultExpanded = !!(active.taskId && sourceThreadId)
+  // stored in `panelExpanded` win; otherwise use the default rule:
+  // expanded whenever we have a thread to show.
+  const defaultExpanded = !!sourceThreadId
   const isPanelExpanded = active.id in panelExpanded
     ? panelExpanded[active.id]
     : defaultExpanded
@@ -259,10 +263,10 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
           )}
         </header>
 
-        {/* Source panel: email thread preview for task conversations.
-            Key by conversation id so React remounts and resets internal
-            state when the user switches to a different task. */}
-        {active.taskId && sourceThreadId && (
+        {/* Source panel: email thread preview for task OR thread-only
+            conversations. Key by conversation id so React remounts and
+            resets internal state when the user switches conversations. */}
+        {sourceThreadId && (
           <ThreadPanel
             key={`source-${active.id}`}
             threadId={sourceThreadId}
