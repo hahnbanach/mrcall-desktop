@@ -116,7 +116,11 @@ const api = {
     }
   },
   update: {
-    run: () => call<any>('update.run', {}, 600000)
+    // 12h ceiling — a first sync on a busy inbox can legitimately take
+    // 1–4h (IMAP pull + memory extraction + task detection over every
+    // thread). The old 10-minute timeout was giving users a bogus
+    // "rpc timeout: update.run" error on new profiles.
+    run: () => call<any>('update.run', {}, 12 * 3600 * 1000)
   },
   emails: {
     listByThread: (threadId: string) =>
