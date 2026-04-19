@@ -12,6 +12,8 @@ interface FieldDescriptor {
   options?: string[]
   help?: string
   secret?: boolean
+  /** Render a native folder picker next to the text input. */
+  picker?: 'directory' | 'directories'
 }
 
 const SECRET_PLACEHOLDER = '<set>'
@@ -283,17 +285,22 @@ function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Eleme
     )
   }
 
-  const isDirectoryList = field.key === 'DOCUMENT_PATHS'
   const pickDirectories = async (): Promise<void> => {
     try {
       const picked = await window.zylch.files.selectDirectories()
       if (picked.length === 0) return
-      const existing = value
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-      const merged = Array.from(new Set([...existing, ...picked])).join(', ')
-      onChange(merged)
+      if (field.picker === 'directory') {
+        // Single-directory field — last pick wins.
+        onChange(picked[picked.length - 1])
+      } else {
+        // Multi-directory field — append, dedup, join with ", ".
+        const existing = value
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+        const merged = Array.from(new Set([...existing, ...picked])).join(', ')
+        onChange(merged)
+      }
     } catch {
       /* user cancelled or dialog failed — silent */
     }
@@ -306,14 +313,14 @@ function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Eleme
         {!field.optional && <span className="text-red-600 ml-1">*</span>}
         <span className="ml-2 text-slate-400 font-mono text-[10px]">{field.key}</span>
       </label>
-      {isDirectoryList ? (
+      {field.picker ? (
         <div className="flex gap-2">
           <div className="flex-1">{control}</div>
           <button
             type="button"
             onClick={pickDirectories}
             className="px-3 py-2 text-sm border border-slate-300 rounded hover:bg-slate-100"
-            title="Pick folders in Finder"
+            title="Pick folder(s) in Finder"
           >
             📁 Browse…
           </button>
