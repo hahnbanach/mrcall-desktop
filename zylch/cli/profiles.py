@@ -55,26 +55,31 @@ def acquire_lock(profile_name: str) -> bool:
     global _lock_fd
     lock_path = os.path.join(get_profile_dir(profile_name), "profile.lock")
 
-    # Clean stale lock: if file exists, check if PID is alive
+    # Clean stale lock. Authoritative liveness check is flock, not the
+    # PID stored in the file — on macOS especially, a dead sidecar's PID
+    # is often reused by an unrelated process (Electron helper, npm, …)
+    # and os.kill(pid, 0) then falsely reports "alive". Advisory flock
+    # is released by the kernel on process exit, so if we can take it
+    # the previous owner is gone and the file is stale.
     if os.path.isfile(lock_path):
+        probe_fd = None
         try:
-            with open(lock_path, "r") as f:
-                content = f.read().strip()
-            if not content:
-                raise ValueError("empty lock file")
-            old_pid = int(content)
-            # Check if process is still running
-            os.kill(old_pid, 0)
-            # Process alive — lock is legitimate, don't remove
-        except (ValueError, ProcessLookupError):
-            # PID invalid, empty, or dead — remove stale lock
+            probe_fd = open(lock_path, "r+")
+            fcntl.flock(probe_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (OSError, IOError):
+            # flock held by a live process — lock is legitimate
+            if probe_fd:
+                probe_fd.close()
+        else:
+            try:
+                fcntl.flock(probe_fd, fcntl.LOCK_UN)
+            finally:
+                probe_fd.close()
             try:
                 os.remove(lock_path)
                 logger.debug(f"[profile] Removed stale lock: {lock_path}")
             except OSError:
                 pass
-        except PermissionError:
-            pass  # Process exists but different user
 
     try:
         _lock_fd = open(lock_path, "w")
