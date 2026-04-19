@@ -124,7 +124,9 @@ const api = {
   },
   files: {
     select: (): Promise<string[]> =>
-      ipcRenderer.invoke('dialog:selectFiles') as Promise<string[]>
+      ipcRenderer.invoke('dialog:selectFiles') as Promise<string[]>,
+    selectDirectories: (): Promise<string[]> =>
+      ipcRenderer.invoke('dialog:selectDirectories') as Promise<string[]>
   },
   profile: {
     current: (): Promise<string> => ipcRenderer.invoke('profile:current') as Promise<string>
