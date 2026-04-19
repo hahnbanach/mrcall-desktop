@@ -6,14 +6,11 @@ to analyze each event and determine if user action is needed.
 
 import json
 import logging
-import re
-from difflib import SequenceMatcher
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from zylch.llm import LLMClient
 from zylch.storage import Storage
-from zylch.storage.models import Email
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 from zylch.workers.thread_presenter import build_thread_history, strip_quoted
 
@@ -131,92 +128,8 @@ class TaskWorker:
         logger.debug(f"[TASK] _is_user_email({email}) -> False")
         return False
 
-    def _is_duplicate_task(self, new_title: str) -> bool:
-        """Check if a similar open task already exists (title similarity > 0.5)."""
-        open_tasks = self.storage.get_task_items(self.owner_id) or []
-        new_lower = new_title.lower()
-        for task in open_tasks:
-            existing = (task.get("suggested_action") or "").lower()
-            if not existing:
-                continue
-            ratio = SequenceMatcher(None, new_lower, existing).ratio()
-            if ratio > 0.5:
-                logger.debug(
-                    f"[task] Skipping duplicate: '{new_title}' similar to existing '{existing}' (ratio={ratio:.2f})"
-                )
-                return True
-        return False
-
-    _NOTIFICATION_PATTERNS = [
-        "noreply",
-        "no-reply",
-        "no_reply",
-        "donotreply",
-        "do-not-reply",
-        "do_not_reply",
-        "notification",
-        "notifications",
-        "mailer-daemon",
-        "postmaster",
-        "autoresponder",
-        "auto-reply",
-        "autoreply",
-        "bounce",
-        "daemon",
-        "automated",
-        "system",
-        "alert",
-        "alerts",
-        "news",
-        "newsletter",
-        "marketing",
-        "digest",
-        "updates",
-        "info",
-        "support",
-        "helpdesk",
-        "feedback",
-    ]
-
-    _NOTIFICATION_DOMAINS = [
-        "accounts.google.com",
-        "facebookmail.com",
-        "linkedin.com",
-        "amazonses.com",
-        "shopify.com",
-        "stripe.com",
-        "paypal.com",
-        "squarespace.com",
-        "mailchimp.com",
-        "sendgrid.net",
-        "mandrillapp.com",
-        "postmarkapp.com",
-    ]
-
-    def _is_notification_sender(self, email: str) -> bool:
-        if not email:
-            return False
-        email_lower = email.lower()
-        local = email_lower.split("@")[0] if "@" in email_lower else email_lower
-        for pat in self._NOTIFICATION_PATTERNS:
-            if pat in local:
-                return True
-        if "@" in email_lower:
-            domain = email_lower.split("@")[1]
-            for d in self._NOTIFICATION_DOMAINS:
-                if domain == d or domain.endswith("." + d):
-                    return True
-        return False
-
     def _is_auto_reply(self, email_dict: Dict) -> bool:
-        """Check if an email is an auto-reply (not a real human response)."""
-        body = (email_dict.get("body_plain") or email_dict.get("snippet") or "").lower()
-        auto_phrases = [
-            "la tua richiesta è stata presa in carico",
-            "your request has been taken up",
-            "ciao mrcaller! grazie mille del tuo messaggio",
-        ]
-        return any(phrase in body for phrase in auto_phrases)
+        return bool(email_dict.get("is_auto_reply"))
 
     def _get_task_prompt(self) -> Optional[str]:
         """Get task detection prompt from storage."""
@@ -265,13 +178,11 @@ class TaskWorker:
     ) -> None:
         """Analyze recent events with parallel LLM, sequential DB writes.
 
-        Phase 1 (parallel): for each thread's winner email, run any sync
-        pre-checks (user-self-sent, notifications, hard-coded rules) inline
-        and collect LLM decisions concurrently.
+        Phase 1 (parallel): for each thread's winner email, handle user-
+        authored self_sent / user_reply branches inline and dispatch every
+        non-user inbound email to the LLM.
 
-        Phase 2 (sequential): apply decisions one-by-one with fresh dedup
-        checks. This eliminates the race where two _analyze_one coroutines
-        both pass _is_duplicate_task before either calls store_task_item.
+        Phase 2 (sequential): apply LLM decisions one-by-one.
         """
         import asyncio
 
@@ -379,9 +290,8 @@ class TaskWorker:
 
         sem = asyncio.Semaphore(concurrency)
 
-        # Phase 1: per thread, collect either a "done" marker (already
-        # handled inline: self-sent, user-reply, notification, hard-coded)
-        # or (email, llm_result) for sequential application.
+        # Phase 1: per thread, either classify as user-authored (self_sent /
+        # user_reply — handled inline) or dispatch to the LLM.
         async def _collect(email: Dict):
             nonlocal analyzed_count
 
@@ -405,68 +315,10 @@ class TaskWorker:
                     return ("self_sent", email)
                 return ("user_reply", email)
 
-            if self._is_notification_sender(from_email):
-                return ("notification", email)
-
-            # Hard-coded rules
-            subject = email.get("subject", "")
-            from zylch.storage.database import get_session as _gs
-
-            _hc_task = None
-            if re.search(
-                r"payment reminder|invoice|bill|overdue|is due|payment failed",
-                subject,
-                re.I,
-            ):
-                with _gs() as sess:
-                    cnt = (
-                        sess.query(Email)
-                        .filter(
-                            Email.owner_id == self.owner_id,
-                            Email.from_email.ilike(from_email),
-                        )
-                        .filter(
-                            Email.subject.ilike("%invoice%")
-                            | Email.subject.ilike("%payment%")
-                            | Email.subject.ilike("%bill%")
-                            | Email.subject.ilike("%overdue%")
-                            | Email.subject.ilike("%is due%")
-                        )
-                        .count()
-                    )
-                if cnt >= 2:
-                    _hc_task = {
-                        "urgency": "medium",
-                        "suggested_action": subject,
-                        "reason": f"Repeated invoice/payment reminder from {from_email}. {cnt} reminders received.",
-                        "contact_name": email.get("from_name", ""),
-                    }
-            elif re.match(r"^(Declined|Annullato):", subject, re.I):
-                with _gs() as sess:
-                    cnt = (
-                        sess.query(Email)
-                        .filter(
-                            Email.owner_id == self.owner_id,
-                            Email.from_email.ilike(from_email),
-                        )
-                        .filter(
-                            Email.subject.ilike("Declined:%") | Email.subject.ilike("Annullato:%")
-                        )
-                        .count()
-                    )
-                if cnt >= 2:
-                    cname = email.get("from_name", "") or from_email
-                    _hc_task = {
-                        "urgency": "low",
-                        "suggested_action": f"Reschedule with {cname} — {cnt} meeting declines",
-                        "reason": f"{cname} has declined {cnt} meeting invitations. Consider reaching out by email or proposing a different format.",
-                        "contact_name": cname,
-                    }
-            if _hc_task:
-                return ("hardcoded", email, _hc_task)
-
             # LLM path: build context (thread-aware for Fix D: we surface
             # ANY open task on the thread, not just the current contact).
+            from zylch.storage.database import get_session as _gs
+
             blob_context, blob_id = self._get_blob_for_contact(from_email)
             thread_tasks = (
                 self.storage.get_tasks_by_thread(self.owner_id, thread_id, open_only=True)
@@ -499,7 +351,7 @@ class TaskWorker:
                 existing_task_context = "\n".join(lines)
 
             trigger_body_raw = email.get("body_plain") or email.get("snippet", "")
-            trigger_body_clean = _strip_quoted(trigger_body_raw, cap=1500) or trigger_body_raw
+            trigger_body_clean = _strip_quoted(trigger_body_raw, cap=None) or trigger_body_raw
             event_data = {
                 "id": email.get("id"),
                 "from_email": email.get("from_email"),
@@ -561,7 +413,7 @@ class TaskWorker:
 
             if kind == "self_sent":
                 subject = email.get("subject", "").strip() or "Self-reminder"
-                body = (email.get("body_plain") or email.get("snippet") or "")[:200].strip()
+                body = (email.get("body_plain") or email.get("snippet") or "").strip()
                 desc = f"Self-sent reminder. {body}" if body else "Self-sent reminder"
                 task_result = {
                     "action_required": True,
@@ -581,10 +433,9 @@ class TaskWorker:
                         "calendar_events": [],
                     },
                 }
-                if not self._is_duplicate_task(subject):
-                    self.storage.store_task_item(self.owner_id, task_result)
-                    action_count += 1
-                    logger.debug(f"[TASK] Created self-sent task: {subject}")
+                self.storage.store_task_item(self.owner_id, task_result)
+                action_count += 1
+                logger.debug(f"[TASK] Created self-sent task: {subject}")
                 self.storage.mark_email_task_processed(self.owner_id, email_id)
                 continue
 
@@ -617,40 +468,6 @@ class TaskWorker:
                 # Fix C: mark ALL non-user siblings processed when the thread
                 # winner is a user reply — otherwise they leak to the next run
                 # and regenerate a duplicate task.
-                _mark_thread_nonuser_processed(thread_id)
-                continue
-
-            if kind == "notification":
-                logger.debug(f"[TASK] Skipping notification sender: {from_email}")
-                self.storage.mark_email_task_processed(self.owner_id, email_id)
-                continue
-
-            if kind == "hardcoded":
-                hc = item[2]
-                hc.update(
-                    {
-                        "action_required": True,
-                        "task_action": "create",
-                        "analyzed_at": datetime.now(timezone.utc).isoformat(),
-                        "event_id": email_id,
-                        "event_type": "email",
-                        "contact_email": from_email,
-                        "email_date": email.get("date", ""),
-                        "sources": {
-                            "emails": [email_id],
-                            "blobs": [],
-                            "calendar_events": [],
-                        },
-                    }
-                )
-                # Fresh dedup check at apply time (Fix A).
-                if not self._is_duplicate_task(hc.get("suggested_action", "")):
-                    self.storage.store_task_item(self.owner_id, hc)
-                    action_count += 1
-                else:
-                    logger.debug(
-                        f"[TASK] dedup/skip hardcoded task for {from_email} thread_id={thread_id}"
-                    )
                 _mark_thread_nonuser_processed(thread_id)
                 continue
 
@@ -740,9 +557,11 @@ class TaskWorker:
                     add_source_email=email_id,
                 )
             elif task_action == "create" and result.get("action_required"):
-                suggested = result.get("suggested_action", "")
-                # Fix A: fresh dedup at apply time; Fix D: if thread already
-                # has an open task, UPDATE it instead of creating a duplicate.
+                # Fix D: if thread already has an open task, UPDATE it
+                # instead of creating a duplicate. (No title-similarity
+                # heuristic — the LLM already saw existing_tasks and chose
+                # task_action; if it said "create" with no existing task we
+                # trust the decision.)
                 if existing_tasks_all:
                     target = existing_tasks_all[0]
                     logger.debug(
@@ -758,11 +577,6 @@ class TaskWorker:
                         reason=result.get("reason"),
                         add_source_email=email_id,
                     )
-                elif self._is_duplicate_task(suggested):
-                    logger.debug(
-                        f"[TASK] dedup/skip create suggested='{suggested[:60]}' "
-                        f"thread_id={thread_id} decision=similar_exists"
-                    )
                 else:
                     result["event_id"] = email_id
                     result["event_type"] = "email"
@@ -777,8 +591,7 @@ class TaskWorker:
                     self.storage.store_task_item(self.owner_id, result)
                     action_count += 1
                     logger.debug(
-                        f"[TASK] dedup/create new task thread_id={thread_id} "
-                        f"from_email={from_email}"
+                        f"[TASK] create new task thread_id={thread_id} " f"from_email={from_email}"
                     )
 
             # Fix C: mark ALL non-user siblings of this thread processed,
@@ -821,9 +634,6 @@ class TaskWorker:
             self.storage.mark_calendar_event_task_processed(self.owner_id, event_id)
 
             if result:
-                suggested = result.get("suggested_action", "")
-                if self._is_duplicate_task(suggested):
-                    continue
                 result["event_id"] = event_id
                 result["event_type"] = "calendar"
                 result["contact_email"] = attendee_emails[0] if attendee_emails else None
@@ -1079,9 +889,9 @@ class TaskWorker:
                 lines.append(
                     "(If there's already a meeting scheduled, you may not need to create a 'schedule call' task)"
                 )
-                for event in upcoming_events[:3]:  # Limit to 3
+                for event in upcoming_events:
                     summary = event.get("summary", "No title")
-                    start = event.get("start_time", "")[:16] if event.get("start_time") else "TBD"
+                    start = event.get("start_time") or "TBD"
                     lines.append(f"  - {summary} ({start})")
 
             if past_events:
@@ -1089,11 +899,9 @@ class TaskWorker:
                 lines.append(
                     "(If a meeting just happened, consider whether follow-up is needed based on meeting type)"
                 )
-                for event in past_events[:3]:  # Limit to 3
+                for event in past_events:
                     summary = event.get("summary", "No title")
-                    start = (
-                        event.get("start_time", "")[:16] if event.get("start_time") else "unknown"
-                    )
+                    start = event.get("start_time") or "unknown"
                     lines.append(f"  - {summary} ({start})")
 
             return "\n".join(lines)
@@ -1145,7 +953,7 @@ class TaskWorker:
             if to_addrs and all(self._is_user_email(a) for a in to_addrs):
                 logger.debug(f"[TASK] Self-sent email detected: {item_id}")
                 subject = item.get("subject", "").strip() or "Self-reminder"
-                body = (item.get("body_plain") or item.get("snippet") or "")[:200].strip()
+                body = (item.get("body_plain") or item.get("snippet") or "").strip()
                 desc = f"Self-sent reminder. {body}" if body else "Self-sent reminder"
                 task_result = {
                     "action_required": True,
@@ -1173,11 +981,6 @@ class TaskWorker:
         # Hard symbolic check - user's email can NEVER be a task contact
         if contact_email and self._is_user_email(contact_email):
             logger.info(f"[TASK] Skipping user's own email: {contact_email}")
-            self._mark_processed(event_type, item_id)
-            return None
-
-        if event_type == "email" and self._is_notification_sender(contact_email):
-            logger.debug(f"[TASK] Skipping notification sender: {contact_email}")
             self._mark_processed(event_type, item_id)
             return None
 
@@ -1211,7 +1014,7 @@ EXISTING OPEN TASKS FOR THIS CONTACT ({len(existing_tasks)} tasks):
                 task_id = task.get("id", "unknown")
                 sources = task.get("sources", {})
                 email_ids = sources.get("emails", [])
-                created = task.get("created_at", "")[:10] if task.get("created_at") else "unknown"
+                created = task.get("created_at") or "unknown"
 
                 existing_task_context += f"""
 Task #{i} (ID: {task_id}):
@@ -1349,10 +1152,6 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
             return result
 
         elif task_action == "create" and result.get("action_required"):
-            suggested = result.get("suggested_action", "")
-            if self._is_duplicate_task(suggested):
-                return None
-
             # Build task result
             task_result = {
                 "action_required": True,
