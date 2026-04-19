@@ -3,6 +3,7 @@ import type { InboxThread, ThreadEmail } from '../types'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import { useConversations } from '../store/conversations'
 import { useThread } from '../store/thread'
+import HtmlEmailBody from '../components/HtmlEmailBody'
 // EmailComposeModal intentionally not imported: the "Open" flow
 // replaces the old "Compose from Email" entrypoint. A future blank
 // compose icon will re-add this.
@@ -568,9 +569,13 @@ function ThreadReadingPane({
               <span>To: {e.to_email || '—'}</span>
               {e.cc_email && <span> · Cc: {e.cc_email}</span>}
             </div>
-            <pre className="text-sm text-slate-900 whitespace-pre-wrap break-words font-sans select-text m-0">
-              {e.body_plain}
-            </pre>
+            {e.body_html ? (
+              <HtmlEmailBody html={e.body_html} />
+            ) : (
+              <pre className="text-sm text-slate-900 whitespace-pre-wrap break-words font-sans select-text m-0">
+                {e.body_plain}
+              </pre>
+            )}
             {(e.has_attachments || e.attachment_filenames.length > 0) && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {e.attachment_filenames.length > 0
