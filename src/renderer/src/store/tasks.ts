@@ -15,12 +15,18 @@ import { errorMessage, isProfileLockedError } from '../lib/errors'
 // list after `update.run` finishes. Without this, Dashboard only loads
 // tasks on mount and stays stale after Update.
 
+type RefreshOpts = { include_completed?: boolean }
+
 type Ctx = {
   tasks: ZylchTask[]
   loading: boolean
   error: string | null
-  /** Fetch fresh tasks from the sidecar. No caching; always hits RPC. */
-  refresh: () => Promise<void>
+  /**
+   * Fetch fresh tasks from the sidecar. No caching; always hits RPC.
+   * Pass `{ include_completed: true }` to fetch closed tasks as well —
+   * callers must filter client-side to render only the slice they want.
+   */
+  refresh: (opts?: RefreshOpts) => Promise<void>
   /** Optimistic in-place update — used by Dashboard item actions. */
   setTasks: React.Dispatch<React.SetStateAction<ZylchTask[]>>
 }
@@ -36,12 +42,14 @@ export function TasksProvider({ children }: { children: ReactNode }): JSX.Elemen
   // the result of the most recently started fetch.
   const reqIdRef = useRef(0)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts?: RefreshOpts) => {
     const myId = ++reqIdRef.current
     setLoading(true)
     setError(null)
     try {
-      const r = await window.zylch.tasks.list()
+      const r = await window.zylch.tasks.list(
+        opts?.include_completed ? { include_completed: true } : undefined
+      )
       if (myId !== reqIdRef.current) return // stale
       setTasks(r)
     } catch (e: unknown) {

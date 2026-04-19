@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ZylchTask } from '../types'
 import { useConversations } from '../store/conversations'
 import { useTasks } from '../store/tasks'
 import { showError } from '../lib/errors'
+
+type StatusFilter = 'open' | 'closed'
 
 interface Props {
   /**
@@ -27,11 +29,22 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
   // a pipeline run. `refresh()` always hits the sidecar — there is no
   // memoization on this path.
   const { tasks, loading, error, refresh, setTasks } = useTasks()
-  const load = refresh
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('open')
+  const [search, setSearch] = useState('')
+  // `load` re-fetches with the current toggle so callers (Refresh button,
+  // post-action refresh) don't have to remember which slice is shown.
+  const load = (): Promise<void> =>
+    refresh(statusFilter === 'closed' ? { include_completed: true } : undefined)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [updating, setUpdating] = useState<Set<string>>(new Set())
   const [pinning, setPinning] = useState<Set<string>>(new Set())
   const [keptNotice, setKeptNotice] = useState<Record<string, string>>({})
+
+  // Re-fetch whenever the user flips the Open/Closed toggle. The mount
+  // fetch in TasksProvider already covers the initial Open load.
+  useEffect(() => {
+    void refresh(statusFilter === 'closed' ? { include_completed: true } : undefined)
+  }, [statusFilter, refresh])
 
   const onPin = async (task: ZylchTask) => {
     const next = !task.pinned
@@ -130,15 +143,42 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
       </div>
     )
 
+  // Step 1: pick the slice the toggle wants. The backend returns mixed
+  // open+closed when `include_completed` is true, so we filter here to
+  // show ONLY closed in the Closed view (and only open in the Open view,
+  // which is the default backend behaviour but we double-guard).
+  const statusFiltered = useMemo(() => {
+    if (statusFilter === 'closed') return tasks.filter((t) => t.completed_at != null)
+    return tasks.filter((t) => t.completed_at == null)
+  }, [tasks, statusFilter])
+
+  // Step 2: client-side substring search across the four fields.
+  const q = search.trim().toLowerCase()
+  const searchFiltered = useMemo(() => {
+    if (!q) return statusFiltered
+    return statusFiltered.filter((t) => {
+      const hay = [
+        t.contact_name || '',
+        t.contact_email || '',
+        t.reason || '',
+        t.suggested_action || ''
+      ]
+        .join(' ')
+        .toLowerCase()
+      return hay.includes(q)
+    })
+  }, [statusFiltered, q])
+
   // Client-side safety sort: pinned tasks first, preserving the existing
   // backend order as a stable tie-breaker. This protects optimistic updates
   // from showing pinned tasks out of place between request and refetch.
-  const sortedTasks = [...tasks].sort(
+  const sortedTasks = [...searchFiltered].sort(
     (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)
   )
 
   const pinnedTasks = sortedTasks.filter((t) => t.pinned)
   const unpinnedTasks = sortedTasks.filter((t) => !t.pinned)
+  const isClosedView = statusFilter === 'closed'
 
   const grouped: Record<string, ZylchTask[]> = {}
   for (const t of unpinnedTasks) {
@@ -154,7 +194,8 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
         key={t.id}
         className={
           'bg-white border rounded-lg p-4 shadow-sm ' +
-          (t.pinned ? 'border-l-4 border-l-amber-400' : '')
+          (t.pinned ? 'border-l-4 border-l-amber-400 ' : '') +
+          (isClosedView ? 'text-slate-500 opacity-80' : '')
         }
       >
         <div className="flex items-start justify-between gap-3 mb-2">
@@ -193,7 +234,12 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
           {expanded.has(t.id) ? 'Hide reason' : 'Show reason'}
         </button>
         {expanded.has(t.id) && (
-          <div className="text-sm text-slate-700 whitespace-pre-wrap border-l-2 border-slate-200 pl-3 mb-3">
+          <div
+            className={
+              'text-sm whitespace-pre-wrap border-l-2 border-slate-200 pl-3 mb-3 ' +
+              (isClosedView ? 'text-slate-500 line-through' : 'text-slate-700')
+            }
+          >
             {t.reason}
           </div>
         )}
@@ -260,19 +306,74 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
     )
   }
 
+  const visibleCount = sortedTasks.length
+  const matchSuffix = q ? ` (${visibleCount} matches)` : ''
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Tasks ({tasks.length})</h1>
+        <h1 className="text-2xl font-semibold">
+          Tasks ({visibleCount}){matchSuffix}
+        </h1>
         <button
-          onClick={load}
+          onClick={() => void load()}
           className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
         >
           Refresh
         </button>
       </div>
-      {tasks.length === 0 && (
-        <div className="text-slate-500">No tasks. All clear.</div>
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <div
+          className="inline-flex rounded-full border border-slate-300 overflow-hidden"
+          role="group"
+          aria-label="Filter by status"
+        >
+          <button
+            type="button"
+            onClick={() => setStatusFilter('open')}
+            className={
+              'px-3 py-1 text-sm ' +
+              (statusFilter === 'open'
+                ? 'bg-emerald-700 text-white border-emerald-700'
+                : 'bg-white text-slate-600 hover:bg-slate-100')
+            }
+            aria-pressed={statusFilter === 'open'}
+          >
+            Open
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('closed')}
+            title="Show closed tasks"
+            className={
+              'px-3 py-1 text-sm border-l border-slate-300 ' +
+              (statusFilter === 'closed'
+                ? 'bg-emerald-700 text-white border-emerald-700'
+                : 'bg-white text-slate-600 hover:bg-slate-100')
+            }
+            aria-pressed={statusFilter === 'closed'}
+          >
+            Closed
+          </button>
+        </div>
+        <div className="flex items-center gap-1.5 border border-slate-300 rounded px-2 py-1 bg-white">
+          <span aria-hidden="true" className="text-slate-400 text-sm">
+            🔍
+          </span>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search…"
+            aria-label="Search tasks"
+            className="text-sm outline-none bg-transparent w-48"
+          />
+        </div>
+      </div>
+      {sortedTasks.length === 0 && (
+        <div className="text-slate-500">
+          {isClosedView ? 'No closed tasks.' : 'No tasks. All clear.'}
+        </div>
       )}
       {pinnedTasks.length > 0 && (
         <section className="mb-6">
