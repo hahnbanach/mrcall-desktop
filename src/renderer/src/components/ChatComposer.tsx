@@ -119,13 +119,18 @@ export default function ChatComposer({
     const trimmed = text.trim()
     if (!trimmed || isDisabled) return
     const attachmentsSnapshot = pendingAttachments.slice()
+    // Clear the input up-front so the user isn't staring at a duplicate of
+    // what they just sent while the LLM takes its 30s to answer. If the
+    // submit fails we restore both the text and the attachments so they
+    // can retry without losing anything.
+    setText('')
+    setPendingAttachments([])
     setBusy(true)
     try {
       await onSubmit(trimmed, attachmentsSnapshot, taskContext)
-      // Clear input only after successful send.
-      setText('')
-      setPendingAttachments([])
     } catch (e) {
+      setText(trimmed)
+      setPendingAttachments(attachmentsSnapshot)
       console.error('[ChatComposer] onSubmit failed', e)
     } finally {
       setBusy(false)
