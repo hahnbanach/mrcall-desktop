@@ -27,13 +27,13 @@ _QUOTED_CUT_PATTERNS = [
 ]
 
 
-def strip_quoted(body: str, cap: Optional[int] = 1500) -> str:
+def strip_quoted(body: str, cap: Optional[int] = None) -> str:
     """Return the new (non-quoted) content of an email body.
 
     Removes lines starting with '>' (quoted), truncates at the first
     quoted-history or signature marker, collapses consecutive blank
     lines. If `cap` is an int (>0), caps the output at that many
-    chars; if `cap` is None, no length cap is applied.
+    chars; if `cap` is None (default), no length cap is applied.
     """
     if not body:
         return ""
@@ -71,7 +71,6 @@ def build_thread_history(
     thread_id: str,
     user_email: str,
     exclude_email_id: Optional[str] = None,
-    limit: int = 20,
 ) -> str:
     """Build a THREAD HISTORY section from emails in a thread.
 
@@ -85,7 +84,6 @@ def build_thread_history(
         thread_id: Thread ID to fetch emails for.
         user_email: User's email (lowercased) — used to mark user replies.
         exclude_email_id: If set, drop this email from the history.
-        limit: Max emails in the thread to render (chronological).
 
     Returns:
         A rendered THREAD HISTORY section, or "" if no emails.
@@ -102,7 +100,6 @@ def build_thread_history(
             Email.thread_id == thread_id,
         )
         .order_by(Email.date_timestamp.asc())
-        .limit(limit)
     )
     thread_emails = q.all()
     if exclude_email_id:
@@ -121,15 +118,11 @@ def build_thread_history(
                     "%Y-%m-%d %H:%M"
                 )
             else:
-                date_str = (te.date or "")[:16]
+                date_str = te.date or ""
         except Exception:
             date_str = te.date or ""
         body_src = te.body_plain or te.snippet or ""
-        body_clean = strip_quoted(body_src, cap=1500)
-        if not body_clean:
-            body_clean = body_src.strip()
-            if len(body_clean) > 1500:
-                body_clean = body_clean[:1500].rstrip() + "…[truncated]"
+        body_clean = strip_quoted(body_src, cap=None) or body_src.strip()
         blocks.append(f"[{date_str}] {role} {te.from_email}:\n{body_clean}")
 
     if not blocks:
