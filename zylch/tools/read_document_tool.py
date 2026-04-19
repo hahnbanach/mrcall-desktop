@@ -28,7 +28,15 @@ def _collect_search_paths() -> List[str]:
     """
     home = os.path.expanduser("~")
     profile_dir = os.environ.get("ZYLCH_PROFILE_DIR", "")
-    downloads = os.path.join(home, "Downloads")
+    # Downloads folder: respect the user's DOWNLOADS_DIR override from
+    # Settings — download_attachment uses the same variable, so we stay
+    # in sync without another knob.
+    configured_downloads = os.environ.get("DOWNLOADS_DIR", "").strip()
+    downloads = (
+        os.path.expanduser(configured_downloads)
+        if configured_downloads
+        else os.path.join(home, "Downloads")
+    )
 
     defaults = [
         os.path.join(home, "gdrive-shared"),
