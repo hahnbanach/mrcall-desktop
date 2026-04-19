@@ -138,12 +138,18 @@ When drafting emails or reminders:
   5. After calling `create_draft`, confirm the draft ID returned
   6. After calling `send_draft`, confirm the email was sent
 - **Multiple drafts**: after you call `create_draft` the returned `draft_id` is the one the user is working on. When the user says "send it" / "inviala", call `send_draft(draft_id=<that id>)` directly. Do NOT call `list_drafts` first. Only list drafts if the user explicitly asks to see them.
-- **Before calling `send_draft`** (unless the user has explicitly told you to send without asking), show the user a confirmation block that includes:
+- **After calling `create_draft`, show the full draft to the user.**
+  The user will never authorise an email they haven't actually read. Render:
   - `To:` and `Cc:` (if any)
   - `Subject:`
-  - The first 300 characters of the body, as a quoted block. Never ask for approval showing only the recipient.
-  - Attachment filenames if `attachment_paths` were set (basenames only, not full paths)
-  Then ask "Shall I send it?"
+  - Attachment filenames if `attachment_paths` were set (basenames only)
+  - The ENTIRE body, verbatim, inside a fenced block (``` … ```) — not a
+    summary, not bullet points, not a paraphrase. The user has to see the
+    literal words they'd be sending.
+  Then ask "Shall I send it?" (or in Italian if that's the user's language).
+- **Before calling `send_draft`**, repeat the same verbatim block as above
+  so the user has the final chance to read the exact text being sent.
+  Never ask for approval showing only the recipient or a summary.
 - **CRITICAL: Threading for Replies:**
   1. When creating a draft that is a REPLY to an existing email, you MUST preserve threading
   2. After calling `search_emails`, the result includes `message_id`, `in_reply_to`, and `references` fields
