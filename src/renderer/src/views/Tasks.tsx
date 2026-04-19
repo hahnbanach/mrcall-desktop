@@ -129,30 +129,17 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
     })
   }
 
-  if (loading) return <div className="p-8 text-slate-500">Loading tasks…</div>
-  if (error)
-    return (
-      <div className="p-8">
-        <div className="text-red-700">Error: {error}</div>
-        <button
-          onClick={load}
-          className="mt-3 px-3 py-1.5 bg-slate-900 text-white rounded text-sm"
-        >
-          Retry
-        </button>
-      </div>
-    )
-
   // Step 1: pick the slice the toggle wants. The backend returns mixed
   // open+closed when `include_completed` is true, so we filter here to
   // show ONLY closed in the Closed view (and only open in the Open view,
   // which is the default backend behaviour but we double-guard).
+  // NB: hooks must run on every render — they live above the loading/error
+  // early returns to obey the Rules of Hooks.
   const statusFiltered = useMemo(() => {
     if (statusFilter === 'closed') return tasks.filter((t) => t.completed_at != null)
     return tasks.filter((t) => t.completed_at == null)
   }, [tasks, statusFilter])
 
-  // Step 2: client-side substring search across the four fields.
   const q = search.trim().toLowerCase()
   const searchFiltered = useMemo(() => {
     if (!q) return statusFiltered
@@ -168,6 +155,20 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
       return hay.includes(q)
     })
   }, [statusFiltered, q])
+
+  if (loading) return <div className="p-8 text-slate-500">Loading tasks…</div>
+  if (error)
+    return (
+      <div className="p-8">
+        <div className="text-red-700">Error: {error}</div>
+        <button
+          onClick={load}
+          className="mt-3 px-3 py-1.5 bg-slate-900 text-white rounded text-sm"
+        >
+          Retry
+        </button>
+      </div>
+    )
 
   // Client-side safety sort: pinned tasks first, preserving the existing
   // backend order as a stable tie-breaker. This protects optimistic updates
