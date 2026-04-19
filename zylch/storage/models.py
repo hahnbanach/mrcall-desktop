@@ -107,6 +107,14 @@ class Email(DictMixin, Base):
     is_auto_reply = Column(Boolean, default=False)
     has_attachments = Column(Boolean, default=False, nullable=False, index=True)
     attachment_filenames = Column(JSON, default=list)
+    # 2026-04-17: per-row pin/read flags backing the desktop Email tab.
+    # `pinned_at` is non-NULL when the thread is pinned by the user; the
+    # `emails.pin` RPC sets/clears it on ALL rows of a thread at once.
+    # `read_at` is a lightweight "opened in UI" marker (fire-and-forget
+    # from the renderer). Both have indexes so thread-grouped queries can
+    # filter/sort efficiently.
+    pinned_at = Column(DateTime, nullable=True, index=True)
+    read_at = Column(DateTime, nullable=True, index=True)
 
     __table_args__ = (
         UniqueConstraint(

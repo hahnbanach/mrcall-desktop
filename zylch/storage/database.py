@@ -148,6 +148,12 @@ def _apply_column_migrations(engine: Engine) -> None:
         # time by IMAPClient._fetch_one and at send time by insert_sent_email.
         ("emails", "has_attachments", "BOOLEAN DEFAULT 0"),
         ("emails", "attachment_filenames", "JSON DEFAULT '[]'"),
+        # 2026-04-17: thread-level pin flag + per-row read marker backing
+        # the desktop Email tab. `emails.pin` RPC sets pinned_at on all
+        # rows sharing a thread_id; `emails.mark_read` sets read_at on
+        # every row of a thread when the user opens it in the UI.
+        ("emails", "pinned_at", "DATETIME"),
+        ("emails", "read_at", "DATETIME"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in migrations:
