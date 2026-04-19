@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { EmailThreadResult, ThreadEmail } from '../types'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 
@@ -42,6 +42,42 @@ export default function ThreadPanel({
   const [result, setResult] = useState<EmailThreadResult | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
+  // User-resizable panel body: bottom edge is a drag handle. Same
+  // pattern as ChatComposer's top edge, but dragging DOWN grows here.
+  const DEFAULT_BODY_HEIGHT = Math.round(window.innerHeight * 0.45)
+  const MIN_BODY_HEIGHT = 120
+  const [bodyHeight, setBodyHeight] = useState<number>(DEFAULT_BODY_HEIGHT)
+  const dragRef = useRef<{ startY: number; startH: number } | null>(null)
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent): void => {
+      if (!dragRef.current) return
+      const { startY, startH } = dragRef.current
+      // Dragging DOWN makes the panel taller.
+      const next = startH + (e.clientY - startY)
+      const maxH = Math.round(window.innerHeight * 0.7)
+      setBodyHeight(Math.max(MIN_BODY_HEIGHT, Math.min(maxH, next)))
+    }
+    const onUp = (): void => {
+      if (!dragRef.current) return
+      dragRef.current = null
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
+  const startDrag = (e: React.MouseEvent): void => {
+    e.preventDefault()
+    dragRef.current = { startY: e.clientY, startH: bodyHeight }
+    document.body.style.cursor = 'ns-resize'
+    document.body.style.userSelect = 'none'
+  }
 
   // Keep local expanded in sync when the parent swaps to a conversation
   // with a different default (e.g. going from a task to general).
@@ -125,7 +161,18 @@ export default function ThreadPanel({
       </button>
 
       {expanded && (
-        <div className="max-h-[45vh] overflow-y-auto border-t">
+        <div
+          className="overflow-y-auto border-t relative"
+          style={{ height: bodyHeight }}
+        >
+          {/* Bottom-edge drag handle mirrors the composer's top handle. */}
+          <div
+            onMouseDown={startDrag}
+            title="Drag to resize"
+            className="absolute bottom-0 left-0 right-0 h-[6px] cursor-ns-resize group z-10"
+          >
+            <div className="mx-auto mt-[2px] h-[2px] w-10 rounded bg-slate-300 group-hover:bg-slate-500 transition-colors" />
+          </div>
           {loading && (
             <div className="p-4 text-slate-500 text-sm">Loading thread...</div>
           )}
