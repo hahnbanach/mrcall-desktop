@@ -323,7 +323,6 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
           disabled={!!active.busy}
           placeholder="Scrivi un messaggio…"
           taskContext={{ taskId: active.taskId, emailId: active.sourceEmailId }}
-          narration={narration}
           initialText={active.draftInput}
         />
       </div>
