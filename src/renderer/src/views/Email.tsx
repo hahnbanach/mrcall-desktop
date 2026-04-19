@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { InboxThread, ThreadEmail } from '../types'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
-import EmailComposeModal, { ComposeSeed } from './EmailComposeModal'
+import { useConversations } from '../store/conversations'
+import { useThread } from '../store/thread'
+// EmailComposeModal intentionally not imported: the "Open" flow
+// replaces the old "Compose from Email" entrypoint. A future blank
+// compose icon will re-add this.
+// import EmailComposeModal, { ComposeSeed } from './EmailComposeModal'
 
 type Folder = 'inbox' | 'drafts' | 'sent'
 
@@ -32,6 +37,15 @@ function formatFullDate(iso: string): string {
   return d.toLocaleString('it-IT')
 }
 
+interface EmailProps {
+  /**
+   * Navigate to the Workspace view. Called by the "Open" button after the
+   * conversations store + thread store have been updated so the active
+   * conversation is the thread-only one.
+   */
+  onOpenWorkspace?: (threadId: string) => void
+}
+
 /**
  * Email view — Superhuman-lite 3-column layout.
  *
@@ -43,10 +57,10 @@ function formatFullDate(iso: string): string {
  *   J / ArrowDown  — next thread
  *   K / ArrowUp    — prev thread
  *   Enter          — scroll selected into view (no-op otherwise in 3-col layout)
- *   R              — reply compose (pre-populated)
- *   C              — blank compose
+ *   C              — Open the selected thread in Workspace (same as the
+ *                    "Open" button; disabled when nothing is selected)
  */
-export default function Email(): JSX.Element {
+export default function Email({ onOpenWorkspace }: EmailProps = {}): JSX.Element {
   const [folder, setFolder] = useState<Folder>('inbox')
   const [threads, setThreads] = useState<InboxThread[]>([])
   const [loading, setLoading] = useState(false)
@@ -54,8 +68,10 @@ export default function Email(): JSX.Element {
   const [hasMore, setHasMore] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [pinning, setPinning] = useState<Set<string>>(new Set())
-  const [compose, setCompose] = useState<ComposeSeed | null>(null)
   const [draftsCount, setDraftsCount] = useState<number>(0)
+
+  const { openThreadChat } = useConversations()
+  const { setActiveThreadId, setActiveTaskId } = useThread()
 
   const listRef = useRef<HTMLDivElement | null>(null)
 
@@ -150,6 +166,17 @@ export default function Email(): JSX.Element {
     [threads]
   )
 
+  // ─── open selected thread in Workspace ───────────────────────────
+  // Shared by: the sidebar "Open" button, the reading-pane "Open" button,
+  // and the `C` keyboard shortcut. No-op if nothing is selected.
+  const openSelected = useCallback(() => {
+    if (!selected) return
+    openThreadChat(selected.thread_id, selected.subject || '', selected.last_email_id)
+    setActiveThreadId(selected.thread_id)
+    setActiveTaskId(null)
+    onOpenWorkspace?.(selected.thread_id)
+  }, [selected, openThreadChat, setActiveThreadId, setActiveTaskId, onOpenWorkspace])
+
   // ─── pin ───────────────────────────────────────────────────────────
   const onPin = useCallback(
     async (thread: InboxThread, evt?: React.MouseEvent) => {
@@ -191,8 +218,6 @@ export default function Email(): JSX.Element {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (active as HTMLElement)?.isContentEditable) {
         return
       }
-      // Don't hijack shortcuts while the compose modal is open.
-      if (compose) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       switch (e.key) {
         case 'j':
@@ -210,31 +235,21 @@ export default function Email(): JSX.Element {
         case 'Enter':
           if (selectedIndex >= 0) selectByIndex(selectedIndex)
           break
-        case 'r':
-        case 'R':
-          if (selected) {
-            const existingTo = selected.from_email || ''
-            const subj = selected.subject?.startsWith('Re:')
-              ? selected.subject
-              : `Re: ${selected.subject || ''}`
-            setCompose({
-              to: existingTo,
-              subject: subj,
-              body: '',
-              thread_id: selected.thread_id,
-              in_reply_to: selected.last_email_id
-            })
-          }
-          break
         case 'c':
         case 'C':
-          setCompose({ to: '', subject: '', body: '' })
+          // Mapped to "Open" for now — opens the selected thread in
+          // Workspace. No-op if no thread is selected. Reply (`R`) was
+          // removed: the user handles replies from the Workspace chat.
+          if (selected) {
+            e.preventDefault()
+            openSelected()
+          }
           break
       }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [threads, selectedIndex, selected, selectByIndex, compose])
+  }, [threads, selectedIndex, selected, selectByIndex, openSelected])
 
   // ─── rendering ────────────────────────────────────────────────────
   const folders: Array<{ id: Folder; label: string; badge?: number }> = [
@@ -248,11 +263,17 @@ export default function Email(): JSX.Element {
       {/* Col 1: folder list */}
       <aside className="w-[180px] shrink-0 border-r bg-slate-50 flex flex-col">
         <button
-          onClick={() => setCompose({ to: '', subject: '', body: '' })}
-          className="m-3 px-3 py-2 rounded text-sm font-medium text-white"
+          onClick={openSelected}
+          disabled={!selected}
+          title={
+            selected
+              ? 'Open thread in Workspace'
+              : 'Select a thread first'
+          }
+          className="m-3 px-3 py-2 rounded text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ backgroundColor: 'var(--profile-accent)' }}
         >
-          ✎ Compose
+          ✉ Open
         </button>
         <nav className="flex flex-col px-2 gap-1">
           {folders.map((f) => {
@@ -304,8 +325,8 @@ export default function Email(): JSX.Element {
         )}
         {folder === 'drafts' && (
           <div className="p-4 text-sm text-slate-500">
-            Drafts live in the chat flow for now. Use Compose to create a new
-            one.
+            Drafts live in the chat flow for now. Open a thread to
+            reply via Workspace chat.
           </div>
         )}
         <ul className="flex flex-col">
@@ -401,35 +422,12 @@ export default function Email(): JSX.Element {
         {selected && (
           <ThreadReadingPane
             thread={selected}
-            onReply={() => {
-              setCompose({
-                to: selected.from_email || '',
-                subject: selected.subject?.startsWith('Re:')
-                  ? selected.subject
-                  : `Re: ${selected.subject || ''}`,
-                body: '',
-                thread_id: selected.thread_id,
-                in_reply_to: selected.last_email_id
-              })
-            }}
+            onOpen={openSelected}
             onPin={() => onPin(selected)}
             pinning={pinning.has(selected.thread_id)}
           />
         )}
       </section>
-
-      {compose && (
-        <EmailComposeModal
-          open={!!compose}
-          seed={compose}
-          onClose={() => setCompose(null)}
-          onAfterSend={() => {
-            setCompose(null)
-            // If we sent from the current thread, refresh list for read state.
-            void loadFolder(folder, false)
-          }}
-        />
-      )}
     </div>
   )
 }
@@ -440,12 +438,12 @@ export default function Email(): JSX.Element {
  */
 function ThreadReadingPane({
   thread,
-  onReply,
+  onOpen,
   onPin,
   pinning
 }: {
   thread: InboxThread
-  onReply: () => void
+  onOpen: () => void
   onPin: () => void
   pinning: boolean
 }): JSX.Element {
@@ -490,9 +488,17 @@ function ThreadReadingPane({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={onReply}
+            onClick={onOpen}
+            title="Open thread in Workspace"
             className="px-3 py-1.5 text-sm text-white rounded"
             style={{ backgroundColor: 'var(--profile-accent)' }}
+          >
+            ✉ Open
+          </button>
+          <button
+            disabled
+            title="Reply (use Workspace chat)"
+            className="px-3 py-1.5 text-sm border rounded text-slate-400 cursor-not-allowed"
           >
             Reply
           </button>

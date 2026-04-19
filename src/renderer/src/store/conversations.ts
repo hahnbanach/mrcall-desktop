@@ -21,6 +21,12 @@ export type Conversation = {
   id: string
   title: string
   taskId?: string
+  // Set when this conversation was opened directly from a thread (Email
+  // view "Open" button). For task-backed conversations the thread id
+  // lives in the thread store and is resolved via activeThreadId —
+  // this field is only populated for thread-only conversations whose
+  // id follows the `thread-<threadId>` convention.
+  threadId?: string
   sourceEmailId?: string
   history: Msg[]
   draftInput: string
@@ -106,6 +112,7 @@ function reducer(state: State, action: Action): State {
 type Ctx = {
   state: State
   openTaskChat: (task: ZylchTask) => void
+  openThreadChat: (threadId: string, subject: string, sourceEmailId?: string) => void
   closeConversation: (id: string) => void
   setActive: (id: string) => void
   appendUser: (id: string, text: string) => void
@@ -164,6 +171,32 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  // Open a thread-only conversation (no task attached). Used by Email
+  // view's "Open" button. Conversation id is `thread-<threadId>` —
+  // Workspace relies on this prefix contract to resolve the Source
+  // panel when no activeThreadId is set from the thread store.
+  const openThreadChat = useCallback(
+    (threadId: string, subject: string, sourceEmailId?: string) => {
+      const id = 'thread-' + threadId
+      const title = subject || threadId.slice(0, 20)
+      dispatch({
+        type: 'OPEN_TASK_CHAT',
+        conv: {
+          id,
+          title,
+          taskId: undefined,
+          threadId,
+          sourceEmailId,
+          history: [],
+          draftInput: '',
+          pendingApproval: null,
+          busy: false
+        }
+      })
+    },
+    []
+  )
+
   const closeConversation = useCallback(
     (id: string) => dispatch({ type: 'CLOSE', id }),
     []
@@ -194,6 +227,7 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     state,
     openTaskChat,
+    openThreadChat,
     closeConversation,
     setActive,
     appendUser,

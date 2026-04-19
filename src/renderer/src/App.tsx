@@ -498,7 +498,7 @@ function AppInner(): JSX.Element {
               className="absolute inset-0 overflow-hidden"
               style={{ display: view === 'email' ? 'block' : 'none' }}
             >
-              <Email />
+              <Email onOpenWorkspace={() => setView('workspace')} />
             </div>
           )}
           <div
@@ -567,6 +567,7 @@ function Sidebar({
 
   const primary: NavItem[] = [
     { id: 'tasks', label: 'Task', icon: '📋' },
+    { id: 'workspace', label: 'Chat', icon: '🗨️' },
     {
       id: 'email',
       label: 'Email',
