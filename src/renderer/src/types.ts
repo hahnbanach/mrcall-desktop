@@ -30,6 +30,13 @@ export interface ThreadEmail {
   date: string
   subject: string
   body_plain: string
+  /**
+   * Raw HTML body from the original email, or empty string if the message
+   * had no HTML alternative. Rendered inside a fully-sandboxed iframe
+   * (sandbox="") so scripts, forms, top-level navigation and plugin
+   * content are all disabled. Empty → fall back to `body_plain`.
+   */
+  body_html: string
   is_auto_reply: boolean
   is_user_sent: boolean
   has_attachments: boolean
