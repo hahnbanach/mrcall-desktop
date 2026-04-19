@@ -998,6 +998,122 @@ async def emails_list_by_thread(
     raise err
 
 
+async def emails_list_inbox(
+    params: Dict[str, Any],
+    notify: NotifyFn,
+) -> Any:
+    """emails.list_inbox(limit=50, offset=0) -> {"threads": [...]}.
+
+    Returns thread summaries for the desktop Email tab's Inbox. See
+    `Storage.list_inbox_threads` for the precise grouping/filtering
+    rules. Each thread dict carries the latest message's metadata plus
+    `pinned`, `unread`, `message_count`.
+    """
+    from zylch.api.token_storage import get_email
+    from zylch.storage.storage import Storage
+
+    limit = int(params.get("limit", 50))
+    offset = int(params.get("offset", 0))
+    owner_id = _owner_id()
+    user_email = (get_email(owner_id) or "").lower()
+    logger.debug(
+        f"[rpc] emails.list_inbox owner_id={owner_id} "
+        f"limit={limit} offset={offset} user_email={'present' if user_email else 'absent'}"
+    )
+    store = Storage.get_instance()
+    threads = store.list_inbox_threads(
+        owner_id=owner_id,
+        user_email=user_email,
+        limit=limit,
+        offset=offset,
+    )
+    logger.debug(f"[rpc] emails.list_inbox -> {len(threads)} threads")
+    return {"threads": threads}
+
+
+async def emails_list_sent(
+    params: Dict[str, Any],
+    notify: NotifyFn,
+) -> Any:
+    """emails.list_sent(limit=50, offset=0) -> {"threads": [...]}.
+
+    Symmetric to `emails.list_inbox` but filters for threads whose
+    latest email was sent by the profile owner (from_email ==
+    owner_email).
+    """
+    from zylch.api.token_storage import get_email
+    from zylch.storage.storage import Storage
+
+    limit = int(params.get("limit", 50))
+    offset = int(params.get("offset", 0))
+    owner_id = _owner_id()
+    user_email = (get_email(owner_id) or "").lower()
+    logger.debug(
+        f"[rpc] emails.list_sent owner_id={owner_id} "
+        f"limit={limit} offset={offset} user_email={'present' if user_email else 'absent'}"
+    )
+    store = Storage.get_instance()
+    threads = store.list_sent_threads(
+        owner_id=owner_id,
+        user_email=user_email,
+        limit=limit,
+        offset=offset,
+    )
+    logger.debug(f"[rpc] emails.list_sent -> {len(threads)} threads")
+    return {"threads": threads}
+
+
+async def emails_pin(
+    params: Dict[str, Any],
+    notify: NotifyFn,
+) -> Any:
+    """emails.pin(thread_id, pinned: bool) -> {ok, affected}.
+
+    Pin is a thread-level flag stored on every row of the thread via
+    `pinned_at`. `affected` is the number of rows whose pinned_at
+    actually changed — re-pinning an already pinned thread returns 0.
+    """
+    from zylch.storage.storage import Storage
+
+    thread_id = params.get("thread_id")
+    if not thread_id:
+        raise ValueError("thread_id is required")
+    if "pinned" not in params:
+        raise ValueError("pinned is required")
+    pinned = bool(params.get("pinned"))
+
+    owner_id = _owner_id()
+    logger.debug(f"[rpc] emails.pin owner_id={owner_id} thread_id={thread_id} pinned={pinned}")
+    store = Storage.get_instance()
+    affected = store.set_thread_pinned(owner_id=owner_id, thread_id=thread_id, pinned=pinned)
+    logger.debug(f"[rpc] emails.pin -> affected={affected}")
+    return {"ok": True, "affected": int(affected)}
+
+
+async def emails_mark_read(
+    params: Dict[str, Any],
+    notify: NotifyFn,
+) -> Any:
+    """emails.mark_read(thread_id) -> {ok, affected}.
+
+    Sets `read_at = now()` on every row of the thread that doesn't
+    already have one. Idempotent; fire-and-forget from the renderer
+    when the user opens a thread.
+    """
+    from zylch.storage.storage import Storage
+
+    thread_id = params.get("thread_id")
+    if not thread_id:
+        raise ValueError("thread_id is required")
+
+    owner_id = _owner_id()
+    logger.debug(f"[rpc] emails.mark_read owner_id={owner_id} thread_id={thread_id}")
+    store = Storage.get_instance()
+    affected = store.mark_thread_read(owner_id=owner_id, thread_id=thread_id)
+    logger.debug(f"[rpc] emails.mark_read -> affected={affected}")
+    return {"ok": True, "affected": int(affected)}
+
+
 async def narration_predict(
     params: Dict[str, Any],
     notify: NotifyFn,
@@ -1350,6 +1466,10 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "narration.summarize": narration_summarize,
     "narration.predict": narration_predict,
     "emails.list_by_thread": emails_list_by_thread,
+    "emails.list_inbox": emails_list_inbox,
+    "emails.list_sent": emails_list_sent,
+    "emails.pin": emails_pin,
+    "emails.mark_read": emails_mark_read,
     "settings.schema": settings_schema,
     "settings.get": settings_get,
     "settings.update": settings_update,

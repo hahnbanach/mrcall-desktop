@@ -277,6 +277,249 @@ class Storage:
             )
             return [r.to_dict() for r in rows]
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Thread-oriented helpers backing the desktop Email tab
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def list_inbox_threads(
+        self,
+        owner_id: str,
+        user_email: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Return inbox threads for the desktop Email tab.
+
+        Rules (mirrors `emails.list_inbox` RPC contract):
+          - Group emails by `thread_id`. Each thread is represented by its
+            newest message (max `date_timestamp`).
+          - Exclude threads whose *only* messages are user-sent. A thread
+            where the last message is user-sent but earlier messages come
+            from someone else stays in.
+          - Order: pinned DESC (thread considered pinned if any row in
+            the thread has pinned_at NOT NULL), then date_timestamp DESC.
+          - unread: True when the thread has a non-user message newer
+            than the most recent user reply AND that message has no
+            read_at timestamp.
+          - pinned: True iff any email in the thread has pinned_at.
+        """
+        me = (user_email or "").lower()
+        with get_session() as session:
+            # Pull every email for this owner ordered newest-first, then
+            # fold them into thread buckets in Python. The mailbox fits
+            # comfortably in RAM for a single user; the query cost is
+            # dominated by the index on owner_id+date_timestamp.
+            rows = (
+                session.query(Email)
+                .filter(Email.owner_id == owner_id)
+                .order_by(Email.date_timestamp.desc())
+                .all()
+            )
+            threads: Dict[str, Dict[str, Any]] = {}
+            for r in rows:
+                tid = r.thread_id
+                if not tid:
+                    continue
+                bucket = threads.get(tid)
+                from_addr = (r.from_email or "").lower()
+                is_user = bool(me) and from_addr == me
+                if bucket is None:
+                    bucket = {
+                        "thread_id": tid,
+                        "latest": r,
+                        "latest_non_user": None if is_user else r,
+                        "latest_user": r if is_user else None,
+                        "has_non_user": not is_user,
+                        "pinned": r.pinned_at is not None,
+                        "message_count": 1,
+                    }
+                    threads[tid] = bucket
+                else:
+                    bucket["message_count"] += 1
+                    if r.pinned_at is not None:
+                        bucket["pinned"] = True
+                    if not is_user and bucket["latest_non_user"] is None:
+                        bucket["latest_non_user"] = r
+                        bucket["has_non_user"] = True
+                    if is_user and bucket["latest_user"] is None:
+                        bucket["latest_user"] = r
+
+            # Apply inbox filter: drop threads with no non-user messages.
+            candidates = [b for b in threads.values() if b["has_non_user"]]
+
+            # Compute unread per thread.
+            for b in candidates:
+                latest_non_user = b["latest_non_user"]
+                latest_user = b["latest_user"]
+                if latest_non_user is None:
+                    b["unread"] = False
+                    continue
+                has_newer_non_user = latest_user is None or (
+                    latest_non_user.date_timestamp or 0
+                ) > (latest_user.date_timestamp or 0)
+                b["unread"] = bool(has_newer_non_user and latest_non_user.read_at is None)
+
+            # Sort: pinned DESC, then date_timestamp DESC of the latest
+            # message.
+            candidates.sort(
+                key=lambda b: (
+                    1 if b["pinned"] else 0,
+                    b["latest"].date_timestamp or 0,
+                ),
+                reverse=True,
+            )
+
+            page = candidates[offset : offset + limit]
+            out: List[Dict[str, Any]] = []
+            for b in page:
+                latest: Email = b["latest"]
+                date_val = latest.date
+                date_iso = date_val.isoformat() if isinstance(date_val, datetime) else ""
+                out.append(
+                    {
+                        "thread_id": b["thread_id"],
+                        "subject": latest.subject or "",
+                        "from_email": latest.from_email or "",
+                        "from_name": latest.from_name or "",
+                        "to_email": latest.to_email or "",
+                        "date": date_iso,
+                        "snippet": latest.snippet or "",
+                        "unread": bool(b["unread"]),
+                        "has_attachments": bool(latest.has_attachments),
+                        "pinned": bool(b["pinned"]),
+                        "message_count": int(b["message_count"]),
+                        "last_email_id": latest.id,
+                    }
+                )
+            return out
+
+    def list_sent_threads(
+        self,
+        owner_id: str,
+        user_email: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Return threads whose most recent message was sent by the user.
+
+        Symmetric to `list_inbox_threads` but filters by
+        `from_email == user_email` on the latest row of each thread.
+        """
+        me = (user_email or "").lower()
+        if not me:
+            return []
+        with get_session() as session:
+            rows = (
+                session.query(Email)
+                .filter(Email.owner_id == owner_id)
+                .order_by(Email.date_timestamp.desc())
+                .all()
+            )
+            threads: Dict[str, Dict[str, Any]] = {}
+            for r in rows:
+                tid = r.thread_id
+                if not tid:
+                    continue
+                bucket = threads.get(tid)
+                from_addr = (r.from_email or "").lower()
+                is_user = from_addr == me
+                if bucket is None:
+                    bucket = {
+                        "thread_id": tid,
+                        "latest": r,
+                        "latest_is_user": is_user,
+                        "pinned": r.pinned_at is not None,
+                        "message_count": 1,
+                    }
+                    threads[tid] = bucket
+                else:
+                    bucket["message_count"] += 1
+                    if r.pinned_at is not None:
+                        bucket["pinned"] = True
+
+            candidates = [b for b in threads.values() if b["latest_is_user"]]
+            candidates.sort(
+                key=lambda b: (
+                    1 if b["pinned"] else 0,
+                    b["latest"].date_timestamp or 0,
+                ),
+                reverse=True,
+            )
+
+            page = candidates[offset : offset + limit]
+            out: List[Dict[str, Any]] = []
+            for b in page:
+                latest: Email = b["latest"]
+                date_val = latest.date
+                date_iso = date_val.isoformat() if isinstance(date_val, datetime) else ""
+                out.append(
+                    {
+                        "thread_id": b["thread_id"],
+                        "subject": latest.subject or "",
+                        "from_email": latest.from_email or "",
+                        "from_name": latest.from_name or "",
+                        "to_email": latest.to_email or "",
+                        "date": date_iso,
+                        "snippet": latest.snippet or "",
+                        "unread": False,
+                        "has_attachments": bool(latest.has_attachments),
+                        "pinned": bool(b["pinned"]),
+                        "message_count": int(b["message_count"]),
+                        "last_email_id": latest.id,
+                    }
+                )
+            return out
+
+    def set_thread_pinned(self, owner_id: str, thread_id: str, pinned: bool) -> int:
+        """Pin or unpin every email row of a thread for an owner.
+
+        Returns the number of rows whose pinned_at changed. Used by the
+        `emails.pin` RPC — the desktop client surfaces pin as a
+        thread-level flag.
+        """
+        with get_session() as session:
+            rows = (
+                session.query(Email)
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.thread_id == thread_id,
+                )
+                .all()
+            )
+            now = datetime.now(timezone.utc) if pinned else None
+            affected = 0
+            for r in rows:
+                if pinned and r.pinned_at is None:
+                    r.pinned_at = now
+                    affected += 1
+                elif not pinned and r.pinned_at is not None:
+                    r.pinned_at = None
+                    affected += 1
+            session.flush()
+            return affected
+
+    def mark_thread_read(self, owner_id: str, thread_id: str) -> int:
+        """Set `read_at = now()` on every row of a thread that lacks one.
+
+        Idempotent: rows that already have a read_at are left alone.
+        Returns the number of rows updated.
+        """
+        with get_session() as session:
+            rows = (
+                session.query(Email)
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.thread_id == thread_id,
+                    Email.read_at.is_(None),
+                )
+                .all()
+            )
+            now = datetime.now(timezone.utc)
+            for r in rows:
+                r.read_at = now
+            session.flush()
+            return len(rows)
+
     def get_email_by_id(self, owner_id: str, gmail_id: str) -> Optional[Dict[str, Any]]:
         """Get a single email by Gmail ID."""
         with get_session() as session:
