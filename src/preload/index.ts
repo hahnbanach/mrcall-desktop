@@ -120,7 +120,31 @@ const api = {
   },
   emails: {
     listByThread: (threadId: string) =>
-      call<any>('emails.list_by_thread', { thread_id: threadId }, 60000)
+      call<any>('emails.list_by_thread', { thread_id: threadId }, 60000),
+    listInbox: (params: { limit?: number; offset?: number } = {}) =>
+      call<{ threads: any[] }>(
+        'emails.list_inbox',
+        { limit: params.limit ?? 50, offset: params.offset ?? 0 },
+        30000
+      ),
+    listSent: (params: { limit?: number; offset?: number } = {}) =>
+      call<{ threads: any[] }>(
+        'emails.list_sent',
+        { limit: params.limit ?? 50, offset: params.offset ?? 0 },
+        30000
+      ),
+    pin: (threadId: string, pinned: boolean) =>
+      call<{ ok: boolean; affected: number }>(
+        'emails.pin',
+        { thread_id: threadId, pinned },
+        15000
+      ),
+    markRead: (threadId: string) =>
+      call<{ ok: boolean; affected: number }>(
+        'emails.mark_read',
+        { thread_id: threadId },
+        15000
+      )
   },
   files: {
     select: (): Promise<string[]> =>

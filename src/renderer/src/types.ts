@@ -40,6 +40,21 @@ export interface EmailThreadResult {
   emails: ThreadEmail[]
 }
 
+export interface InboxThread {
+  thread_id: string
+  subject: string
+  from_email: string
+  from_name: string
+  to_email: string
+  date: string
+  snippet: string
+  unread: boolean
+  has_attachments: boolean
+  pinned: boolean
+  message_count: number
+  last_email_id: string
+}
+
 export interface ZylchAPI {
   tasks: {
     list: (p?: { include_completed?: boolean; include_skipped?: boolean }) => Promise<ZylchTask[]>
@@ -70,6 +85,16 @@ export interface ZylchAPI {
   }
   emails: {
     listByThread: (threadId: string) => Promise<EmailThreadResult>
+    listInbox: (params?: {
+      limit?: number
+      offset?: number
+    }) => Promise<{ threads: InboxThread[] }>
+    listSent: (params?: {
+      limit?: number
+      offset?: number
+    }) => Promise<{ threads: InboxThread[] }>
+    pin: (threadId: string, pinned: boolean) => Promise<{ ok: boolean; affected: number }>
+    markRead: (threadId: string) => Promise<{ ok: boolean; affected: number }>
   }
   files: {
     select: () => Promise<string[]>
