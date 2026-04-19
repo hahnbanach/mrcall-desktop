@@ -178,9 +178,10 @@ class TaskWorker:
     ) -> None:
         """Analyze recent events with parallel LLM, sequential DB writes.
 
-        Phase 1 (parallel): for each thread's winner email, handle user-
-        authored self_sent / user_reply branches inline and dispatch every
-        non-user inbound email to the LLM.
+        Phase 1 (parallel): for each thread's winner email, handle the
+        user_reply branch inline (user replied to a contact — close/update
+        open tasks) and dispatch every other email — including self-sent
+        reminders — to the LLM so the model decides urgency/action/reason.
 
         Phase 2 (sequential): apply LLM decisions one-by-one.
         """
@@ -290,8 +291,10 @@ class TaskWorker:
 
         sem = asyncio.Semaphore(concurrency)
 
-        # Phase 1: per thread, either classify as user-authored (self_sent /
-        # user_reply — handled inline) or dispatch to the LLM.
+        # Phase 1: per thread, classify user-authored replies to contacts as
+        # user_reply (closes/updates open tasks — handled inline). Everything
+        # else — including self-sent reminders — is dispatched to the LLM so
+        # the model, not a hardcoded rule, decides urgency / action / reason.
         async def _collect(email: Dict):
             nonlocal analyzed_count
 
@@ -299,7 +302,10 @@ class TaskWorker:
             email_id = email.get("id", "")
             thread_id = email.get("thread_id") or email_id
 
-            # Self-sent reminder
+            # User-authored: route to user_reply only when at least one
+            # recipient is NOT the user (i.e. it's a reply to a contact).
+            # Self-addressed mail (recipients ⊆ user_emails) falls through
+            # to the LLM path below.
             if from_email in user_emails:
                 to_raw = email.get("to_email", "")
                 if isinstance(to_raw, list):
@@ -311,9 +317,9 @@ class TaskWorker:
                         addr = addr.split("<")[1].split(">")[0].strip()
                     if addr:
                         to_addrs.add(addr)
-                if to_addrs and to_addrs.issubset(user_emails):
-                    return ("self_sent", email)
-                return ("user_reply", email)
+                if not (to_addrs and to_addrs.issubset(user_emails)):
+                    return ("user_reply", email)
+                # else: self-addressed — fall through to LLM path
 
             # LLM path: build context (thread-aware for Fix D: we surface
             # ANY open task on the thread, not just the current contact).
@@ -411,34 +417,6 @@ class TaskWorker:
             thread_id = email.get("thread_id") or email_id
             from_email = email.get("from_email", "").lower()
 
-            if kind == "self_sent":
-                subject = email.get("subject", "").strip() or "Self-reminder"
-                body = (email.get("body_plain") or email.get("snippet") or "").strip()
-                desc = f"Self-sent reminder. {body}" if body else "Self-sent reminder"
-                task_result = {
-                    "action_required": True,
-                    "task_action": "create",
-                    "urgency": "medium",
-                    "suggested_action": subject,
-                    "reason": desc,
-                    "analyzed_at": datetime.now(timezone.utc).isoformat(),
-                    "event_id": email_id,
-                    "event_type": "email",
-                    "contact_email": from_email,
-                    "contact_name": email.get("from_name", ""),
-                    "email_date": email.get("date", ""),
-                    "sources": {
-                        "emails": [email_id],
-                        "blobs": [],
-                        "calendar_events": [],
-                    },
-                }
-                self.storage.store_task_item(self.owner_id, task_result)
-                action_count += 1
-                logger.debug(f"[TASK] Created self-sent task: {subject}")
-                self.storage.mark_email_task_processed(self.owner_id, email_id)
-                continue
-
             if kind == "user_reply":
                 # User reply: close tasks on thread + tasks on each recipient
                 self.storage.mark_email_task_processed(self.owner_id, email_id)
@@ -490,9 +468,12 @@ class TaskWorker:
 
             consecutive_failures = 0
 
-            if self._is_user_email(from_email):
-                _mark_thread_nonuser_processed(thread_id)
-                continue
+            # NOTE: previously we skipped any LLM result whose from_email was
+            # the user. That short-circuited self-sent reminders before the
+            # LLM decision could take effect. _collect() now only routes
+            # truly self-addressed mail to the LLM path (mail to other
+            # recipients goes through the "user_reply" branch above, which
+            # closes/updates open tasks instead of creating new ones).
 
             task_action = result.get("task_action", "none")
             target_task_id = result.get("target_task_id")
@@ -939,50 +920,12 @@ class TaskWorker:
             attendee_emails = [a.get("email", "") for a in attendees if a.get("email")]
             contact_email = attendee_emails[0].lower() if attendee_emails else ""
 
-        if event_type == "email" and contact_email and self._is_user_email(contact_email):
-            to_raw = item.get("to_email", "")
-            if isinstance(to_raw, list):
-                to_raw = ", ".join(to_raw)
-            to_addrs = set()
-            for addr in to_raw.split(","):
-                addr = addr.strip().lower()
-                if "<" in addr and ">" in addr:
-                    addr = addr.split("<")[1].split(">")[0].strip()
-                if addr:
-                    to_addrs.add(addr)
-            if to_addrs and all(self._is_user_email(a) for a in to_addrs):
-                logger.debug(f"[TASK] Self-sent email detected: {item_id}")
-                subject = item.get("subject", "").strip() or "Self-reminder"
-                body = (item.get("body_plain") or item.get("snippet") or "").strip()
-                desc = f"Self-sent reminder. {body}" if body else "Self-sent reminder"
-                task_result = {
-                    "action_required": True,
-                    "task_action": "create",
-                    "urgency": "medium",
-                    "suggested_action": subject,
-                    "reason": desc,
-                    "analyzed_at": datetime.now(timezone.utc).isoformat(),
-                    "event_id": item_id,
-                    "event_type": "email",
-                    "contact_email": contact_email,
-                    "contact_name": item.get("from_name", ""),
-                    "email_date": item.get("date", ""),
-                    "sources": {
-                        "emails": [str(item_id)],
-                        "blobs": [],
-                        "calendar_events": [],
-                    },
-                }
-                self.storage.store_task_item(self.owner_id, task_result)
-                self._mark_processed(event_type, item_id)
-                logger.debug(f"[TASK] Created self-sent task: {subject}")
-                return task_result
-
-        # Hard symbolic check - user's email can NEVER be a task contact
-        if contact_email and self._is_user_email(contact_email):
-            logger.info(f"[TASK] Skipping user's own email: {contact_email}")
-            self._mark_processed(event_type, item_id)
-            return None
+        # Self-sent and user-authored emails are NOT short-circuited here:
+        # they fall through to the LLM path so the model — not a hardcoded
+        # rule — decides urgency / action / reason. (The previous code
+        # manufactured a `urgency="medium"` task for every self-sent email
+        # and silently dropped every mail whose from_email was the user,
+        # defeating the "LLM analyzes everything" refactor.)
 
         # Check if support already replied AFTER this email in the same thread
         if event_type == "email" and item.get("thread_id"):
