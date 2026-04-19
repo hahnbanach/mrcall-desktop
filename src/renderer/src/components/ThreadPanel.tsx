@@ -162,17 +162,13 @@ export default function ThreadPanel({
 
       {expanded && (
         <div
-          className="overflow-y-auto border-t relative"
+          className="border-t relative"
           style={{ height: bodyHeight }}
         >
-          {/* Bottom-edge drag handle mirrors the composer's top handle. */}
-          <div
-            onMouseDown={startDrag}
-            title="Drag to resize"
-            className="absolute bottom-0 left-0 right-0 h-[6px] cursor-ns-resize group z-10"
-          >
-            <div className="mx-auto mt-[2px] h-[2px] w-10 rounded bg-slate-300 group-hover:bg-slate-500 transition-colors" />
-          </div>
+          {/* Scrollable body. Taking the whole wrapper height so the
+              drag handle below sits on the panel's real bottom edge
+              regardless of the inner scroll position. */}
+          <div className="absolute inset-0 overflow-y-auto">
           {loading && (
             <div className="p-4 text-slate-500 text-sm">Loading thread...</div>
           )}
@@ -242,6 +238,16 @@ export default function ThreadPanel({
               ))}
             </div>
           )}
+          </div>
+          {/* Drag handle sits OUTSIDE the scrollable body so inner scroll
+              can't push it away from the panel's bottom edge. */}
+          <div
+            onMouseDown={startDrag}
+            title="Drag to resize"
+            className="absolute bottom-0 left-0 right-0 h-[6px] cursor-ns-resize group z-10"
+          >
+            <div className="mx-auto mt-[2px] h-[2px] w-10 rounded bg-slate-300 group-hover:bg-slate-500 transition-colors" />
+          </div>
         </div>
       )}
     </div>
