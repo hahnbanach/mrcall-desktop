@@ -2102,14 +2102,21 @@ class Storage:
         owner_id: str,
         action_required: Optional[bool] = None,
         limit: int = 100,
+        include_completed: bool = False,
     ) -> List[Dict[str, Any]]:
-        """Get uncompleted task items, sorted by pinned, urgency, analyzed_at."""
+        """Get task items sorted by pinned, urgency, analyzed_at.
+
+        Defaults to open tasks only (completed_at IS NULL). Pass
+        include_completed=True to get the full list — callers decide
+        which slice to render.
+        """
         try:
             with get_session() as session:
                 query = session.query(TaskItem).filter(
                     TaskItem.owner_id == owner_id,
-                    TaskItem.completed_at.is_(None),
                 )
+                if not include_completed:
+                    query = query.filter(TaskItem.completed_at.is_(None))
                 if action_required is not None:
                     query = query.filter(TaskItem.action_required == action_required)
 
