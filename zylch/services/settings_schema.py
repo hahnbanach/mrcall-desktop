@@ -221,6 +221,16 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "group": "Documents & notes",
         "optional": True,
         "help": "Comma-separated absolute paths.",
+        "picker": "directories",
+    },
+    {
+        "key": "DOWNLOADS_DIR",
+        "label": "Downloads folder",
+        "type": "text",
+        "group": "Documents & notes",
+        "optional": True,
+        "help": "Where download_attachment saves files. Defaults to ~/Downloads.",
+        "picker": "directory",
     },
     {
         "key": "USER_NOTES",

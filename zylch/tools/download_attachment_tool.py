@@ -23,20 +23,25 @@ def _resolve_target_dir(target_dir: Optional[str]) -> str:
     """Resolve the directory where attachments should be written.
 
     Rules:
-      1. If `target_dir` is provided, expand ``~`` and return it.
-      2. Otherwise default to ``~/Downloads``.
-      3. If the home directory does not exist, fall back to ``/tmp/zylch/attachments``.
+      1. If `target_dir` is provided (explicit param from the LLM), expand ``~`` and return it.
+      2. Else if DOWNLOADS_DIR env var is set (user preference from Settings), use it.
+      3. Otherwise default to ``~/Downloads``.
+      4. If the home directory does not exist, fall back to ``/tmp/zylch/attachments``.
 
     The directory is created if missing.
     """
     if target_dir:
         resolved = os.path.expanduser(target_dir)
     else:
-        home = os.path.expanduser("~")
-        if not os.path.isdir(home):
-            resolved = DEFAULT_FALLBACK_DIR
+        configured = os.environ.get("DOWNLOADS_DIR", "").strip()
+        if configured:
+            resolved = os.path.expanduser(configured)
         else:
-            resolved = os.path.join(home, "Downloads")
+            home = os.path.expanduser("~")
+            if not os.path.isdir(home):
+                resolved = DEFAULT_FALLBACK_DIR
+            else:
+                resolved = os.path.join(home, "Downloads")
 
     try:
         os.makedirs(resolved, exist_ok=True)
