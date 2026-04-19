@@ -73,6 +73,7 @@ export interface ZylchAPI {
   }
   files: {
     select: () => Promise<string[]>
+    selectDirectories: () => Promise<string[]>
   }
   profile: {
     current: () => Promise<string>

@@ -285,6 +285,18 @@ function registerIpc(): void {
     return result.filePaths
   })
 
+  // Folder picker for settings fields that hold a list of directories
+  // (e.g. DOCUMENT_PATHS). Multi-select so the user can pick several at once.
+  ipcMain.handle('dialog:selectDirectories', async (event): Promise<string[]> => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return []
+    const result = await dialog.showOpenDialog(win, {
+      properties: ['openDirectory', 'multiSelections']
+    })
+    if (result.canceled) return []
+    return result.filePaths
+  })
+
   // Restart the sidecar bound to the originating window (called after
   // settings.update so new .env values are loaded).
   ipcMain.handle('sidecar:restart', async (event): Promise<{ ok: boolean }> => {

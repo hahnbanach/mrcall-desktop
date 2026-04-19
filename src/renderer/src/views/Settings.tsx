@@ -283,6 +283,22 @@ function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Eleme
     )
   }
 
+  const isDirectoryList = field.key === 'DOCUMENT_PATHS'
+  const pickDirectories = async (): Promise<void> => {
+    try {
+      const picked = await window.zylch.files.selectDirectories()
+      if (picked.length === 0) return
+      const existing = value
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const merged = Array.from(new Set([...existing, ...picked])).join(', ')
+      onChange(merged)
+    } catch {
+      /* user cancelled or dialog failed — silent */
+    }
+  }
+
   return (
     <div>
       <label htmlFor={id} className="block text-xs font-medium text-slate-700 mb-1">
@@ -290,7 +306,21 @@ function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Eleme
         {!field.optional && <span className="text-red-600 ml-1">*</span>}
         <span className="ml-2 text-slate-400 font-mono text-[10px]">{field.key}</span>
       </label>
-      {control}
+      {isDirectoryList ? (
+        <div className="flex gap-2">
+          <div className="flex-1">{control}</div>
+          <button
+            type="button"
+            onClick={pickDirectories}
+            className="px-3 py-2 text-sm border border-slate-300 rounded hover:bg-slate-100"
+            title="Pick folders in Finder"
+          >
+            📁 Browse…
+          </button>
+        </div>
+      ) : (
+        control
+      )}
       {field.help && <div className="text-xs text-slate-500 mt-1">{field.help}</div>}
     </div>
   )
