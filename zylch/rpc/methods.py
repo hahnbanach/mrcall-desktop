@@ -102,7 +102,11 @@ async def tasks_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
     )
 
     store = Storage.get_instance()
-    tasks = store.get_task_items(owner_id=owner_id, limit=limit)
+    tasks = store.get_task_items(
+        owner_id=owner_id,
+        limit=limit,
+        include_completed=include_completed,
+    )
     if not include_skipped:
         tasks = [t for t in tasks if not (t.get("sources") or {}).get("skipped_at")]
     logger.debug(f"[rpc] tasks.list -> {len(tasks)} tasks")
