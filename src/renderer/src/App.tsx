@@ -5,6 +5,7 @@ import Update from './views/Update'
 import Settings from './views/Settings'
 import Email from './views/Email'
 import NewProfileWizard from './views/NewProfileWizard'
+import Onboarding from './views/Onboarding'
 import { ConversationsProvider } from './store/conversations'
 import { ThreadProvider, useThread } from './store/thread'
 import { TasksProvider } from './store/tasks'
@@ -694,6 +695,50 @@ function Sidebar({
 }
 
 export default function App(): JSX.Element {
+  // Onboarding detection runs BEFORE mounting the normal app tree:
+  //   1. The main process opens this window with `?onboarding=1` in the
+  //      URL when it detects an empty profiles dir at startup, so we
+  //      can flip into onboarding mode synchronously.
+  //   2. We also ask the main process via IPC so the decision is robust
+  //      to reloads and to a missing query string.
+  // Rendering the normal AppInner would immediately fire `profile.current()`
+  // and `settings.get()` RPCs against a non-existent sidecar, producing
+  // noisy errors on the screen — hence the gate.
+  const [mode, setMode] = useState<'loading' | 'onboarding' | 'app'>(() => {
+    try {
+      const qs = new URLSearchParams(window.location.search)
+      if (qs.get('onboarding') === '1') return 'onboarding'
+    } catch {
+      // best-effort; fall through to async check
+    }
+    return 'loading'
+  })
+
+  useEffect(() => {
+    if (mode !== 'loading') return
+    let cancelled = false
+    window.zylch.onboarding
+      .isFirstRun()
+      .then((first) => {
+        if (cancelled) return
+        setMode(first ? 'onboarding' : 'app')
+      })
+      .catch(() => {
+        if (!cancelled) setMode('app')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [mode])
+
+  if (mode === 'loading') {
+    // Brief flash — IPC roundtrip is sub-10ms. Rendering an empty shell
+    // avoids a layout jump for the common non-first-run case.
+    return <div className="min-h-screen w-full bg-slate-50" />
+  }
+  if (mode === 'onboarding') {
+    return <Onboarding />
+  }
   return (
     <ConversationsProvider>
       <ThreadProvider>

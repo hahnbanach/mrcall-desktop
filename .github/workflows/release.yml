@@ -1,0 +1,97 @@
+name: Build installers
+
+# Builds macOS (.dmg) and Windows (.exe NSIS) installers.
+# - Fires on tag push (`v*`) and manual dispatch.
+# - Downloads the prebuilt `zylch` sidecar binary from the backend
+#   repo's latest release, places it under `bin/`, then runs
+#   electron-builder.
+# - Installers are uploaded as artifacts on every run, and attached
+#   to a GitHub Release only when the run is triggered by a tag push.
+#
+# No code signing (Gatekeeper / SmartScreen prompts are documented in
+# README.md for testers). No auto-update channel.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: mac
+            sidecar_asset: zylch-macos-arm64
+            sidecar_out: bin/zylch
+            arch: arm64
+          - os: macos-13
+            platform: mac
+            sidecar_asset: zylch-macos-x64
+            sidecar_out: bin/zylch
+            arch: x64
+          - os: windows-latest
+            platform: win
+            sidecar_asset: zylch-windows-x64.exe
+            sidecar_out: bin/zylch.exe
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Download zylch sidecar
+        env:
+          # Falls back to the job's GITHUB_TOKEN if no explicit secret
+          # is configured; the backend repo is public so either works.
+          GH_TOKEN: ${{ secrets.SIDECAR_READ_TOKEN || github.token }}
+        shell: bash
+        run: |
+          mkdir -p bin
+          gh release download \
+            --repo malemi/zylch \
+            --pattern "${{ matrix.sidecar_asset }}" \
+            --output "${{ matrix.sidecar_out }}"
+          # Make executable on posix; no-op on Windows.
+          chmod +x "${{ matrix.sidecar_out }}" || true
+          ls -la bin/
+
+      - name: Build installer
+        run: npm run dist:${{ matrix.platform }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zylch-desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
+
+  release:
+    name: Attach installers to GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            zylch-desktop-mac-arm64/*
+            zylch-desktop-mac-x64/*
+            zylch-desktop-win-x64/*

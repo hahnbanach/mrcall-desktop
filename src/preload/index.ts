@@ -200,6 +200,29 @@ const api = {
     restart: (): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('sidecar:restart') as Promise<{ ok: boolean }>
   },
+  onboarding: {
+    // True iff ~/.zylch/profiles is empty (no subdirectories). The
+    // onboarding window is opened by the main process before the
+    // renderer loads, but we also check at mount so the renderer can
+    // route correctly when opened with ?onboarding=1 query.
+    isFirstRun: (): Promise<boolean> =>
+      ipcRenderer.invoke('onboarding:isFirstRun') as Promise<boolean>,
+    // Creates a profile directly on disk — NO sidecar involved. Used
+    // exclusively from the first-run wizard. Returns ok=false with an
+    // `error` string on validation / filesystem errors (the renderer
+    // surfaces it inline).
+    createProfile: (
+      email: string,
+      values: Record<string, string>
+    ): Promise<{ ok: true; profile: string } | { ok: false; error: string }> =>
+      ipcRenderer.invoke('onboarding:createProfile', email, values) as Promise<
+        { ok: true; profile: string } | { ok: false; error: string }
+      >,
+    // After a successful createProfile, the renderer calls finalize to
+    // spawn a real profile-bound window and close the onboarding one.
+    finalize: (email: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('onboarding:finalize', email) as Promise<{ ok: boolean }>
+  },
   onNotification: (method: string, cb: NotifyCb): (() => void) => {
     let set = listeners.get(method)
     if (!set) {

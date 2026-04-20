@@ -145,6 +145,14 @@ export interface ZylchAPI {
   sidecar: {
     restart: () => Promise<{ ok: boolean }>
   }
+  onboarding: {
+    isFirstRun: () => Promise<boolean>
+    createProfile: (
+      email: string,
+      values: Record<string, string>
+    ) => Promise<{ ok: true; profile: string } | { ok: false; error: string }>
+    finalize: (email: string) => Promise<{ ok: boolean }>
+  }
   onNotification: (method: string, cb: (params: any) => void) => () => void
   onStderr: (cb: (chunk: string) => void) => () => void
   onSidecarStatus: (cb: (status: SidecarStatusEvent) => void) => () => void

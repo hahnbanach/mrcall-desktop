@@ -3,9 +3,33 @@ import { join } from 'path'
 import { readdirSync, statSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import { SidecarClient } from './sidecar'
+import { createProfileFS, isFirstRun } from './profileFS'
 
+// Sidecar binary path.
+//
+// - In dev (`npm run dev`): fall back to the developer's local venv,
+//   overridable via ZYLCH_BINARY env var.
+// - In a packaged app (`npm run dist`): electron-builder copies the
+//   sidecar into `<app>/Contents/Resources/bin/zylch` (macOS) or
+//   `<app>\resources\bin\zylch.exe` (Windows). `process.resourcesPath`
+//   resolves to that directory at runtime.
+//
+// ZYLCH_CWD is only used in dev; the packaged sidecar is self-contained
+// (PyInstaller single-file) and doesn't need a specific cwd.
 const ZYLCH_CWD = process.env.ZYLCH_CWD || '/home/mal/private/zylch-standalone'
-const ZYLCH_BINARY = process.env.ZYLCH_BINARY || join(ZYLCH_CWD, 'venv/bin/zylch')
+function resolveSidecarBinary(): string {
+  if (process.env.ZYLCH_BINARY) return process.env.ZYLCH_BINARY
+  if (app.isPackaged) {
+    const name = process.platform === 'win32' ? 'zylch.exe' : 'zylch'
+    return join(process.resourcesPath, 'bin', name)
+  }
+  return join(ZYLCH_CWD, 'venv/bin/zylch')
+}
+// Deferred until app.whenReady so `app.isPackaged` is reliable.
+let ZYLCH_BINARY = ''
+// First-launch default profile. In dev, prefer the developer's own
+// profile; in a packaged build we rely entirely on filesystem discovery
+// (empty profiles dir triggers onboarding).
 const DEFAULT_PROFILE = process.env.ZYLCH_PROFILE || 'mario.alemi@cafe124.it'
 
 // Per-method default timeouts (ms). Callers may override by passing an
@@ -61,7 +85,10 @@ function listProfiles(): string[] {
 
 function spawnSidecar(profile: string, window: BrowserWindow): SidecarClient {
   const sidecar = new SidecarClient({
-    cwd: ZYLCH_CWD,
+    // Packaged builds don't need a specific cwd: the PyInstaller
+    // binary is self-contained. In dev we keep the repo root so
+    // relative imports still resolve if anything ever regresses.
+    cwd: app.isPackaged ? process.resourcesPath : ZYLCH_CWD,
     binary: ZYLCH_BINARY,
     profile
   })
@@ -150,6 +177,45 @@ function createWindowForProfile(profile: string): BrowserWindow {
     win.loadURL(devUrl)
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+  return win
+}
+
+// Onboarding mode: first-run, no profile exists yet. We deliberately do
+// NOT spawn a sidecar — the renderer shows the wizard only and the user
+// creates a profile via the `onboarding:createProfile` IPC which writes
+// the `.env` directly on the filesystem. `onboarding:finalize` then
+// reloads this window as a normal profile-bound window.
+function createOnboardingWindow(): BrowserWindow {
+  const win = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    show: false,
+    title: 'Zylch — Welcome',
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  win.on('ready-to-show', () => win.show())
+  win.webContents.setWindowOpenHandler((d) => {
+    shell.openExternal(d.url)
+    return { action: 'deny' }
+  })
+
+  // Load the normal renderer with an onboarding marker in the query
+  // string. The renderer also has an IPC fallback (`onboarding:isFirstRun`)
+  // so it can check at mount.
+  const devUrl = process.env['ELECTRON_RENDERER_URL']
+  if (devUrl) {
+    win.loadURL(devUrl + '?onboarding=1')
+  } else {
+    win.loadFile(join(__dirname, '../renderer/index.html'), {
+      query: { onboarding: '1' }
+    })
   }
   return win
 }
@@ -297,6 +363,62 @@ function registerIpc(): void {
     return result.filePaths
   })
 
+  // Onboarding: is this a first-run (no profiles on disk)?
+  ipcMain.handle('onboarding:isFirstRun', async (): Promise<boolean> => isFirstRun())
+
+  // Onboarding: create a profile directly on disk. Does NOT involve the
+  // sidecar — called from the first-run window where no sidecar exists
+  // yet. Mirrors the server-side `profiles.create` semantics.
+  ipcMain.handle(
+    'onboarding:createProfile',
+    async (
+      _event,
+      email: string,
+      values: Record<string, string>
+    ): Promise<{ ok: true; profile: string } | { ok: false; error: string }> => {
+      try {
+        const r = createProfileFS(email, values)
+        console.log(
+          `[main] onboarding:createProfile ok profile=${r.profile} keys=${JSON.stringify(
+            Object.keys(values).sort()
+          )}`
+        )
+        return { ok: true, profile: r.profile }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.error(`[main] onboarding:createProfile failed: ${msg}`)
+        return { ok: false, error: msg }
+      }
+    }
+  )
+
+  // Onboarding: swap the current (onboarding) window for a real
+  // profile-bound window. The calling window is closed and a fresh one
+  // is opened with a sidecar attached to `email`. Returns only after
+  // the new window exists; the sidecar itself comes up asynchronously.
+  ipcMain.handle(
+    'onboarding:finalize',
+    async (event, email: string): Promise<{ ok: boolean }> => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (typeof email !== 'string' || !email.trim()) return { ok: false }
+      try {
+        createWindowForProfile(email.trim())
+        if (win && !win.isDestroyed()) {
+          // Close the onboarding window after the new one is spawned so
+          // the app keeps at least one window throughout (prevents the
+          // app from quitting on non-mac via window-all-closed).
+          setTimeout(() => {
+            if (!win.isDestroyed()) win.close()
+          }, 0)
+        }
+        return { ok: true }
+      } catch (e) {
+        console.error('[main] onboarding:finalize failed', e)
+        return { ok: false }
+      }
+    }
+  )
+
   // Restart the sidecar bound to the originating window (called after
   // settings.update so new .env values are loaded).
   ipcMain.handle('sidecar:restart', async (event): Promise<{ ok: boolean }> => {
@@ -312,13 +434,41 @@ function registerIpc(): void {
   })
 }
 
+function bootFirstWindow(): void {
+  // First-run: no profiles on disk → open the onboarding window (no
+  // sidecar). The user creates a profile via the wizard; finalize()
+  // then opens a real profile-bound window.
+  if (isFirstRun()) {
+    console.log('[main] first run detected (no profiles) → onboarding mode')
+    createOnboardingWindow()
+    return
+  }
+  // Existing-user path. Prefer DEFAULT_PROFILE if it still exists;
+  // otherwise fall back to the first profile on disk. This avoids the
+  // old crash where ZYLCH_PROFILE pointed to a since-deleted dir.
+  const profiles = listProfiles()
+  const target = profiles.includes(DEFAULT_PROFILE)
+    ? DEFAULT_PROFILE
+    : profiles[0]
+  if (!target) {
+    // Defensive: listProfiles() disagreed with isFirstRun(). Shouldn't
+    // happen, but bail to onboarding rather than crashing.
+    console.warn('[main] no usable profiles found despite isFirstRun()=false → onboarding')
+    createOnboardingWindow()
+    return
+  }
+  createWindowForProfile(target)
+}
+
 app.whenReady().then(() => {
+  ZYLCH_BINARY = resolveSidecarBinary()
+  console.log(`[main] sidecar binary=${ZYLCH_BINARY} isPackaged=${app.isPackaged}`)
   registerIpc()
   buildAppMenu()
-  createWindowForProfile(DEFAULT_PROFILE)
+  bootFirstWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindowForProfile(DEFAULT_PROFILE)
+      bootFirstWindow()
     }
   })
 })
