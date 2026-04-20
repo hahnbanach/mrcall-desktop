@@ -131,7 +131,13 @@ export default function HtmlEmailBody({ html }: { html: string }): JSX.Element {
     <iframe
       ref={iframeRef}
       title="email-body"
-      sandbox=""
+      // allow-same-origin is deliberate: without it, the parent can't
+      // read contentDocument to measure scrollHeight, so the iframe
+      // gets stuck at the initial minimum (80 px) forever. Scripts,
+      // forms, navigation and popups remain blocked — the email HTML
+      // still can't execute anything. The only extra privilege vs an
+      // empty sandbox is that we can read its DOM from here.
+      sandbox="allow-same-origin"
       referrerPolicy="no-referrer"
       loading="lazy"
       srcDoc={buildSrcDoc(html)}
