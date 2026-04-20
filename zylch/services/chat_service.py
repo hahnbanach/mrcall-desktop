@@ -630,10 +630,17 @@ class ChatService:
             # Restore conversation history if provided
             # This allows the agent to maintain context across API calls
             if conversation_history:
+                # Compact if history is over the soft token limit. Never
+                # raises — on failure returns the original history.
+                from zylch.services.chat_compaction import compact_if_needed
+
+                compacted = await compact_if_needed(conversation_history)
                 logger.info(
-                    f"Restoring conversation history ({len(conversation_history)} messages)"
+                    f"Restoring conversation history "
+                    f"(input={len(conversation_history)} msgs, "
+                    f"after_compaction={len(compacted)} msgs)"
                 )
-                self.agent.set_history(conversation_history)
+                self.agent.set_history(compacted)
             else:
                 # Clear history for new conversation
                 self.agent.clear_history()
