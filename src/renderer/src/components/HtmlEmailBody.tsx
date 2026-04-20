@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // Minimal styling baked into the iframe srcDoc so email HTML renders
 // with a sane default and images never blow the reading pane wider
@@ -68,31 +68,73 @@ function safetyCap(): number {
  */
 export default function HtmlEmailBody({ html }: { html: string }): JSX.Element {
   const [height, setHeight] = useState<number>(IFRAME_MIN_HEIGHT)
-  const handleLoad = (e: React.SyntheticEvent<HTMLIFrameElement>): void => {
-    try {
-      const doc = e.currentTarget.contentDocument
-      if (!doc) return
-      // documentElement.scrollHeight is more reliable than body.scrollHeight
-      // when emails use table-based layouts or set explicit heights on the
-      // body — body can report a stale / collapsed height while <html> sees
-      // the full rendered tree.
-      const bodyH = doc.body?.scrollHeight ?? 0
-      const htmlH = doc.documentElement?.scrollHeight ?? 0
-      const measured = Math.max(bodyH, htmlH) + 16
-      const capped = Math.min(safetyCap(), Math.max(IFRAME_MIN_HEIGHT, measured))
-      setHeight(capped)
-    } catch {
-      /* cross-origin reads shouldn't happen with srcDoc + sandbox="" */
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
+
+  useEffect(() => {
+    const iframe = iframeRef.current
+    if (!iframe) return
+    let ro: ResizeObserver | null = null
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const measure = (): void => {
+      try {
+        const doc = iframe.contentDocument
+        if (!doc) return
+        // documentElement.scrollHeight is more reliable than body.scrollHeight
+        // when emails use table-based layouts or set explicit heights on the
+        // body. Take the max so we don't underestimate in either case.
+        const bodyH = doc.body?.scrollHeight ?? 0
+        const htmlH = doc.documentElement?.scrollHeight ?? 0
+        const raw = Math.max(bodyH, htmlH)
+        if (raw <= 0) return
+        const capped = Math.min(safetyCap(), Math.max(IFRAME_MIN_HEIGHT, raw + 16))
+        setHeight((prev) => (capped === prev ? prev : capped))
+      } catch {
+        /* cross-origin reads shouldn't happen with srcDoc + sandbox="" */
+      }
     }
-  }
+    const onLoad = (): void => {
+      measure()
+      // Re-measure after likely async work (image decoding, web fonts,
+      // CSS layout stabilisation). The single onLoad measurement fires
+      // before images are drawn and consistently comes back too small.
+      timers.push(setTimeout(measure, 150))
+      timers.push(setTimeout(measure, 500))
+      timers.push(setTimeout(measure, 1500))
+      // Also watch the iframe's own body: if anything reflows (image
+      // finally decoded, JS-disabled email still shifts during load),
+      // pick up the new height.
+      try {
+        const doc = iframe.contentDocument
+        if (doc?.body && typeof ResizeObserver !== 'undefined') {
+          ro = new ResizeObserver(measure)
+          ro.observe(doc.body)
+        }
+      } catch {
+        /* swallow */
+      }
+    }
+    iframe.addEventListener('load', onLoad)
+    // Cover the case where `srcDoc` content was already parsed before
+    // React attached the listener (happens with `loading="lazy"` and
+    // tight re-renders).
+    if (iframe.contentDocument?.readyState === 'complete') {
+      onLoad()
+    }
+    return () => {
+      iframe.removeEventListener('load', onLoad)
+      for (const t of timers) clearTimeout(t)
+      ro?.disconnect()
+    }
+  }, [html])
+
   return (
     <iframe
+      ref={iframeRef}
       title="email-body"
       sandbox=""
       referrerPolicy="no-referrer"
       loading="lazy"
       srcDoc={buildSrcDoc(html)}
-      onLoad={handleLoad}
       style={{ width: '100%', height, border: 0, display: 'block' }}
     />
   )
