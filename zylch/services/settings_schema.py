@@ -246,8 +246,11 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "type": "textarea",
         "group": "Documents & notes",
         "optional": True,
-        "secret": True,
-        "help": "Instructions Zylch follows but never reveals.",
+        # NOT marked secret: "secret" here means "never leak to contacts /
+        # emails / drafts", not "hide from the account owner editing their
+        # own Settings". Masking this field in the UI led the user to
+        # believe it wasn't being saved.
+        "help": "Instructions Zylch follows but never reveals to contacts.",
     },
 ]
 
