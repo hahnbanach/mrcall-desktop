@@ -1,14 +1,17 @@
 """Core Zylch AI agent using LLM abstraction layer."""
 
+import copy
 import logging
+from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from ..llm import LLMClient
 from .models import ModelSelector
-from .prompts import get_system_prompt, get_system_prompt_base
+from .prompts import get_system_prompt_base
 from .turn_context import new_turn_id, get_turn_id
 from ..tools.base import Tool, ToolResult, ToolStatus
 from ..agents.base import BaseConversationalAgent
+from ..services.solve_constants import get_personal_data_section
 from ..services.task_executor import APPROVAL_TOOLS
 
 # Type alias for approval callback: (tool_use_id, tool_name, input_dict) -> approved
@@ -51,6 +54,9 @@ class ZylchAIAgent(BaseConversationalAgent):
         self.triggered_instructions = triggered_instructions or []
         self.conversation_history: List[Dict[str, Any]] = []
         self.message_count = 0
+        # Usage dict from the most recent LLM call — exposed for tests
+        # and observability. Reset at the start of each process_message.
+        self.last_usage: Dict[str, int] = {}
 
         logger.info(
             f"Initialized Zylch AI agent with {len(tools)} tools, provider={provider}{f' and {len(self.triggered_instructions)} triggered instructions' if self.triggered_instructions else ''}"
@@ -66,6 +72,56 @@ class ZylchAIAgent(BaseConversationalAgent):
         tool_names = [s["name"] for s in schemas]
         logger.info(f"Tools available to Claude: {tool_names}")
         return schemas
+
+    def _messages_with_history_cache(
+        self,
+        messages: List[Dict[str, Any]],
+        volatile_suffix: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return a deep copy of ``messages`` with a cache_control marker on
+        the last content block of the most recent message.
+
+        Anthropic caches the entire prefix up to the marker, so on the next
+        turn the whole history becomes a cache read. We never mutate
+        ``self.conversation_history`` — the marker is added only on the wire
+        representation, because history is serialized/restored elsewhere and
+        stale cache_control markers would accumulate.
+
+        If ``volatile_suffix`` is provided, it is appended as an EXTRA text
+        block AFTER the cache_control breakpoint on the last message. This
+        lets per-turn, minute-granular content (current time, notifications)
+        reach the model without invalidating the cached prefix.
+
+        Anthropic allows at most 4 ephemeral breakpoints; the system prompt
+        consumes 1, this adds 1, total = 2 — well within the limit.
+        """
+        if not messages:
+            return messages
+        out = copy.deepcopy(messages)
+        last = out[-1]
+        content = last.get("content")
+        if isinstance(content, str):
+            # Promote string content to a single text block so we can attach
+            # cache_control on it. Anthropic accepts both shapes.
+            blocks: List[Dict[str, Any]] = [
+                {
+                    "type": "text",
+                    "text": content,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+            if volatile_suffix:
+                blocks.append({"type": "text", "text": volatile_suffix})
+            last["content"] = blocks
+            return out
+        if isinstance(content, list) and content:
+            # Attach cache_control to the last block — the stable prefix.
+            last_block = content[-1]
+            if isinstance(last_block, dict):
+                last_block["cache_control"] = {"type": "ephemeral"}
+            if volatile_suffix:
+                content.append({"type": "text", "text": volatile_suffix})
+        return out
 
     async def process_message(
         self,
@@ -97,10 +153,24 @@ class ZylchAIAgent(BaseConversationalAgent):
         model = self.model_selector.select_model(user_message, context, force_model=force_model)
         logger.info(f"[chat turn={turn_id}] Using model: {model}")
 
-        # Build system prompt with context
-        system_prompt = get_system_prompt() + get_system_prompt_base()
+        # Build system prompt with context.
+        # We use ``get_system_prompt_base()`` only (no datetime header) so
+        # the cached prefix stays byte-identical across turns within the
+        # same day/hour. The current date/time is injected into the user
+        # message below, AFTER the cache breakpoint, so minute-granular
+        # time updates don't invalidate the cached history.
+        system_prompt = get_system_prompt_base()
         if context and context.get("current_business_id"):
             system_prompt += f"\n\n**CURRENT SESSION:**\n✅ Selected MrCall Assistant: {context['current_business_id']}\nYou CAN save contacts directly to this assistant."
+
+        # Inject user personal data / notes / secret instructions into the
+        # cached system block (Deliverable 2). These live in the profile
+        # .env and change rarely, so placing them inside the cached prefix
+        # keeps the cache valid across turns while still letting them
+        # steer every chat response.
+        personal_section = get_personal_data_section()
+        if personal_section:
+            system_prompt += f"\n\n**USER CONTEXT:**{personal_section}"
 
         # Inject triggered instructions (for prompt awareness - NOT for execution)
         # Note: Trigger execution happens elsewhere (e.g., ChatService.execute_session_start_triggers)
@@ -112,14 +182,48 @@ class ZylchAIAgent(BaseConversationalAgent):
                 f"Injected {len(self.triggered_instructions)} triggered instructions into system prompt"
             )
 
+        # Wrap system as a single cached text block. Anthropic caches the
+        # full prefix (tools + system) up to this marker, and the history
+        # breakpoint below extends caching through the latest turn.
+        system_blocks = [
+            {
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+
+        # Volatile per-turn context (current date/time) goes AFTER the last
+        # cache_control breakpoint so minute-granular changes never
+        # invalidate the cached prefix.
+        now = datetime.now()
+        volatile_suffix = (
+            "\n\n[CURRENT DATE/TIME — " f"{now.strftime('%A, %B %d, %Y')}, {now.strftime('%H:%M')}]"
+        )
+
         # Create message with tool support (with current date/time)
         # Note: model selection is now handled by LLMClient based on provider
         response = await self.client.create_message(
-            messages=self.conversation_history,
-            system=system_prompt,
+            messages=self._messages_with_history_cache(
+                self.conversation_history,
+                volatile_suffix=volatile_suffix,
+            ),
+            system=system_blocks,
             tools=self._get_tool_schemas(),
             max_tokens=self.max_tokens,
         )
+        try:
+            u = response.usage
+            self.last_usage = dict(u)
+            logger.debug(
+                f"[chat turn={turn_id}] usage "
+                f"input={u.get('input_tokens', 0)} "
+                f"output={u.get('output_tokens', 0)} "
+                f"cache_read={u.get('cache_read_input_tokens', 0)} "
+                f"cache_create={u.get('cache_creation_input_tokens', 0)}"
+            )
+        except Exception:
+            pass
 
         # Handle tool use loop
         step = 0
@@ -181,11 +285,26 @@ class ZylchAIAgent(BaseConversationalAgent):
 
             # Continue conversation with tool results (with current date/time)
             response = await self.client.create_message(
-                messages=self.conversation_history,
-                system=system_prompt,  # Use same system prompt with context
+                messages=self._messages_with_history_cache(
+                    self.conversation_history,
+                    volatile_suffix=volatile_suffix,
+                ),
+                system=system_blocks,  # Same cached system prompt
                 tools=self._get_tool_schemas(),
                 max_tokens=self.max_tokens,
             )
+            try:
+                u = response.usage
+                self.last_usage = dict(u)
+                logger.debug(
+                    f"[chat turn={turn_id} step={step}] usage "
+                    f"input={u.get('input_tokens', 0)} "
+                    f"output={u.get('output_tokens', 0)} "
+                    f"cache_read={u.get('cache_read_input_tokens', 0)} "
+                    f"cache_create={u.get('cache_creation_input_tokens', 0)}"
+                )
+            except Exception:
+                pass
 
         # Extract final text response
         assistant_message = ""

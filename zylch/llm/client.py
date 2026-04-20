@@ -131,8 +131,16 @@ class LLMResponse:
                     0,
                 )
                 or getattr(u, "completion_tokens", 0),
+                # Anthropic-only cache metrics; 0 when absent (OpenAI etc.)
+                "cache_creation_input_tokens": getattr(u, "cache_creation_input_tokens", 0) or 0,
+                "cache_read_input_tokens": getattr(u, "cache_read_input_tokens", 0) or 0,
             }
-        return {"input_tokens": 0, "output_tokens": 0}
+        return {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
 
 
 class LLMClient:
