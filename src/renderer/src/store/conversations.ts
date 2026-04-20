@@ -1,12 +1,50 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useReducer,
   useCallback,
+  useState,
   ReactNode,
   createElement
 } from 'react'
 import type { ZylchTask } from '../types'
+
+// Where we stash conversations between renderer reloads (Cmd+R,
+// Electron restart, crash). Key is per-profile so two windows bound
+// to different profiles don't stomp on each other.
+const STORAGE_KEY_PREFIX = 'zylch:conversations:'
+
+function loadPersisted(profile: string): State | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PREFIX + profile)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as State
+    if (!parsed || !Array.isArray(parsed.conversations)) return null
+    // Reset ephemeral fields on restore: a dangling in-flight RPC can't
+    // be resumed, and a stale approval prompt would fire against a tool
+    // call the sidecar has already forgotten.
+    const conversations = parsed.conversations.map((c) => ({
+      ...c,
+      busy: false,
+      pendingApproval: null
+    }))
+    const activeId = conversations.some((c) => c.id === parsed.activeId)
+      ? parsed.activeId
+      : 'general'
+    return { conversations, activeId }
+  } catch {
+    return null
+  }
+}
+
+function savePersisted(profile: string, state: State): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_PREFIX + profile, JSON.stringify(state))
+  } catch {
+    /* quota exceeded or storage unavailable — degrade silently */
+  }
+}
 
 export type Msg = { role: 'user' | 'assistant'; content: string }
 
@@ -145,7 +183,58 @@ function buildTemplate(t: ZylchTask): string {
 }
 
 export function ConversationsProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState)
+  // Resolve the profile key for localStorage on mount and remember it.
+  // zylch.profile.current() is a fire-and-forget at render time; before
+  // it resolves we fall back to a neutral "unknown" key so no data is
+  // lost if the user starts typing before the IPC returns.
+  const [profileKey, setProfileKey] = useState<string>('unknown')
+  useEffect(() => {
+    let cancelled = false
+    window.zylch.profile
+      .current()
+      .then((p) => {
+        if (!cancelled && p) setProfileKey(p)
+      })
+      .catch(() => {
+        /* leave key as 'unknown' */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const [state, dispatch] = useReducer(reducer, initialState, (init) => {
+    // Try the 'unknown' bucket first (set at the very first render);
+    // once profileKey resolves we re-hydrate via the effect below.
+    const persisted = loadPersisted('unknown')
+    return persisted ?? init
+  })
+
+  // When the real profile key becomes available, re-hydrate from its
+  // own bucket (if present). This happens once, before any meaningful
+  // user interaction.
+  useEffect(() => {
+    if (profileKey === 'unknown') return
+    const persisted = loadPersisted(profileKey)
+    if (persisted) {
+      // Replace the whole state atomically — OPEN_TASK_CHAT is already
+      // an upsert, so replay each conversation and leave the active id.
+      // We dispatch SET_ACTIVE after re-opening to make sure the target
+      // survives even if 'general' was the last active.
+      for (const c of persisted.conversations) {
+        if (c.id === 'general') continue
+        dispatch({ type: 'OPEN_TASK_CHAT', conv: c })
+      }
+      dispatch({ type: 'SET_ACTIVE', id: persisted.activeId })
+    }
+  }, [profileKey])
+
+  // Persist on every state change, keyed by the active profile. Writes
+  // are cheap (JSON.stringify of a few KB) and happen on the UI thread;
+  // at this scale the overhead is invisible.
+  useEffect(() => {
+    savePersisted(profileKey, state)
+  }, [profileKey, state])
 
   const openTaskChat = useCallback((task: ZylchTask) => {
     const id = 'task-' + task.id
