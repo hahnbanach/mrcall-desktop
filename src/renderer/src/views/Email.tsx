@@ -582,17 +582,18 @@ function ThreadReadingPane({
           </button>
         </div>
       </header>
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {loading && <div className="text-sm text-slate-500">Loading thread…</div>}
-        {error && <div className="text-sm text-red-700">Failed: {error}</div>}
+      <div className="flex-1 overflow-y-auto bg-white">
+        {loading && <div className="p-4 text-sm text-slate-500">Loading thread…</div>}
+        {error && <div className="p-4 text-sm text-red-700">Failed: {error}</div>}
         {!loading && !error && emails.length === 0 && (
-          <div className="text-sm text-slate-500">No messages.</div>
+          <div className="p-4 text-sm text-slate-500">No messages.</div>
         )}
-        {emails.map((e) => (
+        {emails.map((e, i) => (
           <article
             key={e.id}
             className={
-              'border rounded-lg p-3 shadow-sm bg-white ' +
+              'px-4 py-3 ' +
+              (i < emails.length - 1 ? 'border-b ' : '') +
               (e.is_user_sent ? 'border-l-4 border-l-emerald-500' : '')
             }
           >
