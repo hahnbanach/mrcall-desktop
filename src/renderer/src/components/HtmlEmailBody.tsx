@@ -15,13 +15,31 @@ const IFRAME_CSS = [
 ].join('')
 
 function buildSrcDoc(html: string): string {
-  return (
-    '<!DOCTYPE html><html><head>' +
+  // Many email clients send a full document (DOCTYPE + <html> + <body>).
+  // Wrapping that inside our own <html><body> produces nested body/html,
+  // and browsers stop computing scrollHeight correctly — the content
+  // appears cropped to ~1/3 of the pane. If the payload already looks
+  // like a full document, inject our <base> and <style> into its <head>
+  // instead of wrapping.
+  const looksFull = /<(?:!doctype|html|head|body)\b/i.test(html.slice(0, 400))
+  const headInject =
     '<meta charset="utf-8"/>' +
     '<base target="_blank"/>' +
     '<style>' +
     IFRAME_CSS +
-    '</style>' +
+    '</style>'
+  if (looksFull) {
+    if (/<head[^>]*>/i.test(html)) {
+      return html.replace(/<head([^>]*)>/i, (m) => m + headInject)
+    }
+    if (/<html[^>]*>/i.test(html)) {
+      return html.replace(/<html([^>]*)>/i, (m) => m + '<head>' + headInject + '</head>')
+    }
+    return '<head>' + headInject + '</head>' + html
+  }
+  return (
+    '<!DOCTYPE html><html><head>' +
+    headInject +
     '</head><body>' +
     html +
     '</body></html>'
@@ -53,8 +71,14 @@ export default function HtmlEmailBody({ html }: { html: string }): JSX.Element {
   const handleLoad = (e: React.SyntheticEvent<HTMLIFrameElement>): void => {
     try {
       const doc = e.currentTarget.contentDocument
-      if (!doc || !doc.body) return
-      const measured = doc.body.scrollHeight + 16
+      if (!doc) return
+      // documentElement.scrollHeight is more reliable than body.scrollHeight
+      // when emails use table-based layouts or set explicit heights on the
+      // body — body can report a stale / collapsed height while <html> sees
+      // the full rendered tree.
+      const bodyH = doc.body?.scrollHeight ?? 0
+      const htmlH = doc.documentElement?.scrollHeight ?? 0
+      const measured = Math.max(bodyH, htmlH) + 16
       const capped = Math.min(safetyCap(), Math.max(IFRAME_MIN_HEIGHT, measured))
       setHeight(capped)
     } catch {
