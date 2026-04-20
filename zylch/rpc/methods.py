@@ -129,6 +129,26 @@ async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"ok": bool(ok)}
 
 
+async def tasks_reopen(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """tasks.reopen(task_id) -> {ok: bool}.
+
+    Clears `completed_at` so a closed task is open again. Mirrors
+    tasks.complete.
+    """
+    from zylch.storage.storage import Storage
+
+    task_id = params.get("task_id")
+    if not task_id:
+        raise ValueError("task_id is required")
+
+    owner_id = _owner_id()
+    logger.debug(f"[rpc] tasks.reopen owner_id={owner_id} task_id={task_id}")
+    store = Storage.get_instance()
+    ok = store.reopen_task_item(owner_id=owner_id, task_id=task_id)
+    logger.debug(f"[rpc] tasks.reopen -> {ok}")
+    return {"ok": bool(ok)}
+
+
 async def tasks_pin(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.pin(task_id, pinned: bool) -> {ok: bool}.
 
@@ -1461,6 +1481,7 @@ async def settings_update(params: Dict[str, Any], notify: NotifyFn) -> Any:
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.list": tasks_list,
     "tasks.complete": tasks_complete,
+    "tasks.reopen": tasks_reopen,
     "tasks.skip": tasks_skip,
     "tasks.pin": tasks_pin,
     "tasks.reanalyze": tasks_reanalyze,

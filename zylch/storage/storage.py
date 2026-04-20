@@ -2288,6 +2288,20 @@ class Storage:
             logger.error(f"Failed to complete task {task_id}: {e}")
             return False
 
+    def reopen_task_item(self, owner_id: str, task_id: str) -> bool:
+        """Clear completed_at so a previously-closed task is open again."""
+        try:
+            with get_session() as session:
+                count = (
+                    session.query(TaskItem)
+                    .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)
+                    .update({"completed_at": None})
+                )
+                return count > 0
+        except Exception as e:
+            logger.error(f"Failed to reopen task {task_id}: {e}")
+            return False
+
     def update_task_item(
         self,
         owner_id: str,
