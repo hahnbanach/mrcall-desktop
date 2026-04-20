@@ -28,8 +28,16 @@ function buildSrcDoc(html: string): string {
   )
 }
 
-const IFRAME_MAX_INITIAL_HEIGHT = 1200
 const IFRAME_MIN_HEIGHT = 80
+// Safety valve: 10× viewport height. Only exists so a runaway email
+// (e.g. an infinite-height CSS bug) can't grow the DOM unboundedly. In
+// practice real emails are well under this cap — the reading pane is
+// scrollable, so letting the iframe grow to its natural height means
+// the user scrolls the pane, not the iframe's inner scrollbar.
+function safetyCap(): number {
+  if (typeof window === 'undefined') return 10000
+  return Math.max(10000, window.innerHeight * 10)
+}
 
 /**
  * Isolates HTML email markup inside a fully-sandboxed iframe.
@@ -37,9 +45,8 @@ const IFRAME_MIN_HEIGHT = 80
  * sandbox="" disables scripts, forms, same-origin access, top-level
  * navigation, plugins and popups — so even obviously hostile email HTML
  * can't reach the renderer. referrerPolicy="no-referrer" prevents the
- * parent URL leaking to tracking pixels. Height is measured once on
- * load and capped at IFRAME_MAX_INITIAL_HEIGHT; the outer container is
- * expected to handle scroll.
+ * parent URL leaking to tracking pixels. Height is measured on load to
+ * match the content; the outer reading pane handles scroll.
  */
 export default function HtmlEmailBody({ html }: { html: string }): JSX.Element {
   const [height, setHeight] = useState<number>(IFRAME_MIN_HEIGHT)
@@ -48,7 +55,7 @@ export default function HtmlEmailBody({ html }: { html: string }): JSX.Element {
       const doc = e.currentTarget.contentDocument
       if (!doc || !doc.body) return
       const measured = doc.body.scrollHeight + 16
-      const capped = Math.min(IFRAME_MAX_INITIAL_HEIGHT, Math.max(IFRAME_MIN_HEIGHT, measured))
+      const capped = Math.min(safetyCap(), Math.max(IFRAME_MIN_HEIGHT, measured))
       setHeight(capped)
     } catch {
       /* cross-origin reads shouldn't happen with srcDoc + sandbox="" */
