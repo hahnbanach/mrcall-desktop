@@ -273,7 +273,7 @@ export default function Email({ onOpenWorkspace }: EmailProps = {}): JSX.Element
       <section
         className={
           'flex flex-col bg-white border-r ' +
-          (selected ? 'w-[380px] shrink-0' : 'flex-1 min-w-0')
+          (selected ? 'hidden' : 'flex-1 min-w-0')
         }
       >
         {/* Toolbar: burger (no selection) or back arrow (selection) +
@@ -455,13 +455,16 @@ export default function Email({ onOpenWorkspace }: EmailProps = {}): JSX.Element
         </div>
       </section>
 
-      {/* Reading pane: only mounted when a thread is selected. */}
+      {/* Reading pane: only mounted when a thread is selected.
+          Takes the full width (the thread list is hidden via `hidden`
+          above), matching Superhuman's focus-on-read behaviour. */}
       {selected && (
         <section className="flex-1 min-w-0 flex flex-col bg-white h-full">
           <ThreadReadingPane
             thread={selected}
             onOpen={openSelected}
             onPin={() => onPin(selected)}
+            onBack={() => setSelectedId(null)}
             pinning={pinning.has(selected.thread_id)}
           />
         </section>
@@ -478,11 +481,13 @@ function ThreadReadingPane({
   thread,
   onOpen,
   onPin,
+  onBack,
   pinning
 }: {
   thread: InboxThread
   onOpen: () => void
   onPin: () => void
+  onBack: () => void
   pinning: boolean
 }): JSX.Element {
   const [emails, setEmails] = useState<ThreadEmail[]>([])
@@ -516,12 +521,22 @@ function ThreadReadingPane({
   return (
     <>
       <header className="border-b px-4 py-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold truncate">
-            {thread.subject || '(no subject)'}
-          </h2>
-          <div className="text-xs text-slate-500">
-            {emails.length || thread.message_count} messages
+        <div className="flex items-start gap-2 min-w-0">
+          <button
+            onClick={onBack}
+            title="Back to list"
+            aria-label="Back to list"
+            className="mt-1 text-lg text-slate-600 hover:text-slate-900 leading-none shrink-0"
+          >
+            ←
+          </button>
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold truncate">
+              {thread.subject || '(no subject)'}
+            </h2>
+            <div className="text-xs text-slate-500">
+              {emails.length || thread.message_count} messages
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
