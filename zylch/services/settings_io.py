@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shlex
 from typing import Dict, List, Tuple
 
 from zylch.cli.profiles import get_active_profile, get_active_profile_dir
@@ -40,24 +39,26 @@ def _env_path() -> str:
 def _quote(value: str) -> str:
     """Quote `value` for safe inclusion as `KEY=value` in a dotenv file.
 
-    Multi-line values are emitted as a double-quoted string with each
-    newline converted to the literal escape sequence `\\n` — python-dotenv
-    decodes that back to a real newline when reading, and the .env file
-    stays a single-line entry per key (safe to re-read without needing
-    multiline parser state).
+    Always uses double-quoted form when any quoting is needed, because
+    python-dotenv's parser understands double-quoted values with `\\n`
+    and `\\"` escapes, but NOT shell-style apostrophe escaping like
+    `'"'"'` that `shlex.quote` emits for values containing `'`. Using
+    shell quoting broke the parse and left the whole `.env` unreadable.
 
-    Single-line values that contain shell-ish characters fall back to
-    `shlex.quote` (single-quoted), which is byte-exact.
+    Plain alphanumerics (no whitespace, no quotes, no `#`, no `=`, no
+    backslash) stay unquoted so diffs read cleanly.
     """
     if value == "":
         return ""
-    if "\n" in value or "\r" in value:
-        # Escape embedded quotes and backslashes first, then linebreaks.
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-        escaped = escaped.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n")
-        return f'"{escaped}"'
     if any(ch in _NEEDS_QUOTE for ch in value):
-        return shlex.quote(value)
+        escaped = (
+            value.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\r\n", "\\n")
+            .replace("\n", "\\n")
+            .replace("\r", "\\n")
+        )
+        return f'"{escaped}"'
     return value
 
 
