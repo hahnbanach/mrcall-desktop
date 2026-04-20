@@ -66,6 +66,7 @@ export interface ZylchAPI {
   tasks: {
     list: (p?: { include_completed?: boolean; include_skipped?: boolean }) => Promise<ZylchTask[]>
     complete: (task_id: string) => Promise<{ ok: boolean }>
+    reopen: (task_id: string) => Promise<{ ok: boolean }>
     skip: (task_id: string) => Promise<{ ok: boolean }>
     pin: (task_id: string, pinned: boolean) => Promise<{ ok: boolean }>
     reanalyze: (task_id: string) => Promise<{

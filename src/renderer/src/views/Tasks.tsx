@@ -85,6 +85,15 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
       showError(e, 'Close failed:')
     }
   }
+  const onReopen = async (id: string) => {
+    try {
+      await window.zylch.tasks.reopen(id)
+      // Drop from the current (closed) view — it's now open.
+      setTasks((t) => t.filter((x) => x.id !== id))
+    } catch (e: unknown) {
+      showError(e, 'Reopen failed:')
+    }
+  }
   const onUpdate = async (id: string) => {
     setUpdating((s) => new Set(s).add(id))
     setKeptNotice((n) => {
@@ -258,18 +267,30 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
           >
             {t.pinned ? '📌 Pinned' : '📌 Pin'}
           </button>
-          <button
-            onClick={() => onSkip(t.id)}
-            className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
-          >
-            Skip
-          </button>
-          <button
-            onClick={() => onClose(t.id)}
-            className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded hover:bg-slate-700"
-          >
-            Close
-          </button>
+          {!isClosedView && (
+            <button
+              onClick={() => onSkip(t.id)}
+              className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
+            >
+              Skip
+            </button>
+          )}
+          {isClosedView ? (
+            <button
+              onClick={() => onReopen(t.id)}
+              className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
+              title="Reopen this task"
+            >
+              ↺ Reopen
+            </button>
+          ) : (
+            <button
+              onClick={() => onClose(t.id)}
+              className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded hover:bg-slate-700"
+            >
+              Close
+            </button>
+          )}
           <button
             onClick={() => onUpdate(t.id)}
             disabled={updating.has(t.id)}
