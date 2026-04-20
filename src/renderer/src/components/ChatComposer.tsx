@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 
 export interface ChatComposerTaskContext {
   taskId?: string
@@ -44,44 +44,6 @@ export default function ChatComposer({
   const [text, setText] = useState<string>(initialText)
   const [pendingAttachments, setPendingAttachments] = useState<string[]>([])
   const [busy, setBusy] = useState<boolean>(false)
-  // User-resizable composer height. The top edge acts as a drag handle:
-  // grab and move up to grow the box, down to shrink. Clamped so the
-  // message list above always keeps some room.
-  const DEFAULT_HEIGHT = 200
-  const MIN_HEIGHT = 120
-  const [height, setHeight] = useState<number>(DEFAULT_HEIGHT)
-  const dragRef = useRef<{ startY: number; startH: number } | null>(null)
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent): void => {
-      if (!dragRef.current) return
-      const { startY, startH } = dragRef.current
-      // Dragging UP makes the composer taller.
-      const next = startH + (startY - e.clientY)
-      // Upper bound: never eat more than 70% of the viewport.
-      const maxH = Math.round(window.innerHeight * 0.7)
-      setHeight(Math.max(MIN_HEIGHT, Math.min(maxH, next)))
-    }
-    const onUp = (): void => {
-      if (!dragRef.current) return
-      dragRef.current = null
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [])
-
-  const startDrag = (e: React.MouseEvent): void => {
-    e.preventDefault()
-    dragRef.current = { startY: e.clientY, startH: height }
-    document.body.style.cursor = 'ns-resize'
-    document.body.style.userSelect = 'none'
-  }
 
   const isDisabled = disabled || busy
 
@@ -138,19 +100,10 @@ export default function ChatComposer({
   }
 
   return (
-    <div
-      className="border-t bg-white flex flex-col relative"
-      style={{ height }}
-    >
-      {/* Drag handle — the whole top border is grabbable. 5px hit area
-          with a subtle visible bar; cursor flips to ns-resize on hover. */}
-      <div
-        onMouseDown={startDrag}
-        title="Drag to resize"
-        className="absolute -top-[3px] left-0 right-0 h-[6px] cursor-ns-resize group z-10"
-      >
-        <div className="mx-auto mt-[2px] h-[2px] w-10 rounded bg-slate-300 group-hover:bg-slate-500 transition-colors" />
-      </div>
+    <div className="border-t bg-white flex flex-col relative">
+      {/* Drag handle removed: it got stuck when the mouseup fell on the
+          email iframe in the Email reading pane. The textarea's own
+          resize-y grip at the bottom-right is still available. */}
       {narration && busy && (
         <div className="px-3 pt-2 text-slate-500 italic text-sm whitespace-pre-wrap">
           {narration}
@@ -177,9 +130,9 @@ export default function ChatComposer({
           ))}
         </div>
       )}
-      <div className="p-3 flex gap-2 items-end flex-1 min-h-0">
+      <div className="p-3 flex gap-2 items-end">
         <textarea
-          className="flex-1 h-full border rounded px-3 py-2 text-sm resize-none"
+          className="flex-1 border rounded px-3 py-2 text-sm min-h-[120px] max-h-[70vh] resize-y"
           placeholder={placeholder}
           value={text}
           disabled={isDisabled}

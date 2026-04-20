@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { EmailThreadResult, ThreadEmail } from '../types'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import HtmlEmailBody from './HtmlEmailBody'
@@ -43,42 +43,11 @@ export default function ThreadPanel({
   const [result, setResult] = useState<EmailThreadResult | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
-  // User-resizable panel body: bottom edge is a drag handle. Same
-  // pattern as ChatComposer's top edge, but dragging DOWN grows here.
-  const DEFAULT_BODY_HEIGHT = Math.round(window.innerHeight * 0.45)
-  const MIN_BODY_HEIGHT = 120
-  const [bodyHeight, setBodyHeight] = useState<number>(DEFAULT_BODY_HEIGHT)
-  const dragRef = useRef<{ startY: number; startH: number } | null>(null)
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent): void => {
-      if (!dragRef.current) return
-      const { startY, startH } = dragRef.current
-      // Dragging DOWN makes the panel taller.
-      const next = startH + (e.clientY - startY)
-      const maxH = Math.round(window.innerHeight * 0.7)
-      setBodyHeight(Math.max(MIN_BODY_HEIGHT, Math.min(maxH, next)))
-    }
-    const onUp = (): void => {
-      if (!dragRef.current) return
-      dragRef.current = null
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [])
-
-  const startDrag = (e: React.MouseEvent): void => {
-    e.preventDefault()
-    dragRef.current = { startY: e.clientY, startH: bodyHeight }
-    document.body.style.cursor = 'ns-resize'
-    document.body.style.userSelect = 'none'
-  }
+  // Panel body has a fixed height when expanded — the triangle arrow
+  // in the header is the only affordance. We tried a drag handle but
+  // it got stuck when released over the email iframe (sandbox swallows
+  // mouseup), so the feature was removed.
+  const BODY_HEIGHT = "45vh"
 
   // Keep local expanded in sync when the parent swaps to a conversation
   // with a different default (e.g. going from a task to general).
@@ -164,11 +133,8 @@ export default function ThreadPanel({
       {expanded && (
         <div
           className="border-t relative"
-          style={{ height: bodyHeight }}
+          style={{ height: BODY_HEIGHT }}
         >
-          {/* Scrollable body. Taking the whole wrapper height so the
-              drag handle below sits on the panel's real bottom edge
-              regardless of the inner scroll position. */}
           <div className="absolute inset-0 overflow-y-auto">
           {loading && (
             <div className="p-4 text-slate-500 text-sm">Loading thread...</div>
@@ -243,15 +209,6 @@ export default function ThreadPanel({
               ))}
             </div>
           )}
-          </div>
-          {/* Drag handle sits OUTSIDE the scrollable body so inner scroll
-              can't push it away from the panel's bottom edge. */}
-          <div
-            onMouseDown={startDrag}
-            title="Drag to resize"
-            className="absolute bottom-0 left-0 right-0 h-[6px] cursor-ns-resize group z-10"
-          >
-            <div className="mx-auto mt-[2px] h-[2px] w-10 rounded bg-slate-300 group-hover:bg-slate-500 transition-colors" />
           </div>
         </div>
       )}
