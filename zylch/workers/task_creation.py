@@ -701,6 +701,21 @@ class TaskWorker:
             ):
                 formatted_prompt += f"\n\n{calendar_context}"
 
+            # Append USER_NOTES + USER_SECRET_INSTRUCTIONS (+ the rest of
+            # the personal-data section) so the LLM can honour user-level
+            # guidance about how to classify / dedup specific flows.
+            # Kept INSIDE the cached system block so it's paid 10% on
+            # subsequent calls within a batch. Cache invalidates only when
+            # the user edits Settings — one write, amortised across the run.
+            try:
+                from zylch.services.solve_constants import get_personal_data_section
+
+                personal_section = get_personal_data_section()
+            except Exception:
+                personal_section = ""
+            if personal_section:
+                formatted_prompt += personal_section
+
         except Exception as e:
             logger.error(f"Failed to format prompt: {e}")
             return None
