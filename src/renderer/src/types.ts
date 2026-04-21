@@ -76,6 +76,7 @@ export interface ZylchAPI {
       task_id: string
       usage?: Record<string, unknown>
     }>
+    listByThread: (thread_id: string) => Promise<ZylchTask[]>
   }
   chat: {
     send: (
@@ -103,6 +104,12 @@ export interface ZylchAPI {
     }) => Promise<{ threads: InboxThread[] }>
     pin: (threadId: string, pinned: boolean) => Promise<{ ok: boolean; affected: number }>
     markRead: (threadId: string) => Promise<{ ok: boolean; affected: number }>
+    archive: (threadId: string) => Promise<{
+      ok: boolean
+      archived: number
+      imap: { folder: string; moved: number; attempted: number }
+    }>
+    deleteLocal: (threadId: string) => Promise<{ ok: boolean; deleted: number }>
   }
   files: {
     select: () => Promise<string[]>
