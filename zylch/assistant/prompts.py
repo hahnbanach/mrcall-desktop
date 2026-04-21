@@ -219,6 +219,29 @@ This provides O(1) lookup from local cache, avoiding expensive 10+ second remote
 - Remote searches: 10-30 seconds + API costs
 - If contact was saved before, we already have the data!
 
+**SAVING / CORRECTING memory — update_memory vs create_memory:**
+When the user asks you to save, update, or correct a memory entry (e.g. "salva
+in memoria il profilo Café 124", "ricordati che Luigi lavora ora in Acme",
+"correggi il numero di Mario"):
+1. ALWAYS call `search_local_memory` FIRST with the most specific query
+   you have (name, email, or company).
+2. READ the returned candidates. Each result contains a `blob_id` and the
+   `content` of an existing blob. Decide — you, the LLM, not the tool —
+   whether any candidate really describes the SAME entity the user is
+   talking about. A blob that merely mentions the entity's name in passing
+   is NOT a match.
+3. If one candidate matches → call
+   `update_memory(blob_id="<that exact id>", new_content="<full new text>")`.
+   The new_content replaces the blob entirely, so include everything worth
+   keeping from the old content plus the update.
+4. If NO candidate matches (different person, different company, or search
+   returned `not_found`) → call `create_memory(content="<full profile>")`.
+   Include identifiers (name, email, phone, company) in the content so a
+   future search can find it.
+5. NEVER invent a `blob_id`. NEVER pass a query string to `update_memory` —
+   the tool requires the exact id from search results. If you're not sure
+   any candidate matches, prefer `create_memory` over guessing.
+
 **When enriching NEW contacts (not in local memory):**
 - **Gmail search**: Use search_gmail ONLY if: (1) search_local_memory finds nothing, OR (2) data is stale
 - **AUTO-CACHE**: When search_gmail finds email exchanges, it AUTOMATICALLY caches the contact in local memory!

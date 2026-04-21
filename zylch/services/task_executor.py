@@ -71,7 +71,7 @@ def format_approval_preview(tool_name: str, args: Dict) -> str:
         )
     if tool_name == "update_memory":
         return (
-            f"**Update Memory**\nSearch: {args.get('query', '')}\n\n"
+            f"**Update Memory**\nblob_id: {args.get('blob_id', '')}\n\n"
             f"New content:\n{args.get('new_content', '')}"
         )
     return json.dumps(args, indent=2, default=str)

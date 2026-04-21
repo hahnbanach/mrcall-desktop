@@ -1,7 +1,19 @@
-"""Update a contact's memory blob (ported from solve_tools._update_memory).
+"""Update a memory blob by EXACT id.
 
-Searches for an existing blob by query, then replaces its content.
-Destructive — gated by APPROVAL_TOOLS in ChatService.
+Earlier versions of this tool took a `query` string and ran its own
+semantic search, overwriting the top hit. That meant the tool — not
+the LLM — was deciding which blob to overwrite, and at least once it
+destroyed the wrong entry (Joel blob clobbered with a Café 124
+profile because "Café 124" appeared in Joel's content). See
+memory/feedback_no_hardcoded_rules.md for the principle.
+
+The current contract:
+  1. LLM calls `search_local_memory(query)` first and reads the
+     returned candidates.
+  2. If one of them is the right blob, it calls `update_memory(
+     blob_id=<that candidate's id>, new_content=...)`.
+  3. If no candidate matches, it calls `create_memory(...)` instead.
+The tool itself does NOT guess.
 """
 
 import logging
@@ -14,8 +26,6 @@ logger = logging.getLogger(__name__)
 
 
 class UpdateMemoryTool(Tool):
-    """Update a contact's memory entry."""
-
     def __init__(
         self,
         session_state: Optional[SessionState] = None,
@@ -24,10 +34,13 @@ class UpdateMemoryTool(Tool):
         super().__init__(
             name="update_memory",
             description=(
-                "Update a contact's memory entry."
-                " Use to correct errors, add info, or rename."
-                " First search_local_memory to find the entry,"
-                " then update with corrected content."
+                "Overwrite the content of a memory blob identified by its EXACT"
+                " blob_id. Workflow: (1) call search_local_memory first,"
+                " (2) read the candidates and decide which one actually matches"
+                " what the user wants to update, (3) pass that blob's id here."
+                " If no existing blob matches, call create_memory instead —"
+                " do NOT invent an id and do NOT update a blob you're unsure"
+                " about. Destructive: the previous content is replaced."
             ),
         )
         self.session_state = session_state
@@ -42,82 +55,51 @@ class UpdateMemoryTool(Tool):
 
     async def execute(
         self,
-        query: str = "",
+        blob_id: str = "",
         new_content: str = "",
         **kwargs,
     ) -> ToolResult:
         logger.debug(
-            f"[update_memory] execute(args={{'query_len': {len(query)},"
-            f" 'new_content_len': {len(new_content)}}})"
+            f"[update_memory] execute(blob_id={blob_id!r}," f" new_content_len={len(new_content)})"
         )
 
-        if not query or not new_content:
-            result = ToolResult(
+        if not blob_id or not new_content:
+            return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
-                error="Missing query or new_content",
+                error="Missing blob_id or new_content",
             )
-            logger.debug(f"[update_memory] -> status={result.status}")
-            return result
 
         owner_id = self._get_owner_id()
         if not owner_id:
-            result = ToolResult(
+            return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
                 error="No owner_id available",
             )
-            logger.debug(f"[update_memory] -> status={result.status}")
-            return result
 
         try:
-            from zylch.memory import (
-                EmbeddingEngine,
-                HybridSearchEngine,
-                MemoryConfig,
-            )
+            from zylch.memory import EmbeddingEngine, MemoryConfig
             from zylch.memory.blob_storage import BlobStorage
             from zylch.storage.database import get_session
 
             config = MemoryConfig()
             engine = EmbeddingEngine(config)
-            search = HybridSearchEngine(get_session, engine)
             blob_store = BlobStorage(get_session, engine)
 
-            results = search.search(
-                owner_id=owner_id,
-                query=query,
-                limit=1,
-            )
-            if not results:
-                result = ToolResult(
+            # Verify the id exists for this owner — no silent no-ops.
+            existing = blob_store.get_blob(blob_id=blob_id, owner_id=owner_id)
+            if not existing:
+                return ToolResult(
                     status=ToolStatus.ERROR,
                     data=None,
-                    error=f"No memory entry found for '{query}'",
+                    error=(
+                        f"No blob with id={blob_id!r} for this owner. Did you"
+                        " call search_local_memory first to obtain a real id?"
+                        " If the entity doesn't exist yet, use create_memory."
+                    ),
                 )
-                logger.debug(f"[update_memory] -> status={result.status}")
-                return result
-
-            r = results[0]
-            blob_id = (
-                r.blob_id
-                if hasattr(r, "blob_id")
-                else r.get("blob_id", "") if isinstance(r, dict) else ""
-            )
-            old_content = (
-                r.content
-                if hasattr(r, "content")
-                else r.get("content", "") if isinstance(r, dict) else ""
-            )
-
-            if not blob_id:
-                result = ToolResult(
-                    status=ToolStatus.ERROR,
-                    data=None,
-                    error="Matched result had no blob_id",
-                )
-                logger.debug(f"[update_memory] -> status={result.status}")
-                return result
+            old_content = existing.get("content", "")
 
             blob_store.update_blob(
                 blob_id=blob_id,
@@ -126,25 +108,18 @@ class UpdateMemoryTool(Tool):
                 event_description="Manual correction via chat",
             )
 
-            result = ToolResult(
+            return ToolResult(
                 status=ToolStatus.SUCCESS,
-                data={
-                    "blob_id": str(blob_id),
-                    "action": "updated",
-                },
+                data={"blob_id": str(blob_id), "action": "updated"},
                 message=("Memory updated.\n" f"Was: {old_content}\n" f"Now: {new_content}"),
             )
-            logger.debug(f"[update_memory] -> status={result.status}" f" blob_id={blob_id}")
-            return result
         except Exception as e:
             logger.error(f"[update_memory] failed: {e}")
-            result = ToolResult(
+            return ToolResult(
                 status=ToolStatus.ERROR,
                 data=None,
                 error=f"Update failed: {e}",
             )
-            logger.debug(f"[update_memory] -> status={result.status}")
-            return result
 
     def get_schema(self) -> Dict[str, Any]:
         return {
@@ -153,15 +128,18 @@ class UpdateMemoryTool(Tool):
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "query": {
+                    "blob_id": {
                         "type": "string",
-                        "description": ("Name or keyword to find the memory" " entry to update"),
+                        "description": (
+                            "The EXACT blob id returned by search_local_memory."
+                            " Not a name, not a query — the UUID string."
+                        ),
                     },
                     "new_content": {
                         "type": "string",
-                        "description": ("The corrected full content (replaces" " existing)"),
+                        "description": "The full new content (replaces existing).",
                     },
                 },
-                "required": ["query", "new_content"],
+                "required": ["blob_id", "new_content"],
             },
         }
