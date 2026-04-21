@@ -56,7 +56,13 @@ zylch/
 │   ├── email_sync_tools.py # Email sync tools
 │   ├── email_sync.py     # EmailSyncManager (IMAP incremental)
 │   ├── email_archive.py  # Email archive manager
-│   ├── contact_tools.py  # Contact/task/memory tools
+│   ├── contact_tools.py  # Contact/task/memory search (SearchLocalMemoryTool returns blob_id)
+│   ├── create_memory_tool.py # Create NEW memory blob under user:<owner_id>
+│   ├── update_memory_tool.py # Update EXISTING blob — requires exact blob_id + new_content
+│   ├── read_email_tool.py    # Read email by id
+│   ├── read_document_tool.py # Read document (platform-aware paths)
+│   ├── download_attachment_tool.py # Download email attachment
+│   ├── run_python_tool.py    # Execute Python in sandbox
 │   ├── crm_tools.py      # CRM + compose email tools
 │   ├── whatsapp_tools.py # WhatsApp LLM tools
 │   ├── starchat.py       # StarChat/MrCall HTTP client (channel)
@@ -67,6 +73,12 @@ zylch/
 │   ├── pipedrive.py      # Pipedrive CRM tools
 │   ├── web_search.py     # Web search for enrichment
 │   └── config.py         # Tool configuration
+
+# Memory tool contract (2026-04-21): the LLM — not the tool — decides which
+# blob to update. update_memory takes an exact blob_id (never searches); the
+# LLM first calls SearchLocalMemoryTool, picks a blob_id, then calls either
+# update_memory(blob_id, new_content) or create_memory(content). No hardcoded
+# rules, no fuzzy/substring match inside the tool.
 │
 ├── agents/               # AI agents
 │   ├── base_agent.py     # Base agent class
