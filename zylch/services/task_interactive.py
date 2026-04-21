@@ -185,7 +185,7 @@ def _solve_task(
     client = LLMClient(api_key=api_key, provider=provider)
     system = SOLVE_SYSTEM_PROMPT.format(
         user_name=user_name,
-        personal_data_section=get_personal_data_section(),
+        personal_data_section=get_personal_data_section(owner_id=owner_id),
     )
 
     messages = [
@@ -245,7 +245,7 @@ def _instruct_task(
     client = LLMClient(api_key=api_key, provider=provider)
     system = SOLVE_SYSTEM_PROMPT.format(
         user_name=user_name,
-        personal_data_section=get_personal_data_section(),
+        personal_data_section=get_personal_data_section(owner_id=owner_id),
     )
 
     messages = [

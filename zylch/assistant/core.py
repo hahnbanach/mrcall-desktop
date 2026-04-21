@@ -168,7 +168,8 @@ class ZylchAIAgent(BaseConversationalAgent):
         # .env and change rarely, so placing them inside the cached prefix
         # keeps the cache valid across turns while still letting them
         # steer every chat response.
-        personal_section = get_personal_data_section()
+        owner_id_for_prefs = context.get("user_id") if context else None
+        personal_section = get_personal_data_section(owner_id=owner_id_for_prefs)
         if personal_section:
             system_prompt += f"\n\n**USER CONTEXT:**{personal_section}"
 

@@ -71,8 +71,12 @@ class CreateMemoryTool(Tool):
 
         # Match the namespace the memory worker uses so that newly
         # created blobs are discoverable by the same search path.
+        # Also accept a bare category ("user", "prefs", …) as shorthand
+        # and scope it to this owner — the LLM doesn't know its own id.
         if not namespace:
             namespace = f"user:{owner_id}"
+        elif ":" not in namespace:
+            namespace = f"{namespace}:{owner_id}"
 
         try:
             from zylch.memory import EmbeddingEngine, MemoryConfig
@@ -122,9 +126,13 @@ class CreateMemoryTool(Tool):
                     "namespace": {
                         "type": "string",
                         "description": (
-                            "Optional namespace. Default: 'user:<owner_id>',"
-                            " which matches the auto-extracted memory blobs."
-                            " Leave unset unless you have a specific reason."
+                            "Optional namespace. Default: 'user' (contact"
+                            " profile, matches auto-extracted blobs). Use"
+                            " 'prefs' to save a user preference / working"
+                            " rule (see 'SAVING a PREFERENCE' in the system"
+                            " prompt). A bare category is auto-scoped to"
+                            " this owner; a fully qualified string is kept"
+                            " verbatim."
                         ),
                     },
                 },

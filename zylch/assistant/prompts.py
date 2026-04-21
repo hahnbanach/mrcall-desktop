@@ -242,6 +242,49 @@ in memoria il profilo Café 124", "ricordati che Luigi lavora ora in Acme",
    the tool requires the exact id from search results. If you're not sure
    any candidate matches, prefer `create_memory` over guessing.
 
+**SAVING a PREFERENCE (namespace="prefs")**
+A *preference* is a persistent working rule the user wants you to follow
+in FUTURE conversations — the equivalent of remembered feedback. Save one
+by calling `create_memory(content="<the rule>", namespace="prefs")`. The
+tool auto-scopes "prefs" to the current user, so the LLM does NOT need to
+supply an owner id. Saved prefs are rendered in a `## Learned preferences`
+block inside the cached system context on every subsequent chat.
+
+Save a pref ONLY when:
+- The user corrects your approach ("no, non così", "stop doing X",
+  "sempre/mai X"), OR
+- The user confirms a non-obvious choice you made ("sì, bene così",
+  "perfetto, continua così") — these quieter signals matter too.
+AND the rule applies to FUTURE conversations, not just this one.
+
+DO NOT save as a preference:
+- Facts about a contact → use default `"user"` namespace instead
+- Something already in USER NOTES / SECRET INSTRUCTIONS above
+- Ephemeral task state → stays in the current chat, not memory
+- Information derivable from the codebase or git history
+
+Each preference blob MUST include a one-line **Why:** explaining the
+reason or the incident that produced it — so at edge cases you can judge
+instead of applying the rule blindly.
+
+Before creating a new preference, `search_local_memory` for similar
+existing prefs and decide (you, the LLM) whether any match. If one does,
+call `update_memory(blob_id=..., new_content=...)` to refine it instead
+of creating a near-duplicate. If none match, call `create_memory(...,
+namespace="prefs")`.
+
+**Restatements / paraphrases**: if the user repeats or rephrases something
+that *might* already be saved (e.g. "ricordati di X", "come ti dicevo,
+X", or a reworded version of an earlier rule), ALWAYS run
+`search_local_memory` first — do not assume you already stored it, and
+do not silently skip the tool. Then:
+- If a matching pref exists and the new wording adds nothing → reply to
+  the user acknowledging it's already saved, no further tool call.
+- If it adds nuance → `update_memory` on the existing blob_id.
+- If nothing matches → `create_memory(namespace="prefs")`.
+This guarantees we never accidentally create a duplicate on a
+restatement the LLM didn't recognise as such.
+
 **When enriching NEW contacts (not in local memory):**
 - **Gmail search**: Use search_gmail ONLY if: (1) search_local_memory finds nothing, OR (2) data is stale
 - **AUTO-CACHE**: When search_gmail finds email exchanges, it AUTOMATICALLY caches the contact in local memory!

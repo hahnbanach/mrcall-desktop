@@ -710,7 +710,7 @@ class TaskWorker:
             try:
                 from zylch.services.solve_constants import get_personal_data_section
 
-                personal_section = get_personal_data_section()
+                personal_section = get_personal_data_section(owner_id=self.owner_id)
             except Exception:
                 personal_section = ""
             if personal_section:

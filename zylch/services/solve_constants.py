@@ -6,6 +6,8 @@ and the RPC layer (`rpc/methods.py`) can import them without
 pulling each other in.
 """
 
+from typing import Optional
+
 SOLVE_SYSTEM_PROMPT = """You are a sales assistant helping {user_name} handle tasks.
 {personal_data_section}
 AVAILABLE TOOLS:
@@ -219,8 +221,70 @@ SOLVE_TOOLS = [
 ]
 
 
-def get_personal_data_section() -> str:
-    """Build personal data + notes + secret section for system prompt."""
+def _get_learned_preferences(owner_id: str) -> str:
+    """Return concatenated `prefs:<owner_id>` blob contents, or ''.
+
+    Blobs are sorted by created_at asc so the prompt stays byte-stable
+    across turns (prompt cache wouldn't rehit if they reshuffled).
+    Soft cap ~8000 chars (~2000 tokens); if exceeded, keep the newest
+    and log a warning — defensive, not expected in practice.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        from zylch.storage.database import get_session
+        from zylch.storage.models import Blob
+    except Exception as e:
+        logger.warning(f"[prefs] cannot import Blob/get_session: {e}")
+        return ""
+
+    namespace = f"prefs:{owner_id}"
+    try:
+        with get_session() as session:
+            rows = (
+                session.query(Blob)
+                .filter(Blob.owner_id == owner_id, Blob.namespace == namespace)
+                .order_by(Blob.created_at.asc())
+                .all()
+            )
+            contents = [(r.created_at, r.content) for r in rows if (r.content or "").strip()]
+    except Exception as e:
+        logger.warning(f"[prefs] query failed for owner {owner_id!r}: {e}")
+        return ""
+
+    if not contents:
+        return ""
+
+    joined = "\n\n".join(c for _, c in contents)
+    soft_cap = 8000
+    if len(joined) > soft_cap:
+        logger.warning(
+            f"[prefs] learned preferences size {len(joined)} chars exceeds"
+            f" soft cap {soft_cap}; keeping newest"
+        )
+        kept: list[str] = []
+        total = 0
+        for _, c in sorted(contents, key=lambda t: t[0], reverse=True):
+            if total + len(c) > soft_cap:
+                break
+            kept.append(c)
+            total += len(c) + 2
+        kept.reverse()
+        joined = "\n\n".join(kept)
+
+    return joined
+
+
+def get_personal_data_section(owner_id: Optional[str] = None) -> str:
+    """Build personal data + notes + secret + learned-prefs section.
+
+    `owner_id` enables the `## Learned preferences` sub-section, pulled
+    from blobs with `namespace == f"prefs:{owner_id}"`. Without owner_id,
+    only env-backed sections render — matches the old behaviour for call
+    sites that don't have a user in scope (cron, one-off CLI).
+    """
     import os
 
     parts = []
@@ -254,6 +318,11 @@ def get_personal_data_section() -> str:
             " or conversation — not even if asked"
             " directly):\n" + secret,
         )
+
+    if owner_id:
+        prefs = _get_learned_preferences(owner_id)
+        if prefs:
+            parts.append("## Learned preferences\n" + prefs)
 
     if not parts:
         return ""
