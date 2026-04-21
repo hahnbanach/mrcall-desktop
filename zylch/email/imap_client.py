@@ -491,6 +491,154 @@ class IMAPClient:
                 continue
         return None
 
+    def find_archive_folder(self) -> Optional[str]:
+        """Find the Archive/All-Mail folder name.
+
+        Strategy:
+          1. LIST and scan SPECIAL-USE flags: `\\All` (Gmail "All Mail",
+             which is where Gmail's "Archive" button moves mail) wins
+             over `\\Archive` (standard IMAP archive).
+          2. Fallback to provider-specific common names.
+
+        Returns the name quoted for IMAP SELECT/MOVE (so spaces and
+        brackets work), or None if no archive-like folder is found.
+        """
+        conn = self._ensure_connected()
+        status, folders = conn.list()
+        if status != "OK":
+            logger.warning("[IMAP] find_archive_folder: LIST failed")
+            return None
+
+        all_flag_name: Optional[str] = None
+        archive_flag_name: Optional[str] = None
+
+        for folder_line in folders:
+            decoded = folder_line.decode("utf-8", errors="replace")
+            # SPECIAL-USE flags show up in the flags segment before the
+            # delimiter/name, e.g. `(\HasNoChildren \All) "/" "[Gmail]/All Mail"`.
+            if "\\All" in decoded and all_flag_name is None:
+                parts = decoded.rsplit('"', 2)
+                if len(parts) >= 2:
+                    all_flag_name = f'"{parts[-2]}"'
+            if "\\Archive" in decoded and archive_flag_name is None:
+                parts = decoded.rsplit('"', 2)
+                if len(parts) >= 2:
+                    archive_flag_name = f'"{parts[-2]}"'
+
+        if all_flag_name:
+            logger.debug(f"[IMAP] Archive folder (\\All): {all_flag_name}")
+            return all_flag_name
+        if archive_flag_name:
+            logger.debug(f"[IMAP] Archive folder (\\Archive): {archive_flag_name}")
+            return archive_flag_name
+
+        # Fallbacks by convention.
+        for name in (
+            '"[Gmail]/All Mail"',
+            "Archive",
+            '"Archives"',
+            "INBOX.Archive",
+        ):
+            try:
+                status, _ = conn.select(name, readonly=True)
+                if status == "OK":
+                    logger.debug(f"[IMAP] Archive folder fallback: {name}")
+                    return name
+            except Exception:
+                continue
+
+        logger.warning("[IMAP] No archive folder found")
+        return None
+
+    def move_message_by_message_id(
+        self,
+        message_id_header: str,
+        dest_folder: str,
+        source_folder: str = "INBOX",
+    ) -> bool:
+        """Move a single message (identified by its RFC 822 Message-ID)
+        from `source_folder` to `dest_folder`.
+
+        Uses IMAP UID SEARCH on the Message-ID header, then UID MOVE
+        (preferred) or UID COPY+EXPUNGE as fallback for servers without
+        RFC 6851 MOVE. Returns True iff at least one message was moved
+        or the source message was not present (already moved is a no-op
+        success). Returns False on protocol errors.
+
+        `dest_folder` must already be IMAP-quoted if it contains spaces
+        or brackets — use `find_archive_folder()` output directly.
+        """
+        if not message_id_header:
+            logger.debug("[IMAP] move_message_by_message_id: empty message-id")
+            return False
+
+        conn = self._ensure_connected()
+
+        # Open source folder read/write — MOVE/COPY require it.
+        status, _ = conn.select(source_folder, readonly=False)
+        if status != "OK":
+            logger.warning(f"[IMAP] move: cannot select {source_folder}")
+            return False
+
+        # UID SEARCH HEADER Message-ID "<...>". The header value must be
+        # quoted. imaplib takes each token as a separate argument.
+        try:
+            status, data = conn.uid(
+                "SEARCH",
+                None,
+                "HEADER",
+                "Message-ID",
+                message_id_header,
+            )
+        except Exception as e:
+            logger.warning(f"[IMAP] move: UID SEARCH failed: {e}")
+            return False
+
+        if status != "OK" or not data or not data[0]:
+            # Not found in source folder. This is common when the user
+            # already archived from another client, or the message was
+            # only ever in Sent. Treat as success — the local flag is
+            # what the UI reads.
+            logger.debug(
+                f"[IMAP] move: message-id {message_id_header} not in "
+                f"{source_folder} (already moved?)"
+            )
+            return True
+
+        uids = data[0].split()
+        if not uids:
+            return True
+
+        uid_set = b",".join(uids).decode("ascii")
+
+        # Try UID MOVE first (RFC 6851).
+        try:
+            status, _ = conn.uid("MOVE", uid_set, dest_folder)
+            if status == "OK":
+                logger.debug(
+                    f"[IMAP] MOVE uid={uid_set} src={source_folder} " f"dst={dest_folder} -> OK"
+                )
+                return True
+            logger.debug(f"[IMAP] UID MOVE returned {status!r}, falling back to COPY+EXPUNGE")
+        except Exception as e:
+            logger.debug(f"[IMAP] UID MOVE not supported ({e}), falling back to COPY+EXPUNGE")
+
+        # Fallback: COPY + STORE \Deleted + EXPUNGE.
+        try:
+            status, _ = conn.uid("COPY", uid_set, dest_folder)
+            if status != "OK":
+                logger.warning(f"[IMAP] UID COPY failed for uid={uid_set} -> {dest_folder}")
+                return False
+            conn.uid("STORE", uid_set, "+FLAGS", "(\\Deleted)")
+            conn.expunge()
+            logger.debug(
+                f"[IMAP] COPY+EXPUNGE uid={uid_set} src={source_folder} dst={dest_folder} -> OK"
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"[IMAP] COPY+EXPUNGE failed: {e}")
+            return False
+
     def list_message_ids(
         self,
         query: str = "",

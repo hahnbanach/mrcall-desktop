@@ -292,7 +292,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
         client = LLMClient(api_key=api_key, provider=provider)
         system = SOLVE_SYSTEM_PROMPT.format(
             user_name=user_name,
-            personal_data_section=get_personal_data_section(),
+            personal_data_section=get_personal_data_section(owner_id=owner_id),
         )
 
         user_msg = (
@@ -1502,3 +1502,22 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "settings.update": settings_update,
     "profiles.create": profiles_create,
 }
+
+# Archive + soft-delete handlers live in a sibling module to keep this
+# dispatcher from growing. Merged after the explicit table so a name
+# collision surfaces immediately via the duplicate-key guard.
+from zylch.rpc.email_actions import METHODS as _EMAIL_ACTION_METHODS  # noqa: E402
+
+for _name, _fn in _EMAIL_ACTION_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
+# Task read-only queries (thread filter for the desktop "Open from Inbox"
+# flow) — same merge pattern as email_actions to keep dispatcher small.
+from zylch.rpc.task_queries import METHODS as _TASK_QUERY_METHODS  # noqa: E402
+
+for _name, _fn in _TASK_QUERY_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn

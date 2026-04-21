@@ -309,9 +309,17 @@ class Storage:
             # fold them into thread buckets in Python. The mailbox fits
             # comfortably in RAM for a single user; the query cost is
             # dominated by the index on owner_id+date_timestamp.
+            # Exclude rows flagged archived/deleted — see `emails.archive`
+            # and `emails.delete` RPCs. Filter at the row level (not
+            # per-thread) so a brand-new reply arriving after the user
+            # archived is still surfaced when its row has no archived_at.
             rows = (
                 session.query(Email)
-                .filter(Email.owner_id == owner_id)
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.archived_at.is_(None),
+                    Email.deleted_at.is_(None),
+                )
                 .order_by(Email.date_timestamp.desc())
                 .all()
             )
@@ -411,7 +419,11 @@ class Storage:
         with get_session() as session:
             rows = (
                 session.query(Email)
-                .filter(Email.owner_id == owner_id)
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.archived_at.is_(None),
+                    Email.deleted_at.is_(None),
+                )
                 .order_by(Email.date_timestamp.desc())
                 .all()
             )
@@ -519,6 +531,99 @@ class Storage:
                 r.read_at = now
             session.flush()
             return len(rows)
+
+    def get_thread_message_id_headers(
+        self,
+        owner_id: str,
+        thread_id: str,
+    ) -> List[str]:
+        """Return RFC 822 Message-ID headers of every row in a thread.
+
+        Used by `emails.archive` to look up IMAP UIDs via HEADER SEARCH
+        before issuing the MOVE. Only returns non-empty, non-archived,
+        non-deleted rows — archiving twice is a no-op, and deleted rows
+        should never be touched on the server.
+        """
+        with get_session() as session:
+            rows = (
+                session.query(Email.message_id_header)
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.thread_id == thread_id,
+                    Email.archived_at.is_(None),
+                    Email.deleted_at.is_(None),
+                )
+                .all()
+            )
+            return [r[0] for r in rows if r[0]]
+
+    def set_thread_archived(
+        self,
+        owner_id: str,
+        thread_id: str,
+        archived: bool,
+    ) -> int:
+        """Stamp/clear `archived_at` on every row of a thread.
+
+        Returns the number of rows whose `archived_at` actually changed.
+        Re-archiving an already-archived thread returns 0 (idempotent).
+        The RPC layer handles the IMAP MOVE side — this method only
+        touches the local DB.
+        """
+        with get_session() as session:
+            rows = (
+                session.query(Email)
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.thread_id == thread_id,
+                )
+                .all()
+            )
+            now = datetime.now(timezone.utc) if archived else None
+            affected = 0
+            for r in rows:
+                if archived and r.archived_at is None:
+                    r.archived_at = now
+                    affected += 1
+                elif not archived and r.archived_at is not None:
+                    r.archived_at = None
+                    affected += 1
+            session.flush()
+            return affected
+
+    def set_thread_deleted(
+        self,
+        owner_id: str,
+        thread_id: str,
+        deleted: bool,
+    ) -> int:
+        """Stamp/clear `deleted_at` on every row of a thread.
+
+        Soft delete, local only — never touches IMAP. The server-side
+        copy is preserved on purpose so linked tasks and task
+        provenance (sources.emails[]) remain resolvable. Returns the
+        number of rows whose `deleted_at` actually changed.
+        """
+        with get_session() as session:
+            rows = (
+                session.query(Email)
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.thread_id == thread_id,
+                )
+                .all()
+            )
+            now = datetime.now(timezone.utc) if deleted else None
+            affected = 0
+            for r in rows:
+                if deleted and r.deleted_at is None:
+                    r.deleted_at = now
+                    affected += 1
+                elif not deleted and r.deleted_at is not None:
+                    r.deleted_at = None
+                    affected += 1
+            session.flush()
+            return affected
 
     def get_email_by_id(self, owner_id: str, gmail_id: str) -> Optional[Dict[str, Any]]:
         """Get a single email by Gmail ID."""

@@ -115,6 +115,19 @@ class Email(DictMixin, Base):
     # filter/sort efficiently.
     pinned_at = Column(DateTime, nullable=True, index=True)
     read_at = Column(DateTime, nullable=True, index=True)
+    # 2026-04-21: thread-level archive / local soft-delete flags backing the
+    # desktop Inbox "Archive" and "Delete" buttons.
+    #   archived_at: non-NULL once the user archived the thread. The RPC
+    #     additionally performs an IMAP MOVE to the provider's archive folder.
+    #   deleted_at: non-NULL once the user soft-deleted locally. Unlike
+    #     archive, delete NEVER touches IMAP — the server copy is preserved
+    #     so task provenance / linked references survive.
+    # Both hide the row from inbox/sent list views. Per-row (not per-thread)
+    # so an archive of thread X doesn't mask a brand-new reply that arrives
+    # after the fact; list queries apply the filter at the row level before
+    # thread grouping.
+    archived_at = Column(DateTime, nullable=True, index=True)
+    deleted_at = Column(DateTime, nullable=True, index=True)
 
     __table_args__ = (
         UniqueConstraint(
