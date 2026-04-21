@@ -1,9 +1,11 @@
 ---
 description: |
-  Current state of Zylch standalone as of 2026-04-21. Profile-aware CLI,
+  Current state of Zylch standalone as of 2026-04-22. Profile-aware CLI,
   Electron desktop (validated), prompt caching in chat, user notes injection,
   new memory tool pair (LLM decides update vs create), inbox/sent views,
   email archive/delete RPCs, Open-email → thread-filtered Tasks view.
+  0.1.24 fixes a 3-month-old email-timezone corruption bug that shifted
+  chronology by the sender's UTC offset, confusing task detection.
 ---
 
 # Active Context
@@ -84,6 +86,31 @@ description: |
 - `DOWNLOADS_DIR` field with directory-picker hint (`02401a4`)
 
 ## What Was Completed This Session
+
+**v0.1.24 — Email timezone fix (2026-04-21).** RFC 2822 `Date:` headers carry
+a timezone offset (e.g. `-0600` for Missive-relayed mail, `+0100` for CET
+senders). Two call sites stripped the offset via `dt.replace(tzinfo=None)`
+instead of converting to UTC, so `emails.date` stored the sender-timezone
+wall-clock as if it were UTC. Example: a support reply sent at 14:42 CET was
+stored as `07:42`, making the task detector treat the customer's 13:00
+message as the most recent in the thread and keep the task falsely open.
+
+Fix details:
+- New helper `zylch/utils/dates.parse_email_date_to_utc_naive`
+- Two consumer fixes: `zylch/storage/storage.py:160-170`,
+  `zylch/tools/email_sync.py:_parse_email_date_for_sort`
+- Regression tests `tests/utils/test_dates.py` (7 cases: positive/negative/
+  zero offsets, ISO `Z` suffix, empty/garbage)
+- Historical backfill `scripts/backfill_email_date_utc.py --all --apply`
+  rebuilt 666 mis-timestamped rows (400 on support@mrcall.ai, 266 on
+  mario.alemi@cafe124.it) using the already-correct `date_timestamp`
+  column — no IMAP re-fetch required.
+- Open `task_items` cleared on both profiles; task detector regenerated
+  from corrected chronology (support@mrcall.ai went from 60 false opens
+  to 49 real opens; Tentacools false-positive no longer reproduces).
+
+Impact: silent in production for ~3 months. Any thread with participants
+in different timezones could have had its chronology inverted.
 
 **Email archive + delete (uncommitted at time of writing)**
 - Backend: `zylch/rpc/email_actions.py` NEW — `emails.archive`, `emails.delete`. `storage/models.py` + `storage/database.py` gained `archived_at` / `deleted_at` with idempotent ALTER. `storage/storage.py` gained `set_thread_archived` / `set_thread_deleted` / `get_thread_message_id_headers` and inbox/sent filter clauses. `email/imap_client.py` gained `find_archive_folder` (SPECIAL-USE `\All` then `\Archive`, fallback Gmail/Outlook/iCloud names) + `move_message_by_message_id` (UID MOVE, COPY+EXPUNGE fallback).
