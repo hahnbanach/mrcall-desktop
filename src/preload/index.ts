@@ -83,7 +83,13 @@ const api = {
         reason: string
         task_id: string
         usage?: Record<string, unknown>
-      }>('tasks.reanalyze', { task_id }, 120000)
+      }>('tasks.reanalyze', { task_id }, 120000),
+    // Returns the open tasks whose sources reference emails in the given
+    // thread. Used by the Inbox "Open" button: we always navigate to the
+    // Tasks view and filter to these ids, even when the list is empty or
+    // has exactly one element. No direct-open shortcut.
+    listByThread: (thread_id: string) =>
+      call<any[]>('tasks.list_by_thread', { thread_id }, 15000)
   },
   chat: {
     send: (
@@ -147,6 +153,24 @@ const api = {
     markRead: (threadId: string) =>
       call<{ ok: boolean; affected: number }>(
         'emails.mark_read',
+        { thread_id: threadId },
+        15000
+      ),
+    archive: (threadId: string) =>
+      // IMAP MOVE can take a few seconds (network + folder lookup) so
+      // we give this a comfortable 60s ceiling — the renderer shows a
+      // spinner in the archive button until it resolves.
+      call<{
+        ok: boolean
+        archived: number
+        imap: { folder: string; moved: number; attempted: number }
+      }>('emails.archive', { thread_id: threadId }, 60000),
+    deleteLocal: (threadId: string) =>
+      // Local-only soft delete: instant, no network. Method name
+      // `deleteLocal` on this side to keep the "never touches IMAP"
+      // promise visible at every call site.
+      call<{ ok: boolean; deleted: number }>(
+        'emails.delete',
         { thread_id: threadId },
         15000
       )

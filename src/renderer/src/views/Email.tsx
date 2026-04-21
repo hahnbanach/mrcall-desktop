@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { InboxThread, ThreadEmail } from '../types'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
-import { useConversations } from '../store/conversations'
 import { useThread } from '../store/thread'
 import HtmlEmailBody from '../components/HtmlEmailBody'
 // EmailComposeModal intentionally not imported: the "Open" flow
@@ -40,11 +39,13 @@ function formatFullDate(iso: string): string {
 
 interface EmailProps {
   /**
-   * Navigate to the Workspace view. Called by the "Open" button after the
-   * conversations store + thread store have been updated so the active
-   * conversation is the thread-only one.
+   * Navigate to the Tasks view filtered by the opened thread. Called by
+   * the "Open" button after `taskThreadFilter` has been set on the thread
+   * store — the Tasks view reads that filter and calls
+   * `tasks.list_by_thread` to render exactly the tasks belonging to the
+   * thread. ALWAYS goes to Tasks, even when the thread has 0 or 1 task.
    */
-  onOpenWorkspace?: (threadId: string) => void
+  onOpenTasks?: () => void
 }
 
 /**
@@ -64,7 +65,7 @@ interface EmailProps {
  *   Enter          — scroll selected into view
  *   C              — Open the selected thread in Workspace
  */
-export default function Email({ onOpenWorkspace }: EmailProps = {}): JSX.Element {
+export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
   const [folder, setFolder] = useState<Folder>('inbox')
   const [threads, setThreads] = useState<InboxThread[]>([])
   const [loading, setLoading] = useState(false)
@@ -74,9 +75,10 @@ export default function Email({ onOpenWorkspace }: EmailProps = {}): JSX.Element
   const [pinning, setPinning] = useState<Set<string>>(new Set())
   const [draftsCount, setDraftsCount] = useState<number>(0)
   const [folderMenuOpen, setFolderMenuOpen] = useState(false)
+  const [archiving, setArchiving] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState<Set<string>>(new Set())
 
-  const { openThreadChat } = useConversations()
-  const { setActiveThreadId, setActiveTaskId } = useThread()
+  const { setTaskThreadFilter } = useThread()
 
   const listRef = useRef<HTMLDivElement | null>(null)
 
@@ -171,16 +173,20 @@ export default function Email({ onOpenWorkspace }: EmailProps = {}): JSX.Element
     [threads]
   )
 
-  // ─── open selected thread in Workspace ───────────────────────────
-  // Shared by: the sidebar "Open" button, the reading-pane "Open" button,
-  // and the `C` keyboard shortcut. No-op if nothing is selected.
+  // ─── open selected thread: navigate to Tasks filtered by this thread ─
+  // Shared by: the reading-pane "Open" button and the `C` keyboard
+  // shortcut. ALWAYS navigates to the Tasks view with a thread filter
+  // applied — even when the thread has 0 or 1 task. No direct-open
+  // shortcut for the 1-task case; the filter banner is the single,
+  // predictable behaviour.
   const openSelected = useCallback(() => {
     if (!selected) return
-    openThreadChat(selected.thread_id, selected.subject || '', selected.last_email_id)
-    setActiveThreadId(selected.thread_id)
-    setActiveTaskId(null)
-    onOpenWorkspace?.(selected.thread_id)
-  }, [selected, openThreadChat, setActiveThreadId, setActiveTaskId, onOpenWorkspace])
+    setTaskThreadFilter({
+      threadId: selected.thread_id,
+      subject: selected.subject || ''
+    })
+    onOpenTasks?.()
+  }, [selected, setTaskThreadFilter, onOpenTasks])
 
   // ─── pin ───────────────────────────────────────────────────────────
   const onPin = useCallback(
@@ -213,6 +219,66 @@ export default function Email({ onOpenWorkspace }: EmailProps = {}): JSX.Element
       }
     },
     [folder, loadFolder]
+  )
+
+  // ─── archive (IMAP MOVE + local flag) ─────────────────────────────
+  // Mirrors the Gmail "Archive" button: moves every message of the
+  // thread to the provider's archive folder AND hides the thread from
+  // the local inbox/sent lists. If IMAP fails (auth, network, folder
+  // lookup) the local flag is NOT set — the backend surfaces the error
+  // and we leave the thread in place so the user can retry.
+  const onArchive = useCallback(
+    async (thread: InboxThread, evt?: React.MouseEvent) => {
+      evt?.stopPropagation()
+      if (archiving.has(thread.thread_id)) return
+      setArchiving((s) => new Set(s).add(thread.thread_id))
+      const prevThreads = threads
+      // Optimistic: remove from the list + clear selection if it was
+      // the open thread. Rolled back on error.
+      setThreads((prev) => prev.filter((t) => t.thread_id !== thread.thread_id))
+      if (selectedId === thread.thread_id) setSelectedId(null)
+      try {
+        await window.zylch.emails.archive(thread.thread_id)
+      } catch (e: unknown) {
+        setThreads(prevThreads)
+        if (!isProfileLockedError(e)) setError(errorMessage(e))
+      } finally {
+        setArchiving((s) => {
+          const n = new Set(s)
+          n.delete(thread.thread_id)
+          return n
+        })
+      }
+    },
+    [archiving, threads, selectedId]
+  )
+
+  // ─── delete (local soft delete — NEVER touches IMAP) ──────────────
+  // The server copy is preserved on purpose so any TaskItem whose
+  // sources reference this thread remains resolvable. Button tooltip
+  // spells this out in the reading pane.
+  const onDelete = useCallback(
+    async (thread: InboxThread, evt?: React.MouseEvent) => {
+      evt?.stopPropagation()
+      if (deleting.has(thread.thread_id)) return
+      setDeleting((s) => new Set(s).add(thread.thread_id))
+      const prevThreads = threads
+      setThreads((prev) => prev.filter((t) => t.thread_id !== thread.thread_id))
+      if (selectedId === thread.thread_id) setSelectedId(null)
+      try {
+        await window.zylch.emails.deleteLocal(thread.thread_id)
+      } catch (e: unknown) {
+        setThreads(prevThreads)
+        if (!isProfileLockedError(e)) setError(errorMessage(e))
+      } finally {
+        setDeleting((s) => {
+          const n = new Set(s)
+          n.delete(thread.thread_id)
+          return n
+        })
+      }
+    },
+    [deleting, threads, selectedId]
   )
 
   // ─── keyboard shortcuts ───────────────────────────────────────────
@@ -464,8 +530,12 @@ export default function Email({ onOpenWorkspace }: EmailProps = {}): JSX.Element
             thread={selected}
             onOpen={openSelected}
             onPin={() => onPin(selected)}
+            onArchive={() => onArchive(selected)}
+            onDelete={() => onDelete(selected)}
             onBack={() => setSelectedId(null)}
             pinning={pinning.has(selected.thread_id)}
+            archiving={archiving.has(selected.thread_id)}
+            deleting={deleting.has(selected.thread_id)}
           />
         </section>
       )}
@@ -481,14 +551,22 @@ function ThreadReadingPane({
   thread,
   onOpen,
   onPin,
+  onArchive,
+  onDelete,
   onBack,
-  pinning
+  pinning,
+  archiving,
+  deleting
 }: {
   thread: InboxThread
   onOpen: () => void
   onPin: () => void
+  onArchive: () => void
+  onDelete: () => void
   onBack: () => void
   pinning: boolean
+  archiving: boolean
+  deleting: boolean
 }): JSX.Element {
   const [emails, setEmails] = useState<ThreadEmail[]>([])
   const [loading, setLoading] = useState(false)
@@ -574,11 +652,20 @@ function ThreadReadingPane({
             📌
           </button>
           <button
-            disabled
-            title="Archive (coming soon)"
-            className="px-3 py-1.5 text-sm border rounded text-slate-400 cursor-not-allowed"
+            onClick={onArchive}
+            disabled={archiving}
+            title="Archive: IMAP MOVE to the provider's archive folder (Gmail 'All Mail' / Outlook 'Archive') and hide from this inbox."
+            className="px-3 py-1.5 text-sm border rounded hover:bg-slate-50 disabled:opacity-50"
           >
-            Archive
+            {archiving ? 'Archiving…' : 'Archive'}
+          </button>
+          <button
+            onClick={onDelete}
+            disabled={deleting}
+            title="Delete (local only): hides this thread from Zylch's inbox. The message stays on the IMAP server — linked tasks remain resolvable."
+            className="px-3 py-1.5 text-sm border rounded text-red-700 border-red-300 hover:bg-red-50 disabled:opacity-50"
+          >
+            {deleting ? 'Deleting…' : 'Delete (local)'}
           </button>
         </div>
       </header>

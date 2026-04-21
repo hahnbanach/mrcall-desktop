@@ -499,7 +499,12 @@ function AppInner(): JSX.Element {
               className="absolute inset-0 overflow-hidden"
               style={{ display: view === 'email' ? 'block' : 'none' }}
             >
-              <Email onOpenWorkspace={() => setView('workspace')} />
+              {/* Clicking "Open" on a thread always navigates to the
+                  Tasks view filtered by that thread (via
+                  `taskThreadFilter` on the thread store). The target
+                  view is the same whether the thread has 0, 1, or many
+                  tasks — no direct-open shortcut. */}
+              <Email onOpenTasks={() => setView('tasks')} />
             </div>
           )}
           <div

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ZylchTask } from '../types'
 import { useConversations } from '../store/conversations'
 import { useTasks } from '../store/tasks'
+import { useThread } from '../store/thread'
 import { showError } from '../lib/errors'
 
 type StatusFilter = 'open' | 'closed'
@@ -29,27 +30,78 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
   // a pipeline run. `refresh()` always hits the sidecar — there is no
   // memoization on this path.
   const { tasks, loading, error, refresh, setTasks } = useTasks()
+  // ── Thread filter (Inbox "Open" flow) ───────────────────────────────
+  // When the user clicks "Open" on an Email inbox thread, the Email view
+  // sets `taskThreadFilter` on the thread store and navigates us here.
+  // In that mode we bypass the shared tasks store and hit
+  // `tasks.list_by_thread` directly — a thread can have 0 tasks and we
+  // must show an "empty for this thread" state rather than falling back
+  // to the full list.
+  const { taskThreadFilter, setTaskThreadFilter } = useThread()
+  const [threadTasks, setThreadTasks] = useState<ZylchTask[]>([])
+  const [threadLoading, setThreadLoading] = useState(false)
+  const [threadError, setThreadError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('open')
   const [search, setSearch] = useState('')
+
+  const loadThreadTasks = useCallback(async (threadId: string) => {
+    setThreadLoading(true)
+    setThreadError(null)
+    try {
+      const r = await window.zylch.tasks.listByThread(threadId)
+      setThreadTasks(r)
+    } catch (e: unknown) {
+      setThreadError(e instanceof Error ? e.message : String(e))
+      setThreadTasks([])
+    } finally {
+      setThreadLoading(false)
+    }
+  }, [])
+
+  // Re-fetch whenever the filter changes (incl. when the user resets it).
+  useEffect(() => {
+    if (taskThreadFilter) {
+      void loadThreadTasks(taskThreadFilter.threadId)
+    } else {
+      setThreadTasks([])
+      setThreadError(null)
+    }
+  }, [taskThreadFilter, loadThreadTasks])
+
   // `load` re-fetches with the current toggle so callers (Refresh button,
-  // post-action refresh) don't have to remember which slice is shown.
-  const load = (): Promise<void> =>
-    refresh(statusFilter === 'closed' ? { include_completed: true } : undefined)
+  // post-action refresh) don't have to remember which slice is shown. In
+  // thread-filter mode it re-hits `tasks.list_by_thread` instead.
+  const load = (): Promise<void> => {
+    if (taskThreadFilter) return loadThreadTasks(taskThreadFilter.threadId)
+    return refresh(statusFilter === 'closed' ? { include_completed: true } : undefined)
+  }
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [updating, setUpdating] = useState<Set<string>>(new Set())
   const [pinning, setPinning] = useState<Set<string>>(new Set())
   const [keptNotice, setKeptNotice] = useState<Record<string, string>>({})
 
   // Re-fetch whenever the user flips the Open/Closed toggle. The mount
-  // fetch in TasksProvider already covers the initial Open load.
+  // fetch in TasksProvider already covers the initial Open load. Skipped
+  // in thread-filter mode: the status toggle is hidden there.
   useEffect(() => {
+    if (taskThreadFilter) return
     void refresh(statusFilter === 'closed' ? { include_completed: true } : undefined)
-  }, [statusFilter, refresh])
+  }, [statusFilter, refresh, taskThreadFilter])
+
+  // Helper: apply an in-place mutation to whichever list is active.
+  // In thread-filter mode we operate on the local `threadTasks` array;
+  // otherwise on the shared tasks store (same behaviour as before).
+  const mutateVisible = (
+    fn: (prev: ZylchTask[]) => ZylchTask[]
+  ): void => {
+    if (taskThreadFilter) setThreadTasks((t) => fn(t))
+    else setTasks((t) => fn(t))
+  }
 
   const onPin = async (task: ZylchTask) => {
     const next = !task.pinned
     // Optimistic update
-    setTasks((t) => t.map((x) => (x.id === task.id ? { ...x, pinned: next } : x)))
+    mutateVisible((t) => t.map((x) => (x.id === task.id ? { ...x, pinned: next } : x)))
     setPinning((s) => new Set(s).add(task.id))
     try {
       await window.zylch.tasks.pin(task.id, next)
@@ -57,7 +109,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
       await load()
     } catch (e: unknown) {
       // Roll back the optimistic flip on failure
-      setTasks((t) =>
+      mutateVisible((t) =>
         t.map((x) => (x.id === task.id ? { ...x, pinned: task.pinned } : x))
       )
       showError(e, 'Pin failed:')
@@ -72,7 +124,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
   const onSkip = async (id: string) => {
     try {
       await window.zylch.tasks.skip(id)
-      setTasks((t) => t.filter((x) => x.id !== id))
+      mutateVisible((t) => t.filter((x) => x.id !== id))
     } catch (e: unknown) {
       showError(e, 'Skip failed:')
     }
@@ -80,7 +132,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
   const onClose = async (id: string) => {
     try {
       await window.zylch.tasks.complete(id)
-      setTasks((t) => t.filter((x) => x.id !== id))
+      mutateVisible((t) => t.filter((x) => x.id !== id))
     } catch (e: unknown) {
       showError(e, 'Close failed:')
     }
@@ -89,7 +141,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
     try {
       await window.zylch.tasks.reopen(id)
       // Drop from the current (closed) view — it's now open.
-      setTasks((t) => t.filter((x) => x.id !== id))
+      mutateVisible((t) => t.filter((x) => x.id !== id))
     } catch (e: unknown) {
       showError(e, 'Reopen failed:')
     }
@@ -105,7 +157,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
     try {
       const r = await window.zylch.tasks.reanalyze(id)
       if (r.action === 'closed') {
-        setTasks((t) => t.filter((x) => x.id !== id))
+        mutateVisible((t) => t.filter((x) => x.id !== id))
       } else if (r.action === 'updated') {
         await load()
       } else {
@@ -142,12 +194,15 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
   // open+closed when `include_completed` is true, so we filter here to
   // show ONLY closed in the Closed view (and only open in the Open view,
   // which is the default backend behaviour but we double-guard).
+  // In thread-filter mode we bypass this — `tasks.list_by_thread` already
+  // returns the exact set (open only), so we use `threadTasks` verbatim.
   // NB: hooks must run on every render — they live above the loading/error
   // early returns to obey the Rules of Hooks.
   const statusFiltered = useMemo(() => {
+    if (taskThreadFilter) return threadTasks
     if (statusFilter === 'closed') return tasks.filter((t) => t.completed_at != null)
     return tasks.filter((t) => t.completed_at == null)
-  }, [tasks, statusFilter])
+  }, [tasks, statusFilter, taskThreadFilter, threadTasks])
 
   const q = search.trim().toLowerCase()
   const searchFiltered = useMemo(() => {
@@ -165,11 +220,17 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
     })
   }, [statusFiltered, q])
 
-  if (loading) return <div className="p-8 text-slate-500">Loading tasks…</div>
-  if (error)
+  // Loading / error states. In thread-filter mode we swap to the
+  // thread-specific loading/error so the banner remains visible above.
+  const isThreadMode = taskThreadFilter != null
+  const activeLoading = isThreadMode ? threadLoading : loading
+  const activeError = isThreadMode ? threadError : error
+  if (activeLoading)
+    return <div className="p-8 text-slate-500">Loading tasks…</div>
+  if (activeError)
     return (
       <div className="p-8">
-        <div className="text-red-700">Error: {error}</div>
+        <div className="text-red-700">Error: {activeError}</div>
         <button
           onClick={load}
           className="mt-3 px-3 py-1.5 bg-slate-900 text-white rounded text-sm"
@@ -188,7 +249,9 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
 
   const pinnedTasks = sortedTasks.filter((t) => t.pinned)
   const unpinnedTasks = sortedTasks.filter((t) => !t.pinned)
-  const isClosedView = statusFilter === 'closed'
+  // Thread-filter mode fetches OPEN tasks only, so the closed styling
+  // never applies there regardless of the toggle's in-memory state.
+  const isClosedView = !isThreadMode && statusFilter === 'closed'
 
   const grouped: Record<string, ZylchTask[]> = {}
   for (const t of unpinnedTasks) {
@@ -344,40 +407,67 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
           Refresh
         </button>
       </div>
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
+      {/* Thread-filter banner: appears only when the user came here from
+          the Email view's "Open" button. Shows the thread subject and a
+          reset control so the user can jump back to the full task list.
+          In this mode the Open/Closed toggle is hidden (the RPC returns
+          open tasks only — the toggle has no meaning here). */}
+      {isThreadMode && taskThreadFilter && (
         <div
-          className="inline-flex rounded-full border border-slate-300 overflow-hidden"
-          role="group"
-          aria-label="Filter by status"
+          role="status"
+          className="flex items-center justify-between gap-3 mb-4 px-3 py-2 bg-[color:var(--profile-accent-soft)] border border-[color:var(--profile-accent)] rounded"
         >
+          <div className="min-w-0 text-sm">
+            <span className="font-medium">Tasks for thread:</span>{' '}
+            <span className="truncate inline-block max-w-[60ch] align-bottom">
+              {taskThreadFilter.subject || '(no subject)'}
+            </span>
+          </div>
           <button
-            type="button"
-            onClick={() => setStatusFilter('open')}
-            className={
-              'px-3 py-1 text-sm ' +
-              (statusFilter === 'open'
-                ? 'bg-emerald-700 text-white border-emerald-700'
-                : 'bg-white text-slate-600 hover:bg-slate-100')
-            }
-            aria-pressed={statusFilter === 'open'}
+            onClick={() => setTaskThreadFilter(null)}
+            className="px-2 py-1 text-xs border rounded bg-white hover:bg-slate-100"
+            title="Show all tasks"
           >
-            Open
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('closed')}
-            title="Show closed tasks"
-            className={
-              'px-3 py-1 text-sm border-l border-slate-300 ' +
-              (statusFilter === 'closed'
-                ? 'bg-emerald-700 text-white border-emerald-700'
-                : 'bg-white text-slate-600 hover:bg-slate-100')
-            }
-            aria-pressed={statusFilter === 'closed'}
-          >
-            Closed
+            ✕ Clear filter
           </button>
         </div>
+      )}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        {!isThreadMode && (
+          <div
+            className="inline-flex rounded-full border border-slate-300 overflow-hidden"
+            role="group"
+            aria-label="Filter by status"
+          >
+            <button
+              type="button"
+              onClick={() => setStatusFilter('open')}
+              className={
+                'px-3 py-1 text-sm ' +
+                (statusFilter === 'open'
+                  ? 'bg-emerald-700 text-white border-emerald-700'
+                  : 'bg-white text-slate-600 hover:bg-slate-100')
+              }
+              aria-pressed={statusFilter === 'open'}
+            >
+              Open
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('closed')}
+              title="Show closed tasks"
+              className={
+                'px-3 py-1 text-sm border-l border-slate-300 ' +
+                (statusFilter === 'closed'
+                  ? 'bg-emerald-700 text-white border-emerald-700'
+                  : 'bg-white text-slate-600 hover:bg-slate-100')
+              }
+              aria-pressed={statusFilter === 'closed'}
+            >
+              Closed
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-1.5 border border-slate-300 rounded px-2 py-1 bg-white">
           <span aria-hidden="true" className="text-slate-400 text-sm">
             🔍
@@ -394,7 +484,11 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
       </div>
       {sortedTasks.length === 0 && (
         <div className="text-slate-500">
-          {isClosedView ? 'No closed tasks.' : 'No tasks. All clear.'}
+          {isThreadMode
+            ? 'No tasks for this thread.'
+            : isClosedView
+              ? 'No closed tasks.'
+              : 'No tasks. All clear.'}
         </div>
       )}
       {pinnedTasks.length > 0 && (
