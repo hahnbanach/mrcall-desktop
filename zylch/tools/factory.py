@@ -67,6 +67,7 @@ from .read_document_tool import ReadDocumentTool  # Phase A
 from .read_email_tool import ReadEmailTool
 from .run_python_tool import RunPythonTool  # Phase A
 from .update_memory_tool import UpdateMemoryTool  # Phase A
+from .create_memory_tool import CreateMemoryTool
 
 logger = logging.getLogger(__name__)
 
@@ -293,9 +294,10 @@ class ToolFactory:
                 ),
                 RunPythonTool(),
                 UpdateMemoryTool(session_state=session_state, owner_id=config.owner_id),
+                CreateMemoryTool(session_state=session_state, owner_id=config.owner_id),
             ]
         )
-        logger.info("Phase A tools initialized (5: +read_email)")
+        logger.info("Phase A tools initialized (6: +read_email, +create_memory)")
 
         # Compose Email tool
         tools.append(

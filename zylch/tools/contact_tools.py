@@ -148,8 +148,10 @@ class SearchLocalMemoryTool(Tool):
                 "Search local memory for person/contact info"
                 " using hybrid FTS + semantic search. ALWAYS"
                 " call this FIRST before remote searches"
-                " (Gmail, StarChat, web). Returns ranked"
-                " results by relevance."
+                " (Gmail, StarChat, web) AND before any call"
+                " to update_memory or create_memory. Each"
+                " result includes a blob_id that you pass"
+                " to update_memory if you decide to correct it."
             ),
         )
         self.search_engine = search_engine
@@ -176,12 +178,14 @@ class SearchLocalMemoryTool(Tool):
 
         try:
             if self.search_engine:
-                contacts_namespace = f"{self.owner_id}" f":{self.zylch_assistant_id}:contacts"
-
+                # No namespace filter: the memory worker writes blobs under
+                # `user:<owner_id>` while older code expected a
+                # `<owner>:<assistant>:contacts` bucket that never gets
+                # populated. Filtering by either one hides half the data.
+                # The LLM ranks by hybrid_score and picks a blob_id.
                 results = self.search_engine.search(
                     owner_id=self.owner_id,
                     query=query,
-                    namespace=contacts_namespace,
                     limit=5,
                 )
 
@@ -202,6 +206,7 @@ class SearchLocalMemoryTool(Tool):
 
                 for r in results:
                     person_data = {
+                        "blob_id": r.blob_id,
                         "namespace": r.namespace,
                         "content": r.content,
                         "hybrid_score": round(r.hybrid_score, 2),
@@ -212,7 +217,10 @@ class SearchLocalMemoryTool(Tool):
                     }
 
                     formatted_results.append(person_data)
-                    output.append(f"\n**{r.namespace}**" f" (score: {r.hybrid_score:.2f})")
+                    output.append(
+                        f"\n**{r.namespace}** (blob_id={r.blob_id},"
+                        f" score: {r.hybrid_score:.2f})"
+                    )
                     output.append(person_data["content"])
 
                 return ToolResult(
