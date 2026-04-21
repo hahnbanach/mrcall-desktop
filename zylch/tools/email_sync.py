@@ -4,7 +4,6 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
@@ -580,30 +579,17 @@ class EmailSyncManager:
         return emails
 
     def _parse_email_date_for_sort(self, date_str: str) -> datetime:
-        """Parse email date string to datetime for sorting.
+        """Parse email date string to naive-UTC datetime for sorting.
 
         Email dates are in RFC2822 format like "Thu, 20 Nov 2025 10:30:59 +0100".
-        This method is critical for sorting messages by actual time, not alphabetically!
+        The returned datetime is naive UTC — offsets are converted, not stripped —
+        so chronological ordering across senders in different timezones is correct.
 
         Raises ValueError if parsing fails - do not silently corrupt sort order.
         """
-        if not date_str:
-            raise ValueError("Empty date string - cannot parse email date")
+        from zylch.utils import parse_email_date_to_utc_naive
 
-        # Try RFC2822 format first
-        try:
-            dt = parsedate_to_datetime(date_str)
-            return dt.replace(tzinfo=None)  # Make naive for comparison
-        except Exception as rfc_error:
-            # Fallback: try ISO format
-            try:
-                dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                return dt.replace(tzinfo=None)
-            except Exception as iso_error:
-                raise ValueError(
-                    f"Failed to parse email date '{date_str}': "
-                    f"RFC2822 error: {rfc_error}, ISO error: {iso_error}"
-                )
+        return parse_email_date_to_utc_naive(date_str)
 
     def search_threads(
         self,

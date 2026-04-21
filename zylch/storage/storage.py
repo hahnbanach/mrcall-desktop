@@ -155,18 +155,20 @@ class Storage:
         for email in emails:
             embedding = _generate_email_embedding(email)
 
-            # Parse date: accept datetime, string, or None
+            # Parse date: accept datetime, string, or None. Strings are
+            # normalized to naive UTC via `parse_email_date_to_utc_naive` —
+            # the historical bug stored the sender-timezone wall-clock as if
+            # it were UTC, shifting chronology by the offset.
             raw_date = email.get("date")
             if isinstance(raw_date, str):
-                from email.utils import parsedate_to_datetime
+                from zylch.utils import parse_email_date_to_utc_naive
 
                 try:
-                    raw_date = parsedate_to_datetime(raw_date)
-                except Exception:
-                    try:
-                        raw_date = datetime.fromisoformat(raw_date)
-                    except Exception:
-                        raw_date = datetime.now(timezone.utc)
+                    raw_date = parse_email_date_to_utc_naive(raw_date)
+                except ValueError:
+                    raw_date = datetime.now(timezone.utc).replace(tzinfo=None)
+            elif isinstance(raw_date, datetime) and raw_date.tzinfo is not None:
+                raw_date = raw_date.astimezone(timezone.utc).replace(tzinfo=None)
 
             # Serialize list/dict fields to JSON strings for SQLite Text columns
             labels_val = email.get("labels")
