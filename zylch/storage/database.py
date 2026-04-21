@@ -154,6 +154,12 @@ def _apply_column_migrations(engine: Engine) -> None:
         # every row of a thread when the user opens it in the UI.
         ("emails", "pinned_at", "DATETIME"),
         ("emails", "read_at", "DATETIME"),
+        # 2026-04-21: Inbox Archive/Delete actions. `archived_at` is stamped
+        # by `emails.archive` (which also IMAP-MOVEs the message to the
+        # provider's archive folder). `deleted_at` is a local-only soft
+        # delete stamped by `emails.delete` — never touches IMAP.
+        ("emails", "archived_at", "DATETIME"),
+        ("emails", "deleted_at", "DATETIME"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in migrations:
