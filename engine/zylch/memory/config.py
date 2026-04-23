@@ -1,0 +1,85 @@
+"""Configuration for Memory system."""
+
+from pathlib import Path
+
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
+
+class MemoryConfig(BaseSettings):
+    """Configuration for Memory system.
+
+    All settings can be overridden via environment variables with prefix MEMORY_
+    Example: MEMORY_DB_PATH=/custom/path/memory.db
+    """
+
+    # Storage paths
+    db_path: Path = Field(default=Path(".swarm/memory.db"), description="SQLite database file path")
+
+    # Embedding model
+    embedding_model: str = Field(
+        default="sentence-transformers/all-MiniLM-L6-v2", description="Fastembed model name"
+    )
+    embedding_dim: int = Field(default=384, description="Embedding vector dimensionality")
+
+    # Confidence learning
+    confidence_alpha: float = Field(
+        default=0.3, description="Reinforcement factor for positive feedback"
+    )
+    confidence_beta: float = Field(default=0.7, description="Penalty factor for negative feedback")
+    min_confidence_threshold: float = Field(
+        default=0.0, description="Minimum confidence for pattern retrieval"
+    )
+
+    # Memory reconsolidation
+    similarity_threshold: float = Field(
+        default=0.85,
+        description=(
+            "Cosine similarity threshold to consider "
+            "two memories as 'the same' (0.85 = conservative)"
+        ),
+    )
+    confidence_boost_on_update: float = Field(
+        default=0.1,
+        description="Confidence increment when a memory is reinforced via reconsolidation",
+    )
+
+    # Hybrid search settings
+    reconsolidation_threshold: float = Field(
+        default=0.65, description="Minimum hybrid score to trigger reconsolidation"
+    )
+    fts_weight: float = Field(
+        default=0.5,
+        description="Default FTS weight (alpha) for hybrid search. 0=semantic only, 1=FTS only",
+    )
+    top_k_sentences: int = Field(
+        default=3, description="Number of matching sentences to return per blob"
+    )
+    llm_merge_enabled: bool = Field(
+        default=True, description="Enable LLM-assisted merge for reconsolidation"
+    )
+    llm_merge_model: str = Field(
+        default="claude-opus-4-6-20260205", description="Model for LLM merge"
+    )
+
+    # Performance
+    batch_size: int = Field(default=32, description="Batch size for embedding generation")
+    cache_embeddings: bool = Field(
+        default=True, description="Cache embeddings in SQLite to avoid recomputation"
+    )
+
+    # Namespace
+    user_pattern_boost: float = Field(
+        default=1.5, description="Score multiplier for user-specific patterns vs global"
+    )
+
+    class Config:
+        env_prefix = "MEMORY_"
+        case_sensitive = False
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        extra = "ignore"  # Ignore extra fields from .env (e.g., Zylch settings)
+
+
+# Global default config instance
+default_config = MemoryConfig()

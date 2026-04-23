@@ -1,0 +1,469 @@
+"""Calendar synchronization with Supabase storage."""
+
+import logging
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+from zylch.llm import LLMClient
+
+if TYPE_CHECKING:
+    from zylch.storage import Storage
+
+logger = logging.getLogger(__name__)
+
+
+class CalendarSyncManager:
+    """Manages calendar event synchronization with Supabase storage.
+
+    Fetches events, analyzes patterns, and stores with actionable metadata
+    for relationship intelligence.
+    """
+
+    def __init__(
+        self,
+        calendar_client,
+        api_key: str,
+        provider: str,
+        days_back: int = 30,
+        days_forward: int = 30,
+        my_emails: Optional[List[str]] = None,
+        owner_id: str = "",
+        supabase_storage: Optional["Storage"] = None,
+    ):
+        """Initialize calendar sync manager.
+
+        Args:
+            calendar_client: Calendar client (GoogleCalendarClient or OutlookCalendarClient)
+            api_key: LLM API key for event analysis
+            provider: LLM provider (anthropic, openai, mistral)
+            days_back: Days in past to sync (default: 30)
+            days_forward: Days in future to sync (default: 30)
+            my_emails: List of my email addresses (for identifying external attendees)
+            owner_id: User's Owner ID (required)
+            supabase_storage: Storage instance (required)
+        """
+        if not owner_id or not supabase_storage:
+            raise ValueError("owner_id and supabase_storage are required")
+
+        self.calendar = calendar_client
+        self.provider = provider
+        self.llm_client = LLMClient(api_key=api_key, provider=provider) if api_key else None
+        self.days_back = days_back
+        self.days_forward = days_forward
+        self.my_emails = my_emails or []
+        self.owner_id = owner_id
+        self.supabase = supabase_storage
+
+        logger.info(f"CalendarSyncManager initialized for owner {owner_id}")
+
+    def _load_cache(self) -> Dict[str, Any]:
+        """Load existing calendar events from Supabase."""
+        events = self.supabase.get_all_calendar_events(self.owner_id)
+        events_dict = {}
+        for event in events:
+            event_id = event["google_event_id"]
+            events_dict[event_id] = self._convert_supabase_to_cache(event)
+        return {
+            "last_sync": None,
+            "sync_window": {"days_back": self.days_back, "days_forward": self.days_forward},
+            "events": events_dict,
+        }
+
+    def _save_cache(self, cache: Dict[str, Any]) -> None:
+        """Save calendar events to Supabase."""
+        events_for_supabase = []
+        for event_id, event_data in cache["events"].items():
+            events_for_supabase.append(self._convert_cache_to_supabase(event_data))
+        self.supabase.store_calendar_events_batch(self.owner_id, events_for_supabase)
+        logger.info(f"Saved {len(events_for_supabase)} events to Supabase")
+
+    def _convert_supabase_to_cache(self, supabase_event: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert Supabase calendar_event format to cache format."""
+        return {
+            "id": supabase_event["google_event_id"],
+            "summary": supabase_event.get("summary", ""),
+            "description": supabase_event.get("description", ""),
+            "location": supabase_event.get("location", ""),
+            "start": supabase_event.get("start_time", ""),
+            "end": supabase_event.get("end_time", ""),
+            "is_past": None,  # Will be calculated when needed
+            "attendees": supabase_event.get("attendees", []),
+            "attendees_with_status": supabase_event.get("attendees", []),
+            "external_attendees": [],  # Will be populated when needed
+            "attendee_count": len(supabase_event.get("attendees", [])),
+            "organizer": supabase_event.get("organizer_email", ""),
+            "status": "",
+            "html_link": "",
+            "created_at": supabase_event.get("created_at", ""),
+            "updated_at": supabase_event.get(
+                "google_updated_at", ""
+            ),  # Google Calendar's timestamp, not Supabase's
+            "cached_at": supabase_event.get("updated_at", ""),
+        }
+
+    def _convert_cache_to_supabase(self, cache_event: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert cache event format to Supabase format."""
+        return {
+            "id": cache_event["id"],
+            "summary": cache_event.get("summary"),
+            "description": cache_event.get("description"),
+            "start_time": cache_event.get("start"),
+            "end_time": cache_event.get("end"),
+            "location": cache_event.get("location"),
+            "attendees": cache_event.get("attendees_with_status", cache_event.get("attendees", [])),
+            "organizer_email": cache_event.get("organizer"),
+            "is_external": bool(cache_event.get("external_attendees")),
+            "meet_link": cache_event.get("html_link"),
+            "calendar_id": "primary",
+            "google_updated_at": cache_event.get(
+                "updated_at"
+            ),  # Google Calendar's updated timestamp
+        }
+
+    def sync_events(self, force_full: bool = False) -> Dict[str, Any]:
+        """Sync calendar events and update cache.
+
+        Fetches events from past (30 days) and future (30 days) to understand
+        meeting patterns and identify relationship gaps.
+
+        Args:
+            force_full: Force full sync (ignore last_sync)
+
+        Returns:
+            Sync results with stats
+        """
+        logger.info("📅 Starting calendar event sync...")
+
+        # Load existing cache
+        cache = self._load_cache()
+
+        # Determine sync window
+        now = datetime.now(timezone.utc)
+        time_min = now - timedelta(days=self.days_back)
+        time_max = now + timedelta(days=self.days_forward)
+
+        if force_full or not cache.get("last_sync"):
+            logger.info(
+                f"📦 Full sync: fetching events from "
+                f"{time_min.strftime('%Y-%m-%d')} to {time_max.strftime('%Y-%m-%d')}"
+            )
+        else:
+            logger.info(f"📥 Incremental sync since {cache['last_sync']}")
+
+        # Fetch events from calendar provider
+        try:
+            # Convert timezone-aware datetimes to naive UTC for calendar API
+            # (Both Google and Outlook APIs expect naive UTC)
+            time_min_naive = time_min.replace(tzinfo=None) if time_min.tzinfo else time_min
+            time_max_naive = time_max.replace(tzinfo=None) if time_max.tzinfo else time_max
+
+            events = self.calendar.list_events(
+                time_min=time_min_naive,
+                time_max=time_max_naive,
+                max_results=1000,  # Get all events in window
+            )
+            logger.info(f"📨 Fetched {len(events)} events from calendar")
+        except Exception as e:
+            logger.error(f"Failed to fetch calendar events: {e}")
+            return {"success": False, "error": str(e), "events_fetched": 0}
+
+        # Process and cache events
+        new_events = 0
+        updated_events = 0
+
+        for event in events:
+            event_id = event["id"]
+
+            # Check if event exists in cache
+            if event_id in cache["events"]:
+                # Update existing event
+                cached_event = cache["events"][event_id]
+                if self._event_changed(cached_event, event):
+                    cache["events"][event_id] = self._process_event(event)
+                    updated_events += 1
+            else:
+                # New event
+                cache["events"][event_id] = self._process_event(event)
+                new_events += 1
+
+        # Update sync metadata
+        cache["last_sync"] = datetime.now(timezone.utc).isoformat()
+        cache["sync_window"] = {
+            "days_back": self.days_back,
+            "days_forward": self.days_forward,
+            "time_min": time_min.isoformat(),
+            "time_max": time_max.isoformat(),
+        }
+
+        # Save cache
+        self._save_cache(cache)
+
+        results = {
+            "success": True,
+            "total_events": len(cache["events"]),
+            "new_events": new_events,
+            "updated_events": updated_events,
+            "last_sync": cache["last_sync"],
+        }
+
+        logger.info(
+            f"✅ Sync complete: {new_events} new, {updated_events} updated, "
+            f"{len(cache['events'])} total"
+        )
+
+        return results
+
+    def _process_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """Process and enrich a calendar event.
+
+        Args:
+            event: Raw event from calendar provider (Google or Outlook)
+
+        Returns:
+            Processed event with metadata
+        """
+        # Extract attendee emails and response status (for relationship tracking)
+        attendee_emails = []
+        attendees_with_status = []
+        external_attendees = []
+
+        for attendee in event.get("attendees", []):
+            email = attendee.get("email", "")
+            if email:
+                attendee_emails.append(email)
+                # Store full attendee info with response status
+                attendees_with_status.append(
+                    {
+                        "email": email,
+                        "responseStatus": attendee.get("responseStatus", "needsAction"),
+                        "optional": attendee.get("optional", False),
+                        "self": attendee.get("self", False),
+                    }
+                )
+
+                # Check if this attendee is external (not in my_emails list)
+                is_internal = False
+                for my_email in self.my_emails:
+                    # Support wildcards like *@domain.com
+                    if my_email.startswith("*@"):
+                        domain = my_email[1:]  # Remove * to get @domain.com
+                        if email.endswith(domain):
+                            is_internal = True
+                            break
+                    elif my_email == email:
+                        is_internal = True
+                        break
+
+                # If not internal, it's external
+                if not is_internal:
+                    external_attendees.append(email)
+
+        # Parse start/end times
+        start_str = event.get("start", "")
+        end_str = event.get("end", "")
+
+        # Determine if past or future
+        now = datetime.now(timezone.utc)
+        is_past = None
+        try:
+            # Handle both dict format and string format
+            if isinstance(start_str, dict):
+                # Google Calendar can return {'dateTime': '...', 'timeZone': '...'}
+                start_str = start_str.get("dateTime", "")
+
+            if start_str:
+                start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                # Make naive for comparison (remove tzinfo)
+                start_dt_naive = start_dt.replace(tzinfo=None) if start_dt.tzinfo else start_dt
+                now_naive = now.replace(tzinfo=None)
+                is_past = start_dt_naive < now_naive
+        except Exception as e:
+            logger.debug(f"Failed to parse start time '{start_str}': {e}")
+            is_past = None
+
+        # Build processed event
+        processed = {
+            "id": event["id"],
+            "summary": event.get("summary", "(No title)"),
+            "description": event.get("description", ""),
+            "location": event.get("location", ""),
+            "start": start_str,
+            "end": end_str,
+            "is_past": is_past,
+            "attendees": attendee_emails,
+            "attendees_with_status": attendees_with_status,  # New: full attendee info
+            "external_attendees": external_attendees,
+            "attendee_count": len(attendee_emails),
+            "organizer": event.get("organizer", {}).get("email", ""),
+            "status": event.get("status", ""),
+            "html_link": event.get("html_link", ""),
+            "created_at": event.get("created", ""),
+            "updated_at": event.get("updated", ""),
+            "cached_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        return processed
+
+    def _event_changed(self, cached: Dict[str, Any], fresh: Dict[str, Any]) -> bool:
+        """Check if event has changed since last cache.
+
+        Args:
+            cached: Cached event
+            fresh: Fresh event from API
+
+        Returns:
+            True if changed
+        """
+        # Compare updated timestamps
+        cached_updated = cached.get("updated_at", "")
+        fresh_updated = fresh.get("updated", "")
+
+        return cached_updated != fresh_updated
+
+    def get_events_by_contact(
+        self, contact_email: str, days_back: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Get all events involving a specific contact.
+
+        Args:
+            contact_email: Contact's email address
+            days_back: Optional filter (only events in last N days)
+
+        Returns:
+            List of events with this contact
+        """
+        cache = self._load_cache()
+
+        matching_events = []
+        cutoff_date = None
+
+        if days_back:
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
+
+        for event in cache["events"].values():
+            # Check if contact is in attendees
+            if contact_email in event.get("attendees", []):
+                # Apply date filter if specified
+                if cutoff_date:
+                    start_dt = datetime.fromisoformat(event["start"].replace("Z", "+00:00"))
+                    if start_dt < cutoff_date:
+                        continue
+
+                matching_events.append(event)
+
+        # Sort by start time (most recent first)
+        matching_events.sort(key=lambda e: e.get("start", ""), reverse=True)
+
+        return matching_events
+
+    def get_recent_meetings(
+        self, days_back: int = 7, only_past: bool = True, only_external: bool = False
+    ) -> List[Dict[str, Any]]:
+        """Get recent meetings for relationship gap analysis.
+
+        Args:
+            days_back: How many days back to look
+            only_past: Only include past meetings
+            only_external: Only include meetings with external attendees
+
+        Returns:
+            List of recent meetings
+        """
+        cache = self._load_cache()
+
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
+        meetings = []
+
+        for event in cache["events"].values():
+            # Filter by date
+            start_dt = datetime.fromisoformat(event["start"].replace("Z", "+00:00"))
+            if start_dt < cutoff_date:
+                continue
+
+            # Filter by past/future
+            if only_past and not event.get("is_past", False):
+                continue
+
+            # Filter by external attendees
+            if only_external and not event.get("external_attendees", []):
+                continue
+
+            meetings.append(event)
+
+        # Sort by start time (most recent first)
+        meetings.sort(key=lambda e: e.get("start", ""), reverse=True)
+
+        return meetings
+
+    def search_events(
+        self, query: str, days_back: Optional[int] = None, days_forward: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Search events by keyword in title or description.
+
+        Args:
+            query: Search query
+            days_back: Optional past window
+            days_forward: Optional future window
+
+        Returns:
+            Matching events
+        """
+        cache = self._load_cache()
+
+        query_lower = query.lower()
+        matching = []
+
+        now = datetime.now(timezone.utc)
+        cutoff_past = now - timedelta(days=days_back) if days_back else None
+        cutoff_future = now + timedelta(days=days_forward) if days_forward else None
+
+        for event in cache["events"].values():
+            # Search in summary and description
+            summary = event.get("summary", "").lower()
+            description = event.get("description", "").lower()
+
+            if query_lower in summary or query_lower in description:
+                # Apply date filters
+                start_dt = datetime.fromisoformat(event["start"].replace("Z", "+00:00"))
+
+                if cutoff_past and start_dt < cutoff_past:
+                    continue
+                if cutoff_future and start_dt > cutoff_future:
+                    continue
+
+                matching.append(event)
+
+        # Sort by start time (most recent first)
+        matching.sort(key=lambda e: e.get("start", ""), reverse=True)
+
+        return matching
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get calendar cache statistics.
+
+        Returns:
+            Stats dict
+        """
+        cache = self._load_cache()
+
+        past_count = 0
+        future_count = 0
+        external_count = 0
+
+        for event in cache["events"].values():
+            if event.get("is_past"):
+                past_count += 1
+            else:
+                future_count += 1
+
+            if event.get("external_attendees"):
+                external_count += 1
+
+        return {
+            "total_events": len(cache["events"]),
+            "past_events": past_count,
+            "future_events": future_count,
+            "external_meetings": external_count,
+            "last_sync": cache.get("last_sync"),
+            "sync_window": cache.get("sync_window", {}),
+        }

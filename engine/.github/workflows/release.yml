@@ -1,0 +1,106 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            ext: ""
+          - os: macos-latest
+            platform: macos
+            arch: x64
+            ext: ""
+            rosetta: true
+          - os: macos-latest
+            platform: macos
+            arch: arm64
+            ext: ""
+          - os: windows-latest
+            platform: windows
+            arch: x64
+            ext: ".exe"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python (native)
+        if: ${{ !matrix.rosetta }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup Python x86_64 via Rosetta
+        if: ${{ matrix.rosetta }}
+        run: |
+          # Install x86_64 Python via Rosetta
+          arch -x86_64 /bin/bash -c '
+            curl -sL https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg -o /tmp/python.pkg
+            sudo installer -pkg /tmp/python.pkg -target /
+          '
+          echo "/Library/Frameworks/Python.framework/Versions/3.12/bin" >> $GITHUB_PATH
+
+      - name: Install system deps (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libmagic
+
+      - name: Install system deps (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libmagic1
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          PY="${{ matrix.rosetta && 'arch -x86_64 python3' || 'python3' }}"
+          $PY -m pip install -e .
+          $PY -m pip install pyinstaller
+
+      - name: Build binary
+        shell: bash
+        run: |
+          PY="${{ matrix.rosetta && 'arch -x86_64 python3' || 'python3' }}"
+          # Find neonize native lib for explicit inclusion
+          NEO_LIB=$($PY -c "import neonize; from pathlib import Path; p=Path(neonize.__file__).parent; libs=list(p.glob('neonize-*')); print(libs[0]) if libs else print('')" 2>/dev/null || echo "")
+          NEO_FLAG=""
+          SEP=":"
+          if [ "${{ matrix.platform }}" = "windows" ]; then SEP=";"; fi
+          if [ -n "$NEO_LIB" ] && [ -f "$NEO_LIB" ]; then
+            NEO_FLAG="--add-binary ${NEO_LIB}${SEP}neonize"
+            echo "Including neonize lib: $NEO_LIB"
+          fi
+          $PY -m PyInstaller --onefile --name zylch-${{ matrix.platform }}-${{ matrix.arch }} --hidden-import zylch.cli.main --collect-all zylch --collect-all fastembed --collect-all neonize --collect-binaries neonize --collect-all onnxruntime --collect-binaries onnxruntime $NEO_FLAG zylch/cli/main.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zylch-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/zylch-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            zylch-linux-x64/zylch-linux-x64
+            zylch-macos-x64/zylch-macos-x64
+            zylch-macos-arm64/zylch-macos-arm64
+            zylch-windows-x64/zylch-windows-x64.exe

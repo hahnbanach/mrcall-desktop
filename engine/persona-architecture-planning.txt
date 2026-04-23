@@ -1,0 +1,117 @@
+# ZYLCH PERSONA ARCHITECTURE EVOLUTION
+
+## MISSION CONTEXT
+
+Zylch is a research lab building relational memory infrastructure. The thesis: LLMs are perfect for relational intelligence because professional relationships are already encoded in language. The missing piece is persistent relational memory - that's what Zylch builds.
+
+**Core concept: AVATAR** - A vector-based representation of a person, built from interaction history across all channels (email, calendar, WhatsApp, phone calls).
+
+**Key principles:**
+- A person is NOT an email address. One person can have multiple identifiers (emails, phones, names)
+- Memory reconsolidation: Similar memories UPDATE (not duplicate), mimicking human memory
+- Small-world topology for retrieval
+- Shareable avatars: When employees leave, relational knowledge stays
+
+## CURRENT STATE (WHAT EXISTS)
+
+### Architecture (from ZYLCH_MEMORY_ARCHITECTURE.md):
+- ZylchMemory: Vector-based semantic storage with HNSW indexing (O(log n) retrieval)
+- Sentence-transformers embeddings (384-dim, all-MiniLM-L6-v2)
+- Supabase pg_vector for storage
+- Namespace hierarchy: global → user → contact
+- Avatar structure defined but NOT fully implemented
+- Confidence tracking with Bayesian updates
+- Memory lifecycle management (TTL, decay, garbage collection)
+
+### Current Problem:
+The `/tasks` command (formerly `/gaps`) is making Anthropic API calls for EACH contact to categorize emails into task summaries. This is:
+1. WRONG - Zylch's mission is building relational memory, NOT email categorization
+2. EXPENSIVE - N API calls per contact
+3. SLOW - Sequential analysis
+
+The analysis should come FROM the avatar/memory system, not from per-request LLM calls.
+
+## DESIRED STATE
+
+### Phase 1: Data Ingestion (No LLM calls needed)
+When emails sync:
+1. Extract interaction data (who, when, what channel, direction in/out)
+2. Store in vector database per-contact namespace
+3. Build/update avatar incrementally from raw data
+
+### Phase 2: Avatar Building (Background, async)
+Build avatar profile from accumulated data:
+- Communication patterns (frequency, response latency, preferred times)
+- Relationship strength (recency, frequency weighted)
+- Interaction history summary
+- NO per-request LLM calls - avatar is PRE-COMPUTED
+
+### Phase 3: Query Time (Fast retrieval)
+When user asks "show me tasks" or "info on Luigi":
+1. Semantic search in vector store
+2. Retrieve pre-computed avatar
+3. Format and display - NO LLM call needed for basic queries
+4. Optional: LLM only for complex reasoning/synthesis
+
+## QUESTIONS FOR THE SWARM TO ANSWER
+
+1. **Data Model**: How should we structure the avatar in pg_vector?
+   - What embeddings do we store? (interaction summaries? raw emails? metadata only?)
+   - How do we handle multi-identifier persons (email + phone = same person)?
+   - Schema for the avatars table?
+
+2. **Ingestion Pipeline**: When an email arrives:
+   - What gets embedded and stored?
+   - How do we update existing avatar vs create new?
+   - How does reconsolidation work in practice?
+
+3. **Avatar Computation**: Background job design
+   - What triggers avatar rebuild? (time-based? event-based? threshold?)
+   - What aggregations do we pre-compute?
+   - How do we handle relationship strength decay?
+
+4. **Query Interface**: How does the agent query avatars?
+   - Tool interface for retrieving avatar
+   - What should `/tasks` actually do without LLM calls?
+   - When IS an LLM call justified?
+
+5. **Swarm Architecture**: Should avatar building use agent swarm?
+   - Coordinator agent + worker agents per contact?
+   - Or simpler: background Python jobs?
+   - Trade-offs?
+
+## EXISTING CODE TO REFERENCE
+
+- `/Users/mal/hb/zylch/zylch_memory/` - ZylchMemory implementation
+- `/Users/mal/hb/zylch/zylch_memory/ZYLCH_MEMORY_ARCHITECTURE.md` - Full architecture doc
+- `/Users/mal/hb/zylch/.claude/ARCHITECTURE.md` - System architecture (Memory System Philosophy section)
+- `/Users/mal/hb/zylch/zylch/tools/task_manager.py` - Current (wrong) implementation making LLM calls
+- `/Users/mal/hb/zylch/zylch/tools/email_sync.py` - Email sync pipeline
+- `/Users/mal/hb/zylch/zylch/storage/supabase_client.py` - Database access
+
+## CONSTRAINTS
+
+- NO external contact data sources (no StarChat, no CRM APIs)
+- Contact data comes ONLY from emails, calendar, and future WhatsApp and MrCall integration
+- Must work with Supabase pg_vector (already in use)
+- Must maintain namespace isolation (owner_id scoping)
+- Background jobs should be Railway-compatible (or simple enough to run in-process)
+
+## DELIVERABLES EXPECTED
+
+This is a research task, not a coding task. You are supposed to produce documentation. Code only as example.
+
+1. **Data model** for avatar storage (SQL schema, what gets embedded)
+2. **Ingestion flow** diagram/pseudocode (email → vector store → avatar update)
+3. **Query flow** diagram/pseudocode (user request → avatar retrieval → response)
+4. **Migration path** from current task_manager.py to new architecture
+5. **Decision** on swarm vs background jobs for avatar computation
+
+## SUCCESS CRITERIA
+
+The architecture you will define must be designed in order to achieve these results
+
+- `/tasks` command works WITHOUT any Anthropic API calls (just reads from avatar store)
+- New emails automatically update the relevant avatar
+- Architecture supports future  integrations
+- Clear path to "shareable avatars" enterprise feature
