@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Zylch</title>
+    <!--
+      default-src 'self' keeps everything the renderer loads locked down.
+      img-src allows arbitrary remote images so email HTML shown inside
+      our sandbox="" iframe can fetch its own pictures (hosted on CDNs
+      of the sender). The iframe is sandbox="" so scripts/forms/same-
+      origin are disabled regardless — loading an <img> is the only
+      external traffic we intentionally permit. frame-src covers
+      about:srcdoc which is where the iframe content lives.
+    -->
+    <!--
+      Why img-src *:  our sandbox="" iframes render email HTML, and
+      emails fetch pictures from their sender's CDN. Scripts/forms/
+      same-origin are still blocked by the iframe's own sandbox, so
+      <img> is the only external privilege here.
+      Why no frame-src: srcdoc frames count as same-origin and are
+      already allowed by default-src 'self'. Listing about:srcdoc
+      explicitly is not valid CSP syntax (Chrome warns and ignores).
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:" />
+  </head>
+  <body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
