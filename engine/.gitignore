@@ -1,0 +1,130 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+zylch-website/
+zylch-cli/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+.venv.production
+.venv.test
+
+# Claude/Swarm data directories (may contain user data)
+.claude-flow/
+.swarm/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment and credentials
+.env
+.env.*
+!.env.example
+env
+credentials/
+**/credentials/
+*.pem
+*.key
+
+# Cache and data storage (may contain PII)
+# Note: zylch/cache/ is CODE (json_cache.py, identifier_map.py), not data!
+/cache/
+!zylch/cache/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.pickle
+*.pkl
+
+# Token files
+token.pickle
+token.json
+**/token.pickle
+**/token.json
+
+# Data files (may contain PII)
+data/*.json
+!data/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Memory/index files
+*.hnsw
+indices/
+
+
+# Removed Windows wrapper files per user request
+hive-mind-prompt-*.txt
+
+
+# Removed Windows wrapper files per user request
+hive-mind-prompt-*.txt
+
+# Claude Flow generated files
+.mcp.json
+claude-flow.config.json
+.swarm/
+.hive-mind/
+.claude-flow/
+memory/
+!zylch/memory/
+coordination/
+memory/claude-flow-data.json
+memory/sessions/*
+!memory/sessions/README.md
+memory/agents/*
+!memory/agents/README.md
+coordination/memory_bank/*
+coordination/subtasks/*
+coordination/orchestration/*
+*.db
+*.db-journal
+*.db-wal
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+claude-flow
+# Removed Windows wrapper files per user request
+hive-mind-prompt-*.txt

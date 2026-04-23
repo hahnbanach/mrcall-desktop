@@ -1,0 +1,21 @@
+CONTEXT:
+- Zylch directory: ~/hb/zylch
+- StarChat directory: ~/hb/starchat
+- Current state: Zylch was designed to use StarChat's contacts as external service
+- Decision: Migrate to internal contacts storage within Zylch
+
+REQUIREMENTS:
+1. Analyze StarChat's RESTful API endpoints for contacts (in ../starchat)
+2. Review Zylch's current vector-store implementation and data storage patterns (examine all *.md files in ~/hb/zylch)
+3. Understand what contact information Zylch currently uses (documented in .md files)
+4. Design architecture that:
+   - Replicates StarChat's contact API endpoints internally
+   - Integrates with Zylch's existing vector-store infrastructure
+   - Supports the contact data currently referenced in Zylch
+   - Maintains API compatibility for smooth migration
+
+DELIVERABLES:
+- Data model for contacts storage (considering vector-store requirements)
+- API endpoint specifications matching StarChat's interface
+- Integration architecture with existing Zylch vector-store
+- Migration strategy from external to internal service

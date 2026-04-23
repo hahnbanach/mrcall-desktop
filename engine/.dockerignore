@@ -1,0 +1,59 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files (use docker-compose env instead)
+.env
+.env.*
+!.env.example
+
+# Tests and docs (not needed in production)
+tests/
+docs/
+*.md
+!requirements.txt
+
+# Claude/AI tools
+.claude/
+
+# Cache and runtime data (use volumes instead)
+# Note: zylch/cache/ is CODE - explicitly include it!
+cache/
+!zylch/cache/
+!zylch/cache/*
+.swarm/
+
+# Credentials (mount as volume instead)
+credentials/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
