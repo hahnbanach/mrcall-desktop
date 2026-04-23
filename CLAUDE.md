@@ -20,6 +20,27 @@ All knowledge lives in `./docs/`. This file is the index.
 
 After context compaction, run /doc-intrasession before resuming work!
 
+## Sibling repos
+
+This product spans three repos under `~/private/`:
+
+- **`zylch-standalone/`** — this one. Python CLI + Python sidecar (the "brain").
+- **`zylch-desktop/`** — Electron + React shell that embeds the sidecar via JSON-RPC over stdio. Repo: `malemi/zylch-desktop`.
+- **`zylch-website/`** — static marketing site at https://zylchai.com. Repo: `malemi/zylch-website`.
+
+When a change cuts across repos (e.g. a CLI flag rename that the desktop UI also relies on), check the matching repo before merging.
+
+## Memory discipline
+
+Claude Code keeps a per-user, per-machine memory at `~/.claude/projects/<encoded-path>/memory/`. **It is not in git, not shared with the team, not portable.** The project's source of truth is `./docs/` and this `CLAUDE.md`.
+
+Rules for any agent working in this repo:
+
+- **Project knowledge → `docs/`.** Architecture, decisions, current state, rules: write or edit a doc under `docs/`. Propose the change to the user; do not silently auto-save it to your local CC memory under a `project` or `reference` type.
+- **`active-context.md` is the freshest source.** It's updated continuously; it overrides anything in older strategy/business-model files when they disagree.
+- **Personal notes → CC memory.** User preferences, working-style feedback, your own session-local recall — these are appropriate for `~/.claude/.../memory/` because they're per-developer.
+- **Before quoting CC memory**, verify against the current state of `docs/` or the code. Memory can be stale; the repo cannot.
+
 ## Install
 
 Zylch is distributed as a **prebuilt binary** via `scripts/install.sh` (curl one-liner).
