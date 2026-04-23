@@ -1,6 +1,6 @@
 {
   "name": "zylch-desktop",
-  "version": "0.1.0",
+  "version": "0.1.24",
   "description": "Zylch desktop app (Electron + React)",
   "main": "out/main/index.js",
   "author": "Mario Alemi",
