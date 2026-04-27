@@ -149,7 +149,14 @@ jobs:
         run: npm ci
 
       - name: Build installer
-        run: npm run dist:${{ matrix.platform }}
+        # Constrain electron-builder to the matrix arch. Without this,
+        # `mac.target.arch: ["arm64", "x64"]` in package.json makes
+        # electron-builder produce BOTH dmgs from a single runner — and
+        # the x64 dmg ends up with whatever sidecar the runner built
+        # (e.g. an arm64 binary on macos-14). Per-arch CI runs avoid
+        # that mismatch: each runner ships one installer, with the
+        # matching native sidecar inside.
+        run: npm run dist:${{ matrix.platform }} -- --${{ matrix.arch }}
 
       - name: List installer output
         shell: bash
