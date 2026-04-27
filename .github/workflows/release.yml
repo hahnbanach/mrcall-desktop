@@ -1,40 +1,82 @@
 name: Build installers
 
 # Builds the Python sidecar (PyInstaller) and the Electron app
-# (electron-builder) for macOS arm64, macOS x64, and Windows x64.
+# (electron-builder). Default targets: macOS arm64 and Windows x64.
+# Intel x64 is opt-in:
+#   - tag push ending in `-intel` (e.g. `v0.1.25-intel`)
+#   - workflow_dispatch with input `include_intel: true`
 #
-# - Fires on tag push (`v*`) and manual dispatch.
-# - Workflow_dispatch: installers attached as workflow artifacts only.
-# - Tag push: installers also attached to a GitHub Release.
+# Intel runs on `macos-13-large` (paid larger runner) — the free
+# `macos-13` pool has multi-hour queues. "Larger runners" must be
+# enabled in repo Settings → Actions → Runners.
 #
-# No code signing. Gatekeeper / SmartScreen prompts on first launch
-# are documented for testers.
+# On tag push: installers attached to a GitHub Release (prerelease=false
+# explicitly, so `-intel` doesn't trip auto-detection).
+# On workflow_dispatch: installers attached as workflow artifacts only.
+#
+# No code signing. Gatekeeper / SmartScreen prompts on first launch.
 
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      include_intel:
+        description: 'Also build macOS Intel x64 (paid macos-13-large runner)'
+        type: boolean
+        default: false
 
 jobs:
+  setup:
+    name: Resolve build matrix
+    runs-on: ubuntu-latest
+    outputs:
+      engine_matrix: ${{ steps.compute.outputs.engine_matrix }}
+      app_matrix: ${{ steps.compute.outputs.app_matrix }}
+      include_intel: ${{ steps.compute.outputs.include_intel }}
+    steps:
+      - id: compute
+        shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_INTEL: ${{ inputs.include_intel }}
+        run: |
+          set -euo pipefail
+          INCLUDE_INTEL=false
+          if [[ "$EVENT_NAME" == "push" && "$REF_NAME" == *-intel ]]; then
+            INCLUDE_INTEL=true
+          fi
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && "$INPUT_INTEL" == "true" ]]; then
+            INCLUDE_INTEL=true
+          fi
+          echo "include_intel=$INCLUDE_INTEL" >> "$GITHUB_OUTPUT"
+          echo "Building with include_intel=$INCLUDE_INTEL"
+
+          ENGINE_BASE='[
+            {"os":"macos-14","platform":"mac","arch":"arm64","sidecar_name":"zylch"},
+            {"os":"windows-latest","platform":"win","arch":"x64","sidecar_name":"zylch.exe"}
+          ]'
+          INTEL_ENTRY='{"os":"macos-13-large","platform":"mac","arch":"x64","sidecar_name":"zylch"}'
+
+          if [[ "$INCLUDE_INTEL" == "true" ]]; then
+            ENGINE_MATRIX=$(jq -c --argjson e "$INTEL_ENTRY" '. + [$e]' <<<"$ENGINE_BASE")
+          else
+            ENGINE_MATRIX=$(jq -c '.' <<<"$ENGINE_BASE")
+          fi
+
+          # app_matrix is identical to engine_matrix — same runners, same arch labels
+          echo "engine_matrix={\"include\":$ENGINE_MATRIX}" >> "$GITHUB_OUTPUT"
+          echo "app_matrix={\"include\":$ENGINE_MATRIX}" >> "$GITHUB_OUTPUT"
+          echo "Engine matrix: $ENGINE_MATRIX"
+
   build-engine:
     name: Sidecar ${{ matrix.platform }}-${{ matrix.arch }}
+    needs: setup
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: macos-14
-            platform: mac
-            arch: arm64
-            sidecar_name: zylch
-          - os: macos-13
-            platform: mac
-            arch: x64
-            sidecar_name: zylch
-          - os: windows-latest
-            platform: win
-            arch: x64
-            sidecar_name: zylch.exe
+      matrix: ${{ fromJSON(needs.setup.outputs.engine_matrix) }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -75,23 +117,10 @@ jobs:
 
   build-app:
     name: Installer ${{ matrix.platform }}-${{ matrix.arch }}
-    needs: build-engine
+    needs: [setup, build-engine]
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: macos-14
-            platform: mac
-            arch: arm64
-            sidecar_name: zylch
-          - os: macos-13
-            platform: mac
-            arch: x64
-            sidecar_name: zylch
-          - os: windows-latest
-            platform: win
-            arch: x64
-            sidecar_name: zylch.exe
+      matrix: ${{ fromJSON(needs.setup.outputs.app_matrix) }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -150,6 +179,8 @@ jobs:
       - name: Attach to release
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: false
+          fail_on_unmatched_files: false
           files: |
             artifacts/installers-mac-arm64/*
             artifacts/installers-mac-x64/*
