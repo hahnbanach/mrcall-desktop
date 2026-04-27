@@ -422,7 +422,7 @@ function AppInner(): JSX.Element {
         const root = document.documentElement
         root.style.setProperty('--profile-accent', c.css)
         root.style.setProperty('--profile-accent-soft', c.cssBg)
-        document.title = safe ? `Zylch - ${safe}` : 'Zylch'
+        document.title = safe ? `MrCall Desktop - ${safe}` : 'MrCall Desktop'
       })
       .catch((e) => console.error('[App] profile.current failed', e))
     return () => {
@@ -644,7 +644,7 @@ function Sidebar({
             style={{ backgroundColor: 'var(--profile-accent)' }}
             aria-hidden="true"
           />
-          <span className="font-semibold text-base truncate">Zylch</span>
+          <span className="font-semibold text-base truncate">MrCall Desktop</span>
         </div>
         {profileEmail && (
           <div
@@ -681,7 +681,7 @@ function Sidebar({
       <footer className="border-t border-black/5 px-2 py-2 flex flex-col gap-1.5">
         <button
           onClick={onNewProfile}
-          title="Create a brand-new Zylch profile"
+          title="Create a brand-new MrCall Desktop profile"
           className="px-2 py-1 rounded text-xs border hover:bg-white/60 text-left"
           style={{
             borderColor: 'var(--profile-accent)',
