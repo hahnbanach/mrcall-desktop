@@ -85,8 +85,8 @@ export class SidecarClient extends EventEmitter {
     if (lockMatch) {
       return {
         code: 'profile_locked',
-        message: `Profile ${lockMatch[1]} is already in use by another Zylch window or CLI session.`,
-        hint: 'Close the other Zylch window (or stop the running zylch CLI) and try again.'
+        message: `Profile ${lockMatch[1]} is already in use by another MrCall Desktop window or CLI session.`,
+        hint: 'Close the other MrCall Desktop window (or stop the running zylch CLI) and try again.'
       }
     }
     const tail = this.stderrRing
