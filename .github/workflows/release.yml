@@ -1,0 +1,156 @@
+name: Build installers
+
+# Builds the Python sidecar (PyInstaller) and the Electron app
+# (electron-builder) for macOS arm64, macOS x64, and Windows x64.
+#
+# - Fires on tag push (`v*`) and manual dispatch.
+# - Workflow_dispatch: installers attached as workflow artifacts only.
+# - Tag push: installers also attached to a GitHub Release.
+#
+# No code signing. Gatekeeper / SmartScreen prompts on first launch
+# are documented for testers.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-engine:
+    name: Sidecar ${{ matrix.platform }}-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: mac
+            arch: arm64
+            sidecar_name: zylch
+          - os: macos-13
+            platform: mac
+            arch: x64
+            sidecar_name: zylch
+          - os: windows-latest
+            platform: win
+            arch: x64
+            sidecar_name: zylch.exe
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install libmagic (macOS only)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          brew install libmagic
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$(brew --prefix libmagic)/lib" >> $GITHUB_ENV
+
+      - name: Install Python deps
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Build sidecar (PyInstaller)
+        shell: bash
+        run: |
+          pyinstaller --noconfirm zylch.spec
+          ls -la dist/
+
+      - name: Upload sidecar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sidecar-${{ matrix.platform }}-${{ matrix.arch }}
+          path: engine/dist/${{ matrix.sidecar_name }}
+          if-no-files-found: error
+
+  build-app:
+    name: Installer ${{ matrix.platform }}-${{ matrix.arch }}
+    needs: build-engine
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: mac
+            arch: arm64
+            sidecar_name: zylch
+          - os: macos-13
+            platform: mac
+            arch: x64
+            sidecar_name: zylch
+          - os: windows-latest
+            platform: win
+            arch: x64
+            sidecar_name: zylch.exe
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Download sidecar
+        uses: actions/download-artifact@v4
+        with:
+          name: sidecar-${{ matrix.platform }}-${{ matrix.arch }}
+          path: app/bin
+
+      - name: Make sidecar executable (posix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: chmod +x bin/${{ matrix.sidecar_name }}
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Build installer
+        run: npm run dist:${{ matrix.platform }}
+
+      - name: List installer output
+        shell: bash
+        run: ls -la dist/
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            app/dist/*.dmg
+            app/dist/*.exe
+          if-no-files-found: error
+
+  release:
+    name: Attach installers to GitHub Release
+    needs: build-app
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/installers-mac-arm64/*
+            artifacts/installers-mac-x64/*
+            artifacts/installers-win-x64/*
