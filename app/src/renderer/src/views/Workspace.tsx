@@ -283,7 +283,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
             <div className="text-slate-500 text-sm">
               {active.taskId
                 ? 'Rivedi il messaggio, modificalo se vuoi, poi invialo.'
-                : 'Ask Zylch anything about your tasks, emails, or contacts.'}
+                : 'Ask MrCall Desktop anything about your tasks, emails, or contacts.'}
             </div>
           )}
           {active.history.map((m, i) => (

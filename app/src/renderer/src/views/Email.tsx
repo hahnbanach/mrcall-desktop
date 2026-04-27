@@ -662,7 +662,7 @@ function ThreadReadingPane({
           <button
             onClick={onDelete}
             disabled={deleting}
-            title="Delete (local only): hides this thread from Zylch's inbox. The message stays on the IMAP server — linked tasks remain resolvable."
+            title="Delete (local only): hides this thread from MrCall Desktop's inbox. The message stays on the IMAP server — linked tasks remain resolvable."
             className="px-3 py-1.5 text-sm border rounded text-red-700 border-red-300 hover:bg-red-50 disabled:opacity-50"
           >
             {deleting ? 'Deleting…' : 'Delete (local)'}

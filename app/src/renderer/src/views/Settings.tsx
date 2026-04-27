@@ -121,7 +121,7 @@ export default function Settings(): JSX.Element {
         kind: 'success',
         text: restarted
           ? `Saved ${res.applied.length} field(s). Sidecar restarted.`
-          : `Saved ${res.applied.length} field(s). Restart Zylch to apply.`
+          : `Saved ${res.applied.length} field(s). Restart MrCall Desktop to apply.`
       })
     } catch (e: unknown) {
       if (isProfileLockedError(e)) {

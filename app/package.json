@@ -1,7 +1,7 @@
 {
-  "name": "zylch-desktop",
+  "name": "mrcall-desktop",
   "version": "0.1.24",
-  "description": "Zylch desktop app (Electron + React)",
+  "description": "MrCall Desktop (Electron + React)",
   "main": "out/main/index.js",
   "author": "Mario Alemi",
   "license": "MIT",
@@ -39,8 +39,9 @@
     "vite": "^5.4.8"
   },
   "build": {
-    "appId": "com.zylch.desktop",
-    "productName": "Zylch",
+    "appId": "ai.mrcall.desktop",
+    "productName": "MrCall Desktop",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "directories": {
       "output": "dist"
     },

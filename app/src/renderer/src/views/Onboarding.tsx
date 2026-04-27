@@ -112,7 +112,7 @@ export default function Onboarding(): JSX.Element {
     <div className="min-h-screen w-full flex items-start justify-center bg-slate-50 p-6 overflow-auto">
       <div className="w-full max-w-[560px]">
         <div className="mb-5">
-          <h1 className="text-2xl font-semibold text-slate-900">Welcome to Zylch</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">Welcome to MrCall Desktop</h1>
           <p className="text-sm text-slate-600 mt-1">
             Create your first profile. All data stays on this machine — your credentials
             are written only to <code>~/.zylch/profiles/</code>.
