@@ -142,7 +142,7 @@ function createWindowForProfile(profile: string): BrowserWindow {
     width: 1200,
     height: 800,
     show: false,
-    title: `Zylch — ${profile}`,
+    title: `MrCall Desktop — ${profile}`,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -191,7 +191,7 @@ function createOnboardingWindow(): BrowserWindow {
     width: 1200,
     height: 800,
     show: false,
-    title: 'Zylch — Welcome',
+    title: 'MrCall Desktop — Welcome',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

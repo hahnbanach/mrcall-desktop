@@ -1,11 +1,11 @@
 # CLAUDE.md
 
-Zylch Desktop — Electron + React frontend that embeds the Python sidecar (`zylch`) over JSON-RPC on stdio. Runs on macOS (arm64 + x64) and Windows (x64). All user data lives under `~/.zylch/profiles/<email>/` — nothing syncs to a cloud.
+MrCall Desktop — Electron + React frontend that embeds the Python sidecar (`zylch`) over JSON-RPC on stdio. Runs on macOS arm64 (Apple Silicon) and Windows x64; macOS Intel x64 is opt-in (paid runner). All user data lives under `~/.zylch/profiles/<email>/` — nothing syncs to a cloud.
 
-## Sibling repos
+## Sibling code in this monorepo
 
-- **`../zylch-standalone/`** — the Python CLI + sidecar (the engine). The desktop app calls this binary as a subprocess. Authoritative architecture: `docs/active-context.md`, `docs/ARCHITECTURE.md`. Repo: `malemi/zylch`.
-- **`../zylch-website/`** — marketing site at https://zylchai.com. Download buttons there point at this repo's GitHub releases.
+- **`../engine/`** — the Python CLI + sidecar that this app embeds. Built into `bin/` by the release workflow. Internal package name and CLI binary are still `zylch` (legacy); user-visible branding is "MrCall Desktop".
+- Wider context: `~/hb/mrcall-desktop/CLAUDE.md` and the `~/hb/` meta-repo for sibling services (`mrcall-agent`, `starchat`, `mrcall-dashboard`, `mrcall-website`).
 
 ## Layout
 
@@ -14,7 +14,7 @@ src/
   main/        Electron main process (window, sidecar lifecycle, IPC)
   preload/     Context-bridge between main and renderer
   renderer/    React UI — views: chat, tasks, emails, settings, onboarding wizard
-bin/           Prebuilt zylch sidecar binary (downloaded by CI from malemi/zylch releases)
+bin/           Prebuilt zylch sidecar binary (built by the release workflow from ../engine/)
 out/           electron-vite build output
 dist/          electron-builder installer output (DMG / EXE)
 scripts/       Test helpers (e.g. test-onboarding.mjs)
@@ -30,27 +30,35 @@ npm ci
 npm run dev
 ```
 
-For a packaged build:
+For a packaged build (Mac):
 
 ```bash
-mkdir -p bin
-gh release download --repo malemi/zylch --pattern zylch-macos-arm64 \
-  --output bin/zylch && chmod +x bin/zylch
+# Build the sidecar from the engine subdir, then bundle it into bin/.
+cd ../engine && pip install -e . pyinstaller && pyinstaller --noconfirm zylch.spec
+cp dist/zylch ../app/bin/zylch && chmod +x ../app/bin/zylch
+cd ../app
 npm run dist:mac      # → dist/*.dmg
-npm run dist:win      # → dist/*.exe (on Windows, or via Wine elsewhere)
 ```
+
+Windows requires running on Windows (or `windows-latest` in CI); cross-build via Wine is fragile.
 
 ## Distribution
 
-`.github/workflows/release.yml` fires on tag push (`v*`) or manual dispatch. It pulls the matching sidecar binary from `malemi/zylch` releases, runs electron-builder, and attaches the installers to a GitHub Release on `malemi/zylch-desktop`.
+`.github/workflows/release.yml` (in the repo root, not `app/`) drives every install:
 
-| Platform | Asset |
+- **Tag push `v*`** → builds macOS arm64 + Windows x64. Installers attached to a GitHub Release.
+- **Tag push `v*-intel`** (e.g. `v0.1.25-intel`) → also builds macOS Intel x64 on `macos-13-large` (paid larger runner; "Larger runners" must be enabled in repo settings).
+- **`workflow_dispatch`** with input `include_intel: true|false` → manual build with the same toggle, artifacts only (no Release attached).
+
+The workflow builds the sidecar in `engine/` via PyInstaller in the same run and downloads it into `app/bin/` before electron-builder runs. No external sidecar repo to fetch from anymore.
+
+| Platform | Asset (controlled by `build.artifactName` in `package.json`) |
 |----------|-------|
-| macOS Apple Silicon | `Zylch-<ver>-arm64.dmg` |
-| macOS Intel (x64) | `Zylch-<ver>.dmg` |
-| Windows x64 | `Zylch-Setup-<ver>.exe` |
+| macOS Apple Silicon | `MrCall Desktop-<ver>-arm64.dmg` |
+| macOS Intel (x64) — opt-in | `MrCall Desktop-<ver>-x64.dmg` |
+| Windows x64 | `MrCall Desktop-Setup-<ver>-x64.exe` (NSIS) |
 
-**Installers are not code-signed.** macOS Gatekeeper and Windows SmartScreen will warn on first launch — `README.md` documents the bypass for testers, and the website's `download.html` repeats the same steps.
+**Installers are not code-signed.** macOS Gatekeeper and Windows SmartScreen will warn on first launch — `README.md` documents the bypass for testers, and the marketing site (`mrcall-website`) needs the same instructions in its download page.
 
 ## Architecture notes
 
@@ -58,11 +66,16 @@ npm run dist:win      # → dist/*.exe (on Windows, or via Wine elsewhere)
 - **Profile-aware.** Each Electron window owns one profile (one email). The sidecar acquires an fcntl lock on the profile dir; if you see "profile already in use", another window or CLI invocation has it open.
 - **No telemetry.** No analytics SDK, no error reporter. If you find yourself reaching for one, talk to the user first.
 
+## Naming and branding
+
+- **User-visible**: "MrCall Desktop" everywhere — window title, sidebar, onboarding, README, asset names. `appId` is `ai.mrcall.desktop`.
+- **Internal (engine)**: still `zylch` — Python package, CLI binary `zylch`, env vars `ZYLCH_*`, data dir `~/.zylch/profiles/`. A separate execution plan (Level 3) will rename the engine; until then, those identifiers stay so engine behaviour matches user-visible documentation only at the brand layer.
+
 ## Memory discipline
 
 Claude Code keeps a per-user, per-machine memory at `~/.claude/projects/<encoded-path>/memory/`. **It is not in git, not shared with the team, not portable.** This `CLAUDE.md` and any future `docs/` here are the source of truth.
 
 - **Project knowledge → this file (or a `docs/` doc, if it grows).** Build pipeline, IPC shape, packaging quirks: check them in.
-- **Engine facts → `../zylch-standalone/docs/`.** Don't restate them here; link.
+- **Engine facts → `../engine/docs/`.** Don't restate them here; link.
 - **Personal notes → CC memory.** Your own preferences, working-style feedback. That's fine.
 - **Before quoting CC memory**, verify against the current state of the repo. Memory can be stale; the repo cannot.

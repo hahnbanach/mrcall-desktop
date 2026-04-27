@@ -168,7 +168,7 @@ export function createProfileFS(
   mkdirSync(dir, { mode: 0o700 })
 
   const envPath = join(dir, '.env')
-  const lines: string[] = ['# Created by Zylch desktop onboarding\n']
+  const lines: string[] = ['# Created by MrCall Desktop onboarding\n']
   for (const [k, v] of Object.entries(cleaned)) {
     lines.push(`${k}=${dotenvQuote(v)}\n`)
   }
