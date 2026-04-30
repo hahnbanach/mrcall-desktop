@@ -3,6 +3,7 @@ import type { InboxThread, ThreadEmail } from '../types'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import { useThread } from '../store/thread'
 import HtmlEmailBody from '../components/HtmlEmailBody'
+import Icon from '../components/Icon'
 // EmailComposeModal intentionally not imported: the "Open" flow
 // replaces the old "Compose from Email" entrypoint. A future blank
 // compose icon will re-add this.
@@ -350,9 +351,9 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
               onClick={() => setSelectedId(null)}
               title="Back to list"
               aria-label="Back"
-              className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 text-slate-700 text-lg leading-none"
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-brand-light-grey text-brand-grey-80 transition-colors"
             >
-              {'\u2190'}
+              <Icon name="back" size={18} />
             </button>
           ) : (
             <button
@@ -361,12 +362,12 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
               aria-label="Switch folder"
               aria-haspopup="menu"
               aria-expanded={folderMenuOpen}
-              className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 text-slate-700 text-lg leading-none"
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-brand-light-grey text-brand-grey-80 transition-colors"
             >
-              {'\u2630'}
+              <Icon name="menu" size={18} />
             </button>
           )}
-          <div className="text-sm font-bold text-slate-900">
+          <div className="text-sm font-bold text-brand-black">
             {currentFolderLabel}
           </div>
           {folderMenuOpen && !selected && (
@@ -391,13 +392,10 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
                         setFolderMenuOpen(false)
                       }}
                       className={
-                        'w-full flex items-center justify-between px-3 py-1.5 text-sm text-left ' +
+                        'w-full flex items-center justify-between px-3 py-1.5 text-sm text-left transition-colors ' +
                         (active
-                          ? 'text-white'
-                          : 'text-slate-700 hover:bg-slate-100')
-                      }
-                      style={
-                        active ? { backgroundColor: 'var(--profile-accent)' } : undefined
+                          ? 'bg-brand-blue text-white'
+                          : 'text-brand-grey-80 hover:bg-brand-light-grey')
                       }
                     >
                       <span>{f.label}</span>
@@ -407,7 +405,7 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
                             'text-xs rounded-full px-2 py-0.5 ' +
                             (active
                               ? 'bg-white/25 text-white'
-                              : 'bg-slate-200 text-slate-700')
+                              : 'bg-brand-mid-grey text-brand-grey-80')
                           }
                         >
                           {f.badge}
@@ -423,16 +421,16 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
 
         <div ref={listRef} className="flex-1 overflow-y-auto">
           {loading && threads.length === 0 && (
-            <div className="p-4 text-sm text-slate-500">Loading…</div>
+            <div className="p-4 text-sm text-brand-grey-80">Loading…</div>
           )}
           {error && (
-            <div className="p-4 text-sm text-red-700">Failed: {error}</div>
+            <div className="p-4 text-sm text-brand-danger">Failed: {error}</div>
           )}
           {!loading && !error && threads.length === 0 && folder !== 'drafts' && (
-            <div className="p-4 text-sm text-slate-500">No threads.</div>
+            <div className="p-4 text-sm text-brand-grey-80">No threads.</div>
           )}
           {folder === 'drafts' && (
-            <div className="p-4 text-sm text-slate-500">
+            <div className="p-4 text-sm text-brand-grey-80">
               Drafts live in the chat flow for now. Open a thread to
               reply via Workspace chat.
             </div>
@@ -450,58 +448,60 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
                     selectByIndex(idx)
                   }}
                   className={
-                    'group relative px-3 py-2 border-b cursor-pointer select-none ' +
+                    'group relative px-3 py-2 border-b cursor-pointer select-none transition-colors ' +
                     (isSel
-                      ? 'bg-[color:var(--profile-accent-soft)] '
-                      : 'hover:bg-slate-50 ') +
-                    (t.pinned ? 'border-l-4 ' : 'border-l-4 border-l-transparent ')
-                  }
-                  style={
-                    t.pinned
-                      ? { borderLeftColor: 'var(--profile-accent)' }
-                      : undefined
+                      ? 'bg-brand-light-grey '
+                      : 'hover:bg-brand-light-grey ') +
+                    (t.pinned
+                      ? 'border-l-4 border-l-brand-orange '
+                      : isSel
+                        ? 'border-l-4 border-l-brand-blue '
+                        : 'border-l-4 border-l-transparent ')
                   }
                 >
                   <div className="flex items-center justify-between gap-2 mb-0.5">
                     <div
                       className={
                         'text-sm truncate min-w-0 ' +
-                        (t.unread ? 'font-semibold text-slate-900' : 'text-slate-700')
+                        (t.unread ? 'font-semibold text-brand-black' : 'text-brand-grey-80')
                       }
                     >
                       {t.pinned && (
-                        <span className="mr-1" title="Pinned">
-                          📌
-                        </span>
+                        <Icon
+                          name="pin"
+                          size={12}
+                          className="text-brand-orange inline-block align-text-bottom mr-1"
+                          aria-label="Pinned"
+                        />
                       )}
                       {who}
                     </div>
-                    <div className="text-xs text-slate-500 whitespace-nowrap shrink-0">
+                    <div className="text-xs text-brand-grey-80 whitespace-nowrap shrink-0">
                       {formatShortDate(t.date)}
                     </div>
                   </div>
                   <div
                     className={
                       'text-sm truncate ' +
-                      (t.unread ? 'font-medium text-slate-800' : 'text-slate-700')
+                      (t.unread ? 'font-medium text-brand-black' : 'text-brand-grey-80')
                     }
                   >
                     {t.subject || '(no subject)'}
                     {t.message_count > 1 && (
-                      <span className="text-xs text-slate-400 ml-1">
+                      <span className="text-xs text-brand-mid-grey ml-1">
                         ({t.message_count})
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-500 truncate">{t.snippet}</div>
+                  <div className="text-xs text-brand-grey-80 truncate">{t.snippet}</div>
                   {/* Pin button (visible on hover) */}
                   <button
                     onClick={(e) => onPin(t, e)}
                     disabled={pinning.has(t.thread_id)}
                     title={t.pinned ? 'Unpin thread' : 'Pin thread'}
-                    className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 focus:opacity-100 text-sm px-1 py-0.5 rounded bg-white/80 border border-slate-200 hover:bg-white disabled:opacity-50"
+                    className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 focus:opacity-100 px-1 py-0.5 rounded bg-white/80 border border-brand-mid-grey hover:bg-white disabled:opacity-50 text-brand-grey-80"
                   >
-                    📌
+                    <Icon name="pin" size={14} />
                   </button>
                 </li>
               )
@@ -512,7 +512,7 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
               <button
                 onClick={() => void loadFolder(folder, true)}
                 disabled={loading}
-                className="px-3 py-1.5 text-sm border rounded hover:bg-slate-50 disabled:opacity-50"
+                className="px-3 py-1.5 text-sm border rounded hover:bg-brand-light-grey disabled:opacity-50"
               >
                 {loading ? 'Loading…' : 'Load more'}
               </button>
@@ -604,15 +604,15 @@ function ThreadReadingPane({
             onClick={onBack}
             title="Back to list"
             aria-label="Back to list"
-            className="mt-1 text-lg text-slate-600 hover:text-slate-900 leading-none shrink-0"
+            className="mt-1 text-brand-grey-80 hover:text-brand-black shrink-0 transition-colors"
           >
-            ←
+            <Icon name="back" size={18} />
           </button>
           <div className="min-w-0">
             <h2 className="text-lg font-semibold truncate">
               {thread.subject || '(no subject)'}
             </h2>
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-brand-grey-80">
               {emails.length || thread.message_count} messages
             </div>
           </div>
@@ -621,22 +621,22 @@ function ThreadReadingPane({
           <button
             onClick={onOpen}
             title="Open thread in Workspace"
-            className="px-3 py-1.5 text-sm text-white rounded"
-            style={{ backgroundColor: 'var(--profile-accent)' }}
+            className="px-3 py-1.5 text-sm bg-brand-blue text-white rounded hover:bg-brand-grey-80 transition-colors inline-flex items-center gap-1.5"
           >
-            ✉ Open
+            <Icon name="send" size={14} />
+            Open
           </button>
           <button
             disabled
             title="Reply (use Workspace chat)"
-            className="px-3 py-1.5 text-sm border rounded text-slate-400 cursor-not-allowed"
+            className="px-3 py-1.5 text-sm border rounded text-brand-mid-grey cursor-not-allowed"
           >
             Reply
           </button>
           <button
             disabled
             title="Forward (coming soon)"
-            className="px-3 py-1.5 text-sm border rounded text-slate-400 cursor-not-allowed"
+            className="px-3 py-1.5 text-sm border rounded text-brand-mid-grey cursor-not-allowed"
           >
             Forward
           </button>
@@ -645,17 +645,17 @@ function ThreadReadingPane({
             disabled={pinning}
             title={thread.pinned ? 'Unpin' : 'Pin'}
             className={
-              'px-2 py-1.5 text-sm border rounded hover:bg-slate-50 disabled:opacity-50 ' +
-              (thread.pinned ? 'bg-amber-50 border-amber-300' : '')
+              'px-2 py-1.5 border rounded hover:bg-brand-light-grey disabled:opacity-50 transition-colors ' +
+              (thread.pinned ? 'bg-brand-orange/10 border-brand-orange/40 text-brand-orange' : 'border-brand-mid-grey text-brand-grey-80')
             }
           >
-            📌
+            <Icon name="pin" size={14} />
           </button>
           <button
             onClick={onArchive}
             disabled={archiving}
             title="Archive: IMAP MOVE to the provider's archive folder (Gmail 'All Mail' / Outlook 'Archive') and hide from this inbox."
-            className="px-3 py-1.5 text-sm border rounded hover:bg-slate-50 disabled:opacity-50"
+            className="px-3 py-1.5 text-sm border rounded hover:bg-brand-light-grey disabled:opacity-50"
           >
             {archiving ? 'Archiving…' : 'Archive'}
           </button>
@@ -663,17 +663,17 @@ function ThreadReadingPane({
             onClick={onDelete}
             disabled={deleting}
             title="Delete (local only): hides this thread from MrCall Desktop's inbox. The message stays on the IMAP server — linked tasks remain resolvable."
-            className="px-3 py-1.5 text-sm border rounded text-red-700 border-red-300 hover:bg-red-50 disabled:opacity-50"
+            className="px-3 py-1.5 text-sm border rounded text-brand-danger border-brand-danger/30 hover:bg-brand-danger/10 disabled:opacity-50"
           >
             {deleting ? 'Deleting…' : 'Delete (local)'}
           </button>
         </div>
       </header>
       <div className="flex-1 overflow-y-auto bg-white">
-        {loading && <div className="p-4 text-sm text-slate-500">Loading thread…</div>}
-        {error && <div className="p-4 text-sm text-red-700">Failed: {error}</div>}
+        {loading && <div className="p-4 text-sm text-brand-grey-80">Loading thread…</div>}
+        {error && <div className="p-4 text-sm text-brand-danger">Failed: {error}</div>}
         {!loading && !error && emails.length === 0 && (
-          <div className="p-4 text-sm text-slate-500">No messages.</div>
+          <div className="p-4 text-sm text-brand-grey-80">No messages.</div>
         )}
         {emails.map((e, i) => (
           <article
@@ -681,38 +681,38 @@ function ThreadReadingPane({
             className={
               'px-4 py-3 ' +
               (i < emails.length - 1 ? 'border-b ' : '') +
-              (e.is_user_sent ? 'border-l-4 border-l-emerald-500' : '')
+              (e.is_user_sent ? 'border-l-4 border-l-brand-blue' : '')
             }
           >
             <div className="flex items-start justify-between gap-3 mb-1">
-              <div className="text-sm text-slate-900 min-w-0 break-words">
+              <div className="text-sm text-brand-black min-w-0 break-words">
                 {e.is_user_sent && (
-                  <span className="inline-block text-xs px-2 py-0.5 mr-2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  <span className="inline-block text-xs px-2 py-0.5 mr-2 rounded bg-brand-blue/10 text-brand-grey-80 border border-brand-blue/30">
                     You →
                   </span>
                 )}
                 {e.is_auto_reply && (
-                  <span className="inline-block text-xs px-2 py-0.5 mr-2 rounded bg-slate-100 text-slate-600 border border-slate-300">
+                  <span className="inline-block text-xs px-2 py-0.5 mr-2 rounded bg-brand-light-grey text-brand-grey-80 border border-brand-mid-grey">
                     auto
                   </span>
                 )}
                 <span className="font-medium">
                   {e.from_name ? `${e.from_name} ` : ''}
-                  <span className="text-slate-500">&lt;{e.from_email}&gt;</span>
+                  <span className="text-brand-grey-80">&lt;{e.from_email}&gt;</span>
                 </span>
               </div>
-              <div className="text-xs text-slate-500 whitespace-nowrap">
+              <div className="text-xs text-brand-grey-80 whitespace-nowrap">
                 {formatFullDate(e.date)}
               </div>
             </div>
-            <div className="text-xs text-slate-500 mb-2 break-words">
+            <div className="text-xs text-brand-grey-80 mb-2 break-words">
               <span>To: {e.to_email || '—'}</span>
               {e.cc_email && <span> · Cc: {e.cc_email}</span>}
             </div>
             {e.body_html ? (
               <HtmlEmailBody html={e.body_html} />
             ) : (
-              <pre className="text-sm text-slate-900 whitespace-pre-wrap break-words font-sans select-text m-0">
+              <pre className="text-sm text-brand-black whitespace-pre-wrap break-words font-sans select-text m-0">
                 {e.body_plain}
               </pre>
             )}
@@ -722,14 +722,16 @@ function ThreadReadingPane({
                   ? e.attachment_filenames.map((name, i) => (
                       <span
                         key={i}
-                        className="text-xs px-2 py-0.5 rounded border border-slate-300 bg-slate-50 text-slate-700"
+                        className="text-xs px-2 py-0.5 rounded border border-brand-mid-grey bg-brand-light-grey text-brand-grey-80 inline-flex items-center gap-1"
                       >
-                        📎 {name}
+                        <Icon name="attach" size={12} />
+                        {name}
                       </span>
                     ))
                   : (
-                      <span className="text-xs px-2 py-0.5 rounded border border-slate-300 bg-slate-50 text-slate-700">
-                        📎 attachment
+                      <span className="text-xs px-2 py-0.5 rounded border border-brand-mid-grey bg-brand-light-grey text-brand-grey-80 inline-flex items-center gap-1">
+                        <Icon name="attach" size={12} />
+                        attachment
                       </span>
                     )}
               </div>

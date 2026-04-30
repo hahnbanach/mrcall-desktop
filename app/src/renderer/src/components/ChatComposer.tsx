@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Icon from './Icon'
 
 export interface ChatComposerTaskContext {
   taskId?: string
@@ -105,7 +106,7 @@ export default function ChatComposer({
           email iframe in the Email reading pane. The textarea's own
           resize-y grip at the bottom-right is still available. */}
       {narration && busy && (
-        <div className="px-3 pt-2 text-slate-500 italic text-sm whitespace-pre-wrap">
+        <div className="px-3 pt-2 text-brand-grey-80 italic text-sm whitespace-pre-wrap">
           {narration}
         </div>
       )}
@@ -115,13 +116,13 @@ export default function ChatComposer({
             <span
               key={path}
               title={path}
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs border border-slate-300 rounded bg-slate-100 text-slate-800"
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs border border-brand-mid-grey rounded bg-brand-light-grey text-brand-black"
             >
               <span className="truncate max-w-[240px]">{basename(path)}</span>
               <button
                 onClick={() => removeAttachment(path)}
                 disabled={isDisabled}
-                className="text-slate-500 hover:text-slate-900"
+                className="text-brand-grey-80 hover:text-brand-black"
                 title="Rimuovi allegato"
               >
                 ×
@@ -149,15 +150,16 @@ export default function ChatComposer({
             onClick={pickAttachments}
             disabled={isDisabled}
             title="Allega file"
-            className="px-3 py-2 bg-slate-200 text-slate-800 rounded text-sm hover:bg-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
+            className="px-3 py-2 border border-brand-mid-grey bg-white text-brand-grey-80 rounded text-sm hover:bg-brand-light-grey disabled:opacity-50 transition-colors"
+            aria-label="Allega file"
           >
-            📎
+            <Icon name="attach" size={16} />
           </button>
         )}
         <button
           onClick={send}
           disabled={isDisabled || !text.trim()}
-          className="px-4 py-2 bg-slate-900 text-white rounded text-sm disabled:bg-slate-400"
+          className="px-4 py-2 bg-brand-black text-white rounded text-sm disabled:bg-brand-mid-grey"
         >
           {busy ? '…' : 'Invia'}
         </button>

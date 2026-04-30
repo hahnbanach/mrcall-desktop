@@ -78,25 +78,25 @@ export default function Update() {
         onClick={run}
         disabled={running || sidecarLocked}
         title={sidecarLocked ? 'Sidecar is locked — see banner above' : undefined}
-        className="px-4 py-2 bg-slate-900 text-white rounded disabled:bg-slate-400"
+        className="px-4 py-2 bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
       >
         {running ? 'Updating…' : 'Update now'}
       </button>
 
       {(running || pct > 0) && (
         <div className="mt-6">
-          <div className="h-2 bg-slate-200 rounded overflow-hidden">
+          <div className="h-2 bg-brand-mid-grey rounded overflow-hidden">
             <div
-              className="h-full bg-slate-900 transition-all"
+              className="h-full bg-brand-black transition-all"
               style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
             />
           </div>
-          <div className="text-sm text-slate-600 mt-2">
+          <div className="text-sm text-brand-grey-80 mt-2">
             {pct}% — {message}
-            {eta && <span className="ml-2 text-slate-500">· ~{eta}</span>}
+            {eta && <span className="ml-2 text-brand-grey-80">· ~{eta}</span>}
           </div>
           {running && (
-            <div className="text-xs text-slate-500 mt-1">
+            <div className="text-xs text-brand-grey-80 mt-1">
               Safe to close — progress is saved, will resume from where it left off.
             </div>
           )}
@@ -104,14 +104,14 @@ export default function Update() {
       )}
 
       {error && (
-        <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-800 rounded whitespace-pre-wrap">
+        <div className="mt-4 p-3 bg-brand-danger/10 border border-brand-danger/30 text-brand-danger rounded whitespace-pre-wrap">
           {error}
         </div>
       )}
 
       {result && (
         <div className="mt-6">
-          <h2 className="text-sm font-semibold uppercase text-slate-600 mb-2">Result</h2>
+          <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-2">Result</h2>
           {typeof result?.summary === 'string' && result.summary.length > 0 ? (
             <div className="p-3 bg-white border rounded text-sm whitespace-pre-wrap">
               {result.summary}

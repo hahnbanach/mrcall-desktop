@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
+import Icon from '../components/Icon'
 
 type FieldType = 'text' | 'password' | 'number' | 'select' | 'textarea'
 
@@ -145,7 +146,7 @@ export default function Settings(): JSX.Element {
     return (
       <div className="p-6 max-w-3xl mx-auto">
         <h1 className="text-2xl font-semibold mb-4">Settings</h1>
-        <div className="text-slate-600">Loading…</div>
+        <div className="text-brand-grey-80">Loading…</div>
       </div>
     )
   }
@@ -153,21 +154,21 @@ export default function Settings(): JSX.Element {
   return (
     <div className="p-6 max-w-3xl mx-auto pb-24">
       <h1 className="text-2xl font-semibold mb-2">Settings</h1>
-      <p className="text-sm text-slate-600 mb-6">
+      <p className="text-sm text-brand-grey-80 mb-6">
         Edit the active profile&apos;s configuration. Secrets are masked — type a new value to
-        replace, leave as <code className="text-xs bg-slate-100 px-1">{SECRET_PLACEHOLDER}</code> to
+        replace, leave as <code className="text-xs bg-brand-light-grey px-1">{SECRET_PLACEHOLDER}</code> to
         keep the stored value.
       </p>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-800 rounded whitespace-pre-wrap">
+        <div className="mb-4 p-3 bg-brand-danger/10 border border-brand-danger/30 text-brand-danger rounded whitespace-pre-wrap">
           {error}
         </div>
       )}
 
       {grouped.map(([group, items]) => (
         <section key={group} className="mb-6">
-          <h2 className="text-sm font-semibold uppercase text-slate-600 mb-3 border-b pb-1">
+          <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
             {group}
           </h2>
           <div className="space-y-4">
@@ -188,14 +189,14 @@ export default function Settings(): JSX.Element {
         <button
           onClick={handleSave}
           disabled={!hasChanges || saving}
-          className="px-4 py-2 bg-slate-900 text-white rounded disabled:bg-slate-400"
+          className="px-4 py-2 bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
         >
           {saving ? 'Saving…' : `Save${hasChanges ? ` (${Object.keys(changes).length})` : ''}`}
         </button>
         <button
           onClick={handleDiscard}
           disabled={!hasChanges || saving}
-          className="px-4 py-2 border rounded text-slate-700 disabled:text-slate-400"
+          className="px-4 py-2 border rounded text-brand-grey-80 disabled:text-brand-mid-grey"
         >
           Discard changes
         </button>
@@ -204,10 +205,10 @@ export default function Settings(): JSX.Element {
             className={
               'text-sm ' +
               (status.kind === 'success'
-                ? 'text-green-700'
+                ? 'text-brand-blue'
                 : status.kind === 'error'
-                  ? 'text-red-700'
-                  : 'text-slate-600')
+                  ? 'text-brand-danger'
+                  : 'text-brand-grey-80')
             }
           >
             {status.text}
@@ -228,8 +229,8 @@ interface FieldRowProps {
 function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Element {
   const id = `field-${field.key}`
   const baseInput =
-    'w-full px-3 py-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 ' +
-    (isDirty ? 'border-amber-400 bg-amber-50' : 'border-slate-300')
+    'w-full px-3 py-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-mid-grey ' +
+    (isDirty ? 'border-brand-orange bg-brand-orange/10' : 'border-brand-mid-grey')
 
   let control: JSX.Element
   if (field.type === 'select' && field.options) {
@@ -308,10 +309,10 @@ function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Eleme
 
   return (
     <div>
-      <label htmlFor={id} className="block text-xs font-medium text-slate-700 mb-1">
+      <label htmlFor={id} className="block text-xs font-medium text-brand-grey-80 mb-1">
         {field.label}
-        {!field.optional && <span className="text-red-600 ml-1">*</span>}
-        <span className="ml-2 text-slate-400 font-mono text-[10px]">{field.key}</span>
+        {!field.optional && <span className="text-brand-danger ml-1">*</span>}
+        <span className="ml-2 text-brand-mid-grey font-mono text-[10px]">{field.key}</span>
       </label>
       {field.picker ? (
         <div className="flex gap-2">
@@ -319,16 +320,17 @@ function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Eleme
           <button
             type="button"
             onClick={pickDirectories}
-            className="px-3 py-2 text-sm border border-slate-300 rounded hover:bg-slate-100"
+            className="px-3 py-2 text-sm border border-brand-mid-grey rounded hover:bg-brand-light-grey transition-colors inline-flex items-center gap-1.5"
             title="Pick folder(s) in Finder"
           >
-            📁 Browse…
+            <Icon name="folder" size={14} />
+            Browse…
           </button>
         </div>
       ) : (
         control
       )}
-      {field.help && <div className="text-xs text-slate-500 mt-1">{field.help}</div>}
+      {field.help && <div className="text-xs text-brand-grey-80 mt-1">{field.help}</div>}
     </div>
   )
 }

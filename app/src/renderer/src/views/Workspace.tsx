@@ -211,8 +211,8 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
 
   return (
     <div className="flex h-full">
-      <aside className="w-[220px] border-r bg-slate-50 flex flex-col">
-        <div className="p-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <aside className="w-[220px] border-r bg-brand-light-grey flex flex-col">
+        <div className="p-3 text-xs font-semibold uppercase tracking-wide text-brand-grey-80">
           Conversazioni
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -226,8 +226,8 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
                 className={
                   'group px-3 py-2 cursor-pointer border-l-2 flex items-center justify-between ' +
                   (isActive
-                    ? 'bg-white border-slate-900'
-                    : 'border-transparent hover:bg-slate-100')
+                    ? 'bg-white border-brand-black'
+                    : 'border-transparent hover:bg-brand-light-grey')
                 }
               >
                 <span className="text-sm truncate">{c.title}</span>
@@ -237,7 +237,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
                       e.stopPropagation()
                       closeConversation(c.id)
                     }}
-                    className="ml-2 text-slate-400 hover:text-slate-900 opacity-0 group-hover:opacity-100"
+                    className="ml-2 text-brand-mid-grey hover:text-brand-black opacity-0 group-hover:opacity-100"
                     title="Chiudi"
                   >
                     ×
@@ -256,7 +256,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
             <button
               onClick={markDone}
               disabled={completing}
-              className="px-3 py-1.5 text-sm bg-emerald-700 text-white rounded hover:bg-emerald-800 disabled:bg-slate-400"
+              className="px-3 py-1.5 text-sm bg-brand-blue text-white rounded hover:bg-brand-grey-80 disabled:bg-brand-mid-grey"
             >
               {completing ? 'Attendere…' : 'Marca come fatta'}
             </button>
@@ -280,7 +280,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
           {active.history.length === 0 && !active.pendingApproval && (
-            <div className="text-slate-500 text-sm">
+            <div className="text-brand-grey-80 text-sm">
               {active.taskId
                 ? 'Rivedi il messaggio, modificalo se vuoi, poi invialo.'
                 : 'Ask MrCall Desktop anything about your tasks, emails, or contacts.'}
@@ -292,7 +292,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
               className={
                 'p-3 rounded-lg whitespace-pre-wrap ' +
                 (m.role === 'user'
-                  ? 'bg-slate-900 text-white ml-12'
+                  ? 'bg-brand-black text-white ml-12'
                   : 'bg-white border mr-12')
               }
             >
@@ -306,7 +306,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
             </div>
           ))}
           {active.busy && !active.pendingApproval && (
-            <div className="text-slate-500 italic text-sm whitespace-pre-wrap">
+            <div className="text-brand-grey-80 italic text-sm whitespace-pre-wrap">
               {narration || 'Sto pensando alla tua richiesta.'}
             </div>
           )}
@@ -346,27 +346,27 @@ function ApprovalCard({
   onDecline: () => void
 }) {
   return (
-    <div className="border border-amber-400 bg-amber-50 rounded-lg p-4 mr-12">
+    <div className="border border-brand-orange bg-brand-orange/10 rounded-lg p-4 mr-12">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs px-2 py-0.5 bg-amber-200 text-amber-900 rounded font-mono">
+        <span className="text-xs px-2 py-0.5 bg-brand-orange/30 text-brand-orange rounded font-mono">
           {approval.name}
         </span>
-        <span className="text-sm text-amber-900 font-medium">
+        <span className="text-sm text-brand-orange font-medium">
           Conferma richiesta
         </span>
       </div>
       {approval.preview && (
-        <div className="text-sm text-slate-800 mb-3 whitespace-pre-wrap">
+        <div className="text-sm text-brand-black mb-3 whitespace-pre-wrap">
           {approval.preview}
         </div>
       )}
-      <div className="bg-white border border-amber-200 rounded p-3 mb-3 space-y-2">
+      <div className="bg-white border border-brand-orange/30 rounded p-3 mb-3 space-y-2">
         {Object.entries(approval.input).map(([k, v]) => (
           <div key={k}>
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div className="text-xs font-semibold uppercase tracking-wide text-brand-grey-80">
               {k}
             </div>
-            <div className="text-sm text-slate-900 whitespace-pre-wrap break-words">
+            <div className="text-sm text-brand-black whitespace-pre-wrap break-words">
               {typeof v === 'string' ? v : JSON.stringify(v, null, 2)}
             </div>
           </div>
@@ -375,20 +375,20 @@ function ApprovalCard({
       <div className="flex gap-2 flex-wrap">
         <button
           onClick={onApproveOnce}
-          className="px-3 py-1.5 text-sm bg-emerald-700 text-white rounded hover:bg-emerald-800"
+          className="px-3 py-1.5 text-sm bg-brand-blue text-white rounded hover:bg-brand-grey-80"
         >
           Allow once
         </button>
         <button
           onClick={onApproveSession}
-          className="px-3 py-1.5 text-sm bg-emerald-900 text-white rounded hover:bg-emerald-950"
+          className="px-3 py-1.5 text-sm bg-brand-grey-80 text-white rounded hover:bg-brand-grey-80"
           title="Auto-approve this tool for the rest of this conversation"
         >
           Allow for session
         </button>
         <button
           onClick={onDecline}
-          className="px-3 py-1.5 text-sm bg-slate-200 text-slate-800 rounded hover:bg-slate-300"
+          className="px-3 py-1.5 text-sm bg-brand-mid-grey text-brand-black rounded hover:bg-brand-mid-grey"
         >
           Deny
         </button>
