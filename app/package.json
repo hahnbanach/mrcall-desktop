@@ -64,7 +64,11 @@
         }
       ],
       "category": "public.app-category.productivity",
-      "identity": null
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "notarize": true
     },
     "win": {
       "target": [
