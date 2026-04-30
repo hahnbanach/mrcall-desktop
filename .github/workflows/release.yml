@@ -148,6 +148,21 @@ jobs:
       - name: Install npm deps
         run: npm ci
 
+      - name: Validate notarytool credentials (macOS only)
+        if: runner.os == 'macOS'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # Fail fast (5 s) instead of waiting for electron-builder to
+        # waste 1 min signing first. notarytool prints the actual HTTP
+        # error from Apple here, which @electron/notarize swallows.
+        run: |
+          xcrun notarytool history \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID"
+
       - name: Build installer
         env:
           # macOS code-signing + notarization. electron-builder reads
