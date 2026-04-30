@@ -149,7 +149,7 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
           <button
             onClick={onClose}
             disabled={submitting}
-            className="text-slate-500 hover:text-slate-900 text-lg leading-none disabled:opacity-50"
+            className="text-brand-grey-80 hover:text-brand-black text-lg leading-none disabled:opacity-50"
             aria-label="Close"
           >
             x
@@ -157,7 +157,7 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
         </div>
 
         {formError && (
-          <div className="mb-3 p-2 bg-red-50 border border-red-200 text-red-800 rounded text-sm whitespace-pre-wrap">
+          <div className="mb-3 p-2 bg-brand-danger/10 border border-brand-danger/30 text-brand-danger rounded text-sm whitespace-pre-wrap">
             {formError}
           </div>
         )}
@@ -256,7 +256,7 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
             />
           </Field>
 
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-brand-grey-80">
             Other optional fields (personal data, MrCall credentials, notes…) can be edited from the
             new profile&apos;s own Settings tab once you open it.
           </p>
@@ -266,14 +266,14 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
           <button
             onClick={onClose}
             disabled={submitting}
-            className="px-3 py-1.5 text-sm border rounded text-slate-700 disabled:opacity-50"
+            className="px-3 py-1.5 text-sm border rounded text-brand-grey-80 disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={!canSubmit || submitting}
-            className="px-4 py-1.5 text-sm bg-slate-900 text-white rounded disabled:bg-slate-400"
+            className="px-4 py-1.5 text-sm bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
           >
             {submitting ? 'Creating…' : 'Create profile'}
           </button>
@@ -293,12 +293,12 @@ interface FieldProps {
 function Field({ label, required, help, children }: FieldProps): JSX.Element {
   return (
     <div>
-      <label className="block text-xs font-medium text-slate-700 mb-1">
+      <label className="block text-xs font-medium text-brand-grey-80 mb-1">
         {label}
-        {required && <span className="text-red-600 ml-1">*</span>}
+        {required && <span className="text-brand-danger ml-1">*</span>}
       </label>
       {children}
-      {help && <div className="text-xs text-slate-500 mt-1">{help}</div>}
+      {help && <div className="text-xs text-brand-grey-80 mt-1">{help}</div>}
     </div>
   )
 }

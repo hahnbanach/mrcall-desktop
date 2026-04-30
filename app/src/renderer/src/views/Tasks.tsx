@@ -4,6 +4,7 @@ import { useConversations } from '../store/conversations'
 import { useTasks } from '../store/tasks'
 import { useThread } from '../store/thread'
 import { showError } from '../lib/errors'
+import Icon from '../components/Icon'
 
 type StatusFilter = 'open' | 'closed'
 
@@ -19,9 +20,9 @@ interface Props {
 
 const URGENCY_ORDER = ['high', 'medium', 'low']
 const URGENCY_STYLES: Record<string, string> = {
-  high: 'bg-red-100 text-red-800 border-red-300',
-  medium: 'bg-amber-100 text-amber-800 border-amber-300',
-  low: 'bg-slate-100 text-slate-700 border-slate-300'
+  high: 'bg-brand-danger/10 text-brand-danger border-brand-danger/30',
+  medium: 'bg-brand-orange/10 text-brand-orange border-brand-orange/30',
+  low: 'bg-brand-light-grey text-brand-grey-80 border-brand-mid-grey'
 }
 
 export default function Tasks({ onOpenWorkspace }: Props = {}) {
@@ -226,14 +227,14 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
   const activeLoading = isThreadMode ? threadLoading : loading
   const activeError = isThreadMode ? threadError : error
   if (activeLoading)
-    return <div className="p-8 text-slate-500">Loading tasks…</div>
+    return <div className="p-8 text-brand-grey-80">Loading tasks…</div>
   if (activeError)
     return (
       <div className="p-8">
-        <div className="text-red-700">Error: {activeError}</div>
+        <div className="text-brand-danger">Error: {activeError}</div>
         <button
           onClick={load}
-          className="mt-3 px-3 py-1.5 bg-slate-900 text-white rounded text-sm"
+          className="mt-3 px-3 py-1.5 bg-brand-black text-white rounded text-sm hover:bg-brand-grey-80 transition-colors"
         >
           Retry
         </button>
@@ -266,23 +267,22 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
       <article
         key={t.id}
         className={
-          'bg-white border rounded-lg p-4 shadow-sm ' +
-          (t.pinned ? 'border-l-4 border-l-amber-400 ' : '') +
-          (isClosedView ? 'text-slate-500 opacity-80' : '')
+          'bg-white border border-brand-mid-grey/40 rounded-2xl p-4 shadow-sm ' +
+          (t.pinned ? 'border-l-4 border-l-brand-orange ' : '') +
+          (isClosedView ? 'text-brand-grey-80 opacity-80' : '')
         }
       >
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex items-center gap-2">
             {t.pinned && (
-              <span
-                className="text-amber-600"
-                title="Pinned"
+              <Icon
+                name="pin"
+                size={14}
+                className="text-brand-orange shrink-0"
                 aria-label="Pinned"
-              >
-                📌
-              </span>
+              />
             )}
-            <div className="text-sm text-slate-500">
+            <div className="text-sm text-brand-grey-80">
               {t.contact_name
                 ? `${t.contact_name} <${t.contact_email}>`
                 : t.contact_email}
@@ -297,20 +297,20 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
             {u}
           </span>
         </div>
-        <div className="text-slate-900 whitespace-pre-wrap mb-2">
+        <div className="text-brand-black whitespace-pre-wrap mb-2">
           {t.suggested_action}
         </div>
         <button
           onClick={() => toggle(t.id)}
-          className="text-xs text-slate-500 hover:text-slate-800 mb-2"
+          className="text-xs text-brand-grey-80 hover:text-brand-black mb-2"
         >
           {expanded.has(t.id) ? 'Hide reason' : 'Show reason'}
         </button>
         {expanded.has(t.id) && (
           <div
             className={
-              'text-sm whitespace-pre-wrap border-l-2 border-slate-200 pl-3 mb-3 ' +
-              (isClosedView ? 'text-slate-500 line-through' : 'text-slate-700')
+              'text-sm whitespace-pre-wrap border-l-2 border-brand-mid-grey pl-3 mb-3 ' +
+              (isClosedView ? 'text-brand-grey-80 line-through' : 'text-brand-grey-80')
             }
           >
             {t.reason}
@@ -322,18 +322,19 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
             disabled={pinning.has(t.id)}
             title={t.pinned ? 'Unpin task' : 'Pin task to top'}
             className={
-              'px-3 py-1.5 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed ' +
+              'px-3 py-1.5 text-sm border rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5 ' +
               (t.pinned
-                ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
-                : 'hover:bg-slate-100 text-slate-600')
+                ? 'bg-brand-orange/10 text-brand-orange border-brand-orange/30 hover:bg-brand-orange/20'
+                : 'border-brand-mid-grey hover:bg-brand-light-grey text-brand-grey-80')
             }
           >
-            {t.pinned ? '📌 Pinned' : '📌 Pin'}
+            <Icon name="pin" size={14} />
+            {t.pinned ? 'Pinned' : 'Pin'}
           </button>
           {!isClosedView && (
             <button
               onClick={() => onSkip(t.id)}
-              className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
+              className="px-3 py-1.5 text-sm border border-brand-mid-grey rounded hover:bg-brand-light-grey transition-colors"
             >
               Skip
             </button>
@@ -341,15 +342,16 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
           {isClosedView ? (
             <button
               onClick={() => onReopen(t.id)}
-              className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
+              className="px-3 py-1.5 text-sm border border-brand-mid-grey rounded hover:bg-brand-light-grey transition-colors inline-flex items-center gap-1.5"
               title="Reopen this task"
             >
-              ↺ Reopen
+              <Icon name="reopen" size={14} />
+              Reopen
             </button>
           ) : (
             <button
               onClick={() => onClose(t.id)}
-              className="px-3 py-1.5 text-sm bg-slate-900 text-white rounded hover:bg-slate-700"
+              className="px-3 py-1.5 text-sm bg-brand-black text-white rounded hover:bg-brand-grey-80 transition-colors"
             >
               Close
             </button>
@@ -357,7 +359,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
           <button
             onClick={() => onUpdate(t.id)}
             disabled={updating.has(t.id)}
-            className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-sm border border-brand-mid-grey rounded hover:bg-brand-light-grey transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {updating.has(t.id) ? 'Analyzing…' : 'Update'}
           </button>
@@ -376,14 +378,14 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
               }
               onOpenWorkspace?.(threadId, t.id)
             }}
-            className="px-3 py-1.5 text-sm bg-emerald-700 text-white rounded hover:bg-emerald-800"
+            className="px-3 py-1.5 text-sm bg-brand-blue text-white rounded hover:bg-brand-grey-80 transition-colors"
             title={threadId ? 'Open in workspace' : 'Open in workspace (no thread)'}
           >
             Open
           </button>
         </div>
         {keptNotice[t.id] && (
-          <div className="mt-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-1.5">
+          <div className="mt-2 text-xs text-brand-grey-80 bg-brand-light-grey border border-brand-mid-grey rounded px-2 py-1.5">
             Task kept — {keptNotice[t.id]}
           </div>
         )}
@@ -402,7 +404,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
         </h1>
         <button
           onClick={() => void load()}
-          className="px-3 py-1.5 text-sm border rounded hover:bg-slate-100"
+          className="px-3 py-1.5 text-sm border border-brand-mid-grey rounded hover:bg-brand-light-grey transition-colors"
         >
           Refresh
         </button>
@@ -415,7 +417,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
       {isThreadMode && taskThreadFilter && (
         <div
           role="status"
-          className="flex items-center justify-between gap-3 mb-4 px-3 py-2 bg-[color:var(--profile-accent-soft)] border border-[color:var(--profile-accent)] rounded"
+          className="flex items-center justify-between gap-3 mb-4 px-3 py-2 bg-brand-light-grey border-l-4 border-brand-blue rounded"
         >
           <div className="min-w-0 text-sm">
             <span className="font-medium">Tasks for thread:</span>{' '}
@@ -425,17 +427,18 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
           </div>
           <button
             onClick={() => setTaskThreadFilter(null)}
-            className="px-2 py-1 text-xs border rounded bg-white hover:bg-slate-100"
+            className="px-2 py-1 text-xs border border-brand-mid-grey rounded bg-white hover:bg-brand-light-grey transition-colors inline-flex items-center gap-1"
             title="Show all tasks"
           >
-            ✕ Clear filter
+            <Icon name="close" size={12} />
+            Clear filter
           </button>
         </div>
       )}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         {!isThreadMode && (
           <div
-            className="inline-flex rounded-full border border-slate-300 overflow-hidden"
+            className="inline-flex rounded-full border border-brand-mid-grey overflow-hidden"
             role="group"
             aria-label="Filter by status"
           >
@@ -443,10 +446,10 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
               type="button"
               onClick={() => setStatusFilter('open')}
               className={
-                'px-3 py-1 text-sm ' +
+                'px-3 py-1 text-sm transition-colors ' +
                 (statusFilter === 'open'
-                  ? 'bg-emerald-700 text-white border-emerald-700'
-                  : 'bg-white text-slate-600 hover:bg-slate-100')
+                  ? 'bg-brand-blue text-white'
+                  : 'bg-white text-brand-grey-80 hover:bg-brand-light-grey')
               }
               aria-pressed={statusFilter === 'open'}
             >
@@ -457,10 +460,10 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
               onClick={() => setStatusFilter('closed')}
               title="Show closed tasks"
               className={
-                'px-3 py-1 text-sm border-l border-slate-300 ' +
+                'px-3 py-1 text-sm border-l border-brand-mid-grey transition-colors ' +
                 (statusFilter === 'closed'
-                  ? 'bg-emerald-700 text-white border-emerald-700'
-                  : 'bg-white text-slate-600 hover:bg-slate-100')
+                  ? 'bg-brand-blue text-white'
+                  : 'bg-white text-brand-grey-80 hover:bg-brand-light-grey')
               }
               aria-pressed={statusFilter === 'closed'}
             >
@@ -468,10 +471,8 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
             </button>
           </div>
         )}
-        <div className="flex items-center gap-1.5 border border-slate-300 rounded px-2 py-1 bg-white">
-          <span aria-hidden="true" className="text-slate-400 text-sm">
-            🔍
-          </span>
+        <div className="flex items-center gap-1.5 border border-brand-mid-grey rounded px-2 py-1 bg-white">
+          <Icon name="search" size={14} className="text-brand-mid-grey shrink-0" />
           <input
             type="text"
             value={search}
@@ -483,7 +484,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
         </div>
       </div>
       {sortedTasks.length === 0 && (
-        <div className="text-slate-500">
+        <div className="text-brand-grey-80">
           {isThreadMode
             ? 'No tasks for this thread.'
             : isClosedView
@@ -493,8 +494,9 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
       )}
       {pinnedTasks.length > 0 && (
         <section className="mb-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-700 mb-2">
-            📌 Pinned ({pinnedTasks.length})
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-orange mb-2 inline-flex items-center gap-2">
+            <Icon name="pin" size={14} />
+            Pinned ({pinnedTasks.length})
           </h2>
           <div className="space-y-3">{pinnedTasks.map(renderTask)}</div>
         </section>
@@ -504,7 +506,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
         if (!list || list.length === 0) return null
         return (
           <section key={u} className="mb-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 mb-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-grey-80 mb-2">
               {u} ({list.length})
             </h2>
             <div className="space-y-3">{list.map(renderTask)}</div>

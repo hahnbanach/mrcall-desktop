@@ -109,23 +109,23 @@ export default function Onboarding(): JSX.Element {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-start justify-center bg-slate-50 p-6 overflow-auto">
+    <div className="min-h-screen w-full flex items-start justify-center bg-brand-light-grey p-6 overflow-auto">
       <div className="w-full max-w-[560px]">
         <div className="mb-5">
-          <h1 className="text-2xl font-semibold text-slate-900">Welcome to MrCall Desktop</h1>
-          <p className="text-sm text-slate-600 mt-1">
+          <h1 className="text-2xl font-semibold text-brand-black">Welcome to MrCall Desktop</h1>
+          <p className="text-sm text-brand-grey-80 mt-1">
             Create your first profile. All data stays on this machine — your credentials
             are written only to <code>~/.zylch/profiles/</code>.
           </p>
         </div>
 
         {formError && (
-          <div className="mb-3 p-2 bg-red-50 border border-red-200 text-red-800 rounded text-sm whitespace-pre-wrap">
+          <div className="mb-3 p-2 bg-brand-danger/10 border border-brand-danger/30 text-brand-danger rounded text-sm whitespace-pre-wrap">
             {formError}
           </div>
         )}
 
-        <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-5 space-y-3">
+        <div className="bg-white border border-brand-mid-grey rounded-lg shadow-sm p-5 space-y-3">
           <Field label="Email address" required>
             <input
               type="email"
@@ -226,7 +226,7 @@ export default function Onboarding(): JSX.Element {
             />
           </Field>
 
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-brand-grey-80">
             Other optional fields (personal data, MrCall credentials, notes…) can be edited
             from Settings after this setup.
           </p>
@@ -235,7 +235,7 @@ export default function Onboarding(): JSX.Element {
             <button
               onClick={handleSubmit}
               disabled={!canSubmit || submitting}
-              className="px-4 py-2 text-sm bg-slate-900 text-white rounded disabled:bg-slate-400"
+              className="px-4 py-2 text-sm bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
             >
               {submitting ? 'Creating…' : 'Create profile and continue'}
             </button>
@@ -256,12 +256,12 @@ interface FieldProps {
 function Field({ label, required, help, children }: FieldProps): JSX.Element {
   return (
     <div>
-      <label className="block text-xs font-medium text-slate-700 mb-1">
+      <label className="block text-xs font-medium text-brand-grey-80 mb-1">
         {label}
-        {required && <span className="text-red-600 ml-1">*</span>}
+        {required && <span className="text-brand-danger ml-1">*</span>}
       </label>
       {children}
-      {help && <div className="text-xs text-slate-500 mt-1">{help}</div>}
+      {help && <div className="text-xs text-brand-grey-80 mt-1">{help}</div>}
     </div>
   )
 }
