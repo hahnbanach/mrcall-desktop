@@ -71,32 +71,51 @@ edited from **Settings** after setup.
 - **Reset** — delete `~/.zylch/profiles/<email>/` to wipe a profile.
   Delete `~/.zylch/` entirely to start from scratch.
 
-## Build from source (contributors)
+## Develop locally (hot-reload)
 
-The sidecar lives in this repo under `../engine/` and is built via
-PyInstaller. The release workflow does this automatically on every CI
-run; locally:
+After cloning the repo and checking out the branch you want to test:
 
 ```bash
-# Build the sidecar from the engine subdir.
+cd app
+npm ci                                # installs Node deps from package-lock.json
+```
+
+The renderer spawns the Python `zylch` sidecar over stdio. It looks
+for the binary at `~/private/zylch-standalone/venv/bin/zylch` by
+default; override with `ZYLCH_BINARY=/path/to/zylch`.
+
+If you don't already have a `zylch` venv on disk, install the engine
+in dev mode from this same repo:
+
+```bash
+cd ../engine && pip install -e .       # exposes a `zylch` script in your venv
+export ZYLCH_BINARY=$(which zylch)     # confirm Python finds it
+cd ../app && npm run dev               # opens Electron with hot-reload
+```
+
+Hot-reload picks up renderer (TSX / CSS) changes live. Edits to the
+Electron main process under `src/main/` need a restart of `npm run dev`.
+
+A fresh checkout has no profiles, so first launch shows the
+**Welcome to MrCall Desktop** onboarding form — see "First launch" above.
+
+## Build installers (release path)
+
+The PyInstaller-bundled sidecar is what ships in the released `.dmg`
+/ `.exe`; the release workflow does this on every CI run. Locally:
+
+```bash
+# 1. Build the sidecar from the engine subdir.
 cd ../engine
 pip install -e . pyinstaller
 pyinstaller --noconfirm zylch.spec
 cp dist/zylch ../app/bin/zylch && chmod +x ../app/bin/zylch
 
-# Then build the installer.
+# 2. Build the installer.
 cd ../app
 npm ci
 npm run dist:mac      # → dist/*.dmg
-npm run dist:win      # → dist/*.exe (on Windows; Wine on others)
-```
-
-For dev (hot-reload, no packaged sidecar):
-
-```bash
-npm run dev
-# Expects a runnable `zylch` somewhere on disk. Override with
-# ZYLCH_BINARY=/path/to/zylch if not at the default location.
+npm run dist:win      # → dist/*.exe (run on Windows; Wine cross-build is fragile)
 ```
 
 ## CI
