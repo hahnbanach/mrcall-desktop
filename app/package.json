@@ -42,6 +42,7 @@
     "appId": "ai.mrcall.desktop",
     "productName": "MrCall Desktop",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "afterSign": "scripts/notarize.js",
     "directories": {
       "output": "dist"
     },
@@ -68,9 +69,7 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",
-      "notarize": {
-        "teamId": "${env.APPLE_TEAM_ID}"
-      }
+      "notarize": false
     },
     "win": {
       "target": [
