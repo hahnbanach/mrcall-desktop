@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- V8 (Chromium) requires JIT to execute JavaScript. -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+
+  <!-- Electron maps executable pages without an embedded signature. -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+
+  <!-- Some Electron / Node deps inspect DYLD_* on launch. -->
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+
+  <!-- The PyInstaller sidecar embeds a Python runtime + native deps
+       (fastembed / onnxruntime / neonize) that are not signed by
+       Apple's standard library validation. Disable validation for
+       child processes the app loads. -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>
