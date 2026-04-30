@@ -15,15 +15,21 @@ import { createProfileFS, isFirstRun } from './profileFS'
 //   resolves to that directory at runtime.
 //
 // ZYLCH_CWD is only used in dev; the packaged sidecar is self-contained
-// (PyInstaller single-file) and doesn't need a specific cwd.
-const ZYLCH_CWD = process.env.ZYLCH_CWD || '/path/to/engine'
+// (PyInstaller single-file) and doesn't need a specific cwd. Defaults to
+// the user's home directory — always exists, doesn't matter what it is
+// because the Python sidecar locates its data via `~/.zylch` regardless
+// of cwd. Override with ZYLCH_CWD=/path/to/repo if running uninstalled
+// Python imports out of a checkout.
+const ZYLCH_CWD = process.env.ZYLCH_CWD || homedir()
 function resolveSidecarBinary(): string {
   if (process.env.ZYLCH_BINARY) return process.env.ZYLCH_BINARY
   if (app.isPackaged) {
     const name = process.platform === 'win32' ? 'zylch.exe' : 'zylch'
     return join(process.resourcesPath, 'bin', name)
   }
-  return join(ZYLCH_CWD, 'venv/bin/zylch')
+  // Dev fallback: legacy local-checkout layout (engine venv at the
+  // repo root). Use ZYLCH_BINARY for any other layout.
+  return join(ZYLCH_CWD, 'private', 'zylch-standalone', 'venv', 'bin', 'zylch')
 }
 // Deferred until app.whenReady so `app.isPackaged` is reliable.
 let ZYLCH_BINARY = ''
