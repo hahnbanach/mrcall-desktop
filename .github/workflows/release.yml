@@ -149,7 +149,25 @@ jobs:
         run: npm ci
 
       - name: Build installer
-        run: npm run dist:${{ matrix.platform }}
+        env:
+          # macOS code-signing + notarization. electron-builder reads
+          # CSC_LINK / CSC_KEY_PASSWORD to sign with a Developer ID
+          # Application cert; APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD /
+          # APPLE_TEAM_ID drive notarytool. CSC_LINK accepts the .p12
+          # base64 string directly. The vars are set on every runner
+          # but are only consumed by electron-builder on macOS — no-op
+          # on Windows.
+          CSC_LINK: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # `-- --${matrix.arch}` constrains electron-builder to the
+        # matrix arch. Without it, `mac.target.arch: ["arm64", "x64"]`
+        # in package.json makes electron-builder produce both dmgs
+        # from a single runner — and the x64 dmg ends up with whatever
+        # sidecar that runner built (e.g. an arm64 binary on macos-14).
+        run: npm run dist:${{ matrix.platform }} -- --${{ matrix.arch }}
 
       - name: List installer output
         shell: bash
