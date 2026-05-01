@@ -1,0 +1,50 @@
+# Messages configuration for mrcall-desktop
+# Customize the text shown by .claude/scripts/hooks/warning-messages.sh.
+# All messages are notification-only; they never block tool use.
+#
+# Each key resolved in this order:
+#   1. messages.toml (this file) — wins if defined
+#   2. DEFAULT_MESSAGES in warning-messages.sh — fallback
+
+# =============================================================================
+# Code Quality
+# =============================================================================
+
+[quality]
+
+# Engine: Python files under engine/zylch/** without a sibling test under engine/tests/test_<module>.py
+tdd_reminder_python = "No test file found for this Python module. Consider TDD — write a test under engine/tests/ first."
+
+# App: TypeScript files under app/src/**. The app has no unit-test harness yet, so we nudge toward smoke-tests.
+tdd_reminder_ts = "No test file found for this TypeScript module. Smoke-test the change in 'npm run dev' before declaring done."
+
+# Reminder before git push.
+push_quality = "Quality check before push: run 'cd engine && make lint' and 'cd app && npm run typecheck' as relevant. Don't bypass with --no-verify."
+
+# =============================================================================
+# Release / Deploy
+# =============================================================================
+
+[release]
+
+# Triggered when the user prompt mentions release / notarize / publish / deploy / production.
+release_gate = "Release / notarize / publish detected. Run /release-checklist (Six Gates) before tagging. Notarize via afterSign, not mac.notarize."
+
+# =============================================================================
+# IPC Contract
+# =============================================================================
+
+[ipc]
+
+# Shown when a Write touches a file likely on the JSON-RPC stdio boundary
+# (app/src/main/rpc*, app/src/main/sidecar*, app/src/preload/*, engine/zylch/rpc/*).
+ipc_reminder = "This file lives on the JSON-RPC boundary. If you changed a method name, payload shape, or error envelope, both engine/ and app/ must move together — pull in ipc-contract-reviewer."
+
+# =============================================================================
+# File Operations
+# =============================================================================
+
+[files]
+
+# Shown after a successful Write. %s is the file path.
+file_written = "File written: %s"

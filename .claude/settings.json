@@ -1,0 +1,50 @@
+{
+  "_comment": "Project-local Claude Code settings for mrcall-desktop. Hooks are notification-only and never block tool use. See .claude/README.md.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'SCRIPT=\".claude/scripts/hooks/warning-messages.sh\"; if [[ -x \"$SCRIPT\" ]]; then \"$SCRIPT\" tdd-reminder \"$CLAUDE_FILE_PATH\" 2>/dev/null || true; fi; exit 0'",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'if [[ \"$CLAUDE_TOOL_INPUT\" == *\"git push\"* ]]; then SCRIPT=\".claude/scripts/hooks/warning-messages.sh\"; if [[ -x \"$SCRIPT\" ]]; then \"$SCRIPT\" push-quality 2>/dev/null || true; fi; fi; exit 0'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'SCRIPT=\".claude/scripts/hooks/warning-messages.sh\"; if [[ -x \"$SCRIPT\" ]]; then \"$SCRIPT\" file-written \"$CLAUDE_FILE_PATH\" 2>/dev/null || true; fi; exit 0'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'if echo \"$CLAUDE_USER_PROMPT\" | grep -qiE \"release|notarize|publish|deploy|production\"; then SCRIPT=\".claude/scripts/hooks/warning-messages.sh\"; if [[ -x \"$SCRIPT\" ]]; then \"$SCRIPT\" release-gate 2>/dev/null || true; fi; fi; exit 0'",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
