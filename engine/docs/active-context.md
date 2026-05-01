@@ -87,6 +87,54 @@ description: |
 
 ## What Was Completed This Session
 
+**Task auto-close — RealStep / cafe124 case (2026-05-01, uncommitted).**
+Three coupled fixes in `zylch/workers/task_creation.py` and one helper
+in `zylch/storage/storage.py`. Plan: `docs/execution-plans/fix-task-autoclose-stale.md`.
+
+- **F1 — Cc fallback in user_reply.** Per-recipient close in Phase-2
+  user_reply now iterates `to_email + cc_email` (was: `to_email`
+  only). Fixes the RealStep thread where Mario's reply with Ivan +
+  Michele in Cc closed only Argento's task. `storage.get_unprocessed_emails_for_task`
+  was missing `cc_email` in its SELECT — added.
+- **F2 — Disabled "Forcing update on stale task" branch.**
+  `task_creation.py:522-539` used to write the LLM's advisory text
+  ("Keep existing task as-is: …", "No action needed — Ivan is
+  managing …") into existing tasks when the LLM returned
+  `task_action="none"` with a non-empty `suggested_action`. That
+  corrupted de342a1d / 5c66fa63 on `mario.alemi@cafe124.it`. The
+  branch now logs a `WARNING` and skips the update. Email is still
+  marked task_processed via the unconditional
+  `_mark_thread_nonuser_processed` so the thread is not re-analyzed.
+  No prompt audit done — `agents/trainers/task_email.py` is a
+  meta-prompt; per-user trained prompts may need re-training only if
+  WARNINGs start appearing in `zylch.log`.
+- **F3 — Diagnostic log when `get_tasks_by_thread` returns empty
+  in user_reply.** Captures `thread_id`, `email_id`, `from_email`
+  for next-occurrence reproducer of RC-1 (root cause not reproduced).
+
+Tests: `tests/workers/test_task_worker_bugs.py` gained 3 + 1 = 4 new
+cases (F1 × 3, F2 × 1). Also patched the pre-existing failing
+`TestColleagueEmailCreatesTask::test_colleague_email_not_skipped`
+(deferred `get_session` import in `_collect` defeats fixture-level
+patch). 14/14 green.
+
+- **F4 — Bounded reanalyze sweep at end of `_run_tasks`.** New helper
+  `zylch/services/process_pipeline.py:_reanalyze_sweep` picks up to
+  `REANALYZE_CAP=10` open tasks (oldest first) whose `analyzed_at` (or
+  `created_at` fallback) is older than `REANALYZE_MIN_AGE_HOURS=24`,
+  and runs `reanalyze_task` serially. Tolerates per-task exceptions;
+  logs `[TASK] Reanalyze sweep: N of M eligible …`. Cost: up to 10
+  extra LLM calls per `update`. Surfaces in the return string as
+  `"N action items detected (M reanalyzed)"`.
+- **Cleanup of corrupted tasks on `mario.alemi@cafe124.it`** —
+  de342a1d and 5c66fa63 closed via direct SQL UPDATE 2026-05-01
+  10:49 UTC (Mario already replied to the thread).
+
+Tests: `tests/services/test_reanalyze_sweep.py` (6 cases). Total
+20/20 green across `tests/services/` + `tests/workers/test_task_worker_bugs.py`.
+
+---
+
 **v0.1.24 — Email timezone fix (2026-04-21).** RFC 2822 `Date:` headers carry
 a timezone offset (e.g. `-0600` for Missive-relayed mail, `+0100` for CET
 senders). Two call sites stripped the offset via `dt.replace(tzinfo=None)`

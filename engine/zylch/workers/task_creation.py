@@ -425,20 +425,48 @@ class TaskWorker:
                     if thread_id
                     else []
                 )
+                if not thread_tasks:
+                    # F3: per-thread close path produced nothing. Per-recipient
+                    # fallback below is the only remaining presidio. Log enough
+                    # state to reproduce next time (RC-1: get_tasks_by_thread
+                    # returning empty when the live DB has tasks on the thread).
+                    logger.debug(
+                        f"[TASK] user_reply thread_tasks=EMPTY "
+                        f"thread_id={thread_id} email_id={email_id} "
+                        f"from_email={from_email} — falling back to recipients"
+                    )
                 for t in thread_tasks:
                     self.storage.complete_task_item(self.owner_id, t["id"])
                     logger.debug(
                         f"[TASK] dedup/close task_id={t['id']} thread_id={thread_id} decision=user_replied"
                     )
-                to_raw = email.get("to_email", "")
-                if isinstance(to_raw, list):
-                    to_raw = ", ".join(to_raw)
-                for addr in to_raw.split(","):
-                    addr = addr.strip().lower()
-                    if "<" in addr and ">" in addr:
-                        addr = addr.split("<")[1].split(">")[0].strip()
-                    if not addr or addr in user_emails:
+
+                # F1: per-recipient fallback iterates To AND Cc. The original
+                # code only walked to_email, so a user reply with the contact
+                # in Cc never closed that contact's task (real case: RealStep
+                # thread on cafe124 profile, 2026-04-30).
+                def _split_addrs(raw) -> list:
+                    if not raw:
+                        return []
+                    if isinstance(raw, list):
+                        raw = ", ".join(raw)
+                    out = []
+                    for a in raw.split(","):
+                        a = a.strip().lower()
+                        if "<" in a and ">" in a:
+                            a = a.split("<")[1].split(">")[0].strip()
+                        if a:
+                            out.append(a)
+                    return out
+
+                recipients = _split_addrs(email.get("to_email")) + _split_addrs(
+                    email.get("cc_email")
+                )
+                seen_addrs = set()
+                for addr in recipients:
+                    if addr in seen_addrs or addr in user_emails:
                         continue
+                    seen_addrs.add(addr)
                     existing = self.storage.get_task_by_contact(self.owner_id, addr)
                     if existing and not any(t["id"] == existing["id"] for t in thread_tasks):
                         self.storage.complete_task_item(self.owner_id, existing["id"])
@@ -524,18 +552,21 @@ class TaskWorker:
                 and existing_tasks_all
                 and result.get("suggested_action")
             ):
+                # F2: previously this branch wrote result.suggested_action
+                # into existing_tasks_all[0] even when task_action == "none",
+                # turning LLM advisory text ("Keep existing task as-is: …",
+                # "No action needed — Ivan is managing …") into the literal
+                # task description. That corrupted de342a1d / 5c66fa63 on
+                # the cafe124 profile. The LLM has the create/update/close
+                # vocabulary; if it picks none we trust it. The email is
+                # still marked task_processed via the unconditional
+                # _mark_thread_nonuser_processed below so the thread is not
+                # re-analyzed next run.
                 stale = existing_tasks_all[0]
-                logger.debug(
-                    f"[TASK] Forcing update on stale task {stale['id']} for "
-                    f"{from_email}, LLM said '{task_action}' thread_id={thread_id}"
-                )
-                self.storage.update_task_item(
-                    self.owner_id,
-                    stale["id"],
-                    urgency=result.get("urgency"),
-                    suggested_action=result.get("suggested_action"),
-                    reason=result.get("reason"),
-                    add_source_email=email_id,
+                logger.warning(
+                    f"[TASK] LLM said '{task_action}' with non-empty "
+                    f"suggested_action; NOT updating task {stale['id']} "
+                    f"thread_id={thread_id} from_email={from_email}"
                 )
             elif task_action == "create" and result.get("action_required"):
                 # Fix D: if thread already has an open task, UPDATE it

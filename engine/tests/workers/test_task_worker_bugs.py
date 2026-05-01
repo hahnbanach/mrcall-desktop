@@ -150,6 +150,155 @@ class TestUserReplyClosesTask:
         )
 
 
+class TestUserReplyClosesCcRecipientTask:
+    """F1 (RealStep / cafe124 case): user reply with contact in Cc must close
+    that contact's task, not just To recipients."""
+
+    @pytest.mark.asyncio
+    async def test_reply_with_contact_in_cc_closes_cc_task(self, worker, mock_storage):
+        """to=A, cc=B,C — tasks for A AND B AND C must all be closed via the
+        per-recipient fallback (when get_tasks_by_thread returns empty)."""
+        mock_storage.get_unprocessed_emails_for_task.return_value = [
+            {
+                "id": "email-reply-cc",
+                "from_email": "mario.alemi@cafe124.it",
+                "to_email": "e.argento@realstep.it",
+                "cc_email": "ivan.marchese@cafe124milan.com, m.scacciati@realstep.it",
+                "subject": "Re: RealStep meeting",
+                "body_plain": "Confermo per il 5 maggio.",
+                "snippet": "Confermo per il 5 maggio.",
+                "date_timestamp": 1712700000,
+                "thread_id": "thread-realstep",
+            },
+        ]
+        # Per-thread close returns empty (RC-1 condition).
+        mock_storage.get_tasks_by_thread.return_value = []
+        # Per-recipient lookups: each contact has its own task.
+        tasks_by_addr = {
+            "e.argento@realstep.it": {"id": "task-argento"},
+            "ivan.marchese@cafe124milan.com": {"id": "task-ivan"},
+            "m.scacciati@realstep.it": {"id": "task-michele"},
+        }
+        mock_storage.get_task_by_contact.side_effect = lambda owner, addr: tasks_by_addr.get(addr)
+
+        await worker.get_tasks(refresh=True)
+
+        completed_ids = {call.args[1] for call in mock_storage.complete_task_item.call_args_list}
+        assert completed_ids == {"task-argento", "task-ivan", "task-michele"}
+
+    @pytest.mark.asyncio
+    async def test_reply_with_user_self_in_cc_skipped(self, worker, mock_storage):
+        """User's own address in Cc (BCC-to-self pattern) must be ignored."""
+        mock_storage.get_unprocessed_emails_for_task.return_value = [
+            {
+                "id": "email-reply-self-cc",
+                "from_email": "mario.alemi@cafe124.it",
+                "to_email": "contact@ex.com",
+                "cc_email": "mario.alemi@cafe124.it",
+                "subject": "Re: x",
+                "body_plain": "ok",
+                "snippet": "ok",
+                "date_timestamp": 1712700000,
+                "thread_id": "thread-self-cc",
+            },
+        ]
+        mock_storage.get_tasks_by_thread.return_value = []
+        mock_storage.get_task_by_contact.side_effect = lambda owner, addr: (
+            {"id": "task-contact"} if addr == "contact@ex.com" else None
+        )
+
+        await worker.get_tasks(refresh=True)
+
+        completed_ids = {call.args[1] for call in mock_storage.complete_task_item.call_args_list}
+        assert completed_ids == {"task-contact"}
+
+    @pytest.mark.asyncio
+    async def test_reply_dedup_recipients_no_double_close(self, worker, mock_storage):
+        """Same address listed in both To and Cc must trigger only one close."""
+        mock_storage.get_unprocessed_emails_for_task.return_value = [
+            {
+                "id": "email-reply-dup",
+                "from_email": "mario.alemi@cafe124.it",
+                "to_email": "dup@ex.com",
+                "cc_email": "dup@ex.com",
+                "subject": "Re: y",
+                "body_plain": "ok",
+                "snippet": "ok",
+                "date_timestamp": 1712700000,
+                "thread_id": "thread-dup",
+            },
+        ]
+        mock_storage.get_tasks_by_thread.return_value = []
+        mock_storage.get_task_by_contact.return_value = {"id": "task-dup"}
+
+        await worker.get_tasks(refresh=True)
+
+        # complete_task_item called exactly once for task-dup
+        dup_calls = [
+            c for c in mock_storage.complete_task_item.call_args_list if c.args[1] == "task-dup"
+        ]
+        assert len(dup_calls) == 1
+
+
+class TestForcingUpdateBranchDoesNotCorruptTask:
+    """F2 (RealStep case): when LLM returns task_action='none' with a
+    non-empty suggested_action ("Keep existing task as-is: …"), the worker
+    must NOT overwrite the existing task's fields. The advisory text is
+    not a task description."""
+
+    @pytest.mark.asyncio
+    async def test_none_with_advisory_does_not_update_existing_task(self, worker, mock_storage):
+        existing = {
+            "id": "task-existing",
+            "contact_email": "m.scacciati@realstep.it",
+            "suggested_action": "Original action: confirm date",
+            "urgency": "high",
+            "reason": "Original reason",
+            "sources": {"emails": ["e1"]},
+        }
+        mock_storage.get_unprocessed_emails_for_task.return_value = [
+            {
+                "id": "email-from-michele",
+                "from_email": "m.scacciati@realstep.it",
+                "to_email": "mario.alemi@cafe124.it",
+                "cc_email": "",
+                "subject": "Re: meeting",
+                "body_plain": "ack",
+                "snippet": "ack",
+                "date_timestamp": 1712700000,
+                "thread_id": "thread-realstep",
+            }
+        ]
+        mock_storage.get_tasks_by_thread.return_value = [existing]
+        mock_storage.get_task_by_contact.return_value = None
+
+        # _collect imports get_session lazily at call time via
+        # `from zylch.storage.database import get_session as _gs`, so the
+        # fixture-level patch has already exited. Re-patch for the test body.
+        with (
+            patch("zylch.storage.database.get_session"),
+            patch(
+                "zylch.workers.task_creation.build_thread_history",
+                return_value="",
+            ),
+        ):
+            with patch.object(worker, "_analyze_event", new_callable=AsyncMock) as mock_analyze:
+                mock_analyze.return_value = {
+                    "action_required": True,
+                    "task_action": "none",
+                    "suggested_action": ("Keep existing task as-is: Coordinate with Ivan to reply"),
+                    "reason": "This email is just an ack",
+                    "urgency": "high",
+                }
+                with patch.object(worker, "_get_blob_for_contact", return_value=("", None)):
+                    await worker.get_tasks(refresh=True)
+
+        # The existing task must NOT be updated by the "Forcing update" branch.
+        mock_storage.update_task_item.assert_not_called()
+        # The email must still be marked processed (so we don't loop forever).
+        mock_storage.mark_email_task_processed.assert_called()
+
+
 class TestColleagueEmailCreatesTask:
     """Bug #2 extended: Emails from same-domain colleagues must create tasks."""
 
@@ -169,17 +318,26 @@ class TestColleagueEmailCreatesTask:
             },
         ]
 
-        # Mock the LLM analysis to return a task
-        with patch.object(worker, "_analyze_event", new_callable=AsyncMock) as mock_analyze:
-            mock_analyze.return_value = {
-                "action_required": True,
-                "task_action": "create",
-                "urgency": "medium",
-                "suggested_action": "Update pitch deck with patent info",
-                "reason": "Colleague needs updated pitch for potential investors",
-            }
-            with patch.object(worker, "_get_blob_for_contact", return_value=("", None)):
-                await worker.get_tasks(refresh=True)
+        # Mock the LLM analysis to return a task. `_collect` re-imports
+        # `get_session` lazily, so the fixture-level patch has already
+        # exited; re-patch for the test body. Same for build_thread_history.
+        with (
+            patch("zylch.storage.database.get_session"),
+            patch(
+                "zylch.workers.task_creation.build_thread_history",
+                return_value="",
+            ),
+        ):
+            with patch.object(worker, "_analyze_event", new_callable=AsyncMock) as mock_analyze:
+                mock_analyze.return_value = {
+                    "action_required": True,
+                    "task_action": "create",
+                    "urgency": "medium",
+                    "suggested_action": "Update pitch deck with patent info",
+                    "reason": "Colleague needs updated pitch for potential investors",
+                }
+                with patch.object(worker, "_get_blob_for_contact", return_value=("", None)):
+                    await worker.get_tasks(refresh=True)
 
         # The email must have been analyzed (not skipped)
         mock_analyze.assert_called_once()

@@ -357,7 +357,87 @@ async def _run_tasks(owner_id: str, store) -> str:
 
     tasks, _ = await worker.get_tasks(refresh=True)
     action_count = sum(1 for t in (tasks or []) if t.get("action_required"))
+
+    # F4: bounded reanalyze sweep — defense in depth for tasks that escaped
+    # initial closure (e.g. RC-1: get_tasks_by_thread returning empty in
+    # user_reply, RealStep / cafe124 case 2026-04-30). Pick the oldest open
+    # tasks whose analyzed_at (or created_at) is older than the threshold,
+    # cap at REANALYZE_CAP per run, run serial via reanalyze_task.
+    swept = await _reanalyze_sweep(owner_id, store, tasks)
+    if swept:
+        return f"{action_count} action items detected ({swept} reanalyzed)"
     return f"{action_count} action items detected"
+
+
+# F4 sweep tunables — exposed as module constants for tests + future
+# overrides via env if it ever needs to be runtime-configurable.
+REANALYZE_CAP = 10
+REANALYZE_MIN_AGE_HOURS = 24
+
+
+async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> int:
+    """Reanalyze a bounded slice of stale open tasks.
+
+    Skips silently if no tasks are eligible. Returns the number of
+    tasks for which reanalyze_task succeeded (not the number that
+    were closed/updated — that's logged but not surfaced here).
+
+    The sweep is scoped to the tasks the caller already loaded
+    (`tasks` from `worker.get_tasks(refresh=True)`) so we don't
+    issue a second `get_task_items` query.
+    """
+    from datetime import datetime, timezone
+
+    from zylch.workers.task_reanalyze import reanalyze_task
+
+    now = datetime.now(timezone.utc)
+    candidates: list = []
+    for t in tasks or []:
+        if t.get("completed_at"):
+            continue
+        if not t.get("action_required"):
+            continue
+        ref = t.get("analyzed_at") or t.get("created_at")
+        if not ref:
+            continue
+        try:
+            ref_dt = datetime.fromisoformat(str(ref).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        if ref_dt.tzinfo is None:
+            ref_dt = ref_dt.replace(tzinfo=timezone.utc)
+        age_hours = (now - ref_dt).total_seconds() / 3600.0
+        if age_hours >= REANALYZE_MIN_AGE_HOURS:
+            candidates.append((ref_dt, t))
+
+    if not candidates:
+        return 0
+
+    candidates.sort(key=lambda x: x[0])
+    sweep_targets = candidates[:REANALYZE_CAP]
+    logger.info(
+        f"[TASK] Reanalyze sweep: {len(sweep_targets)} of {len(candidates)} "
+        f"eligible (cap={REANALYZE_CAP}, min_age_h={REANALYZE_MIN_AGE_HOURS})"
+    )
+
+    ok_count = 0
+    for _, t in sweep_targets:
+        task_id = t.get("id")
+        if not task_id:
+            continue
+        try:
+            res = await reanalyze_task(task_id, owner_id)
+        except Exception as e:
+            logger.warning(f"[TASK] Reanalyze raised for task {task_id}: {e}")
+            continue
+        if res.get("ok"):
+            ok_count += 1
+            logger.debug(
+                f"[TASK] Reanalyze sweep task_id={task_id} " f"applied={res.get('action')}"
+            )
+        else:
+            logger.warning(f"[TASK] Reanalyze sweep task_id={task_id} " f"error={res.get('error')}")
+    return ok_count
 
 
 async def _auto_train_memory(
