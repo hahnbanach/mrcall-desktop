@@ -1,11 +1,25 @@
 // Standalone node test that exercises the same JSON-RPC protocol the
 // Electron main process uses. Run headless to verify Phase 3a/3b without X.
+//
+// Required env:
+//   ZYLCH_BINARY  absolute path to a built zylch sidecar
+//   ZYLCH_PROFILE the profile email to attach to (must already exist)
+//   ZYLCH_CWD     (optional) working dir for the sidecar; defaults to $HOME
 import { spawn } from 'node:child_process'
+import { homedir } from 'node:os'
+
+const binary = process.env.ZYLCH_BINARY
+const profile = process.env.ZYLCH_PROFILE
+if (!binary || !profile) {
+  console.error('error: ZYLCH_BINARY and ZYLCH_PROFILE must be set')
+  process.exit(2)
+}
+const cwd = process.env.ZYLCH_CWD || homedir()
 
 const proc = spawn(
-  '/path/to/engine/venv/bin/zylch',
-  ['-p', 'user@example.com', 'rpc'],
-  { cwd: '/path/to/engine', stdio: ['pipe', 'pipe', 'pipe'] }
+  binary,
+  ['-p', profile, 'rpc'],
+  { cwd, stdio: ['pipe', 'pipe', 'pipe'] }
 )
 
 let buf = ''

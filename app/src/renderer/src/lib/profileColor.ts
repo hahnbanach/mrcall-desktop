@@ -46,15 +46,15 @@ export function profileColor(email: string): ProfileColor {
 //
 // import { profileColor } from './profileColor'
 //
-// const a = profileColor('user@example.com')
-// const b = profileColor('user@example.com')
+// const a = profileColor('alice@example.com')
+// const b = profileColor('alice@example.com')
 // console.assert(a.h === b.h, 'deterministic: same email -> same hue')
 //
 // const samples = [
-//   'user@example.com',
-//   'mario.alemi@mrcall.ai',
-//   'foo@example.com',
-//   'bar@example.com',
+//   'alice@example.com',
+//   'bob@example.com',
+//   'foo@example.org',
+//   'bar@example.org',
 //   'support@acme.io'
 // ]
 // const hues = new Set(samples.map((e) => profileColor(e).h))

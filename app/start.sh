@@ -7,7 +7,7 @@
 #
 # Usage:
 #   ./start.sh                              # auto-selects profile if only one
-#   ./start.sh user@example.com       # explicit profile
+#   ./start.sh you@example.com              # explicit profile
 
 set -euo pipefail
 

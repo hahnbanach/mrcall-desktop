@@ -68,7 +68,7 @@ event = calendar.create_event(
    - Sender: contact@example.com
    - To/CC recipients: mario.alemi@mrcall.ai, ...
 4. **Creates calendar event** with:
-   - Title: Based on email subject ("Call - Flusso Dati IVR Connecto")
+   - Title: Based on email subject ("Call - Project Discussion")
    - Time: Parsed from email
    - Attendees: All email participants
    - Meet link: Auto-generated

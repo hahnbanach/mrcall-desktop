@@ -47,12 +47,12 @@ If all are false → NO TASK (thread closed)
 **Esempio:**
 ```
 Da: Anna Bianchi <contact@example.com>
-Subject: Café 124 at Vitafoods Europe 2026
+Subject: Your company at TradeShow 2026
 
-Hi Mario,
+Hi User,
 I hope you're doing well.
 
-Reaching out from Sesamers where we are curating...
+Reaching out from a curation platform where we are organizing...
 • Clean, functional beverages backed by clear science
 • Active ingredients with proven claims
 • Lifestyle formats that scale quickly into retail & D2C

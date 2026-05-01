@@ -1,0 +1,44 @@
+# Top-level gitignore for the mrcall-desktop monorepo.
+# Engine and app each keep their own gitignore for stack-specific rules
+# (engine/.gitignore, app/.gitignore). This file covers cross-cutting
+# things that don't belong to either subdir.
+
+# ---------------------------------------------------------------------------
+# Claude Code project-local overrides — never share these.
+# ---------------------------------------------------------------------------
+.claude/settings.local.json
+**/.claude/settings.local.json
+
+# ---------------------------------------------------------------------------
+# OS junk
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ---------------------------------------------------------------------------
+# Editor / IDE state
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+
+# ---------------------------------------------------------------------------
+# TypeScript incremental build artifacts
+# ---------------------------------------------------------------------------
+*.tsbuildinfo
+
+# ---------------------------------------------------------------------------
+# Logs that occasionally land at the repo root during one-off scripts
+# ---------------------------------------------------------------------------
+*.log
+
+# ---------------------------------------------------------------------------
+# Secrets / env files at the repo root (defense-in-depth — engine/ and
+# app/ already cover their own subdirs, but guard here too).
+# ---------------------------------------------------------------------------
+.env
+.env.local
+.env.*
+!.env.example

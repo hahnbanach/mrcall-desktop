@@ -109,7 +109,7 @@ class TestUserReplyClosesTask:
             },
         ]
         mock_storage.get_task_by_contact.return_value = {
-            "id": "task-mapostoli",
+            "id": "task-customer",
             "contact_email": "customer@otherco.com",
         }
 
@@ -117,7 +117,7 @@ class TestUserReplyClosesTask:
 
         mock_storage.complete_task_item.assert_called_with(
             "test_owner",
-            "task-mapostoli",
+            "task-customer",
         )
 
     @pytest.mark.asyncio
@@ -138,7 +138,7 @@ class TestUserReplyClosesTask:
 
         # Return task for first call (mapostoli), None for second (someone.else)
         mock_storage.get_task_by_contact.side_effect = [
-            {"id": "task-mapostoli", "contact_email": "customer@otherco.com"},
+            {"id": "task-customer", "contact_email": "customer@otherco.com"},
             None,
         ]
 
@@ -146,7 +146,7 @@ class TestUserReplyClosesTask:
 
         mock_storage.complete_task_item.assert_called_with(
             "test_owner",
-            "task-mapostoli",
+            "task-customer",
         )
 
 

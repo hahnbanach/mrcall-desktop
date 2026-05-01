@@ -2,7 +2,7 @@
 """Test script to debug hybrid search and reconsolidation.
 
 Usage:
-    python scripts/test_hybrid_search.py "PC Dépannage customer@example.com"
+    python scripts/test_hybrid_search.py "Acme Corp contact@example.com"
     python scripts/test_hybrid_search.py --query "your search query"
     python scripts/test_hybrid_search.py --blob-id UUID  # search with content of existing blob
 """

@@ -17,9 +17,16 @@
 // The whole test runs in <1s.
 
 import { mkdirSync, rmSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import Module from 'node:module'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+// Resolve sources relative to the script's location in the monorepo:
+// app/scripts/test-onboarding.mjs → app/src/main/profileFS.ts.
+const APP_ROOT = resolve(__dirname, '..')
 
 const sandboxHome = join(tmpdir(), `zylch_onboarding_test_${Date.now()}`)
 rmSync(sandboxHome, { recursive: true, force: true })
@@ -68,9 +75,7 @@ const esbuild = (() => {
 })()
 
 const outPath = join(sandboxHome, '_compiled_profileFS.cjs')
-const srcPath = join(
-  '/path/to/app/src/main/profileFS.ts'
-)
+const srcPath = join(APP_ROOT, 'src', 'main', 'profileFS.ts')
 if (esbuild) {
   esbuild.buildSync({
     entryPoints: [srcPath],
@@ -100,7 +105,7 @@ if (esbuild) {
   )
   const { execSync } = require('node:child_process')
   execSync(`npx --yes tsc -p ${tsconfigPath}`, {
-    cwd: '/path/to/app',
+    cwd: APP_ROOT,
     stdio: 'inherit'
   })
   // tsc will place the compiled file under sandboxHome/.../profileFS.js

@@ -33,10 +33,10 @@ function resolveSidecarBinary(): string {
 }
 // Deferred until app.whenReady so `app.isPackaged` is reliable.
 let ZYLCH_BINARY = ''
-// First-launch default profile. In dev, prefer the developer's own
-// profile; in a packaged build we rely entirely on filesystem discovery
-// (empty profiles dir triggers onboarding).
-const DEFAULT_PROFILE = process.env.ZYLCH_PROFILE || 'user@example.com'
+// First-launch default profile. Set ZYLCH_PROFILE in dev to skip the
+// onboarding wizard; in a packaged build we rely entirely on filesystem
+// discovery (empty profiles dir triggers onboarding).
+const DEFAULT_PROFILE = process.env.ZYLCH_PROFILE || ''
 
 // Per-method default timeouts (ms). Callers may override by passing an
 // explicit `timeout` — this map only sets the default when none given.
