@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import Icon from '../components/Icon'
+import ConnectGoogleCalendar from './ConnectGoogleCalendar'
+import { performSignOut } from '../App'
+import { auth } from '../firebase/config'
 
 type FieldType = 'text' | 'password' | 'number' | 'select' | 'textarea'
 
@@ -166,6 +169,20 @@ export default function Settings(): JSX.Element {
         </div>
       )}
 
+      <section className="mb-6">
+        <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
+          Account
+        </h2>
+        <AccountCard />
+      </section>
+
+      <section className="mb-6">
+        <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
+          Integrations
+        </h2>
+        <ConnectGoogleCalendar />
+      </section>
+
       {grouped.map(([group, items]) => (
         <section key={group} className="mb-6">
           <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
@@ -215,6 +232,35 @@ export default function Settings(): JSX.Element {
           </span>
         )}
       </div>
+    </div>
+  )
+}
+
+function AccountCard(): JSX.Element {
+  // Read Firebase user synchronously — by the time Settings renders,
+  // FirebaseAuthGate has already accepted the session.
+  const user = auth.currentUser
+  const email = user?.email || '—'
+  const uid = user?.uid || ''
+  return (
+    <div className="bg-white border border-brand-mid-grey rounded-lg shadow-sm p-4 flex items-start justify-between gap-3">
+      <div>
+        <div className="text-sm font-semibold text-brand-black">{email}</div>
+        {uid && (
+          <div className="text-xs text-brand-grey-80 mt-0.5 font-mono">
+            uid <span className="opacity-60">{uid}</span>
+          </div>
+        )}
+        <p className="text-xs text-brand-grey-80 mt-1">
+          Same MrCall account used in the dashboard. Sign out to switch users.
+        </p>
+      </div>
+      <button
+        onClick={() => performSignOut()}
+        className="px-3 py-1.5 text-xs border rounded text-brand-grey-80 hover:bg-brand-light-grey shrink-0"
+      >
+        Sign out
+      </button>
     </div>
   )
 }

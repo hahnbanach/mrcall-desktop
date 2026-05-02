@@ -36,6 +36,7 @@ export const KNOWN_KEYS: ReadonlySet<string> = new Set([
   'MRCALL_DASHBOARD_URL',
   'MRCALL_REALM',
   'OPENAI_API_KEY',
+  'OWNER_ID',
   'SMTP_HOST',
   'SMTP_PORT',
   'SYSTEM_LLM_PROVIDER',
@@ -107,6 +108,108 @@ export interface CreateProfileResult {
   ok: true
   profile: string
   path: string
+}
+
+// Firebase UIDs are alphanumeric (28 chars in practice) and never
+// contain a `@`. This regex is intentionally permissive: anything that
+// is non-empty, no `/`, no whitespace, no leading dot. We use it to
+// distinguish "directory name = uid" from "directory name = email" in
+// the existing email-keyed code paths without adding a side channel.
+const PROFILE_DIR_REGEX = /^[A-Za-z0-9_.-]{4,128}$/
+
+function isValidProfileName(name: string): boolean {
+  return PROFILE_DIR_REGEX.test((name || '').trim())
+}
+
+/**
+ * Create a profile keyed by an opaque identifier (the Firebase UID).
+ *
+ * This is the post-signin onboarding path: the renderer pre-populates
+ * `email` from the Firebase user object so we can write EMAIL_ADDRESS
+ * into the .env without a second prompt, but the on-disk directory is
+ * named after the UID — emails change, UIDs don't, so this keeps the
+ * profile stable across email changes.
+ *
+ * `OWNER_ID` is also written so the engine's owner-scoped storage
+ * (OAuthToken, etc.) keys cleanly off the same UID.
+ */
+export function createProfileForFirebaseUser(
+  uid: string,
+  email: string,
+  values: Record<string, string>
+): CreateProfileResult {
+  const trimmedUid = (uid || '').trim()
+  const trimmedEmail = (email || '').trim()
+  if (!isValidProfileName(trimmedUid)) {
+    throw new Error(`Invalid Firebase UID: ${JSON.stringify(uid)}`)
+  }
+  if (!isValidEmail(trimmedEmail)) {
+    throw new Error(`Invalid email address: ${JSON.stringify(email)}`)
+  }
+  if (!values || typeof values !== 'object') {
+    throw new Error("'values' must be an object {key: value}")
+  }
+
+  const cleaned: Record<string, string> = {}
+  const unknown: string[] = []
+  for (const [k, rawV] of Object.entries(values)) {
+    if (!KNOWN_KEYS.has(k)) {
+      unknown.push(k)
+      continue
+    }
+    cleaned[k] = rawV == null ? '' : typeof rawV === 'string' ? rawV : String(rawV)
+  }
+  if (unknown.length > 0) {
+    throw new Error(`unknown setting keys: ${JSON.stringify(unknown.sort())}`)
+  }
+
+  const provider = (cleaned['SYSTEM_LLM_PROVIDER'] || '').trim().toLowerCase()
+  if (provider !== 'anthropic' && provider !== 'openai') {
+    throw new Error("SYSTEM_LLM_PROVIDER must be 'anthropic' or 'openai'")
+  }
+  if (provider === 'anthropic' && !cleaned['ANTHROPIC_API_KEY']) {
+    throw new Error('ANTHROPIC_API_KEY is required when provider=anthropic')
+  }
+  if (provider === 'openai' && !cleaned['OPENAI_API_KEY']) {
+    throw new Error('OPENAI_API_KEY is required when provider=openai')
+  }
+  // Tie the engine's owner_id to the Firebase UID so OAuth tokens
+  // (Google Calendar, future MrCall delegations) all key off the same
+  // identifier the renderer pushes to the engine via account.set_firebase_token.
+  cleaned['OWNER_ID'] = trimmedUid
+  if (!cleaned['EMAIL_ADDRESS']) {
+    cleaned['EMAIL_ADDRESS'] = trimmedEmail
+  }
+
+  const dir = profileDir(trimmedUid)
+  if (existsSync(dir)) {
+    throw new Error(`Profile directory already exists: ${trimmedUid}`)
+  }
+
+  const root = profilesRoot()
+  if (!existsSync(root)) {
+    mkdirSync(root, { recursive: true, mode: 0o700 })
+  }
+  mkdirSync(dir, { mode: 0o700 })
+
+  const envPath = join(dir, '.env')
+  const lines: string[] = [
+    '# Created by MrCall Desktop onboarding (Firebase signin path)\n',
+    `# email=${trimmedEmail}\n`
+  ]
+  for (const [k, v] of Object.entries(cleaned)) {
+    lines.push(`${k}=${dotenvQuote(v)}\n`)
+  }
+
+  const fd = openSync(envPath, 'wx', 0o600)
+  try {
+    writeFileSync(fd, lines.join(''), 'utf8')
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+
+  return { ok: true, profile: trimmedUid, path: envPath }
 }
 
 /**

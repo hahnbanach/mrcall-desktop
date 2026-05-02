@@ -21,6 +21,34 @@ structure). Read those for details:
 - [`app/CLAUDE.md`](app/CLAUDE.md) + [`app/docs/`](app/docs/) — Electron layout, dev workflow, packaging.
 - [`docs/`](docs/) — cross-cutting docs: IPC contract, release pipeline, brand/rename rollout.
 
+## Identity (Firebase) — added 2026-05-02
+
+The Electron renderer now gates the entire UI behind a Firebase Auth
+sign-in (same `talkmeapp-e696c` project the dashboard uses, so the
+account is shared). The renderer pushes the resulting ID token to the
+Python sidecar over JSON-RPC (`account.set_firebase_token`); the
+sidecar holds it in memory and uses it as the `auth:` header for
+outgoing StarChat calls. The token is never persisted to disk.
+
+Profiles created post-Firebase are keyed by the immutable Firebase
+UID (`~/.zylch/profiles/<firebase_uid>/`), not the email — emails can
+change. The user's email is stored as `EMAIL_ADDRESS` in the
+profile's `.env` for display, alongside `OWNER_ID = <firebase_uid>`
+which the engine's owner-scoped storage (OAuthToken etc.) uses as the
+foreign key.
+
+Google Calendar is a *separate* OAuth — PKCE flow on
+`127.0.0.1:19275`, scope `calendar.readonly`, tokens stored encrypted
+in the existing `OAuthToken` table with `provider='google_calendar'`.
+The Calendar OAuth is incremental: Firebase signin doesn't ask for it,
+the user clicks "Connect Google Calendar" in Settings to grant it
+later. Configure `GOOGLE_CALENDAR_CLIENT_ID` (Desktop-app or Web
+loopback OAuth client) in profile settings before the first
+connect — no client secret is used.
+
+The legacy CLI MrCall PKCE flow on `:19274` (`zylch init`) is left
+intact for users who never sign in to the desktop UI.
+
 ## Naming and identifiers — the rename in flight
 
 This monorepo was assembled by subtree-merging two predecessor repos

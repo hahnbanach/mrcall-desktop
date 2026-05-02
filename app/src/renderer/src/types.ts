@@ -192,6 +192,11 @@ export interface ZylchAPI {
       email: string,
       values: Record<string, string>
     ) => Promise<{ ok: true; profile: string } | { ok: false; error: string }>
+    createProfileForFirebaseUser: (
+      uid: string,
+      email: string,
+      values: Record<string, string>
+    ) => Promise<{ ok: true; profile: string } | { ok: false; error: string }>
     finalize: (email: string) => Promise<{ ok: boolean }>
   }
   onNotification: (method: string, cb: (params: any) => void) => () => void

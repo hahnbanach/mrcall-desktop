@@ -3,7 +3,7 @@ import { join } from 'path'
 import { readdirSync, statSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import { SidecarClient } from './sidecar'
-import { createProfileFS, isFirstRun } from './profileFS'
+import { createProfileFS, createProfileForFirebaseUser, isFirstRun } from './profileFS'
 
 // Brand the running process. Three layers each cover a different surface:
 //
@@ -422,6 +422,33 @@ function registerIpc(): void {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         console.error(`[main] onboarding:createProfile failed: ${msg}`)
+        return { ok: false, error: msg }
+      }
+    }
+  )
+
+  // Firebase-aware onboarding. Same shape as createProfile, but the
+  // resulting profile directory is named after the Firebase UID
+  // (immutable across email changes) and the .env carries OWNER_ID +
+  // EMAIL_ADDRESS so the engine binds its owner-scoped storage to
+  // the same identifier the renderer pushes via account.set_firebase_token.
+  ipcMain.handle(
+    'onboarding:createProfileForFirebaseUser',
+    async (
+      _event,
+      uid: string,
+      email: string,
+      values: Record<string, string>
+    ): Promise<{ ok: true; profile: string } | { ok: false; error: string }> => {
+      try {
+        const r = createProfileForFirebaseUser(uid, email, values)
+        console.log(
+          `[main] onboarding:createProfileForFirebaseUser ok profile=${r.profile} email=${email}`
+        )
+        return { ok: true, profile: r.profile }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.error(`[main] onboarding:createProfileForFirebaseUser failed: ${msg}`)
         return { ok: false, error: msg }
       }
     }

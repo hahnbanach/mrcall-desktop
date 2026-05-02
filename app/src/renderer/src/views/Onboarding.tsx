@@ -7,12 +7,18 @@
  * `window.zylch.onboarding.*` which writes the profile `.env` on the
  * filesystem and then spawns a real sidecar-bound window.
  *
+ * Reaches this screen only AFTER FirebaseAuthGate has accepted a
+ * signin, so we always have a Firebase user available — its uid keys
+ * the on-disk profile directory and its email pre-populates the form.
+ *
  * Field set deliberately mirrors `NewProfileWizard` (LLM provider +
  * key, email + app-password, IMAP/SMTP, optional Telegram). Everything
  * else is editable from Settings once the user is in.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage } from '../lib/errors'
+import { auth } from '../firebase/config'
+import { performSignOut } from '../App'
 
 type Provider = 'anthropic' | 'openai'
 
@@ -40,7 +46,13 @@ function isValidEmail(s: string): boolean {
 }
 
 export default function Onboarding(): JSX.Element {
-  const [email, setEmail] = useState('')
+  // Firebase user is guaranteed by FirebaseAuthGate. We seed the email
+  // from it but let the user override (they may want IMAP on a
+  // different mailbox than their Firebase identity).
+  const firebaseUser = auth.currentUser
+  const firebaseUid = firebaseUser?.uid || ''
+  const firebaseEmail = firebaseUser?.email || ''
+  const [email, setEmail] = useState(firebaseEmail)
   const [provider, setProvider] = useState<Provider>('anthropic')
   const [apiKey, setApiKey] = useState('')
   const [emailPassword, setEmailPassword] = useState('')
@@ -88,7 +100,23 @@ export default function Onboarding(): JSX.Element {
     else values.OPENAI_API_KEY = apiKey
     if (telegramToken.trim()) values.TELEGRAM_BOT_TOKEN = telegramToken.trim()
     try {
-      const r = await window.zylch.onboarding.createProfile(email.trim(), values)
+      // Path A: Firebase signed-in user → profile keyed by UID.
+      // FirebaseAuthGate guarantees we land here only when a user
+      // exists, but be defensive in case state transitions race.
+      let r:
+        | { ok: true; profile: string }
+        | { ok: false; error: string }
+      if (firebaseUid && firebaseEmail) {
+        r = await window.zylch.onboarding.createProfileForFirebaseUser(
+          firebaseUid,
+          email.trim(),
+          values
+        )
+      } else {
+        // Path B: legacy email-keyed profile (FirebaseAuthGate is off
+        // or the user object went missing). Kept as a safety net.
+        r = await window.zylch.onboarding.createProfile(email.trim(), values)
+      }
       if (!r.ok) {
         setFormError(r.error || 'Failed to create profile')
         setSubmitting(false)
@@ -111,12 +139,29 @@ export default function Onboarding(): JSX.Element {
   return (
     <div className="min-h-screen w-full flex items-start justify-center bg-brand-light-grey p-6 overflow-auto">
       <div className="w-full max-w-[560px]">
-        <div className="mb-5">
-          <h1 className="text-2xl font-semibold text-brand-black">Welcome to MrCall Desktop</h1>
-          <p className="text-sm text-brand-grey-80 mt-1">
-            Create your first profile. All data stays on this machine — your credentials
-            are written only to <code>~/.zylch/profiles/</code>.
-          </p>
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-brand-black">Welcome to MrCall Desktop</h1>
+            <p className="text-sm text-brand-grey-80 mt-1">
+              Create your first profile. All data stays on this machine — your credentials
+              are written only to <code>~/.zylch/profiles/</code>.
+            </p>
+            {firebaseEmail && (
+              <p className="text-xs text-brand-grey-80 mt-2">
+                Signed in as <strong>{firebaseEmail}</strong>
+                <span className="ml-1 opacity-60">(uid {firebaseUid.slice(0, 8)}…)</span>
+              </p>
+            )}
+          </div>
+          {firebaseUser && (
+            <button
+              type="button"
+              onClick={() => performSignOut()}
+              className="px-2 py-1 text-xs text-brand-grey-80 hover:text-brand-black border rounded shrink-0"
+            >
+              Sign out
+            </button>
+          )}
         </div>
 
         {formError && (

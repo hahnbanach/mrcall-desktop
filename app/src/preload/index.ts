@@ -318,6 +318,19 @@ const api = {
       ipcRenderer.invoke('onboarding:createProfile', email, values) as Promise<
         { ok: true; profile: string } | { ok: false; error: string }
       >,
+    // Firebase-aware variant: profile directory is named after the
+    // Firebase UID (immutable), .env carries OWNER_ID + EMAIL_ADDRESS.
+    createProfileForFirebaseUser: (
+      uid: string,
+      email: string,
+      values: Record<string, string>
+    ): Promise<{ ok: true; profile: string } | { ok: false; error: string }> =>
+      ipcRenderer.invoke(
+        'onboarding:createProfileForFirebaseUser',
+        uid,
+        email,
+        values
+      ) as Promise<{ ok: true; profile: string } | { ok: false; error: string }>,
     // After a successful createProfile, the renderer calls finalize to
     // spawn a real profile-bound window and close the onboarding one.
     finalize: (email: string): Promise<{ ok: boolean }> =>
