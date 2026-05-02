@@ -130,9 +130,14 @@ Node (main process), not the renderer.
 
 5. **For packaged release builds:** add `GOOGLE_SIGNIN_CLIENT_SECRET`
    as a repo secret at *Settings → Secrets and variables → Actions →
-   New repository secret*, and add a step to `release.yml` that writes
-   it to `app/src/main/oauthSecrets.ts` before `npm run dist`. Not
-   wired yet — see Status table.
+   New repository secret*. The `release.yml` workflow has a
+   "Materialise Google OAuth client_secret" step (between `npm ci` and
+   `npm run dist`) that runs `node scripts/write-oauth-secrets.mjs` —
+   reads the env var, validates it starts with `GOCSPX-`, writes
+   `app/src/main/oauthSecrets.ts` so Vite/Rollup inlines the value into
+   `out/main/index.js`. The secret rides inside the bundled `.dmg` /
+   `.exe`; end users install and click "Continue with Google" without
+   any local setup.
 
 ## Status
 
@@ -145,8 +150,9 @@ Node (main process), not the renderer.
 | Committed config file (`app/src/main/oauthConfig.ts`) | done — Client ID `375340415237-jl3hl6hcu15po65oo7dovl1lb3a960ni…` already wired |
 | Gitignored secret file (`app/src/main/oauthSecrets.ts`) + postinstall seeder | done — developer pastes the value locally |
 | `client_secret` plumbed through `googleSignin.exchangeCode` | done |
-| End-to-end live test in `npm run dev` | **pending — needs `oauthSecrets.ts` populated locally** |
-| End-to-end live test on a packaged DMG / EXE | pending — also needs CI step that materialises `oauthSecrets.ts` from a repo secret before `npm run dist` |
+| CI step: `release.yml` writes `oauthSecrets.ts` from `GOOGLE_SIGNIN_CLIENT_SECRET` repo secret before build | done (commit `b6739d5`) — repo secret still has to be created at *Settings → Secrets and variables → Actions* |
+| End-to-end live test in `npm run dev` | **pending — needs the user to start the dev server with the populated `oauthSecrets.ts`** |
+| End-to-end live test on a packaged DMG / EXE | pending — needs `GOOGLE_SIGNIN_CLIENT_SECRET` repo secret + a `v*` tag push |
 | Renderer-side surfacing of "not configured" error in plain language | covered by the inline error string returned by main, no extra UX yet |
 
 ## Known follow-ups

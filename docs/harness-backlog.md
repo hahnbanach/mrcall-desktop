@@ -6,6 +6,19 @@ materialises) `app/docs/harness-backlog.md`.
 
 ## Open
 
+- [ ] **No CI gate prevents committing the OAuth Client secret.**
+  Discovered: 2026-05-02
+  Impact: GitHub Secret Scanning catches the `GOCSPX-` prefix on push
+  and triggers Google to auto-revoke within minutes. The damage is
+  recoverable (re-issue the secret) but it WILL break signin in any
+  in-flight build. The current defence is `app/.gitignore:15` plus the
+  postinstall+CI scripts that route the value around source. A
+  pre-commit hook (or repo-side server-hook) that hard-blocks any diff
+  containing `GOCSPX-[A-Za-z0-9]` would catch a slip.
+  Recommendation: a tiny pre-commit hook in `.git/hooks/pre-commit` or
+  a `gitleaks`-style action in CI on PRs, configured to fail on any
+  match against the Google client_secret regex.
+
 - [ ] **No contract test for IPC method/payload changes.**
   Discovered: 2026-05-02
   Impact: a server-side method rename or payload shape change must be

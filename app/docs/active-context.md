@@ -15,12 +15,15 @@ freshest source). Facts migrate here as they get touched.
 
 ## What Is Built and Working
 
-### Identity (Firebase, 2026-05-02 landing)
-- `FirebaseAuthGate` in `App.tsx` wraps the entire app. Unsigned-in users see `views/SignIn.tsx` (email/password; Google + magic links deferred).
-- Firebase config hard-coded in `firebase/config.ts` (project `talkmeapp-e696c`, same as the dashboard — single MrCall account spans both surfaces). Persistence via `[indexedDBLocalPersistence, browserLocalPersistence]`.
+### Identity (Firebase, 2026-05-02)
+- `FirebaseAuthGate` in `App.tsx` wraps the entire app. Unsigned-in users see `views/SignIn.tsx` — **email/password and "Continue with Google"** (PKCE → Firebase `signInWithCredential`); magic links remain deferred.
+- Firebase config hard-coded in `firebase/config.ts` (project `talkmeapp-e696c`, same as the dashboard — single MrCall account spans both surfaces). **Persistence is `inMemoryPersistence` (post-`bc011be`)**: every app launch shows the SignIn screen. The previous indexedDB/local-storage persistence let a stale Firebase session silently survive across launches and decouple from the on-disk profile, so a wrong-account state could surface.
 - `firebase/authUtils.ts` listens to `onAuthStateChanged`, pushes the ID token to the engine via `window.zylch.account.setFirebaseToken` on every signin and on a 50-min proactive refresh interval.
+- **UID-keyed profile binding (post-`bc011be`).** Every BrowserWindow now boots into an *auth-pending* state with NO sidecar. After Firebase signin the renderer calls `window.zylch.auth.bindProfile(uid)`; main attaches a sidecar bound to `~/.zylch/profiles/<firebase_uid>/`. If the dir doesn't exist, the renderer routes to `Onboarding.tsx` which creates it via `onboarding.createProfileForFirebaseUser(uid, email, values)` and the same window then attaches in-place — Firebase auth state preserved, no second signin. Sign-out + re-signin as a different user swaps the sidecar in-place.
+- **IdentityBanner** at the top of every authenticated window: "Signed in as `<email>` (uid `<prefix>…`)" + one-click *Sign out*. Wrong-account state surfaces in seconds.
+- **Legacy escape hatch.** Windows opened via "+ New Window for Profile" pass `?legacy=1` and skip the Firebase gate; `ZYLCH_PROFILE` env var also bypasses the gate for engine integration tests. StarChat / `mrcall.*` features won't work in these windows until the user signs in via Settings — acceptable, those profiles are pre-Firebase.
 - `Settings.tsx` carries an **AccountCard** (Firebase email + uid + Sign-out) and an **Integrations** section with `views/ConnectGoogleCalendar.tsx` (Connect / Disconnect / status badge).
-- `Onboarding.tsx` pre-fills the email field from `auth.currentUser` and routes through the new `window.zylch.onboarding.createProfileForFirebaseUser(uid, email, values)` IPC, which writes the profile to `~/.zylch/profiles/<firebase_uid>/` (keyed by immutable UID, not email).
+- `Onboarding.tsx` pre-fills the email field from `auth.currentUser` and writes the profile to `~/.zylch/profiles/<firebase_uid>/` (keyed by immutable UID, not email).
 
 ### Views
 - **Chat** — assistant conversation, attachments, prompt-cached system prompt.
@@ -28,54 +31,71 @@ freshest source). Facts migrate here as they get touched.
 - **Emails** — Inbox + Sent tabs, thread reading pane with HTML body in sandboxed iframe, archive (IMAP MOVE) + delete (local soft-delete) buttons, "Open" jumps to Tasks filtered by thread.
 - **Settings** — schema-driven editor over the engine's profile `.env`. `USER_SECRET_INSTRUCTIONS` unmasked. `DOWNLOADS_DIR` shown with directory picker hint. **AccountCard + Integrations sections at the top (Firebase signin + Google Calendar OAuth)**.
 - **Onboarding wizard** — Firebase-aware: shows the signed-in user's email + uid prefix at the top, pre-fills the form, writes a UID-keyed profile dir.
-- **SignIn screen** — email/password gate wrapping everything else.
+- **SignIn screen** — email/password + "Continue with Google". Friendly error mapping for `auth/network-request-failed`, `auth/invalid-credential`, `auth/account-exists-with-different-credential`, `auth/popup-closed-by-user`, `auth/cancelled-popup-request`. Inline busy state for Google flow ("Opening Google sign-in in your browser…" → "Signing in to Firebase…").
+
+### "Continue with Google" (2026-05-02 first cut, commits `057d9de..b6739d5`)
+- `app/src/main/googleSignin.ts` runs PKCE OAuth on `127.0.0.1:19276` in the main process — no sidecar dependency, so the flow works during onboarding/auth-pending boot. Single in-flight flow at a time; concurrent calls cancel the prior. 5-min consent timeout.
+- IPC `signin:googleStart` opens the consent URL in the system browser via `shell.openExternal`, awaits the loopback callback, exchanges the code at `oauth2.googleapis.com/token`, returns `{ idToken, email }`. `signin:googleCancel` aborts an in-flight flow.
+- Renderer hands the resulting Google id_token to Firebase via `signInWithCredential(auth, GoogleAuthProvider.credential(idToken))`. `FirebaseAuthGate` then sees `auth.currentUser` and unmounts the SignIn screen.
+- Token exchange POST includes `client_secret` — Google enforces it for Desktop OAuth clients even on the PKCE flow (returns `400 invalid_request: client_secret is missing` otherwise). See "OAuth secret management" section above.
+- **CSP** unchanged — `signInWithCredential` reaches the already-allowed `identitytoolkit.googleapis.com`; consent runs in the system browser; token exchange runs in Node. Plan: [`../../docs/execution-plans/google-signin.md`](../../docs/execution-plans/google-signin.md).
 
 ### IPC client (preload)
-- All `window.zylch.*` calls go through `ipcRenderer.invoke('rpc:call', method, params, timeout)`. Single chokepoint at `app/src/preload/index.ts`.
+- Engine RPCs go through `ipcRenderer.invoke('rpc:call', method, params, timeout)` to the per-window sidecar. Single chokepoint at `app/src/preload/index.ts`.
+- Renderer-only IPCs (no engine involvement) use named channels: `shell:openExternal`, `signin:googleStart` / `signin:googleCancel`, `auth:bindProfile`, `onboarding:isFirstRun`, `onboarding:createProfile`, `onboarding:createProfileForFirebaseUser`, `onboarding:finalize`, `dialog:selectFiles`, `dialog:selectDirectories`, `profile:current`, `profiles:list`, `window:openForProfile`, `sidecar:restart`. These run in main process and never reach the sidecar.
 - Notification fan-out for streaming RPCs (`tasks.solve.event`, `update.run` progress, `google.calendar.auth_url_ready`).
-- Optional timeout per method — pin/reanalyze/listByThread have explicit longer timeouts; `google.calendar.connect` gets 5.5 min for the user to consent.
-- New namespaces this session: `account.{setFirebaseToken,signOut,whoAmI}`, `mrcall.listMyBusinesses`, `google.calendar.{connect,disconnect,status,cancel}`, `shell.openExternal`. Plus `onboarding.createProfileForFirebaseUser(uid, email, values)`.
+- Optional timeout per method — pin/reanalyze/listByThread have explicit longer timeouts; `google.calendar.connect` gets 5.5 min for the user to consent; `signin:googleStart` allows up to 5 min for browser consent.
+- Renderer-side namespace organisation: `tasks`, `chat`, `update`, `emails`, `files`, `profile`, `profiles`, `window`, `narration`, `settings`, `sidecar`, `account`, `mrcall`, `google.calendar`, `shell`, `signin`, `auth`, `onboarding`.
 
 ### Sidecar lifecycle (main)
 - Sidecar binary path resolves from `ZYLCH_BINARY` env or default `~/private/zylch-standalone/venv/bin/zylch` (dev). Packaged builds use the bundled `app/bin/zylch`.
 - `cwd` defaults to `homedir()` (`f1969bb5`) so signed/notarized builds don't reach into a dev path.
-- Profile-aware: each Electron window owns one profile (one email). Profile dir is locked via fcntl by the sidecar.
+- **Auth-pending boot (post-`bc011be`).** Default boot opens a window with NO sidecar; the sidecar attaches after `auth.bindProfile(uid)` resolves a profile dir. Sign-out + re-signin can swap the sidecar in-place on the same window. Only the legacy escape hatch (`ZYLCH_PROFILE` or "+ New Window for Profile" with `?legacy=1`) attaches a sidecar at boot.
+- Profile-aware: each window owns one profile. Profile dir is locked via fcntl by the sidecar.
+
+### OAuth secret management (Google sign-in, 2026-05-02)
+- The Desktop OAuth client lives in `talkmeapp-e696c` Google Cloud project; Client ID is committed in `app/src/main/oauthConfig.ts`, Client secret stays out of git.
+- `app/src/main/oauthSecrets.ts` is **gitignored** (see `app/.gitignore:15`). Holds `GOOGLE_SIGNIN_CLIENT_SECRET`. Postinstall (`scripts/setup-oauth-secrets.mjs`) seeds it from the committed `oauthSecrets.example.ts` template on first `npm install` so a fresh clone builds.
+- The `GOCSPX-` prefix is autodetected by GitHub Secret Scanning, which would notify Google → auto-revoke within minutes — the gitignore is mandatory regardless of what Google's docs say about installed-app secrets being "non-confidential".
+- Dev: developer pastes the real value into the local `oauthSecrets.ts`.
+- CI / packaged builds: `release.yml` runs `node scripts/write-oauth-secrets.mjs` between `npm ci` and `npm run dist`. The script reads `GOOGLE_SIGNIN_CLIENT_SECRET` from the workflow env (sourced from a repo secret), validates the `GOCSPX-` prefix, writes the file. Vite/Rollup inlines the constant during `electron-vite build`; the secret rides inside the bundled `out/main/index.js` → `.dmg` / `.exe`. End users install and click "Continue with Google" without local setup.
 
 ### Packaging
 - electron-builder produces `MrCall Desktop-<ver>-arm64.dmg` (macOS Apple Silicon), `MrCall Desktop-<ver>-x64.dmg` (macOS Intel, opt-in via `v*-intel` tag), `MrCall Desktop-Setup-<ver>-x64.exe` (Windows NSIS).
 - macOS code-signed + notarized via afterSign hook (`3a3eb522`). Windows installers not yet signed.
 - Sidecar built by `.github/workflows/release.yml` via PyInstaller in the same run, downloaded into `app/bin/` before electron-builder runs.
 
-## What Was Completed This Session
+## What Was Completed This Session (2026-05-02)
 
-**Firebase signin landing — app side (commits `25e668b..11f4cbe`, all pushed).**
+Recent commits on `main` (newest last):
 
-- `firebase/config.ts`, `firebase/authUtils.ts`, `views/SignIn.tsx`, `views/ConnectGoogleCalendar.tsx` — new files. `firebase` SDK added to `package.json`.
-- `App.tsx` wraps the existing `AppRouter` in `FirebaseAuthGate`; exports `performSignOut()` (clears engine session via `account.signOut`, then Firebase `signOut`); `setTokenPusher` wired so the renderer keeps the engine's in-memory session fresh.
-- `Onboarding.tsx` — Firebase-aware: pre-fills email from `auth.currentUser`, routes new profiles through `createProfileForFirebaseUser(uid, email, values)`, shows "Signed in as …" header + Sign-out shortcut.
-- `Settings.tsx` — added `AccountCard` and `Integrations` sections at the top.
-- `preload/index.ts` + `renderer/src/types.ts` — new namespaces `account`, `mrcall`, `google.calendar`, `shell`. Plus `onboarding.createProfileForFirebaseUser`.
-- `main/index.ts` — new IPC `shell:openExternal` (validates http(s), delegates to Electron `shell.openExternal`); new `onboarding:createProfileForFirebaseUser` handler.
-- `main/profileFS.ts` — new `createProfileForFirebaseUser` that writes `~/.zylch/profiles/<firebase_uid>/.env` with `OWNER_ID + EMAIL_ADDRESS`. `KNOWN_KEYS` gains `OWNER_ID` and `GOOGLE_CALENDAR_CLIENT_ID`.
+- `451526a` **CSP fix.** Added `connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com` to `app/src/renderer/index.html`. Email/password signin was hitting `auth/network-request-failed` because `default-src 'self'` blocked all Firebase Auth traffic.
+- `057d9de` **"Continue with Google" first cut.** `app/src/main/googleSignin.ts` (PKCE on :19276), `signin:googleStart` / `signin:googleCancel` IPC, preload + types, button on `SignIn.tsx`. Initial config via `GOOGLE_SIGNIN_CLIENT_ID` env var.
+- `642fdae` **Refactor to single config file.** Replaced env-var lookup with `import { GOOGLE_SIGNIN_CLIENT_ID } from './oauthConfig'`. Operator edits one committed file.
+- `b2af895` **Wired actual Client ID** into `oauthConfig.ts` (`375340415237-jl3hl6hcu15po65oo7dovl1lb3a960ni.apps.googleusercontent.com`). Project number prefix matches `messagingSenderId` so Firebase trusts the audience.
+- `bc011be` **UID-keyed profile binding (by another agent).** In-memory Firebase persistence; auth-pending boot with no sidecar; `auth:bindProfile(uid)` IPC; IdentityBanner; `?legacy=1` escape hatch. Closes the silent identity-drift gap.
+- `f5bbf2c` **`client_secret` plumbing + isolation from git.** Google's token endpoint enforces `client_secret` for Desktop OAuth clients — a secret-less request returns `400 client_secret is missing`. Architecture: `oauthConfig.ts` re-exports `GOOGLE_SIGNIN_CLIENT_SECRET` from gitignored `oauthSecrets.ts`; postinstall (`scripts/setup-oauth-secrets.mjs`) seeds from `.example`; developer pastes the real value locally. `googleSignin.exchangeCode` includes the secret in the POST when set.
+- `b6739d5` **CI step for packaged releases.** New step in `release.yml` runs `node scripts/write-oauth-secrets.mjs` between `npm ci` and `npm run dist`; reads `GOOGLE_SIGNIN_CLIENT_SECRET` repo secret, validates the `GOCSPX-` prefix, writes `oauthSecrets.ts`. Vite inlines the value into `out/main/index.js`; the `.dmg` / `.exe` ship with the secret embedded — end users don't configure anything.
 
-Verified: `npm run typecheck` clean at every commit; `npm run dev` end-to-end NOT exercised from this machine.
+Verified: `npm run typecheck` clean at every commit; build smoke test confirmed the Vite-only inject + the new CI script writer both produce the expected `out/main/index.js`. Real `npm run dev` end-to-end Google signin NOT exercised from this machine.
 
 ## What Is In Progress
 
-- **"Continue with Google" on the Firebase SignIn screen (2026-05-02).** New `app/src/main/googleSignin.ts` runs the PKCE flow on `127.0.0.1:19276` (no sidecar required — main process owns the loopback HTTP server and the token exchange). New IPC `signin:googleStart` / `signin:googleCancel`, preload exposes `window.zylch.signin.{googleStart,googleCancel}`, types in `renderer/src/types.ts`. `SignIn.tsx` renders a button that calls `googleStart`, then trades the returned Google id_token for a Firebase session via `signInWithCredential(GoogleAuthProvider.credential(idToken))`. Configuration is via `GOOGLE_SIGNIN_CLIENT_ID` env var (dev mode); packaged-build path not yet wired. Plan + setup runbook: [`../../docs/execution-plans/google-signin.md`](../../docs/execution-plans/google-signin.md). Typecheck clean; live end-to-end test pending — needs a configured client ID.
-- **CSP fix for Firebase signin (`main` `451526a`).** Added `connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com` to the renderer's CSP. Without it Firebase signin hit `auth/network-request-failed` and the SignIn screen showed "Network error reaching Firebase". Live verification of email/password signin pending.
-- **Live verification of the Firebase landing in the running Electron app — pending.** Compiles + typechecks; a real signin / engine round-trip / Calendar OAuth needs the user to run `npm run dev`. No automated harness for this.
+- **End-to-end live verification of "Continue with Google" in `npm run dev` — pending.** All plumbing is in place; needs the user to run the dev server with the populated local `oauthSecrets.ts` and click the button. Watch for `auth/account-exists-with-different-credential` if the user already has an email/password account on the same address, and for `redirect_uri_mismatch` (means the client wasn't created as Desktop type).
+- **End-to-end live test on a packaged DMG / EXE — pending.** Requires the `GOOGLE_SIGNIN_CLIENT_SECRET` repo secret to be created (Settings → Secrets and variables → Actions) and a `v*` tag push.
+- **Live verification of the Firebase email/password signin — pending.** CSP fix is in; needs a user click to confirm.
 - Mac validation of pre-existing flows still pending: close-note UI (composer keyboard shortcuts, closed-view rendering, reopen clears note), IMAP archive folder discovery, Open → Tasks filter behaviour.
 
 ## Immediate Next Steps
 
-1. `cd app && npm run dev` → sign in with the dashboard account → verify `account.who_am_i` returns the expected uid/email + `mrcall.list_my_businesses` returns the businesses.
-2. Configure `GOOGLE_CALENDAR_CLIENT_ID` in Settings (Desktop-app or Web OAuth client with redirect `http://127.0.0.1:19275/oauth2/google/callback`), click "Connect Google Calendar" in Settings → confirm consent flow + token persistence.
-3. Bundle the Mac validations for the prior UI flows (close-note, archive, Open→Tasks) once the Firebase end-to-end is green.
+1. `cd app && npm run dev` → click "Continue with Google" → verify the system browser opens consent → `signInWithCredential` succeeds → `IdentityBanner` shows the right email + uid prefix → `auth:bindProfile` either attaches a sidecar or routes to onboarding. Email/password signin can be smoke-tested in the same run.
+2. Add `GOOGLE_SIGNIN_CLIENT_SECRET` as a repo secret at *Settings → Secrets and variables → Actions* so a future `v*` tag push produces a packaged build with Google signin baked in.
+3. Configure `GOOGLE_CALENDAR_CLIENT_ID` in Settings and exercise "Connect Google Calendar" → confirm consent + token persistence.
+4. Bundle the Mac validations for the prior UI flows (close-note, archive, Open→Tasks) once Firebase signin is green.
 
 ## Known Issues
 
-- **No live end-to-end verification of the Firebase landing.** Smoke covers dispatcher + error paths only.
-- **Onboarding flow has no sidecar yet.** When the FirebaseAuthGate is satisfied but the user is in onboarding (no profile dir → no sidecar), `account.setFirebaseToken` calls fail; the wired pusher swallows the error at debug level. Token gets pushed for real once the post-onboarding window spawns its sidecar. Acceptable; documented in the App.tsx comment.
+- **No live end-to-end verification of any Firebase signin path.** Email/password, Continue with Google, and the engine round-trip after `auth:bindProfile` all compile + typecheck but have not been clicked from this machine.
+- **Onboarding-mode invariants not stress-tested.** Auth-pending boot with no sidecar, then `auth:bindProfile` either attaching or routing to onboarding, is the entire signin UX — needs verification on a fresh Mac with empty `~/.zylch/profiles/`.
 - Renderer's `tasks.complete` notification path: there is no `tasks.complete.changed` notification, so other windows on the same profile won't update their task list until the user refreshes. (Same gap as `tasks.skip`, `tasks.reopen`.)
 - No unit test coverage on the renderer side. The IPC contract is the only enforcement; payload shape mismatches surface only at runtime.

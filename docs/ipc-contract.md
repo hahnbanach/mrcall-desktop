@@ -66,3 +66,22 @@ profile.\*, files.\*, narration.\*, etc.) see:
 These are the source of truth. This document tracks recent additions
 and deltas; bringing the full surface into this file is a separate
 documentation push.
+
+## Out of scope: renderer-only IPCs
+
+A separate set of IPC channels run entirely in the Electron main
+process and never reach the Python sidecar. They are NOT part of this
+contract and live only in `app/src/preload/index.ts` /
+`app/src/renderer/src/types.ts`. As of 2026-05-02:
+
+- Profile / window: `profile:current`, `profiles:list`,
+  `window:openForProfile`, `sidecar:restart`.
+- Onboarding: `onboarding:isFirstRun`, `onboarding:createProfile`,
+  `onboarding:createProfileForFirebaseUser`, `onboarding:finalize`.
+- Identity (Firebase signin): `signin:googleStart`,
+  `signin:googleCancel`, `auth:bindProfile`.
+- Filesystem dialogs / shell: `dialog:selectFiles`,
+  `dialog:selectDirectories`, `shell:openExternal`.
+
+Don't document them here — add new entries to `app/docs/active-context.md`
+under "IPC client (preload)" instead.
