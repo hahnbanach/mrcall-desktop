@@ -57,8 +57,12 @@ main process rather than the engine.
   exchange. Single in-flight flow at a time; concurrent calls cancel
   the prior one. 5-minute consent timeout matches the Calendar flow.
 - **`app/src/main/index.ts`** — registers IPC `signin:googleStart` and
-  `signin:googleCancel`. Reads `GOOGLE_SIGNIN_CLIENT_ID` from env at
-  startup; surfaces a friendly "not configured" error if missing.
+  `signin:googleCancel`. Imports `GOOGLE_SIGNIN_CLIENT_ID` from
+  `oauthConfig.ts`; surfaces a friendly "not configured" error if the
+  constant is empty.
+- **`app/src/main/oauthConfig.ts`** — single committed source of truth
+  for the Client ID. Public-by-design (Desktop OAuth clients have no
+  client_secret), edited and committed when the client rotates.
 - **`app/src/preload/index.ts`** + **`app/src/renderer/src/types.ts`** —
   expose `window.zylch.signin.googleStart()` / `googleCancel()` to the
   renderer.
@@ -76,43 +80,32 @@ Node (main process), not the renderer.
 
 ## One-time setup the user has to do
 
-The desktop binary ships without an embedded OAuth client because the
-client ID needs to be paired with redirect URIs we control in the user's
-own Google Cloud project. **Until the user creates one and configures
-the env var, the "Continue with Google" button surfaces an inline error
-explaining what to do.**
-
-Steps:
-
-1. **Pick or create the OAuth client.**
+1. **Create the OAuth client.**
    - Open <https://console.cloud.google.com/apis/credentials> in the
      `talkmeapp-e696c` project (the one Firebase Auth is wired to).
-   - Click *Create credentials → OAuth client ID*.
-   - **Application type**: prefer **Desktop app** (no client secret,
-     PKCE built-in). A **Web application** also works — Google's PKCE
-     flow accepts loopback redirects without a client_secret for
-     installed-app patterns — but desktop is the cleaner match.
+   - *Create credentials → OAuth client ID*.
+   - **Application type**: **Desktop app** (no client_secret, PKCE
+     built-in, no redirect-URI registration needed — Google accepts
+     any `http://127.0.0.1:<port>` loopback for installed apps).
    - **Name**: anything memorable, e.g. `mrcall-desktop-signin`.
-2. **Authorize the loopback redirect** (Web client only — Desktop
-   clients don't need this).
-   - Add `http://127.0.0.1:19276/oauth2/google/signin-callback` under
-     "Authorized redirect URIs". Save.
-3. **Whitelist for Firebase** (only if the OAuth client is in a
-   *different* Google Cloud project from Firebase Auth — for
-   `talkmeapp-e696c` this step is a no-op, the client is already in
-   the same project).
-   - Firebase console → *Authentication → Sign-in method → Google →
-     Web SDK configuration → Whitelist client IDs from external
-     projects → add the new client ID*.
-4. **Run the desktop app with the env var set**:
-   ```bash
-   cd app
-   GOOGLE_SIGNIN_CLIENT_ID=<the client ID> npm run dev
-   ```
+   - Copy the resulting **Client ID** (looks like
+     `1234567890-abcdefg.apps.googleusercontent.com`).
 
-For packaged builds the env var is not present at runtime — that is a
-follow-up: either bake the client ID into the bundle at build time
-(Vite `define`) or read it from the user's Settings.
+2. **(Only if the client lives in a different Cloud project.)**
+   For `talkmeapp-e696c` this step is a no-op — the client is in the
+   same project as Firebase Auth, so Firebase already trusts it.
+   Otherwise: Firebase console → *Authentication → Sign-in method →
+   Google → Web SDK configuration → Whitelist client IDs from
+   external projects → add the new client ID*.
+
+3. **Paste it into `app/src/main/oauthConfig.ts` and commit.**
+   ```ts
+   export const GOOGLE_SIGNIN_CLIENT_ID = '1234567890-abcdefg.apps.googleusercontent.com'
+   ```
+   That's it. Same file is used for `npm run dev`, packaged DMG / EXE
+   builds, and CI. Public-by-design: Google OAuth Client IDs for
+   Desktop clients are not secrets (parallel to the Firebase apiKey
+   already committed in `renderer/firebase/config.ts`).
 
 ## Status
 
@@ -122,9 +115,9 @@ follow-up: either bake the client ID into the bundle at build time
 | IPC registration (`signin:googleStart` / `signin:googleCancel`) | done |
 | Preload + renderer typings | done |
 | "Continue with Google" button on `SignIn.tsx` | done |
-| `GOOGLE_SIGNIN_CLIENT_ID` documented as a dev-time env var | done |
-| End-to-end live test in `npm run dev` | **pending — needs a configured client ID** |
-| Packaged-build configuration story (env var doesn't survive bundling) | not started |
+| Committed config file (`app/src/main/oauthConfig.ts`) | done — pending the actual Client ID value |
+| End-to-end live test in `npm run dev` | **pending — needs the Client ID pasted into `oauthConfig.ts`** |
+| End-to-end live test on a packaged DMG / EXE | pending |
 | Renderer-side surfacing of "not configured" error in plain language | covered by the inline error string returned by main, no extra UX yet |
 
 ## Known follow-ups
@@ -135,11 +128,6 @@ follow-up: either bake the client ID into the bundle at build time
   they have to sign in with email/password to merge. Acceptable
   short-term; Firebase has a `linkWithCredential` API for the proper
   fix.
-- **Packaged build configuration.** `process.env.GOOGLE_SIGNIN_CLIENT_ID`
-  is not a thing in a notarized DMG. The cleanest path is a build-time
-  Vite `define` that bakes the client ID into `main/index.ts`, exposed
-  through `electron.vite.config.ts`. Alternative: read from a
-  per-machine config file the first time the app launches.
 - **Onboarding-mode stress test.** Verify that opening the app with an
   empty `~/.zylch/profiles/` and clicking Continue with Google produces
   a working signin: no sidecar exists yet, so any IPC path that quietly

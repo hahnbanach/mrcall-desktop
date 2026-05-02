@@ -5,14 +5,7 @@ import { homedir } from 'os'
 import { SidecarClient } from './sidecar'
 import { createProfileFS, createProfileForFirebaseUser, isFirstRun } from './profileFS'
 import { cancelGoogleSignin, startGoogleSignin } from './googleSignin'
-
-// OAuth client ID for the "Continue with Google" button on the SignIn
-// screen. Must point at a Google OAuth client (Desktop or Web type) in
-// the same Google Cloud project as Firebase Auth (`talkmeapp-e696c`).
-// Configured via env var because the SignIn screen renders BEFORE any
-// profile / sidecar exists, so settings.get() is not available at that
-// point. Setup is documented in `docs/execution-plans/google-signin.md`.
-const GOOGLE_SIGNIN_CLIENT_ID = process.env.GOOGLE_SIGNIN_CLIENT_ID || ''
+import { GOOGLE_SIGNIN_CLIENT_ID } from './oauthConfig'
 
 // Brand the running process. Three layers each cover a different surface:
 //
