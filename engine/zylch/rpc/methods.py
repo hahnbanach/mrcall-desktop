@@ -1548,3 +1548,12 @@ for _name, _fn in _ACCOUNT_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
+
+# MrCall actions driven by the desktop renderer — these all use the
+# active Firebase session as Bearer credential against StarChat.
+from zylch.rpc.mrcall_actions import METHODS as _MRCALL_METHODS  # noqa: E402
+
+for _name, _fn in _MRCALL_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn

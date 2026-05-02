@@ -255,6 +255,19 @@ const api = {
       expires_at_ms?: number
     }> => call('account.who_am_i', {})
   },
+  mrcall: {
+    // Lists businesses owned/managed by the signed-in user. Mirrors the
+    // dashboard's `Business.checkUserHasBusinesses` call (POST
+    // /mrcall/v1/{realm}/crm/business/search). Throws a -32010 error
+    // when no Firebase session is set; the renderer should treat that
+    // as "show signin again".
+    listMyBusinesses: (params: { offset?: number; limit?: number } = {}) =>
+      call<{ businesses: unknown[]; role: string }>(
+        'mrcall.list_my_businesses',
+        { offset: params.offset ?? 0, limit: params.limit ?? 100 },
+        30000
+      )
+  },
   onboarding: {
     // True iff ~/.zylch/profiles is empty (no subdirectories). The
     // onboarding window is opened by the main process before the

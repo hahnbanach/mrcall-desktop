@@ -169,6 +169,12 @@ export interface ZylchAPI {
       expires_at_ms?: number
     }>
   }
+  mrcall: {
+    listMyBusinesses: (params?: {
+      offset?: number
+      limit?: number
+    }) => Promise<{ businesses: unknown[]; role: string }>
+  }
   onboarding: {
     isFirstRun: () => Promise<boolean>
     createProfile: (
