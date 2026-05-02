@@ -72,6 +72,14 @@ DEFAULT_SCOPES = " ".join(
     ]
 )
 
+# Calendar ID the desktop reads from. Google's API treats `"primary"`
+# as the alias for the user's main calendar (the one tied to their
+# Google account email — exactly the calendar the user just consented
+# with via the OAuth flow above). Future code that wants to enumerate
+# secondary calendars should hit `/calendar/v3/users/me/calendarList`
+# explicitly; everything else should use this constant.
+DEFAULT_CALENDAR_ID = "primary"
+
 
 def _generate_pkce() -> Tuple[str, str]:
     """Return (code_verifier, code_challenge) using the S256 method."""
