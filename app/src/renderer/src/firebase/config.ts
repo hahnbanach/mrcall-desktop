@@ -1,22 +1,10 @@
 import { initializeApp } from 'firebase/app'
-import {
-  browserLocalPersistence,
-  indexedDBLocalPersistence,
-  initializeAuth
-} from 'firebase/auth'
+import { inMemoryPersistence, initializeAuth } from 'firebase/auth'
 
 // Same Firebase project as mrcall-dashboard. The API key + project ID are
 // public-by-design (Firebase JS SDK config) — they identify the project,
 // not the bearer; security rules and the Firebase Admin SDK key (held
 // server-side only) are what gate access.
-//
-// Mirror of mrcall-dashboard/.env.development "Firebase Configuration
-// (Production)" block — kept hard-coded here because:
-//   - Electron renderers don't have process.env at runtime in packaged
-//     builds (it's stripped by Vite); reading from a .env that ships with
-//     the app would just be indirection without security benefit.
-//   - The desktop app is MIT/public; embedding the public Firebase config
-//     is consistent with how every Firebase web client ships its config.
 const firebaseConfig = {
   apiKey: 'AIzaSyDTaGASuYL5ZEW5YUaJvOa3DN-7LSaXn8g',
   authDomain: 'talkmeapp-e696c.firebaseapp.com',
@@ -29,13 +17,19 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 
-// IndexedDB first (preferred — survives app restarts cleanly in Electron's
-// chromium renderer), localStorage as fallback. Same combination the
-// dashboard uses; Firebase Auth picks the first that's available at
-// runtime.
-const auth = initializeAuth(app, {
-  persistence: [indexedDBLocalPersistence, browserLocalPersistence]
-})
+// In-memory persistence only. Earlier versions of this file used
+// indexedDB + localStorage so the user stayed signed in across app
+// restarts. That created a serious failure mode: a stale session for a
+// previous user (or test account) was silently restored on startup, the
+// SignIn screen never showed, and the renderer ended up bound to a
+// Firebase identity the current operator did not just authenticate as.
+// On-disk profile selection is keyed by Firebase UID (see main/index.ts
+// auth:bindProfile), so a wrong identity = wrong profile = wrong data.
+//
+// Trade-off: the user must sign in on every app launch. For a desktop
+// app where StarChat needs a live JWT anyway, that is a fair price for
+// removing the silent-restore trap.
+const auth = initializeAuth(app, { persistence: inMemoryPersistence })
 auth.useDeviceLanguage()
 
 export { app, auth }

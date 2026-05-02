@@ -324,13 +324,23 @@ const api = {
     googleCancel: (): Promise<{ cancelled: boolean }> =>
       ipcRenderer.invoke('signin:googleCancel') as Promise<{ cancelled: boolean }>
   },
+  auth: {
+    // Ask main to attach a sidecar bound to ~/.zylch/profiles/<uid>/
+    // to the calling window IN-PLACE (same renderer context, Firebase
+    // auth state preserved). Returns:
+    //   { ok: true,  found: true  } — sidecar attached, render AppInner
+    //   { ok: true,  found: false } — no profile dir for this uid, render Onboarding
+    //   { ok: false, found: ?,    reason } — bind refused (e.g. window already bound)
+    bindProfile: (
+      uid: string
+    ): Promise<{ ok: boolean; found: boolean; reason?: string }> =>
+      ipcRenderer.invoke('auth:bindProfile', uid) as Promise<{
+        ok: boolean
+        found: boolean
+        reason?: string
+      }>
+  },
   onboarding: {
-    // True iff ~/.zylch/profiles is empty (no subdirectories). The
-    // onboarding window is opened by the main process before the
-    // renderer loads, but we also check at mount so the renderer can
-    // route correctly when opened with ?onboarding=1 query.
-    isFirstRun: (): Promise<boolean> =>
-      ipcRenderer.invoke('onboarding:isFirstRun') as Promise<boolean>,
     // Creates a profile directly on disk — NO sidecar involved. Used
     // exclusively from the first-run wizard. Returns ok=false with an
     // `error` string on validation / filesystem errors (the renderer
@@ -355,10 +365,11 @@ const api = {
         email,
         values
       ) as Promise<{ ok: true; profile: string } | { ok: false; error: string }>,
-    // After a successful createProfile, the renderer calls finalize to
-    // spawn a real profile-bound window and close the onboarding one.
-    finalize: (email: string): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke('onboarding:finalize', email) as Promise<{ ok: boolean }>
+    // After createProfile{,ForFirebaseUser} succeeds, the wizard
+    // calls finalize to attach a sidecar to the SAME window (in-place
+    // — keeps Firebase auth state alive across the transition).
+    finalize: (profile: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('onboarding:finalize', profile) as Promise<{ ok: boolean }>
   },
   onNotification: (method: string, cb: NotifyCb): (() => void) => {
     let set = listeners.get(method)

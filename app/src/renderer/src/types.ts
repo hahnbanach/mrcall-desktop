@@ -195,8 +195,12 @@ export interface ZylchAPI {
     }>
     googleCancel: () => Promise<{ cancelled: boolean }>
   }
+  auth: {
+    bindProfile: (
+      uid: string
+    ) => Promise<{ ok: boolean; found: boolean; reason?: string }>
+  }
   onboarding: {
-    isFirstRun: () => Promise<boolean>
     createProfile: (
       email: string,
       values: Record<string, string>
@@ -206,7 +210,7 @@ export interface ZylchAPI {
       email: string,
       values: Record<string, string>
     ) => Promise<{ ok: true; profile: string } | { ok: false; error: string }>
-    finalize: (email: string) => Promise<{ ok: boolean }>
+    finalize: (profile: string) => Promise<{ ok: boolean }>
   }
   onNotification: (method: string, cb: (params: any) => void) => () => void
   onStderr: (cb: (chunk: string) => void) => () => void

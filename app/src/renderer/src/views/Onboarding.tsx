@@ -1,19 +1,15 @@
 /**
- * First-run onboarding screen.
+ * Onboarding screen — shown when FirebaseAuthGate has a signed-in
+ * user but no UID-keyed profile dir exists on disk for them. No
+ * sidecar is attached to the window yet; the wizard writes
+ * `~/.zylch/profiles/<firebase_uid>/.env` directly from main via
+ * `onboarding.createProfileForFirebaseUser`, then `finalize` attaches
+ * a sidecar to THIS window in-place (preserving the Firebase auth
+ * state — no second signin), and finally `onReady` signals the gate
+ * to transition into the bound app.
  *
- * Shown instead of the normal sidebar/tabs layout when the app detects
- * no profiles on disk. No sidecar is running in this state — the
- * wizard talks directly to the main process via
- * `window.zylch.onboarding.*` which writes the profile `.env` on the
- * filesystem and then spawns a real sidecar-bound window.
- *
- * Reaches this screen only AFTER FirebaseAuthGate has accepted a
- * signin, so we always have a Firebase user available — its uid keys
- * the on-disk profile directory and its email pre-populates the form.
- *
- * Field set deliberately mirrors `NewProfileWizard` (LLM provider +
- * key, email + app-password, IMAP/SMTP, optional Telegram). Everything
- * else is editable from Settings once the user is in.
+ * Field set mirrors `NewProfileWizard`. Everything else is editable
+ * from Settings once the user is in.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage } from '../lib/errors'
@@ -21,6 +17,13 @@ import { auth } from '../firebase/config'
 import { performSignOut } from '../App'
 
 type Provider = 'anthropic' | 'openai'
+
+interface OnboardingProps {
+  // Called after createProfile + finalize succeed, both of which write
+  // and attach state in main. The gate uses this to re-push the
+  // Firebase token to the now-attached sidecar and flip into 'bound'.
+  onReady?: (profile: string) => void
+}
 
 const PRESETS: Record<string, { imapHost: string; smtpHost: string }> = {
   'gmail.com': { imapHost: 'imap.gmail.com', smtpHost: 'smtp.gmail.com' },
@@ -45,7 +48,7 @@ function isValidEmail(s: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim())
 }
 
-export default function Onboarding(): JSX.Element {
+export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Element {
   // Firebase user is guaranteed by FirebaseAuthGate. We seed the email
   // from it but let the user override (they may want IMAP on a
   // different mailbox than their Firebase identity).
@@ -122,13 +125,16 @@ export default function Onboarding(): JSX.Element {
         setSubmitting(false)
         return
       }
-      // Main process spawns a new profile-bound window and closes the
-      // onboarding window. We intentionally do NOT try to reset our own
-      // React state after this — the window is about to disappear.
+      // Attach a sidecar to THIS window in-place. Same renderer
+      // context, so Firebase auth state survives the transition.
       const fin = await window.zylch.onboarding.finalize(r.profile)
       if (!fin.ok) {
-        setFormError('Profile created but failed to open the main window.')
+        setFormError('Profile created but failed to attach the sidecar.')
         setSubmitting(false)
+        return
+      }
+      if (onReady) {
+        onReady(r.profile)
       }
     } catch (e: unknown) {
       setFormError(errorMessage(e))

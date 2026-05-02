@@ -86,3 +86,14 @@ export async function refreshAuthToken(): Promise<string | null> {
     return null
   }
 }
+
+// Force a token push for the currently-signed-in user. Used after
+// `auth:bindProfile` attaches a sidecar to a previously sidecar-less
+// window — the initial push from setupAuthListener would have failed
+// silently (no RPC channel), so we re-push now that the channel
+// exists. No-op if no user is signed in.
+export async function repushTokenForCurrentUser(): Promise<void> {
+  const user = auth.currentUser
+  if (!user || user.isAnonymous) return
+  await pushToken(user)
+}

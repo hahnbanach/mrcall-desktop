@@ -9,7 +9,7 @@ import NewProfileWizard from './views/NewProfileWizard'
 import Onboarding from './views/Onboarding'
 import SignIn from './views/SignIn'
 import { auth } from './firebase/config'
-import { setupAuthListener, setTokenPusher } from './firebase/authUtils'
+import { repushTokenForCurrentUser, setupAuthListener, setTokenPusher } from './firebase/authUtils'
 import { ConversationsProvider } from './store/conversations'
 import { ThreadProvider, useThread } from './store/thread'
 import { TasksProvider } from './store/tasks'
@@ -461,6 +461,7 @@ function AppInner(): JSX.Element {
 
   return (
     <div className="flex flex-col h-full">
+      <IdentityBanner />
       <SidecarStatusBanner />
       <div className="flex flex-1 min-h-0">
         <Sidebar
@@ -692,28 +693,38 @@ function Sidebar({
   )
 }
 
-// Gates the entire UI behind a Firebase signin. The first frame after
-// mount waits one tick on `onAuthStateChanged` (Firebase Auth restores
-// the session from indexedDB synchronously in practice but the listener
-// fires async); we render a blank shell during that brief window to
-// avoid a flash of the SignIn screen for users with a persisted session.
+// Three-state machine driving the Firebase signin → profile binding
+// flow:
+//
+//   pending     — Firebase auth hasn't reported back yet (in-memory
+//                 persistence: this is one tick at most)
+//   signed-out  — user is null, render SignIn
+//   binding     — user just signed in, asking main to bindProfile
+//   bound       — sidecar attached, render AppInner
+//   onboarding  — no profile dir for this UID yet, render Onboarding
+//   error       — bindProfile said no with an explicit reason
+type AuthGateState =
+  | { phase: 'pending' }
+  | { phase: 'signed-out' }
+  | { phase: 'binding'; user: User }
+  | { phase: 'bound'; user: User }
+  | { phase: 'onboarding'; user: User }
+  | { phase: 'error'; user: User; reason: string }
+
+// Gates the entire UI behind a Firebase signin AND a successful
+// profile bind. With in-memory persistence and UID-keyed profiles,
+// these two are inseparable: a window with a Firebase user but no
+// matching profile dir on disk has no engine to talk to.
 function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Element {
-  const [authReady, setAuthReady] = useState(false)
-  const [user, setUser] = useState<User | null>(null)
+  const [state, setState] = useState<AuthGateState>({ phase: 'pending' })
 
   useEffect(() => {
     // Wire the token-push hook so authUtils can hand fresh tokens to
-    // the Python sidecar via JSON-RPC. This MUST be set before the
-    // first onAuthStateChanged fires — setTokenPusher is synchronous
-    // and authUtils swallows errors so a sidecar that isn't up yet
-    // (e.g. onboarding mode) won't break signin.
+    // the Python sidecar via JSON-RPC. The initial push fires before
+    // any sidecar is attached (the auth-pending window has none); the
+    // catch swallows the failure and we re-push after bindProfile
+    // succeeds via repushTokenForCurrentUser().
     setTokenPusher(async ({ uid, email, idToken, expiresAtMs }) => {
-      // Onboarding windows have no sidecar, so window.zylch.account
-      // calls would fail. Defensive: only push when an RPC channel is
-      // viable. We can't easily detect "no sidecar" here without an
-      // RPC roundtrip, so we let the call fail and just log — the
-      // renderer remains usable, and Phase 5's onboarding rework
-      // ensures a sidecar is up before signin completes.
       try {
         await window.zylch.account.setFirebaseToken({
           uid,
@@ -726,8 +737,11 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
       }
     })
     const unsub = setupAuthListener((u) => {
-      setUser(u)
-      setAuthReady(true)
+      if (!u || u.isAnonymous) {
+        setState({ phase: 'signed-out' })
+      } else {
+        setState({ phase: 'binding', user: u })
+      }
     })
     return () => {
       setTokenPusher(null)
@@ -735,13 +749,135 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
     }
   }, [])
 
-  if (!authReady) {
+  // When we transition into 'binding', ask main to attach a sidecar
+  // for this UID. Three outcomes shape the next state.
+  useEffect(() => {
+    if (state.phase !== 'binding') return
+    let cancelled = false
+    const u = state.user
+    ;(async () => {
+      try {
+        const r = await window.zylch.auth.bindProfile(u.uid)
+        if (cancelled) return
+        if (r.ok && r.found) {
+          // Sidecar is attached. Re-push the token now that the RPC
+          // channel exists (the initial push during onAuthStateChanged
+          // fired before the sidecar was bound and was swallowed).
+          await repushTokenForCurrentUser()
+          if (cancelled) return
+          setState({ phase: 'bound', user: u })
+        } else if (r.ok && !r.found) {
+          setState({ phase: 'onboarding', user: u })
+        } else {
+          setState({
+            phase: 'error',
+            user: u,
+            reason: r.reason || 'Unable to bind profile'
+          })
+        }
+      } catch (e) {
+        if (cancelled) return
+        console.error('[App] auth.bindProfile failed', e)
+        setState({
+          phase: 'error',
+          user: u,
+          reason: e instanceof Error ? e.message : String(e)
+        })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [state])
+
+  if (state.phase === 'pending' || state.phase === 'binding') {
     return <div className="min-h-screen w-full bg-brand-light-grey" />
   }
-  if (!user || user.isAnonymous) {
+  if (state.phase === 'signed-out') {
     return <SignIn />
   }
+  if (state.phase === 'onboarding') {
+    // Onboarding wizard creates the UID-keyed profile and then calls
+    // onboarding:finalize, which attaches a sidecar to THIS window
+    // in-place. The wizard then signals back via onReady, and we flip
+    // ourselves into 'binding' so the existing useEffect re-pushes
+    // the token and transitions to 'bound'. No reload, no second
+    // signin — the renderer context (and Firebase auth state) stays
+    // alive across the transition.
+    const u = state.user
+    return (
+      <Onboarding
+        onReady={() => {
+          setState({ phase: 'binding', user: u })
+        }}
+      />
+    )
+  }
+  if (state.phase === 'error') {
+    return <AuthGateError user={state.user} reason={state.reason} />
+  }
   return <>{children}</>
+}
+
+// Persistent top bar showing the current Firebase identity. Surfaces
+// at the very top of every signed-in window so a wrong-account state
+// is visible within seconds — not buried in Settings → AccountCard.
+// Hidden in legacy windows (those have no Firebase user and routinely
+// run with `auth.currentUser === null`).
+function IdentityBanner(): JSX.Element | null {
+  const user = auth.currentUser
+  if (!user || user.isAnonymous) return null
+  const email = user.email || '—'
+  const uid = user.uid || ''
+  return (
+    <div
+      role="banner"
+      className="flex items-center gap-2 px-4 py-1.5 text-xs border-b bg-brand-light-grey border-brand-mid-grey text-brand-grey-80"
+    >
+      <span className="opacity-70">Signed in as</span>
+      <span className="font-mono text-brand-black">{email}</span>
+      {uid && (
+        <span className="font-mono opacity-50" title={uid}>
+          (uid {uid.slice(0, 8)}…)
+        </span>
+      )}
+      <button
+        onClick={() => performSignOut()}
+        className="ml-auto px-2 py-0.5 text-[11px] border rounded hover:bg-white"
+      >
+        Sign out
+      </button>
+    </div>
+  )
+}
+
+function AuthGateError({ user, reason }: { user: User; reason: string }): JSX.Element {
+  return (
+    <div className="min-h-screen w-full flex items-start justify-center bg-brand-light-grey p-6 overflow-auto">
+      <div className="w-full max-w-[480px] mt-10 bg-white border border-brand-mid-grey rounded-lg shadow-sm p-5">
+        <h1 className="text-lg font-semibold text-brand-black">Profile bind failed</h1>
+        <p className="text-sm text-brand-grey-80 mt-1">
+          Signed in as <strong>{user.email || '—'}</strong>{' '}
+          <span className="opacity-60">(uid {user.uid.slice(0, 8)}…)</span>
+        </p>
+        <pre className="mt-3 p-2 bg-brand-light-grey border rounded text-xs whitespace-pre-wrap break-all">
+          {reason}
+        </pre>
+        <p className="text-xs text-brand-grey-80 mt-3">
+          This window is already bound to a different profile. Sign out
+          and sign back in, or open a fresh window from the File menu.
+        </p>
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={() => performSignOut()}
+            className="px-3 py-1.5 text-xs border rounded text-brand-grey-80 hover:bg-brand-light-grey"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // Small button shown wherever we need a signout affordance. Currently
@@ -763,51 +899,7 @@ export async function performSignOut(): Promise<void> {
   }
 }
 
-function AppRouter(): JSX.Element {
-  // Onboarding detection runs BEFORE mounting the normal app tree:
-  //   1. The main process opens this window with `?onboarding=1` in the
-  //      URL when it detects an empty profiles dir at startup, so we
-  //      can flip into onboarding mode synchronously.
-  //   2. We also ask the main process via IPC so the decision is robust
-  //      to reloads and to a missing query string.
-  // Rendering the normal AppInner would immediately fire `profile.current()`
-  // and `settings.get()` RPCs against a non-existent sidecar, producing
-  // noisy errors on the screen — hence the gate.
-  const [mode, setMode] = useState<'loading' | 'onboarding' | 'app'>(() => {
-    try {
-      const qs = new URLSearchParams(window.location.search)
-      if (qs.get('onboarding') === '1') return 'onboarding'
-    } catch {
-      // best-effort; fall through to async check
-    }
-    return 'loading'
-  })
-
-  useEffect(() => {
-    if (mode !== 'loading') return
-    let cancelled = false
-    window.zylch.onboarding
-      .isFirstRun()
-      .then((first) => {
-        if (cancelled) return
-        setMode(first ? 'onboarding' : 'app')
-      })
-      .catch(() => {
-        if (!cancelled) setMode('app')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [mode])
-
-  if (mode === 'loading') {
-    // Brief flash — IPC roundtrip is sub-10ms. Rendering an empty shell
-    // avoids a layout jump for the common non-first-run case.
-    return <div className="min-h-screen w-full bg-brand-light-grey" />
-  }
-  if (mode === 'onboarding') {
-    return <Onboarding />
-  }
+function AppShell(): JSX.Element {
   return (
     <ConversationsProvider>
       <ThreadProvider>
@@ -819,10 +911,31 @@ function AppRouter(): JSX.Element {
   )
 }
 
+// `?legacy=1` is set by main when a window is opened via the
+// "+ New Window for Profile" picker (or via ZYLCH_PROFILE). Such
+// windows already have a sidecar bound to a chosen profile dir; they
+// pre-date the Firebase-as-identity model, so we skip the auth gate
+// entirely and render AppInner directly. Engine-side StarChat /
+// mrcall.* / google.calendar.* calls will fail with -32010 in this
+// mode, since no Firebase token has been pushed — that's fine, those
+// features simply don't work in legacy windows until/unless the user
+// signs in through Settings.
+function isLegacyWindow(): boolean {
+  try {
+    const qs = new URLSearchParams(window.location.search)
+    return qs.get('legacy') === '1'
+  } catch {
+    return false
+  }
+}
+
 export default function App(): JSX.Element {
+  if (isLegacyWindow()) {
+    return <AppShell />
+  }
   return (
     <FirebaseAuthGate>
-      <AppRouter />
+      <AppShell />
     </FirebaseAuthGate>
   )
 }

@@ -3,7 +3,7 @@ import { join } from 'path'
 import { readdirSync, statSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import { SidecarClient } from './sidecar'
-import { createProfileFS, createProfileForFirebaseUser, isFirstRun } from './profileFS'
+import { createProfileFS, createProfileForFirebaseUser, profileDir } from './profileFS'
 import { cancelGoogleSignin, startGoogleSignin } from './googleSignin'
 import { GOOGLE_SIGNIN_CLIENT_ID } from './oauthConfig'
 
@@ -62,9 +62,11 @@ function resolveSidecarBinary(): string {
 }
 // Deferred until app.whenReady so `app.isPackaged` is reliable.
 let ZYLCH_BINARY = ''
-// First-launch default profile. Set ZYLCH_PROFILE in dev to skip the
-// onboarding wizard; in a packaged build we rely entirely on filesystem
-// discovery (empty profiles dir triggers onboarding).
+// Dev-only override: bypass the Firebase auth gate and bind a window
+// directly to a named profile (CLI or scripted automation). Empty in
+// production. With Firebase signin now mandatory in normal use, this
+// exists only as an escape hatch for engine integration tests that
+// don't have a Firebase user.
 const DEFAULT_PROFILE = process.env.ZYLCH_PROFILE || ''
 
 // Per-method default timeouts (ms). Callers may override by passing an
@@ -172,6 +174,30 @@ function entryFromEvent(event: Electron.IpcMainInvokeEvent): WindowEntry | null 
   return windowEntries.get(win.id) ?? null
 }
 
+// Spawn a sidecar for an existing window and register it in
+// windowEntries. Used by:
+//   - createWindowForProfile() at window creation
+//   - auth:bindProfile after Firebase signin attaches to an
+//     auth-pending window in-place
+function attachSidecarToWindow(win: BrowserWindow, profile: string): SidecarClient {
+  const sidecar = spawnSidecar(profile, win)
+  const existing = windowEntries.get(win.id)
+  if (existing) {
+    // Should not happen — caller is expected to check first.
+    console.warn(
+      `[main][w${win.id}] attachSidecarToWindow called but window already has a sidecar (profile=${existing.profile}) — replacing`
+    )
+    try {
+      existing.sidecar.stop()
+    } catch {}
+  }
+  windowEntries.set(win.id, { sidecar, profile, window: win })
+  if (!win.isDestroyed()) {
+    win.setTitle(`MrCall Desktop — ${profile}`)
+  }
+  return sidecar
+}
+
 function createWindowForProfile(profile: string): BrowserWindow {
   const win = new BrowserWindow({
     width: 1200,
@@ -194,10 +220,8 @@ function createWindowForProfile(profile: string): BrowserWindow {
   })
 
   // Spawn a sidecar for this window BEFORE loading the renderer so that
-  // early rpc:call invocations can find the mapping. stderr and
-  // notifications are routed only to this window's webContents.
-  const sidecar = spawnSidecar(profile, win)
-  windowEntries.set(win.id, { sidecar, profile, window: win })
+  // early rpc:call invocations can find the mapping.
+  attachSidecarToWindow(win, profile)
 
   win.on('closed', () => {
     const entry = windowEntries.get(win.id)
@@ -210,24 +234,34 @@ function createWindowForProfile(profile: string): BrowserWindow {
 
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   if (devUrl) {
-    win.loadURL(devUrl)
+    // ?legacy=1 tells the renderer to skip FirebaseAuthGate — this
+    // window is bound to a profile via the picker, not via Firebase
+    // signin. Only path that opens such a window is `+ New Window for
+    // Profile` and the ZYLCH_PROFILE dev escape hatch.
+    win.loadURL(devUrl + '?legacy=1')
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
+    win.loadFile(join(__dirname, '../renderer/index.html'), {
+      query: { legacy: '1' }
+    })
   }
   return win
 }
 
-// Onboarding mode: first-run, no profile exists yet. We deliberately do
-// NOT spawn a sidecar — the renderer shows the wizard only and the user
-// creates a profile via the `onboarding:createProfile` IPC which writes
-// the `.env` directly on the filesystem. `onboarding:finalize` then
-// reloads this window as a normal profile-bound window.
-function createOnboardingWindow(): BrowserWindow {
+// Auth-pending window: created at boot, no sidecar yet. The renderer
+// mounts FirebaseAuthGate; once the user signs in, the renderer asks
+// main to attach a sidecar via `auth:bindProfile(uid)`. If the
+// UID-keyed profile dir doesn't exist, the renderer shows the
+// Onboarding wizard which creates it and then attaches.
+//
+// `win.on('closed')` is also registered here so that if the user
+// closes the window before binding a sidecar, we clean up the (empty)
+// entry — defensive, the entry won't exist yet but the listener stays.
+function createAuthPendingWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
     show: false,
-    title: 'MrCall Desktop — Welcome',
+    title: 'MrCall Desktop — Sign in',
     icon: existsSync(ICON_PATH) ? ICON_PATH : undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -243,16 +277,20 @@ function createOnboardingWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
-  // Load the normal renderer with an onboarding marker in the query
-  // string. The renderer also has an IPC fallback (`onboarding:isFirstRun`)
-  // so it can check at mount.
+  win.on('closed', () => {
+    const entry = windowEntries.get(win.id)
+    if (entry) {
+      console.log(`[main][w${win.id}] auth-pending window closed, stopping sidecar`)
+      entry.sidecar.stop()
+      windowEntries.delete(win.id)
+    }
+  })
+
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   if (devUrl) {
-    win.loadURL(devUrl + '?onboarding=1')
+    win.loadURL(devUrl)
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), {
-      query: { onboarding: '1' }
-    })
+    win.loadFile(join(__dirname, '../renderer/index.html'))
   }
   return win
 }
@@ -400,8 +438,70 @@ function registerIpc(): void {
     return result.filePaths
   })
 
-  // Onboarding: is this a first-run (no profiles on disk)?
-  ipcMain.handle('onboarding:isFirstRun', async (): Promise<boolean> => isFirstRun())
+  // Bind the originating window to a profile keyed by the Firebase UID.
+  // Path: renderer's FirebaseAuthGate observes signin, calls this with
+  // the UID. We check the on-disk profile dir; if it exists, we attach
+  // a sidecar to the current window (in-place — same renderer context,
+  // same auth state). If it doesn't exist, we return found=false and
+  // the renderer routes to Onboarding, which after createProfile will
+  // call this same IPC.
+  //
+  // Idempotent: if the window already has a sidecar bound to the same
+  // profile, returns immediately. If bound to a DIFFERENT profile, we
+  // refuse — the caller should open a new window.
+  ipcMain.handle(
+    'auth:bindProfile',
+    async (
+      event,
+      uid: string
+    ): Promise<{ ok: boolean; found: boolean; reason?: string }> => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (!win) return { ok: false, found: false, reason: 'no window' }
+      const trimmed = (uid || '').trim()
+      if (!trimmed) return { ok: false, found: false, reason: 'empty uid' }
+      const dir = profileDir(trimmed)
+      let exists = false
+      try {
+        exists = statSync(dir).isDirectory()
+      } catch {
+        exists = false
+      }
+      if (!exists) {
+        console.log(`[main][w${win.id}] auth:bindProfile uid=${trimmed} → not found`)
+        return { ok: true, found: false }
+      }
+      const existing = windowEntries.get(win.id)
+      if (existing) {
+        if (existing.profile === trimmed) {
+          console.log(
+            `[main][w${win.id}] auth:bindProfile uid=${trimmed} → already bound, no-op`
+          )
+          return { ok: true, found: true }
+        }
+        // Different profile (signOut → re-signin as another user, or
+        // the same window cycling through accounts). Drop the old
+        // sidecar and attach a fresh one. The user has explicitly
+        // signed out of the old identity, so abandoning in-flight ops
+        // is the correct semantic.
+        console.log(
+          `[main][w${win.id}] auth:bindProfile uid=${trimmed} → swapping sidecar (was profile=${existing.profile})`
+        )
+        try {
+          existing.sidecar.markIntentionalRestart()
+          existing.sidecar.stop()
+        } catch (e) {
+          console.warn(`[main][w${win.id}] failed to stop old sidecar`, e)
+        }
+        windowEntries.delete(win.id)
+      } else {
+        console.log(
+          `[main][w${win.id}] auth:bindProfile uid=${trimmed} → attaching sidecar`
+        )
+      }
+      attachSidecarToWindow(win, trimmed)
+      return { ok: true, found: true }
+    }
+  )
 
   // Onboarding: create a profile directly on disk. Does NOT involve the
   // sidecar — called from the first-run window where no sidecar exists
@@ -456,25 +556,33 @@ function registerIpc(): void {
     }
   )
 
-  // Onboarding: swap the current (onboarding) window for a real
-  // profile-bound window. The calling window is closed and a fresh one
-  // is opened with a sidecar attached to `email`. Returns only after
-  // the new window exists; the sidecar itself comes up asynchronously.
+  // Onboarding: attach the just-created profile to the originating
+  // window in-place. Replaces the older "spawn new window + close old"
+  // dance — that path destroyed the renderer context and lost the
+  // Firebase auth state, forcing the user to sign in twice. With
+  // in-place attach, the same renderer keeps `auth.currentUser` alive
+  // across the transition from Onboarding → AppInner.
+  //
+  // Equivalent to `auth:bindProfile(profile)` for newly-created
+  // profiles where the dir is guaranteed to exist; kept under the
+  // `onboarding:` namespace for call-site clarity at the wizard.
   ipcMain.handle(
     'onboarding:finalize',
-    async (event, email: string): Promise<{ ok: boolean }> => {
+    async (event, profile: string): Promise<{ ok: boolean }> => {
       const win = BrowserWindow.fromWebContents(event.sender)
-      if (typeof email !== 'string' || !email.trim()) return { ok: false }
+      if (!win) return { ok: false }
+      if (typeof profile !== 'string' || !profile.trim()) return { ok: false }
+      const trimmed = profile.trim()
+      const existing = windowEntries.get(win.id)
+      if (existing) {
+        if (existing.profile === trimmed) return { ok: true }
+        console.warn(
+          `[main][w${win.id}] onboarding:finalize refused: window bound to profile=${existing.profile}`
+        )
+        return { ok: false }
+      }
       try {
-        createWindowForProfile(email.trim())
-        if (win && !win.isDestroyed()) {
-          // Close the onboarding window after the new one is spawned so
-          // the app keeps at least one window throughout (prevents the
-          // app from quitting on non-mac via window-all-closed).
-          setTimeout(() => {
-            if (!win.isDestroyed()) win.close()
-          }, 0)
-        }
+        attachSidecarToWindow(win, trimmed)
         return { ok: true }
       } catch (e) {
         console.error('[main] onboarding:finalize failed', e)
@@ -580,29 +688,28 @@ function registerIpc(): void {
 }
 
 function bootFirstWindow(): void {
-  // First-run: no profiles on disk → open the onboarding window (no
-  // sidecar). The user creates a profile via the wizard; finalize()
-  // then opens a real profile-bound window.
-  if (isFirstRun()) {
-    console.log('[main] first run detected (no profiles) → onboarding mode')
-    createOnboardingWindow()
+  // ZYLCH_PROFILE: dev escape hatch. Bypass the Firebase auth gate and
+  // bind a window directly to a named profile (engine integration
+  // tests, scripted automation). The profile dir must exist; if it
+  // doesn't we fall through to the auth-pending path so the user can
+  // recover via signin / onboarding.
+  if (DEFAULT_PROFILE && listProfiles().includes(DEFAULT_PROFILE)) {
+    console.log(`[main] ZYLCH_PROFILE=${DEFAULT_PROFILE} → legacy profile-bound window`)
+    createWindowForProfile(DEFAULT_PROFILE)
     return
   }
-  // Existing-user path. Prefer DEFAULT_PROFILE if it still exists;
-  // otherwise fall back to the first profile on disk. This avoids the
-  // old crash where ZYLCH_PROFILE pointed to a since-deleted dir.
-  const profiles = listProfiles()
-  const target = profiles.includes(DEFAULT_PROFILE)
-    ? DEFAULT_PROFILE
-    : profiles[0]
-  if (!target) {
-    // Defensive: listProfiles() disagreed with isFirstRun(). Shouldn't
-    // happen, but bail to onboarding rather than crashing.
-    console.warn('[main] no usable profiles found despite isFirstRun()=false → onboarding')
-    createOnboardingWindow()
-    return
-  }
-  createWindowForProfile(target)
+  // Default path: always start in auth-pending mode (no sidecar). The
+  // renderer's FirebaseAuthGate forces signin, then asks main to bind
+  // a sidecar to the profile dir keyed by the Firebase UID. If no
+  // such profile exists, the renderer routes to the onboarding wizard
+  // which creates it and binds in-place.
+  //
+  // Profile selection is therefore a function of the signed-in
+  // Firebase identity, not of alphabetical order on disk — that's
+  // how we make sure "I signed in as X" and "I see X's data" can
+  // never disagree.
+  console.log('[main] booting in auth-pending mode')
+  createAuthPendingWindow()
 }
 
 app.whenReady().then(() => {
