@@ -71,7 +71,8 @@ const api = {
   tasks: {
     list: (params: { include_completed?: boolean; include_skipped?: boolean } = {}) =>
       call<any[]>('tasks.list', params),
-    complete: (task_id: string) => call<{ ok: boolean }>('tasks.complete', { task_id }),
+    complete: (task_id: string, note?: string | null) =>
+      call<{ ok: boolean }>('tasks.complete', { task_id, note: note ?? null }),
     reopen: (task_id: string) => call<{ ok: boolean }>('tasks.reopen', { task_id }),
     skip: (task_id: string) => call<{ ok: boolean }>('tasks.skip', { task_id }),
     pin: (task_id: string, pinned: boolean) =>

@@ -2383,14 +2383,23 @@ class Storage:
             logger.error(f"Failed to merge task sources for {task_id}: {e}")
             return False
 
-    def complete_task_item(self, owner_id: str, task_id: str) -> bool:
-        """Mark a task as completed."""
+    def complete_task_item(self, owner_id: str, task_id: str, note: str | None = None) -> bool:
+        """Mark a task as completed.
+
+        ``note`` is an optional free-text closing reason supplied by the
+        user from the desktop UI. Stored on `task_items.close_note` and
+        rendered next to the task in the Closed view. Auto-close paths
+        (worker, reanalyze) leave it None so we don't fabricate a reason.
+        """
         try:
             with get_session() as session:
+                values: dict = {"completed_at": datetime.now(timezone.utc)}
+                if note is not None:
+                    values["close_note"] = note.strip() or None
                 count = (
                     session.query(TaskItem)
                     .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)
-                    .update({"completed_at": datetime.now(timezone.utc)})
+                    .update(values)
                 )
                 return count > 0
         except Exception as e:
@@ -2398,13 +2407,13 @@ class Storage:
             return False
 
     def reopen_task_item(self, owner_id: str, task_id: str) -> bool:
-        """Clear completed_at so a previously-closed task is open again."""
+        """Clear completed_at + close_note so a previously-closed task is open again."""
         try:
             with get_session() as session:
                 count = (
                     session.query(TaskItem)
                     .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)
-                    .update({"completed_at": None})
+                    .update({"completed_at": None, "close_note": None})
                 )
                 return count > 0
         except Exception as e:

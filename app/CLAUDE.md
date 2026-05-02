@@ -73,9 +73,10 @@ The workflow builds the sidecar in `engine/` via PyInstaller in the same run and
 
 ## Memory discipline
 
-Claude Code keeps a per-user, per-machine memory at `~/.claude/projects/<encoded-path>/memory/`. **It is not in git, not shared with the team, not portable.** This `CLAUDE.md` and any future `docs/` here are the source of truth.
+Claude Code keeps a per-user, per-machine memory at `~/.claude/projects/<encoded-path>/memory/`. **It is not in git, not shared with the team, not portable.** This `CLAUDE.md` and [`docs/`](docs/) here are the source of truth.
 
-- **Project knowledge → this file (or a `docs/` doc, if it grows).** Build pipeline, IPC shape, packaging quirks: check them in.
-- **Engine facts → `../engine/docs/`.** Don't restate them here; link.
+- **Project knowledge → this file or a doc under [`docs/`](docs/).** Build pipeline, IPC client shape, packaging quirks, electron-builder, sidecar lifecycle from the Electron side: check them in. Use `docs/active-context.md` for what is in flight, `docs/ARCHITECTURE.md` for boundaries, `docs/CONVENTIONS.md` for app code style.
+- **Engine facts → [`../engine/docs/`](../engine/docs/).** Don't restate them here; link.
+- **Cross-cutting facts (IPC contract, release pipeline, brand/rename) → [`../docs/`](../docs/).**
 - **Personal notes → CC memory.** Your own preferences, working-style feedback. That's fine.
 - **Before quoting CC memory**, verify against the current state of the repo. Memory can be stale; the repo cannot.

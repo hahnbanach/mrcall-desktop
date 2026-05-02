@@ -114,17 +114,34 @@ async def tasks_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 
 async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """tasks.complete(task_id) -> {ok: bool}."""
+    """tasks.complete(task_id, note?) -> {ok: bool}.
+
+    `note` is an optional free-text closing reason. Stored on
+    `task_items.close_note` and shown next to the task in the
+    Closed view; never injected into any LLM prompt.
+    """
     from zylch.storage.storage import Storage
 
     task_id = params.get("task_id")
     if not task_id:
         raise ValueError("task_id is required")
 
+    raw_note = params.get("note")
+    note: str | None
+    if raw_note is None:
+        note = None
+    elif isinstance(raw_note, str):
+        note = raw_note
+    else:
+        raise ValueError("note must be a string when provided")
+
     owner_id = _owner_id()
-    logger.debug(f"[rpc] tasks.complete owner_id={owner_id} task_id={task_id}")
+    logger.debug(
+        f"[rpc] tasks.complete owner_id={owner_id} task_id={task_id} "
+        f"note_len={len(note) if note else 0}"
+    )
     store = Storage.get_instance()
-    ok = store.complete_task_item(owner_id=owner_id, task_id=task_id)
+    ok = store.complete_task_item(owner_id=owner_id, task_id=task_id, note=note)
     logger.debug(f"[rpc] tasks.complete -> {ok}")
     return {"ok": bool(ok)}
 

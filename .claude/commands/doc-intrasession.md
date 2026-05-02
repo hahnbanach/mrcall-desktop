@@ -1,11 +1,11 @@
 ---
-description: Mid-session alignment check — engine + app + IPC contract.
+description: Mid-session alignment check — root + engine + app + IPC contract.
 ---
 Lightweight tick prompt. Decide whether to act or stay quiet. Budget: 15 seconds of user attention.
 
 ## Step 1 — Refresh constraints
 
-Re-read `./engine/docs/system-rules.md` and `./engine/docs/ARCHITECTURE.md` to reload the static layer into context. Skim `./CLAUDE.md` if the cross-engine/app boundary is in play.
+Re-read the relevant static layer. Default to `./engine/docs/system-rules.md` and `./engine/docs/ARCHITECTURE.md` for engine work; add `./app/docs/ARCHITECTURE.md` (if present) and `./app/CLAUDE.md` for app work; add `./docs/ipc-contract.md` (if present) when the engine ↔ app boundary is in play. Skim `./CLAUDE.md` if you've lost the monorepo shape.
 
 ## Step 2 — Inspect recent changes
 
@@ -17,14 +17,14 @@ Run in parallel:
 
 ## Step 3 — Mechanical enforcement
 
-If anything in `engine/zylch/**` changed: `cd engine && make lint`.
-If anything in `app/src/**` changed: `cd app && npm run typecheck`.
-
 Run only the relevant one; don't run both if only one side moved.
+
+- If anything in `engine/zylch/**` changed: `cd engine && make lint`.
+- If anything in `app/src/**` changed: `cd app && npm run typecheck`.
 
 ## Step 4 — Manual alignment (only what automation doesn't cover)
 
-- **IPC contract**: did anything change in the JSON-RPC method names, payload shapes, or error envelopes? If yes, both `engine/` (server) and `app/src/main/` (client) must be in sync. The contract is the most common silent breakage in this monorepo.
+- **IPC contract** (most common silent breakage in this monorepo): did anything change in JSON-RPC method names, payload shapes, or error envelopes? If yes, both sides must move together — `engine/zylch/rpc/` (server) and `app/src/preload/index.ts` + `app/src/main/` (client). Cross-cutting; surface in `./docs/ipc-contract.md` if it exists.
 - **Layering**: do new files respect dependency direction? (Renderer → preload → main → sidecar; never the reverse. Engine never imports app types.)
 - **Boundaries**: is data validated at the IPC boundary, not deep inside business logic?
 - **Sidecar lifecycle**: are spawn / stdio / shutdown semantics still correct if `app/src/main/` was touched?
@@ -35,8 +35,13 @@ Run only the relevant one; don't run both if only one side moved.
 If a violation was possible because no automated check catches it:
 
 ```
-Harness gap: [description]. Recommend adding [enforcement mechanism] to engine/docs/harness-backlog.md.
+Harness gap: [description]. Recommend adding [enforcement mechanism] to:
+  - ./docs/harness-backlog.md       (cross-cutting / IPC / release)
+  - ./engine/docs/harness-backlog.md (engine-only)
+  - ./app/docs/harness-backlog.md   (app-only)
 ```
+
+Pick the tree the gap belongs to. Don't duplicate.
 
 ## Output
 

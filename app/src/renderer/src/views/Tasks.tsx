@@ -80,6 +80,13 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
   const [updating, setUpdating] = useState<Set<string>>(new Set())
   const [pinning, setPinning] = useState<Set<string>>(new Set())
   const [keptNotice, setKeptNotice] = useState<Record<string, string>>({})
+  // ── Close-with-note composer ────────────────────────────────────────
+  // When the user clicks Close on an open task we swap the action row
+  // for an inline composer (textarea + Save / Cancel). Empty textarea →
+  // close without a note. Only one task can be in composer mode at a
+  // time; opening another resets the draft.
+  const [closingId, setClosingId] = useState<string | null>(null)
+  const [noteDraft, setNoteDraft] = useState('')
 
   // Re-fetch whenever the user flips the Open/Closed toggle. The mount
   // fetch in TasksProvider already covers the initial Open load. Skipped
@@ -130,10 +137,21 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
       showError(e, 'Skip failed:')
     }
   }
-  const onClose = async (id: string) => {
+  const beginClose = (id: string) => {
+    setClosingId(id)
+    setNoteDraft('')
+  }
+  const cancelClose = () => {
+    setClosingId(null)
+    setNoteDraft('')
+  }
+  const commitClose = async (id: string) => {
+    const note = noteDraft.trim() || null
     try {
-      await window.zylch.tasks.complete(id)
+      await window.zylch.tasks.complete(id, note)
       mutateVisible((t) => t.filter((x) => x.id !== id))
+      setClosingId(null)
+      setNoteDraft('')
     } catch (e: unknown) {
       showError(e, 'Close failed:')
     }
@@ -316,6 +334,55 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
             {t.reason}
           </div>
         )}
+        {isClosedView && t.close_note && (
+          <div className="mb-3 text-sm bg-brand-light-grey border-l-2 border-brand-blue pl-3 py-1.5 pr-2 rounded-r">
+            <span className="text-xs uppercase tracking-wide text-brand-grey-80">
+              Closing note
+            </span>
+            <div className="text-brand-black whitespace-pre-wrap">{t.close_note}</div>
+          </div>
+        )}
+        {closingId === t.id ? (
+          <div className="space-y-2">
+            <textarea
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  cancelClose()
+                } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault()
+                  void commitClose(t.id)
+                }
+              }}
+              autoFocus
+              placeholder="Optional closing note — e.g. 'Already paid via bank transfer'"
+              className="w-full text-sm border border-brand-mid-grey rounded p-2 resize-y min-h-[60px] outline-none focus:border-brand-blue"
+              rows={2}
+            />
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => void commitClose(t.id)}
+                className="px-3 py-1.5 text-sm bg-brand-black text-white rounded hover:bg-brand-grey-80 transition-colors"
+                title={
+                  noteDraft.trim()
+                    ? 'Close task with this note (⌘↵)'
+                    : 'Close task without a note (⌘↵)'
+                }
+              >
+                {noteDraft.trim() ? 'Save & close' : 'Close (no note)'}
+              </button>
+              <button
+                onClick={cancelClose}
+                className="px-3 py-1.5 text-sm border border-brand-mid-grey rounded hover:bg-brand-light-grey transition-colors"
+                title="Cancel (Esc)"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => onPin(t)}
@@ -350,8 +417,9 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
             </button>
           ) : (
             <button
-              onClick={() => onClose(t.id)}
+              onClick={() => beginClose(t.id)}
               className="px-3 py-1.5 text-sm bg-brand-black text-white rounded hover:bg-brand-grey-80 transition-colors"
+              title="Close task (with optional note)"
             >
               Close
             </button>
@@ -384,6 +452,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
             Open
           </button>
         </div>
+        )}
         {keptNotice[t.id] && (
           <div className="mt-2 text-xs text-brand-grey-80 bg-brand-light-grey border border-brand-mid-grey rounded px-2 py-1.5">
             Task kept — {keptNotice[t.id]}

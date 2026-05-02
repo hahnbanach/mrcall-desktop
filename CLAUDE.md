@@ -13,11 +13,13 @@ for macOS and Windows.
 | `app/` | Electron + React frontend that embeds the engine via JSON-RPC over stdio. Three views: chat, tasks, emails. | The desktop UI, packaging via `electron-builder`, GitHub release pipeline. |
 | `docs/` | Monorepo-wide docs: things that span engine ↔ app or describe the repo as a whole. | Cross-cutting decisions, release process, IPC contracts. |
 
-Each subdir has its own `CLAUDE.md`. Read those for details:
+Each subdir has its own `CLAUDE.md` and `docs/` (mirroring the three-tree
+structure). Read those for details:
 
-- [`engine/CLAUDE.md`](engine/CLAUDE.md) — engine doc index, install, channel matrix, critical rules.
+- [`engine/CLAUDE.md`](engine/CLAUDE.md) + [`engine/docs/`](engine/docs/) — engine doc index, install, channel matrix, critical rules.
 - [`engine/docs/active-context.md`](engine/docs/active-context.md) — **freshest source** for what's working / in-flight on the engine side.
-- [`app/CLAUDE.md`](app/CLAUDE.md) — Electron layout, dev workflow, packaging.
+- [`app/CLAUDE.md`](app/CLAUDE.md) + [`app/docs/`](app/docs/) — Electron layout, dev workflow, packaging.
+- [`docs/`](docs/) — cross-cutting docs: IPC contract, release pipeline, brand/rename rollout.
 
 ## Naming and identifiers — the rename in flight
 

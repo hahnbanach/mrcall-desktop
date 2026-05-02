@@ -1,11 +1,12 @@
 ---
 description: |
-  Current state of Zylch standalone as of 2026-04-22. Profile-aware CLI,
+  Engine-side state of mrcall-desktop as of 2026-05-02. Profile-aware CLI,
   Electron desktop (validated), prompt caching in chat, user notes injection,
-  new memory tool pair (LLM decides update vs create), inbox/sent views,
-  email archive/delete RPCs, Open-email → thread-filtered Tasks view.
-  0.1.24 fixes a 3-month-old email-timezone corruption bug that shifted
-  chronology by the sender's UTC offset, confusing task detection.
+  memory tool pair (LLM decides update vs create), inbox/sent views, email
+  archive/delete RPCs, Open-email → thread-filtered Tasks view, RealStep/
+  cafe124 task auto-close fixes, optional close_note column on task_items.
+  App-side state lives in ../../app/docs/active-context.md; cross-cutting
+  state in ../../docs/active-context.md.
 ---
 
 # Active Context
@@ -56,8 +57,19 @@ description: |
 - **Incremental**: analyzes only unprocessed emails, preserves existing tasks
 - **LLM-driven**: every non-user email (including self-sent) goes through the LLM (`958b6b5`, `c3db306`)
 - **USER_NOTES + USER_SECRET_INSTRUCTIONS injected into detector prompt** (`f887f5d`) — user-specific context steers detection
-- **Reopen**: `tasks.reopen` RPC + storage method — close isn't final (`843362a`)
+- **Reopen**: `tasks.reopen` RPC + storage method — close isn't final (`843362a`). Reopen now also clears `close_note`.
 - `tasks.list` honours `include_completed` (`50aa4bd`)
+- **Close with optional note**: `tasks.complete(task_id, note?)` accepts a free-text reason stored on `task_items.close_note`. Display-only — never injected into detector or any LLM prompt. Auto-close paths (worker, reanalyze sweep) leave note=None so closing reasons aren't fabricated.
+
+### Task auto-close — RealStep / cafe124 fixes (baseline since 2026-05-01)
+Three coupled fixes in `zylch/workers/task_creation.py` + reanalyze sweep:
+
+- **F1 — Cc fallback in user_reply.** Per-recipient close in user_reply iterates `to_email + cc_email` (was: `to_email` only). `storage.get_unprocessed_emails_for_task` SELECTs `cc_email`.
+- **F2 — Disabled "Forcing update on stale task" branch.** When LLM returns `task_action="none"` with non-empty `suggested_action`, the worker logs WARNING and skips the update instead of overwriting existing task fields with the LLM advisory text. Email still marked task_processed via the unconditional `_mark_thread_nonuser_processed`.
+- **F3 — Diagnostic log when `get_tasks_by_thread` returns empty in user_reply.** Captures `thread_id`, `email_id`, `from_email` for the next-occurrence reproducer of RC-1 (root cause not reproduced).
+- **F4 — Bounded reanalyze sweep at end of `_run_tasks`.** `services/process_pipeline.py:_reanalyze_sweep` picks up to `REANALYZE_CAP=10` open tasks (oldest first) whose `analyzed_at` (or `created_at` fallback) is older than `REANALYZE_MIN_AGE_HOURS=24`. Tolerates per-task exceptions; logs `[TASK] Reanalyze sweep: N of M eligible …`. Cost: up to 10 extra LLM calls per `update`. Surfaces in the return string as `"N action items detected (M reanalyzed)"`.
+
+Tests: `tests/workers/test_task_worker_bugs.py` (14 cases, all green) + `tests/services/test_reanalyze_sweep.py` (6 cases, all green) — 20/20 across both files.
 
 ### Chat (Assistant)
 - **Prompt caching in chat**: `zylch/assistant/core.py` + `llm/client.py` mark system/tools as `cache_control: ephemeral` (`1358594`)
@@ -87,51 +99,39 @@ description: |
 
 ## What Was Completed This Session
 
-**Task auto-close — RealStep / cafe124 case (2026-05-01, uncommitted).**
-Three coupled fixes in `zylch/workers/task_creation.py` and one helper
-in `zylch/storage/storage.py`. Plan: `docs/execution-plans/fix-task-autoclose-stale.md`.
+**Optional close-note on task completion (2026-05-02, uncommitted).**
 
-- **F1 — Cc fallback in user_reply.** Per-recipient close in Phase-2
-  user_reply now iterates `to_email + cc_email` (was: `to_email`
-  only). Fixes the RealStep thread where Mario's reply with Ivan +
-  Michele in Cc closed only Argento's task. `storage.get_unprocessed_emails_for_task`
-  was missing `cc_email` in its SELECT — added.
-- **F2 — Disabled "Forcing update on stale task" branch.**
-  `task_creation.py:522-539` used to write the LLM's advisory text
-  ("Keep existing task as-is: …", "No action needed — Ivan is
-  managing …") into existing tasks when the LLM returned
-  `task_action="none"` with a non-empty `suggested_action`. That
-  corrupted de342a1d / 5c66fa63 on `mario.alemi@cafe124.it`. The
-  branch now logs a `WARNING` and skips the update. Email is still
-  marked task_processed via the unconditional
-  `_mark_thread_nonuser_processed` so the thread is not re-analyzed.
-  No prompt audit done — `agents/trainers/task_email.py` is a
-  meta-prompt; per-user trained prompts may need re-training only if
-  WARNINGs start appearing in `zylch.log`.
-- **F3 — Diagnostic log when `get_tasks_by_thread` returns empty
-  in user_reply.** Captures `thread_id`, `email_id`, `from_email`
-  for next-occurrence reproducer of RC-1 (root cause not reproduced).
+- New nullable `task_items.close_note` column. ORM model + idempotent
+  ALTER TABLE migration (`storage/database.py:_apply_column_migrations`).
+- `Storage.complete_task_item(owner_id, task_id, note=None)` — kwarg
+  is backwards-compatible; existing auto-close call sites (worker,
+  reanalyze, task_interactive) keep `note=None` so no closing reasons
+  are fabricated. `Storage.reopen_task_item` now also clears
+  `close_note` so a reopened task starts fresh.
+- `tasks.complete` RPC accepts optional `note` (str | null), validated
+  type, length-only logged. Display-only — never injected into the
+  task-detection prompt or any other LLM context.
 
-Tests: `tests/workers/test_task_worker_bugs.py` gained 3 + 1 = 4 new
-cases (F1 × 3, F2 × 1). Also patched the pre-existing failing
-`TestColleagueEmailCreatesTask::test_colleague_email_not_skipped`
-(deferred `get_session` import in `_collect` defeats fixture-level
-patch). 14/14 green.
+**Test fix — `TestUserReplyClosesCcRecipientTask` (3 cases).** These
+F1 tests were failing on HEAD (verified via `git stash`): `_collect`
+re-imports `get_session` lazily so the fixture-level patch is already
+exited when `user_reply` runs, and the fixture's `user_email =
+"user@example.com"` didn't match the test data's `from_email =
+mario.alemi@cafe124.it`, so `_collect` routed to LLM instead of
+user_reply. Two coupled fixes in `tests/workers/test_task_worker_bugs.py`:
 
-- **F4 — Bounded reanalyze sweep at end of `_run_tasks`.** New helper
-  `zylch/services/process_pipeline.py:_reanalyze_sweep` picks up to
-  `REANALYZE_CAP=10` open tasks (oldest first) whose `analyzed_at` (or
-  `created_at` fallback) is older than `REANALYZE_MIN_AGE_HOURS=24`,
-  and runs `reanalyze_task` serially. Tolerates per-task exceptions;
-  logs `[TASK] Reanalyze sweep: N of M eligible …`. Cost: up to 10
-  extra LLM calls per `update`. Surfaces in the return string as
-  `"N action items detected (M reanalyzed)"`.
-- **Cleanup of corrupted tasks on `mario.alemi@cafe124.it`** —
-  de342a1d and 5c66fa63 closed via direct SQL UPDATE 2026-05-01
-  10:49 UTC (Mario already replied to the thread).
+- Wrap each test's `await worker.get_tasks(...)` in
+  `patch("zylch.storage.database.get_session")` +
+  `patch("zylch.workers.task_creation.build_thread_history")` (same
+  pattern already used by `TestForcingUpdateBranch` and
+  `TestColleagueEmailCreatesTask`).
+- Align `from_email` to `user@example.com` and the self-cc address to
+  match the fixture's `user_email`. The test's assertion is about
+  Cc-recipient closure semantics — the user's own address is
+  incidental.
 
-Tests: `tests/services/test_reanalyze_sweep.py` (6 cases). Total
-20/20 green across `tests/services/` + `tests/workers/test_task_worker_bugs.py`.
+Tests: 20/20 green across `tests/workers/test_task_worker_bugs.py` +
+`tests/services/`.
 
 ---
 
@@ -213,11 +213,12 @@ in different timezones could have had its chronology inverted.
 
 ## Immediate Next Steps
 
-1. Validate the two new UI flows (archive/delete + Open→Tasks filter) on Mac, then commit
-2. Exercise the new memory tools end-to-end in zylch-desktop on Mac
-3. Re-run Custom124 diagnosis after a few update cycles to confirm USER_NOTES guidance takes effect
-4. Split oversized files: `command_handlers.py` (5427), `workers/task_creation.py` (1149), `tools/gmail_tools.py` (1002), `workers/memory.py` (916)
-5. Keep `tests/` directory renewal slow-burn — current live tests are the manual cache deliverables + `tests/workers/test_task_worker_bugs.py`
+1. Validate the close-note UI on Mac: open task → Close → leave note empty → confirm closure; reopen → confirm note cleared; close with text → switch to Closed view → confirm note appears in subdued box.
+2. Validate the two prior UI flows (archive/delete + Open→Tasks filter) on Mac, then commit alongside the close-note feature.
+3. Exercise the memory tools end-to-end in mrcall-desktop on Mac (search → update/create round-trip).
+4. Re-run Custom124 diagnosis after a few update cycles to confirm USER_NOTES guidance takes effect.
+5. Split oversized files: `command_handlers.py` (5427), `workers/task_creation.py` (1149), `tools/gmail_tools.py` (1002), `workers/memory.py` (916).
+6. Keep `tests/` directory renewal slow-burn — current live tests are the manual cache deliverables + `tests/workers/test_task_worker_bugs.py` + `tests/services/test_reanalyze_sweep.py`.
 
 ## Known Issues
 

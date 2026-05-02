@@ -51,7 +51,11 @@ description: |
 
 ## Test Status
 
-10 tests pass in `tests/workers/test_task_worker_bugs.py` (task detection regression tests). The rest of `tests/` references the old SaaS architecture and needs a rewrite.
+20 tests pass across the curated live set:
+- `tests/workers/test_task_worker_bugs.py` — 14 cases (task detection regressions, RealStep / cafe124 fixes F1–F4, including 3 Cc-fallback tests fixed 2026-05-02 by re-patching `get_session` lazily and aligning fixture user_email)
+- `tests/services/test_reanalyze_sweep.py` — 6 cases (bounded reanalyze sweep)
+
+The rest of `tests/` references the old SaaS architecture and needs a rewrite.
 
 ## Lint Status
 

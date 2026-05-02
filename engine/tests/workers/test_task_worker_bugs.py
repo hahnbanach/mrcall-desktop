@@ -161,7 +161,7 @@ class TestUserReplyClosesCcRecipientTask:
         mock_storage.get_unprocessed_emails_for_task.return_value = [
             {
                 "id": "email-reply-cc",
-                "from_email": "mario.alemi@cafe124.it",
+                "from_email": "user@example.com",
                 "to_email": "e.argento@realstep.it",
                 "cc_email": "ivan.marchese@cafe124milan.com, m.scacciati@realstep.it",
                 "subject": "Re: RealStep meeting",
@@ -181,7 +181,18 @@ class TestUserReplyClosesCcRecipientTask:
         }
         mock_storage.get_task_by_contact.side_effect = lambda owner, addr: tasks_by_addr.get(addr)
 
-        await worker.get_tasks(refresh=True)
+        # `_collect` re-imports `get_session` lazily, so the fixture-level
+        # patch has already exited. Re-patch for the test body. Same for
+        # build_thread_history (the LLM analyze path is short-circuited via
+        # the per-thread close → analyze branch).
+        with (
+            patch("zylch.storage.database.get_session"),
+            patch(
+                "zylch.workers.task_creation.build_thread_history",
+                return_value="",
+            ),
+        ):
+            await worker.get_tasks(refresh=True)
 
         completed_ids = {call.args[1] for call in mock_storage.complete_task_item.call_args_list}
         assert completed_ids == {"task-argento", "task-ivan", "task-michele"}
@@ -192,9 +203,9 @@ class TestUserReplyClosesCcRecipientTask:
         mock_storage.get_unprocessed_emails_for_task.return_value = [
             {
                 "id": "email-reply-self-cc",
-                "from_email": "mario.alemi@cafe124.it",
+                "from_email": "user@example.com",
                 "to_email": "contact@ex.com",
-                "cc_email": "mario.alemi@cafe124.it",
+                "cc_email": "user@example.com",
                 "subject": "Re: x",
                 "body_plain": "ok",
                 "snippet": "ok",
@@ -207,7 +218,14 @@ class TestUserReplyClosesCcRecipientTask:
             {"id": "task-contact"} if addr == "contact@ex.com" else None
         )
 
-        await worker.get_tasks(refresh=True)
+        with (
+            patch("zylch.storage.database.get_session"),
+            patch(
+                "zylch.workers.task_creation.build_thread_history",
+                return_value="",
+            ),
+        ):
+            await worker.get_tasks(refresh=True)
 
         completed_ids = {call.args[1] for call in mock_storage.complete_task_item.call_args_list}
         assert completed_ids == {"task-contact"}
@@ -218,7 +236,7 @@ class TestUserReplyClosesCcRecipientTask:
         mock_storage.get_unprocessed_emails_for_task.return_value = [
             {
                 "id": "email-reply-dup",
-                "from_email": "mario.alemi@cafe124.it",
+                "from_email": "user@example.com",
                 "to_email": "dup@ex.com",
                 "cc_email": "dup@ex.com",
                 "subject": "Re: y",
@@ -231,7 +249,14 @@ class TestUserReplyClosesCcRecipientTask:
         mock_storage.get_tasks_by_thread.return_value = []
         mock_storage.get_task_by_contact.return_value = {"id": "task-dup"}
 
-        await worker.get_tasks(refresh=True)
+        with (
+            patch("zylch.storage.database.get_session"),
+            patch(
+                "zylch.workers.task_creation.build_thread_history",
+                return_value="",
+            ),
+        ):
+            await worker.get_tasks(refresh=True)
 
         # complete_task_item called exactly once for task-dup
         dup_calls = [

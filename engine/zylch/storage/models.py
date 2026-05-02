@@ -326,6 +326,7 @@ class TaskItem(DictMixin, Base):
     created_at = Column(DateTime, default=_utcnow)
     analyzed_at = Column(DateTime)
     completed_at = Column(DateTime)
+    close_note = Column(Text)
     sources = Column(JSON, default=dict)
     pinned = Column(Boolean, default=False, nullable=False, index=True)
 

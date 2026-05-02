@@ -160,6 +160,10 @@ def _apply_column_migrations(engine: Engine) -> None:
         # delete stamped by `emails.delete` — never touches IMAP.
         ("emails", "archived_at", "DATETIME"),
         ("emails", "deleted_at", "DATETIME"),
+        # 2026-05-02: optional free-text note attached when a task is closed
+        # by the user (e.g. "already paid via bank transfer"). Display-only:
+        # not consumed by the task detector, never sent to any LLM prompt.
+        ("task_items", "close_note", "TEXT"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in migrations:

@@ -12,6 +12,7 @@ export interface ZylchTask {
   created_at: string
   analyzed_at?: string
   completed_at?: string | null
+  close_note?: string | null
   pinned?: boolean
   sources: {
     emails: string[]
@@ -65,7 +66,7 @@ export interface InboxThread {
 export interface ZylchAPI {
   tasks: {
     list: (p?: { include_completed?: boolean; include_skipped?: boolean }) => Promise<ZylchTask[]>
-    complete: (task_id: string) => Promise<{ ok: boolean }>
+    complete: (task_id: string, note?: string | null) => Promise<{ ok: boolean }>
     reopen: (task_id: string) => Promise<{ ok: boolean }>
     skip: (task_id: string) => Promise<{ ok: boolean }>
     pin: (task_id: string, pinned: boolean) => Promise<{ ok: boolean }>
