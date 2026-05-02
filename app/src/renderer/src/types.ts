@@ -175,6 +175,17 @@ export interface ZylchAPI {
       limit?: number
     }) => Promise<{ businesses: unknown[]; role: string }>
   }
+  google: {
+    calendar: {
+      connect: () => Promise<{ ok: boolean; email: string; scope: string }>
+      disconnect: () => Promise<{ ok: boolean }>
+      status: () => Promise<{ connected: boolean; email?: string | null }>
+      cancel: () => Promise<{ cancelled: boolean }>
+    }
+  }
+  shell: {
+    openExternal: (url: string) => Promise<{ ok: boolean }>
+  }
   onboarding: {
     isFirstRun: () => Promise<boolean>
     createProfile: (

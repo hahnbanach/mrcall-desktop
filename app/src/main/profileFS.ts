@@ -27,6 +27,7 @@ export const KNOWN_KEYS: ReadonlySet<string> = new Set([
   'DOWNLOADS_DIR',
   'EMAIL_ADDRESS',
   'EMAIL_PASSWORD',
+  'GOOGLE_CALENDAR_CLIENT_ID',
   'IMAP_HOST',
   'IMAP_PORT',
   'MRCALL_BASE_URL',

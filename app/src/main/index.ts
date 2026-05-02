@@ -454,6 +454,36 @@ function registerIpc(): void {
     }
   )
 
+  // Open a URL in the user's default browser. The renderer uses this
+  // for Google Calendar OAuth consent (and any future link-out) — we
+  // deliberately do NOT load the URL inside a BrowserWindow because
+  // Google's consent flow needs the user's system password manager and
+  // 2FA prompts, which only work in a real browser.
+  ipcMain.handle(
+    'shell:openExternal',
+    async (_event, url: string): Promise<{ ok: boolean }> => {
+      if (typeof url !== 'string' || !url) return { ok: false }
+      // Defence in depth: only allow http(s) URLs. The renderer
+      // should never have a reason to ask for file:// or chrome://.
+      let parsed: URL
+      try {
+        parsed = new URL(url)
+      } catch {
+        return { ok: false }
+      }
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        return { ok: false }
+      }
+      try {
+        await shell.openExternal(url)
+        return { ok: true }
+      } catch (e) {
+        console.error('[main] shell.openExternal failed', e)
+        return { ok: false }
+      }
+    }
+  )
+
   // Restart the sidecar bound to the originating window (called after
   // settings.update so new .env values are loaded).
   ipcMain.handle('sidecar:restart', async (event): Promise<{ ok: boolean }> => {

@@ -268,6 +268,38 @@ const api = {
         30000
       )
   },
+  google: {
+    calendar: {
+      // Starts the PKCE flow on :19275. Returns the connected Gmail
+      // address on success. The consent URL is delivered separately
+      // via the `google.calendar.auth_url_ready` notification, which
+      // the renderer listens for and opens in the user's default
+      // browser via window.zylch.shell.openExternal.
+      // Long timeout: user has up to 5 min to consent + 2FA.
+      connect: () =>
+        call<{ ok: boolean; email: string; scope: string }>(
+          'google.calendar.connect',
+          {},
+          330000
+        ),
+      // Drop the stored Calendar tokens for the active session.
+      disconnect: () => call<{ ok: boolean }>('google.calendar.disconnect', {}),
+      // {connected: bool, email?: string} — never echoes a token.
+      status: () =>
+        call<{ connected: boolean; email?: string | null }>('google.calendar.status', {}),
+      // User closed the browser without consenting — release :19275.
+      cancel: () => call<{ cancelled: boolean }>('google.calendar.cancel', {})
+    }
+  },
+  shell: {
+    // Open a URL in the user's default browser. Used by the Calendar
+    // OAuth flow (and any future link-out from the renderer) so
+    // consent pages don't render inside an Electron BrowserWindow,
+    // which would lose the system password manager and make 2FA
+    // awkward.
+    openExternal: (url: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('shell:openExternal', url) as Promise<{ ok: boolean }>
+  },
   onboarding: {
     // True iff ~/.zylch/profiles is empty (no subdirectories). The
     // onboarding window is opened by the main process before the

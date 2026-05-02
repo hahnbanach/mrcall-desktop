@@ -156,6 +156,20 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "group": "MrCall",
         "optional": True,
     },
+    # ─── Google ─────────────────────────────────────────────
+    {
+        "key": "GOOGLE_CALENDAR_CLIENT_ID",
+        "label": "Google Calendar OAuth client ID",
+        "type": "text",
+        "group": "Google",
+        "optional": True,
+        "help": (
+            "OAuth 2.0 client ID for the Calendar integration. Create one in "
+            "Google Cloud Console (type 'Desktop app' or 'Web application' "
+            "with redirect http://127.0.0.1:19275/oauth2/google/callback). "
+            "No client secret is needed — the desktop flow uses PKCE."
+        ),
+    },
     # ─── Personal data ──────────────────────────────────────
     {
         "key": "USER_FULL_NAME",
