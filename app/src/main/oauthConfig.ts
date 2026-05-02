@@ -31,3 +31,18 @@
 // whitelist step.
 export const GOOGLE_SIGNIN_CLIENT_ID =
   '375340415237-jl3hl6hcu15po65oo7dovl1lb3a960ni.apps.googleusercontent.com'
+
+// Companion `client_secret` for the Desktop OAuth client. Google's
+// token endpoint requires it during the authorization-code exchange
+// even on the PKCE flow — testing without it returns
+// `400 invalid_request: client_secret is missing`.
+//
+// Per Google's docs the secret isn't confidential for installed-app
+// clients (it ships in the binary anyway), and PKCE is the real
+// security boundary. BUT GitHub Secret Scanning autodetects the
+// `GOCSPX-` prefix and triggers an automatic Google-side revocation
+// minutes after any commit lands. So the actual value lives in the
+// gitignored sibling `oauthSecrets.ts`, populated locally (postinstall
+// copies the `.example` template) and in CI (a workflow step writes
+// it from a repo secret before `npm run dist`).
+export { GOOGLE_SIGNIN_CLIENT_SECRET } from './oauthSecrets'

@@ -7,7 +7,7 @@
   "author": "Mario Alemi",
   "license": "MIT",
   "scripts": {
-    "postinstall": "node scripts/patch-electron-name.mjs",
+    "postinstall": "node scripts/patch-electron-name.mjs && node scripts/setup-oauth-secrets.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",

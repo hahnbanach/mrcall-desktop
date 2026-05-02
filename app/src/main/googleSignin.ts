@@ -95,6 +95,7 @@ function buildAuthUrl(clientId: string, challenge: string, state: string): strin
 
 async function exchangeCode(
   clientId: string,
+  clientSecret: string,
   code: string,
   verifier: string
 ): Promise<GoogleSigninResult> {
@@ -105,6 +106,13 @@ async function exchangeCode(
     grant_type: 'authorization_code',
     code_verifier: verifier
   })
+  // Google's token endpoint enforces client_secret for Desktop OAuth
+  // clients during the authorization-code exchange, even with PKCE.
+  // Public-by-design per Google's docs (see oauthConfig.ts). Sent only
+  // when configured so a future PKCE-only flow keeps working.
+  if (clientSecret) {
+    body.set('client_secret', clientSecret)
+  }
   const res = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -176,6 +184,7 @@ export function cancelGoogleSignin(): boolean {
  */
 export function startGoogleSignin(opts: {
   clientId: string
+  clientSecret: string
   onAuthUrl: (url: string) => void
 }): Promise<GoogleSigninResult> {
   cancelGoogleSignin()
@@ -269,7 +278,7 @@ export function startGoogleSignin(opts: {
           )
         )
 
-        const result = await exchangeCode(opts.clientId, code, verifier)
+        const result = await exchangeCode(opts.clientId, opts.clientSecret, code, verifier)
         settleResolve(result)
       } catch (e) {
         try {

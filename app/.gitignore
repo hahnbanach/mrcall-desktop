@@ -6,3 +6,10 @@ bin/
 *.log
 .env
 .env.local
+
+# Local-only Google OAuth secrets — see src/main/oauthSecrets.example.ts.
+# Not really confidential per Google's installed-app docs, but GitHub
+# Secret Scanning autodetects the `GOCSPX-` prefix and triggers an
+# automatic Google-side revocation within minutes of any commit, so
+# the actual file stays out of git regardless.
+src/main/oauthSecrets.ts

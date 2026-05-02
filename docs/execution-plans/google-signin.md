@@ -60,9 +60,14 @@ main process rather than the engine.
   `signin:googleCancel`. Imports `GOOGLE_SIGNIN_CLIENT_ID` from
   `oauthConfig.ts`; surfaces a friendly "not configured" error if the
   constant is empty.
-- **`app/src/main/oauthConfig.ts`** — single committed source of truth
-  for the Client ID. Public-by-design (Desktop OAuth clients have no
-  client_secret), edited and committed when the client rotates.
+- **`app/src/main/oauthConfig.ts`** — committed source of truth for the
+  public Client ID; re-exports `GOOGLE_SIGNIN_CLIENT_SECRET` from the
+  gitignored sibling.
+- **`app/src/main/oauthSecrets.ts`** (gitignored) — holds the Google
+  Client secret. Postinstall (`scripts/setup-oauth-secrets.mjs`) seeds
+  it from `oauthSecrets.example.ts` on a fresh clone so the build
+  doesn't fail; the developer pastes the real value locally.
+  CI populates it from a repo secret right before `npm run dist`.
 - **`app/src/preload/index.ts`** + **`app/src/renderer/src/types.ts`** —
   expose `window.zylch.signin.googleStart()` / `googleCancel()` to the
   renderer.
@@ -84,12 +89,15 @@ Node (main process), not the renderer.
    - Open <https://console.cloud.google.com/apis/credentials> in the
      `talkmeapp-e696c` project (the one Firebase Auth is wired to).
    - *Create credentials → OAuth client ID*.
-   - **Application type**: **Desktop app** (no client_secret, PKCE
-     built-in, no redirect-URI registration needed — Google accepts
-     any `http://127.0.0.1:<port>` loopback for installed apps).
+   - **Application type**: **Desktop app**. Google issues both a
+     Client ID and a Client secret for Desktop clients, and the token
+     endpoint enforces both during the authorization-code exchange
+     even on the PKCE flow — testing with secret missing returns
+     `400 invalid_request: client_secret is missing`.
    - **Name**: anything memorable, e.g. `mrcall-desktop-signin`.
-   - Copy the resulting **Client ID** (looks like
-     `1234567890-abcdefg.apps.googleusercontent.com`).
+   - Copy the **Client ID** (looks like
+     `1234567890-abcdefg.apps.googleusercontent.com`) and the **Client
+     secret** (looks like `GOCSPX-...`) from the detail page.
 
 2. **(Only if the client lives in a different Cloud project.)**
    For `talkmeapp-e696c` this step is a no-op — the client is in the
@@ -98,14 +106,33 @@ Node (main process), not the renderer.
    Google → Web SDK configuration → Whitelist client IDs from
    external projects → add the new client ID*.
 
-3. **Paste it into `app/src/main/oauthConfig.ts` and commit.**
+3. **Paste the public Client ID into `app/src/main/oauthConfig.ts` and
+   commit.** Public-by-design (parallel to the Firebase apiKey already
+   committed in `renderer/firebase/config.ts`):
    ```ts
-   export const GOOGLE_SIGNIN_CLIENT_ID = '1234567890-abcdefg.apps.googleusercontent.com'
+   export const GOOGLE_SIGNIN_CLIENT_ID =
+     '1234567890-abcdefg.apps.googleusercontent.com'
    ```
-   That's it. Same file is used for `npm run dev`, packaged DMG / EXE
-   builds, and CI. Public-by-design: Google OAuth Client IDs for
-   Desktop clients are not secrets (parallel to the Firebase apiKey
-   already committed in `renderer/firebase/config.ts`).
+
+4. **Paste the Client secret into the gitignored
+   `app/src/main/oauthSecrets.ts`. Do NOT commit.**
+   The file is created on first `npm install` by
+   `scripts/setup-oauth-secrets.mjs`, which copies the committed
+   `oauthSecrets.example.ts` template. Edit it in place:
+   ```ts
+   export const GOOGLE_SIGNIN_CLIENT_SECRET = 'GOCSPX-...'
+   ```
+   Why gitignore: the `GOCSPX-` prefix is autodetected by GitHub
+   Secret Scanning, which would trigger Google to auto-revoke the
+   secret minutes after any push — even though Google's docs say
+   installed-app client_secrets aren't really confidential. Restart
+   `npm run dev` after editing.
+
+5. **For packaged release builds:** add `GOOGLE_SIGNIN_CLIENT_SECRET`
+   as a repo secret at *Settings → Secrets and variables → Actions →
+   New repository secret*, and add a step to `release.yml` that writes
+   it to `app/src/main/oauthSecrets.ts` before `npm run dist`. Not
+   wired yet — see Status table.
 
 ## Status
 
@@ -115,9 +142,11 @@ Node (main process), not the renderer.
 | IPC registration (`signin:googleStart` / `signin:googleCancel`) | done |
 | Preload + renderer typings | done |
 | "Continue with Google" button on `SignIn.tsx` | done |
-| Committed config file (`app/src/main/oauthConfig.ts`) | done — pending the actual Client ID value |
-| End-to-end live test in `npm run dev` | **pending — needs the Client ID pasted into `oauthConfig.ts`** |
-| End-to-end live test on a packaged DMG / EXE | pending |
+| Committed config file (`app/src/main/oauthConfig.ts`) | done — Client ID `375340415237-jl3hl6hcu15po65oo7dovl1lb3a960ni…` already wired |
+| Gitignored secret file (`app/src/main/oauthSecrets.ts`) + postinstall seeder | done — developer pastes the value locally |
+| `client_secret` plumbed through `googleSignin.exchangeCode` | done |
+| End-to-end live test in `npm run dev` | **pending — needs `oauthSecrets.ts` populated locally** |
+| End-to-end live test on a packaged DMG / EXE | pending — also needs CI step that materialises `oauthSecrets.ts` from a repo secret before `npm run dist` |
 | Renderer-side surfacing of "not configured" error in plain language | covered by the inline error string returned by main, no extra UX yet |
 
 ## Known follow-ups

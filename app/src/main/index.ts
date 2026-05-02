@@ -5,7 +5,7 @@ import { homedir } from 'os'
 import { SidecarClient } from './sidecar'
 import { createProfileFS, createProfileForFirebaseUser, profileDir } from './profileFS'
 import { cancelGoogleSignin, startGoogleSignin } from './googleSignin'
-import { GOOGLE_SIGNIN_CLIENT_ID } from './oauthConfig'
+import { GOOGLE_SIGNIN_CLIENT_ID, GOOGLE_SIGNIN_CLIENT_SECRET } from './oauthConfig'
 
 // Brand the running process. Three layers each cover a different surface:
 //
@@ -644,6 +644,7 @@ function registerIpc(): void {
       try {
         const result = await startGoogleSignin({
           clientId: GOOGLE_SIGNIN_CLIENT_ID,
+          clientSecret: GOOGLE_SIGNIN_CLIENT_SECRET,
           onAuthUrl: (url) => {
             // Opening in the system browser keeps password manager / 2FA
             // affordances. Failures here are non-fatal — the user can
