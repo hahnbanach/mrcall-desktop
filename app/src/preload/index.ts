@@ -300,6 +300,30 @@ const api = {
     openExternal: (url: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('shell:openExternal', url) as Promise<{ ok: boolean }>
   },
+  signin: {
+    // Drives the "Continue with Google" button on the Firebase signin
+    // screen. The main process runs the full PKCE OAuth flow on
+    // 127.0.0.1:19276 (engine isn't up yet in onboarding mode) and
+    // returns a Google id_token; the renderer hands that to Firebase
+    // via signInWithCredential. Long timeout: user has up to 5 min to
+    // complete consent + 2FA in their default browser.
+    googleStart: (): Promise<{
+      ok: boolean
+      idToken?: string
+      email?: string | null
+      error?: string
+    }> =>
+      ipcRenderer.invoke('signin:googleStart') as Promise<{
+        ok: boolean
+        idToken?: string
+        email?: string | null
+        error?: string
+      }>,
+    // Abort an in-flight Google signin (e.g. user closed the browser
+    // tab and clicked Cancel). Releases :19276.
+    googleCancel: (): Promise<{ cancelled: boolean }> =>
+      ipcRenderer.invoke('signin:googleCancel') as Promise<{ cancelled: boolean }>
+  },
   onboarding: {
     // True iff ~/.zylch/profiles is empty (no subdirectories). The
     // onboarding window is opened by the main process before the

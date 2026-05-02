@@ -4,6 +4,15 @@ import { readdirSync, statSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import { SidecarClient } from './sidecar'
 import { createProfileFS, createProfileForFirebaseUser, isFirstRun } from './profileFS'
+import { cancelGoogleSignin, startGoogleSignin } from './googleSignin'
+
+// OAuth client ID for the "Continue with Google" button on the SignIn
+// screen. Must point at a Google OAuth client (Desktop or Web type) in
+// the same Google Cloud project as Firebase Auth (`talkmeapp-e696c`).
+// Configured via env var because the SignIn screen renders BEFORE any
+// profile / sidecar exists, so settings.get() is not available at that
+// point. Setup is documented in `docs/execution-plans/google-signin.md`.
+const GOOGLE_SIGNIN_CLIENT_ID = process.env.GOOGLE_SIGNIN_CLIENT_ID || ''
 
 // Brand the running process. Three layers each cover a different surface:
 //
@@ -510,6 +519,57 @@ function registerIpc(): void {
       }
     }
   )
+
+  // "Continue with Google" on the SignIn screen. Runs entirely in main
+  // process — there's no sidecar in onboarding mode, so we can't
+  // delegate to the engine the way post-signin Calendar OAuth does.
+  // The result `idToken` is a Google id_token; the renderer feeds it
+  // into Firebase via `signInWithCredential(GoogleAuthProvider.credential(idToken))`.
+  ipcMain.handle(
+    'signin:googleStart',
+    async (): Promise<{
+      ok: boolean
+      idToken?: string
+      email?: string | null
+      error?: string
+    }> => {
+      if (!GOOGLE_SIGNIN_CLIENT_ID) {
+        return {
+          ok: false,
+          error:
+            'Google sign-in is not configured. Set GOOGLE_SIGNIN_CLIENT_ID before launching the app (see docs/execution-plans/google-signin.md).'
+        }
+      }
+      try {
+        const result = await startGoogleSignin({
+          clientId: GOOGLE_SIGNIN_CLIENT_ID,
+          onAuthUrl: (url) => {
+            // Opening in the system browser keeps password manager / 2FA
+            // affordances. Failures here are non-fatal — the user can
+            // still copy the URL out of the log if needed; the loopback
+            // server stays up either way.
+            shell.openExternal(url).catch((e) => {
+              console.error('[main] shell.openExternal failed for google signin', e)
+            })
+          }
+        })
+        console.log(
+          `[main] signin:googleStart ok email=${result.email ?? '(unknown)'}`
+        )
+        return { ok: true, idToken: result.idToken, email: result.email }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.error('[main] signin:googleStart failed:', msg)
+        return { ok: false, error: msg }
+      }
+    }
+  )
+
+  // Renderer can abort an in-flight Google signin (e.g. user closed the
+  // browser tab without consenting and clicked Cancel). Releases :19276.
+  ipcMain.handle('signin:googleCancel', async (): Promise<{ cancelled: boolean }> => {
+    return { cancelled: cancelGoogleSignin() }
+  })
 
   // Restart the sidecar bound to the originating window (called after
   // settings.update so new .env values are loaded).

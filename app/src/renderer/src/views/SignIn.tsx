@@ -1,9 +1,12 @@
 /**
- * Firebase signin screen — email/password only in Phase 1.
+ * Firebase signin screen — email/password and "Continue with Google".
  *
- * Google sign-in and magic links require browser-based OAuth flows and
- * land in Phase 4 (alongside Google Calendar OAuth, which shares the
- * external-browser → local-callback infrastructure).
+ * Email/password signin is handled entirely in the renderer by the
+ * Firebase JS SDK. Google signin runs a PKCE OAuth flow in the Electron
+ * main process (no Python sidecar exists yet in onboarding mode), which
+ * returns a Google id_token; we then hand it to Firebase via
+ * `signInWithCredential` so the auth state graduates the user past
+ * `FirebaseAuthGate`. Magic links remain deferred.
  *
  * Successful signin is observed by FirebaseAuthGate via
  * onAuthStateChanged — this component does not push the user up itself.
@@ -11,7 +14,9 @@
 import { useState } from 'react'
 import {
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   sendPasswordResetEmail,
+  signInWithCredential,
   signInWithEmailAndPassword
 } from 'firebase/auth'
 import { auth } from '../firebase/config'
@@ -36,6 +41,11 @@ function describeFirebaseError(code: string | undefined): string {
       return 'Too many attempts. Wait a minute and try again.'
     case 'auth/network-request-failed':
       return 'Network error reaching Firebase. Check your connection.'
+    case 'auth/account-exists-with-different-credential':
+      return 'An account with this email already exists with a different sign-in method. Try signing in with email/password instead.'
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return 'Sign-in was cancelled before completing.'
     default:
       return code ? `Firebase error (${code}).` : 'Sign-in failed. Try again.'
   }
@@ -46,8 +56,40 @@ export default function SignIn(): JSX.Element {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
+  const [googleBusy, setGoogleBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+
+  // "Continue with Google" runs the PKCE flow in the main process,
+  // hands us back a Google id_token, and we trade it for a Firebase
+  // session via signInWithCredential. The browser tab handles the
+  // user-facing consent UX; we just show busy state.
+  const onGoogleClick = async (): Promise<void> => {
+    if (googleBusy) return
+    setError(null)
+    setInfo(null)
+    setGoogleBusy(true)
+    setInfo('Opening Google sign-in in your browser…')
+    try {
+      const r = await window.zylch.signin.googleStart()
+      if (!r.ok || !r.idToken) {
+        setInfo(null)
+        setError(r.error || 'Google sign-in failed.')
+        return
+      }
+      setInfo('Signing in to Firebase…')
+      const credential = GoogleAuthProvider.credential(r.idToken)
+      await signInWithCredential(auth, credential)
+      // FirebaseAuthGate observes onAuthStateChanged and unmounts us.
+      setInfo(null)
+    } catch (e: unknown) {
+      const code = (e as { code?: string }).code
+      setInfo(null)
+      setError(describeFirebaseError(code))
+    } finally {
+      setGoogleBusy(false)
+    }
+  }
 
   const submit = async (): Promise<void> => {
     if (busy) return
@@ -120,6 +162,23 @@ export default function SignIn(): JSX.Element {
         )}
 
         <div className="bg-white border border-brand-mid-grey rounded-lg shadow-sm p-5 space-y-3">
+          {mode !== 'reset' && (
+            <>
+              <button
+                onClick={onGoogleClick}
+                disabled={googleBusy || busy}
+                className="w-full px-4 py-2 text-sm bg-white border border-brand-mid-grey rounded hover:bg-brand-light-grey disabled:opacity-60 disabled:cursor-not-allowed text-brand-black"
+                aria-label="Continue with Google"
+              >
+                {googleBusy ? 'Waiting for Google…' : 'Continue with Google'}
+              </button>
+              <div className="flex items-center gap-2 text-[11px] text-brand-grey-80 uppercase tracking-wide">
+                <span className="flex-1 h-px bg-brand-mid-grey" />
+                <span>or</span>
+                <span className="flex-1 h-px bg-brand-mid-grey" />
+              </div>
+            </>
+          )}
           <div>
             <label className="block text-xs font-medium text-brand-grey-80 mb-1">
               Email address
@@ -206,9 +265,9 @@ export default function SignIn(): JSX.Element {
         </div>
 
         <p className="text-xs text-brand-grey-80 mt-4">
-          Continuing with Google, magic links, and connecting Google Calendar arrive in a follow-up
-          release. For now, an email/password account is enough to unlock the MrCall phone
-          integration.
+          Continue with Google opens your default browser for consent and brings you back here
+          automatically. Magic links arrive in a follow-up release. Either path unlocks the
+          MrCall phone integration.
         </p>
       </div>
     </div>

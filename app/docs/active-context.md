@@ -62,6 +62,8 @@ Verified: `npm run typecheck` clean at every commit; `npm run dev` end-to-end NO
 
 ## What Is In Progress
 
+- **"Continue with Google" on the Firebase SignIn screen (2026-05-02).** New `app/src/main/googleSignin.ts` runs the PKCE flow on `127.0.0.1:19276` (no sidecar required — main process owns the loopback HTTP server and the token exchange). New IPC `signin:googleStart` / `signin:googleCancel`, preload exposes `window.zylch.signin.{googleStart,googleCancel}`, types in `renderer/src/types.ts`. `SignIn.tsx` renders a button that calls `googleStart`, then trades the returned Google id_token for a Firebase session via `signInWithCredential(GoogleAuthProvider.credential(idToken))`. Configuration is via `GOOGLE_SIGNIN_CLIENT_ID` env var (dev mode); packaged-build path not yet wired. Plan + setup runbook: [`../../docs/execution-plans/google-signin.md`](../../docs/execution-plans/google-signin.md). Typecheck clean; live end-to-end test pending — needs a configured client ID.
+- **CSP fix for Firebase signin (`main` `451526a`).** Added `connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com` to the renderer's CSP. Without it Firebase signin hit `auth/network-request-failed` and the SignIn screen showed "Network error reaching Firebase". Live verification of email/password signin pending.
 - **Live verification of the Firebase landing in the running Electron app — pending.** Compiles + typechecks; a real signin / engine round-trip / Calendar OAuth needs the user to run `npm run dev`. No automated harness for this.
 - Mac validation of pre-existing flows still pending: close-note UI (composer keyboard shortcuts, closed-view rendering, reopen clears note), IMAP archive folder discovery, Open → Tasks filter behaviour.
 

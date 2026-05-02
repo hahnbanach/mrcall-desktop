@@ -186,6 +186,15 @@ export interface ZylchAPI {
   shell: {
     openExternal: (url: string) => Promise<{ ok: boolean }>
   }
+  signin: {
+    googleStart: () => Promise<{
+      ok: boolean
+      idToken?: string
+      email?: string | null
+      error?: string
+    }>
+    googleCancel: () => Promise<{ cancelled: boolean }>
+  }
   onboarding: {
     isFirstRun: () => Promise<boolean>
     createProfile: (
