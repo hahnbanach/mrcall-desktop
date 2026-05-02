@@ -1,12 +1,14 @@
 ---
 description: |
   Engine-side state of mrcall-desktop as of 2026-05-02. Profile-aware CLI,
-  Electron desktop (validated), prompt caching in chat, user notes injection,
-  memory tool pair (LLM decides update vs create), inbox/sent views, email
-  archive/delete RPCs, Open-email → thread-filtered Tasks view, RealStep/
-  cafe124 task auto-close fixes, optional close_note column on task_items.
-  App-side state lives in ../../app/docs/active-context.md; cross-cutting
-  state in ../../docs/active-context.md.
+  Firebase signin (renderer-driven, in-memory token bridge), Google
+  Calendar OAuth (PKCE :19275), Electron desktop (validated), prompt
+  caching in chat, user notes injection, memory tool pair (LLM decides
+  update vs create), inbox/sent views, email archive/delete RPCs,
+  Open-email → thread-filtered Tasks view, RealStep/cafe124 task
+  auto-close fixes, optional close_note column on task_items. App-side
+  state lives in ../../app/docs/active-context.md; cross-cutting state
+  in ../../docs/active-context.md.
 ---
 
 # Active Context
@@ -42,6 +44,22 @@ description: |
 ### Telegram / MrCall
 - Telegram bot via python-telegram-bot, proactive 8am/8pm digest
 - MrCall StarChat HTTP client with OAuth2 flow
+
+### Firebase auth (desktop signin, 2026-05-02 landing)
+- `zylch/auth/` package — `FirebaseSession` singleton (uid, email, id_token, expires_at_ms) held in process memory only. Thread-safe via a module-level lock; never persisted to disk. `set_session`, `clear_session`, `get_session`, `require_session` (raises `NoActiveSession` mapped to JSON-RPC -32010).
+- `zylch/rpc/account.py` — `account.set_firebase_token`, `account.sign_out`, `account.who_am_i`. The renderer pushes the token after Firebase signin and on every 50-min refresh; `who_am_i` never echoes the token back.
+- `zylch/tools/starchat_firebase.py` — `make_starchat_client_from_firebase_session(realm?, timeout=30)` returns a `StarChatClient(auth_type="firebase")` with `auth: <jwt>` header, mirroring the dashboard's call shape.
+- `zylch/rpc/mrcall_actions.py` — `mrcall.list_my_businesses(offset, limit)` POSTs to `/mrcall/v1/{realm}/crm/business/search` with the active JWT. First reachable smoke-test of the signin → JWT → StarChat path.
+- The legacy CLI MrCall PKCE flow on `:19274` (`zylch.tools.mrcall.oauth`, used by `cli/setup.py`) is untouched.
+
+### Google Calendar OAuth (incremental, 2026-05-02 landing)
+- `zylch/tools/google/calendar_oauth.py` — PKCE flow on `127.0.0.1:19275`, scope `openid email https://www.googleapis.com/auth/calendar.readonly`, `access_type=offline` + `prompt=consent` so we always get a refresh_token. `DEFAULT_CALENDAR_ID = "primary"` — the user's main Google calendar (the one tied to the consenting Google account).
+- `zylch/rpc/google_actions.py` — `google.calendar.connect / disconnect / status / cancel`. `connect` emits a `google.calendar.auth_url_ready` notification with the consent URL right before awaiting the callback; the renderer opens that URL via `shell:openExternal`. 5-minute consent timeout. Tokens stored encrypted via `Storage.save_provider_credentials(uid, "google_calendar", …)`.
+- `config.py` — `google_calendar_client_id` field (env `GOOGLE_CALENDAR_CLIENT_ID`). No client_secret — the desktop is a public OAuth client and Google's PKCE flow doesn't use one. Surfaced in Settings via `services/settings_schema.py`.
+
+### Profile-by-Firebase-UID
+- New profiles created via the desktop signin are keyed by the immutable Firebase UID at `~/.zylch/profiles/<firebase_uid>/`. The `.env` carries `OWNER_ID=<uid>` (so engine owner-scoped storage binds to it) plus `EMAIL_ADDRESS=<email>` (display only). Created via the new `onboarding:createProfileForFirebaseUser` IPC.
+- Legacy email-keyed profiles still work; `engine/scripts/migrate_profile_to_uid.py --email <e> --uid <uid>` upgrades them on demand (atomic dir rename + .env patch + `--dry-run` / `--force`).
 
 ### Update Pipeline (`zylch update`)
 - [1/5] Email sync (IMAP, 60 days default)
@@ -99,132 +117,43 @@ Tests: `tests/workers/test_task_worker_bugs.py` (14 cases, all green) + `tests/s
 
 ## What Was Completed This Session
 
-**Optional close-note on task completion (2026-05-02, uncommitted).**
+**Firebase signin landing — engine side (commits `25e668b..11f4cbe` on `main`, all pushed).**
 
-- New nullable `task_items.close_note` column. ORM model + idempotent
-  ALTER TABLE migration (`storage/database.py:_apply_column_migrations`).
-- `Storage.complete_task_item(owner_id, task_id, note=None)` — kwarg
-  is backwards-compatible; existing auto-close call sites (worker,
-  reanalyze, task_interactive) keep `note=None` so no closing reasons
-  are fabricated. `Storage.reopen_task_item` now also clears
-  `close_note` so a reopened task starts fresh.
-- `tasks.complete` RPC accepts optional `note` (str | null), validated
-  type, length-only logged. Display-only — never injected into the
-  task-detection prompt or any other LLM context.
+- New packages: `zylch/auth/` (`FirebaseSession` singleton + `NoActiveSession`), `zylch/tools/google/` (PKCE Calendar OAuth on :19275).
+- New RPC modules merged into the dispatch table at `zylch/rpc/methods.py`: `account.py` (3 methods), `mrcall_actions.py` (1 method), `google_actions.py` (4 methods). Total live methods: 33.
+- New StarChat factory: `zylch/tools/starchat_firebase.py:make_starchat_client_from_firebase_session()`.
+- New setting: `google_calendar_client_id` in `config.py` + matching schema row in `services/settings_schema.py` ("Google" group).
+- Migration script: `engine/scripts/migrate_profile_to_uid.py` (live-tested in a sandbox HOME).
+- **`zylch.tools.mrcall` package init repaired (`d62506c`)**: stripped four imports of never-tracked sibling modules (`variable_utils`, `llm_helper`, `config_tools`, `feature_context_tool`); the `tools/mrcall/__init__.py` had been broken since the subtree merge that built this monorepo. `oauth.py` (the only real submodule) re-exports remain. Move details in commit body.
+- **Cleanup brief landed at `docs/execution-plans/cleanup-mrcall-configurator-deadcode.md`** (in mrcall-desktop, not engine) — `command_handlers.py` `/mrcall config` / `/mrcall train` / `/mrcall feature` handlers + `tools/factory.py:_create_mrcall_tools` + `tests/test_mrcall_integration.py` reference symbols that were never tracked. Currently graceful-degraded; recommends DELETE in a follow-up PR.
 
-**Test fix — `TestUserReplyClosesCcRecipientTask` (3 cases).** These
-F1 tests were failing on HEAD (verified via `git stash`): `_collect`
-re-imports `get_session` lazily so the fixture-level patch is already
-exited when `user_reply` runs, and the fixture's `user_email =
-"user@example.com"` didn't match the test data's `from_email =
-mario.alemi@cafe124.it`, so `_collect` routed to LLM instead of
-user_reply. Two coupled fixes in `tests/workers/test_task_worker_bugs.py`:
-
-- Wrap each test's `await worker.get_tasks(...)` in
-  `patch("zylch.storage.database.get_session")` +
-  `patch("zylch.workers.task_creation.build_thread_history")` (same
-  pattern already used by `TestForcingUpdateBranch` and
-  `TestColleagueEmailCreatesTask`).
-- Align `from_email` to `user@example.com` and the self-cc address to
-  match the fixture's `user_email`. The test's assertion is about
-  Cc-recipient closure semantics — the user's own address is
-  incidental.
-
-Tests: 20/20 green across `tests/workers/test_task_worker_bugs.py` +
-`tests/services/`.
-
----
-
-**v0.1.24 — Email timezone fix (2026-04-21).** RFC 2822 `Date:` headers carry
-a timezone offset (e.g. `-0600` for Missive-relayed mail, `+0100` for CET
-senders). Two call sites stripped the offset via `dt.replace(tzinfo=None)`
-instead of converting to UTC, so `emails.date` stored the sender-timezone
-wall-clock as if it were UTC. Example: a support reply sent at 14:42 CET was
-stored as `07:42`, making the task detector treat the customer's 13:00
-message as the most recent in the thread and keep the task falsely open.
-
-Fix details:
-- New helper `zylch/utils/dates.parse_email_date_to_utc_naive`
-- Two consumer fixes: `zylch/storage/storage.py:160-170`,
-  `zylch/tools/email_sync.py:_parse_email_date_for_sort`
-- Regression tests `tests/utils/test_dates.py` (7 cases: positive/negative/
-  zero offsets, ISO `Z` suffix, empty/garbage)
-- Historical backfill `scripts/backfill_email_date_utc.py --all --apply`
-  rebuilt 666 mis-timestamped rows (400 on support@mrcall.ai, 266 on
-  user@example.com) using the already-correct `date_timestamp`
-  column — no IMAP re-fetch required.
-- Open `task_items` cleared on both profiles; task detector regenerated
-  from corrected chronology (support@mrcall.ai went from 60 false opens
-  to 49 real opens; Tentacools false-positive no longer reproduces).
-
-Impact: silent in production for ~3 months. Any thread with participants
-in different timezones could have had its chronology inverted.
-
-**Email archive + delete (uncommitted at time of writing)**
-- Backend: `zylch/rpc/email_actions.py` NEW — `emails.archive`, `emails.delete`. `storage/models.py` + `storage/database.py` gained `archived_at` / `deleted_at` with idempotent ALTER. `storage/storage.py` gained `set_thread_archived` / `set_thread_deleted` / `get_thread_message_id_headers` and inbox/sent filter clauses. `email/imap_client.py` gained `find_archive_folder` (SPECIAL-USE `\All` then `\Archive`, fallback Gmail/Outlook/iCloud names) + `move_message_by_message_id` (UID MOVE, COPY+EXPUNGE fallback).
-- Desktop: Archive + Delete buttons in `views/Email.tsx` ThreadReadingPane, optimistic removal with rollback; Delete tooltip spells out "local-only".
-- Tested: `emails.delete` end-to-end over JSON-RPC stdin/stdout (`zylch -p … rpc`); migration across 4 existing profiles; Gmail archive-folder discovery returns `[Gmail]/All Mail`. IMAP MOVE live path (real thread) NOT tested — pending Mac validation.
-
-**Open-email → thread-filtered Tasks view (uncommitted at time of writing)**
-- Backend: `zylch/rpc/task_queries.py` NEW — `tasks.list_by_thread`.
-- Desktop: `views/Email.tsx` `openSelected()` rewired; `views/Tasks.tsx` gained filter mode with banner + clear button; `store/thread.ts` gained `taskThreadFilter`; prop `onOpenWorkspace` → `onOpenTasks`; `App.tsx` wired.
-- Tested: RPC for known/unknown thread + missing param over sidecar; `npm run typecheck` + `npm run build` clean. Click-flow in Electron NOT exercised — pending Mac validation.
-
-**Primary: `0b9e4e8` — memory tool rewrite (LLM decides update vs create)**
-- `update_memory_tool.py` rewritten: takes exact `blob_id` + `new_content` only; no internal semantic search, no fuzzy match
-- `create_memory_tool.py` NEW: companion for fresh blobs under `user:<owner_id>`
-- `contact_tools.py` `SearchLocalMemoryTool`: exposes `blob_id` per hit, drops stale namespace filter
-- `services/task_executor.py` approval preview uses `blob_id`
-- `assistant/prompts.py` documents the "save/correct memory" workflow
-- Motivation: old `update_memory` searched internally and clobbered the Joel blob when user asked to save a different contact ("Café 124"). The LLM must choose which blob to update.
-- Tested at Python level; end-to-end Electron chat validation pending on Mac.
-
-**Other commits since 2026-04-10 (13), by theme:**
-
-- Chat intelligence
-  - `1358594` prompt cache + user notes + compaction (`assistant/core.py`, `llm/client.py`, `services/chat_compaction.py`)
-  - `108572b` draft preview shows full body verbatim
-- Tasks
-  - `843362a` reopen: `tasks.reopen` RPC + storage method
-  - `f887f5d` inject USER_NOTES + USER_SECRET_INSTRUCTIONS into task detector
-  - `50aa4bd` `tasks.list` honours `include_completed`
-- Emails
-  - `c56634a` inbox/sent list + thread pin + read tracking
-  - `65185fc` `emails.list_by_thread` returns `body_html`
-- Settings / env
-  - `32fc4bc` unmask `USER_SECRET_INSTRUCTIONS` + `scripts/repair_env.py`
-  - `3117cd4` `settings_io` uses dotenv-style quoting, not shlex
-  - `02401a4` `DOWNLOADS_DIR` + directory-picker hint
-- Ops / scripts
-  - `a7f9c59` `scripts/diag_custom124.py` — read-only inspection of Custom124 state
-  - `5bf67c7` one-shot cleanup script for merged Custom124 tasks
-- RPC / release
-  - `2e96365` `update.run` no longer blocks the sidecar
-  - `e6125c4` rough ETA + "progress is saved" notice during update
-  - `53b6146` bump to 0.1.23
+Verification: dispatcher METHODS count is 33 post-landing; every `account.*` / `mrcall.*` / `google.calendar.*` error path without a session returns -32010. Real round-trip against Firebase / StarChat / Google not run from this machine.
 
 ## What Is In Progress
 
-- **Mac validation: IMAP archive (Task 2)** — archive a disposable thread from the Inbox view, confirm it appears in Gmail's "All Mail" and disappears from INBOX. Outlook/iCloud/Fastmail archive-folder discovery also only smoke-tested on Gmail so far.
-- **Mac validation: Open → Tasks filter (Task 3)** — Inbox → Open → lands on Tasks view with banner; exercise 0-task thread, N-task thread, Clear filter, sidebar back-nav while filter is set.
-- **Electron chat validation of the new memory flow on Mac** — user to exercise search → update/create round-trip in the desktop app
-- **Custom124 cleanup follow-up** — now that `USER_NOTES` feeds the task detector (`f887f5d`), run `scripts/diag_custom124.py` (`a7f9c59`) to confirm duplicates stop recurring after the one-shot cleanup (`5bf67c7`). Related memory file: `project_task_detection_fixes.md`.
-- Remaining: .docx/.pptx native parsing (current fallback is `run_python`)
+- **Live verification of the Firebase landing in the running Electron app** — only smoke tests cover the new RPCs; the real round-trip needs `npm run dev` + signin + StarChat call + Calendar OAuth (with a configured `GOOGLE_CALENDAR_CLIENT_ID`).
+- **Mac validation of pre-existing UI flows still pending**: IMAP archive (real thread on Gmail / Outlook / iCloud / Fastmail), Open → Tasks filter (0-task, N-task, Clear filter, sidebar back-nav), close-note composer, end-to-end memory tool round-trip in chat.
+- **Custom124 cleanup follow-up** — re-run `scripts/diag_custom124.py` after a few `update` cycles to confirm `USER_NOTES`-driven detection stopped duplicates from recurring.
+- .docx / .pptx native parsing (current fallback: `run_python`).
 
 ## Immediate Next Steps
 
-1. Validate the close-note UI on Mac: open task → Close → leave note empty → confirm closure; reopen → confirm note cleared; close with text → switch to Closed view → confirm note appears in subdued box.
-2. Validate the two prior UI flows (archive/delete + Open→Tasks filter) on Mac, then commit alongside the close-note feature.
-3. Exercise the memory tools end-to-end in mrcall-desktop on Mac (search → update/create round-trip).
-4. Re-run Custom124 diagnosis after a few update cycles to confirm USER_NOTES guidance takes effect.
-5. Split oversized files: `command_handlers.py` (5427), `workers/task_creation.py` (1149), `tools/gmail_tools.py` (1002), `workers/memory.py` (916).
-6. Keep `tests/` directory renewal slow-burn — current live tests are the manual cache deliverables + `tests/workers/test_task_worker_bugs.py` + `tests/services/test_reanalyze_sweep.py`.
+1. Live-test the Firebase signin path in the running app: `cd app && npm run dev`, sign in with the dashboard account, exercise `mrcall.list_my_businesses`. End-to-end against real Firebase + StarChat is the only meaningful verification of the JWT round-trip.
+2. Configure a `GOOGLE_CALENDAR_CLIENT_ID` (Desktop-app or Web OAuth client with redirect `http://127.0.0.1:19275/oauth2/google/callback`) in Settings, then "Connect Google Calendar" in Settings; verify token persistence in `OAuthToken` (provider `google_calendar`).
+3. Wire `tools/calendar_sync.py` to read the new `google_calendar` tokens. Current sync code (469 lines) is partial scaffolding — it composes events into the `calendar_events` table but never fetches them; reading the token from `Storage.get_provider_credentials(uid, "google_calendar")` is the missing piece.
+4. Open the follow-up PR per `docs/execution-plans/cleanup-mrcall-configurator-deadcode.md` (the brief is self-contained for a fresh agent).
+5. Validate the previously pending UI flows on Mac (close-note composer, archive/delete, Open → Tasks filter).
+6. Split oversized files: `command_handlers.py` (5427), `workers/task_creation.py` (1149), `tools/gmail_tools.py` (1002), `workers/memory.py` (916).
+7. Keep `tests/` directory renewal slow-burn — current live tests are the manual cache deliverables + `tests/workers/test_task_worker_bugs.py` + `tests/services/test_reanalyze_sweep.py`. `tests/test_mrcall_integration.py` is part of the dead-configurator brief.
 
 ## Known Issues
 
+- **Firebase round-trip not live-verified** — only smoke tests cover the new RPCs.
+- **Dead `MrCallConfiguratorTrainer` references** (`command_handlers.py` `/mrcall config`/`train`/`feature` handlers, `tools/factory.py:_create_mrcall_tools`, `tests/test_mrcall_integration.py`) — gracefully degraded but still present. Brief at `docs/execution-plans/cleanup-mrcall-configurator-deadcode.md` (in mrcall-desktop tree).
 - `services/command_handlers.py` (5427 lines) — 10x over 500-line guideline
 - `tools/gmail_tools.py` (1002), `workers/task_creation.py` (1149), `workers/memory.py` (916) — all above guideline
 - `services/sync_service.py` (574) — slightly over
+- `tools/calendar_sync.py` is partial scaffolding — never fetched events from Google API; will be wired to the new OAuth tokens in a follow-up.
 - Legacy trained prompts with `{from_email}` placeholders fall back to old behavior (new prompts use cached system prompt)
 - neonize "Press Ctrl+C to exit" line printed by Go runtime — not suppressible from Python
 - Most tests in `tests/` are stale (except `tests/workers/test_task_worker_bugs.py` and the manual cache deliverables)
