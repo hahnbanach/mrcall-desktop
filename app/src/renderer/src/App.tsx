@@ -9,7 +9,7 @@ import NewProfileWizard from './views/NewProfileWizard'
 import Onboarding from './views/Onboarding'
 import SignIn from './views/SignIn'
 import { auth } from './firebase/config'
-import { setupAuthListener } from './firebase/authUtils'
+import { setupAuthListener, setTokenPusher } from './firebase/authUtils'
 import { ConversationsProvider } from './store/conversations'
 import { ThreadProvider, useThread } from './store/thread'
 import { TasksProvider } from './store/tasks'
@@ -702,11 +702,37 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
   const [user, setUser] = useState<User | null>(null)
 
   useEffect(() => {
+    // Wire the token-push hook so authUtils can hand fresh tokens to
+    // the Python sidecar via JSON-RPC. This MUST be set before the
+    // first onAuthStateChanged fires — setTokenPusher is synchronous
+    // and authUtils swallows errors so a sidecar that isn't up yet
+    // (e.g. onboarding mode) won't break signin.
+    setTokenPusher(async ({ uid, email, idToken, expiresAtMs }) => {
+      // Onboarding windows have no sidecar, so window.zylch.account
+      // calls would fail. Defensive: only push when an RPC channel is
+      // viable. We can't easily detect "no sidecar" here without an
+      // RPC roundtrip, so we let the call fail and just log — the
+      // renderer remains usable, and Phase 5's onboarding rework
+      // ensures a sidecar is up before signin completes.
+      try {
+        await window.zylch.account.setFirebaseToken({
+          uid,
+          email,
+          idToken,
+          expiresAtMs
+        })
+      } catch (e) {
+        console.debug('[App] account.setFirebaseToken push skipped:', e)
+      }
+    })
     const unsub = setupAuthListener((u) => {
       setUser(u)
       setAuthReady(true)
     })
-    return unsub
+    return () => {
+      setTokenPusher(null)
+      unsub()
+    }
   }, [])
 
   if (!authReady) {
@@ -722,10 +748,18 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
 // surfaced from Settings via a top-bar action; kept here so it lives
 // next to the gate that consumes it.
 export async function performSignOut(): Promise<void> {
+  // Tell the engine first so its cached session is cleared even if
+  // Firebase's signOut throws (offline, etc). On a no-sidecar window
+  // this is a no-op.
+  try {
+    await window.zylch.account.signOut()
+  } catch (e) {
+    console.debug('[App] engine signOut push skipped:', e)
+  }
   try {
     await signOut(auth)
   } catch (e) {
-    console.error('[App] signOut failed', e)
+    console.error('[App] firebase signOut failed', e)
   }
 }
 

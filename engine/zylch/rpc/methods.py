@@ -1538,3 +1538,13 @@ for _name, _fn in _TASK_QUERY_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
+
+# Firebase account session — `account.set_firebase_token` is what the
+# renderer calls after signin (and on every proactive refresh) to hand
+# the engine a fresh Bearer token for outgoing StarChat calls.
+from zylch.rpc.account import METHODS as _ACCOUNT_METHODS  # noqa: E402
+
+for _name, _fn in _ACCOUNT_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn

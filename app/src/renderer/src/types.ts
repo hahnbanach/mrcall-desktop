@@ -154,6 +154,21 @@ export interface ZylchAPI {
   sidecar: {
     restart: () => Promise<{ ok: boolean }>
   }
+  account: {
+    setFirebaseToken: (args: {
+      uid: string
+      email: string | null
+      idToken: string
+      expiresAtMs: number
+    }) => Promise<{ ok: boolean }>
+    signOut: () => Promise<{ ok: boolean }>
+    whoAmI: () => Promise<{
+      signed_in: boolean
+      uid?: string
+      email?: string | null
+      expires_at_ms?: number
+    }>
+  }
   onboarding: {
     isFirstRun: () => Promise<boolean>
     createProfile: (

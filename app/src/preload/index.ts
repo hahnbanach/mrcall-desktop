@@ -226,6 +226,35 @@ const api = {
     restart: (): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('sidecar:restart') as Promise<{ ok: boolean }>
   },
+  account: {
+    // Push a freshly-issued Firebase ID token from the renderer into the
+    // engine. The engine holds it in-memory and uses it as the Bearer
+    // token for outgoing StarChat calls. Called after signin and on
+    // every proactive refresh (~50 min cadence in authUtils.ts).
+    setFirebaseToken: (args: {
+      uid: string
+      email: string | null
+      idToken: string
+      expiresAtMs: number
+    }): Promise<{ ok: boolean }> =>
+      call<{ ok: boolean }>('account.set_firebase_token', {
+        uid: args.uid,
+        email: args.email,
+        id_token: args.idToken,
+        expires_at_ms: args.expiresAtMs
+      }),
+    // Drop the engine's cached session (renderer-driven signout).
+    signOut: (): Promise<{ ok: boolean }> =>
+      call<{ ok: boolean }>('account.sign_out', {}),
+    // Read-only "what does the engine think my session is?" Never
+    // echoes the token itself.
+    whoAmI: (): Promise<{
+      signed_in: boolean
+      uid?: string
+      email?: string | null
+      expires_at_ms?: number
+    }> => call('account.who_am_i', {})
+  },
   onboarding: {
     // True iff ~/.zylch/profiles is empty (no subdirectories). The
     // onboarding window is opened by the main process before the
