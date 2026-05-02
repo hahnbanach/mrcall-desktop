@@ -223,22 +223,9 @@ class ToolFactory:
         if pipedrive:
             tools.extend(ToolFactory._create_pipedrive_tools(pipedrive))
 
-        # MrCall configuration tools (3 tools)
-        if starchat:
-            tools.extend(
-                ToolFactory._create_mrcall_tools(
-                    starchat_client=starchat,
-                    session_state=session_state,
-                    storage=supabase_storage,
-                    owner_id=config.owner_id,
-                    api_key=config.anthropic_api_key,
-                    provider=getattr(
-                        config,
-                        "llm_provider",
-                        "anthropic",
-                    ),
-                )
-            )
+        # MrCall configuration tools removed — desktop is a consumer of
+        # MrCall via StarChat, not a configurator. Configuration lives in
+        # the dashboard / `mrcall-agent` repo.
 
         # SMS tool (send only - verification removed)
         tools.append(SendSMSTool(session_state=session_state))
@@ -454,47 +441,6 @@ class ToolFactory:
         return [
             SearchPipedrivePersonTool(pipedrive_client),
             GetPipedrivePersonDealsTool(pipedrive_client),
-        ]
-
-    @staticmethod
-    def _create_mrcall_tools(
-        starchat_client,
-        session_state: SessionState,
-        storage,
-        owner_id: str,
-        api_key: str,
-        provider: str,
-    ) -> List[Tool]:
-        """Create MrCall assistant config tools."""
-        from .mrcall import (
-            GetAssistantCatalogTool,
-            ConfigureAssistantTool,
-        )
-        from .mrcall.feature_context_tool import (
-            GetMrCallFeatureContextTool,
-        )
-        from zylch.agents.trainers import (
-            MrCallConfiguratorTrainer,
-        )
-
-        trainer = MrCallConfiguratorTrainer(
-            storage=storage,
-            starchat_client=starchat_client,
-            owner_id=owner_id,
-            api_key=api_key,
-            provider=provider,
-        )
-
-        return [
-            GetAssistantCatalogTool(starchat_client, session_state),
-            GetMrCallFeatureContextTool(trainer, session_state),
-            ConfigureAssistantTool(
-                starchat_client,
-                session_state,
-                trainer,
-                api_key,
-                provider,
-            ),
         ]
 
     @staticmethod

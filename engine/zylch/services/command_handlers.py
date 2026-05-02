@@ -787,14 +787,6 @@ async def handle_mrcall(
         user_email: User's email (optional)
         context: Request context containing source, firebase_token, etc.
     """
-    # Check if MrCall module is available
-    try:
-        from zylch.agents.trainers.mrcall_configurator import (
-            MrCallConfiguratorTrainer,
-        )
-    except (ImportError, ModuleNotFoundError):
-        return "MrCall is not available." " The MrCall agent module is not installed."
-
     from zylch.storage import Storage
     from zylch.api.token_storage import get_mrcall_credentials
     import httpx
@@ -807,36 +799,17 @@ async def handle_mrcall(
         f"[/mrcall] is_dashboard={is_dashboard}, has_firebase_token={bool(firebase_token)}"
     )
 
-    FEATURE_TO_VARIABLES = {
-        name: feature["variables"] for name, feature in MrCallConfiguratorTrainer.FEATURES.items()
-    }
-    SUPPORTED_FEATURES = list(FEATURE_TO_VARIABLES.keys())
-
     help_text = """**📞 MrCall Integration**
 
-**Interactive Mode (recommended):**
-• `/mrcall open [business_id]` - Enter configuration mode
-• `/mrcall exit` - Exit configuration mode
-
-In config mode, use natural language:
-- "Enable booking with 30-minute appointments"
-- "Change the greeting to be more formal"
-- "Show me the current settings"
+This desktop is a *consumer* of your MrCall assistants.
+Configure them at https://dashboard.mrcall.ai
 
 **Quick Commands:**
 • `/mrcall list` - List your MrCall assistants
 • `/mrcall link <business_id>` - Link to assistant by ID
-• `/mrcall show [feature]` - Show current configuration
 • `/mrcall unlink` - Unlink current assistant
-• `/mrcall` - Show current link status
-
-**Advanced:**
 • `/mrcall variables [get] [--name NAME]` - List/filter variables
-• `/mrcall variables set <NAME> <VALUE>` - Set variable directly
-• `/agent mrcall train` - Manually train agent
-• `/agent mrcall run "..."` - Single-turn configuration
-
-**Features:** welcome_inbound, welcome_outbound, booking (more coming)
+• `/mrcall` - Show current link status
 
 **Setup:**
 1. Run `/connect mrcall` to authenticate with MrCall
@@ -1207,246 +1180,23 @@ Run `/agent mrcall train` to generate configuration context for all features."""
 
 {sub_prompt}"""
 
-        # Subcommand: config - Configure assistant behavior
+        # Subcommand: config — moved to the dashboard.
         if subcommand == "config":
             logger.debug(f"[/mrcall config] positional={positional}")
-            import asyncio
-            from concurrent.futures import ThreadPoolExecutor
-            from zylch.api.token_storage import get_active_llm_provider
-
-            # Validate args: config <feature> <instructions>
-            if len(positional) < 2:
-                return f"""❌ **Missing feature and instructions**
-
-**Usage:** `/mrcall config <feature> "instructions"`
-
-**Example:**
-```
-/mrcall config welcome_inbound "use formal tone (lei/Sie), don't ask for name"
-```
-
-**Supported features:** {', '.join(SUPPORTED_FEATURES)}"""
-
-            feature_name = positional[1]
-            if feature_name not in SUPPORTED_FEATURES:
-                return f"""❌ **Unknown feature:** `{feature_name}`
-
-**Supported features:** {', '.join(SUPPORTED_FEATURES)}"""
-
-            # Join remaining args as instructions (handles multi-line quoted strings)
-            instructions = " ".join(positional[2:])
-            if not instructions:
-                return f"""❌ **Missing instructions**
-
-**Usage:** `/mrcall config {feature_name} "your instructions here"`
-
-**Example:**
-```
-/mrcall config welcome_inbound "use formal tone, don't ask for name"
-```"""
-
-            # Dashboard detection for firebase_token
-            is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
-            firebase_token = context.get("firebase_token") if context else None
-            logger.debug(
-                f"[/mrcall config] is_dashboard={is_dashboard}, firebase_token={'present' if firebase_token else 'absent'}"
+            return (
+                "**Configure your MrCall assistant from the dashboard:**\n\n"
+                "https://dashboard.mrcall.ai\n\n"
+                "Local desktop configuration was removed — the desktop is a "
+                "consumer of MrCall via StarChat (see `/mrcall list`, "
+                "`/mrcall link`)."
             )
 
-            # Get MrCall credentials (skip OAuth check for dashboard users)
-            if not is_dashboard:
-                creds = get_mrcall_credentials(owner_id)
-                if not creds or not creds.get("access_token"):
-                    return "❌ **MrCall not connected**\n\nRun `/connect mrcall` first."
-
-            # Get linked business ID (explicit /mrcall link takes priority over OAuth default)
-            business_id = client.get_mrcall_link(owner_id)
-            if not business_id:
-                return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
-
-            logger.debug(
-                f"[/mrcall config] feature={feature_name}, business_id={business_id}, instructions_len={len(instructions)}"
+        # Subcommand: feature — moved to the dashboard.
+        if subcommand == "feature":
+            return (
+                "**Manage MrCall features from the dashboard:**\n\n"
+                "https://dashboard.mrcall.ai"
             )
-
-            # Get LLM credentials (with system-level fallback for dashboard)
-            llm_provider, api_key = get_active_llm_provider(owner_id)
-            if not api_key and is_dashboard:
-                # System-level fallback for dashboard users (no BYOK)
-                from zylch.llm.providers import get_system_llm_credentials
-
-                llm_provider, api_key = get_system_llm_credentials()
-                if api_key:
-                    logger.info(
-                        f"[/mrcall config] Using system-level {llm_provider} API key for owner={owner_id}"
-                    )
-            logger.debug(
-                f"[/mrcall config] llm_provider={llm_provider}, api_key={'present' if api_key else 'absent'}"
-            )
-            if not api_key:
-                return "❌ **No LLM configured**\n\nRun `/connect anthropic` to configure an LLM provider."
-
-            # Get variable names for this feature (can be multiple)
-            variable_names = FEATURE_TO_VARIABLES[feature_name]
-            logger.debug(f"[/mrcall config] variable_names={variable_names}")
-
-            # Run the config update in executor (involves multiple async calls)
-            # Pass is_dashboard and firebase_token into closure for StarChat client creation
-            def _config_feature():
-                import asyncio
-                from zylch.tools.starchat import StarChatClient, create_starchat_client
-                from zylch.agents.trainers import MrCallConfiguratorTrainer
-                from zylch.tools.mrcall.llm_helper import modify_variables_with_llm
-
-                # Create a new event loop for this thread
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    # Create StarChat client (dashboard uses firebase_token, CLI uses OAuth)
-                    if is_dashboard and firebase_token:
-                        from zylch.config import settings
-
-                        starchat = StarChatClient(
-                            base_url=settings.mrcall_base_url.rstrip("/"),
-                            auth_type="firebase",
-                            jwt_token=firebase_token,
-                            realm=settings.mrcall_realm,
-                            owner_id=owner_id,
-                            verify_ssl=settings.starchat_verify_ssl,
-                        )
-                        logger.debug("[/mrcall config] StarChat client created with firebase_token")
-                    else:
-                        starchat = loop.run_until_complete(create_starchat_client(owner_id))
-                        logger.debug("[/mrcall config] StarChat client created with OAuth")
-
-                    # 1. Load context (lazy generate if missing)
-                    agent_type = f"mrcall_{business_id}_{feature_name}"
-                    context = client.get_agent_prompt(owner_id, agent_type)
-                    logger.debug(
-                        f"[/mrcall config] get_agent_prompt(agent_type={agent_type}) -> context_len={len(context) if context else 0}"
-                    )
-
-                    trainer = MrCallConfiguratorTrainer(
-                        storage=client,
-                        starchat_client=starchat,
-                        owner_id=owner_id,
-                        api_key=api_key,
-                        provider=llm_provider,
-                    )
-
-                    if not context:
-                        # Generate it first
-                        logger.info(f"No context found for {feature_name}, generating...")
-                        context, _ = loop.run_until_complete(
-                            trainer.train_feature(feature_name, business_id)
-                        )
-                        logger.debug(
-                            f"[/mrcall config] train_feature() -> context_len={len(context) if context else 0}"
-                        )
-
-                    # 2. Get current values for ALL variables in this feature
-                    business_data = loop.run_until_complete(
-                        starchat.get_business_config(business_id)
-                    )
-                    business_variables = business_data.get("variables", {})
-                    logger.debug(
-                        f"[/mrcall config] get_business_config() -> vars_count={len(business_variables)}"
-                    )
-
-                    current_values = {}
-                    missing_vars = []
-                    for var_name in variable_names:
-                        value = business_variables.get(var_name, "")
-                        if value:
-                            current_values[var_name] = value
-                        else:
-                            missing_vars.append(var_name)
-
-                    if missing_vars:
-                        loop.run_until_complete(starchat.close())
-                        return None, None, f"Variable(s) not found: {', '.join(missing_vars)}"
-
-                    # 3. Use LLM with function calling to modify ALL variables
-                    logger.debug(
-                        f"[/mrcall config] calling modify_variables_with_llm(current_values={list(current_values.keys())})"
-                    )
-                    update_result = loop.run_until_complete(
-                        modify_variables_with_llm(
-                            current_values=current_values,
-                            context=context,
-                            instructions=instructions,
-                            api_key=api_key,
-                            provider=llm_provider,
-                        )
-                    )
-                    logger.debug(
-                        f"[/mrcall config] modify_variables_with_llm() -> new_values={list(update_result.new_values.keys())}"
-                    )
-
-                    # 4. Apply ALL new values to StarChat
-                    for var_name, new_value in update_result.new_values.items():
-                        logger.debug(
-                            f"[/mrcall config] update_business_variable({var_name}) -> new_value_len={len(new_value)}"
-                        )
-                        loop.run_until_complete(
-                            starchat.update_business_variable(business_id, var_name, new_value)
-                        )
-
-                    # 5. Retrain to update sub-prompt
-                    logger.debug(f"[/mrcall config] retraining feature {feature_name}")
-                    loop.run_until_complete(trainer.train_feature(feature_name, business_id))
-
-                    # Close starchat client
-                    loop.run_until_complete(starchat.close())
-
-                    return update_result.new_values, update_result.behavior_summary, None
-                except Exception as e:
-                    logger.error(f"Config feature error: {e}", exc_info=True)
-                    return None, None, str(e)
-                finally:
-                    loop.close()
-
-            executor = ThreadPoolExecutor(max_workers=1)
-            loop = asyncio.get_event_loop()
-
-            try:
-                new_values, behavior_summary, error = await loop.run_in_executor(
-                    executor, _config_feature
-                )
-
-                if error:
-                    # Check for auth errors
-                    if any(
-                        code in error for code in ["405", "401", "403", "Unauthorized", "Forbidden"]
-                    ):
-                        return "❌ **MrCall connection expired**\n\nRun `/connect mrcall` to reconnect."
-                    return f"❌ **Error configuring assistant:** {error}"
-
-                # Log variables for debugging (internal only)
-                logger.debug(f"Variables updated for {feature_name}: {list(new_values.keys())}")
-
-                # Get display name for user-friendly message
-                from zylch.agents.trainers import MrCallConfiguratorTrainer
-
-                display_name = MrCallConfiguratorTrainer.FEATURES.get(feature_name, {}).get(
-                    "display_name", feature_name
-                )
-
-                return f"""✅ **Configuration updated**
-
-**{display_name}**
-
-{behavior_summary}
-
-Run `/mrcall show {feature_name}` to see the full configuration."""
-
-            except Exception as e:
-                logger.error(f"Failed to config feature: {e}", exc_info=True)
-                error_str = str(e)
-                # Check for auth errors
-                if any(
-                    code in error_str for code in ["405", "401", "403", "Unauthorized", "Forbidden"]
-                ):
-                    return "❌ **MrCall connection expired**\n\nRun `/connect mrcall` to reconnect."
-                return f"❌ **Error configuring assistant:** {error_str}"
 
         # No subcommand: show status
         if subcommand is None:
@@ -3280,56 +3030,15 @@ async def handle_agent(
         # =====================
         elif domain == "mrcall":
             if action == "train":
-                from zylch.agents.trainers import MrCallConfiguratorTrainer
-
-                # Optional feature argument: /agent mrcall train [feature] [--force]
-                remaining = args[2:] if len(args) > 2 else []
-                force = "--force" in remaining
-                remaining = [a for a in remaining if a != "--force"]
-                feature = remaining[0] if remaining else None
-
-                # Validate feature early
-                if feature and feature not in MrCallConfiguratorTrainer.FEATURES:
-                    available = list(MrCallConfiguratorTrainer.FEATURES.keys())
-                    return (
-                        f"❌ **Unknown feature:** `{feature}`\n\nAvailable: {', '.join(available)}"
-                    )
-
-                business_id = storage.get_mrcall_link(owner_id)
-                if not business_id:
-                    return "❌ **No assistant linked**\n\nRun `/mrcall list` then `/mrcall link <ID>` first."
-
-                firebase_token = context.get("firebase_token", "") if context else ""
-
-                # Run as background job (training takes 5-8 min, would 504 inline)
-                job = storage.create_background_job(
-                    owner_id=owner_id,
-                    job_type="mrcall_train",
-                    channel="mrcall",
-                    business_id=business_id,
-                    params={
-                        "force": force,
-                        "features": [feature] if feature else None,
-                        "business_id": business_id,
-                        "firebase_token": firebase_token,
-                    },
+                # Training the MrCall configurator was a platform-side
+                # responsibility that never landed in the desktop. Point
+                # the user at the dashboard.
+                return (
+                    "**Train your MrCall assistant from the dashboard:**\n\n"
+                    "https://dashboard.mrcall.ai\n\n"
+                    "Local training was removed — the desktop is a "
+                    "consumer of MrCall via StarChat."
                 )
-
-                if job["status"] in ("pending", "running"):
-                    if job["status"] == "pending":
-                        import asyncio
-                        from zylch.services.job_executor import JobExecutor
-
-                        executor = JobExecutor(storage)
-                        asyncio.create_task(
-                            executor.execute_job(
-                                job["id"], owner_id, api_key, llm_provider, user_email
-                            )
-                        )
-                        logger.info(f"[/agent mrcall train] Scheduled background job {job['id']}")
-                    return "🚀 **Training started**\n\nYou'll be notified when it completes."
-
-                return "❌ Failed to create training job."
 
             elif action == "run":
                 instructions = " ".join(args[2:]) if len(args) > 2 else ""
@@ -3875,394 +3584,22 @@ async def _handle_mrcall_agent_train(
     force: bool = False,
     job_id: str = None,
 ) -> str:
-    """Train MrCall features and build unified agent.
+    """Stub — MrCall training was a platform-side responsibility that
+    never landed in the desktop. Point users at the dashboard.
 
-    Supports selective retraining: only re-generates prompts for features
-    whose variables changed since the last training snapshot.
-
-    Args:
-        feature: Optional specific feature to train. If None, uses diff logic.
-        context: Request context (for dashboard detection)
-        force: If True, skip diff and retrain all features.
-        job_id: Optional background job ID for progress reporting and stop checks.
+    The signature is preserved because `services/job_executor.py:
+    _execute_mrcall_train` still calls this function as a coroutine.
     """
-    import asyncio
-    from datetime import datetime, timezone
-    from zylch.agents.trainers import MrCallAgentTrainer, MrCallConfiguratorTrainer
-    from zylch.tools.starchat import StarChatClient, create_starchat_client
-
-    # Dashboard detection
-    is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
-    firebase_token = context.get("firebase_token") if context else None
-
-    # Check MrCall is connected (skip for dashboard - they use firebase_token)
-    if not is_dashboard:
-        from zylch.api.token_storage import get_mrcall_credentials
-
-        mrcall_creds = get_mrcall_credentials(owner_id)
-        if not mrcall_creds or not mrcall_creds.get("access_token"):
-            return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
-
-    if not api_key or not llm_provider:
-        return """❌ **LLM API key required**
-
-Connect your LLM provider:
-`/connect anthropic` or `/connect openai` or `/connect mistral`"""
-
-    # Check MrCall is linked
-    business_id = storage.get_mrcall_link(owner_id)
-    if not business_id:
-        return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
-
-    # Validate feature if specified
-    if feature and feature not in MrCallConfiguratorTrainer.FEATURES:
-        available = list(MrCallConfiguratorTrainer.FEATURES.keys())
-        return f"""❌ **Unknown feature:** `{feature}`
-
-Available features: {', '.join(available)}
-
-Usage:
-• `/agent mrcall train` - Train all features
-• `/agent mrcall train {available[0]}` - Train specific feature"""
-
-    try:
-        # Create StarChat client (dashboard vs CLI)
-        if is_dashboard and firebase_token:
-            from zylch.config import settings
-
-            starchat = StarChatClient(
-                base_url=settings.mrcall_base_url.rstrip("/"),
-                auth_type="firebase",
-                jwt_token=firebase_token,
-                realm=settings.mrcall_realm,
-                owner_id=owner_id,
-                verify_ssl=settings.starchat_verify_ssl,
-            )
-            logger.info("[/agent mrcall train] Created StarChatClient with firebase_token")
-        else:
-            starchat = await create_starchat_client(owner_id)
-
-        # Train feature(s) using MrCallConfiguratorTrainer
-        configurator = MrCallConfiguratorTrainer(
-            storage=storage,
-            starchat_client=starchat,
-            owner_id=owner_id,
-            api_key=api_key,
-            provider=llm_provider,
-        )
-
-        # Fetch live business config for snapshot comparison
-        business = await starchat.get_business_config(business_id)
-        if not business:
-            return f"❌ **Error:** Business not found: {business_id}"
-        live_variables = business.get("variables", {})
-
-        # Determine which features to train
-        features_to_train = []
-        skipped_features = []
-        diff_info = None
-
-        if feature:
-            # Explicit feature requested — always train it
-            features_to_train = [feature]
-            logger.info(f"[/agent mrcall train] Explicit feature requested: {feature}")
-        elif force:
-            # Force retrain all
-            features_to_train = list(MrCallConfiguratorTrainer.FEATURES.keys())
-            logger.info(
-                f"[/agent mrcall train] Force retrain all {len(features_to_train)} features"
-            )
-        else:
-            # Selective retraining: load snapshot and diff
-            snapshot = storage.get_training_snapshot(owner_id, business_id)
-
-            if snapshot is None:
-                # First training — no snapshot exists, train everything
-                features_to_train = list(MrCallConfiguratorTrainer.FEATURES.keys())
-                logger.info(
-                    f"[/agent mrcall train] First training (no snapshot), training all {len(features_to_train)} features"
-                )
-            else:
-                # Diff snapshot vs live variables
-                snapshot_variables = snapshot.get("variables", {})
-                diff_info = MrCallConfiguratorTrainer.diff_snapshot(
-                    snapshot_variables, live_variables
-                )
-                stale_features = diff_info["stale_features"]
-
-                if not stale_features:
-                    # Verify unified prompt exists — it may have been lost
-                    unified_key = f"mrcall_{business_id}"
-                    if not storage.get_agent_prompt(owner_id, unified_key):
-                        logger.warning(
-                            "[/agent mrcall train] Snapshot up-to-date but unified prompt missing. Rebuilding..."
-                        )
-                        agent_trainer = MrCallAgentTrainer(
-                            storage=storage,
-                            owner_id=owner_id,
-                            api_key=api_key,
-                            user_email=user_email or "",
-                            provider=llm_provider,
-                            starchat_client=starchat,
-                        )
-                        try:
-                            prompt, metadata = await agent_trainer.build_prompt(business_id)
-                            storage.store_agent_prompt(owner_id, unified_key, prompt, metadata)
-                            logger.info("[/agent mrcall train] Unified prompt rebuilt successfully")
-                        except Exception as e:
-                            logger.error(
-                                f"[/agent mrcall train] Failed to rebuild unified prompt: {e}"
-                            )
-                            # Fall through to full retrain
-                            features_to_train = list(MrCallConfiguratorTrainer.FEATURES.keys())
-                            stale_features = set(features_to_train)
-
-                if not stale_features:
-                    if is_dashboard:
-                        import random
-
-                        _DASHBOARD_UPTODATE_MESSAGES = [
-                            "Your assistant is already up to date! Nothing to retrain.",
-                            "All good! The assistant already knows everything.",
-                            "No changes detected — your assistant is sharp as ever.",
-                            "Already trained and ready to go!",
-                            "Nothing new to learn — your assistant is all caught up.",
-                        ]
-                        return random.choice(_DASHBOARD_UPTODATE_MESSAGES)
-                    return """✅ **Already up to date**
-
-No variables have changed since the last training. Nothing to retrain.
-
-Use `/agent mrcall train --force` to retrain all features anyway."""
-
-                features_to_train = list(stale_features)
-                skipped_features = list(diff_info["current_features"])
-                logger.info(
-                    f"[/agent mrcall train] Selective retraining: "
-                    f"{len(features_to_train)} stale ({features_to_train}), "
-                    f"{len(skipped_features)} current ({skipped_features})"
-                )
-
-        # Train the features (parallel with asyncio.gather for speed)
-        trained_features = []
-        failed_features = []
-        total_features = len(features_to_train)
-
-        # Helper: check if job was cancelled (for early exit)
-        def _is_stopped() -> bool:
-            if not job_id:
-                return False
-            from zylch.services.job_executor import _should_stop_job
-
-            return _should_stop_job(storage, job_id, owner_id)
-
-        # Update progress before training starts
-        if job_id:
-            storage.update_background_job_progress(
-                job_id,
-                progress_pct=15,
-                items_processed=0,
-                total_items=total_features,
-                status_message=f"Training {total_features} features...",
-            )
-
-        # Check for early cancellation
-        if _is_stopped():
-            return "Training cancelled by user."
-
-        # Train features SEQUENTIALLY to avoid Anthropic rate limits (429)
-        completed_count = 0
-
-        async def _train_one(feat_name: str):
-            nonlocal completed_count
-            try:
-                await configurator.train_feature(feat_name, business_id)
-                completed_count += 1
-                # Update progress
-                if job_id:
-                    pct = 15 + int(completed_count / total_features * 70)  # 15% → 85%
-                    storage.update_background_job_progress(
-                        job_id,
-                        progress_pct=pct,
-                        items_processed=completed_count,
-                        total_items=total_features,
-                        status_message=f"Trained {completed_count}/{total_features} features ({feat_name})",
-                    )
-                return (feat_name, None)
-            except Exception as e:
-                logger.error(
-                    f"[/agent mrcall train] Failed to train {feat_name}: {e}", exc_info=True
-                )
-                return (feat_name, str(e))
-
-        for feat_name in features_to_train:
-            if _is_stopped():
-                return "Training cancelled by user."
-            result = await _train_one(feat_name)
-            feat_result_name, feat_err = result
-            # Retry once on rate limit errors
-            if feat_err and "rate_limit" in feat_err.lower():
-                logger.info(f"[/agent mrcall train] Rate limited on {feat_name}, retrying in 5s...")
-                await asyncio.sleep(5)
-                result = await _train_one(feat_name)
-                feat_result_name, feat_err = result
-            if feat_err is None:
-                trained_features.append(feat_result_name)
-            else:
-                failed_features.append((feat_result_name, feat_err))
-
-        # Check for cancellation after training
-        if _is_stopped():
-            return "Training cancelled by user."
-
-        # Update progress: building unified prompt
-        if job_id:
-            storage.update_background_job_progress(
-                job_id,
-                progress_pct=90,
-                items_processed=total_features,
-                total_items=total_features,
-                status_message="Building unified agent prompt...",
-            )
-
-        # Build unified agent prompt (combines ALL feature sub-prompts, including unchanged ones)
-        agent_trainer = MrCallAgentTrainer(
-            storage=storage,
-            owner_id=owner_id,
-            api_key=api_key,
-            user_email=user_email or "",
-            provider=llm_provider,
-            starchat_client=starchat,
-        )
-
-        prompt, metadata = await agent_trainer.build_prompt(business_id)
-
-        # Store unified agent prompt
-        storage.store_agent_prompt(owner_id, f"mrcall_{business_id}", prompt, metadata)
-
-        # Update snapshot — only for successfully trained features
-        # Load existing snapshot and merge in new values for trained features
-        existing_snapshot = storage.get_training_snapshot(owner_id, business_id)
-        snapshot_vars = existing_snapshot.get("variables", {}) if existing_snapshot else {}
-
-        for feat_name in trained_features:
-            feat_var_names = MrCallConfiguratorTrainer.FEATURES[feat_name]["variables"]
-            for var_name in feat_var_names:
-                val = live_variables.get(var_name)
-                snapshot_vars[var_name] = str(val) if val is not None else None
-
-        storage.store_training_snapshot(
-            owner_id=owner_id,
-            business_id=business_id,
-            variables=snapshot_vars,
-            metadata={
-                "features_trained": trained_features,
-                "features_skipped": skipped_features,
-                "features_failed": [f[0] for f in failed_features],
-                "generated_at": datetime.now(timezone.utc).isoformat(),
-                "total_features": len(MrCallConfiguratorTrainer.FEATURES),
-                "selective": diff_info is not None,
-            },
-        )
-
-        features_included = metadata.get("features_included", trained_features)
-
-        # Dashboard-friendly completion messages (random, fun)
-        _DASHBOARD_TRAINING_MESSAGES = [
-            "Done! Sorry for keeping you waiting, but patience is a virtue... or so they say.",
-            "All trained up! Your assistant is now smarter than it was 30 seconds ago.",
-            "Training complete! The assistant learned a lot. Pop quiz later.",
-            "Finished! Your assistant is ready to impress your callers.",
-            "Done! I'd give your assistant an A+ if I could grade it.",
-            "All set! Your assistant just graduated from configuration school.",
-            "Training done! Your assistant promises to use this knowledge wisely.",
-            "Complete! The assistant has been thoroughly briefed and is eager to perform.",
-            "Voila! Configuration absorbed, understood, and committed to memory.",
-            "That's a wrap! Your assistant is locked and loaded.",
-            "Mission accomplished! All features trained and ready to go.",
-            "Done! The assistant took great notes. It's a star student.",
-            "Training complete! No configurations were harmed in the process.",
-            "All done! Your assistant is now fully up to speed.",
-            "Finished! It took a moment, but perfection takes time.",
-            "Complete! The assistant is now an expert on your setup.",
-            "Done and dusted! Your MrCall assistant is ready to shine.",
-            "Training wrapped up! Everything looks good from here.",
-            "Success! Your assistant has memorized every configuration detail.",
-            "All features trained! Your assistant is ready for its first day.",
-        ]
-
-        # Build response message
-        if is_dashboard and not failed_features:
-            import random
-
-            return random.choice(_DASHBOARD_TRAINING_MESSAGES)
-
-        if failed_features:
-            failed_msg = "\n".join(f"  - {f}: {e}" for f, e in failed_features)
-            return f"""⚠️ **Training partially completed**
-
-**Trained:** {', '.join(trained_features)}
-**Failed:**
-{failed_msg}
-{"**Skipped (unchanged):** " + ', '.join(skipped_features) if skipped_features else ""}
-
-**Usage:**
-`/agent mrcall run "your instructions here"`"""
-
-        if feature:
-            return f"""✅ **Feature '{feature}' Trained**
-
-Agent updated with new '{feature}' configuration knowledge.
-
-**All features:** {', '.join(features_included)}
-
-**Usage:**
-`/agent mrcall run "your instructions here"`"""
-
-        if skipped_features:
-            changed_vars_msg = ""
-            if diff_info and diff_info["changed_variables"]:
-                changed_vars_msg = "\n**Changed variables:** " + ", ".join(
-                    cv["name"] for cv in diff_info["changed_variables"]
-                )
-
-            return f"""✅ **MrCall Agent Trained (selective)**
-
-**Retrained:** {', '.join(trained_features)}
-**Skipped (unchanged):** {', '.join(skipped_features)}{changed_vars_msg}
-
-Saved {len(skipped_features)} LLM calls by only retraining features with changed variables.
-
-**Usage:**
-`/agent mrcall run "enable booking with 30-min appointments"`"""
-        else:
-            return f"""✅ **MrCall Agent Trained**
-
-Your unified MrCall configuration agent is ready!
-
-**Features trained:** {', '.join(features_included)}
-
-**Usage:**
-`/agent mrcall run "enable booking with 30-min appointments"`
-`/agent mrcall run "change the welcome message"`
-`/agent mrcall run "what are my current settings?"`"""
-
-    except ValueError as e:
-        return f"❌ **Error:** {str(e)}"
-    except Exception as e:
-        logger.error(f"MrCall agent train error: {e}", exc_info=True)
-        error_str = str(e).lower()
-        if (
-            "405" in error_str
-            or "401" in error_str
-            or "403" in error_str
-            or "unauthorized" in error_str
-        ):
-            return """❌ **MrCall authentication error**
-
-Please connect your MrCall account:
-`/connect mrcall`"""
-        return f"❌ **Error:** {str(e)}"
+    logger.info(
+        f"[mrcall_train] Stubbed call: owner={owner_id}, feature={feature}, "
+        f"force={force}, job_id={job_id}"
+    )
+    return (
+        "**Train your MrCall assistant from the dashboard:**\n\n"
+        "https://dashboard.mrcall.ai\n\n"
+        "Local training was removed — the desktop is a consumer of "
+        "MrCall via StarChat."
+    )
 
 
 async def _handle_mrcall_agent_run(
@@ -4851,139 +4188,14 @@ For quick changes without dialogue, use single-turn mode:
 
 
 def _tutorial_mrcall_dev() -> str:
-    """Tutorial for developers adding MrCall features."""
-    return """**MrCall Developer Guide**
-
-How to add new configurable features to MrCall.
-
----
-
-## Architecture Overview
-
-MrCall uses a **two-tier training architecture**:
-
-```
-Layer 1: MrCallConfiguratorTrainer
-    | Generates feature sub-prompts from current config
-    v
-Layer 2: MrCallAgentTrainer
-    | Combines sub-prompts into unified agent
-    v
-MrCallAgent
-    | Runs with 4 tools, auto-selects based on intent
-    v
-StarChat API (updates variables)
-```
-
----
-
-## Single Source of Truth
-
-**CRITICAL:** All feature/variable mappings are defined in ONE place:
-
-```python
-# zylch/agents/mrcall_configurator_trainer.py
-MrCallConfiguratorTrainer.FEATURES
-```
-
-Other files DERIVE from this automatically. Never manually edit mappings elsewhere.
-
----
-
-## Adding a New Feature
-
-### 1. Define Meta-Prompt
-
-In `zylch/agents/mrcall_configurator_trainer.py`:
-
-```python
-MY_FEATURE_META_PROMPT = '''You are analyzing the X configuration...
-
-## VARIABLES CONTEXT:
-{variables_context}
-
-OUTPUT ONLY THE SUB-PROMPT TEXT.'''
-```
-
-### 2. Add to FEATURES Dict
-
-```python
-FEATURES = {
-    # ... existing features ...
-    "my_feature": {
-        "variables": ["VAR1", "VAR2", "VAR3"],
-        "description": "What this feature controls",
-        "display_name": "User-facing name",
-        "meta_prompt": MY_FEATURE_META_PROMPT,
-        "dynamic_context": True,  # if multiple variables
-    },
-}
-```
-
-### 3. Add Tool to Agent
-
-In `zylch/agents/mrcall_agent.py`:
-
-```python
-MRCALL_AGENT_TOOLS = [
-    # ... existing tools ...
-    {
-        "name": "configure_my_feature",
-        "description": "Modify my_feature settings...",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "changes": {
-                    "type": "object",
-                    "additionalProperties": {"type": "string"}
-                }
-            },
-            "required": ["changes"]
-        }
-    },
-]
-```
-
-### 4. Add Handler
-
-In `MrCallAgent._handle_tool_response()`:
-
-```python
-elif block.name == 'configure_my_feature':
-    result['result'] = await self._process_configure(
-        block.input, 'my_feature'
+    """Pointer to the dashboard for MrCall configuration."""
+    return (
+        "**MrCall configuration**\n\n"
+        "MrCall assistants are configured from the dashboard at "
+        "https://dashboard.mrcall.ai. The desktop is a *consumer* of "
+        "MrCall via StarChat (see `/mrcall list`, `/mrcall link`, and "
+        "the `mrcall.list_my_businesses` JSON-RPC method)."
     )
-```
-
-### 5. Update Help Text
-
-In `command_handlers.py`, update the features list in help text.
-
----
-
-## Testing
-
-```bash
-/agent mrcall train my_feature    # Train just the new feature
-/agent mrcall train               # Retrain all + rebuild unified agent
-/agent mrcall run "modify my_feature settings"
-```
-
----
-
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `mrcall_configurator_trainer.py` | FEATURES dict (source of truth) + meta-prompts |
-| `mrcall_agent_trainer.py` | Combines sub-prompts into unified agent |
-| `mrcall_agent.py` | Tools + handlers for running agent |
-| `command_handlers.py` | CLI command routing |
-
----
-
-**Full guide:** See skill `zylch-mrcall-feature-configuration`
-"""
 
 
 def _tutorial_tasks() -> str:

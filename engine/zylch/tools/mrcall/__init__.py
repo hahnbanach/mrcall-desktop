@@ -1,15 +1,12 @@
 """MrCall integration package.
 
-Currently exposes only the legacy CLI OAuth2 PKCE flow (`oauth.py`) and
-the Firebase-session StarChat client factory (`starchat_firebase.py`).
+Re-exports:
 
-The original module docstring advertised a richer "configurator" toolset
-(`variable_utils`, `llm_helper`, `config_tools`, `feature_context_tool`)
-re-exported from this package. Those modules were never present in this
-checkout — the upstream subtree merge brought in only `__init__.py` and
-`oauth.py`. The matching trainer (`MrCallConfiguratorTrainer`) is
-likewise absent, and every code path that would have consumed those
-symbols already short-circuits at runtime with "MrCall is not
-available." So those dead imports were stripped to make the package
-import cleanly; do not re-add them without the corresponding modules.
+- `oauth.py` — legacy CLI OAuth2 PKCE flow (used by `zylch init` /
+  `zylch.cli.setup`).
+- `starchat_firebase.py` — Firebase-session StarChat client factory
+  (used by `zylch.rpc.mrcall_actions`).
+
+The desktop is a consumer of MrCall, not a configurator; assistant
+configuration lives in the dashboard / `mrcall-agent` repo.
 """
