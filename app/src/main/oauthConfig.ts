@@ -23,4 +23,11 @@
 //
 // Empty string means "Continue with Google" is not configured for this
 // build; the IPC returns a friendly error rather than silently failing.
-export const GOOGLE_SIGNIN_CLIENT_ID = ''
+//
+// The project-number prefix `375340415237` matches the
+// `messagingSenderId` in `renderer/firebase/config.ts`, confirming the
+// client lives in the same Google Cloud project as Firebase Auth — so
+// the resulting id_token's audience is accepted without an external
+// whitelist step.
+export const GOOGLE_SIGNIN_CLIENT_ID =
+  '375340415237-jl3hl6hcu15po65oo7dovl1lb3a960ni.apps.googleusercontent.com'
