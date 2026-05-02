@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { signOut, type User } from 'firebase/auth'
 import Tasks from './views/Tasks'
 import Workspace from './views/Workspace'
 import Update from './views/Update'
@@ -6,6 +7,9 @@ import Settings from './views/Settings'
 import Email from './views/Email'
 import NewProfileWizard from './views/NewProfileWizard'
 import Onboarding from './views/Onboarding'
+import SignIn from './views/SignIn'
+import { auth } from './firebase/config'
+import { setupAuthListener } from './firebase/authUtils'
 import { ConversationsProvider } from './store/conversations'
 import { ThreadProvider, useThread } from './store/thread'
 import { TasksProvider } from './store/tasks'
@@ -688,7 +692,44 @@ function Sidebar({
   )
 }
 
-export default function App(): JSX.Element {
+// Gates the entire UI behind a Firebase signin. The first frame after
+// mount waits one tick on `onAuthStateChanged` (Firebase Auth restores
+// the session from indexedDB synchronously in practice but the listener
+// fires async); we render a blank shell during that brief window to
+// avoid a flash of the SignIn screen for users with a persisted session.
+function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Element {
+  const [authReady, setAuthReady] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+
+  useEffect(() => {
+    const unsub = setupAuthListener((u) => {
+      setUser(u)
+      setAuthReady(true)
+    })
+    return unsub
+  }, [])
+
+  if (!authReady) {
+    return <div className="min-h-screen w-full bg-brand-light-grey" />
+  }
+  if (!user || user.isAnonymous) {
+    return <SignIn />
+  }
+  return <>{children}</>
+}
+
+// Small button shown wherever we need a signout affordance. Currently
+// surfaced from Settings via a top-bar action; kept here so it lives
+// next to the gate that consumes it.
+export async function performSignOut(): Promise<void> {
+  try {
+    await signOut(auth)
+  } catch (e) {
+    console.error('[App] signOut failed', e)
+  }
+}
+
+function AppRouter(): JSX.Element {
   // Onboarding detection runs BEFORE mounting the normal app tree:
   //   1. The main process opens this window with `?onboarding=1` in the
   //      URL when it detects an empty profiles dir at startup, so we
@@ -741,5 +782,13 @@ export default function App(): JSX.Element {
         </TasksProvider>
       </ThreadProvider>
     </ConversationsProvider>
+  )
+}
+
+export default function App(): JSX.Element {
+  return (
+    <FirebaseAuthGate>
+      <AppRouter />
+    </FirebaseAuthGate>
   )
 }
