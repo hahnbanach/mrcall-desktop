@@ -148,6 +148,18 @@ jobs:
       - name: Install npm deps
         run: npm ci
 
+      - name: Materialise Google OAuth client_secret
+        # Writes app/src/main/oauthSecrets.ts from the GOOGLE_SIGNIN_CLIENT_SECRET
+        # repo secret BEFORE electron-vite builds main/index.ts — Vite/Rollup
+        # inlines the secret into the compiled bundle, which then ships inside
+        # the .dmg / .exe. The source file stays out of git (gitignored) so
+        # GitHub Secret Scanning never sees the value. See
+        # docs/execution-plans/google-signin.md for the full setup runbook.
+        env:
+          GOOGLE_SIGNIN_CLIENT_SECRET: ${{ secrets.GOOGLE_SIGNIN_CLIENT_SECRET }}
+        shell: bash
+        run: node scripts/write-oauth-secrets.mjs
+
       - name: Validate notarytool credentials (macOS only)
         if: runner.os == 'macOS'
         env:
