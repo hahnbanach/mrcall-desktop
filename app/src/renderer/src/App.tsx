@@ -719,23 +719,11 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
   const [state, setState] = useState<AuthGateState>({ phase: 'pending' })
 
   useEffect(() => {
-    // Wire the token-push hook so authUtils can hand fresh tokens to
-    // the Python sidecar via JSON-RPC. The initial push fires before
-    // any sidecar is attached (the auth-pending window has none); the
-    // catch swallows the failure and we re-push after bindProfile
-    // succeeds via repushTokenForCurrentUser().
-    setTokenPusher(async ({ uid, email, idToken, expiresAtMs }) => {
-      try {
-        await window.zylch.account.setFirebaseToken({
-          uid,
-          email,
-          idToken,
-          expiresAtMs
-        })
-      } catch (e) {
-        console.debug('[App] account.setFirebaseToken push skipped:', e)
-      }
-    })
+    // Subscribe to Firebase auth changes. We deliberately do NOT wire
+    // setTokenPusher here: the auth-pending window has no sidecar, so
+    // a token push would hit `rpc:call` against a missing entry and
+    // Electron would log it as a handler error. The pusher is wired
+    // only after bindProfile attaches a sidecar (in the effect below).
     const unsub = setupAuthListener((u) => {
       if (!u || u.isAnonymous) {
         setState({ phase: 'signed-out' })
@@ -760,15 +748,33 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
         const r = await window.zylch.auth.bindProfile(u.uid)
         if (cancelled) return
         if (r.ok && r.found) {
-          // Sidecar is attached. Re-push the token now that the RPC
-          // channel exists (the initial push during onAuthStateChanged
-          // fired before the sidecar was bound and was swallowed).
+          // Sidecar is attached. Wire the token pusher (now that the
+          // RPC channel exists), then push the current token. The 50-
+          // minute proactive refresh in authUtils picks up from here.
+          setTokenPusher(async ({ uid, email, idToken, expiresAtMs }) => {
+            try {
+              await window.zylch.account.setFirebaseToken({
+                uid,
+                email,
+                idToken,
+                expiresAtMs
+              })
+            } catch (e) {
+              console.debug('[App] account.setFirebaseToken push failed:', e)
+            }
+          })
           await repushTokenForCurrentUser()
           if (cancelled) return
           setState({ phase: 'bound', user: u })
         } else if (r.ok && !r.found) {
+          // Wizard path. The pusher stays unset until the user
+          // completes onboarding and we re-enter 'binding' with a
+          // newly-created profile dir, at which point the success
+          // branch above wires it.
+          setTokenPusher(null)
           setState({ phase: 'onboarding', user: u })
         } else {
+          setTokenPusher(null)
           setState({
             phase: 'error',
             user: u,
@@ -778,6 +784,7 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
       } catch (e) {
         if (cancelled) return
         console.error('[App] auth.bindProfile failed', e)
+        setTokenPusher(null)
         setState({
           phase: 'error',
           user: u,
@@ -787,6 +794,14 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
     })()
     return () => {
       cancelled = true
+    }
+  }, [state])
+
+  // Sign-out resets the token pusher so a subsequent signin (as the
+  // same or a different user) starts from a clean slate.
+  useEffect(() => {
+    if (state.phase === 'signed-out') {
+      setTokenPusher(null)
     }
   }, [state])
 
