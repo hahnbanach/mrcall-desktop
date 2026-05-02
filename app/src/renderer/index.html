@@ -11,6 +11,15 @@
       origin are disabled regardless — loading an <img> is the only
       external traffic we intentionally permit. frame-src covers
       about:srcdoc which is where the iframe content lives.
+
+      connect-src is required for the Firebase JS SDK: signin /
+      signup / password-reset hit identitytoolkit.googleapis.com,
+      and the 50-min ID-token refresh hits securetoken.googleapis.com.
+      Without these, the SDK throws auth/network-request-failed which
+      the SignIn screen renders as "Network error reaching Firebase".
+      Email/password is the only auth method we ship today; phone
+      auth would additionally need www.google.com (reCAPTCHA) and
+      apis.google.com — add only when those flows land.
     -->
     <!--
       Why img-src *:  our sandbox="" iframes render email HTML, and
@@ -21,7 +30,7 @@
       already allowed by default-src 'self'. Listing about:srcdoc
       explicitly is not valid CSP syntax (Chrome warns and ignores).
     -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com" />
   </head>
   <body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
