@@ -1,9 +1,36 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from 'electron'
 import { join } from 'path'
 import { readdirSync, statSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import { SidecarClient } from './sidecar'
 import { createProfileFS, isFirstRun } from './profileFS'
+
+// Brand the running process. Three layers each cover a different surface:
+//
+//  - `app.setName()`      → the auto-built macOS appMenu (About / Hide / Quit)
+//                          and `app.getName()` everywhere it's read
+//  - `process.title`      → Activity Monitor / `ps` output
+//  - `package.json`       → `productName` at top level is what
+//                          electron-builder bakes into the packaged
+//                          bundle's CFBundleName + what Electron's
+//                          `app.getName()` reads at startup
+//
+// The Cmd-Tab label and the bold app name in the menu bar (next to the
+// Apple logo) read from the .app bundle's Info.plist — `app.setName()`
+// cannot reach those. `scripts/patch-electron-name.mjs` (run via
+// `postinstall`) fixes this for dev. Packaged builds get the right
+// CFBundleName from electron-builder + `productName` at install time.
+app.setName('MrCall Desktop')
+process.title = 'MrCall Desktop'
+
+// MrCall icon used as: BrowserWindow `icon` (Windows/Linux taskbar) and as
+// the macOS Dock / Cmd-Tab override in dev. In packaged macOS builds the
+// .icns inside Contents/Resources (auto-baked by electron-builder from
+// build/icon.png) is what the system uses, so we don't override the Dock
+// icon there. The path is relative to `out/main/` (electron-vite build
+// output); in packaged builds `build/` is not shipped, so we only touch
+// it in dev.
+const ICON_PATH = join(__dirname, '../../build/icon.png')
 
 // Sidecar binary path.
 //
@@ -149,6 +176,7 @@ function createWindowForProfile(profile: string): BrowserWindow {
     height: 800,
     show: false,
     title: `MrCall Desktop — ${profile}`,
+    icon: existsSync(ICON_PATH) ? ICON_PATH : undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -198,6 +226,7 @@ function createOnboardingWindow(): BrowserWindow {
     height: 800,
     show: false,
     title: 'MrCall Desktop — Welcome',
+    icon: existsSync(ICON_PATH) ? ICON_PATH : undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -469,6 +498,19 @@ function bootFirstWindow(): void {
 app.whenReady().then(() => {
   ZYLCH_BINARY = resolveSidecarBinary()
   console.log(`[main] sidecar binary=${ZYLCH_BINARY} isPackaged=${app.isPackaged}`)
+
+  // Override the Dock / Cmd-Tab icon in dev. Without this, macOS shows the
+  // Electron.app bundle icon because dev mode runs from
+  // node_modules/electron/dist/. In packaged builds the system reads the
+  // .icns from Contents/Resources directly — no override needed.
+  if (process.platform === 'darwin' && !app.isPackaged && app.dock && existsSync(ICON_PATH)) {
+    try {
+      app.dock.setIcon(nativeImage.createFromPath(ICON_PATH))
+    } catch (e) {
+      console.warn('[main] failed to set dock icon:', e)
+    }
+  }
+
   registerIpc()
   buildAppMenu()
   bootFirstWindow()

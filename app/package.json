@@ -1,11 +1,13 @@
 {
   "name": "mrcall-desktop",
+  "productName": "MrCall Desktop",
   "version": "0.1.25",
   "description": "MrCall Desktop (Electron + React)",
   "main": "out/main/index.js",
   "author": "Mario Alemi",
   "license": "MIT",
   "scripts": {
+    "postinstall": "node scripts/patch-electron-name.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
@@ -61,6 +63,7 @@
       }
     ],
     "mac": {
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "dmg",
@@ -78,6 +81,7 @@
       "notarize": false
     },
     "win": {
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "nsis",
