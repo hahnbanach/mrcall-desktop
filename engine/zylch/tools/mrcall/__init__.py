@@ -1,41 +1,15 @@
-"""MrCall assistant configuration tools.
+"""MrCall integration package.
 
-This module enables natural language configuration of MrCall AI phone assistants.
-It provides tools for modifying welcome messages and conversation handling.
+Currently exposes only the legacy CLI OAuth2 PKCE flow (`oauth.py`) and
+the Firebase-session StarChat client factory (`starchat_firebase.py`).
 
-Features:
-- Dynamic sub-prompt generation via MrCallConfiguratorTrainer
-- Preview + confirm workflow for all changes
-- Variable preservation (%%VAR%%, {{VAR}}) during modifications
-- Automatic sub-prompt regeneration after config changes
+The original module docstring advertised a richer "configurator" toolset
+(`variable_utils`, `llm_helper`, `config_tools`, `feature_context_tool`)
+re-exported from this package. Those modules were never present in this
+checkout — the upstream subtree merge brought in only `__init__.py` and
+`oauth.py`. The matching trainer (`MrCallConfiguratorTrainer`) is
+likewise absent, and every code path that would have consumed those
+symbols already short-circuits at runtime with "MrCall is not
+available." So those dead imports were stripped to make the package
+import cleanly; do not re-add them without the corresponding modules.
 """
-
-from .variable_utils import (
-    extract_variables,
-    validate_variable_preservation,
-    create_variable_preservation_instructions,
-    format_variable_changes,
-)
-from .llm_helper import modify_prompt_with_llm
-from .config_tools import (
-    GetAssistantCatalogTool,
-    ConfigureAssistantTool,
-    VARIABLE_TO_FEATURE,
-)
-from .feature_context_tool import GetMrCallFeatureContextTool
-
-__all__ = [
-    # Variable utilities
-    "extract_variables",
-    "validate_variable_preservation",
-    "create_variable_preservation_instructions",
-    "format_variable_changes",
-    # LLM helper
-    "modify_prompt_with_llm",
-    # Tools
-    "GetAssistantCatalogTool",
-    "ConfigureAssistantTool",
-    "GetMrCallFeatureContextTool",
-    # Constants
-    "VARIABLE_TO_FEATURE",
-]

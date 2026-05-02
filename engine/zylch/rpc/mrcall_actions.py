@@ -21,7 +21,7 @@ from typing import Any, Awaitable, Callable, Dict
 import httpx
 
 from zylch.auth import NoActiveSession
-from zylch.tools.starchat_firebase import make_starchat_client_from_firebase_session
+from zylch.tools.mrcall.starchat_firebase import make_starchat_client_from_firebase_session
 
 logger = logging.getLogger(__name__)
 

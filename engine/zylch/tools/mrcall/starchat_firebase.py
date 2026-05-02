@@ -6,16 +6,7 @@ the user's Firebase ID token, pushes it to the engine via
 the StarChat Bearer credential. This module is the small bridge that
 turns the cached `FirebaseSession` into a configured `StarChatClient`.
 
-Why this lives in `zylch.tools` (not `zylch.tools.mrcall`):
-  - `zylch/tools/mrcall/__init__.py` currently imports several modules
-    that do not exist in this checkout (`variable_utils`, `llm_helper`,
-    `config_tools`, `feature_context_tool` — leftovers from a partially
-    landed refactor). Anything we add inside that package would chain a
-    broken import every time the dispatcher loaded.
-  - `tools/starchat.py` is the generic, multi-auth StarChat client this
-    module composes; a sibling under `tools/` is the natural home.
-
-This module always picks `auth_type="firebase"` and pulls the JWT from
+It always picks `auth_type="firebase"` and pulls the JWT from
 `zylch.auth.require_session()`, so callers don't have to know about
 sessions or thread the token through their own plumbing.
 
