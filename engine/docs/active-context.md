@@ -20,7 +20,7 @@ description: |
 - **Profile system**: multi-profile with `-p/--profile`, exact match, flock-based liveness (stale-lock check via flock, not PID)
 - **Storage**: SQLite at `~/.zylch/profiles/<name>/zylch.db`, 19+ ORM models, WAL mode
 - **Config**: Pydantic Settings from profile `.env`, `zylch init` wizard (rclone-style), DOWNLOADS_DIR with picker hint
-- **LLM**: BYOK (Anthropic, OpenAI) via direct SDK calls (aisuite dropped)
+- **LLM**: BYOK (Anthropic, OpenAI) via direct SDK calls (aisuite dropped); also MrCall-credits mode (`provider="mrcall"`) routing through `mrcall-agent`'s proxy and billing the user's `CALLCREDIT` pool — see "MrCall-credits v1" below.
 
 ### Electron Desktop (end-to-end working)
 - `zylch-desktop` launches on Mac, validated by user on 2026-04-13
@@ -115,6 +115,23 @@ Tests: `tests/workers/test_task_worker_bugs.py` (14 cases, all green) + `tests/s
 - `USER_SECRET_INSTRUCTIONS` unmasked in settings schema; `scripts/repair_env.py` repairs mis-quoted `.env` files (`32fc4bc`)
 - `DOWNLOADS_DIR` field with directory-picker hint (`02401a4`)
 
+### MrCall-credits v1 — engine side (branch `feat/mrcall-credits-v1`, tip `3001844`)
+
+A second LLM billing mode alongside BYOK. When the user picks `SYSTEM_LLM_PROVIDER=mrcall`, every Anthropic call is routed through `mrcall-agent`'s `POST /api/desktop/llm/proxy` and billed against the user's `CALLCREDIT` balance on StarChat — the same unified pool that funds phone-call minutes and the configurator chat. There is **no** separate LLM-only category.
+
+- `zylch/llm/proxy_client.py` (NEW, 536 lines) — `MrCallProxyClient` mimicking `anthropic.Anthropic().messages.create` (sync + async + streaming context manager). Httpx-based; parses Anthropic SSE; reconstructs Message/event objects with `.content`, `.usage`, `.stop_reason`. Typed exceptions: `MrCallInsufficientCredits(available, topup_url)`, `MrCallAuthError`, `MrCallProxyError`. Auth header is `auth: <jwt>` (no Bearer prefix), value pulled from `zylch.auth.session.id_token`. `stream` is forced to True on the wire regardless of caller intent.
+- `zylch/llm/client.py` (MODIFIED) — `LLMClient.__init__` branches on `provider == "mrcall"`: requires a live Firebase session (raises `RuntimeError("MrCall credits require Firebase signin. Use Settings → Sign In.")` if absent) and constructs `MrCallProxyClient(proxy_base_url=settings.mrcall_proxy_url, firebase_session=session)`. Reuses the existing `_call_anthropic` codepath because the proxy returns Anthropic-format objects.
+- `zylch/llm/providers.py` (MODIFIED) — `"mrcall"` entry in `PROVIDER_MODELS` (model from `settings.mrcall_credits_model`) and in `PROVIDER_FEATURES` with `is_metered=True` (`tool_calling`, `web_search`, `prompt_caching`, `vision` all True — pass-through to Anthropic). Same `is_metered` flag (with `False`) added to `anthropic` and `openai` for consistent caller branching. `PROVIDER_API_KEY_NAMES` deliberately omits `"mrcall"` — the credential is the Firebase session, not an env var.
+- `zylch/rpc/account.py` (MODIFIED) + `rpc/methods.py` (MODIFIED) — new JSON-RPC method `account.balance()` that calls `GET /api/desktop/llm/balance` on `mrcall-agent` with the in-memory Firebase ID token from the session. Returns the server payload verbatim. 401 → `{"error": "auth_expired"}` for the renderer to refresh + retry. Total live methods: 34 (was 33).
+- `zylch/config.py` (MODIFIED) — adds `mrcall_proxy_url` (env `MRCALL_PROXY_URL`, default `https://zylch-test.mrcall.ai`) and `mrcall_credits_model` (env `MRCALL_CREDITS_MODEL`, default `claude-sonnet-4-5`).
+- `zylch/services/settings_schema.py` (MODIFIED) — `"mrcall"` added to `LLM_PROVIDER` choices so the Settings UI surfaces it.
+
+Tests: `engine/tests/llm/test_proxy_client.py` (NEW, 8 cases: happy SSE, 401 → `MrCallAuthError`, 402 → `MrCallInsufficientCredits` with parsed `available` / `topup_url`, auth header shape, body forwarding, streaming reconstruction). 8/8 green.
+
+The Anthropic API key is server-side on `mrcall-agent` — never on the desktop client. The desktop only ever sends the Firebase JWT. Top-up happens on `https://dashboard.mrcall.ai/plan`; the desktop "Top up" button (renderer side) just opens that URL via `shell.openExternal`.
+
+Pricing math (server-side; documented here for reference): `units = ceil(actual_µUSD × 1.5 / 11000)` — markup × value-of-1-credit-in-µUSD. 1 credit = €0.01.
+
 ## What Was Completed This Session
 
 **Firebase signin landing — engine side (commits `25e668b..11f4cbe` on `main`, all pushed).**
@@ -131,6 +148,7 @@ Verification: dispatcher METHODS count is 33 post-landing; every `account.*` / `
 
 ## What Is In Progress
 
+- **MrCall-credits v1 live verification** — branch `feat/mrcall-credits-v1` (tip `3001844`) is green at the unit-test layer (8/8 in `tests/llm/test_proxy_client.py`); the real round-trip — Firebase signin → renderer flips Settings to "MrCall credits" → first chat through `MrCallProxyClient` → balance refresh in the Settings card → 402 path on a depleted account → top-up on dashboard → balance updates — has not been clicked end-to-end. Needs `mrcall-agent` deployed at `https://zylch-test.mrcall.ai` with `/api/desktop/llm/proxy` + `/api/desktop/llm/balance` live, and a signed-in user with at least 1 `CALLCREDIT` unit.
 - **Live verification of the Firebase landing in the running Electron app** — only smoke tests cover the new RPCs; the real round-trip needs `npm run dev` + signin + StarChat call + Calendar OAuth (with a configured `GOOGLE_CALENDAR_CLIENT_ID`).
 - **Mac validation of pre-existing UI flows still pending**: IMAP archive (real thread on Gmail / Outlook / iCloud / Fastmail), Open → Tasks filter (0-task, N-task, Clear filter, sidebar back-nav), close-note composer, end-to-end memory tool round-trip in chat.
 - **Custom124 cleanup follow-up** — re-run `scripts/diag_custom124.py` after a few `update` cycles to confirm `USER_NOTES`-driven detection stopped duplicates from recurring.

@@ -29,9 +29,20 @@ freshest source). Facts migrate here as they get touched.
 - **Chat** — assistant conversation, attachments, prompt-cached system prompt.
 - **Tasks** — open/closed toggle, search, pin, skip, close (with optional note), reopen, reanalyze, open-in-workspace. Thread-filter mode when entered from Inbox "Open".
 - **Emails** — Inbox + Sent tabs, thread reading pane with HTML body in sandboxed iframe, archive (IMAP MOVE) + delete (local soft-delete) buttons, "Open" jumps to Tasks filtered by thread.
-- **Settings** — schema-driven editor over the engine's profile `.env`. `USER_SECRET_INSTRUCTIONS` unmasked. `DOWNLOADS_DIR` shown with directory picker hint. **AccountCard + Integrations sections at the top (Firebase signin + Google Calendar OAuth)**.
+- **Settings** — schema-driven editor over the engine's profile `.env`. `USER_SECRET_INSTRUCTIONS` unmasked. `DOWNLOADS_DIR` shown with directory picker hint. **AccountCard + Integrations sections at the top (Firebase signin + Google Calendar OAuth)**. **`LLMProviderCard` at the top of the LLM group (BYOK vs MrCall credits — see "MrCall credits v1" below)**.
 - **Onboarding wizard** — Firebase-aware: shows the signed-in user's email + uid prefix at the top, pre-fills the form, writes a UID-keyed profile dir.
 - **SignIn screen** — email/password + "Continue with Google". Friendly error mapping for `auth/network-request-failed`, `auth/invalid-credential`, `auth/account-exists-with-different-credential`, `auth/popup-closed-by-user`, `auth/cancelled-popup-request`. Inline busy state for Google flow ("Opening Google sign-in in your browser…" → "Signing in to Firebase…").
+
+### MrCall credits v1 (2026-05-03, branch `feat/mrcall-credits-v1`, tip `3001844`)
+
+- `views/Settings.tsx` carries a new `LLMProviderCard` at the top of the LLM settings group: a radio toggle between **BYOK** (`anthropic` / `openai`) and **Use MrCall credits** (`mrcall`). The underlying setting is still `SYSTEM_LLM_PROVIDER` — the card just exposes a friendlier UX over a value that the schema-driven `<select>` below can also set.
+- "MrCall credits" requires a live Firebase signin; the card disables itself with an explanatory hint when `auth.currentUser` is null. Picking BYOK keeps whichever of `anthropic` / `openai` was last selected (defaulting to `anthropic`).
+- Balance display: when "MrCall credits" is active and the user is signed in, the card calls `window.zylch.account.balance()` on mount and on every `window` `focus` event (so a top-up done in another tab updates the displayed balance once the user returns). Loading / error / `auth_expired` states each render their own line — no silent failure.
+- "Top up" button: `shell.openExternal('https://dashboard.mrcall.ai/plan')` — bare `/plan`, no `business_id` (the dashboard resolves the active business from the user's Firebase auth state). The constant lives in `views/Settings.tsx` as `TOPUP_URL`.
+- Preload binding: `window.zylch.account.balance(): Promise<BalancePayload | { error: 'auth_expired' }>` at `app/src/preload/index.ts` (15 s timeout). Returns the proxy's payload verbatim — `balance_credits`, `balance_micro_usd`, `balance_usd`, `granularity_micro_usd?`, `estimate_messages_remaining?` — so a server-side schema change doesn't require a desktop release.
+- Renderer types: `account.balance` typed on `ZylchAPI` in `app/src/renderer/src/types.ts`.
+- The Anthropic API key lives server-side on `mrcall-agent`; the desktop only sends the Firebase JWT (engine-side, via `MrCallProxyClient` — see `../../engine/docs/active-context.md` "MrCall-credits v1 — engine side"). All credits live in StarChat's existing `CALLCREDIT` pool — there is no separate LLM-only category. 1 credit = €0.01.
+- Live verification pending: full round-trip needs `npm run dev` + Firebase signin + flip Settings to "MrCall credits" + send a chat message + observe the balance ticker drop + exhaust to 402 + click "Top up" + balance refresh on return.
 
 ### "Continue with Google" (2026-05-02 first cut, commits `057d9de..b6739d5`)
 - `app/src/main/googleSignin.ts` runs PKCE OAuth on `127.0.0.1:19276` in the main process — no sidecar dependency, so the flow works during onboarding/auth-pending boot. Single in-flight flow at a time; concurrent calls cancel the prior. 5-min consent timeout.
@@ -96,6 +107,7 @@ Verified: `npm run typecheck` clean at every commit; build smoke test confirmed 
 ## Known Issues
 
 - **No live end-to-end verification of any Firebase signin path.** Email/password, Continue with Google, and the engine round-trip after `auth:bindProfile` all compile + typecheck but have not been clicked from this machine.
+- **MrCall-credits v1 not live-verified** (branch `feat/mrcall-credits-v1`). Settings card renders, `account.balance` is wired, `MrCallProxyClient` has 8/8 unit tests green, but the live round-trip (signin → flip to credits → chat → balance update → 402 path → top-up) needs the proxy deployed at `https://zylch-test.mrcall.ai` and a click from a real signed-in user.
 - **Onboarding-mode invariants not stress-tested.** Auth-pending boot with no sidecar, then `auth:bindProfile` either attaching or routing to onboarding, is the entire signin UX — needs verification on a fresh Mac with empty `~/.zylch/profiles/`.
 - Renderer's `tasks.complete` notification path: there is no `tasks.complete.changed` notification, so other windows on the same profile won't update their task list until the user refreshes. (Same gap as `tasks.skip`, `tasks.reopen`.)
 - No unit test coverage on the renderer side. The IPC contract is the only enforcement; payload shape mismatches surface only at runtime.

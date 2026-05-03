@@ -66,6 +66,30 @@ The workflow builds the sidecar in `engine/` via PyInstaller in the same run and
 - **Profile-aware.** Each Electron window owns one profile (one email). The sidecar acquires an fcntl lock on the profile dir; if you see "profile already in use", another window or CLI invocation has it open.
 - **No telemetry.** No analytics SDK, no error reporter. If you find yourself reaching for one, talk to the user first.
 
+## Settings — LLM billing mode (since 2026-05)
+
+`views/Settings.tsx` carries an `LLMProviderCard` at the top of the LLM
+group: a radio toggle between **BYOK** (`anthropic` / `openai`) and **Use
+MrCall credits** (`mrcall`). Picking MrCall credits requires a live
+Firebase signin; the card is disabled with an explanatory hint
+otherwise.
+
+When MrCall credits is selected, the card calls `window.zylch.account.balance()`
+on mount and on every `window` focus event (so a top-up done in another
+tab updates the displayed balance once the user comes back). The
+underlying RPC binding lives at `app/src/preload/index.ts` with a 15 s
+timeout; it returns the proxy's payload verbatim
+(`balance_credits`, `balance_micro_usd`, `balance_usd`,
+`granularity_micro_usd?`, `estimate_messages_remaining?`) or
+`{error: 'auth_expired'}` on a 401 (renderer should refresh + retry).
+
+The "Top up" button uses `shell.openExternal('https://dashboard.mrcall.ai/plan')` —
+no business_id in the URL; the dashboard resolves the active business
+from the user's Firebase auth state. The Anthropic key lives server-side
+on `mrcall-agent`; the desktop never holds it. Cross-cutting context in
+[`../CLAUDE.md`](../CLAUDE.md), engine plumbing in
+[`../engine/CLAUDE.md`](../engine/CLAUDE.md).
+
 ## Naming and branding
 
 - **User-visible**: "MrCall Desktop" everywhere — window title, sidebar, onboarding, README, asset names. `appId` is `ai.mrcall.desktop`.

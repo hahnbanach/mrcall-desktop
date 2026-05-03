@@ -214,6 +214,7 @@ def test_search_emails():
 - Use `~/.zylch/.env` for secrets (Pydantic Settings)
 - Encrypt stored credentials with Fernet (`zylch/utils/encryption.py`)
 - App passwords for IMAP (no OAuth token storage needed)
+- **Firebase ID token** (held in-memory by `zylch.auth.session` and used as the `auth:` header by `MrCallProxyClient` and StarChat-Firebase callers): never log the token itself. `len(id_token)` and at most the first 8 characters are acceptable for diagnostic logs, matching the rest of the secret-logging policy.
 
 ### Input Validation
 - Validate user input at CLI boundaries

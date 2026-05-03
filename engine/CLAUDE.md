@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Zylch — local AI-powered sales intelligence CLI. Python 3.11+ / SQLite / IMAP / WhatsApp (neonize) / BYOK LLM. Mono-user, no server.
+Zylch — local AI-powered sales intelligence CLI. Python 3.11+ / SQLite / IMAP / WhatsApp (neonize) / BYOK or MrCall-credits LLM. Mono-user, no server.
 
 ## Documentation
 
@@ -82,6 +82,30 @@ ruff check zylch/
 | MrCall | StarChat HTTP + OAuth2 | Channel adapter |
 | Telegram | python-telegram-bot | Bot interface |
 | Calendar | CalDAV | Planned |
+
+## MrCall credits mode (since 2026-05)
+
+The engine supports two LLM billing modes, selected by `SYSTEM_LLM_PROVIDER`:
+
+- **BYOK** (`anthropic`, `openai`) — user supplies their own API key. Direct SDK calls. Default.
+- **MrCall credits** (`mrcall`) — calls route through `mrcall-agent`'s `POST /api/desktop/llm/proxy` and bill the user's `CALLCREDIT` balance on StarChat. Same unified pool that funds phone calls and configurator chat — there is no separate LLM-only category. The Anthropic API key lives server-side; the desktop only sends the Firebase JWT.
+
+Implementation:
+
+- `zylch/llm/proxy_client.py` — `MrCallProxyClient`, a drop-in for the subset of `anthropic.Anthropic().messages.create` the engine uses (sync + async + streaming context manager). Httpx-based; parses Anthropic SSE; reconstructs Message/event objects with `.content`, `.usage`, `.stop_reason`. Typed exceptions: `MrCallInsufficientCredits(available, topup_url)`, `MrCallAuthError`, `MrCallProxyError`.
+- `zylch/llm/client.py` — `LLMClient.__init__` branches on `provider == "mrcall"`: requires a live Firebase session (raises if absent) and constructs `MrCallProxyClient(proxy_base_url=settings.mrcall_proxy_url, firebase_session=zylch.auth.session)`. Reuses the existing `_call_anthropic` codepath because the proxy returns Anthropic-format objects.
+- `zylch/llm/providers.py` — `"mrcall"` entry with `is_metered=True`; same flag (with `False`) added to `anthropic` and `openai` for consistent caller branching.
+- `zylch/rpc/account.py` — new JSON-RPC method `account.balance()` that calls `GET /api/desktop/llm/balance` on `mrcall-agent` with the cached Firebase ID token. Returns the server payload verbatim so a server-side schema change doesn't require an engine release.
+- `zylch/services/settings_schema.py` — `"mrcall"` added to `LLM_PROVIDER` choices.
+
+Config (in `zylch/config.py`):
+
+- `MRCALL_PROXY_URL` — default `https://zylch-test.mrcall.ai`. Base URL of the proxy.
+- `MRCALL_CREDITS_MODEL` — default `claude-sonnet-4-5`. The model the engine asks the proxy to run; controls what we charge for, independent of any BYOK env.
+
+Tests: `engine/tests/llm/test_proxy_client.py` (8 cases — happy SSE, 401, 402, auth header shape, body forwarding, streaming reconstruction).
+
+Top-up flow lives on `dashboard.mrcall.ai/plan`; the desktop client just opens the URL via `shell.openExternal` (renderer-side concern, see `app/CLAUDE.md`). The engine never logs the JWT — only `len()` / first 8 chars at most, per the secret-logging rule.
 
 ## Critical Rules
 

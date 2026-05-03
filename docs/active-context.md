@@ -28,6 +28,30 @@ Facts migrate here as they get touched.
 - **Google Calendar** is an *incremental* OAuth — separate from Firebase signin. PKCE flow on `127.0.0.1:19275` in the engine (post-signin only), `calendar.readonly` scope, `access_type=offline` + `prompt=consent`. Tokens persisted via `Storage.save_provider_credentials(uid, "google_calendar", …)`. `DEFAULT_CALENDAR_ID = "primary"`. Settings exposes `GOOGLE_CALENDAR_CLIENT_ID` (no client_secret — distinct from Google sign-in, which does need one).
 - Legacy CLI MrCall PKCE flow on `:19274` (`zylch init` wizard) is untouched — orthogonal to the desktop signin.
 
+### MrCall credits — second LLM billing mode (2026-05-03, branch `feat/mrcall-credits-v1`)
+
+The desktop now has **two LLM billing modes** instead of BYOK-only:
+
+- **BYOK** (`anthropic` / `openai`) — unchanged. User supplies their own API key in the profile `.env`; direct SDK calls.
+- **Use MrCall credits** (`mrcall`) — new. Calls route through `mrcall-agent`'s `POST /api/desktop/llm/proxy`; charges the user's `CALLCREDIT` balance on StarChat. **Same unified pool** that funds phone calls and the configurator chat — there is no separate LLM-only category. The Anthropic API key lives server-side on `mrcall-agent`; the desktop only sends the Firebase JWT (`auth: <jwt>` header, no Bearer prefix — same convention StarChat uses).
+
+Pricing math (server-side; documented here for reference): `units = ceil(actual_µUSD × 1.5 / 11000)` — markup × value-of-1-credit-in-µUSD. 1 credit = €0.01.
+
+Engine pieces (full detail in [`../engine/docs/active-context.md`](../engine/docs/active-context.md) "MrCall-credits v1"):
+
+- `engine/zylch/llm/proxy_client.py` — `MrCallProxyClient`, drop-in for the subset of `anthropic.Anthropic().messages.create` `LLMClient` uses (sync + async + streaming context manager). Httpx + Anthropic SSE → reconstructed Message. Typed exceptions: `MrCallInsufficientCredits(available, topup_url)`, `MrCallAuthError`, `MrCallProxyError`.
+- `engine/zylch/llm/client.py` — `LLMClient.__init__` branches on `provider == "mrcall"`, requires `zylch.auth.session`, reuses `_call_anthropic` codepath (proxy returns Anthropic-format objects).
+- `engine/zylch/llm/providers.py` — `is_metered=True` on `mrcall`, `False` on `anthropic` / `openai`.
+- `engine/zylch/rpc/account.py` — new JSON-RPC `account.balance()` → `GET /api/desktop/llm/balance`. Schema in [`ipc-contract.md`](ipc-contract.md).
+- `engine/zylch/config.py` — `MRCALL_PROXY_URL` (default `https://zylch-test.mrcall.ai`), `MRCALL_CREDITS_MODEL` (default `claude-sonnet-4-5`).
+- Tests: `engine/tests/llm/test_proxy_client.py` (8 cases, all green).
+
+App pieces (full detail in [`../app/docs/active-context.md`](../app/docs/active-context.md) "MrCall credits v1"):
+
+- `app/src/preload/index.ts` — `account.balance` binding (15 s timeout).
+- `app/src/renderer/src/types.ts` — `account.balance` typed on `ZylchAPI`.
+- `app/src/renderer/src/views/Settings.tsx` — new `LLMProviderCard` with the BYOK ↔ MrCall-credits radio, balance display (refresh on mount + on window `focus`), "Top up" button via `shell.openExternal('https://dashboard.mrcall.ai/plan')`, disabled state when not signed in.
+
 ### "Continue with Google" sign-in (2026-05-02)
 - Architecture: PKCE OAuth in the **main process** on `127.0.0.1:19276`, not in the engine. Reason: the SignIn screen renders before any sidecar exists in onboarding / auth-pending mode, so engine RPCs aren't available. Mirrors the post-signin Calendar flow on `:19275` structurally; both run in different lifecycle phases.
 - Renderer click "Continue with Google" → `signin:googleStart` IPC → main spins up a one-shot HTTP server on :19276, opens consent URL via `shell.openExternal`, awaits loopback callback, exchanges code at `oauth2.googleapis.com/token`, returns `{ idToken, email }` → renderer calls `signInWithCredential(auth, GoogleAuthProvider.credential(idToken))` → `FirebaseAuthGate` observes `onAuthStateChanged`. CSP unchanged (`identitytoolkit.googleapis.com` is already allowed; consent runs in system browser; token POST runs in Node).
@@ -101,3 +125,4 @@ The previous session's Firebase signin landing (`25e668b..11f4cbe`) is now folde
 - **Dead configurator references.** `command_handlers.py` (`/mrcall config`, `/mrcall train`, `/mrcall feature`) and `factory.py:_create_mrcall_tools` reference `MrCallConfiguratorTrainer`, `GetAssistantCatalogTool`, `ConfigureAssistantTool`, etc. — symbols that were never tracked in this repo. Currently graceful-degraded (`/mrcall config` short-circuits with "MrCall is not available"). `engine/tests/test_mrcall_integration.py` is similarly dead. Brief at `docs/execution-plans/cleanup-mrcall-configurator-deadcode.md`.
 - **No automated contract test for IPC method/payload changes.** Tracked in [`harness-backlog.md`](harness-backlog.md). The renderer-only IPCs added this session (`signin:googleStart`, `signin:googleCancel`, `auth:bindProfile`) and the engine RPC methods added across recent sessions are typed on the renderer side via `app/src/renderer/src/types.ts`, but engine ↔ preload divergence still surfaces only at runtime.
 - **Legacy email-keyed profiles** are not auto-migrated. Users who signed in with email pre-2026-05 keep working, but their on-disk profile dir name is the email. Use `engine/scripts/migrate_profile_to_uid.py` to upgrade.
+- **MrCall-credits v1 not live-verified** (branch `feat/mrcall-credits-v1`, tip `3001844`). 8/8 unit tests on `MrCallProxyClient`; preload + Settings card compile + typecheck. Live round-trip — Firebase signin → flip Settings to MrCall credits → chat → balance update → 402 path → top-up on dashboard → balance refresh — pending. Needs `mrcall-agent` deployed at `https://zylch-test.mrcall.ai` with `/api/desktop/llm/proxy` + `/api/desktop/llm/balance` reachable.

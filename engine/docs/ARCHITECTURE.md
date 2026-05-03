@@ -100,8 +100,11 @@ zylch/
 │   └── config.py         # Memory configuration
 │
 ├── llm/                  # LLM client
-│   ├── client.py         # LLMClient (direct Anthropic/OpenAI SDK)
-│   ├── providers.py      # Provider config (models, features)
+│   ├── client.py         # LLMClient (direct Anthropic/OpenAI SDK; "mrcall" → MrCallProxyClient)
+│   ├── proxy_client.py   # MrCallProxyClient — anthropic-shaped client over mrcall-agent's
+│   │                     # /api/desktop/llm/proxy (Firebase JWT auth, SSE → Message reconstruct,
+│   │                     # typed exceptions: MrCallInsufficientCredits/AuthError/ProxyError)
+│   ├── providers.py      # Provider config (models, features, is_metered flag)
 │   └── exceptions.py     # LLM error types
 │
 ├── api/                  # Compatibility shim

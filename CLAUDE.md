@@ -49,6 +49,28 @@ connect — no client secret is used.
 The legacy CLI MrCall PKCE flow on `:19274` (`zylch init`) is left
 intact for users who never sign in to the desktop UI.
 
+## LLM billing modes — BYOK vs MrCall credits (since 2026-05)
+
+The desktop has two LLM billing modes, picked from the Settings card:
+
+- **BYOK** (`anthropic` / `openai`) — user supplies their own API key in
+  the profile `.env`. Direct SDK calls, no server hop. Default.
+- **Use MrCall credits** (`mrcall`) — calls route through `mrcall-agent`'s
+  `POST /api/desktop/llm/proxy` and bill the user's `CALLCREDIT` balance
+  on StarChat. Same unified pool that funds phone calls and the
+  configurator chat — there is no separate LLM-only category. The
+  Anthropic API key lives server-side; the desktop only sends the
+  Firebase JWT. Top-up happens on `https://dashboard.mrcall.ai/plan`.
+
+Engine pieces: `engine/zylch/llm/proxy_client.py` (`MrCallProxyClient`),
+`engine/zylch/rpc/account.py` (`account.balance` JSON-RPC),
+`MRCALL_PROXY_URL` env var (default `https://zylch-test.mrcall.ai`).
+See [`engine/CLAUDE.md`](engine/CLAUDE.md) for full details.
+
+App pieces: new `LLMProviderCard` in `app/src/renderer/src/views/Settings.tsx`
+(BYOK ↔ MrCall-credits radio + balance display + "Top up" via
+`shell.openExternal`). See [`app/CLAUDE.md`](app/CLAUDE.md).
+
 ## Naming and identifiers — the rename in flight
 
 This monorepo was assembled by subtree-merging two predecessor repos
