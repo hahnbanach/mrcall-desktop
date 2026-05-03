@@ -15,9 +15,10 @@ straight to Anthropic. The proxy:
     `content_block_*`, `message_delta`, `message_stop`); we accumulate
     those events and reconstruct a single Message-shaped object so the
     downstream `LLMResponse` adapter is unaware that streaming happened;
-  - charges the user's `LLMTOKENS` credit balance (StarChat-side); on
-    402 we surface a typed exception the renderer can show as a "top up"
-    toast.
+  - charges the user's `CALLCREDIT` credit balance (StarChat-side; the
+    same unified pool that funds phone-call minutes — there is no
+    separate LLM-only category since the 2026-05 pivot); on 402 we
+    surface a typed exception the renderer can show as a "top up" toast.
 
 We never log the JWT — only its length / first 8 characters at most,
 matching the rest of the engine's secret-logging policy.
