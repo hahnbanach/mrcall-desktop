@@ -8,25 +8,51 @@ from zylch.config import settings
 PROVIDER_MODELS: Dict[str, str] = {
     "anthropic": settings.anthropic_model,
     "openai": settings.openai_model,
+    # "mrcall" routes through mrcall-agent's proxy and bills the user's
+    # MrCall credit balance instead of using a BYOK Anthropic key. The
+    # underlying model is still a Claude model — pinned via
+    # `mrcall_credits_model` so we control which model we charge for
+    # without depending on whatever the user's Anthropic env happens to
+    # have configured.
+    "mrcall": settings.mrcall_credits_model,
 }
 
-# Feature availability per provider
+# Feature availability per provider.
+#
+# `is_metered`: True when the provider charges against the user's MrCall
+# credit balance (bookkeeping happens server-side). Callers can branch
+# on this to surface "Out of credits" UX or to skip features that don't
+# make sense in metered mode (e.g. local-only fallback).
 PROVIDER_FEATURES: Dict[str, Dict[str, bool]] = {
     "anthropic": {
         "tool_calling": True,
         "web_search": True,  # Built-in web_search_20250305 tool
         "prompt_caching": True,  # cache_control: {"type": "ephemeral"}
         "vision": True,
+        "is_metered": False,
     },
     "openai": {
         "tool_calling": True,
         "web_search": True,  # Via Responses API (web_search_preview tool)
         "prompt_caching": False,  # Anthropic-only feature
         "vision": True,
+        "is_metered": False,
+    },
+    "mrcall": {
+        # Same capability surface as anthropic — the proxy is a
+        # pass-through to Anthropic server-side; cache headers /
+        # web_search tool defs are forwarded verbatim.
+        "tool_calling": True,
+        "web_search": True,
+        "prompt_caching": True,
+        "vision": True,
+        "is_metered": True,
     },
 }
 
-# API key environment variable names (for reference)
+# API key environment variable names (for reference). "mrcall" is
+# omitted: the credentials in that mode are the Firebase ID token held
+# in `zylch.auth.session`, not an env var.
 PROVIDER_API_KEY_NAMES: Dict[str, str] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",

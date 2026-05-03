@@ -91,7 +91,25 @@ class Settings(BaseSettings):
     )
     system_llm_provider: str = Field(
         default="anthropic",
-        description=("LLM provider (anthropic, openai)"),
+        description=("LLM provider (anthropic, openai, mrcall)"),
+    )
+
+    # MrCall credits mode — when system_llm_provider == "mrcall", the
+    # engine routes Anthropic calls through mrcall-agent's proxy and
+    # bills the user's MrCall credit balance. The Firebase ID token
+    # cached in zylch.auth.session is the credential.
+    mrcall_proxy_url: str = Field(
+        default="https://zylch-test.mrcall.ai",
+        env="MRCALL_PROXY_URL",
+        description=(
+            "MrCall proxy base URL for credits-mode LLM calls"
+            " (POST /api/desktop/llm/proxy + GET /api/desktop/llm/balance)"
+        ),
+    )
+    mrcall_credits_model: str = Field(
+        default="claude-sonnet-4-5",
+        env="MRCALL_CREDITS_MODEL",
+        description="Model used when system_llm_provider == 'mrcall'",
     )
 
     # LLM models

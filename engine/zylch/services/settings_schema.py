@@ -35,8 +35,11 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "type": "select",
         "group": "LLM",
         "optional": False,
-        "options": ["anthropic", "openai"],
-        "help": "Which model provider to use.",
+        "options": ["anthropic", "openai", "mrcall"],
+        "help": (
+            "Which model provider to use. 'mrcall' uses MrCall credits "
+            "(requires sign-in) instead of a BYOK API key."
+        ),
     },
     {
         "key": "ANTHROPIC_API_KEY",

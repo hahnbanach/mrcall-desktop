@@ -180,6 +180,29 @@ class LLMClient:
             import openai
 
             self._client = openai.OpenAI(api_key=api_key)
+        elif provider == "mrcall":
+            # Credits mode — route through mrcall-agent's proxy. The
+            # credential is the Firebase ID token held in
+            # zylch.auth.session, NOT the `api_key` arg (which the
+            # caller may pass as "" since the user has no BYOK key in
+            # this mode). Fail fast at init time if no session exists
+            # so the renderer surfaces a clear "sign in first" error
+            # instead of a confusing 401 mid-conversation.
+            from zylch.auth import get_session
+            from zylch.config import settings
+
+            from .proxy_client import MrCallProxyClient
+
+            session = get_session()
+            if session is None:
+                raise RuntimeError(
+                    "MrCall credits require Firebase signin. "
+                    "Use Settings → Sign In."
+                )
+            self._client = MrCallProxyClient(
+                proxy_base_url=settings.mrcall_proxy_url,
+                firebase_session=session,
+            )
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -503,7 +526,12 @@ class LLMClient:
         """Synchronous version of create_message."""
         model_name = model or self.model
 
-        if self.provider == "anthropic":
+        if self.provider == "anthropic" or self.provider == "mrcall":
+            # MrCall-credits mode reuses the Anthropic call path because
+            # the proxy mirrors the SDK surface (`client.messages.create`)
+            # and returns Anthropic-shaped Message objects. The only
+            # difference is that `self._client` is a MrCallProxyClient
+            # instead of `anthropic.Anthropic`.
             response = self._call_anthropic(
                 messages,
                 system,

@@ -168,6 +168,20 @@ export interface ZylchAPI {
       email?: string | null
       expires_at_ms?: number
     }>
+    /** Fetch the signed-in user's MrCall credit balance via the
+     *  mrcall-agent proxy. Returns the server payload verbatim, OR
+     *  `{error: 'auth_expired'}` when the cached Firebase ID token was
+     *  rejected (renderer should refresh + retry). */
+    balance: () => Promise<
+      | {
+          balance_credits: number
+          balance_micro_usd: number
+          balance_usd: number
+          granularity_micro_usd?: number
+          estimate_messages_remaining?: number
+        }
+      | { error: 'auth_expired' }
+    >
   }
   mrcall: {
     listMyBusinesses: (params?: {

@@ -253,7 +253,22 @@ const api = {
       uid?: string
       email?: string | null
       expires_at_ms?: number
-    }> => call('account.who_am_i', {})
+    }> => call('account.who_am_i', {}),
+    // GET the user's MrCall credit balance via mrcall-agent's
+    // /api/desktop/llm/balance proxy. Used by the Settings card when
+    // SYSTEM_LLM_PROVIDER == 'mrcall'. Returns the server payload
+    // verbatim, OR `{error: 'auth_expired'}` when the cached Firebase
+    // ID token was rejected (renderer should refresh + retry).
+    balance: (): Promise<
+      | {
+          balance_credits: number
+          balance_micro_usd: number
+          balance_usd: number
+          granularity_micro_usd?: number
+          estimate_messages_remaining?: number
+        }
+      | { error: 'auth_expired' }
+    > => call('account.balance', {}, 15000)
   },
   mrcall: {
     // Lists businesses owned/managed by the signed-in user. Mirrors the

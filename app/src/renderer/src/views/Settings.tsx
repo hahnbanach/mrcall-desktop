@@ -189,6 +189,19 @@ export default function Settings(): JSX.Element {
             {group}
           </h2>
           <div className="space-y-4">
+            {group === 'LLM' && (
+              <LLMProviderCard
+                value={
+                  ('SYSTEM_LLM_PROVIDER' in edits
+                    ? edits.SYSTEM_LLM_PROVIDER
+                    : (loaded.SYSTEM_LLM_PROVIDER ?? 'anthropic')) as
+                    | 'anthropic'
+                    | 'openai'
+                    | 'mrcall'
+                }
+                onChange={(v) => handleChange('SYSTEM_LLM_PROVIDER', v)}
+              />
+            )}
             {items.map((f) => (
               <FieldRow
                 key={f.key}
@@ -232,6 +245,177 @@ export default function Settings(): JSX.Element {
           </span>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── LLM provider toggle (BYOK vs MrCall credits) ────────────────────
+//
+// Sits at the top of the LLM settings group and gives a clearer choice
+// than the bare `SYSTEM_LLM_PROVIDER` <select>. When the user picks
+// "MrCall credits" we also fetch the live balance via `account.balance`
+// (JSON-RPC → engine → mrcall-agent proxy) and show a top-up link.
+//
+// The underlying setting is still `SYSTEM_LLM_PROVIDER` — this card
+// just exposes a friendlier UX. The raw <select> in the schema-driven
+// FieldRow below remains visible so power users can still pick `openai`
+// directly without going through this card.
+
+type ProviderValue = 'anthropic' | 'openai' | 'mrcall'
+
+interface BalancePayload {
+  balance_credits: number
+  balance_micro_usd: number
+  balance_usd: number
+  granularity_micro_usd?: number
+  estimate_messages_remaining?: number
+}
+
+const TOPUP_URL = 'https://dashboard.mrcall.ai/billing/topup'
+
+function LLMProviderCard({
+  value,
+  onChange
+}: {
+  value: ProviderValue
+  onChange: (v: ProviderValue) => void
+}): JSX.Element {
+  const signedIn = !!auth.currentUser
+  const isMrCall = value === 'mrcall'
+  // BYOK groups anthropic + openai. The radio only flips between
+  // "BYOK" and "MrCall credits"; the actual byok provider keeps
+  // whatever value was already set (defaulting to anthropic).
+  const byokProvider: 'anthropic' | 'openai' = value === 'openai' ? 'openai' : 'anthropic'
+
+  const [balance, setBalance] = useState<BalancePayload | null>(null)
+  const [balanceErr, setBalanceErr] = useState<string | null>(null)
+  const [balanceLoading, setBalanceLoading] = useState(false)
+
+  const refreshBalance = async (): Promise<void> => {
+    if (!signedIn) return
+    setBalanceLoading(true)
+    setBalanceErr(null)
+    try {
+      const r = await window.zylch.account.balance()
+      if ('error' in r && r.error === 'auth_expired') {
+        setBalance(null)
+        setBalanceErr('Session expired — please sign in again.')
+      } else if ('balance_credits' in r) {
+        setBalance(r)
+      }
+    } catch (e: unknown) {
+      setBalance(null)
+      setBalanceErr(errorMessage(e))
+    } finally {
+      setBalanceLoading(false)
+    }
+  }
+
+  // Fetch balance on mount, when the user picks MrCall credits, and
+  // every time the window regains focus (the user may have just
+  // topped up from the dashboard in another tab).
+  useEffect(() => {
+    if (!isMrCall || !signedIn) return
+    void refreshBalance()
+    const onFocus = (): void => {
+      void refreshBalance()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMrCall, signedIn])
+
+  const cantUseMrCall = !signedIn
+
+  return (
+    <div className="bg-white border border-brand-mid-grey rounded-lg p-4 space-y-3">
+      <div className="text-xs font-medium text-brand-grey-80">LLM billing mode</div>
+      <div className="space-y-2">
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="radio"
+            name="llm-mode"
+            checked={!isMrCall}
+            onChange={() => onChange(byokProvider)}
+            className="mt-1"
+          />
+          <div>
+            <div className="text-sm font-medium text-brand-black">BYOK (your own API key)</div>
+            <div className="text-xs text-brand-grey-80">
+              Use your own Anthropic or OpenAI API key. No MrCall credits consumed.
+            </div>
+          </div>
+        </label>
+        <label
+          className={
+            'flex items-start gap-2 ' +
+            (cantUseMrCall ? 'cursor-not-allowed opacity-60' : 'cursor-pointer')
+          }
+          title={cantUseMrCall ? 'Sign in to use MrCall credits' : ''}
+        >
+          <input
+            type="radio"
+            name="llm-mode"
+            checked={isMrCall}
+            disabled={cantUseMrCall}
+            onChange={() => onChange('mrcall')}
+            className="mt-1"
+          />
+          <div>
+            <div className="text-sm font-medium text-brand-black">Use MrCall credits</div>
+            <div className="text-xs text-brand-grey-80">
+              Routes Claude calls through MrCall and bills your credit balance.
+              {cantUseMrCall && (
+                <span className="text-brand-danger ml-1">Sign in first to enable.</span>
+              )}
+            </div>
+          </div>
+        </label>
+      </div>
+
+      {isMrCall && signedIn && (
+        <div className="mt-2 border-t pt-3 space-y-2">
+          {balanceLoading && <div className="text-xs text-brand-grey-80">Loading balance…</div>}
+          {balanceErr && (
+            <div className="text-xs text-brand-danger">Balance: {balanceErr}</div>
+          )}
+          {balance && !balanceLoading && (
+            <div className="text-xs">
+              <span className="text-brand-grey-80">Balance: </span>
+              <span className="font-medium text-brand-black">
+                {balance.balance_credits.toLocaleString()} credits
+              </span>
+              <span className="text-brand-grey-80">
+                {' '}
+                (~${balance.balance_usd.toFixed(2)})
+              </span>
+              {typeof balance.estimate_messages_remaining === 'number' && (
+                <span className="text-brand-grey-80">
+                  {' '}
+                  · ~{balance.estimate_messages_remaining} messages left
+                </span>
+              )}
+            </div>
+          )}
+          <div className="flex items-center gap-3 text-xs">
+            <button
+              type="button"
+              onClick={() => void window.zylch.shell.openExternal(TOPUP_URL)}
+              className="text-brand-blue underline hover:no-underline"
+            >
+              Top up credits
+            </button>
+            <button
+              type="button"
+              onClick={() => void refreshBalance()}
+              disabled={balanceLoading}
+              className="text-brand-grey-80 underline hover:no-underline disabled:opacity-50"
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
