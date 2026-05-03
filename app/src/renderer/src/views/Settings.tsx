@@ -271,7 +271,10 @@ interface BalancePayload {
   estimate_messages_remaining?: number
 }
 
-const TOPUP_URL = 'https://dashboard.mrcall.ai/billing/topup'
+// Renderer doesn't know the active business_id (the engine resolves it
+// from the Firebase JWT server-side). Bare /plan lets the dashboard
+// pick up the business from the user's auth state.
+const TOPUP_URL = 'https://dashboard.mrcall.ai/plan'
 
 function LLMProviderCard({
   value,

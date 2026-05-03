@@ -243,7 +243,7 @@ def test_402_raises_insufficient_credits_with_topup_url():
             json={
                 "error": "insufficient_credits",
                 "available": 0,
-                "topup_url": "https://dashboard.mrcall.ai/billing/topup",
+                "topup_url": "https://dashboard.mrcall.ai/plan",
             },
         )
 
@@ -256,7 +256,7 @@ def test_402_raises_insufficient_credits_with_topup_url():
         )
     err = excinfo.value
     assert err.available == 0
-    assert err.topup_url == "https://dashboard.mrcall.ai/billing/topup"
+    assert err.topup_url == "https://dashboard.mrcall.ai/plan"
     assert err.status == 402
 
 
