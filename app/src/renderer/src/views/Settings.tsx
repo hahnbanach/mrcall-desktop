@@ -191,22 +191,17 @@ export default function Settings(): JSX.Element {
           <div className="space-y-4">
             {group === 'LLM' && (
               <LLMProviderCard
-                // No SYSTEM_LLM_PROVIDER in .env? Engine defaults to
-                // MrCall credits unless a BYOK key is present, so the
-                // radio reflects that — picking a value here writes
-                // the explicit choice into .env.
-                value={
-                  ('SYSTEM_LLM_PROVIDER' in edits
-                    ? edits.SYSTEM_LLM_PROVIDER
-                    : (loaded.SYSTEM_LLM_PROVIDER ||
-                       (loaded.ANTHROPIC_API_KEY ? 'anthropic'
-                        : loaded.OPENAI_API_KEY ? 'openai'
-                        : 'mrcall'))) as
-                    | 'anthropic'
-                    | 'openai'
-                    | 'mrcall'
+                // The engine resolves transport from key presence: an
+                // ANTHROPIC_API_KEY in .env means BYOK, absence means
+                // MrCall credits. We mirror that here — picking the
+                // BYOK side reveals the key field in the schema below;
+                // picking credits clears it.
+                hasAnthropicKey={
+                  ('ANTHROPIC_API_KEY' in edits
+                    ? !!edits.ANTHROPIC_API_KEY
+                    : !!loaded.ANTHROPIC_API_KEY)
                 }
-                onChange={(v) => handleChange('SYSTEM_LLM_PROVIDER', v)}
+                onClearKey={() => handleChange('ANTHROPIC_API_KEY', '')}
               />
             )}
             {items.map((f) => (
@@ -256,19 +251,15 @@ export default function Settings(): JSX.Element {
   )
 }
 
-// ─── LLM provider toggle (BYOK vs MrCall credits) ────────────────────
+// ─── LLM mode card (BYOK vs MrCall credits) ──────────────────────────
 //
-// Sits at the top of the LLM settings group and gives a clearer choice
-// than the bare `SYSTEM_LLM_PROVIDER` <select>. When the user picks
-// "MrCall credits" we also fetch the live balance via `account.balance`
-// (JSON-RPC → engine → mrcall-agent proxy) and show a top-up link.
-//
-// The underlying setting is still `SYSTEM_LLM_PROVIDER` — this card
-// just exposes a friendlier UX. The raw <select> in the schema-driven
-// FieldRow below remains visible so power users can still pick `openai`
-// directly without going through this card.
-
-type ProviderValue = 'anthropic' | 'openai' | 'mrcall'
+// The engine has one provider (Anthropic) over two transports: direct
+// (BYOK Anthropic key) and proxy (MrCall credits, billed via the
+// Firebase session). The runtime decides based on whether
+// ANTHROPIC_API_KEY is set in `.env`. This card mirrors that — it does
+// not write a separate "provider" setting. Picking BYOK reveals the
+// key field in the schema-driven section below; picking credits
+// clears the key (with optional sign-in check).
 
 interface BalancePayload {
   balance_credits: number
@@ -284,18 +275,14 @@ interface BalancePayload {
 const TOPUP_URL = 'https://dashboard.mrcall.ai/plan'
 
 function LLMProviderCard({
-  value,
-  onChange
+  hasAnthropicKey,
+  onClearKey
 }: {
-  value: ProviderValue
-  onChange: (v: ProviderValue) => void
+  hasAnthropicKey: boolean
+  onClearKey: () => void
 }): JSX.Element {
   const signedIn = !!auth.currentUser
-  const isMrCall = value === 'mrcall'
-  // BYOK groups anthropic + openai. The radio only flips between
-  // "BYOK" and "MrCall credits"; the actual byok provider keeps
-  // whatever value was already set (defaulting to anthropic).
-  const byokProvider: 'anthropic' | 'openai' = value === 'openai' ? 'openai' : 'anthropic'
+  const isCredits = !hasAnthropicKey
 
   const [balance, setBalance] = useState<BalancePayload | null>(null)
   const [balanceErr, setBalanceErr] = useState<string | null>(null)
@@ -321,11 +308,10 @@ function LLMProviderCard({
     }
   }
 
-  // Fetch balance on mount, when the user picks MrCall credits, and
-  // every time the window regains focus (the user may have just
-  // topped up from the dashboard in another tab).
+  // Fetch balance on mount when on credits, and every time the window
+  // regains focus (user may have topped up in another tab).
   useEffect(() => {
-    if (!isMrCall || !signedIn) return
+    if (!isCredits || !signedIn) return
     void refreshBalance()
     const onFocus = (): void => {
       void refreshBalance()
@@ -333,57 +319,42 @@ function LLMProviderCard({
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMrCall, signedIn])
-
-  const cantUseMrCall = !signedIn
+  }, [isCredits, signedIn])
 
   return (
     <div className="bg-white border border-brand-mid-grey rounded-lg p-4 space-y-3">
       <div className="text-xs font-medium text-brand-grey-80">LLM billing mode</div>
-      <div className="space-y-2">
-        <label className="flex items-start gap-2 cursor-pointer">
-          <input
-            type="radio"
-            name="llm-mode"
-            checked={!isMrCall}
-            onChange={() => onChange(byokProvider)}
-            className="mt-1"
-          />
-          <div>
-            <div className="text-sm font-medium text-brand-black">BYOK (your own API key)</div>
-            <div className="text-xs text-brand-grey-80">
-              Use your own Anthropic or OpenAI API key. No MrCall credits consumed.
-            </div>
+      {isCredits ? (
+        <div className="text-sm text-brand-black">
+          <strong>MrCall credits</strong> (Firebase signin)
+          <div className="text-xs text-brand-grey-80 mt-0.5">
+            Claude calls are routed through <code className="text-[11px]">mrcall-agent</code>{' '}
+            and billed against your MrCall credit balance.
           </div>
-        </label>
-        <label
-          className={
-            'flex items-start gap-2 ' +
-            (cantUseMrCall ? 'cursor-not-allowed opacity-60' : 'cursor-pointer')
-          }
-          title={cantUseMrCall ? 'Sign in to use MrCall credits' : ''}
-        >
-          <input
-            type="radio"
-            name="llm-mode"
-            checked={isMrCall}
-            disabled={cantUseMrCall}
-            onChange={() => onChange('mrcall')}
-            className="mt-1"
-          />
-          <div>
-            <div className="text-sm font-medium text-brand-black">Use MrCall credits</div>
-            <div className="text-xs text-brand-grey-80">
-              Routes Claude calls through MrCall and bills your credit balance.
-              {cantUseMrCall && (
-                <span className="text-brand-danger ml-1">Sign in first to enable.</span>
-              )}
+          {!signedIn && (
+            <div className="text-xs text-brand-danger mt-1">
+              Sign in with Firebase to actually make calls.
             </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-sm text-brand-black">
+          <strong>BYOK (Anthropic key)</strong>
+          <div className="text-xs text-brand-grey-80 mt-0.5">
+            Calls go directly to Anthropic. No MrCall credits consumed.
           </div>
-        </label>
-      </div>
+          <button
+            type="button"
+            onClick={onClearKey}
+            className="mt-2 text-xs text-brand-grey-80 underline hover:text-brand-black"
+            title="Clear ANTHROPIC_API_KEY and switch back to MrCall credits"
+          >
+            Switch to MrCall credits
+          </button>
+        </div>
+      )}
 
-      {isMrCall && signedIn && (
+      {isCredits && signedIn && (
         <div className="mt-2 border-t pt-3 space-y-2">
           {balanceLoading && <div className="text-xs text-brand-grey-80">Loading balance…</div>}
           {balanceErr && (

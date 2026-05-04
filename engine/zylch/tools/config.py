@@ -115,33 +115,16 @@ class ToolConfig:
 
             storage = Storage.get_instance()
 
-        # Fetch BYOK credentials from Supabase
-        # LLM Provider (detect active provider)
-        from ..api.token_storage import get_active_llm_provider
+        # LLM credentials are no longer plumbed through ToolConfig — the
+        # engine picks transport (BYOK direct vs MrCall-credits proxy)
+        # at LLMClient construction time via `make_llm_client()`. The
+        # remaining `anthropic_api_key` field on ToolConfig is kept for
+        # legacy field-equality checks elsewhere; populate it from
+        # settings for visibility.
+        from zylch.config import settings as _eng_settings
 
-        provider, api_key = get_active_llm_provider(owner_id)
-        if provider and api_key:
-            config.llm_provider = provider
-            config.anthropic_api_key = api_key  # Store in anthropic_api_key for backward compat
-
-        # Anthropic (legacy check - only if not already set by get_active_llm_provider)
-        if not config.anthropic_api_key:
-            anthropic_key = storage.get_anthropic_key(owner_id)
-            if anthropic_key:
-                config.anthropic_api_key = anthropic_key
-                config.llm_provider = "anthropic"
-
-        # System-level fallback if user has no key configured
-        # (useful for integrations like MrCall where operator provides the key)
-        if not config.anthropic_api_key:
-            from zylch.llm.providers import get_system_llm_credentials
-
-            sys_provider, sys_key = get_system_llm_credentials()
-            if sys_key:
-                config.llm_provider = sys_provider
-                config.anthropic_api_key = (
-                    sys_key  # field name is legacy, stores any provider's key
-                )
+        if _eng_settings.anthropic_api_key:
+            config.anthropic_api_key = _eng_settings.anthropic_api_key
 
         # Pipedrive
         pipedrive_token = storage.get_pipedrive_key(owner_id)

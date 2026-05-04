@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from bs4 import BeautifulSoup
 
-from zylch.llm import LLMClient
+from zylch.llm import try_make_llm_client
 
 if TYPE_CHECKING:
     from zylch.storage import Storage
@@ -62,8 +62,6 @@ class EmailSyncManager:
     def __init__(
         self,
         email_archive,
-        api_key: str,
-        provider: str,
         days_back: int = 30,
         owner_id: str = "",
         supabase_storage: Optional["Storage"] = None,
@@ -72,8 +70,6 @@ class EmailSyncManager:
 
         Args:
             email_archive: EmailArchiveManager instance
-            api_key: API key for the LLM provider
-            provider: LLM provider (anthropic, openai, mistral)
             days_back: Days back for intelligence window (default: 30)
             owner_id: User's Owner ID (required)
             supabase_storage: Storage instance (required)
@@ -82,7 +78,8 @@ class EmailSyncManager:
             raise ValueError("owner_id and supabase_storage are required")
 
         self.archive = email_archive
-        self.llm_client = LLMClient(api_key=api_key, provider=provider) if api_key else None
+        # LLM is optional here — sync still works without analysis.
+        self.llm_client = try_make_llm_client()
         self.days_back = 30  # Fixed: always 1 month intelligence window
         self.owner_id = owner_id
         self.supabase = supabase_storage

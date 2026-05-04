@@ -12,8 +12,7 @@ Agents should inherit from this base class and define their own:
 import logging
 from typing import Any, Dict, List, Optional
 
-from zylch.llm import LLMClient, PROVIDER_MODELS
-from zylch.config import settings
+from zylch.llm import LLMClient, make_llm_client
 from zylch.storage import Storage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 
@@ -27,20 +26,17 @@ class SpecializedAgent:
     PROMPT_KEY: str = ""  # Key in agent_prompts table
     TOOLS: List[Dict[str, Any]] = []  # Tool schemas for LLM
 
-    def __init__(self, storage: Storage, owner_id: str, api_key: str, provider: str = "anthropic"):
+    def __init__(self, storage: Storage, owner_id: str):
         """Initialize base agent with common configuration.
 
         Args:
             storage: Storage instance
             owner_id: Owner ID
-            api_key: LLM API key
-            provider: LLM provider (anthropic, openai, mistral)
         """
         self.storage = storage
         self.owner_id = owner_id
-        self.provider = provider
-        self.model = PROVIDER_MODELS.get(provider, settings.default_model)
-        self.llm = LLMClient(api_key=api_key, provider=provider)
+        self.llm: LLMClient = make_llm_client()
+        self.model = self.llm.model
 
         # Initialize hybrid search for context gathering
         config = MemoryConfig()

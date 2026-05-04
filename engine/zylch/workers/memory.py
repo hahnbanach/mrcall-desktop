@@ -10,7 +10,7 @@ then LLM-merges new information with existing knowledge.
 import logging
 from typing import Dict, List, Optional
 
-from zylch.llm import LLMClient
+from zylch.llm import LLMClient, make_llm_client
 from zylch.storage import Storage
 from zylch.memory import (
     BlobStorage,
@@ -34,25 +34,16 @@ class MemoryWorker:
     5. Mark email as processed
     """
 
-    def __init__(self, storage: Storage, owner_id: str, api_key: str, provider: str):
+    def __init__(self, storage: Storage, owner_id: str):
         """Initialize MemoryWorker.
 
         Args:
             storage: Storage instance
             owner_id: Owner ID for namespace
-            api_key: API key for the LLM provider
-            provider: LLM provider (anthropic, openai, mistral)
         """
         self.storage = storage
         self.owner_id = owner_id
         self.namespace = f"user:{owner_id}"
-
-        # BYOK - API key must be provided, no env var fallback
-        if not api_key:
-            raise ValueError(
-                f"API key required for memory extraction. "
-                f"Please run `/connect {provider}` to configure your API key."
-            )
 
         # Initialize components
         config = MemoryConfig()
@@ -61,10 +52,12 @@ class MemoryWorker:
 
         self.blob_storage = BlobStorage(get_session, self.embedding_engine)
         self.hybrid_search = HybridSearchEngine(get_session, self.embedding_engine)
-        self.llm_merge = LLMMergeService(api_key, provider)
+        self.llm_merge = LLMMergeService()
 
-        # LLM client for fact extraction
-        self.client = LLMClient(api_key=api_key, provider=provider)
+        # LLM client for fact extraction. Raises RuntimeError if no
+        # transport is configured — surfaces "no LLM" as a clear error
+        # rather than silently producing no memories.
+        self.client: LLMClient = make_llm_client()
 
         # Cache for user's custom prompt (lazy loaded)
         self._custom_prompt: Optional[str] = None

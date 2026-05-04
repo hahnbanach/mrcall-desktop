@@ -2,17 +2,15 @@
 
 import logging
 
-
-from zylch.llm import LLMClient, PROVIDER_MODELS
+from zylch.llm import LLMClient, make_llm_client
 
 
 class LLMMergeService:
     """LLM-assisted memory merge for reconsolidation."""
 
-    def __init__(self, api_key: str, provider: str, model: str = None):
-        self.provider = provider
-        self.model = model or PROVIDER_MODELS.get(provider, PROVIDER_MODELS["anthropic"])
-        self.client = LLMClient(api_key=api_key, provider=provider)
+    def __init__(self, model: str = None):
+        self.client: LLMClient = make_llm_client(model=model)
+        self.model = self.client.model
         self.MERGE_PROMPT = """Merge these entities into a SINGLE ENTITY:
 
 EXISTING_ENTITY:

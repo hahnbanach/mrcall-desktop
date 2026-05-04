@@ -1,17 +1,18 @@
-"""LLM abstraction layer using LiteLLM for multi-provider support.
+"""LLM abstraction layer.
 
-Supported providers:
-- Anthropic (claude-opus-4-6-20260205) - Full features including web search and prompt caching
-- OpenAI (gpt-4.1) - Tool calling supported, no web search or prompt caching
-- Mistral (mistral-large-3) - Tool calling supported, no web search or prompt caching
+Single provider (Anthropic), two transports (``direct`` BYOK and
+``proxy`` MrCall credits). See :mod:`zylch.llm.client` for the
+:class:`LLMClient` and the :func:`make_llm_client` factory most
+callers use.
 """
 
-from .client import LLMClient
-from .providers import PROVIDER_MODELS, PROVIDER_FEATURES, get_provider_info
+from .client import LLMClient, LLMResponse, TextBlock, ToolUseBlock, make_llm_client, try_make_llm_client
 
 __all__ = [
     "LLMClient",
-    "PROVIDER_MODELS",
-    "PROVIDER_FEATURES",
-    "get_provider_info",
+    "LLMResponse",
+    "TextBlock",
+    "ToolUseBlock",
+    "make_llm_client",
+    "try_make_llm_client",
 ]

@@ -152,9 +152,8 @@ async def reanalyze_task(
 
     On failure returns {"ok": False, "error": "...", "task_id": task_id}.
     """
-    from zylch.api.token_storage import get_active_llm_provider, get_email
-    from zylch.llm import LLMClient
-    from zylch.llm.providers import get_system_llm_credentials
+    from zylch.api.token_storage import get_email
+    from zylch.llm import try_make_llm_client
     from zylch.storage.database import get_session
     from zylch.storage.storage import Storage
     from zylch.workers.thread_presenter import build_thread_history
@@ -187,14 +186,11 @@ async def reanalyze_task(
             user_email=user_email or "",
         )
 
-    # LLM credentials (BYOK, same resolution order as /tasks)
-    llm_provider, api_key = get_active_llm_provider(owner_id)
-    if not api_key or not llm_provider:
-        llm_provider, api_key = get_system_llm_credentials()
-    if not api_key or not llm_provider:
+    client = try_make_llm_client()
+    if client is None:
         return {
             "ok": False,
-            "error": "no LLM credentials configured",
+            "error": "no LLM transport configured",
             "task_id": task_id,
         }
 
@@ -217,7 +213,6 @@ async def reanalyze_task(
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     user_content = _build_user_content(task, thread_history_section, today_str)
 
-    client = LLMClient(api_key=api_key, provider=llm_provider)
     try:
         response = await client.create_message(
             system=system,

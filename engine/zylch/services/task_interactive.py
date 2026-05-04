@@ -36,8 +36,6 @@ console = Console()
 def run_interactive_tasks(
     owner_id: str,
     store,
-    api_key: str,
-    provider: str,
     user_email: str,
 ):
     """Walk through active tasks interactively."""
@@ -62,16 +60,9 @@ def run_interactive_tasks(
             store.complete_task_item(owner_id, task["id"])
             console.print("  [green]Marked as done.[/green]")
         elif choice == "3":
-            _solve_task(task, store, owner_id, api_key, provider, user_email)
+            _solve_task(task, store, owner_id, user_email)
         elif choice == "4":
-            _instruct_task(
-                task,
-                store,
-                owner_id,
-                api_key,
-                provider,
-                user_email,
-            )
+            _instruct_task(task, store, owner_id, user_email)
         elif choice == "e":
             break
 
@@ -173,16 +164,14 @@ def _solve_task(
     task: Dict,
     store,
     owner_id: str,
-    api_key: str,
-    provider: str,
     user_email: str,
 ):
     """Agentic solve: LLM uses tools to research and propose."""
-    from zylch.llm.client import LLMClient
+    from zylch.llm import make_llm_client
 
     context = build_task_context(task, store, owner_id)
     user_name = user_email.split("@")[0] if user_email else "the user"
-    client = LLMClient(api_key=api_key, provider=provider)
+    client = make_llm_client()
     system = SOLVE_SYSTEM_PROMPT.format(
         user_name=user_name,
         personal_data_section=get_personal_data_section(owner_id=owner_id),
@@ -217,11 +206,9 @@ def _instruct_task(
     task: Dict,
     store,
     owner_id: str,
-    api_key: str,
-    provider: str,
     user_email: str,
 ):
-    from zylch.llm.client import LLMClient
+    from zylch.llm import make_llm_client
 
     context = build_task_context(task, store, owner_id)
     user_name = user_email.split("@")[0] if user_email else "the user"
@@ -242,7 +229,7 @@ def _instruct_task(
     if not instructions.strip():
         return
 
-    client = LLMClient(api_key=api_key, provider=provider)
+    client = make_llm_client()
     system = SOLVE_SYSTEM_PROMPT.format(
         user_name=user_name,
         personal_data_section=get_personal_data_section(owner_id=owner_id),

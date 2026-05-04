@@ -29,35 +29,22 @@ class SettingsField(TypedDict, total=False):
 # Order = display order. Groups are also rendered in this order.
 SETTINGS_SCHEMA: List[SettingsField] = [
     # ─── LLM ─────────────────────────────────────────────────
-    {
-        "key": "SYSTEM_LLM_PROVIDER",
-        "label": "LLM provider",
-        "type": "select",
-        "group": "LLM",
-        "optional": False,
-        "options": ["anthropic", "openai", "mrcall"],
-        "help": (
-            "Which model provider to use. 'mrcall' uses MrCall credits "
-            "(requires sign-in) instead of a BYOK API key."
-        ),
-    },
+    #
+    # Single field: the user's Anthropic key. Presence of the key flips
+    # the engine into BYOK ("direct" transport); absence means MrCall
+    # credits (Firebase JWT routed through mrcall-agent's proxy).
     {
         "key": "ANTHROPIC_API_KEY",
-        "label": "Anthropic API key",
+        "label": "Anthropic API key (BYOK)",
         "type": "password",
         "group": "LLM",
         "optional": True,
         "secret": True,
-        "help": "Required if provider = anthropic.",
-    },
-    {
-        "key": "OPENAI_API_KEY",
-        "label": "OpenAI API key",
-        "type": "password",
-        "group": "LLM",
-        "optional": True,
-        "secret": True,
-        "help": "Required if provider = openai.",
+        "help": (
+            "Set this to use your own Anthropic billing. Leave blank to "
+            "use MrCall credits — requires Firebase signin in the desktop "
+            "app."
+        ),
     },
     # ─── Email (IMAP) ────────────────────────────────────────
     {

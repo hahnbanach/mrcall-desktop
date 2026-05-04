@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from zylch.llm import LLMClient
+from zylch.llm import make_llm_client
 from zylch.storage import Storage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 from zylch.workers.thread_presenter import build_thread_history, strip_quoted
@@ -78,8 +78,6 @@ class TaskWorker:
         self,
         storage: Storage,
         owner_id: str,
-        api_key: str,
-        provider: str,
         user_email: str = "",
     ):
         """Initialize TaskWorker.
@@ -87,13 +85,11 @@ class TaskWorker:
         Args:
             storage: Storage instance
             owner_id: Owner ID
-            api_key: API key for the LLM provider
             user_email: User's email address
-            provider: LLM provider (anthropic, openai, mistral)
         """
         self.storage = storage
         self.owner_id = owner_id
-        self.client = LLMClient(api_key=api_key, provider=provider)
+        self.client = make_llm_client()
         self.user_email = user_email.lower() if user_email else ""
         self.user_domain = (
             user_email.split("@")[1].lower() if user_email and "@" in user_email else ""

@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-from zylch.llm import LLMClient
+from zylch.llm import try_make_llm_client
 
 if TYPE_CHECKING:
     from zylch.storage import Storage
@@ -22,8 +22,6 @@ class CalendarSyncManager:
     def __init__(
         self,
         calendar_client,
-        api_key: str,
-        provider: str,
         days_back: int = 30,
         days_forward: int = 30,
         my_emails: Optional[List[str]] = None,
@@ -34,8 +32,6 @@ class CalendarSyncManager:
 
         Args:
             calendar_client: Calendar client (GoogleCalendarClient or OutlookCalendarClient)
-            api_key: LLM API key for event analysis
-            provider: LLM provider (anthropic, openai, mistral)
             days_back: Days in past to sync (default: 30)
             days_forward: Days in future to sync (default: 30)
             my_emails: List of my email addresses (for identifying external attendees)
@@ -46,8 +42,7 @@ class CalendarSyncManager:
             raise ValueError("owner_id and supabase_storage are required")
 
         self.calendar = calendar_client
-        self.provider = provider
-        self.llm_client = LLMClient(api_key=api_key, provider=provider) if api_key else None
+        self.llm_client = try_make_llm_client()
         self.days_back = days_back
         self.days_forward = days_forward
         self.my_emails = my_emails or []

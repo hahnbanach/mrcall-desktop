@@ -22,8 +22,6 @@ interface Props {
   onCreated: (email: string) => void
 }
 
-type Provider = 'anthropic' | 'openai'
-
 // Sensible IMAP/SMTP defaults keyed off the email's domain. Mirrors
 // what `zylch init` offers as a one-keystroke option in the CLI.
 const PRESETS: Record<string, { imapHost: string; smtpHost: string }> = {
@@ -51,8 +49,6 @@ function isValidEmail(s: string): boolean {
 
 export default function NewProfileWizard({ open, onClose, onCreated }: Props): JSX.Element | null {
   const [email, setEmail] = useState('')
-  const [provider, setProvider] = useState<Provider>('anthropic')
-  const [apiKey, setApiKey] = useState('')
   const [emailPassword, setEmailPassword] = useState('')
   const [imapHost, setImapHost] = useState('')
   const [imapPort, setImapPort] = useState('993')
@@ -67,8 +63,6 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
   useEffect(() => {
     if (!open) return
     setEmail('')
-    setProvider('anthropic')
-    setApiKey('')
     setEmailPassword('')
     setImapHost('')
     setImapPort('993')
@@ -91,12 +85,11 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
 
   const canSubmit = useMemo(() => {
     if (!isValidEmail(email)) return false
-    if (!apiKey.trim()) return false
     if (!emailPassword.trim()) return false
     if (!imapHost.trim() || !smtpHost.trim()) return false
     if (!imapPort.trim() || !smtpPort.trim()) return false
     return true
-  }, [email, apiKey, emailPassword, imapHost, smtpHost, imapPort, smtpPort])
+  }, [email, emailPassword, imapHost, smtpHost, imapPort, smtpPort])
 
   if (!open) return null
 
@@ -104,8 +97,10 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
     if (!canSubmit || submitting) return
     setSubmitting(true)
     setFormError(null)
+    // No SYSTEM_LLM_PROVIDER, no API key. The engine resolves transport
+    // from .env contents at runtime — see Settings → LLM to add a BYOK
+    // Anthropic key after the profile is created.
     const values: Record<string, string> = {
-      SYSTEM_LLM_PROVIDER: provider,
       EMAIL_ADDRESS: email.trim(),
       EMAIL_PASSWORD: emailPassword,
       IMAP_HOST: imapHost.trim(),
@@ -113,8 +108,6 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
       SMTP_HOST: smtpHost.trim(),
       SMTP_PORT: smtpPort.trim()
     }
-    if (provider === 'anthropic') values.ANTHROPIC_API_KEY = apiKey
-    else values.OPENAI_API_KEY = apiKey
     if (telegramToken.trim()) values.TELEGRAM_BOT_TOKEN = telegramToken.trim()
     try {
       const r = await window.zylch.profiles.create(email.trim(), values)
@@ -170,30 +163,6 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
               onChange={(e) => setEmail(e.target.value)}
               placeholder="user@example.com"
               autoComplete="off"
-              className="w-full px-3 py-2 border rounded text-sm"
-            />
-          </Field>
-
-          <Field label="LLM provider" required>
-            <select
-              value={provider}
-              onChange={(e) => setProvider(e.target.value as Provider)}
-              className="w-full px-3 py-2 border rounded text-sm"
-            >
-              <option value="anthropic">anthropic</option>
-              <option value="openai">openai</option>
-            </select>
-          </Field>
-
-          <Field
-            label={provider === 'anthropic' ? 'Anthropic API key' : 'OpenAI API key'}
-            required
-          >
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              autoComplete="new-password"
               className="w-full px-3 py-2 border rounded text-sm"
             />
           </Field>

@@ -13,8 +13,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from zylch.config import settings
-from zylch.llm import LLMClient, PROVIDER_MODELS
+from zylch.llm import make_llm_client
 from zylch.storage import Storage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 
@@ -191,23 +190,18 @@ OUTPUT ONLY THE PROMPT TEXT or NO_CHANGES_NEEDED."""
 class EmailTaskAgentTrainer:
     """Builds personalized task detection prompt by analyzing user email patterns."""
 
-    def __init__(
-        self, storage: Storage, owner_id: str, api_key: str, user_email: str, provider: str
-    ):
+    def __init__(self, storage: Storage, owner_id: str, user_email: str):
         """Initialize EmailTaskAgentTrainer.
 
         Args:
             storage: Storage instance
             owner_id: Owner ID
-            api_key: LLM API key
             user_email: User's email address (for identifying sent vs received)
-            provider: LLM provider (anthropic, openai, mistral)
         """
         self.storage = storage
         self.owner_id = owner_id
-        self.provider = provider
-        self.model = PROVIDER_MODELS.get(provider, settings.default_model)
-        self.client = LLMClient(api_key=api_key, provider=provider)
+        self.client = make_llm_client()
+        self.model = self.client.model
         self.user_email = user_email.lower() if user_email else ""
         self.user_domain = (
             user_email.split("@")[1].lower() if user_email and "@" in user_email else ""
@@ -382,7 +376,7 @@ Body: {body}
             threads=threads_text, blobs=blobs_text, search_limit=self.search_limit
         )
 
-        logger.info(f"Training task detection agent (provider: {self.provider})...")
+        logger.info(f"Training task detection agent (transport={self.client.transport})...")
         logger.debug(f"Prompt size: {len(meta_prompt)} chars (~{len(meta_prompt)//4} tokens)")
 
         response = self.client.create_message_sync(

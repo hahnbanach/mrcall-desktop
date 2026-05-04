@@ -287,26 +287,15 @@ def _run_whatsapp_sync(
 
 async def _run_memory(owner_id: str, store) -> int:
     """Run memory extraction (awaitable)."""
-    from zylch.api.token_storage import (
-        get_active_llm_provider,
-    )
     from zylch.workers.memory import MemoryWorker
 
-    llm_provider, api_key = get_active_llm_provider(owner_id)
-    if not api_key:
-        raise ValueError("No API key configured." " Check ANTHROPIC_API_KEY in your profile.")
-
-    worker = MemoryWorker(
-        storage=store,
-        owner_id=owner_id,
-        api_key=api_key,
-        provider=llm_provider or "anthropic",
-    )
+    # Constructor raises RuntimeError if no LLM transport is available.
+    worker = MemoryWorker(storage=store, owner_id=owner_id)
 
     if not worker.has_custom_prompt():
         # Auto-train memory agent on first run
         console.print("  [dim]First run — training memory agent...[/dim]")
-        await _auto_train_memory(owner_id, store, api_key, llm_provider)
+        await _auto_train_memory(owner_id, store)
         # Reset cache so worker picks up the new prompt
         worker._custom_prompt_loaded = False
 
@@ -316,22 +305,13 @@ async def _run_memory(owner_id: str, store) -> int:
 
 async def _run_tasks(owner_id: str, store) -> str:
     """Run task detection (awaitable)."""
-    from zylch.api.token_storage import (
-        get_active_llm_provider,
-    )
     from zylch.workers.task_creation import TaskWorker
-
-    llm_provider, api_key = get_active_llm_provider(owner_id)
-    if not api_key:
-        raise ValueError("No API key configured." " Check ANTHROPIC_API_KEY in your profile.")
 
     user_email = os.environ.get("EMAIL_ADDRESS", "")
 
     worker = TaskWorker(
         storage=store,
         owner_id=owner_id,
-        api_key=api_key,
-        provider=llm_provider or "anthropic",
         user_email=user_email,
     )
 
@@ -339,13 +319,7 @@ async def _run_tasks(owner_id: str, store) -> str:
     prompt = worker._get_task_prompt()
     if not prompt:
         console.print("  [dim]First run — training task agent...[/dim]")
-        await _auto_train_tasks(
-            owner_id,
-            store,
-            api_key,
-            llm_provider,
-            user_email,
-        )
+        await _auto_train_tasks(owner_id, store, user_email)
         # Reset cache so worker picks up the new prompt
         worker._task_prompt = None
         worker._task_prompt_loaded = False
@@ -440,23 +414,12 @@ async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> int:
     return ok_count
 
 
-async def _auto_train_memory(
-    owner_id: str,
-    store,
-    api_key: str,
-    llm_provider: str,
-):
+async def _auto_train_memory(owner_id: str, store):
     """Auto-train memory extraction agent (first run)."""
     from zylch.agents.trainers import EmailMemoryAgentTrainer
 
     user_email = os.environ.get("EMAIL_ADDRESS", "")
-    builder = EmailMemoryAgentTrainer(
-        store,
-        owner_id,
-        api_key,
-        user_email,
-        llm_provider,
-    )
+    builder = EmailMemoryAgentTrainer(store, owner_id, user_email)
     agent_prompt, metadata = await builder.build_memory_email_prompt()
     if not agent_prompt or not agent_prompt.strip():
         console.print(
@@ -475,25 +438,13 @@ async def _auto_train_memory(
     )
 
 
-async def _auto_train_tasks(
-    owner_id: str,
-    store,
-    api_key: str,
-    llm_provider: str,
-    user_email: str,
-):
+async def _auto_train_tasks(owner_id: str, store, user_email: str):
     """Auto-train task detection agent (first run)."""
     from zylch.agents.trainers.task_email import (
         EmailTaskAgentTrainer,
     )
 
-    trainer = EmailTaskAgentTrainer(
-        store,
-        owner_id,
-        api_key,
-        user_email,
-        llm_provider,
-    )
+    trainer = EmailTaskAgentTrainer(store, owner_id, user_email)
     prompt, metadata = await trainer.build_task_prompt()
     if not prompt or not prompt.strip():
         console.print(

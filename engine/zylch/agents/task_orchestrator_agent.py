@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 from zylch.agents.base import BaseConversationalAgent
 from zylch.agents.emailer_agent import EmailerAgent, EMAIL_AGENT_TOOLS
 from zylch.agents.mrcall_agent import MrCallAgent, MRCALL_AGENT_TOOLS
-from zylch.llm import LLMClient
+from zylch.llm import make_llm_client
 from zylch.storage import Storage
 from zylch.storage.database import get_session
 from zylch.storage.models import Draft
@@ -106,9 +106,7 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
         orchestrator = TaskOrchestratorAgent(
             session_state=session_state,
             owner_id=user_id,
-            api_key=config.anthropic_api_key,
-            provider=config.llm_provider,
-            storage=storage
+            storage=storage,
         )
         response = await orchestrator.process_message(\"draft a reply email\")
     """
@@ -117,8 +115,6 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
         self,
         session_state: SessionState,
         owner_id: str,
-        api_key: str,
-        provider: str = "anthropic",
         storage: Optional[Storage] = None,
         starchat_client=None,
     ):
@@ -127,20 +123,16 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
         Args:
             session_state: SessionState with task context
             owner_id: Owner ID
-            api_key: LLM API key
-            provider: LLM provider (anthropic, openai, mistral)
             storage: Storage instance
             starchat_client: Optional StarChat client for MrCall operations
         """
         self.session_state = session_state
         self.owner_id = owner_id
-        self.api_key = api_key
-        self.provider = provider
         self.storage = storage or Storage.get_instance()
         self.starchat_client = starchat_client
 
         # LLM client for orchestration decisions
-        self.llm = LLMClient(api_key=api_key, provider=provider)
+        self.llm = make_llm_client()
 
         # Lazy-loaded sub-agents
         self._emailer_agent: Optional[EmailerAgent] = None
@@ -159,8 +151,6 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
             self._emailer_agent = EmailerAgent(
                 storage=self.storage,
                 owner_id=self.owner_id,
-                api_key=self.api_key,
-                provider=self.provider,
             )
         return self._emailer_agent
 
@@ -170,8 +160,6 @@ class TaskOrchestratorAgent(BaseConversationalAgent):
             self._mrcall_agent = MrCallAgent(
                 storage=self.storage,
                 owner_id=self.owner_id,
-                api_key=self.api_key,
-                provider=self.provider,
                 starchat_client=self.starchat_client,
             )
         return self._mrcall_agent

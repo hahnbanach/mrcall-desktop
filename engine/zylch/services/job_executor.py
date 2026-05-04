@@ -89,18 +89,20 @@ class JobExecutor:
         self.storage: Storage = storage
 
     async def execute_job(
-        self, job_id: str, owner_id: str, api_key: str, llm_provider: str, user_email: str = ""
+        self, job_id: str, owner_id: str, user_email: str = ""
     ) -> None:
         """Entry point: claim job and dispatch to appropriate handler.
 
         This runs in the background (fire-and-forget from FastAPI's perspective).
         The actual work runs in a thread pool to avoid blocking the event loop.
 
+        Each handler resolves its own LLM transport via
+        :func:`zylch.llm.make_llm_client` — there are no
+        ``api_key``/``provider`` arguments threaded through anymore.
+
         Args:
             job_id: Background job UUID
             owner_id: Owner ID
-            api_key: User's LLM API key (BYOK)
-            llm_provider: LLM provider name (anthropic, openai, mistral)
             user_email: User's email address (for task filtering)
         """
         try:
@@ -123,14 +125,12 @@ class JobExecutor:
                     job_id,
                     owner_id,
                     channel,
-                    api_key,
-                    llm_provider,
                     chain_task=chain_task,
                     user_email=user_email,
                 )
             elif job_type == "task_process":
                 await self._execute_task_process(
-                    job_id, owner_id, channel, api_key, llm_provider, user_email
+                    job_id, owner_id, channel, user_email
                 )
             elif job_type == "sync":
                 job_params = job.get("params", {})
@@ -141,28 +141,24 @@ class JobExecutor:
                     job_id,
                     owner_id,
                     channel,
-                    api_key,
-                    llm_provider,
                     days_back=days_back,
                     force=force,
                     user_email=user_email,
                 )
             elif job_type == "task_train":
                 await self._execute_task_train(
-                    job_id, owner_id, channel, api_key, llm_provider, user_email
+                    job_id, owner_id, channel, user_email
                 )
             elif job_type == "mrcall_train":
                 job_params = job.get("params", {})
                 await self._execute_mrcall_train(
-                    job_id, owner_id, channel, api_key, llm_provider, user_email, job_params
+                    job_id, owner_id, channel, user_email, job_params
                 )
             elif job_type == "email_train":
                 job_params = job.get("params", {})
                 await self._execute_email_train(
                     job_id,
                     owner_id,
-                    api_key,
-                    llm_provider,
                     job_params.get("user_email", user_email),
                 )
             elif job_type == "memory_train":
@@ -171,8 +167,6 @@ class JobExecutor:
                     job_id,
                     owner_id,
                     channel,
-                    api_key,
-                    llm_provider,
                     job_params.get("user_email", user_email),
                 )
             else:
@@ -190,8 +184,6 @@ class JobExecutor:
         job_id: str,
         owner_id: str,
         channel: str,
-        api_key: str,
-        llm_provider: str,
         chain_task: bool = False,
         user_email: str = "",
     ) -> None:
@@ -201,8 +193,6 @@ class JobExecutor:
             job_id: Background job UUID
             owner_id: Owner ID
             channel: 'email', 'calendar', 'mrcall', or 'all'
-            api_key: User's LLM API key
-            llm_provider: LLM provider name (anthropic, openai, mistral)
             chain_task: If True, auto-chain task_process after completion
                         (set by _chain_processing_after_sync)
             user_email: User's email address (needed for task chaining)
@@ -213,9 +203,7 @@ class JobExecutor:
             """Sync code that runs in thread pool."""
             from zylch.workers import MemoryWorker
 
-            worker = MemoryWorker(
-                storage=storage, owner_id=owner_id, api_key=api_key, provider=llm_provider
-            )
+            worker = MemoryWorker(storage=storage, owner_id=owner_id)
 
             # Check if user has custom prompt for requested channel
             if channel in ["email", "all"] and not worker.has_custom_prompt():
@@ -355,15 +343,13 @@ class JobExecutor:
         # Chain task processing after memory is done (blobs must exist before task analysis)
         if chain_task:
             logger.info("[SYNC-CHAIN] Memory complete, now chaining task_process")
-            await self._chain_task_processing(owner_id, api_key, llm_provider, user_email)
+            await self._chain_task_processing(owner_id, user_email)
 
     async def _execute_task_process(
         self,
         job_id: str,
         owner_id: str,
         channel: str,
-        api_key: str,
-        llm_provider: str,
         user_email: str,
     ) -> None:
         """Execute task detection in thread pool.
@@ -372,8 +358,6 @@ class JobExecutor:
             job_id: Background job UUID
             owner_id: Owner ID
             channel: 'email', 'calendar', or 'all'
-            api_key: User's LLM API key
-            llm_provider: LLM provider name (anthropic, openai, mistral)
             user_email: User's email address
         """
         storage = self.storage
@@ -386,10 +370,10 @@ class JobExecutor:
             1,
             "Generating task detection prompt (LLM call)...",
         )
-        has_prompt = await self._refresh_task_prompt(owner_id, api_key, llm_provider, user_email)
+        has_prompt = await self._refresh_task_prompt(owner_id, user_email)
         if not has_prompt:
             raise ValueError(
-                "Could not generate task detection prompt." " Check LLM API key and email data."
+                "Could not generate task detection prompt." " Check LLM transport and email data."
             )
         self.storage.update_background_job_progress(
             job_id,
@@ -406,8 +390,6 @@ class JobExecutor:
             worker = TaskWorker(
                 storage=storage,
                 owner_id=owner_id,
-                api_key=api_key,
-                provider=llm_provider,
                 user_email=user_email,
             )
 
@@ -544,8 +526,6 @@ class JobExecutor:
         job_id: str,
         owner_id: str,
         channel: str,
-        api_key: str,
-        llm_provider: str,
         user_email: str,
     ) -> None:
         """Execute task agent training in thread pool.
@@ -554,8 +534,6 @@ class JobExecutor:
             job_id: Background job UUID
             owner_id: Owner ID
             channel: 'email', 'calendar', or 'all'
-            api_key: User's LLM API key
-            llm_provider: LLM provider name (anthropic, openai, mistral)
             user_email: User's email address
         """
         from zylch.agents.trainers import EmailTaskAgentTrainer
@@ -586,9 +564,7 @@ class JobExecutor:
                         job_id, 10, 0, 1, "Analyzing email patterns..."
                     )
 
-                    builder = EmailTaskAgentTrainer(
-                        storage, owner_id, api_key, user_email, llm_provider
-                    )
+                    builder = EmailTaskAgentTrainer(storage, owner_id, user_email)
 
                     # Run async build_task_prompt in this thread's event loop
                     loop = asyncio.new_event_loop()
@@ -643,8 +619,6 @@ class JobExecutor:
         job_id: str,
         owner_id: str,
         channel: str,
-        api_key: str,
-        llm_provider: str,
         user_email: str,
         job_params: dict,
     ) -> None:
@@ -657,8 +631,6 @@ class JobExecutor:
             job_id: Background job UUID
             owner_id: Owner ID
             channel: Job channel (typically 'mrcall')
-            api_key: User's LLM API key (BYOK)
-            llm_provider: LLM provider name
             user_email: User's email address
             job_params: Job parameters (force, features, business_id, firebase_token)
         """
@@ -702,8 +674,6 @@ class JobExecutor:
                     _handle_mrcall_agent_train(
                         storage,
                         owner_id,
-                        api_key,
-                        llm_provider,
                         user_email,
                         feature=feature,
                         context=context,
@@ -737,8 +707,6 @@ class JobExecutor:
         self,
         job_id: str,
         owner_id: str,
-        api_key: str,
-        llm_provider: str,
         user_email: str,
     ) -> None:
         """Execute email agent training in thread pool."""
@@ -751,7 +719,7 @@ class JobExecutor:
             asyncio.set_event_loop(loop)
             try:
                 result_msg = loop.run_until_complete(
-                    _handle_emailer_train(storage, owner_id, api_key, llm_provider, user_email)
+                    _handle_emailer_train(storage, owner_id, user_email)
                 )
             finally:
                 loop.close()
@@ -770,8 +738,6 @@ class JobExecutor:
         job_id: str,
         owner_id: str,
         channel: str,
-        api_key: str,
-        llm_provider: str,
         user_email: str,
     ) -> None:
         """Execute memory agent training in thread pool."""
@@ -784,9 +750,7 @@ class JobExecutor:
             asyncio.set_event_loop(loop)
             try:
                 result_msg = loop.run_until_complete(
-                    _handle_memory_train(
-                        storage, owner_id, channel, api_key, llm_provider, user_email
-                    )
+                    _handle_memory_train(storage, owner_id, channel, user_email)
                 )
             finally:
                 loop.close()
@@ -803,8 +767,6 @@ class JobExecutor:
         job_id: str,
         owner_id: str,
         channel: str,
-        api_key: str,
-        llm_provider: str,
         days_back: int = 30,
         force: bool = False,
         user_email: str = "",
@@ -819,8 +781,6 @@ class JobExecutor:
             job_id: Background job UUID
             owner_id: Owner ID
             channel: 'email', 'calendar', or 'all'
-            api_key: User's LLM API key (BYOK) - required for calendar sync
-            llm_provider: LLM provider name (anthropic, openai, mistral)
             days_back: Number of days to sync (default: 30)
             force: If True, reset processing timestamps to force reprocessing
             user_email: User's email address (for task processing chain)
@@ -858,13 +818,13 @@ class JobExecutor:
 
             logger.info(f"[SYNC] Using IMAP for {email_addr}")
 
-            # Create sync service
+            # Create sync service. The service constructs its own
+            # LLMClient via `make_llm_client()` if it needs one for
+            # event analysis.
             sync_service = SyncService(
                 email_client=email_client,
                 owner_id=owner_id,
                 supabase_storage=storage,
-                anthropic_api_key=api_key,
-                llm_provider=llm_provider,
             )
 
             # Progress callback: updates the background job status
@@ -954,13 +914,11 @@ class JobExecutor:
         self.storage.create_notification(owner_id, msg, "info")
 
         # Auto-chain memory_process + task_process if agents are trained
-        await self._chain_processing_after_sync(owner_id, api_key, llm_provider, user_email)
+        await self._chain_processing_after_sync(owner_id, user_email)
 
     async def _refresh_task_prompt(
         self,
         owner_id: str,
-        api_key: str,
-        llm_provider: str,
         user_email: str,
     ) -> bool:
         """Refresh task prompt before task processing.
@@ -997,9 +955,7 @@ class JobExecutor:
             trainer = EmailTaskAgentTrainer(
                 storage=storage,
                 owner_id=owner_id,
-                api_key=api_key,
                 user_email=user_email,
-                provider=llm_provider,
             )
 
             loop = asyncio.new_event_loop()
@@ -1038,7 +994,7 @@ class JobExecutor:
             return False
 
     async def _chain_processing_after_sync(
-        self, owner_id: str, api_key: str, llm_provider: str, user_email: str
+        self, owner_id: str, user_email: str
     ) -> None:
         """Auto-chain memory processing after sync completes.
 
@@ -1046,14 +1002,11 @@ class JobExecutor:
         memory blobs (via _get_blob_for_contact) as context for task decisions.
         Task processing is chained after memory completes (see _execute_memory_process).
 
-        Only chains if the memory agent is trained and there are unprocessed items.
-
-        Args:
-            owner_id: Owner ID
-            api_key: User's LLM API key
-            llm_provider: LLM provider name
-            user_email: User's email address
+        Only chains if the memory agent is trained, there are unprocessed
+        items, and an LLM transport is available.
         """
+        from zylch.llm import try_make_llm_client
+
         storage = self.storage
 
         # Check if memory agent is trained
@@ -1065,20 +1018,20 @@ class JobExecutor:
                 f" {owner_id}, skipping memory processing"
             )
             # Even without memory agent, try task processing
-            await self._chain_task_processing(owner_id, api_key, llm_provider, user_email)
+            await self._chain_task_processing(owner_id, user_email)
             return
 
-        # Check API key before starting LLM-dependent processing
-        if not api_key:
+        # Check that an LLM transport is available before starting
+        # LLM-dependent processing.
+        if try_make_llm_client() is None:
             logger.debug(
-                f"[SYNC-CHAIN] Agents trained but no API key"
-                f" for {owner_id}, skipping processing"
+                f"[SYNC-CHAIN] No LLM transport for {owner_id},"
+                f" skipping processing"
             )
             storage.create_notification(
                 owner_id,
-                "New emails synced but task processing"
-                " skipped — no API key. Run `/connect"
-                " anthropic` to configure.",
+                "New emails synced but task processing skipped — "
+                "no LLM configured. Set ANTHROPIC_API_KEY or sign in.",
                 "warning",
             )
             return
@@ -1096,36 +1049,29 @@ class JobExecutor:
                 logger.info(
                     f"[SYNC-CHAIN] Chaining memory_process job {job['id']} (will chain task_process after)"
                 )
-                asyncio.create_task(
-                    self.execute_job(job["id"], owner_id, api_key, llm_provider, user_email)
-                )
+                asyncio.create_task(self.execute_job(job["id"], owner_id, user_email))
             else:
                 logger.info(f"[SYNC-CHAIN] memory_process job already {job['status']}")
         else:
             logger.info("[SYNC-CHAIN] No unprocessed emails for memory, trying task chain directly")
-            await self._chain_task_processing(owner_id, api_key, llm_provider, user_email)
+            await self._chain_task_processing(owner_id, user_email)
 
     async def _chain_task_processing(
-        self, owner_id: str, api_key: str, llm_provider: str, user_email: str
+        self, owner_id: str, user_email: str
     ) -> None:
-        """Chain task processing (called after memory processing completes).
+        """Chain task processing (called after memory processing completes)."""
+        from zylch.llm import try_make_llm_client
 
-        Args:
-            owner_id: Owner ID
-            api_key: User's LLM API key
-            llm_provider: LLM provider name
-            user_email: User's email address
-        """
         storage = self.storage
 
-        # Refresh (or generate) task prompt before processing
-        if not api_key:
+        if try_make_llm_client() is None:
             logger.debug(
-                f"[SYNC-CHAIN] No API key for {owner_id}," f" skipping task prompt refresh"
+                f"[SYNC-CHAIN] No LLM transport for {owner_id},"
+                f" skipping task prompt refresh"
             )
             return
 
-        has_prompt = await self._refresh_task_prompt(owner_id, api_key, llm_provider, user_email)
+        has_prompt = await self._refresh_task_prompt(owner_id, user_email)
         if not has_prompt:
             logger.info(
                 f"[SYNC-CHAIN] No task prompt available"
@@ -1141,9 +1087,7 @@ class JobExecutor:
             )
             if job["status"] == "pending":
                 logger.info(f"[SYNC-CHAIN] Chaining task_process job {job['id']}")
-                asyncio.create_task(
-                    self.execute_job(job["id"], owner_id, api_key, llm_provider, user_email)
-                )
+                asyncio.create_task(self.execute_job(job["id"], owner_id, user_email))
             else:
                 logger.info(f"[SYNC-CHAIN] task_process job already {job['status']}")
         else:

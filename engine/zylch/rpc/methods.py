@@ -260,7 +260,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
     notifications; pauses on tool approval (waits for tasks.solve.approve).
     Returns {ok, result} when done.
     """
-    from zylch.llm.client import LLMClient
+    from zylch.llm import make_llm_client
     from zylch.services.solve_constants import (
         SOLVE_SYSTEM_PROMPT,
         SOLVE_TOOLS,
@@ -299,14 +299,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
         user_email = os.environ.get("EMAIL_ADDRESS", "")
         user_name = user_email.split("@")[0] if user_email else "the user"
 
-        api_key = (
-            os.environ.get("ANTHROPIC_API_KEY")
-            or os.environ.get("OPENAI_API_KEY")
-            or os.environ.get("LLM_API_KEY")
-            or ""
-        )
-        provider = os.environ.get("LLM_PROVIDER", "anthropic")
-        client = LLMClient(api_key=api_key, provider=provider)
+        client = make_llm_client()
         system = SOLVE_SYSTEM_PROMPT.format(
             user_name=user_name,
             personal_data_section=get_personal_data_section(owner_id=owner_id),
@@ -905,18 +898,14 @@ async def narration_summarize(
         user = f"Ultime righe di log:\n{joined}"
 
     try:
-        from zylch.config import settings
-        from zylch.llm.client import LLMClient
+        from zylch.llm import try_make_llm_client
 
-        api_key = getattr(settings, "anthropic_api_key", None)
-        if not api_key:
+        # Narration is a "nice to have" — silently skip if no LLM is
+        # configured rather than surfacing an error toast.
+        client = try_make_llm_client(model="claude-haiku-4-5-20251001")
+        if client is None:
             return {"text": ""}
 
-        client = LLMClient(
-            api_key=api_key,
-            provider="anthropic",
-            model="claude-haiku-4-5-20251001",
-        )
         resp = await asyncio.to_thread(
             client.create_message_sync,
             messages=[{"role": "user", "content": user}],
@@ -1199,18 +1188,12 @@ async def narration_predict(
     fallback = "Sto pensando alla tua richiesta."
 
     try:
-        from zylch.config import settings
-        from zylch.llm.client import LLMClient
+        from zylch.llm import try_make_llm_client
 
-        api_key = getattr(settings, "anthropic_api_key", None)
-        if not api_key:
+        client = try_make_llm_client(model="claude-haiku-4-5-20251001")
+        if client is None:
             return {"text": ""}
 
-        client = LLMClient(
-            api_key=api_key,
-            provider="anthropic",
-            model="claude-haiku-4-5-20251001",
-        )
         resp = await asyncio.to_thread(
             client.create_message_sync,
             messages=[{"role": "user", "content": user}],
@@ -1379,13 +1362,13 @@ async def profiles_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
         err.code = -32602  # type: ignore[attr-defined]
         raise err
 
-    # No LLM-side validation here. The wizard doesn't write
-    # SYSTEM_LLM_PROVIDER / BYOK keys at all — they are resolved at
-    # runtime by `zylch.api.token_storage.get_active_llm_provider`. The
-    # KNOWN_KEYS check above already rejects unknown keys; the engine
-    # tolerates any value of SYSTEM_LLM_PROVIDER (unrecognised values
-    # fall through to inference). IMAP password is recommended but
-    # deferred to the user.
+    # No LLM-side validation here. The engine has one provider
+    # (Anthropic) and two transports (BYOK direct vs MrCall-credits
+    # proxy); selection happens at runtime in
+    # `zylch.llm.client.make_llm_client()` based on the presence of
+    # ANTHROPIC_API_KEY in .env. The KNOWN_KEYS check above already
+    # rejects unknown keys; IMAP password is recommended but deferred
+    # to the user.
     if not cleaned.get("EMAIL_ADDRESS"):
         # Force the email field to match the profile name so the .env is
         # internally consistent.

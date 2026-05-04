@@ -76,11 +76,14 @@ class ChatService:
         else:
             config = ToolConfig.from_settings()
 
-        # Check for Anthropic API key - required for chat
-        if not config.anthropic_api_key:
+        # Verify an LLM transport is available — either a BYOK
+        # Anthropic key in .env or a live Firebase session for credits.
+        from zylch.llm import try_make_llm_client
+
+        if try_make_llm_client() is None:
             raise ValueError(
-                "Anthropic API key not configured. "
-                "Please run `/connect anthropic` to set up your API key."
+                "No LLM configured. Set ANTHROPIC_API_KEY in the profile "
+                ".env, or sign in with Firebase to use MrCall credits."
             )
 
         # Create all tools using factory (returns tuple: tools, session_state)
@@ -90,11 +93,9 @@ class ChatService:
         # Create model selector
         model_selector = ToolFactory.create_model_selector(config)
 
-        # Initialize agent
+        # Initialize agent — picks transport via `make_llm_client()`.
         self.agent = ZylchAIAgent(
-            api_key=config.anthropic_api_key,
             tools=tools,
-            provider=config.llm_provider,
             model_selector=model_selector,
         )
 
@@ -898,9 +899,6 @@ class ChatService:
 
         try:
             from zylch.services.job_executor import JobExecutor
-            from zylch.api.token_storage import (
-                get_active_llm_provider,
-            )
             import asyncio
 
             storage = Storage.get_instance()
@@ -912,16 +910,8 @@ class ChatService:
             )
 
             if job["status"] == "pending":
-                llm_provider, api_key = get_active_llm_provider(owner_id)
                 executor = JobExecutor(storage)
-                asyncio.create_task(
-                    executor.execute_job(
-                        job["id"],
-                        owner_id,
-                        api_key or "",
-                        llm_provider or "",
-                    )
-                )
+                asyncio.create_task(executor.execute_job(job["id"], owner_id))
                 logger.info(
                     f"[AUTO-SYNC] Background job {job['id']} " f"scheduled for owner_id={owner_id}"
                 )
@@ -1082,21 +1072,19 @@ What would you like to do?"""
             # Lazy-create TaskOrchestratorAgent if needed
             if self._task_orchestrator is None:
                 from zylch.agents.task_orchestrator_agent import TaskOrchestratorAgent
-                from zylch.api.token_storage import get_active_llm_provider
 
-                # Get LLM credentials
-                llm_provider, api_key = get_active_llm_provider(owner_id)
-                if not api_key or not llm_provider:
-                    return "❌ LLM API key required. Run `/connect anthropic` to set up."
-
-                self._task_orchestrator = TaskOrchestratorAgent(
-                    session_state=ToolFactory._session_state,
-                    owner_id=owner_id,
-                    api_key=api_key,
-                    provider=llm_provider,
-                    storage=self.storage,
-                    starchat_client=ToolFactory._starchat_client,
-                )
+                # The orchestrator builds its own LLMClient via
+                # `make_llm_client()`; if no transport is available it
+                # raises and we surface a clear message.
+                try:
+                    self._task_orchestrator = TaskOrchestratorAgent(
+                        session_state=ToolFactory._session_state,
+                        owner_id=owner_id,
+                        storage=self.storage,
+                        starchat_client=ToolFactory._starchat_client,
+                    )
+                except RuntimeError as exc:
+                    return f"❌ {exc}"
 
             # Process message through orchestrator
             response = await self._task_orchestrator.process_message(
@@ -1161,22 +1149,16 @@ What would you like to do?"""
 
                 ToolFactory._session_state = SessionState()
 
-            # Get LLM credentials (with system-level fallback)
-            from zylch.api.token_storage import get_active_llm_provider
+            # Verify an LLM transport is available before constructing
+            # the (legacy) MrCall configurator agent. The agent itself
+            # will use `make_llm_client()` internally.
+            from zylch.llm import try_make_llm_client
 
-            llm_provider, api_key = get_active_llm_provider(owner_id)
-            if not api_key:
-                # System-level fallback for integrations (e.g., MrCall dashboard users)
-                from zylch.config import settings
-                from zylch.llm.providers import get_system_llm_credentials
-
-                llm_provider, api_key = get_system_llm_credentials()
-                if api_key:
-                    logger.info(
-                        f"[/mrcall open] Using system-level {llm_provider} API key for owner={owner_id}"
-                    )
-            if not api_key or not llm_provider:
-                return "❌ LLM API key required. Run `/connect anthropic` to set up."
+            if try_make_llm_client() is None:
+                return (
+                    "❌ No LLM configured. Set ANTHROPIC_API_KEY in the "
+                    "profile .env, or sign in with Firebase to use MrCall credits."
+                )
 
             # Get or create StarChat client
             if not ToolFactory._starchat_client:
@@ -1209,8 +1191,6 @@ What would you like to do?"""
             self._mrcall_orchestrator = MrCallOrchestratorAgent(
                 session_state=ToolFactory._session_state,
                 owner_id=owner_id,
-                api_key=api_key,
-                provider=llm_provider,
                 storage=self.storage,
                 starchat_client=ToolFactory._starchat_client,
             )
@@ -1250,25 +1230,23 @@ What would you like to do?"""
             if not hasattr(self, "_mrcall_history"):
                 self._mrcall_history = []
 
-            # Get or create MrCallAgent directly (skip orchestrator)
+            # Get or create MrCallAgent directly (skip orchestrator).
+            # The agent itself constructs its LLM client via
+            # `make_llm_client()` — no credential threading here.
             if not hasattr(self, "_mrcall_agent") or self._mrcall_agent is None:
                 logger.info("[MrCallConfigMode] Creating MrCallAgent directly")
-                from zylch.api.token_storage import get_active_llm_provider
+                from zylch.llm import try_make_llm_client
                 from zylch.agents.mrcall_agent import MrCallAgent
 
-                llm_provider, api_key = get_active_llm_provider(owner_id)
-                if not api_key:
-                    from zylch.llm.providers import get_system_llm_credentials
-
-                    llm_provider, api_key = get_system_llm_credentials()
-                if not api_key or not llm_provider:
-                    return "❌ LLM API key required. Run `/connect anthropic` to set up."
+                if try_make_llm_client() is None:
+                    return (
+                        "❌ No LLM configured. Set ANTHROPIC_API_KEY in the "
+                        "profile .env, or sign in with Firebase to use MrCall credits."
+                    )
 
                 self._mrcall_agent = MrCallAgent(
                     storage=self.storage,
                     owner_id=owner_id,
-                    api_key=api_key,
-                    provider=llm_provider,
                     starchat_client=ToolFactory._starchat_client,
                 )
 

@@ -28,9 +28,54 @@ Facts migrate here as they get touched.
 - **Google Calendar** is an *incremental* OAuth — separate from Firebase signin. PKCE flow on `127.0.0.1:19275` in the engine (post-signin only), `calendar.readonly` scope, `access_type=offline` + `prompt=consent`. Tokens persisted via `Storage.save_provider_credentials(uid, "google_calendar", …)`. `DEFAULT_CALENDAR_ID = "primary"`. Settings exposes `GOOGLE_CALENDAR_CLIENT_ID` (no client_secret — distinct from Google sign-in, which does need one).
 - Legacy CLI MrCall PKCE flow on `:19274` (`zylch init` wizard) is untouched — orthogonal to the desktop signin.
 
-### LLM mode = credits-by-default for new profiles (2026-05-04)
+### Transport model — Anthropic + direct/proxy (2026-05-04, refactor)
 
-The desktop Onboarding wizard no longer asks for `SYSTEM_LLM_PROVIDER` or an API key. Wizard-created profiles land in `.env` without either field, and the engine resolver (`zylch/api/token_storage.py:get_active_llm_provider` + `zylch/llm/providers.py:get_system_llm_credentials`) infers the mode from `.env` contents: explicit `SYSTEM_LLM_PROVIDER=mrcall` wins, else `ANTHROPIC_API_KEY` → anthropic, else `OPENAI_API_KEY` → openai, else MrCall credits. To opt into BYOK after onboarding, the user adds `ANTHROPIC_API_KEY=…` to `~/.zylch/profiles/<uid>/.env` (or flips the toggle in Settings → LLM). For credits mode the resolver returns `("mrcall", "firebase-session")` — a sentinel constant `MRCALL_SESSION_SENTINEL` so the existing `if not api_key:` gates throughout the engine keep flowing; `LLMClient.__init__("mrcall")` ignores the value and reads the JWT from `zylch.auth.session`. The Settings `LLMProviderCard` now derives its displayed default from the same logic (key presence) when `SYSTEM_LLM_PROVIDER` isn't in `.env`, so the radio matches what the engine actually does. Live verification pending.
+Replaces the muddled three-provider model
+(`anthropic`/`openai`/`mrcall`) with **one provider — Anthropic — over
+two transports**:
+
+- `direct` — BYOK. `ANTHROPIC_API_KEY` in the profile `.env` calls
+  `anthropic.Anthropic(...)` directly.
+- `proxy` — MrCall credits. Calls go through `mrcall-agent`'s proxy
+  with the in-memory Firebase JWT as credential.
+
+Selection is presence-based and lives in one function,
+`zylch.llm.client.make_llm_client()`. Set the key → BYOK; leave it
+out → credits. The desktop Onboarding wizard writes neither
+`SYSTEM_LLM_PROVIDER` nor any API key, so fresh profiles default to
+credits.
+
+What's gone:
+- `zylch/llm/providers.py` (the `PROVIDER_MODELS` / `PROVIDER_FEATURES`
+  / `PROVIDER_API_KEY_NAMES` legacy maps).
+- `zylch.api.token_storage.get_active_llm_provider` and the
+  `MRCALL_SESSION_SENTINEL` placeholder string.
+- `OPENAI_API_KEY` / `openai_model` config fields and the entire
+  `_call_openai` branch in `LLMClient`. OpenAI was dead code in this
+  product (no caller exercised it; prompt caching is Anthropic-only).
+- `SYSTEM_LLM_PROVIDER` in the settings schema and in `KNOWN_KEYS` on
+  both sides (`profileFS.ts`, `settings_schema.py`).
+
+What changed in the app:
+- `views/Settings.tsx`'s `LLMProviderCard` now mirrors the engine's
+  rule: it shows BYOK or Credits based on whether
+  `ANTHROPIC_API_KEY` is set, and the "Switch to MrCall credits"
+  button just clears the key. No `SYSTEM_LLM_PROVIDER` setting is
+  written.
+- `views/Onboarding.tsx` and `views/NewProfileWizard.tsx` no longer
+  collect any LLM credentials.
+
+Backward compat: pydantic ignores unknown env keys, so old profiles
+with `SYSTEM_LLM_PROVIDER=…` / `OPENAI_API_KEY=…` keep booting; the
+values are silently ignored. A user with `ANTHROPIC_API_KEY` keeps
+BYOK identically. The only behaviour change is for a profile that had
+explicit `SYSTEM_LLM_PROVIDER=mrcall` *and* an Anthropic key — it now
+flips to BYOK. Documented because rare.
+
+Engine-side details: see `engine/docs/active-context.md`. App-side
+LLM card behaviour: see `app/docs/active-context.md`. Live
+verification (sign in fresh, send chat, paste a key in Settings,
+confirm transport switch) pending.
 
 ### MrCall credits — second LLM billing mode (2026-05-03, branch `feat/mrcall-credits-v1`)
 

@@ -80,24 +80,23 @@ class Settings(BaseSettings):
         description="Enable prompt caching",
     )
 
-    # LLM API keys
+    # LLM credentials.
+    #
+    # The engine has one provider — Anthropic — over two transports
+    # (see `zylch.llm.client.make_llm_client`):
+    #
+    #   - "direct" (BYOK)   — uses anthropic_api_key below.
+    #   - "proxy"  (credits)— uses the Firebase JWT cached in
+    #                         zylch.auth.session; routes through
+    #                         mrcall-agent. No API key in .env.
+    #
+    # Selection is automatic: anthropic_api_key set → direct; else proxy.
     anthropic_api_key: str = Field(
         default="",
-        description="Anthropic API key",
-    )
-    openai_api_key: str = Field(
-        default="",
-        description="OpenAI API key",
-    )
-    system_llm_provider: str = Field(
-        default="anthropic",
-        description=("LLM provider (anthropic, openai, mrcall)"),
+        description="Anthropic API key (BYOK). Leave empty to use MrCall credits.",
     )
 
-    # MrCall credits mode — when system_llm_provider == "mrcall", the
-    # engine routes Anthropic calls through mrcall-agent's proxy and
-    # bills the user's MrCall credit balance. The Firebase ID token
-    # cached in zylch.auth.session is the credential.
+    # MrCall credits transport configuration.
     mrcall_proxy_url: str = Field(
         default="https://zylch-test.mrcall.ai",
         env="MRCALL_PROXY_URL",
@@ -109,7 +108,7 @@ class Settings(BaseSettings):
     mrcall_credits_model: str = Field(
         default="claude-sonnet-4-5",
         env="MRCALL_CREDITS_MODEL",
-        description="Model used when system_llm_provider == 'mrcall'",
+        description="Model used by the MrCall-credits proxy transport",
     )
 
     # LLM models
@@ -119,11 +118,7 @@ class Settings(BaseSettings):
     )
     anthropic_model: str = Field(
         default="claude-opus-4-6",
-        description="Anthropic model to use",
-    )
-    openai_model: str = Field(
-        default="gpt-4.1",
-        description="OpenAI model to use",
+        description="Anthropic model used for the BYOK transport",
     )
 
     # IMAP/SMTP Email

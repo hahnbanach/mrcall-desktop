@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from zylch.llm import LLMClient, PROVIDER_MODELS
+from zylch.llm import LLMClient, make_llm_client
 from zylch.storage import Storage
 from zylch.storage.database import get_session
 from zylch.storage.models import Blob
@@ -22,23 +22,18 @@ logger = logging.getLogger(__name__)
 class BaseAgentTrainer:
     """Base class for all agent trainers with shared initialization and methods."""
 
-    def __init__(
-        self, storage: Storage, owner_id: str, api_key: str, user_email: str, provider: str
-    ):
+    def __init__(self, storage: Storage, owner_id: str, user_email: str):
         """Initialize base trainer with common configuration.
 
         Args:
             storage: Storage instance
             owner_id: Owner ID
-            api_key: LLM API key
             user_email: User's email address (for identifying sent vs received)
-            provider: LLM provider (anthropic, openai, mistral)
         """
         self.storage = storage
         self.owner_id = owner_id
-        self.provider = provider
-        self.model = PROVIDER_MODELS.get(provider, PROVIDER_MODELS["anthropic"])
-        self.client = LLMClient(api_key=api_key, provider=provider)
+        self.client: LLMClient = make_llm_client()
+        self.model = self.client.model
         self.user_email = user_email.lower() if user_email else ""
         self.user_domain = (
             user_email.split("@")[1].lower() if user_email and "@" in user_email else ""
@@ -104,7 +99,7 @@ class BaseAgentTrainer:
         Returns:
             Generated prompt content
         """
-        logger.info(f"Generating agent prompt (provider: {self.provider})...")
+        logger.info(f"Generating agent prompt (transport={self.client.transport})...")
 
         response = self.client.create_message_sync(
             model=self.model,

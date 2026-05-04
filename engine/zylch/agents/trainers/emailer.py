@@ -107,19 +107,15 @@ class EmailerAgentTrainer(BaseAgentTrainer):
     Extends BaseAgentTrainer for shared initialization and methods.
     """
 
-    def __init__(
-        self, storage: Storage, owner_id: str, api_key: str, user_email: str, provider: str
-    ):
+    def __init__(self, storage: Storage, owner_id: str, user_email: str):
         """Initialize EmailerAgentTrainer.
 
         Args:
             storage: Storage instance
             owner_id: Owner ID
-            api_key: LLM API key
             user_email: User's email address (for identifying sent emails)
-            provider: LLM provider (anthropic, openai, mistral)
         """
-        super().__init__(storage, owner_id, api_key, user_email, provider)
+        super().__init__(storage, owner_id, user_email)
 
     async def build_prompt(self) -> Tuple[str, Dict[str, Any]]:
         """Build the emailer agent prompt.

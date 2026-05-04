@@ -505,8 +505,7 @@ def _handle_agent_run(
     conversation_history: list,
 ):
     """Run agentic loop with all tools (from chat)."""
-    from zylch.api.token_storage import get_active_llm_provider
-    from zylch.llm.client import LLMClient
+    from zylch.llm import try_make_llm_client
     from zylch.services.task_interactive import (
         SOLVE_SYSTEM_PROMPT,
         _get_personal_data_section,
@@ -514,16 +513,18 @@ def _handle_agent_run(
     )
     from zylch.storage.storage import Storage
 
-    provider, api_key = get_active_llm_provider(owner_id)
-    if not api_key:
-        console.print("[red]No API key. Run zylch init.[/red]")
+    client = try_make_llm_client()
+    if client is None:
+        console.print(
+            "[red]No LLM configured. Set ANTHROPIC_API_KEY in your "
+            "profile .env, or sign in via the desktop app to use "
+            "MrCall credits.[/red]"
+        )
         return
 
     user_email = os.environ.get("EMAIL_ADDRESS", "")
     user_name = user_email.split("@")[0] if user_email else "you"
     store = Storage.get_instance()
-
-    client = LLMClient(api_key=api_key, provider=provider)
     system = SOLVE_SYSTEM_PROMPT.format(
         user_name=user_name,
         personal_data_section=_get_personal_data_section(),

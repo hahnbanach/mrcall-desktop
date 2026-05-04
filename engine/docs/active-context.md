@@ -132,13 +132,61 @@ The Anthropic API key is server-side on `mrcall-agent` — never on the desktop 
 
 Pricing math (server-side; documented here for reference): `units = ceil(actual_µUSD × 1.5 / 11000)` — markup × value-of-1-credit-in-µUSD. 1 credit = €0.01.
 
-### Provider resolution — credits-by-default (2026-05-04)
+### Transport model — Anthropic + direct/proxy (2026-05-04, refactor)
 
-`get_active_llm_provider(owner_id)` and `get_system_llm_credentials()` now resolve the active LLM mode from a single rule: **the presence of `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) in the profile `.env` flips the engine into BYOK; absence flips it into MrCall credits.** Explicit `SYSTEM_LLM_PROVIDER=mrcall` still wins over key presence so a user who clicks "Use MrCall credits" in Settings keeps that even with a key in `.env`.
+The engine has **one provider (Anthropic) over two transports**:
 
-For credits mode the resolver returns `("mrcall", "firebase-session")` — a sentinel string exported as `MRCALL_SESSION_SENTINEL` from `zylch.api.token_storage`. The string is non-empty so the dozens of `if not api_key:` gates scattered across `services/`, `workers/`, `tools/` keep flowing through to `LLMClient(api_key=api_key, provider="mrcall")`, which itself ignores `api_key` and reads the JWT from `zylch.auth.session`. If no Firebase session is live the existing `RuntimeError("MrCall credits require Firebase signin. …")` surfaces.
+- ``direct`` — BYOK. The user's ``ANTHROPIC_API_KEY`` from the profile
+  ``.env`` is used to call ``anthropic.Anthropic(...)`` directly.
+- ``proxy`` — MrCall credits. Calls are routed through ``mrcall-agent``
+  via ``MrCallProxyClient`` and billed against the user's MrCall credit
+  balance. Credential is the in-memory Firebase ID token held by
+  :mod:`zylch.auth.session`.
 
-Why this matters: post-Firebase profiles created via the desktop Onboarding wizard no longer carry `SYSTEM_LLM_PROVIDER` or `ANTHROPIC_API_KEY` in `.env`, so `settings.system_llm_provider` falls back to its pydantic default `"anthropic"`. Without this rewrite the resolver would have returned `("anthropic", "")` and every LLM-gated feature would short-circuit. With it, the same profile resolves to `("mrcall", sentinel)` and the engine routes through the proxy. A user who later adds `ANTHROPIC_API_KEY=…` to `.env` is auto-flipped to BYOK on the next sidecar restart — no Settings-UI step required.
+Both transports return Anthropic-shape ``Message`` objects, so the
+rest of the engine — workers, agents, trainers, tools, services —
+sees a single uniform :class:`zylch.llm.LLMClient`.
+
+`zylch/llm/client.py:make_llm_client()` is the single entry point
+that every caller uses. Resolution is presence-based: an
+``ANTHROPIC_API_KEY`` in ``.env`` flips to ``direct``, else proxy. If
+no Firebase session is live in proxy mode, the factory raises
+``RuntimeError("No LLM configured: …")``. Background workers that
+should silently skip use ``try_make_llm_client()``.
+
+This refactor collapsed a muddled three-provider model
+(``anthropic`` / ``openai`` / ``mrcall``) plus a
+``MRCALL_SESSION_SENTINEL`` placeholder string. OpenAI was dead code
+in the desktop product — its ``_call_openai`` branch in
+``LLMClient``, ``OPENAI_API_KEY`` config field, ``openai_model``
+field, the ``"openai"`` schema option, and ``settings_schema.py``
+entry are all removed. ``zylch/llm/providers.py`` is gone (the
+``PROVIDER_MODELS`` / ``PROVIDER_FEATURES`` / ``PROVIDER_API_KEY_NAMES``
+maps were the last vestiges of the legacy multi-provider scaffolding).
+``zylch.api.token_storage.get_active_llm_provider`` is gone too —
+every caller either uses ``make_llm_client()`` directly or surfaces
+``"No LLM configured"`` via ``try_make_llm_client() is None``.
+
+Concretely the refactor touched ~25 files and dropped
+``api_key``/``provider`` parameters from: ``SpecializedAgent``,
+``EmailerAgent``, ``TaskOrchestratorAgent``, ``MemoryWorker``,
+``TaskWorker``, ``LLMMergeService``, ``BaseAgentTrainer``,
+``EmailMemoryAgentTrainer``, ``EmailTaskAgentTrainer``,
+``EmailerAgentTrainer``, ``EmailSyncManager``, ``CalendarSyncManager``,
+``ZylchAIAgent``, ``ComposeEmailTool``, ``WebSearchTool``, every
+``JobExecutor._execute_*`` method, every ``_handle_*`` helper in
+``command_handlers.py``, every direct ``LLMClient(api_key=…, provider=…)``
+construction in ``rpc/methods.py``, and ``cli/setup.py`` (the legacy
+CLI wizard now prompts only for an optional Anthropic key).
+
+Backward compat: pydantic ignores unknown env keys
+(``extra="ignore"``), so old profiles with ``SYSTEM_LLM_PROVIDER=…``
+and ``OPENAI_API_KEY=…`` keep booting; those values are simply
+ignored. A user with ``ANTHROPIC_API_KEY`` set keeps BYOK behaviour
+identically. A user who explicitly chose ``SYSTEM_LLM_PROVIDER=mrcall``
+and also has an Anthropic key in ``.env`` will silently flip to BYOK —
+the only meaningful behaviour change. Documented in
+``docs/active-context.md``.
 
 ## What Was Completed This Session
 

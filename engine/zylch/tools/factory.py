@@ -134,13 +134,13 @@ class ToolFactory:
                 except Exception as e:
                     logger.warning("EmailArchiveManager init" f" skipped: {e}")
 
-            # Email sync manager
+            # Email sync manager — LLM transport resolved internally
+            # via `try_make_llm_client()`; the manager skips analysis
+            # if no transport is available.
             email_sync = None
-            if email_archive and config.anthropic_api_key and config.llm_provider:
+            if email_archive:
                 email_sync = EmailSyncManager(
                     email_archive=email_archive,
-                    api_key=config.anthropic_api_key,
-                    provider=config.llm_provider,
                     days_back=30,
                     owner_id=config.owner_id,
                     supabase_storage=supabase_storage,
@@ -211,13 +211,8 @@ class ToolFactory:
         # Calendar tools removed (pending CalDAV)
         # TODO: Re-add when CalDAV is implemented
 
-        # Web search tool (1 tool)
-        tools.append(
-            WebSearchTool(
-                api_key=config.anthropic_api_key,
-                provider=getattr(config, "llm_provider", "anthropic"),
-            )
-        )
+        # Web search tool (1 tool) — picks transport via make_llm_client
+        tools.append(WebSearchTool())
 
         # Pipedrive tools (2 tools) - optional
         if pipedrive:
@@ -287,17 +282,7 @@ class ToolFactory:
         logger.info("Phase A tools initialized (6: +read_email, +create_memory)")
 
         # Compose Email tool
-        tools.append(
-            ComposeEmailTool(
-                session_state=session_state,
-                api_key=config.anthropic_api_key,
-                provider=getattr(
-                    config,
-                    "llm_provider",
-                    "anthropic",
-                ),
-            )
-        )
+        tools.append(ComposeEmailTool(session_state=session_state))
         logger.info("Compose Email tool initialized")
 
         # Store service client references

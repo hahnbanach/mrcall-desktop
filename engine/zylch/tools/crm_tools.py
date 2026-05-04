@@ -223,12 +223,7 @@ class ComposeEmailTool(Tool):
     The emailer agent uses LLM to generate contextual emails.
     """
 
-    def __init__(
-        self,
-        session_state: SessionState,
-        api_key: str,
-        provider: str = "anthropic",
-    ):
+    def __init__(self, session_state: SessionState):
         super().__init__(
             name="compose_email",
             description=(
@@ -239,8 +234,6 @@ class ComposeEmailTool(Tool):
             ),
         )
         self.session_state = session_state
-        self.api_key = api_key
-        self.provider = provider
         self._agent = None  # Lazy initialization
 
     def _get_agent(self):
@@ -254,12 +247,7 @@ class ComposeEmailTool(Tool):
                 raise ValueError("No owner_id available." " Please log in first.")
 
             storage = Storage.get_instance()
-            self._agent = EmailerAgent(
-                storage=storage,
-                owner_id=owner_id,
-                api_key=self.api_key,
-                provider=self.provider,
-            )
+            self._agent = EmailerAgent(storage=storage, owner_id=owner_id)
         return self._agent
 
     async def execute(

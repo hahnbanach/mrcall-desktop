@@ -491,16 +491,10 @@ Progress: {job.get('progress_pct', 0)}%
 Please wait for the current sync to complete."""
 
         if job["status"] == "pending":
-            # Get LLM credentials for calendar sync
-            from zylch.api.token_storage import get_active_llm_provider
-
-            llm_provider, api_key = get_active_llm_provider(owner_id)
-
-            # Schedule execution in background
+            # Schedule execution in background. Each worker resolves its
+            # own LLM transport via `make_llm_client()`.
             executor = JobExecutor(storage)
-            asyncio.create_task(
-                executor.execute_job(job["id"], owner_id, api_key or "", llm_provider or "")
-            )
+            asyncio.create_task(executor.execute_job(job["id"], owner_id))
 
             logger.info(f"[/sync] Scheduled background job {job['id']} (force={force})")
 
@@ -572,13 +566,11 @@ Use `/agent process` to extract facts from synced data:
         blob_storage = BlobStorage(get_session, embedding_engine)
         search_engine = HybridSearchEngine(get_session, embedding_engine)
 
-        # Initialize LLM merge service (for reconsolidation)
-        from zylch.api.token_storage import get_active_llm_provider
+        # Initialize LLM merge service (for reconsolidation). Skip if
+        # no LLM transport is configured.
+        from zylch.llm import try_make_llm_client
 
-        llm_merge = None
-        llm_provider, api_key = get_active_llm_provider(owner_id)
-        if api_key:
-            llm_merge = LLMMergeService(api_key=api_key, provider=llm_provider)
+        llm_merge = LLMMergeService() if try_make_llm_client() is not None else None
 
         namespace = f"user:{owner_id}"
 
@@ -2232,20 +2224,12 @@ Shows items needing your action, analyzed by AI.
 
         # Interactive mode — runs its own input loop
         if args and args[0] == "interactive":
-            from zylch.api.token_storage import get_active_llm_provider
             from zylch.services.task_interactive import (
                 run_interactive_tasks,
             )
 
-            llm_provider, api_key = get_active_llm_provider(owner_id)
             user_email = get_email(owner_id) or ""
-            run_interactive_tasks(
-                owner_id,
-                storage,
-                api_key,
-                llm_provider,
-                user_email,
-            )
+            run_interactive_tasks(owner_id, storage, user_email)
             return ""
 
         # Handle subcommands
@@ -2281,20 +2265,14 @@ Run `/tasks` to see items needing action."""
 
 Run `/agent task process` to recreate all tasks."""
 
-        # Get LLM provider and API key
-        from zylch.api.token_storage import get_active_llm_provider
+        # Verify an LLM transport is available
+        from zylch.llm import try_make_llm_client
 
-        llm_provider, api_key = get_active_llm_provider(owner_id)
-        if not api_key or not llm_provider:
-            from zylch.llm.providers import get_system_llm_credentials
+        if try_make_llm_client() is None:
+            return """❌ **No LLM configured**
 
-            llm_provider, api_key = get_system_llm_credentials()
-
-        if not api_key or not llm_provider:
-            return """❌ **LLM API key required**
-
-Connect your LLM provider:
-`/connect anthropic` or `/connect openai` or `/connect mistral`"""
+Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
+to use MrCall credits."""
 
         # Get user email
         user_email = get_email(owner_id) or ""
@@ -2335,7 +2313,7 @@ Run `/sync` first to get fresh emails, then `/tasks refresh`."""
                 logger.warning(f"Could not check newest email date: {e}")
 
         # Create worker and get tasks
-        worker = TaskWorker(storage, owner_id, api_key, llm_provider, user_email)
+        worker = TaskWorker(storage, owner_id, user_email)
         tasks, _ = await worker.get_tasks(refresh=refresh)
 
         if not tasks:
@@ -2684,7 +2662,8 @@ Shows your running/pending background jobs.
         if subcommand == "resume":
             import asyncio
             from zylch.services.job_executor import JobExecutor
-            from zylch.api.token_storage import get_active_llm_provider, get_email
+            from zylch.api.token_storage import get_email
+            from zylch.llm import try_make_llm_client
 
             # Get pending jobs for this user
             pending_jobs = storage.get_user_background_jobs(owner_id, status="pending", limit=10)
@@ -2692,20 +2671,22 @@ Shows your running/pending background jobs.
             if not pending_jobs:
                 return "📭 No pending jobs to resume."
 
-            # Get LLM credentials
-            llm_provider, api_key = get_active_llm_provider(owner_id)
+            if try_make_llm_client() is None:
+                return (
+                    "❌ No LLM configured. Set ANTHROPIC_API_KEY in the "
+                    "profile .env, or sign in with Firebase to use MrCall credits."
+                )
+
             user_email = get_email(owner_id) or ""
 
-            if not api_key:
-                return "❌ No LLM provider configured. Run `/connect anthropic` first."
-
-            # Execute each pending job
+            # Execute each pending job — each worker resolves its own
+            # transport via `make_llm_client()`.
             executor = JobExecutor(storage)
             resumed_count = 0
 
             for job in pending_jobs:
                 asyncio.create_task(
-                    executor.execute_job(job["id"], owner_id, api_key, llm_provider, user_email)
+                    executor.execute_job(job["id"], owner_id, user_email)
                 )
                 resumed_count += 1
 
@@ -2908,21 +2889,16 @@ async def handle_agent(
             if channel not in valid_channels:
                 return f"❌ Unknown channel: `{channel}`\n\nValid channels: `email`, `all`"
 
-        # Get common requirements
-        from zylch.api.token_storage import get_active_llm_provider
+        # Verify a transport is available before doing any agent work.
+        from zylch.llm import try_make_llm_client
 
-        llm_provider, api_key = get_active_llm_provider(owner_id)
+        if try_make_llm_client() is None:
+            return (
+                "❌ No LLM configured. Set ANTHROPIC_API_KEY in the "
+                "profile .env, or sign in with Firebase to use MrCall credits."
+            )
+
         user_email = get_email(owner_id)
-
-        # System-level fallback (users without BYOK keys use system key)
-        if not api_key:
-            from zylch.llm.providers import get_system_llm_credentials
-
-            llm_provider, api_key = get_system_llm_credentials()
-            if api_key:
-                logger.info(
-                    f"[/agent {domain}] Using system-level {llm_provider} API key for owner={owner_id}"
-                )
 
         # Build agent_type for DB storage (e.g., 'memory_email', 'task_calendar')
         def get_agent_type(domain: str, channel: str) -> str:
@@ -2947,9 +2923,7 @@ async def handle_agent(
 
                         executor = JobExecutor(storage)
                         asyncio.create_task(
-                            executor.execute_job(
-                                job["id"], owner_id, api_key, llm_provider, user_email
-                            )
+                            executor.execute_job(job["id"], owner_id, user_email)
                         )
                         logger.info(
                             f"[/agent memory train] Scheduled background job {job['id']} for channel={channel}"
@@ -2958,7 +2932,7 @@ async def handle_agent(
                 return "❌ Failed to create training job."
 
             elif action == "run":
-                return await _handle_memory_run(storage, owner_id, channel, api_key, llm_provider)
+                return await _handle_memory_run(storage, owner_id, channel)
 
             elif action == "show":
                 return await _handle_agent_show(storage, owner_id, domain, channel)
@@ -2972,12 +2946,12 @@ async def handle_agent(
         elif domain == "task":
             if action == "train":
                 return await _handle_task_train(
-                    storage, owner_id, channel, api_key, llm_provider, user_email
+                    storage, owner_id, channel, user_email
                 )
 
             elif action == "run":
                 return await _handle_task_run(
-                    storage, owner_id, channel, api_key, llm_provider, user_email
+                    storage, owner_id, channel, user_email
                 )
 
             elif action == "show":
@@ -3005,9 +2979,7 @@ async def handle_agent(
 
                         executor = JobExecutor(storage)
                         asyncio.create_task(
-                            executor.execute_job(
-                                job["id"], owner_id, api_key, llm_provider, user_email
-                            )
+                            executor.execute_job(job["id"], owner_id, user_email)
                         )
                         logger.info(f"[/agent email train] Scheduled background job {job['id']}")
                     return "🚀 **Email training started**\n\nAnalyzing your writing style in the background. You'll be notified when complete."
@@ -3015,9 +2987,7 @@ async def handle_agent(
 
             elif action == "run":
                 instructions = " ".join(args[2:]) if len(args) > 2 else ""
-                return await _handle_emailer_run(
-                    storage, owner_id, api_key, llm_provider, instructions
-                )
+                return await _handle_emailer_run(storage, owner_id, instructions)
 
             elif action == "show":
                 return await _handle_emailer_show(storage, owner_id)
@@ -3043,7 +3013,7 @@ async def handle_agent(
             elif action == "run":
                 instructions = " ".join(args[2:]) if len(args) > 2 else ""
                 return await _handle_mrcall_agent_run(
-                    storage, owner_id, api_key, llm_provider, instructions, context
+                    storage, owner_id, instructions, context
                 )
 
             elif action == "show":
@@ -3065,16 +3035,17 @@ async def handle_agent(
 
 
 async def _handle_memory_train(
-    storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str
+    storage, owner_id: str, channel: str, user_email: str
 ) -> str:
     """Train memory extraction agent for specified channel."""
     from zylch.agents.trainers import EmailMemoryAgentTrainer
+    from zylch.llm import try_make_llm_client
 
-    if not api_key or not llm_provider:
-        return """❌ **LLM API key required**
+    if try_make_llm_client() is None:
+        return """❌ **No LLM configured**
 
-Connect your LLM provider:
-`/connect anthropic` or `/connect openai` or `/connect mistral`"""
+Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
+to use MrCall credits."""
 
     if not user_email:
         return """❌ **User email not found**
@@ -3092,7 +3063,7 @@ Please ensure your account is properly connected via `/connect`."""
                 results.append("📧 **Email:** No emails found - skipped")
                 continue
 
-            builder = EmailMemoryAgentTrainer(storage, owner_id, api_key, user_email, llm_provider)
+            builder = EmailMemoryAgentTrainer(storage, owner_id, user_email)
             agent_prompt, metadata = await builder.build_memory_email_prompt()
             storage.store_agent_prompt(owner_id, "memory_email", agent_prompt, metadata)
             results.append(
@@ -3115,7 +3086,7 @@ Please ensure your account is properly connected via `/connect`."""
                 continue
 
             try:
-                trainer = MrCallMemoryTrainer(storage, owner_id, api_key, user_email, llm_provider)
+                trainer = MrCallMemoryTrainer(storage, owner_id, user_email)
                 agent_prompt, metadata = await trainer.build_prompt()
                 storage.store_agent_prompt(owner_id, "memory_mrcall", agent_prompt, metadata)
                 results.append(
@@ -3133,9 +3104,7 @@ Please ensure your account is properly connected via `/connect`."""
 - `/agent memory process {channel}` to extract facts"""
 
 
-async def _handle_memory_run(
-    storage, owner_id: str, channel: str, api_key: str, llm_provider: str
-) -> str:
+async def _handle_memory_run(storage, owner_id: str, channel: str) -> str:
     """Start memory processing as a background job.
 
     Creates a background job that runs in a thread pool, returning immediately.
@@ -3143,12 +3112,13 @@ async def _handle_memory_run(
     """
     import asyncio
     from zylch.services.job_executor import JobExecutor
+    from zylch.llm import try_make_llm_client
 
-    if not api_key or not llm_provider:
-        return """❌ **LLM API key required**
+    if try_make_llm_client() is None:
+        return """❌ **No LLM configured**
 
-Connect your LLM provider:
-`/connect anthropic` or `/connect openai` or `/connect mistral`"""
+Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
+to use MrCall credits."""
 
     # Check for custom agent before starting job
     if channel in ["email", "all"]:
@@ -3187,8 +3157,6 @@ Job ID: `{job['id']}`"""
             executor.execute_job(
                 job["id"],
                 owner_id,
-                api_key,
-                llm_provider,
                 "",  # user_email not needed for memory processing
             )
         )
@@ -3213,7 +3181,7 @@ Job ID: `{job['id']}`
 
 
 async def _handle_task_train(
-    storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str
+    storage, owner_id: str, channel: str, user_email: str
 ) -> str:
     """Force-regenerate task detection prompt (manual override).
 
@@ -3222,12 +3190,13 @@ async def _handle_task_train(
     """
     import asyncio
     from zylch.services.job_executor import JobExecutor
+    from zylch.llm import try_make_llm_client
 
-    if not api_key or not llm_provider:
-        return """❌ **LLM API key required**
+    if try_make_llm_client() is None:
+        return """❌ **No LLM configured**
 
-Connect your LLM provider:
-`/connect anthropic` or `/connect openai` or `/connect mistral`"""
+Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
+to use MrCall credits."""
 
     if not user_email:
         return """❌ **User email not found**
@@ -3260,7 +3229,7 @@ Job ID: `{job['id']}`"""
         # Schedule execution in background (fire-and-forget)
         executor = JobExecutor(storage)
         asyncio.create_task(
-            executor.execute_job(job["id"], owner_id, api_key, llm_provider, user_email or "")
+            executor.execute_job(job["id"], owner_id, user_email or "")
         )
 
         return f"""🚀 **Task agent training started**
@@ -3277,7 +3246,7 @@ Job ID: `{job['id']}`
 
 
 async def _handle_task_run(
-    storage, owner_id: str, channel: str, api_key: str, llm_provider: str, user_email: str
+    storage, owner_id: str, channel: str, user_email: str
 ) -> str:
     """Start task detection as a background job.
 
@@ -3286,12 +3255,13 @@ async def _handle_task_run(
     """
     import asyncio
     from zylch.services.job_executor import JobExecutor
+    from zylch.llm import try_make_llm_client
 
-    if not api_key or not llm_provider:
-        return """❌ **LLM API key required**
+    if try_make_llm_client() is None:
+        return """❌ **No LLM configured**
 
-Connect your LLM provider:
-`/connect anthropic` or `/connect openai` or `/connect mistral`"""
+Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
+to use MrCall credits."""
 
     # Log if no task prompt exists (auto-generated after sync)
     if channel in ["email", "all"]:
@@ -3317,7 +3287,7 @@ Job ID: `{job['id']}`"""
         # Schedule execution in background (fire-and-forget)
         executor = JobExecutor(storage)
         asyncio.create_task(
-            executor.execute_job(job["id"], owner_id, api_key, llm_provider, user_email or "")
+            executor.execute_job(job["id"], owner_id, user_email or "")
         )
 
         return f"""🚀 **Task detection started**
@@ -3357,16 +3327,17 @@ The prompt will be auto-regenerated on next sync, or run \
 
 
 async def _handle_emailer_train(
-    storage, owner_id: str, api_key: str, llm_provider: str, user_email: str
+    storage, owner_id: str, user_email: str
 ) -> str:
     """Train emailer agent to learn user's writing style."""
     from zylch.agents.trainers import EmailerAgentTrainer
+    from zylch.llm import try_make_llm_client
 
-    if not api_key or not llm_provider:
-        return """❌ **LLM API key required**
+    if try_make_llm_client() is None:
+        return """❌ **No LLM configured**
 
-Connect your LLM provider:
-`/connect anthropic` or `/connect openai` or `/connect mistral`"""
+Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
+to use MrCall credits."""
 
     if not user_email:
         return """❌ **User email not found**
@@ -3383,7 +3354,7 @@ Run `/sync` to synchronize your emails first.
 Then run this command again."""
 
     try:
-        trainer = EmailerAgentTrainer(storage, owner_id, api_key, user_email, llm_provider)
+        trainer = EmailerAgentTrainer(storage, owner_id, user_email)
         agent_prompt, metadata = await trainer.build_emailer_prompt()
         storage.store_agent_prompt(owner_id, "emailer", agent_prompt, metadata)
 
@@ -3456,7 +3427,7 @@ Retrain with: `/agent email train`"""
 
 
 async def _handle_emailer_run(
-    storage, owner_id: str, api_key: str, llm_provider: str, instructions: str
+    storage, owner_id: str, instructions: str
 ) -> str:
     """Execute the email agent with given instructions.
 
@@ -3469,6 +3440,7 @@ async def _handle_emailer_run(
     The agent decides which tool to use based on the instructions.
     """
     from zylch.agents.emailer_agent import EmailerAgent
+    from zylch.llm import try_make_llm_client
 
     if not instructions.strip():
         return """❌ **Missing instructions**
@@ -3480,17 +3452,15 @@ Examples:
 • `/agent email run "What can I answer to this guy?"`
 • `/agent email run "cerca info su Acme Corp"`"""
 
-    if not api_key or not llm_provider:
-        return """❌ **LLM API key required**
+    if try_make_llm_client() is None:
+        return """❌ **No LLM configured**
 
-Connect your LLM provider:
-`/connect anthropic` or `/connect openai` or `/connect mistral`"""
+Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
+to use MrCall credits."""
 
     try:
         # Initialize the email agent
-        agent = EmailerAgent(
-            storage=storage, owner_id=owner_id, api_key=api_key, provider=llm_provider
-        )
+        agent = EmailerAgent(storage=storage, owner_id=owner_id)
 
         # Run the agent
         result = await agent.run(instructions=instructions)
@@ -3603,19 +3573,18 @@ async def _handle_mrcall_agent_train(
 
 
 async def _handle_mrcall_agent_run(
-    storage, owner_id: str, api_key: str, llm_provider: str, instructions: str, context: dict = None
+    storage, owner_id: str, instructions: str, context: dict = None
 ) -> str:
     """Execute the MrCall agent with given instructions.
 
     Args:
         storage: Supabase storage instance
         owner_id: User's Owner ID
-        api_key: LLM API key
-        llm_provider: LLM provider name
         instructions: User instructions for the agent
         context: Request context (for dashboard detection)
     """
     from zylch.agents.mrcall_agent import MrCallAgent
+    from zylch.llm import try_make_llm_client
     from zylch.tools.starchat import StarChatClient, create_starchat_client
 
     if not instructions.strip():
@@ -3629,11 +3598,11 @@ Examples:
 • `/agent mrcall run "change the welcome message"`
 • `/agent mrcall run "what are my current settings?"`"""
 
-    if not api_key or not llm_provider:
-        return """❌ **LLM API key required**
+    if try_make_llm_client() is None:
+        return """❌ **No LLM configured**
 
-Connect your LLM provider:
-`/connect anthropic` or `/connect openai` or `/connect mistral`"""
+Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
+to use MrCall credits."""
 
     try:
         # Create StarChat client (dashboard vs CLI)
@@ -3659,8 +3628,6 @@ Connect your LLM provider:
         agent = MrCallAgent(
             storage=storage,
             owner_id=owner_id,
-            api_key=api_key,
-            provider=llm_provider,
             starchat_client=starchat,
         )
 

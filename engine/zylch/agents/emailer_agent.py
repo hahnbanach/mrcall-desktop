@@ -340,16 +340,14 @@ class EmailerAgent(SpecializedAgent):
     PROMPT_KEY = "emailer"  # Key in agent_prompts table
     TOOLS = EMAIL_AGENT_TOOLS
 
-    def __init__(self, storage: Storage, owner_id: str, api_key: str, provider: str = "anthropic"):
+    def __init__(self, storage: Storage, owner_id: str):
         """Initialize EmailerAgent.
 
         Args:
             storage: Storage instance
             owner_id: Owner ID
-            api_key: API key for LLM
-            provider: LLM provider (anthropic, openai, mistral)
         """
-        super().__init__(storage, owner_id, api_key, provider)
+        super().__init__(storage, owner_id)
 
         # Email-specific: context gatherer for email composition
         self.gatherer = EmailContextGatherer(storage, self.search_engine, owner_id)

@@ -1,30 +1,27 @@
-"""Lightweight intent classification using LLM."""
+"""Lightweight intent classification using LLM.
+
+Note: this module is currently dead — no caller in the engine imports
+``IntentRouter``. Kept around for the eventual /agent skill router but
+the constructor uses the standard LLM factory so it stays buildable.
+"""
 
 import json
 from typing import Dict, Any, List, Optional
 
-from zylch.llm import LLMClient, PROVIDER_MODELS
+from zylch.llm import LLMClient, make_llm_client
 
 
 class IntentRouter:
     """Routes user input to appropriate skill(s)."""
 
-    def __init__(self, skill_registry, api_key: str, provider: str):
+    def __init__(self, skill_registry):
         """Initialize IntentRouter.
 
         Args:
             skill_registry: Registry of available skills
-            api_key: LLM API key (BYOK - from Supabase)
-            provider: LLM provider (anthropic, openai, mistral)
         """
-        if not api_key:
-            raise ValueError(
-                "LLM API key required for IntentRouter. "
-                "Please run `/connect <provider>` to configure your API key."
-            )
-        self.provider = provider
-        self.router_model = PROVIDER_MODELS.get(provider, PROVIDER_MODELS["anthropic"])
-        self.client = LLMClient(api_key=api_key, provider=provider)
+        self.client: LLMClient = make_llm_client()
+        self.router_model = self.client.model
         self.skill_registry = skill_registry
 
     async def classify_intent(

@@ -28,8 +28,6 @@ class SyncService:
         self,
         email_client: Optional[IMAPClient] = None,
         email_archive: Optional[EmailArchiveManager] = None,
-        anthropic_api_key: Optional[str] = None,
-        llm_provider: Optional[str] = None,
         owner_id: Optional[str] = None,
         supabase_storage: Optional["Storage"] = None,
     ):
@@ -38,15 +36,11 @@ class SyncService:
         Args:
             email_client: IMAPClient instance
             email_archive: Optional EmailArchiveManager
-            anthropic_api_key: LLM API key (BYOK)
-            llm_provider: LLM provider name
             owner_id: User ID for multi-tenant storage
             supabase_storage: Storage instance
         """
         self.email_client = email_client
         self.email_archive = email_archive
-        self.anthropic_api_key = anthropic_api_key
-        self.llm_provider = llm_provider
 
         self.owner_id = owner_id
         self.supabase = supabase_storage

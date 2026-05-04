@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from ..llm import LLMClient
+from ..llm import LLMClient, make_llm_client
 from .models import ModelSelector
 from .prompts import get_system_prompt_base
 from .turn_context import new_turn_id, get_turn_id
@@ -28,9 +28,7 @@ class ZylchAIAgent(BaseConversationalAgent):
 
     def __init__(
         self,
-        api_key: str,
         tools: List[Tool],
-        provider: str,
         model_selector: Optional[ModelSelector] = None,
         max_tokens: int = 4096,
         triggered_instructions: Optional[List[str]] = None,
@@ -38,15 +36,12 @@ class ZylchAIAgent(BaseConversationalAgent):
         """Initialize Zylch AI agent.
 
         Args:
-            api_key: API key for the LLM provider
             tools: List of available tools
             model_selector: Model selection logic (optional)
             max_tokens: Maximum tokens for response
             triggered_instructions: List of triggered instructions (optional, for prompt injection)
-            provider: LLM provider (anthropic, openai, mistral)
         """
-        self.client = LLMClient(api_key=api_key, provider=provider)
-        self.provider = provider
+        self.client: LLMClient = make_llm_client()
         self.tools = tools
         self.tool_map = {tool.name: tool for tool in tools}
         self.model_selector = model_selector or ModelSelector()

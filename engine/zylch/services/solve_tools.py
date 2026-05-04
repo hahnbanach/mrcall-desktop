@@ -467,32 +467,23 @@ def _read_document(args: Dict) -> str:
 
 def _web_search(args: Dict) -> str:
     """Search the web."""
-    import os
-
     query = args.get("query", "")
     if not query:
         return "No query provided"
 
     try:
-        from zylch.llm.client import LLMClient
+        from zylch.llm import try_make_llm_client
 
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        provider = os.environ.get(
-            "SYSTEM_LLM_PROVIDER",
-            "anthropic",
-        )
-        if not api_key:
-            return "No API key for web search"
-
-        # Use Sonnet for web search (cheaper, fast enough)
-        model = "claude-sonnet-4-20250514"
-        client = LLMClient(
-            api_key=api_key,
-            provider=provider,
-            model=model,
-        )
+        # Use Sonnet for web search (cheaper, fast enough). Both
+        # transports forward the prompt to Anthropic.
+        client = try_make_llm_client(model="claude-sonnet-4-20250514")
+        if client is None:
+            return (
+                "No LLM configured for web search. Set ANTHROPIC_API_KEY "
+                "in the profile .env, or sign in with Firebase to use "
+                "MrCall credits."
+            )
         response = client.create_message_sync(
-            model=model,
             messages=[
                 {
                     "role": "user",
