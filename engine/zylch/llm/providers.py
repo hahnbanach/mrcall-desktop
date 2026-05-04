@@ -150,23 +150,31 @@ def get_system_llm_credentials(
 ) -> tuple[str, str]:
     """Get system-level LLM credentials (for when user has no BYOK key).
 
-    Used by MrCall dashboard and other integrations where the operator
-    provides the API key (not the end user).
-
-    Uses system_llm_provider setting to determine which system key to use.
-    Falls back to provided values if no system key is available.
+    Mirrors :func:`zylch.api.token_storage.get_active_llm_provider`:
+    explicit `SYSTEM_LLM_PROVIDER=mrcall` wins; otherwise the presence
+    of a BYOK key decides; no key → MrCall credits with the Firebase
+    JWT as credential. The sentinel constant is imported lazily to
+    avoid a circular import.
 
     Returns:
         (provider, api_key) tuple
     """
-    provider = settings.system_llm_provider
-    if provider == "anthropic" and settings.anthropic_api_key:
+    from zylch.api.token_storage import MRCALL_SESSION_SENTINEL
+
+    explicit = (settings.system_llm_provider or "").strip().lower()
+
+    if explicit == "mrcall":
+        return "mrcall", MRCALL_SESSION_SENTINEL
+    if explicit == "anthropic" and settings.anthropic_api_key:
         return "anthropic", settings.anthropic_api_key
-    if provider == "openai" and settings.openai_api_key:
+    if explicit == "openai" and settings.openai_api_key:
         return "openai", settings.openai_api_key
-    # Try any available key as last resort
+
     if settings.anthropic_api_key:
         return "anthropic", settings.anthropic_api_key
     if settings.openai_api_key:
         return "openai", settings.openai_api_key
-    return fallback_provider, fallback_api_key
+
+    if fallback_provider or fallback_api_key:
+        return fallback_provider, fallback_api_key
+    return "mrcall", MRCALL_SESSION_SENTINEL

@@ -8,15 +8,15 @@
  * state — no second signin), and finally `onReady` signals the gate
  * to transition into the bound app.
  *
- * Field set mirrors `NewProfileWizard`. Everything else is editable
- * from Settings once the user is in.
+ * Field set is intentionally minimal: email + IMAP/SMTP + optional
+ * Telegram. No LLM provider / API-key fields — the engine resolver
+ * defaults to MrCall credits when no key is in `.env`. Everything
+ * else is editable from Settings once the user is in.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage } from '../lib/errors'
 import { auth } from '../firebase/config'
 import { performSignOut } from '../App'
-
-type Provider = 'anthropic' | 'openai'
 
 interface OnboardingProps {
   // Called after createProfile + finalize succeed, both of which write
@@ -56,8 +56,6 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
   const firebaseUid = firebaseUser?.uid || ''
   const firebaseEmail = firebaseUser?.email || ''
   const [email, setEmail] = useState(firebaseEmail)
-  const [provider, setProvider] = useState<Provider>('anthropic')
-  const [apiKey, setApiKey] = useState('')
   const [emailPassword, setEmailPassword] = useState('')
   const [imapHost, setImapHost] = useState('')
   const [imapPort, setImapPort] = useState('993')
@@ -79,19 +77,23 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
 
   const canSubmit = useMemo(() => {
     if (!isValidEmail(email)) return false
-    if (!apiKey.trim()) return false
     if (!emailPassword.trim()) return false
     if (!imapHost.trim() || !smtpHost.trim()) return false
     if (!imapPort.trim() || !smtpPort.trim()) return false
     return true
-  }, [email, apiKey, emailPassword, imapHost, smtpHost, imapPort, smtpPort])
+  }, [email, emailPassword, imapHost, smtpHost, imapPort, smtpPort])
 
   const handleSubmit = async (): Promise<void> => {
     if (!canSubmit || submitting) return
     setSubmitting(true)
     setFormError(null)
+    // No SYSTEM_LLM_PROVIDER, no API key. The engine resolver
+    // (`zylch.api.token_storage.get_active_llm_provider`) defaults to
+    // MrCall credits when no BYOK key is in the profile .env. To opt
+    // into BYOK, the user adds `ANTHROPIC_API_KEY=...` (or
+    // `OPENAI_API_KEY=...`) to `.env` after onboarding — or flips the
+    // toggle in Settings.
     const values: Record<string, string> = {
-      SYSTEM_LLM_PROVIDER: provider,
       EMAIL_ADDRESS: email.trim(),
       EMAIL_PASSWORD: emailPassword,
       IMAP_HOST: imapHost.trim(),
@@ -99,8 +101,6 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
       SMTP_HOST: smtpHost.trim(),
       SMTP_PORT: smtpPort.trim()
     }
-    if (provider === 'anthropic') values.ANTHROPIC_API_KEY = apiKey
-    else values.OPENAI_API_KEY = apiKey
     if (telegramToken.trim()) values.TELEGRAM_BOT_TOKEN = telegramToken.trim()
     try {
       // Path A: Firebase signed-in user → profile keyed by UID.
@@ -188,29 +188,15 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
             />
           </Field>
 
-          <Field label="LLM provider" required>
-            <select
-              value={provider}
-              onChange={(e) => setProvider(e.target.value as Provider)}
-              className="w-full px-3 py-2 border rounded text-sm"
-            >
-              <option value="anthropic">anthropic</option>
-              <option value="openai">openai</option>
-            </select>
-          </Field>
-
-          <Field
-            label={provider === 'anthropic' ? 'Anthropic API key' : 'OpenAI API key'}
-            required
-          >
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              autoComplete="new-password"
-              className="w-full px-3 py-2 border rounded text-sm"
-            />
-          </Field>
+          <div className="text-xs text-brand-grey-80 bg-brand-light-grey/60 border border-brand-mid-grey rounded p-3">
+            Your AI calls run on <strong>MrCall credits</strong> by default — the same
+            balance that funds your phone calls. You can top up from Settings.
+            <br />
+            To use your own API key instead (BYOK), add{' '}
+            <code className="text-[11px]">ANTHROPIC_API_KEY=…</code> to{' '}
+            <code className="text-[11px]">~/.zylch/profiles/&lt;uid&gt;/.env</code> after
+            this setup, or flip the toggle in Settings → LLM.
+          </div>
 
           <Field
             label="Email app password"

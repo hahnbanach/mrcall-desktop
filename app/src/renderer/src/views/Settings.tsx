@@ -191,10 +191,17 @@ export default function Settings(): JSX.Element {
           <div className="space-y-4">
             {group === 'LLM' && (
               <LLMProviderCard
+                // No SYSTEM_LLM_PROVIDER in .env? Engine defaults to
+                // MrCall credits unless a BYOK key is present, so the
+                // radio reflects that — picking a value here writes
+                // the explicit choice into .env.
                 value={
                   ('SYSTEM_LLM_PROVIDER' in edits
                     ? edits.SYSTEM_LLM_PROVIDER
-                    : (loaded.SYSTEM_LLM_PROVIDER ?? 'anthropic')) as
+                    : (loaded.SYSTEM_LLM_PROVIDER ||
+                       (loaded.ANTHROPIC_API_KEY ? 'anthropic'
+                        : loaded.OPENAI_API_KEY ? 'openai'
+                        : 'mrcall'))) as
                     | 'anthropic'
                     | 'openai'
                     | 'mrcall'

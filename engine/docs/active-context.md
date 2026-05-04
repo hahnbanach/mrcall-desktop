@@ -132,6 +132,14 @@ The Anthropic API key is server-side on `mrcall-agent` — never on the desktop 
 
 Pricing math (server-side; documented here for reference): `units = ceil(actual_µUSD × 1.5 / 11000)` — markup × value-of-1-credit-in-µUSD. 1 credit = €0.01.
 
+### Provider resolution — credits-by-default (2026-05-04)
+
+`get_active_llm_provider(owner_id)` and `get_system_llm_credentials()` now resolve the active LLM mode from a single rule: **the presence of `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) in the profile `.env` flips the engine into BYOK; absence flips it into MrCall credits.** Explicit `SYSTEM_LLM_PROVIDER=mrcall` still wins over key presence so a user who clicks "Use MrCall credits" in Settings keeps that even with a key in `.env`.
+
+For credits mode the resolver returns `("mrcall", "firebase-session")` — a sentinel string exported as `MRCALL_SESSION_SENTINEL` from `zylch.api.token_storage`. The string is non-empty so the dozens of `if not api_key:` gates scattered across `services/`, `workers/`, `tools/` keep flowing through to `LLMClient(api_key=api_key, provider="mrcall")`, which itself ignores `api_key` and reads the JWT from `zylch.auth.session`. If no Firebase session is live the existing `RuntimeError("MrCall credits require Firebase signin. …")` surfaces.
+
+Why this matters: post-Firebase profiles created via the desktop Onboarding wizard no longer carry `SYSTEM_LLM_PROVIDER` or `ANTHROPIC_API_KEY` in `.env`, so `settings.system_llm_provider` falls back to its pydantic default `"anthropic"`. Without this rewrite the resolver would have returned `("anthropic", "")` and every LLM-gated feature would short-circuit. With it, the same profile resolves to `("mrcall", sentinel)` and the engine routes through the proxy. A user who later adds `ANTHROPIC_API_KEY=…` to `.env` is auto-flipped to BYOK on the next sidecar restart — no Settings-UI step required.
+
 ## What Was Completed This Session
 
 **Firebase signin landing — engine side (commits `25e668b..11f4cbe` on `main`, all pushed).**

@@ -28,6 +28,10 @@ Facts migrate here as they get touched.
 - **Google Calendar** is an *incremental* OAuth — separate from Firebase signin. PKCE flow on `127.0.0.1:19275` in the engine (post-signin only), `calendar.readonly` scope, `access_type=offline` + `prompt=consent`. Tokens persisted via `Storage.save_provider_credentials(uid, "google_calendar", …)`. `DEFAULT_CALENDAR_ID = "primary"`. Settings exposes `GOOGLE_CALENDAR_CLIENT_ID` (no client_secret — distinct from Google sign-in, which does need one).
 - Legacy CLI MrCall PKCE flow on `:19274` (`zylch init` wizard) is untouched — orthogonal to the desktop signin.
 
+### LLM mode = credits-by-default for new profiles (2026-05-04)
+
+The desktop Onboarding wizard no longer asks for `SYSTEM_LLM_PROVIDER` or an API key. Wizard-created profiles land in `.env` without either field, and the engine resolver (`zylch/api/token_storage.py:get_active_llm_provider` + `zylch/llm/providers.py:get_system_llm_credentials`) infers the mode from `.env` contents: explicit `SYSTEM_LLM_PROVIDER=mrcall` wins, else `ANTHROPIC_API_KEY` → anthropic, else `OPENAI_API_KEY` → openai, else MrCall credits. To opt into BYOK after onboarding, the user adds `ANTHROPIC_API_KEY=…` to `~/.zylch/profiles/<uid>/.env` (or flips the toggle in Settings → LLM). For credits mode the resolver returns `("mrcall", "firebase-session")` — a sentinel constant `MRCALL_SESSION_SENTINEL` so the existing `if not api_key:` gates throughout the engine keep flowing; `LLMClient.__init__("mrcall")` ignores the value and reads the JWT from `zylch.auth.session`. The Settings `LLMProviderCard` now derives its displayed default from the same logic (key presence) when `SYSTEM_LLM_PROVIDER` isn't in `.env`, so the radio matches what the engine actually does. Live verification pending.
+
 ### MrCall credits — second LLM billing mode (2026-05-03, branch `feat/mrcall-credits-v1`)
 
 The desktop now has **two LLM billing modes** instead of BYOK-only:

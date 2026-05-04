@@ -65,29 +65,51 @@ def get_graph_token(
 # ------------------------------------------------------------------
 
 
+# Sentinel returned in place of an API key when the resolved provider is
+# MrCall credits. The credential in that mode is the in-memory Firebase
+# JWT held by `zylch.auth.session` — `LLMClient.__init__("mrcall")` pulls
+# it from there and ignores the `api_key` argument. The sentinel exists
+# only to satisfy the many `if not api_key:` gates scattered across the
+# engine which otherwise treat an empty key as "LLM not configured".
+MRCALL_SESSION_SENTINEL = "firebase-session"
+
+
 def get_active_llm_provider(
     owner_id: str,
 ) -> Tuple[str, str]:
     """Return (provider, api_key) for the active LLM.
 
-    In standalone mode, always reads from profile .env
-    (via Settings). DB-stored keys are a SaaS remnant.
+    Resolution policy:
+    1. Explicit `SYSTEM_LLM_PROVIDER=mrcall` always wins → MrCall credits.
+    2. Otherwise the presence of a BYOK key decides — `ANTHROPIC_API_KEY`
+       beats `OPENAI_API_KEY` if both happen to be set.
+    3. No key set anywhere → MrCall credits (the Firebase JWT cached in
+       `zylch.auth.session` is the credential).
+
+    The default `SYSTEM_LLM_PROVIDER=anthropic` (from pydantic) is treated
+    as "no explicit choice" when no Anthropic key is present, so a fresh
+    profile without keys flows to credits without the user editing the
+    setting.
     """
     from zylch.config import settings
 
-    provider = settings.system_llm_provider
-    if provider == "anthropic" and settings.anthropic_api_key:
+    explicit = (settings.system_llm_provider or "").strip().lower()
+
+    if explicit == "mrcall":
+        return ("mrcall", MRCALL_SESSION_SENTINEL)
+    if explicit == "anthropic" and settings.anthropic_api_key:
         return ("anthropic", settings.anthropic_api_key)
-    if provider == "openai" and settings.openai_api_key:
+    if explicit == "openai" and settings.openai_api_key:
         return ("openai", settings.openai_api_key)
 
-    # Last resort: any available key
+    # Explicit choice didn't match (or key missing) → infer from .env.
     if settings.anthropic_api_key:
         return ("anthropic", settings.anthropic_api_key)
     if settings.openai_api_key:
         return ("openai", settings.openai_api_key)
 
-    return (provider, "")
+    # No BYOK key available → fall back to MrCall credits.
+    return ("mrcall", MRCALL_SESSION_SENTINEL)
 
 
 # ------------------------------------------------------------------
