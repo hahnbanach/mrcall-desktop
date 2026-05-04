@@ -8,10 +8,10 @@
  * state — no second signin), and finally `onReady` signals the gate
  * to transition into the bound app.
  *
- * Field set is intentionally minimal: email + IMAP/SMTP + optional
- * Telegram. No LLM provider / API-key fields — the engine resolver
- * defaults to MrCall credits when no key is in `.env`. Everything
- * else is editable from Settings once the user is in.
+ * Field set is intentionally minimal: email + IMAP/SMTP. No LLM
+ * provider / API-key fields — the engine resolver defaults to MrCall
+ * credits when no key is in `.env`. Everything else is editable from
+ * Settings once the user is in.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage } from '../lib/errors'
@@ -61,7 +61,6 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
   const [imapPort, setImapPort] = useState('993')
   const [smtpHost, setSmtpHost] = useState('')
   const [smtpPort, setSmtpPort] = useState('587')
-  const [telegramToken, setTelegramToken] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -101,7 +100,6 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
       SMTP_HOST: smtpHost.trim(),
       SMTP_PORT: smtpPort.trim()
     }
-    if (telegramToken.trim()) values.TELEGRAM_BOT_TOKEN = telegramToken.trim()
     try {
       // Path A: Firebase signed-in user → profile keyed by UID.
       // FirebaseAuthGate guarantees we land here only when a user
@@ -238,19 +236,6 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
               />
             </Field>
           </div>
-
-          <Field
-            label="Telegram bot token"
-            help="Optional — paste a token from @BotFather to enable the Telegram bot."
-          >
-            <input
-              type="password"
-              value={telegramToken}
-              onChange={(e) => setTelegramToken(e.target.value)}
-              autoComplete="new-password"
-              className="w-full px-3 py-2 border rounded text-sm"
-            />
-          </Field>
 
           <p className="text-xs text-brand-grey-80">
             Other optional fields (personal data, MrCall credentials, notes…) can be edited

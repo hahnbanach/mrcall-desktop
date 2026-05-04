@@ -9,9 +9,9 @@
  * surprising; the user should choose when to switch.
  *
  * Field set kept tight on purpose: the schema has many optional
- * fields (Telegram allowed user, MrCall, personal data, notes, …)
- * that are best edited from the new profile's own Settings tab once
- * it is opened — the wizard only collects what is needed to launch.
+ * fields (MrCall, personal data, notes, …) that are best edited from
+ * the new profile's own Settings tab once it is opened — the wizard
+ * only collects what is needed to launch.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage } from '../lib/errors'
@@ -54,7 +54,6 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
   const [imapPort, setImapPort] = useState('993')
   const [smtpHost, setSmtpHost] = useState('')
   const [smtpPort, setSmtpPort] = useState('587')
-  const [telegramToken, setTelegramToken] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -68,7 +67,6 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
     setImapPort('993')
     setSmtpHost('')
     setSmtpPort('587')
-    setTelegramToken('')
     setFormError(null)
     setSubmitting(false)
   }, [open])
@@ -108,7 +106,6 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
       SMTP_HOST: smtpHost.trim(),
       SMTP_PORT: smtpPort.trim()
     }
-    if (telegramToken.trim()) values.TELEGRAM_BOT_TOKEN = telegramToken.trim()
     try {
       const r = await window.zylch.profiles.create(email.trim(), values)
       if (!r.ok) {
@@ -214,16 +211,6 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
               />
             </Field>
           </div>
-
-          <Field label="Telegram bot token" help="Optional — paste a token from @BotFather to enable the Telegram bot.">
-            <input
-              type="password"
-              value={telegramToken}
-              onChange={(e) => setTelegramToken(e.target.value)}
-              autoComplete="new-password"
-              className="w-full px-3 py-2 border rounded text-sm"
-            />
-          </Field>
 
           <p className="text-xs text-brand-grey-80">
             Other optional fields (personal data, MrCall credentials, notes…) can be edited from the
