@@ -98,7 +98,7 @@ class Settings(BaseSettings):
 
     # MrCall credits transport configuration.
     mrcall_proxy_url: str = Field(
-        default="https://zylch-test.mrcall.ai",
+        default="https://zylch.mrcall.ai",
         env="MRCALL_PROXY_URL",
         description=(
             "MrCall proxy base URL for credits-mode LLM calls"

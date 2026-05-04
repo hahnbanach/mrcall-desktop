@@ -92,7 +92,7 @@ Engine pieces (full detail in [`../engine/docs/active-context.md`](../engine/doc
 - `engine/zylch/llm/client.py` — `LLMClient.__init__` branches on `provider == "mrcall"`, requires `zylch.auth.session`, reuses `_call_anthropic` codepath (proxy returns Anthropic-format objects).
 - `engine/zylch/llm/providers.py` — `is_metered=True` on `mrcall`, `False` on `anthropic` / `openai`.
 - `engine/zylch/rpc/account.py` — new JSON-RPC `account.balance()` → `GET /api/desktop/llm/balance`. Schema in [`ipc-contract.md`](ipc-contract.md).
-- `engine/zylch/config.py` — `MRCALL_PROXY_URL` (default `https://zylch-test.mrcall.ai`), `MRCALL_CREDITS_MODEL` (default `claude-sonnet-4-5`).
+- `engine/zylch/config.py` — `MRCALL_PROXY_URL` (default `https://zylch.mrcall.ai`, production `mrcall-agent`; override to `https://zylch-test.mrcall.ai` for dev), `MRCALL_CREDITS_MODEL` (default `claude-sonnet-4-5`).
 - Tests: `engine/tests/llm/test_proxy_client.py` (8 cases, all green).
 
 App pieces (full detail in [`../app/docs/active-context.md`](../app/docs/active-context.md) "MrCall credits v1"):

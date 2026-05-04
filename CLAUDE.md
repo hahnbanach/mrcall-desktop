@@ -64,7 +64,7 @@ The desktop has two LLM billing modes, picked from the Settings card:
 
 Engine pieces: `engine/zylch/llm/proxy_client.py` (`MrCallProxyClient`),
 `engine/zylch/rpc/account.py` (`account.balance` JSON-RPC),
-`MRCALL_PROXY_URL` env var (default `https://zylch-test.mrcall.ai`).
+`MRCALL_PROXY_URL` env var (default `https://zylch.mrcall.ai`, the production `mrcall-agent` deployment).
 See [`engine/CLAUDE.md`](engine/CLAUDE.md) for full details.
 
 App pieces: new `LLMProviderCard` in `app/src/renderer/src/views/Settings.tsx`

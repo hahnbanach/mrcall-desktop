@@ -100,7 +100,7 @@ Implementation:
 
 Config (in `zylch/config.py`):
 
-- `MRCALL_PROXY_URL` — default `https://zylch-test.mrcall.ai`. Base URL of the proxy.
+- `MRCALL_PROXY_URL` — default `https://zylch.mrcall.ai` (production deployment of `mrcall-agent`). Override via env to point at the test deployment (`https://zylch-test.mrcall.ai`) for development against the test StarChat realm.
 - `MRCALL_CREDITS_MODEL` — default `claude-sonnet-4-5`. The model the engine asks the proxy to run; controls what we charge for, independent of any BYOK env.
 
 Tests: `engine/tests/llm/test_proxy_client.py` (8 cases — happy SSE, 401, 402, auth header shape, body forwarding, streaming reconstruction).
