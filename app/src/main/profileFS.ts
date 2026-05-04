@@ -163,16 +163,10 @@ export function createProfileForFirebaseUser(
     throw new Error(`unknown setting keys: ${JSON.stringify(unknown.sort())}`)
   }
 
-  const provider = (cleaned['SYSTEM_LLM_PROVIDER'] || '').trim().toLowerCase()
-  if (provider !== 'anthropic' && provider !== 'openai') {
-    throw new Error("SYSTEM_LLM_PROVIDER must be 'anthropic' or 'openai'")
-  }
-  if (provider === 'anthropic' && !cleaned['ANTHROPIC_API_KEY']) {
-    throw new Error('ANTHROPIC_API_KEY is required when provider=anthropic')
-  }
-  if (provider === 'openai' && !cleaned['OPENAI_API_KEY']) {
-    throw new Error('OPENAI_API_KEY is required when provider=openai')
-  }
+  // No LLM-side validation: the wizard doesn't write SYSTEM_LLM_PROVIDER
+  // or BYOK keys at all, and the engine resolver tolerates any value
+  // (unrecognised → falls through to key-presence inference).
+  //
   // Tie the engine's owner_id to the Firebase UID so OAuth tokens
   // (Google Calendar, future MrCall delegations) all key off the same
   // identifier the renderer pushes to the engine via account.set_firebase_token.
@@ -245,16 +239,8 @@ export function createProfileFS(
     throw new Error(`unknown setting keys: ${JSON.stringify(unknown.sort())}`)
   }
 
-  const provider = (cleaned['SYSTEM_LLM_PROVIDER'] || '').trim().toLowerCase()
-  if (provider !== 'anthropic' && provider !== 'openai') {
-    throw new Error("SYSTEM_LLM_PROVIDER must be 'anthropic' or 'openai'")
-  }
-  if (provider === 'anthropic' && !cleaned['ANTHROPIC_API_KEY']) {
-    throw new Error('ANTHROPIC_API_KEY is required when provider=anthropic')
-  }
-  if (provider === 'openai' && !cleaned['OPENAI_API_KEY']) {
-    throw new Error('OPENAI_API_KEY is required when provider=openai')
-  }
+  // No LLM-side validation — see the matching note in
+  // createProfileForFirebaseUser.
   if (!cleaned['EMAIL_ADDRESS']) {
     cleaned['EMAIL_ADDRESS'] = trimmedEmail
   }

@@ -1379,23 +1379,13 @@ async def profiles_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
         err.code = -32602  # type: ignore[attr-defined]
         raise err
 
-    # Required fields. We require provider + matching API key + the
-    # email address (so the profile is actually usable). IMAP password
-    # is recommended but not strictly required — the UI marks it
-    # required, but server-side we let the user defer it.
-    provider = cleaned.get("SYSTEM_LLM_PROVIDER", "").strip().lower()
-    if provider not in ("anthropic", "openai"):
-        err = ValueError("SYSTEM_LLM_PROVIDER must be 'anthropic' or 'openai'")
-        err.code = -32602  # type: ignore[attr-defined]
-        raise err
-    if provider == "anthropic" and not cleaned.get("ANTHROPIC_API_KEY"):
-        err = ValueError("ANTHROPIC_API_KEY is required when provider=anthropic")
-        err.code = -32602  # type: ignore[attr-defined]
-        raise err
-    if provider == "openai" and not cleaned.get("OPENAI_API_KEY"):
-        err = ValueError("OPENAI_API_KEY is required when provider=openai")
-        err.code = -32602  # type: ignore[attr-defined]
-        raise err
+    # No LLM-side validation here. The wizard doesn't write
+    # SYSTEM_LLM_PROVIDER / BYOK keys at all — they are resolved at
+    # runtime by `zylch.api.token_storage.get_active_llm_provider`. The
+    # KNOWN_KEYS check above already rejects unknown keys; the engine
+    # tolerates any value of SYSTEM_LLM_PROVIDER (unrecognised values
+    # fall through to inference). IMAP password is recommended but
+    # deferred to the user.
     if not cleaned.get("EMAIL_ADDRESS"):
         # Force the email field to match the profile name so the .env is
         # internally consistent.

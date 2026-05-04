@@ -149,8 +149,7 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
           <div>
             <h1 className="text-2xl font-semibold text-brand-black">Welcome to MrCall Desktop</h1>
             <p className="text-sm text-brand-grey-80 mt-1">
-              Create your first profile. All data stays on this machine — your credentials
-              are written only to <code>~/.zylch/profiles/</code>.
+              Create your first profile. All data stays on this machine.
             </p>
             {firebaseEmail && (
               <p className="text-xs text-brand-grey-80 mt-2">
@@ -187,16 +186,6 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
               className="w-full px-3 py-2 border rounded text-sm"
             />
           </Field>
-
-          <div className="text-xs text-brand-grey-80 bg-brand-light-grey/60 border border-brand-mid-grey rounded p-3">
-            Your AI calls run on <strong>MrCall credits</strong> by default — the same
-            balance that funds your phone calls. You can top up from Settings.
-            <br />
-            To use your own API key instead (BYOK), add{' '}
-            <code className="text-[11px]">ANTHROPIC_API_KEY=…</code> to{' '}
-            <code className="text-[11px]">~/.zylch/profiles/&lt;uid&gt;/.env</code> after
-            this setup, or flip the toggle in Settings → LLM.
-          </div>
 
           <Field
             label="Email app password"
