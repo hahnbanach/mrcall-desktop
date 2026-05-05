@@ -113,7 +113,10 @@ if ! git diff --quiet || ! git diff --cached --quiet || [[ -n "$(git ls-files --
     echo "Skipped commit."
   fi
 else
-  echo "No working-tree changes to commit."
+  # Working tree is clean. The user-supplied $MSG would be unused for
+  # a commit, but we still feed it into the tag annotation below — so
+  # call that out explicitly so the message doesn't feel "lost".
+  echo "No working-tree changes to commit. Message will be used as the tag annotation."
 fi
 
 # --- Compute next tag --------------------------------------------
@@ -150,7 +153,12 @@ else
 fi
 
 # --- Create the annotated tag -----------------------------------
-git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
+# Tag annotation: prefer the user-supplied $MSG so the release notes
+# carry meaning ("Search email and task dedup", not "Release v0.1.26").
+# Falls back to a generic placeholder only if $MSG is empty (it's
+# required upstream but be defensive).
+TAG_MSG="${MSG:-Release $NEW_TAG}"
+git tag -a "$NEW_TAG" -m "$NEW_TAG — $TAG_MSG"
 echo "Tagged $NEW_TAG."
 
 # --- Push branch + tag ------------------------------------------
@@ -170,7 +178,7 @@ fi
 # macos-13-large runner for an Intel x64 .dmg. Off by default; ask.
 INTEL_TAG="${NEW_TAG}-intel"
 if confirm "Also push companion tag $INTEL_TAG (paid Intel macOS runner)?"; then
-  git tag -a "$INTEL_TAG" -m "Release $INTEL_TAG (Intel x64 opt-in)"
+  git tag -a "$INTEL_TAG" -m "$INTEL_TAG — $TAG_MSG (Intel x64 opt-in)"
   git push origin "$INTEL_TAG"
   echo "Pushed $INTEL_TAG."
 fi
