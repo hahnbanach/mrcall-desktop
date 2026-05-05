@@ -618,6 +618,88 @@ class Storage:
                 )
             return out
 
+    def get_sibling_threads_with_contact(
+        self,
+        owner_id: str,
+        contact_email: str,
+        user_email: str,
+        primary_thread_id: str,
+        days: int = 60,
+    ) -> List[str]:
+        """Return thread_ids ≠ primary where user and contact corresponded.
+
+        Used by ``reanalyze_task`` to surface cross-thread replies a
+        single-thread reanalyze would miss (real case: Salamone task on
+        thread A, user's resolving reply on thread B addressed to the
+        same contact, both within the same conversation cluster but
+        with different `thread_id` in the DB).
+
+        A thread qualifies when at least one of its non-archived /
+        non-deleted emails in the last *days* days is either:
+          * sent BY ``contact_email`` (any recipient), OR
+          * sent BY ``user_email`` with ``contact_email`` in to/cc.
+
+        Returned in newest-first order of the latest qualifying email.
+        Empty when ``contact_email`` is missing or matches a known
+        notification address pattern (`noreply@`, `notification@`,
+        `bounce@`) — those generate cross-thread noise without signal.
+        """
+        contact_low = (contact_email or "").strip().lower()
+        if not contact_low:
+            return []
+        # Suppress notification senders — these pollute the LLM context
+        # with unrelated alerts addressed to the same noreply mailbox.
+        local = contact_low.split("@", 1)[0]
+        if local in ("noreply", "no-reply", "notification", "notifications", "bounce", "mailer-daemon"):
+            return []
+        user_low = (user_email or "").strip().lower()
+        cutoff_ts = int(
+            (datetime.now(timezone.utc) - timedelta(days=days)).timestamp()
+        )
+
+        with get_session() as session:
+            rows = (
+                session.query(Email)
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.thread_id.isnot(None),
+                    Email.thread_id != primary_thread_id,
+                    Email.archived_at.is_(None),
+                    Email.deleted_at.is_(None),
+                    Email.date_timestamp >= cutoff_ts,
+                )
+                .order_by(Email.date_timestamp.desc())
+                .all()
+            )
+
+        latest_per_thread: Dict[str, int] = {}
+        for r in rows:
+            tid = r.thread_id
+            if not tid:
+                continue
+            from_addr = (r.from_email or "").lower()
+            qualifies = False
+            if from_addr == contact_low:
+                qualifies = True
+            elif user_low and from_addr == user_low:
+                recipients = (
+                    (r.to_email or "") + "," + (r.cc_email or "")
+                ).lower()
+                if contact_low in recipients:
+                    qualifies = True
+            if not qualifies:
+                continue
+            ts = r.date_timestamp or 0
+            if tid not in latest_per_thread or ts > latest_per_thread[tid]:
+                latest_per_thread[tid] = ts
+
+        return [
+            tid
+            for tid, _ in sorted(
+                latest_per_thread.items(), key=lambda kv: kv[1], reverse=True
+            )
+        ]
+
     def search_emails_flat(
         self,
         owner_id: str,

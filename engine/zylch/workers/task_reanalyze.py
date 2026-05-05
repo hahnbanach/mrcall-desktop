@@ -122,11 +122,22 @@ def _build_user_content(
     if thread_history_section:
         parts.append(thread_history_section)
         parts.append(
-            "IMPORTANT — Thread context: if the user already replied "
-            "(lines marked 'USER REPLY ✓') resolving the issue, choose "
-            "CLOSE. If the conversation moved on and the original suggested "
-            "action is now stale, choose UPDATE with a fresh "
-            "suggested_action. Otherwise choose KEEP."
+            "IMPORTANT — Thread context.\n"
+            "  * The PRIMARY thread is shown first; any 'RELATED THREAD' "
+            "blocks below it are sibling conversations with the SAME "
+            "contact in the last 60 days. Treat them as part of the same "
+            "decision: a user reply on a related thread that resolves "
+            "the issue is just as good as one on the primary thread.\n"
+            "  * If the user already replied (lines marked 'USER REPLY "
+            "✓') in any of the threads — and the ball is now in the "
+            "contact's court — choose CLOSE. The user does not have to "
+            "wait for a literal 'done' confirmation; once they have "
+            "replied with the next-step action, the task is handled "
+            "from their side.\n"
+            "  * If the conversation moved on and the original suggested "
+            "action is now stale (different ask, different deadline), "
+            "choose UPDATE with a fresh suggested_action.\n"
+            "  * Otherwise choose KEEP."
         )
     else:
         parts.append(
@@ -179,12 +190,53 @@ async def reanalyze_task(
             }
 
         user_email = get_email(owner_id) or os.environ.get("EMAIL_ADDRESS", "")
-        thread_history_section = build_thread_history(
+        primary_history = build_thread_history(
             session=sess,
             owner_id=owner_id,
             thread_id=thread_id,
             user_email=user_email or "",
         )
+
+        # F6 (2026-05-05): pull sibling threads where the user already
+        # corresponded with the same contact_email — single-thread
+        # reanalyze misses cross-thread resolutions (real case: Salamone
+        # task on thread A, user's "reactivate access" reply on thread
+        # B; without sibling history the LLM can't see the ball is in
+        # the contact's court).
+        contact_for_siblings = (task.get("contact_email") or "").strip().lower()
+        sibling_thread_ids: List[str] = []
+        if contact_for_siblings:
+            sibling_thread_ids = store.get_sibling_threads_with_contact(
+                owner_id=owner_id,
+                contact_email=contact_for_siblings,
+                user_email=user_email or "",
+                primary_thread_id=thread_id,
+                days=60,
+            )
+
+        sibling_sections: List[str] = []
+        for sid in sibling_thread_ids:
+            section = build_thread_history(
+                session=sess,
+                owner_id=owner_id,
+                thread_id=sid,
+                user_email=user_email or "",
+            )
+            if section:
+                sibling_sections.append(
+                    f"--- RELATED THREAD ({sid}, same contact, last 60d) ---\n{section}"
+                )
+
+        if sibling_sections:
+            thread_history_section = "\n\n".join(
+                [primary_history] + sibling_sections
+            )
+            logger.debug(
+                f"[reanalyze_task] task_id={task_id} primary_thread={thread_id} "
+                f"siblings={len(sibling_sections)}"
+            )
+        else:
+            thread_history_section = primary_history
 
     client = try_make_llm_client()
     if client is None:

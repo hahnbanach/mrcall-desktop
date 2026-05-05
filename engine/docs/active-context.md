@@ -137,14 +137,56 @@ What this fix does NOT cover:
 - **Cross-batch user reply.** If the user's reply is processed in
   batch N (no task yet) and the contact's email is processed in
   batch N+1 (creates the task), the close still doesn't fire. The
-  F4 reanalyze sweep eventually picks it up but is gated by 24h age
-  + 10 tasks/run. Tracked.
+  F4 reanalyze sweep eventually picks it up — see F6 below for the
+  sibling-thread context now passed into reanalyze.
 - **Topical dedup across senders.** A task on Salamone (`@cnit.it`)
   and a separate task on `noreply@aifos.it` about the same training
   do not get merged or co-closed when the user replies to one of
   them. Requires LLM-driven clustering against memory blobs (the
   AIFOS company blob and the Salamone person blob link to the same
   topic). Tracked separately, larger piece.
+
+### Task auto-close — F6 cross-thread context in reanalyze (2026-05-05)
+
+`reanalyze_task` was single-thread: it called `_resolve_thread_id` and
+`build_thread_history` for the task's primary thread only. So if the
+user resolved the issue on a SIBLING thread with the same contact
+(real case: Salamone task on `<0BC008F8…>`, user's "se lo riattivate
+vedo di finirlo" reply on `<50C17CA8…>`), the LLM couldn't see the
+reply and decided KEEP. This affected both F4's end-of-update sweep
+and the desktop UI's per-task "Update" button.
+
+Fix: new storage helper `get_sibling_threads_with_contact(owner_id,
+contact_email, user_email, primary_thread_id, days=60)` returns
+distinct thread_ids ≠ primary where at least one non-archived /
+non-deleted email in the last 60 days is either FROM the contact, or
+from the user with the contact in to/cc. `reanalyze_task` now stitches
+a "RELATED THREAD" block per sibling under the primary thread history,
+and `_build_user_content` tells the LLM to treat related threads as
+part of the same decision (a user reply on a sibling that resolves the
+issue is enough to CLOSE).
+
+Suppression: when `contact_email`'s local part is `noreply` /
+`no-reply` / `notification` / `notifications` / `bounce` /
+`mailer-daemon`, sibling lookup returns empty. These addresses do not
+"correspond" with the user — pulling other notification threads from
+the same noreply mailbox would just add unrelated alerts.
+
+Verified live on profile `mario.alemi@gmail.com` (UID dir
+`HxiZh…`): the Salamone task's primary thread `<0BC008F8…>` resolves
+the sibling `<50C17CA8…>` correctly, and the reanalyze prompt now
+contains both threads with the user's Apr 26 reply visible. Smoke run
+end-to-end up to the LLM call (didn't actually invoke the model).
+AIFOS noreply suppression returns empty as expected.
+
+What F6 still doesn't cover: tasks freshly created in the same
+`update` run remain ineligible for F4 (gated by
+`REANALYZE_MIN_AGE_HOURS = 24`). Brand-new users running their first
+update will see Salamone-style tasks open until the next update after
+the 24h window — F5 handles the same-batch case via the per-recipient
+close fallback; F6 handles the cross-batch + ageing case. The
+remaining gap (LLM-driven preempt at create time) is bigger and
+deferred.
 
 ### Task auto-close — RealStep / cafe124 fixes (baseline since 2026-05-01)
 Three coupled fixes in `zylch/workers/task_creation.py` + reanalyze sweep:
