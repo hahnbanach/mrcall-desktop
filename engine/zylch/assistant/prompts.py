@@ -220,12 +220,37 @@ This provides O(1) lookup from local cache, avoiding expensive 10+ second remote
      returned nothing AND the user expects older mail.
   4. `search_calendar_events` — for meetings/appointments
 
+**RETRY PROTOCOL when a search returns 0 hits:**
+An empty result is almost never proof the entity isn't there. It's a SIGNAL
+that the user's spelling, casing, or word boundary differs from what's
+stored. Before reporting "not found", run UP TO 3 follow-up queries on the
+SAME tool, each varying the previous in exactly one way. Stop early as soon
+as you get hits.
+
+1. **Drop one token.** "Carmine Salomone" → try `carmine` alone, then
+   `salomone` alone. First-name-only catches misspelled-surname cases;
+   surname-only catches wrong-first-name cases. Pick the rarer-looking
+   token first (uncommon first names; long surnames).
+2. **Vary one letter.** Italian spelling often confuses single/double
+   consonants (Rosselli ↔ Roselli) and adjacent vowels (a/o, e/i):
+   `Salomone` → `Salamone`, `Cattaneo` → `Catanneo`. Try the most likely
+   single-character substitution.
+3. **Switch surface.** If the name fails, try a fragment you can derive
+   from context: an email domain (`from:@cnit.it`), a phone fragment, a
+   role/keyword from the conversation (`RSPP`, `sicurezza`, the company
+   name). Bare `body:` queries on `search_local_emails` are cheap.
+
+After 3 retries with no hits, STOP. Report verbatim each query you tried
+("I tried `carmine salomone`, `salomone`, `carmine` — all empty") so the
+user can correct a typo in their original request. Don't pretend to have
+exhausted the data when you've only tried one phrasing.
+
 **Reporting honestly when nothing matches:**
-If `search_local_memory` AND `search_local_emails` both return empty, tell the
-user explicitly which surfaces you've checked ("memory blobs and the local email
-archive, both empty") before offering to try IMAP / spelling variants / wider
-windows. Do NOT claim you "checked the local database" when you only checked
-memory blobs.
+Tell the user explicitly which surfaces you've checked ("memory blobs and
+the local email archive, both empty across 3 spelling variants") before
+offering to try IMAP / wider history / a different name. Do NOT claim you
+"checked the local database" when you only checked memory blobs. Do NOT
+claim you "tried variants" if you only sent one query.
 
 **Why this cascade:**
 - Memory lookup: <100ms (entity blobs)

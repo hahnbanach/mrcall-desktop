@@ -131,12 +131,26 @@ class SearchLocalEmailsTool(Tool):
                 status=ToolStatus.SUCCESS,
                 data={"matches": [], "count": 0, "query": query, "folder": folder_norm},
                 message=(
-                    f"No local emails match `{query}` (folder={folder_norm}). "
-                    "If you expect a match, consider variants of the "
-                    "name/spelling (last name only, common nicknames, "
-                    "different domain), broaden the predicates, or fall "
-                    "back to search_provider_emails with "
-                    "search_all_history=true to look beyond the local sync."
+                    f"No local emails match `{query}` (folder={folder_norm}).\n"
+                    "An empty result is a SIGNAL, not a verdict. Before "
+                    "telling the user 'not found', run up to 3 follow-up "
+                    "queries on this same tool:\n"
+                    "  1. DROP ONE TOKEN — if your query had multiple "
+                    "words, retry with each word alone. The user's name "
+                    "may have a typo in only one of them.\n"
+                    "  2. VARY ONE LETTER — Italian spelling often "
+                    "confuses single/double consonants and adjacent "
+                    "vowels (a/o, e/i, ll/l). Pick the most plausible "
+                    "single-character substitution.\n"
+                    "  3. SWITCH SURFACE — try an email domain "
+                    "(`from:@example.com`), a phone fragment, or a "
+                    "role/keyword from context (`body:rspp`, `subject:"
+                    "formazione`).\n"
+                    "STOP after 3 retries. Then report verbatim every "
+                    "query you tried so the user can see and correct a "
+                    "typo in their original request. Only suggest "
+                    "search_provider_emails with search_all_history=true "
+                    "when you've actually exhausted variants."
                 ),
             )
 

@@ -207,7 +207,29 @@ class SearchLocalMemoryTool(Tool):
                             "query": query,
                         },
                         message=(
-                            f"No contacts found for '{query}'." " Proceed with remote searches."
+                            f"No memory blobs ranked above threshold for "
+                            f"'{query}'.\n"
+                            "An empty result is a SIGNAL, not a verdict. "
+                            "Before falling through to remote searches, "
+                            "run up to 3 follow-up queries on this tool:\n"
+                            "  1. DROP ONE TOKEN — try each word of a "
+                            "multi-word name on its own. Hybrid search "
+                            "still ranks rare surnames better than "
+                            "common first names.\n"
+                            "  2. VARY ONE LETTER — Italian names often "
+                            "differ by a single vowel/consonant "
+                            "(Sal*a*mone vs Sal*o*mone, Roselli vs "
+                            "Rosselli). Pick the most plausible "
+                            "substitution.\n"
+                            "  3. SWITCH SURFACE — if the name fails, "
+                            "try an email domain, phone fragment, or "
+                            "role/company keyword from context.\n"
+                            "If still empty after 3 retries, ALSO try "
+                            "search_local_emails on the same variants — "
+                            "the raw email archive may hold tangential "
+                            "messages that never produced a memory blob. "
+                            "Only THEN proceed with remote searches, and "
+                            "report verbatim every query you tried."
                         ),
                     )
 
