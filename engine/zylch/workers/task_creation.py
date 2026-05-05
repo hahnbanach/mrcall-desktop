@@ -333,10 +333,130 @@ class TaskWorker:
             if existing_task and not any(t["id"] == existing_task["id"] for t in thread_tasks):
                 existing_tasks_all.append(existing_task)
 
+            # F7 (2026-05-05): topical siblings via memory blobs.
+            # Search memory using the email's CONTENT (subject + body +
+            # sender) and pull blobs above a similarity threshold. Then
+            # ask storage which OTHER open tasks reference those blobs
+            # in their `sources.blobs`. This is the path that lets the
+            # LLM see "AIFOS noreply task and Salamone task share the
+            # CNIT/training blob — they're the same problem", which
+            # thread-only + sender-only context cannot surface.
+            #
+            # Two safety rails learned from live calibration on the
+            # gmail+cafe124 profiles (2026-05-05):
+            #
+            # 1. NOTIFICATION-ADDRESS SKIP. When the sender's local-
+            #    part is `noreply` / `notification` / etc., the blobs
+            #    extracted from such senders form a dense cluster
+            #    around the notification platform itself (e.g. MrCall
+            #    Notification → 35+ unrelated phone-call tasks share
+            #    the same anchor blob). F7 would surface a candidate
+            #    list dominated by noise. Skip topical expansion
+            #    entirely; rely on thread + contact lookup for these.
+            #
+            # 2. RECENCY CAP. The blob graph for a long-running profile
+            #    can fan out to dozens of tasks. The LLM's job is to
+            #    judge "same issue?" — its accuracy on long candidate
+            #    lists is worse than on short ones. Cap to the top N
+            #    most-recent topically-related tasks.
+            try:
+                _from_local = (from_email or "").split("@", 1)[0]
+                _is_notification = _from_local in (
+                    "noreply",
+                    "no-reply",
+                    "notification",
+                    "notifications",
+                    "bounce",
+                    "mailer-daemon",
+                )
+            except Exception:
+                _is_notification = False
+            if _is_notification:
+                logger.debug(
+                    f"[TASK] F7 skipped (notification sender): {from_email}"
+                )
+            try:
+                if not _is_notification:
+                    # Build the query from subject + body excerpt + sender.
+                    # body_plain is much richer than snippet — the snippet
+                    # often truncates before the topical keywords (signature
+                    # blocks, entity names) and we lose the signal. Cap at
+                    # 800 chars to bound the query cost + embedding latency.
+                    body_for_query = (
+                        email.get("body_plain") or email.get("snippet") or ""
+                    )
+                    topical_query_parts = [
+                        str(email.get("subject") or ""),
+                        str(body_for_query)[:800],
+                        from_email,
+                    ]
+                    topical_query = " ".join(
+                        p for p in topical_query_parts if p
+                    ).strip()
+                    topical_blob_ids: List[str] = []
+                    # Threshold: hybrid_search hybrid_score is roughly in
+                    # [0,1] but query-dependent (FTS coverage warps the
+                    # bottom). Live calibration on the gmail profile (HxiZh…)
+                    # 2026-05-05: with subject + body_plain[:800] + sender,
+                    # on-topic CNIT/Salamone blobs cluster at 0.35-0.40,
+                    # off-topic noise (Ivan Quieti, real-estate entities)
+                    # caps at 0.27-0.34. 0.30 is the sweet spot — catches
+                    # the cluster, drops most outliers. Anything that
+                    # slips through still has to pass the LLM's "same
+                    # issue?" judgment downstream.
+                    TOPICAL_MIN_SCORE = 0.30
+                    # Hard cap on candidates returned to the LLM: long
+                    # candidate lists degrade the model's judgment. 8 is
+                    # enough for "thread + contact + a few topical
+                    # neighbours" without overwhelming.
+                    F7_MAX_RELATED = 8
+                    if topical_query:
+                        namespace = f"user:{self.owner_id}"
+                        topical_results = self.hybrid_search.search(
+                            owner_id=self.owner_id,
+                            query=topical_query,
+                            namespace=namespace,
+                            limit=20,
+                        )
+                        topical_blob_ids = [
+                            str(r.blob_id)
+                            for r in topical_results
+                            if getattr(r, "blob_id", None)
+                            and getattr(r, "hybrid_score", 0.0) >= TOPICAL_MIN_SCORE
+                        ]
+                    # The contact-blob anchor is a strong signal
+                    # regardless of FTS/semantic noise — looked up by
+                    # the canonical sender address. Always include it.
+                    if blob_id and str(blob_id) not in topical_blob_ids:
+                        topical_blob_ids.insert(0, str(blob_id))
+                    if topical_blob_ids:
+                        related_via_memory = self.storage.get_open_tasks_by_blobs(
+                            owner_id=self.owner_id, blob_ids=topical_blob_ids
+                        )
+                        # Cap most-recent first to bound LLM noise.
+                        related_via_memory = related_via_memory[:F7_MAX_RELATED]
+                        existing_ids = {t.get("id") for t in existing_tasks_all}
+                        added = 0
+                        for t in related_via_memory:
+                            if t.get("id") and t["id"] not in existing_ids:
+                                existing_tasks_all.append(t)
+                                existing_ids.add(t["id"])
+                                added += 1
+                        if added:
+                            logger.debug(
+                                f"[TASK] F7 topical-sibling tasks added={added} "
+                                f"thread_id={thread_id} from_email={from_email} "
+                                f"matched_blobs={len(topical_blob_ids)}"
+                            )
+            except Exception as e:
+                # Best effort. A failure here must not block task analysis.
+                logger.warning(f"[TASK] F7 topical-sibling lookup failed: {e}")
+
             existing_task_context = ""
             if existing_tasks_all:
                 lines = [
-                    f"EXISTING OPEN TASKS FOR THIS THREAD/CONTACT ({len(existing_tasks_all)}):"
+                    f"EXISTING OPEN TASKS FOR THIS THREAD / CONTACT / TOPIC "
+                    f"({len(existing_tasks_all)}):"
                 ]
                 for i, t in enumerate(existing_tasks_all, 1):
                     lines.append(
@@ -347,6 +467,18 @@ class TaskWorker:
                         f"- Source emails: {len(t.get('sources', {}).get('emails', []))}"
                     )
                 lines.append(
+                    "These candidates come from THREE sources, in priority order:\n"
+                    "  (a) the SAME thread as the current event,\n"
+                    "  (b) the SAME contact_email (any thread),\n"
+                    "  (c) the SAME memory blobs (topical siblings — may be a "
+                    "DIFFERENT contact and a DIFFERENT thread, e.g. the same "
+                    "topic surfaces from a person's email AND a noreply "
+                    "notification AND a phone-call alert; they share blobs in "
+                    "memory because they refer to the same underlying matter).\n"
+                    "Treat (c) as 'is this really a NEW issue, or is the new "
+                    "event just another touch on a problem we're already "
+                    "tracking?' If yes → UPDATE (folding the new event into the "
+                    "existing task) or CLOSE (if the user already resolved). "
                     "Decide: UPDATE (target_task_id), CLOSE (target_task_id), "
                     "CREATE (new issue), or NONE."
                 )

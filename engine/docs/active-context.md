@@ -146,6 +146,77 @@ What this fix does NOT cover:
   AIFOS company blob and the Salamone person blob link to the same
   topic). Tracked separately, larger piece.
 
+### Task creation — F7 topical-sibling candidates via memory blobs (2026-05-05)
+
+The product premise of mrcall-desktop is that memory blobs let the
+assistant link events arriving from DIFFERENT senders / channels under
+the same topic ("a phone notification, an email from a CNIT colleague,
+and an automated AIFOS welcome — all the same training problem"). Until
+this commit, `task_creation.py:_collect` consulted memory only via
+``_get_blob_for_contact(from_email)`` — one blob, looked up by sender
+address. The LLM analyser saw `existing_tasks_all = thread_tasks +
+[task_by_contact]` — no cross-mittente, no cross-thread topic.
+
+F7 widens that lookup:
+
+  1. Build a topical query from the email's subject + body_plain[:800]
+     + sender. body_plain (not snippet) is required — snippets often
+     truncate before the entity names that drive the match.
+  2. Call `hybrid_search.search` with the query, take blobs whose
+     `hybrid_score >= 0.30`. Always include the contact-blob anchor.
+  3. Ask new storage helper
+     `Storage.get_open_tasks_by_blobs(owner_id, blob_ids)` for OPEN
+     `action_required` tasks whose `sources.blobs` overlap.
+  4. Cap to top 8 most-recent and merge into `existing_tasks_all`.
+  5. The existing LLM prompt is updated to say candidates may come
+     from "thread / contact / TOPIC" and that topical siblings may be
+     a different sender — let the LLM judge UPDATE / CLOSE / CREATE /
+     NONE.
+
+Two safety rails calibrated against profile `HxiZh…` on 2026-05-05:
+
+  * **Notification-sender skip.** Senders whose local-part is
+    `noreply` / `notification` / `bounce` / etc. produce dense blob
+    clusters around the platform itself (MrCall Notification → 35+
+    unrelated phone-call tasks share one anchor). F7 short-circuits
+    for these — the candidate list would be dominated by noise.
+    Thread + contact lookup remains unchanged for them.
+  * **Threshold + cap.** `hybrid_score >= 0.30` drops most outliers;
+    `top 8 most-recent` bounds context for the LLM judge.
+
+Live calibration on `HxiZh…` (gmail profile, 511 emails, 598 blobs):
+
+  * AIFOS noreply email → SKIP (rule 1) — no candidates surfaced ✓
+  * MrCall Notification email → SKIP (rule 1) — no 37-task explosion ✓
+  * Salamone email (real human, well-formed query): F7 fires but
+    returns 2 task candidates that look topically unrelated
+    (Omniaimpianti, fiscal-deduction). Root cause is **blob
+    duplication upstream**: the memory has 8 distinct "Carmine
+    Salamone PERSON" blobs (reconsolidation didn't merge them); the
+    existing Salamone task references just one of them
+    (`1d8c167a…`); the search ranks other Salamone-variant blobs
+    higher and those are orphans (no task references them). So F7
+    can't form the cross-link in this profile until memory
+    reconsolidation is fixed. The LLM downstream still has the full
+    email body and will judge the 2 surfaced candidates as
+    unrelated, so the noise costs LLM tokens but should not corrupt
+    decisions — keep an eye on it.
+
+What F7 does NOT do, and the proper next step:
+
+  * Today the bridge from "email" to "blobs extracted from this email"
+    is via free-form `blob.event_description = "Extracted from email
+    <id>"`. There is no queryable index. F7 reconstructs the link via
+    similarity search, which depends on memory quality. The clean
+    architecture is a new `email_blobs(email_id, blob_id)` association
+    table written by the memory worker on each upsert, plus
+    `Storage.get_blobs_for_email(email_id)`. Then task_creation can
+    request EXACTLY the blobs of the new email — no similarity guess.
+    Tracked separately, larger piece (schema migration + worker
+    change + backfill).
+
+Curated tests still 43/43 green (services / llm / phase2 ordering).
+
 ### Task auto-close — F6 cross-thread context in reanalyze (2026-05-05)
 
 `reanalyze_task` was single-thread: it called `_resolve_thread_id` and

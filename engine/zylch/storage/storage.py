@@ -618,6 +618,58 @@ class Storage:
                 )
             return out
 
+    def get_open_tasks_by_blobs(
+        self,
+        owner_id: str,
+        blob_ids: List[str],
+    ) -> List[Dict[str, Any]]:
+        """Return open task_items whose ``sources.blobs`` overlap with *blob_ids*.
+
+        Used to find topically-related open tasks across senders / threads:
+        the memory worker links blobs to events (emails, calls, WA), and a
+        single blob can be referenced by tasks created from very different
+        sources (e.g. a CNIT/training blob shared by a task off Salamone's
+        email, a task off an AIFOS noreply, and a task off an MrCall phone
+        notification). Surfacing those siblings lets the task-detection LLM
+        decide UPDATE/CLOSE/CREATE/NONE with full topical context, not just
+        thread + sender.
+
+        Filters: ``completed_at IS NULL`` and ``action_required = True``.
+        Returns task dicts in newest-first order of ``analyzed_at`` (or
+        ``created_at`` if missing). Empty when ``blob_ids`` is empty.
+        """
+        if not blob_ids:
+            return []
+        wanted = {str(b) for b in blob_ids if b}
+        if not wanted:
+            return []
+
+        with get_session() as session:
+            rows = (
+                session.query(TaskItem)
+                .filter(
+                    TaskItem.owner_id == owner_id,
+                    TaskItem.completed_at.is_(None),
+                    TaskItem.action_required.is_(True),
+                )
+                .all()
+            )
+
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            sources = r.sources or {}
+            task_blobs = sources.get("blobs") or []
+            if not task_blobs:
+                continue
+            if wanted.intersection({str(b) for b in task_blobs}):
+                out.append(r.to_dict())
+
+        def _key(t: Dict[str, Any]) -> str:
+            return str(t.get("analyzed_at") or t.get("created_at") or "")
+
+        out.sort(key=_key, reverse=True)
+        return out
+
     def get_sibling_threads_with_contact(
         self,
         owner_id: str,
