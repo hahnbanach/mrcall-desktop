@@ -103,6 +103,22 @@ export interface ZylchAPI {
       limit?: number
       offset?: number
     }) => Promise<{ threads: InboxThread[] }>
+    /**
+     * Gmail-style thread search. ``query`` accepts the operators
+     * documented in ``docs/ipc-contract.md`` (``from:``, ``to:``,
+     * ``cc:``, ``subject:``, ``body:``, ``has:attachment``,
+     * ``is:unread|read|pinned|auto``, ``before:`` / ``after:``,
+     * ``older_than:Nd``, ``newer_than:Nd``, ``filename:``). Bare terms
+     * match across subject/body/snippet/from. Returns the same
+     * ``InboxThread`` shape as ``listInbox`` / ``listSent`` so the
+     * thread list renders unchanged.
+     */
+    search: (params: {
+      query: string
+      folder?: 'inbox' | 'sent' | 'all'
+      limit?: number
+      offset?: number
+    }) => Promise<{ threads: InboxThread[] }>
     pin: (threadId: string, pinned: boolean) => Promise<{ ok: boolean; affected: number }>
     markRead: (threadId: string) => Promise<{ ok: boolean; affected: number }>
     archive: (threadId: string) => Promise<{

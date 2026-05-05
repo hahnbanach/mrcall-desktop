@@ -55,6 +55,49 @@ Returns an array of `TaskItem` dicts. Each row includes (when present):
 - `pinned: boolean`
 - `sources: { emails: string[], blobs: string[], calendar_events: string[], thread_id?: string | null }`
 
+### `emails.search(query, folder?, limit?, offset?)`
+
+| Param | Type | Required | Notes |
+|-------|------|----------|-------|
+| `query` | string | yes | Gmail-style query (see below). Empty/whitespace returns the same result as `emails.list_inbox` (or `…list_sent`) for the requested folder. |
+| `folder` | `"inbox" \| "sent" \| "all"` | no | Default `"inbox"`. Same coarse filter the listing endpoints use; `all` searches both directions. |
+| `limit` | int | no | Default 50. |
+| `offset` | int | no | Default 0. Pagination is over the matching thread list, not over messages. |
+
+Returns `{ threads: InboxThread[] }` — same dict shape as
+`emails.list_inbox` / `emails.list_sent`, so the renderer reuses the
+existing thread row component.
+
+**Operator language** (parsed by `engine/zylch/services/email_search.py`):
+
+| Operator | Matches |
+|----------|---------|
+| `from:foo` | substring of `from_email` or `from_name` |
+| `to:foo` | substring of `to_email` |
+| `cc:foo` | substring of `cc_email` |
+| `subject:foo` | substring of `subject` |
+| `body:foo` | substring of `body_plain` |
+| `has:attachment` (also `attach`/`attachments`/`file`) | `has_attachments == True` |
+| `filename:foo` | substring inside any `attachment_filenames` entry |
+| `is:unread` | `read_at IS NULL` and message is not user-sent |
+| `is:read` | `read_at IS NOT NULL` |
+| `is:pinned` | `pinned_at IS NOT NULL` |
+| `is:auto` | `is_auto_reply == True` |
+| `before:YYYY-MM-DD` / `after:YYYY-MM-DD` | UTC date comparison |
+| `older_than:Nd|w|m|y` / `newer_than:…` | relative cutoff against `date` |
+| bare term | substring of subject / body / snippet / from |
+
+Quote phrases with `"…"`. Prefix any predicate with `-` to negate.
+Multiple predicates of the same operator OR together (Gmail-style);
+different operators AND. Unknown `key:value` pairs degrade silently
+to free-text terms — searches never fail because of a typo'd
+operator.
+
+A thread is included if **any** of its non-archived/non-deleted
+messages matches; the thread summary still reflects the latest
+message of the thread (not the matching one), mirroring
+`list_inbox_threads`.
+
 ### `account.balance()`
 
 Forwards to `mrcall-agent`'s `GET /api/desktop/llm/balance` with the

@@ -484,6 +484,203 @@ class Storage:
                 )
             return out
 
+    def search_threads(
+        self,
+        owner_id: str,
+        user_email: str,
+        query: str,
+        folder: str = "inbox",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Gmail-style thread search backing ``emails.search`` RPC.
+
+        Parses *query* via :func:`zylch.services.email_search.parse_query`,
+        scans the owner's non-archived/non-deleted email rows, keeps any
+        thread that has at least one matching message, and returns
+        thread summaries in the same shape as
+        :meth:`list_inbox_threads` so the renderer renders identically.
+
+        ``folder`` is one of ``inbox`` / ``sent`` / ``all`` and applies
+        the same coarse filter the listing endpoints use:
+          * ``inbox`` — drop threads whose only messages are user-sent.
+          * ``sent`` — keep threads whose latest message was user-sent.
+          * ``all`` — no folder filter (search across both directions).
+        """
+        from zylch.services.email_search import email_matches, parse_query
+
+        me = (user_email or "").lower()
+        parsed = parse_query(query)
+
+        with get_session() as session:
+            rows = (
+                session.query(Email)
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.archived_at.is_(None),
+                    Email.deleted_at.is_(None),
+                )
+                .order_by(Email.date_timestamp.desc())
+                .all()
+            )
+
+            matching_thread_ids: set[str] = set()
+            for r in rows:
+                if not r.thread_id:
+                    continue
+                if email_matches(r, parsed, user_email=me):
+                    matching_thread_ids.add(r.thread_id)
+
+            threads: Dict[str, Dict[str, Any]] = {}
+            for r in rows:
+                tid = r.thread_id
+                if not tid or tid not in matching_thread_ids:
+                    continue
+                bucket = threads.get(tid)
+                from_addr = (r.from_email or "").lower()
+                is_user = bool(me) and from_addr == me
+                if bucket is None:
+                    bucket = {
+                        "thread_id": tid,
+                        "latest": r,
+                        "latest_non_user": None if is_user else r,
+                        "latest_user": r if is_user else None,
+                        "has_non_user": not is_user,
+                        "pinned": r.pinned_at is not None,
+                        "message_count": 1,
+                    }
+                    threads[tid] = bucket
+                else:
+                    bucket["message_count"] += 1
+                    if r.pinned_at is not None:
+                        bucket["pinned"] = True
+                    if not is_user and bucket["latest_non_user"] is None:
+                        bucket["latest_non_user"] = r
+                        bucket["has_non_user"] = True
+                    if is_user and bucket["latest_user"] is None:
+                        bucket["latest_user"] = r
+
+            candidates: List[Dict[str, Any]] = []
+            for b in threads.values():
+                if folder == "inbox":
+                    if not b["has_non_user"]:
+                        continue
+                elif folder == "sent":
+                    latest_addr = (b["latest"].from_email or "").lower()
+                    if not me or latest_addr != me:
+                        continue
+                candidates.append(b)
+
+            for b in candidates:
+                latest_non_user = b["latest_non_user"]
+                latest_user = b["latest_user"]
+                if latest_non_user is None:
+                    b["unread"] = False
+                    continue
+                has_newer_non_user = latest_user is None or (
+                    latest_non_user.date_timestamp or 0
+                ) > (latest_user.date_timestamp or 0)
+                b["unread"] = bool(
+                    has_newer_non_user and latest_non_user.read_at is None
+                )
+
+            candidates.sort(
+                key=lambda b: (
+                    1 if b["pinned"] else 0,
+                    b["latest"].date_timestamp or 0,
+                ),
+                reverse=True,
+            )
+
+            page = candidates[offset : offset + limit]
+            out: List[Dict[str, Any]] = []
+            for b in page:
+                latest: Email = b["latest"]
+                date_val = latest.date
+                date_iso = (
+                    date_val.isoformat() if isinstance(date_val, datetime) else ""
+                )
+                out.append(
+                    {
+                        "thread_id": b["thread_id"],
+                        "subject": latest.subject or "",
+                        "from_email": latest.from_email or "",
+                        "from_name": latest.from_name or "",
+                        "to_email": latest.to_email or "",
+                        "date": date_iso,
+                        "snippet": latest.snippet or "",
+                        "unread": bool(b["unread"]),
+                        "has_attachments": bool(latest.has_attachments),
+                        "pinned": bool(b["pinned"]),
+                        "message_count": int(b["message_count"]),
+                        "last_email_id": latest.id,
+                    }
+                )
+            return out
+
+    def search_emails_flat(
+        self,
+        owner_id: str,
+        user_email: str,
+        query: str,
+        folder: str = "all",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Search individual messages (NOT threads) matching *query*.
+
+        Mirrors :meth:`search_threads` but returns a flat per-message
+        list so an LLM caller sees exactly which message hit. Same
+        Gmail-style predicates, same folder semantics. Used by the
+        ``search_local_emails`` LLM tool.
+        """
+        from zylch.services.email_search import email_matches, parse_query
+
+        me = (user_email or "").lower()
+        parsed = parse_query(query)
+        with get_session() as session:
+            rows = (
+                session.query(Email)
+                .filter(
+                    Email.owner_id == owner_id,
+                    Email.archived_at.is_(None),
+                    Email.deleted_at.is_(None),
+                )
+                .order_by(Email.date_timestamp.desc())
+                .all()
+            )
+            out: List[Dict[str, Any]] = []
+            for r in rows:
+                if not email_matches(r, parsed, user_email=me):
+                    continue
+                from_addr = (r.from_email or "").lower()
+                is_user = bool(me) and from_addr == me
+                if folder == "inbox" and is_user:
+                    continue
+                if folder == "sent" and not is_user:
+                    continue
+                date_iso = (
+                    r.date.isoformat() if isinstance(r.date, datetime) else ""
+                )
+                out.append(
+                    {
+                        "id": r.id,
+                        "thread_id": r.thread_id,
+                        "date": date_iso,
+                        "from_email": r.from_email or "",
+                        "from_name": r.from_name or "",
+                        "to_email": r.to_email or "",
+                        "cc_email": r.cc_email or "",
+                        "subject": r.subject or "",
+                        "snippet": r.snippet or "",
+                        "has_attachments": bool(r.has_attachments),
+                        "is_user_sent": is_user,
+                    }
+                )
+                if len(out) >= offset + limit:
+                    break
+            return out[offset : offset + limit]
+
     def set_thread_pinned(self, owner_id: str, thread_id: str, pinned: bool) -> int:
         """Pin or unpin every email row of a thread for an owner.
 

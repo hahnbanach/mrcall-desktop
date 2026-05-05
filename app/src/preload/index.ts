@@ -145,6 +145,25 @@ const api = {
         { limit: params.limit ?? 50, offset: params.offset ?? 0 },
         30000
       ),
+    search: (params: {
+      query: string
+      folder?: 'inbox' | 'sent' | 'all'
+      limit?: number
+      offset?: number
+    }) =>
+      // Search scans the entire owner mailbox in-memory on the engine
+      // side, so a long mailbox + body matching can take a beat. 30s
+      // matches list_inbox / list_sent.
+      call<{ threads: any[] }>(
+        'emails.search',
+        {
+          query: params.query,
+          folder: params.folder ?? 'inbox',
+          limit: params.limit ?? 50,
+          offset: params.offset ?? 0
+        },
+        30000
+      ),
     pin: (threadId: string, pinned: boolean) =>
       call<{ ok: boolean; affected: number }>(
         'emails.pin',

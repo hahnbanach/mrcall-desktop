@@ -78,6 +78,12 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
   const [folderMenuOpen, setFolderMenuOpen] = useState(false)
   const [archiving, setArchiving] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState<Set<string>>(new Set())
+  // Search input is local; `searchQuery` is the committed value (Enter
+  // / blur) that drives the actual fetch. Keeps every keystroke from
+  // hitting the engine.
+  const [searchInput, setSearchInput] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchHelpOpen, setSearchHelpOpen] = useState(false)
 
   const { setTaskThreadFilter } = useThread()
 
@@ -91,6 +97,31 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
       setLoading(true)
       setError(null)
       try {
+        const trimmed = searchQuery.trim()
+        if (target === 'drafts') {
+          // Drafts use the existing chat-side endpoint — no dedicated RPC
+          // is exposed for the desktop today. We just surface the count,
+          // and the user edits drafts via the chat flow. The middle column
+          // shows a stub; clicking a draft in the future could reuse the
+          // compose modal pre-populated.
+          setThreads([])
+          setHasMore(false)
+          return
+        }
+        if (trimmed) {
+          // Gmail-style search overrides the folder list. ``folder``
+          // still scopes the results to inbox vs sent so the user's
+          // current folder selection is preserved.
+          const r = await window.zylch.emails.search({
+            query: trimmed,
+            folder: target === 'sent' ? 'sent' : 'inbox',
+            limit: PAGE_SIZE,
+            offset: append ? threads.length : 0
+          })
+          setThreads((prev) => (append ? [...prev, ...r.threads] : r.threads))
+          setHasMore(r.threads.length === PAGE_SIZE)
+          return
+        }
         if (target === 'inbox') {
           const r = await window.zylch.emails.listInbox({
             limit: PAGE_SIZE,
@@ -105,14 +136,6 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
           })
           setThreads((prev) => (append ? [...prev, ...r.threads] : r.threads))
           setHasMore(r.threads.length === PAGE_SIZE)
-        } else {
-          // Drafts use the existing chat-side endpoint — no dedicated RPC
-          // is exposed for the desktop today. We just surface the count,
-          // and the user edits drafts via the chat flow. The middle column
-          // shows a stub; clicking a draft in the future could reuse the
-          // compose modal pre-populated.
-          setThreads([])
-          setHasMore(false)
         }
       } catch (e: unknown) {
         if (!isProfileLockedError(e)) setError(errorMessage(e))
@@ -120,15 +143,24 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
         setLoading(false)
       }
     },
-    [threads.length]
+    [threads.length, searchQuery]
   )
 
-  // Initial load + folder change.
+  // Initial load + folder/search change. Reloading on `searchQuery`
+  // means submit-on-Enter triggers the new fetch automatically.
   useEffect(() => {
     setSelectedId(null)
     setThreads([])
     void loadFolder(folder, false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folder, searchQuery])
+
+  // Reset the search box when the user switches folder (Inbox ↔ Sent ↔
+  // Drafts) so the input never shows a stale query against a folder
+  // that won't run it.
+  useEffect(() => {
+    setSearchInput('')
+    setSearchQuery('')
   }, [folder])
 
   // Drafts badge: refresh on mount + every 30s. Uses the existing
@@ -419,6 +451,111 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
           )}
         </div>
 
+        {/* Search bar — Gmail-style operators. Hidden in Drafts (no
+            backend support). Submit on Enter; clear with × or Escape. */}
+        {folder !== 'drafts' && (
+          <div className="relative px-3 py-2 border-b bg-white shrink-0">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                setSearchQuery(searchInput.trim())
+              }}
+              className="flex items-center gap-2"
+            >
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.preventDefault()
+                      setSearchInput('')
+                      setSearchQuery('')
+                    }
+                  }}
+                  placeholder={
+                    folder === 'sent'
+                      ? 'Search sent — from: to: subject: has:attachment …'
+                      : 'Search inbox — from: to: subject: has:attachment …'
+                  }
+                  aria-label="Search emails"
+                  className="w-full pl-3 pr-8 py-1.5 text-sm border border-brand-mid-grey rounded focus:outline-none focus:border-brand-blue"
+                />
+                {searchInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchInput('')
+                      setSearchQuery('')
+                    }}
+                    title="Clear search"
+                    aria-label="Clear search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-brand-grey-80 hover:text-brand-black"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSearchHelpOpen((v) => !v)}
+                title="Search syntax help"
+                aria-label="Search syntax help"
+                aria-expanded={searchHelpOpen}
+                className="px-2 py-1 text-xs border border-brand-mid-grey rounded text-brand-grey-80 hover:bg-brand-light-grey"
+              >
+                ?
+              </button>
+            </form>
+            {searchQuery && (
+              <div className="mt-1 text-xs text-brand-grey-80">
+                Searching {folder === 'sent' ? 'sent' : 'inbox'} for{' '}
+                <code className="px-1 py-0.5 bg-brand-light-grey rounded">
+                  {searchQuery}
+                </code>
+              </div>
+            )}
+            {searchHelpOpen && (
+              <div className="mt-2 p-3 bg-brand-light-grey rounded text-xs text-brand-grey-80 leading-relaxed">
+                <div className="font-semibold text-brand-black mb-1">
+                  Search operators
+                </div>
+                <ul className="space-y-0.5">
+                  <li>
+                    <code>from:alice</code> · <code>to:bob</code> ·{' '}
+                    <code>cc:carol</code>
+                  </li>
+                  <li>
+                    <code>subject:invoice</code> · <code>body:contract</code>
+                  </li>
+                  <li>
+                    <code>has:attachment</code> ·{' '}
+                    <code>filename:report.pdf</code>
+                  </li>
+                  <li>
+                    <code>is:unread</code> · <code>is:read</code> ·{' '}
+                    <code>is:pinned</code> · <code>is:auto</code>
+                  </li>
+                  <li>
+                    <code>before:2026-04-01</code> ·{' '}
+                    <code>after:2026-01-01</code>
+                  </li>
+                  <li>
+                    <code>older_than:7d</code> · <code>newer_than:30d</code>{' '}
+                    (units: d/w/m/y)
+                  </li>
+                  <li>
+                    Quotes: <code>subject:&quot;q3 plan&quot;</code> · negate
+                    with <code>-</code> · bare terms match
+                    subject/body/snippet/from
+                  </li>
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
         <div ref={listRef} className="flex-1 overflow-y-auto">
           {loading && threads.length === 0 && (
             <div className="p-4 text-sm text-brand-grey-80">Loading…</div>
@@ -427,7 +564,9 @@ export default function Email({ onOpenTasks }: EmailProps = {}): JSX.Element {
             <div className="p-4 text-sm text-brand-danger">Failed: {error}</div>
           )}
           {!loading && !error && threads.length === 0 && folder !== 'drafts' && (
-            <div className="p-4 text-sm text-brand-grey-80">No threads.</div>
+            <div className="p-4 text-sm text-brand-grey-80">
+              {searchQuery ? 'No matches.' : 'No threads.'}
+            </div>
           )}
           {folder === 'drafts' && (
             <div className="p-4 text-sm text-brand-grey-80">

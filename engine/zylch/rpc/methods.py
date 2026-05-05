@@ -1095,6 +1095,49 @@ async def emails_list_sent(
     return {"threads": threads}
 
 
+async def emails_search(
+    params: Dict[str, Any],
+    notify: NotifyFn,
+) -> Any:
+    """emails.search(query, folder='inbox', limit=50, offset=0) -> {"threads": [...]}.
+
+    Gmail-style query language. Supported operators:
+    ``from:`` / ``to:`` / ``cc:`` / ``subject:`` / ``body:``,
+    ``has:attachment``, ``is:unread|read|pinned|auto``,
+    ``before:YYYY-MM-DD`` / ``after:YYYY-MM-DD``,
+    ``older_than:Nd|w|m|y`` / ``newer_than:…``, ``filename:``.
+    Bare terms match in subject/body/snippet/from. Prefix with ``-`` to
+    negate. ``folder`` is ``inbox`` / ``sent`` / ``all``.
+    """
+    from zylch.api.token_storage import get_email
+    from zylch.storage.storage import Storage
+
+    query = str(params.get("query", "") or "")
+    folder = str(params.get("folder", "inbox") or "inbox").lower()
+    if folder not in ("inbox", "sent", "all"):
+        folder = "inbox"
+    limit = int(params.get("limit", 50))
+    offset = int(params.get("offset", 0))
+    owner_id = _owner_id()
+    user_email = (get_email(owner_id) or "").lower()
+    logger.debug(
+        f"[rpc] emails.search owner_id={owner_id} folder={folder} "
+        f"limit={limit} offset={offset} query_len={len(query)} "
+        f"user_email={'present' if user_email else 'absent'}"
+    )
+    store = Storage.get_instance()
+    threads = store.search_threads(
+        owner_id=owner_id,
+        user_email=user_email,
+        query=query,
+        folder=folder,
+        limit=limit,
+        offset=offset,
+    )
+    logger.debug(f"[rpc] emails.search -> {len(threads)} threads")
+    return {"threads": threads}
+
+
 async def emails_pin(
     params: Dict[str, Any],
     notify: NotifyFn,
@@ -1485,6 +1528,7 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "emails.list_by_thread": emails_list_by_thread,
     "emails.list_inbox": emails_list_inbox,
     "emails.list_sent": emails_list_sent,
+    "emails.search": emails_search,
     "emails.pin": emails_pin,
     "emails.mark_read": emails_mark_read,
     "settings.schema": settings_schema,
