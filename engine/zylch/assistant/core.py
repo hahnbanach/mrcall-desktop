@@ -54,7 +54,7 @@ class ZylchAIAgent(BaseConversationalAgent):
         self.last_usage: Dict[str, int] = {}
 
         logger.info(
-            f"Initialized Zylch AI agent with {len(tools)} tools, provider={provider}{f' and {len(self.triggered_instructions)} triggered instructions' if self.triggered_instructions else ''}"
+            f"Initialized Zylch AI agent with {len(tools)} tools, transport={self.client.transport}{f' and {len(self.triggered_instructions)} triggered instructions' if self.triggered_instructions else ''}"
         )
 
     def _get_tool_schemas(self) -> List[Dict[str, Any]]:
