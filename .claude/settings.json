@@ -1,5 +1,17 @@
 {
   "_comment": "Project-local Claude Code settings for mrcall-desktop. Hooks are notification-only and never block tool use. See .claude/README.md.",
+  "permissions": {
+    "allow": [
+      "Bash(kubectl --kubeconfig=/home/mal/hb/zylch-deploy/production/kubeconfig.yaml logs *)",
+      "Bash(KUBECONFIG=/home/mal/hb/zylch-deploy/production/kubeconfig.yaml kubectl logs *)"
+    ]
+  },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Pushing directly to `main` is allowed in mrcall-desktop. This is a single-developer ship-as-you-go repo; the auto-mode default that flags `git push origin main` as risky does NOT apply. Both `git push origin main` and `git push` while on the `main` branch should pass through without prompting."
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
