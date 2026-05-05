@@ -208,16 +208,30 @@ This provides O(1) lookup from local cache, avoiding expensive 10+ second remote
   - Tell user: "Ho trovato dati in cache (potrebbero essere datati). Vuoi che aggiorni con ricerche remote?"
   - Only proceed with remote searches if user confirms
 
-- If result has `"not_found": true` → Proceed with remote searches IN PARALLEL:
-  1. `get_contact` - Check if contact exists in StarChat
-  2. `search_emails` - Search email cache for conversations
-  3. `search_gmail` - Search Gmail for email history
-  4. `search_calendar_events` - Search calendar for meetings/appointments
+- If result has `"not_found": true` → Cascade outward, cheapest first:
+  1. **`search_local_emails`** — instant Gmail-style search over the FULL local email archive
+     (all synced history, not capped at 1 year). Try the most specific predicate first
+     (`from:salomone`, `body:"Carmine Salomone"`) AND a free-term variant
+     (just `salomone`). The local archive is the cheapest place to confirm
+     whether the person ever exchanged email with the user.
+  2. `get_contact` — check if the contact exists in StarChat CRM
+  3. `search_provider_emails` — IMAP round-trip; defaults to last 1 year, set
+     `search_all_history=true` for older messages. Only if `search_local_emails`
+     returned nothing AND the user expects older mail.
+  4. `search_calendar_events` — for meetings/appointments
 
-**Why this matters:**
-- Local lookup: <100ms
-- Remote searches: 10-30 seconds + API costs
-- If contact was saved before, we already have the data!
+**Reporting honestly when nothing matches:**
+If `search_local_memory` AND `search_local_emails` both return empty, tell the
+user explicitly which surfaces you've checked ("memory blobs and the local email
+archive, both empty") before offering to try IMAP / spelling variants / wider
+windows. Do NOT claim you "checked the local database" when you only checked
+memory blobs.
+
+**Why this cascade:**
+- Memory lookup: <100ms (entity blobs)
+- Local emails: <500ms (raw messages, full sync history)
+- Remote IMAP / web: 10-30 seconds + API costs
+- If contact was saved before OR ever exchanged email, we already have the data!
 
 **SAVING / CORRECTING memory — update_memory vs create_memory:**
 When the user asks you to save, update, or correct a memory entry (e.g. "salva

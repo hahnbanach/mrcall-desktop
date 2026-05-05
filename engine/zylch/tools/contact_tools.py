@@ -158,11 +158,15 @@ class SearchLocalMemoryTool(Tool):
         self.owner_id = owner_id
         self.zylch_assistant_id = zylch_assistant_id
 
-    async def execute(self, query: str) -> ToolResult:
+    async def execute(self, query: str, limit: int = 50) -> ToolResult:
         """Search for a person in local memory.
 
         Args:
             query: Search query - can be email, phone, or name
+            limit: Max ranked candidates to return. Default 50 (was a
+                hardcoded 5 — too aggressive a cap for a memory store
+                that grows to hundreds/thousands of blobs; relevant
+                results were dropping off the list).
 
         Returns:
             ToolResult with ranked person data or not_found
@@ -175,6 +179,12 @@ class SearchLocalMemoryTool(Tool):
             )
 
         query = query.strip()
+        try:
+            limit_i = int(limit)
+        except (TypeError, ValueError):
+            limit_i = 50
+        if limit_i <= 0:
+            limit_i = 50
 
         try:
             if self.search_engine:
@@ -186,7 +196,7 @@ class SearchLocalMemoryTool(Tool):
                 results = self.search_engine.search(
                     owner_id=self.owner_id,
                     query=query,
-                    limit=5,
+                    limit=limit_i,
                 )
 
                 if not results:
@@ -266,6 +276,14 @@ class SearchLocalMemoryTool(Tool):
                         "type": "string",
                         "description": (
                             "Search query: email address," " phone number, or person name"
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": (
+                            "Max ranked candidates to return. Default"
+                            " 50. Raise if you suspect a relevant blob"
+                            " might have ranked outside the first page."
                         ),
                     },
                 },

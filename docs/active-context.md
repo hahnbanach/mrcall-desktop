@@ -167,6 +167,19 @@ The previous session's Firebase signin landing (`25e668b..11f4cbe`) is now folde
 4. Open a follow-up PR per `cleanup-mrcall-configurator-deadcode.md` once Firebase signin is validated. Self-contained — fresh agent should pick it up cold.
 5. Wire `engine/zylch/tools/calendar_sync.py` to the new `provider='google_calendar'` tokens (current sync code is partial pre-existing scaffolding; reading from the encrypted store is a small change).
 
+## Assistant tool surface (updated 2026-05-05)
+
+- **Email-tab search** (renderer-side): new JSON-RPC `emails.search(query, folder?, limit?, offset?)`. Gmail-style operators backed by `engine/zylch/services/email_search.py` parser+matcher. Returns the same `InboxThread[]` shape as `emails.list_inbox` so the renderer renders unchanged. UI is a Gmail-style bar above the thread list with submit-on-Enter, `?` help panel, Esc to clear.
+- **Chat assistant** (LLM-side): new tool `search_local_emails(query, folder?, limit?, offset?)` covering the *full* local mailbox (no 1-year IMAP cap) with the same Gmail syntax. Sits between `search_local_memory` (entity blobs) and `search_provider_emails` (IMAP) in the cascade documented in `engine/zylch/assistant/prompts.py`. The cascade now also asks the assistant to report explicitly which surfaces it checked when both come up empty, instead of saying "I checked the local database" when only the blob store was queried.
+- **Cap-bug fixes** in two existing tools while we were there: `SearchLocalMemoryTool` 5→50, `SearchEmailsTool` 20→50, both with the limit exposed as a parameter so a future call can scale up. Both caps were silently dropping relevant matches off the bottom of the ranked list.
+
+Test ledger this session:
+
+- `engine/tests/services/test_email_search.py` — 24/24 (parser + matcher).
+- App typecheck clean.
+- Engine `tests/workers/test_task_worker_bugs.py` — 14 errors at HEAD, **pre-existing** from the 2026-05-04 transport refactor (tests still mock `zylch.workers.task_creation.LLMClient`, attribute removed). Unchanged by this session's work; tracked but not fixed here.
+- Live verification of the new RPC method and the new LLM tool against a running sidecar **NOT** done — needs `npm run dev` + a "find emails about X" chat turn + a UI search.
+
 ## Known Issues
 
 - **No live end-to-end verification of any signin path.** Email/password, Continue with Google, the post-signin `auth:bindProfile` round-trip, and the engine `mrcall.list_my_businesses` + Calendar OAuth all compile + typecheck but have not been clicked from this machine.

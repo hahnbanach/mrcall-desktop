@@ -68,6 +68,7 @@ from .read_email_tool import ReadEmailTool
 from .run_python_tool import RunPythonTool  # Phase A
 from .update_memory_tool import UpdateMemoryTool  # Phase A
 from .create_memory_tool import CreateMemoryTool
+from .local_email_search_tool import SearchLocalEmailsTool
 
 logger = logging.getLogger(__name__)
 
@@ -277,9 +278,16 @@ class ToolFactory:
                 RunPythonTool(),
                 UpdateMemoryTool(session_state=session_state, owner_id=config.owner_id),
                 CreateMemoryTool(session_state=session_state, owner_id=config.owner_id),
+                SearchLocalEmailsTool(
+                    storage=supabase_storage,
+                    session_state=session_state,
+                    owner_id=config.owner_id,
+                ),
             ]
         )
-        logger.info("Phase A tools initialized (6: +read_email, +create_memory)")
+        logger.info(
+            "Phase A tools initialized (7: +read_email, +create_memory, +search_local_emails)"
+        )
 
         # Compose Email tool
         tools.append(ComposeEmailTool(session_state=session_state))

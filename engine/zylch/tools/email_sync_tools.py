@@ -104,10 +104,17 @@ class SearchEmailsTool(Tool):
         query: Optional[str] = None,
         open_only: bool = False,
         expected_action: Optional[str] = None,
+        limit: int = 50,
     ):
         try:
             if self.storage and query:
-                emails = self.storage.search_emails(self.owner_id, query, limit=20)
+                try:
+                    limit_i = int(limit)
+                except (TypeError, ValueError):
+                    limit_i = 50
+                if limit_i <= 0:
+                    limit_i = 50
+                emails = self.storage.search_emails(self.owner_id, query, limit=limit_i)
 
                 results = []
                 for email in emails:
@@ -173,6 +180,12 @@ class SearchEmailsTool(Tool):
                         "type": "string",
                         "description": (
                             "Search query - keywords, names, or" " topics to find in emails"
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": (
+                            "Max ranked results to return. Default 50."
                         ),
                     },
                 },

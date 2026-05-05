@@ -32,6 +32,30 @@ description: |
 - Email archive with SQLite FTS, incremental sync
 - `zylch sync` does synchronous IMAP fetch
 - **Inbox / Sent views**: `emails.list_inbox`, `emails.list_sent`, thread pin, read tracking (`c56634a`)
+- **Gmail-style thread search**: new `emails.search(query, folder?, limit?, offset?)` RPC. Parser + matcher in `zylch/services/email_search.py` (pure functions, no DB). Storage method `Storage.search_threads` reuses the same in-memory scan + thread-fold pattern as `list_inbox_threads`, then keeps any thread with at least one matching message. Operators: `from:` / `to:` / `cc:` / `subject:` / `body:` / `has:attachment` / `filename:` / `is:unread|read|pinned|auto` / `before:YYYY-MM-DD` / `after:` / `older_than:Nd|w|m|y` / `newer_than:`. Negation via `-`, quoted phrases via `"…"`. Unknown ops degrade to free-text. Tests: `engine/tests/services/test_email_search.py` (24/24 green). Backend pending live verification — typecheck + parser smoke green; mailbox round-trip not exercised yet.
+
+### LLM tool: `search_local_emails` (added this session)
+
+The chat assistant now has a dedicated LLM tool to query the local email archive with the same Gmail-style operators as the UI search bar. `engine/zylch/tools/local_email_search_tool.py:SearchLocalEmailsTool` wraps `Storage.search_emails_flat()` (flat per-message return — different from `search_threads()` which is thread-folded for the UI) so the LLM sees exactly which messages hit. Default limit 50, exposed as a parameter. Registered alongside Phase A tools in `tools/factory.py`.
+
+The lookup cascade in `assistant/prompts.py` is now:
+
+1. `search_local_memory` (entity blobs, <100 ms)
+2. `search_local_emails` (raw messages, full local history, <500 ms)
+3. `get_contact` / `search_provider_emails` (StarChat / IMAP, 10–30 s)
+
+Closes the gap surfaced by the "Carmine Salomone" complaint (2026-05-05): the assistant claimed to have checked the "local database" but the only local-store tool it had was `search_local_memory` (blobs only). The new tool gives it the missing surface — and the prompt update tells it to be explicit about what was checked when both come up empty.
+
+Two cap-related rule violations fixed at the same time:
+
+- `SearchLocalMemoryTool.execute(limit=5)` → default 50, exposed as parameter (`tools/contact_tools.py`).
+- `SearchEmailsTool.execute(...).search_emails(..., limit=20)` → default 50, exposed as parameter (`tools/email_sync_tools.py`).
+
+Both were dropping relevant results off the bottom of the list silently.
+
+### Diagnostic: `engine/scripts/diag_memory.py`
+
+CLI script that prints per-profile memory pipeline state — total emails, memory-processed count, blob count by namespace, and optional `--needle SUBSTRING` greps that scan email columns + blob content. Use after a "the assistant didn't find X" complaint to know quickly whether memory pipeline is dead, working-but-sparse, or genuinely missing the entity. Verified on 2026-05-05 across `mario.alemi@cafe124.it` (608/608 emails processed, 729 blobs), `mario.alemi@gmail.com` (635/704, 458 blobs), `support@mrcall.ai` (1216/1216, 569 blobs) — memory pipeline is healthy on all three.
 - **HTML body rendering**: `emails.list_by_thread` returns `body_html` (`65185fc`)
 - Draft preview shows full body verbatim, not a summary (`108572b`)
 - **Archive + Delete (this session)**: `emails.archive(thread_id)` IMAP MOVE to provider archive folder (SPECIAL-USE `\All` / `\Archive`, fallback provider names), UID MOVE with COPY+EXPUNGE fallback. `emails.delete(thread_id)` soft-delete locally only (preserves provenance for linked tasks, IMAP untouched). New columns `archived_at` / `deleted_at` on Email model, applied via existing `_apply_column_migrations` at boot. `list_inbox_threads` / `list_sent_threads` filter out flagged threads. Desktop: Archive + Delete buttons in ThreadReadingPane with optimistic removal + rollback on error. RPC lives in `zylch/rpc/email_actions.py` (not `command_handlers.py`).
