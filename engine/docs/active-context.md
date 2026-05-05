@@ -103,6 +103,49 @@ CLI script that prints per-profile memory pipeline state — total emails, memor
 - `tasks.list` honours `include_completed` (`50aa4bd`)
 - **Close with optional note**: `tasks.complete(task_id, note?)` accepts a free-text reason stored on `task_items.close_note`. Display-only — never injected into detector or any LLM prompt. Auto-close paths (worker, reanalyze sweep) leave note=None so closing reasons aren't fabricated.
 
+### Task auto-close — F5 cross-thread sibling fix (2026-05-05)
+
+Real case on profile `HxiZh…`: thread `<0BC008F8…>` (Salamone's
+"Riscontro Formazione Obbligatoria") got a task created from his Mar 31
+mail; the user's Apr 26 reply was on a sibling thread `<50C17CA8…>`
+("Riscontro presente email"), same contact, same topic. Both in the
+same `update` batch. Task remained open with no auto-close.
+
+Root cause in `zylch/workers/task_creation.py` Phase 2:
+`get_unprocessed_emails_for_task` returns rows newest-first
+(`date_timestamp DESC`), so the `threads` dict insertion order put the
+user's Apr 26 reply BEFORE the contact's Mar 31 mail. `asyncio.gather`
+preserves input order. In Phase 2 the `user_reply` branch consumed the
+reply FIRST — its per-recipient close lookup ran while the task didn't
+yet exist, found nothing, no-op'd. The LLM branch then created the
+task moments later, with no further close attempt.
+
+Fix: sort `collected` so any `kind == "llm"` runs before any
+`kind == "user_reply"`. Python's `sorted` is stable, so within each
+kind the original order is preserved. The LLM's `existing_tasks_all`
+is captured at `_collect` time (frozen before Phase 2), so the reorder
+doesn't change what the LLM sees — only what's available in the DB
+when user_reply does its lookup.
+
+Tests: `engine/tests/workers/test_task_phase2_ordering.py` (5 cases,
+all green) — exercises the sort key in isolation. The legacy
+`tests/workers/test_task_worker_bugs.py` fixture is broken at HEAD
+(mocks `zylch.workers.task_creation.LLMClient`, an attribute removed
+in the 2026-05-04 transport refactor) — separate harness gap.
+
+What this fix does NOT cover:
+- **Cross-batch user reply.** If the user's reply is processed in
+  batch N (no task yet) and the contact's email is processed in
+  batch N+1 (creates the task), the close still doesn't fire. The
+  F4 reanalyze sweep eventually picks it up but is gated by 24h age
+  + 10 tasks/run. Tracked.
+- **Topical dedup across senders.** A task on Salamone (`@cnit.it`)
+  and a separate task on `noreply@aifos.it` about the same training
+  do not get merged or co-closed when the user replies to one of
+  them. Requires LLM-driven clustering against memory blobs (the
+  AIFOS company blob and the Salamone person blob link to the same
+  topic). Tracked separately, larger piece.
+
 ### Task auto-close — RealStep / cafe124 fixes (baseline since 2026-05-01)
 Three coupled fixes in `zylch/workers/task_creation.py` + reanalyze sweep:
 

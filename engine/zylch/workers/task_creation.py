@@ -402,11 +402,34 @@ class TaskWorker:
         )
 
         # Phase 2: apply decisions sequentially, with fresh dedup checks.
+        #
+        # ORDERING (F5, 2026-05-05): LLM-driven items go BEFORE user_reply
+        # items. `get_unprocessed_emails_for_task` returns rows newest-first
+        # (date_timestamp DESC), and `threads` keeps the latest email per
+        # thread. So a user's reply on a sibling thread is typically newer
+        # than the contact's email that produced the open task — meaning the
+        # user_reply's per-recipient close lookup runs in Phase 2 BEFORE the
+        # task even exists, finds nothing, no-ops, and the task survives the
+        # batch with no recovery until the F4 reanalyze sweep (which is
+        # gated by REANALYZE_MIN_AGE_HOURS=24 and capped at 10 tasks/run).
+        # Real case 2026-05-04 on profile HxiZh…: thread <0BC008F8…>
+        # (Salamone's "Riscontro Formazione Obbligatoria") got the task
+        # created from his Mar 31 mail; the user's Apr 26 reply was on a
+        # sibling thread <50C17CA8…> ("Riscontro presente email"). Both in
+        # the same batch — the user_reply consumed first, found no task,
+        # bailed; the task was created moments later and never closed.
+        # Sorting by kind (llm < user_reply) gives the close logic a chance
+        # to see a freshly created task with the matching contact_email.
+        non_exception_items = [c for c in collected if not isinstance(c, Exception)]
+        for c in collected:
+            if isinstance(c, Exception):
+                logger.error(f"[TASK] _collect raised: {c}")
+        ordered_items = sorted(
+            non_exception_items,
+            key=lambda it: 1 if it[0] == "user_reply" else 0,
+        )
         consecutive_failures = 0
-        for item in collected:
-            if isinstance(item, Exception):
-                logger.error(f"[TASK] _collect raised: {item}")
-                continue
+        for item in ordered_items:
             kind = item[0]
             email = item[1]
             email_id = email.get("id", "")
