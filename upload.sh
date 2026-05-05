@@ -29,7 +29,19 @@ get_latest_tag() {
   # `head -1` is fine here: this is a SORTED stream from git, not a
   # truncated search result. The "fetch them all" rule applies to
   # query/list capping, not to "give me the maximum element".
-  git tag --sort=-v:refname --list 'v[0-9]*' | head -1 || true
+  #
+  # `grep -vE -- '-'` excludes the companion suffixes (e.g. `v0.1.26-intel`,
+  # `v0.1.26-rc1`). They sort HIGHER than the plain release tag in
+  # `-v:refname` ordering, so without this filter `LATEST_TAG` ends up
+  # `v0.1.26-intel`, then `${LATEST_TAG##*.}` is the literal string
+  # `26-intel`, then `$((PATCH + 1))` tries to evaluate it as bash
+  # arithmetic — `intel` is read as a variable name and `set -u`
+  # raises "intel: unbound variable" before the script can recover.
+  # We only ever want to bump from the canonical `vX.Y.Z` tag.
+  git tag --sort=-v:refname --list 'v[0-9]*' \
+    | grep -vE -- '-' \
+    | head -1 \
+    || true
 }
 
 bump_app_version() {
