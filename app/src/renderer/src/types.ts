@@ -133,17 +133,24 @@ export interface ZylchAPI {
     selectDirectories: () => Promise<string[]>
   }
   profile: {
-    current: () => Promise<string>
+    /** Resolves to the profile this window's sidecar is bound to.
+     *  `id` is the on-disk directory name (Firebase UID for new
+     *  profiles, email for legacy ones — stable, safe as a key);
+     *  `email` is the display label from the profile's `.env`,
+     *  null when the file is missing or unreadable. */
+    current: () => Promise<{ id: string; email: string | null }>
   }
   profiles: {
-    list: () => Promise<string[]>
+    /** Each entry is `{id, email}`. Render the email; key by id. */
+    list: () => Promise<Array<{ id: string; email: string | null }>>
     create: (
       email: string,
       values: Record<string, string>
     ) => Promise<{ ok: boolean; profile: string }>
   }
   window: {
-    openForProfile: (email: string) => Promise<{ ok: boolean }>
+    /** `id` is the on-disk profile directory name (UID or legacy email). */
+    openForProfile: (id: string) => Promise<{ ok: boolean }>
   }
   narration: {
     summarize: (lines: string[], context?: string) => Promise<{ text: string }>

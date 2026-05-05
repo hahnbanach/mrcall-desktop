@@ -58,6 +58,12 @@ freshest source). Facts migrate here as they get touched.
 - Optional timeout per method — pin/reanalyze/listByThread have explicit longer timeouts; `google.calendar.connect` gets 5.5 min for the user to consent; `signin:googleStart` allows up to 5 min for browser consent.
 - Renderer-side namespace organisation: `tasks`, `chat`, `update`, `emails`, `files`, `profile`, `profiles`, `window`, `narration`, `settings`, `sidecar`, `account`, `mrcall`, `google.calendar`, `shell`, `signin`, `auth`, `onboarding`.
 
+### Profile picker — emails instead of raw UIDs (this session)
+- After the UID-keyed profile binding (`bc011be`), every "+ New Window for Profile" picker, the sidebar `ProfilesDropdown`, the window title, and the `IdentityBanner` derived label all rendered the directory name — which for fresh post-Firebase profiles is the Firebase UID (long hex string), not an email. Confirmed visually on the Mac clone today.
+- Fix: `profile:current` and `profiles:list` IPC return shape changed from `string` / `string[]` to `{id: string; email: string | null}` / array thereof. Email is parsed from each profile's `.env` (`EMAIL_ADDRESS=…`) by a tiny dotenv reader added to `main/profileFS.ts:readProfileEnvValue` (mirror of the existing `dotenvQuote` writer — handles single-quote shlex style, double-quote escapes, and bare values). `listProfilesWithEmail()` wraps the directory enumeration. Renderer call sites (`App.tsx` mount, `ProfilePickerDialog`, `ProfilesDropdown`, `store/conversations.ts`) now display the email and key state by id; the dir id stays the lookup key for `window.openForProfile(id)` and the localStorage bucket so neither breaks when EMAIL_ADDRESS changes.
+- Fallback: when `.env` is missing or unreadable, the picker falls back to the dir id as the label (same as the old behaviour) and `email` is null. A tooltip shows `Profile dir: <id>` whenever email is present so the UID is still discoverable.
+- Live test: typecheck clean; node smoke script verified the .env reader against 4 fixtures (UID+plain email, UID+shlex-quoted email, legacy email-as-dir, missing .env). The actual Mac picker behaviour is the next click — not exercised from this machine.
+
 ### Sidecar lifecycle (main)
 - Sidecar binary path resolves from `ZYLCH_BINARY` env or default `~/private/zylch-standalone/venv/bin/zylch` (dev). Packaged builds use the bundled `app/bin/zylch`.
 - `cwd` defaults to `homedir()` (`f1969bb5`) so signed/notarized builds don't reach into a dev path.

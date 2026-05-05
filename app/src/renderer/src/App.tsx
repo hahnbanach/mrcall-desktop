@@ -135,6 +135,11 @@ function SidecarStatusBanner(): JSX.Element | null {
 // locked by another session, the new window's sidecar will error out and
 // rpc:calls there will fail with a clear message — this dialog does not
 // pre-check lock state.
+interface ProfileEntry {
+  id: string
+  email: string | null
+}
+
 function ProfilePickerDialog({
   open,
   onClose
@@ -142,7 +147,7 @@ function ProfilePickerDialog({
   open: boolean
   onClose: () => void
 }): JSX.Element | null {
-  const [profiles, setProfiles] = useState<string[]>([])
+  const [profiles, setProfiles] = useState<ProfileEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -175,11 +180,12 @@ function ProfilePickerDialog({
 
   if (!open) return null
 
-  const choose = async (email: string): Promise<void> => {
+  const choose = async (entry: ProfileEntry): Promise<void> => {
+    const label = entry.email || entry.id
     try {
-      const r = await window.zylch.window.openForProfile(email)
+      const r = await window.zylch.window.openForProfile(entry.id)
       if (!r.ok) {
-        setError(`Failed to open window for ${email}`)
+        setError(`Failed to open window for ${label}`)
         return
       }
       onClose()
@@ -219,19 +225,24 @@ function ProfilePickerDialog({
           </div>
         )}
         <ul className="flex flex-col gap-1">
-          {profiles.map((email) => {
-            const c = profileColor(email)
+          {profiles.map((entry) => {
+            // Colour stable on `id`; label preferred from email, fall
+            // back to the raw dir name only when EMAIL_ADDRESS is
+            // missing from the profile .env.
+            const c = profileColor(entry.id)
+            const label = entry.email || entry.id
             return (
-              <li key={email}>
+              <li key={entry.id}>
                 <button
-                  onClick={() => choose(email)}
+                  onClick={() => choose(entry)}
                   className="w-full text-left px-3 py-2 rounded border border-brand-mid-grey hover:bg-brand-light-grey flex items-center gap-2"
+                  title={entry.email ? `Profile dir: ${entry.id}` : undefined}
                 >
                   <span
                     className="inline-block w-3 h-3 rounded-full"
                     style={{ backgroundColor: c.css }}
                   />
-                  <span className="font-mono text-sm">{email}</span>
+                  <span className="font-mono text-sm truncate">{label}</span>
                 </button>
               </li>
             )
@@ -257,11 +268,14 @@ function ProfilesDropdown({
   currentEmail,
   refreshKey
 }: {
+  /** The current window's profile label as already displayed in the
+   *  Sidebar — email when available, dir id as fallback. Used here
+   *  only to mark the "current" row, not as a key. */
   currentEmail: string
   refreshKey: number
 }): JSX.Element {
   const [open, setOpen] = useState(false)
-  const [profiles, setProfiles] = useState<string[]>([])
+  const [profiles, setProfiles] = useState<ProfileEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -313,12 +327,13 @@ function ProfilesDropdown({
     }
   }, [open])
 
-  const choose = async (email: string): Promise<void> => {
-    if (email === currentEmail) return
+  const choose = async (entry: ProfileEntry): Promise<void> => {
+    const label = entry.email || entry.id
+    if (label === currentEmail) return
     try {
-      const r = await window.zylch.window.openForProfile(email)
+      const r = await window.zylch.window.openForProfile(entry.id)
       if (!r.ok) {
-        setError(`Failed to open window for ${email}`)
+        setError(`Failed to open window for ${label}`)
         return
       }
       setOpen(false)
@@ -359,14 +374,15 @@ function ProfilesDropdown({
               No profiles found. Run <code>zylch init</code> first.
             </div>
           )}
-          {profiles.map((email) => {
-            const c = profileColor(email)
-            const isCurrent = email === currentEmail
+          {profiles.map((entry) => {
+            const c = profileColor(entry.id)
+            const label = entry.email || entry.id
+            const isCurrent = label === currentEmail
             return (
               <button
-                key={email}
+                key={entry.id}
                 role="menuitem"
-                onClick={() => choose(email)}
+                onClick={() => choose(entry)}
                 disabled={isCurrent}
                 className={
                   'w-full text-left px-3 py-2 text-xs flex items-center gap-2 ' +
@@ -374,12 +390,13 @@ function ProfilesDropdown({
                     ? 'text-brand-mid-grey cursor-default'
                     : 'text-brand-grey-80 hover:bg-brand-light-grey')
                 }
+                title={entry.email ? `Profile dir: ${entry.id}` : undefined}
               >
                 <span
                   className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
                   style={{ backgroundColor: c.css }}
                 />
-                <span className="font-mono truncate">{email}</span>
+                <span className="font-mono truncate">{label}</span>
                 {isCurrent && (
                   <span className="ml-auto text-[10px] uppercase tracking-wide">
                     current
@@ -416,15 +433,25 @@ function AppInner(): JSX.Element {
     let cancelled = false
     window.zylch.profile
       .current()
-      .then((email) => {
+      .then((p) => {
         if (cancelled) return
-        const safe = email || ''
-        setProfileEmail(safe)
-        const c = profileColor(safe)
+        // Display fallback chain: profile .env email → Firebase user
+        // email → dir id. The Firebase fallback covers older UID-keyed
+        // profiles whose .env was written before EMAIL_ADDRESS became
+        // mandatory (those exist on the test Mac clone): the renderer
+        // has the email in hand from `auth.currentUser` regardless,
+        // so the user never sees a raw UID in the sidebar.
+        // The accent colour is keyed by id so it stays stable across
+        // email changes.
+        const firebaseEmail = (auth.currentUser?.email || '').trim()
+        const display = (p?.email || firebaseEmail || p?.id || '').trim()
+        const accentKey = (p?.id || '').trim()
+        setProfileEmail(display)
+        const c = profileColor(accentKey || display)
         const root = document.documentElement
         root.style.setProperty('--profile-accent', c.css)
         root.style.setProperty('--profile-accent-soft', c.cssBg)
-        document.title = safe ? `MrCall Desktop - ${safe}` : 'MrCall Desktop'
+        document.title = display ? `MrCall Desktop - ${display}` : 'MrCall Desktop'
       })
       .catch((e) => console.error('[App] profile.current failed', e))
     return () => {

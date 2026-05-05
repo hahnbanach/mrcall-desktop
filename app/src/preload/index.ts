@@ -202,16 +202,31 @@ const api = {
       ipcRenderer.invoke('dialog:selectDirectories') as Promise<string[]>
   },
   profile: {
-    current: (): Promise<string> => ipcRenderer.invoke('profile:current') as Promise<string>
+    // Returns `{id, email}` for the profile this window's sidecar is
+    // bound to. `id` is the on-disk directory name (Firebase UID for new
+    // profiles, email for legacy ones — stable across email changes,
+    // safe as a localStorage key); `email` is the human-friendly
+    // display label read from the profile's `.env`.
+    current: (): Promise<{ id: string; email: string | null }> =>
+      ipcRenderer.invoke('profile:current') as Promise<{
+        id: string
+        email: string | null
+      }>
   },
   profiles: {
-    list: (): Promise<string[]> => ipcRenderer.invoke('profiles:list') as Promise<string[]>,
+    // Each entry carries `{id, email}` so renderer pickers can show the
+    // email even when the dir is named after a Firebase UID.
+    list: (): Promise<Array<{ id: string; email: string | null }>> =>
+      ipcRenderer.invoke('profiles:list') as Promise<
+        Array<{ id: string; email: string | null }>
+      >,
     create: (email: string, values: Record<string, string>) =>
       call<{ ok: boolean; profile: string }>('profiles.create', { email, values }, 30000)
   },
   window: {
-    openForProfile: (email: string): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke('window:openForProfile', email) as Promise<{ ok: boolean }>
+    // `id` is the on-disk profile directory name (UID or legacy email).
+    openForProfile: (id: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('window:openForProfile', id) as Promise<{ ok: boolean }>
   },
   narration: {
     summarize: (lines: string[], context: string = '') =>

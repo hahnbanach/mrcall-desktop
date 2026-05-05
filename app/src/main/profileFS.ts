@@ -13,7 +13,17 @@
  * + _quote sources for parity). Everything else (unknown-key rejection,
  * required provider/key/email) matches server-side.
  */
-import { existsSync, mkdirSync, writeFileSync, openSync, closeSync, fsyncSync } from 'fs'
+import {
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  openSync,
+  closeSync,
+  fsyncSync,
+  readFileSync,
+  readdirSync,
+  statSync
+} from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 
@@ -100,6 +110,101 @@ export function profileDir(email: string): string {
 
 export function profileExists(email: string): boolean {
   return existsSync(profileDir(email))
+}
+
+/**
+ * Strip dotenv-style quoting (parity with what `dotenvQuote` produces).
+ *  - `'foo'`         → `foo`     (shlex-style single quotes)
+ *  - `"foo\nbar"`    → `foo\nbar` with `\n`/`\\`/`\"` unescaped
+ *  - bare `foo`      → `foo`
+ *
+ * .env files are structured input — a small regex / state machine here is
+ * appropriate (the "no regex on prose" rule is about parsing unstructured
+ * text, not key=value config).
+ */
+function stripDotenvQuoting(raw: string): string {
+  const v = raw.trim()
+  if (v.length >= 2) {
+    if (v[0] === "'" && v[v.length - 1] === "'") {
+      // shlex.quote inverse: `'"'"'` collapses back into a single `'`.
+      return v.slice(1, -1).split(`'"'"'`).join("'")
+    }
+    if (v[0] === '"' && v[v.length - 1] === '"') {
+      const inner = v.slice(1, -1)
+      return inner
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\')
+    }
+  }
+  return v
+}
+
+/**
+ * Read a single key from a profile's `.env`. Returns null if the file
+ * doesn't exist, isn't readable, or doesn't carry the key. Used by the
+ * profile-listing IPC to surface human-friendly emails next to the
+ * UID-keyed directory names.
+ */
+export function readProfileEnvValue(id: string, key: string): string | null {
+  const envPath = join(profileDir(id), '.env')
+  let text: string
+  try {
+    text = readFileSync(envPath, 'utf-8')
+  } catch {
+    return null
+  }
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith('#')) continue
+    // Optional `export ` prefix tolerated for hand-written .envs.
+    const stripped = line.startsWith('export ') ? line.slice(7) : line
+    const eq = stripped.indexOf('=')
+    if (eq <= 0) continue
+    const k = stripped.slice(0, eq).trim()
+    if (k !== key) continue
+    return stripDotenvQuoting(stripped.slice(eq + 1))
+  }
+  return null
+}
+
+export interface ProfileSummary {
+  /** Directory name under `~/.zylch/profiles/`. Firebase UID for new
+   *  profiles, email for legacy ones. Stable across email changes —
+   *  use this as the key when opening / selecting / persisting. */
+  id: string
+  /** `EMAIL_ADDRESS` from the profile's `.env`, or null if missing /
+   *  unreadable. Display-only — never use as a lookup key. */
+  email: string | null
+}
+
+/**
+ * Enumerate every profile under `~/.zylch/profiles/` and resolve each
+ * to a `{id, email}` summary. Mirrors the listing rules used to live
+ * inline in `main/index.ts:listProfiles()`: every readable subdirectory
+ * counts, even if its `.env` is missing or unreadable (the user can
+ * recover via the Settings tab).
+ */
+export function listProfilesWithEmail(): ProfileSummary[] {
+  const dir = profilesRoot()
+  if (!existsSync(dir)) return []
+  const out: ProfileSummary[] = []
+  let names: string[]
+  try {
+    names = readdirSync(dir).sort()
+  } catch {
+    return []
+  }
+  for (const name of names) {
+    const full = join(dir, name)
+    try {
+      if (!statSync(full).isDirectory()) continue
+    } catch {
+      continue
+    }
+    out.push({ id: name, email: readProfileEnvValue(name, 'EMAIL_ADDRESS') })
+  }
+  return out
 }
 
 export interface CreateProfileResult {

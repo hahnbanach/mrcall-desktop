@@ -193,7 +193,10 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     window.zylch.profile
       .current()
       .then((p) => {
-        if (!cancelled && p) setProfileKey(p)
+        // Persist by stable id (Firebase UID for new profiles, email
+        // for legacy) so the localStorage bucket survives email
+        // changes — the user's email-as-display lives only in the UI.
+        if (!cancelled && p && p.id) setProfileKey(p.id)
       })
       .catch(() => {
         /* leave key as 'unknown' */

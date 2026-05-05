@@ -1,9 +1,16 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from 'electron'
 import { join } from 'path'
-import { readdirSync, statSync, existsSync } from 'fs'
+import { statSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import { SidecarClient } from './sidecar'
-import { createProfileFS, createProfileForFirebaseUser, profileDir } from './profileFS'
+import {
+  createProfileFS,
+  createProfileForFirebaseUser,
+  listProfilesWithEmail,
+  ProfileSummary,
+  profileDir,
+  readProfileEnvValue
+} from './profileFS'
 import { cancelGoogleSignin, startGoogleSignin } from './googleSignin'
 import { GOOGLE_SIGNIN_CLIENT_ID, GOOGLE_SIGNIN_CLIENT_SECRET } from './oauthConfig'
 
@@ -90,34 +97,24 @@ interface WindowEntry {
 }
 const windowEntries = new Map<number, WindowEntry>()
 
-function listProfiles(): string[] {
-  // Enumerate every subdirectory of ~/.zylch/profiles. We deliberately do
-  // NOT require a `.env` file: profiles created via `zylch init` always
-  // have one, but the Settings tab can also write one back, so a missing
-  // .env is recoverable. Filtering it out here would silently hide the
-  // profile and confuse the user (Bug 1: the picker showed only one
-  // entry because — under some FS / permission scenarios — statSync on
-  // the .env raised and the catch swallowed the entry).
-  const dir = join(homedir(), '.zylch', 'profiles')
-  if (!existsSync(dir)) return []
+function listProfiles(): ProfileSummary[] {
+  // Enumerate every subdirectory of ~/.zylch/profiles and resolve each to
+  // a `{id, email}` summary. The id is the on-disk directory name (UID
+  // for Firebase-keyed profiles, email for legacy ones); the email is
+  // read from the profile's `.env` so the UI can show a human-friendly
+  // label even when the directory itself is named after a UID. A
+  // missing / unreadable .env yields email=null but the profile is
+  // still listed (Bug 1: the picker used to swallow such entries).
   try {
-    const names = readdirSync(dir).sort()
-    const out: string[] = []
-    for (const name of names) {
-      const profileDir = join(dir, name)
-      try {
-        if (statSync(profileDir).isDirectory()) {
-          out.push(name)
-        }
-      } catch {
-        // skip non-dirs / unreadable entries
-      }
-    }
-    return out
+    return listProfilesWithEmail()
   } catch (e) {
     console.error('[main] listProfiles failed', e)
     return []
   }
+}
+
+function profileExistsById(id: string): boolean {
+  return listProfiles().some((p) => p.id === id)
 }
 
 function spawnSidecar(profile: string, window: BrowserWindow): SidecarClient {
@@ -410,14 +407,28 @@ function registerIpc(): void {
     }
   })
 
-  // Returns the profile this window's sidecar was spawned with.
-  ipcMain.handle('profile:current', async (event): Promise<string> => {
-    const entry = entryFromEvent(event)
-    return entry?.profile ?? ''
-  })
+  // Returns the profile this window's sidecar was spawned with as
+  // `{id, email}`. `id` is the on-disk directory name (Firebase UID for
+  // new profiles, email for legacy ones — stable across email changes);
+  // `email` is read from the profile's `.env` so the UI never has to
+  // surface a raw UID.
+  ipcMain.handle(
+    'profile:current',
+    async (event): Promise<ProfileSummary> => {
+      const entry = entryFromEvent(event)
+      const id = entry?.profile ?? ''
+      if (!id) return { id: '', email: null }
+      return { id, email: readProfileEnvValue(id, 'EMAIL_ADDRESS') }
+    }
+  )
 
-  // Enumerate profiles by reading ~/.zylch/profiles/.
-  ipcMain.handle('profiles:list', async (): Promise<string[]> => listProfiles())
+  // Enumerate profiles by reading ~/.zylch/profiles/. Each entry carries
+  // `{id, email}` so the picker can render a friendly label without
+  // every renderer reinventing .env parsing.
+  ipcMain.handle(
+    'profiles:list',
+    async (): Promise<ProfileSummary[]> => listProfiles()
+  )
 
   // Open a new BrowserWindow bound to a profile. If the profile is already
   // in use by another sidecar (CLI or another window), the new sidecar
@@ -426,7 +437,7 @@ function registerIpc(): void {
   // the lock file is authoritative on the Python side.
   ipcMain.handle('window:openForProfile', async (_event, profile: string): Promise<{ ok: boolean }> => {
     if (typeof profile !== 'string' || !profile) return { ok: false }
-    if (!listProfiles().includes(profile)) {
+    if (!profileExistsById(profile)) {
       console.warn(`[main] window:openForProfile unknown profile=${profile}`)
       return { ok: false }
     }
@@ -715,7 +726,7 @@ function bootFirstWindow(): void {
   // tests, scripted automation). The profile dir must exist; if it
   // doesn't we fall through to the auth-pending path so the user can
   // recover via signin / onboarding.
-  if (DEFAULT_PROFILE && listProfiles().includes(DEFAULT_PROFILE)) {
+  if (DEFAULT_PROFILE && profileExistsById(DEFAULT_PROFILE)) {
     console.log(`[main] ZYLCH_PROFILE=${DEFAULT_PROFILE} → legacy profile-bound window`)
     createWindowForProfile(DEFAULT_PROFILE)
     return

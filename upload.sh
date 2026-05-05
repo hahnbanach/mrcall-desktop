@@ -25,6 +25,13 @@ confirm() {
   [[ -z "$answer" || "$answer" =~ ^[Yy]$ ]]
 }
 
+confirm_no() {
+  # Like confirm but defaults to NO on a bare Enter — for prompts where
+  # the safer / less surprising path is "skip".
+  read -rp "$1 [yN] " answer
+  [[ "$answer" =~ ^[Yy]$ ]]
+}
+
 get_latest_tag() {
   # `head -1` is fine here: this is a SORTED stream from git, not a
   # truncated search result. The "fetch them all" rule applies to
@@ -194,7 +201,7 @@ fi
 # Windows x64). A separate tag `v*-intel` opts into the paid
 # macos-13-large runner for an Intel x64 .dmg. Off by default; ask.
 INTEL_TAG="${NEW_TAG}-intel"
-if confirm "Also push companion tag $INTEL_TAG (paid Intel macOS runner)?"; then
+if confirm_no "Also push companion tag $INTEL_TAG (paid Intel macOS runner)?"; then
   git tag -a "$INTEL_TAG" -m "$INTEL_TAG — $TAG_MSG (Intel x64 opt-in)"
   git push origin "$INTEL_TAG"
   echo "Pushed $INTEL_TAG."
