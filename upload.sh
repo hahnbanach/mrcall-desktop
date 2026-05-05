@@ -113,10 +113,15 @@ if ! git diff --quiet || ! git diff --cached --quiet || [[ -n "$(git ls-files --
     echo "Skipped commit."
   fi
 else
-  # Working tree is clean. The user-supplied $MSG would be unused for
-  # a commit, but we still feed it into the tag annotation below — so
-  # call that out explicitly so the message doesn't feel "lost".
-  echo "No working-tree changes to commit. Message will be used as the tag annotation."
+  # Working tree is clean. This is the normal case when the user
+  # crafted commits by hand before running the release script. The
+  # alarming-looking "No working-tree changes to commit" wording
+  # used to live here, but it reads like an error to the eye even
+  # though it just means "you're already up-to-date locally" —
+  # phrase positively so the user doesn't bail out thinking the
+  # script didn't pick up their commits.
+  echo "Working tree clean — proceeding with version bump + tag + push."
+  echo "Your message will be used as the tag annotation."
 fi
 
 # --- Compute next tag --------------------------------------------
