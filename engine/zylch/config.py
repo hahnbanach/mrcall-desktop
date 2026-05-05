@@ -198,24 +198,43 @@ class Settings(BaseSettings):
     # Google Calendar OAuth (optional channel — desktop only)
     # Populate via Google Cloud Console: create an OAuth 2.0 client ID
     # of type "Desktop app" (or "Web application" with the loopback
-    # http://127.0.0.1:19275/oauth2/google/callback redirect URI). The
-    # client_secret is intentionally NOT used: the desktop binary can't
-    # keep it confidential and Google's PKCE flow doesn't require it.
+    # http://127.0.0.1:19275/oauth2/google/callback redirect URI).
+    # client_secret: empirically REQUIRED for "Desktop app" type clients
+    # even on PKCE — Google's token endpoint returns 400 without it.
+    # "Web application" type with the loopback redirect URI does not
+    # require a secret. Leave the secret empty for the Web case.
     google_calendar_client_id: str = Field(
         default="",
         env="GOOGLE_CALENDAR_CLIENT_ID",
         description="Google OAuth 2.0 client ID for the Calendar integration",
     )
-    # Build-time fallback. The Electron main process injects the same
+    google_calendar_client_secret: str = Field(
+        default="",
+        env="GOOGLE_CALENDAR_CLIENT_SECRET",
+        description=(
+            "Google OAuth 2.0 client secret for the Calendar integration."
+            " Required for 'Desktop app' type clients; leave empty for"
+            " 'Web application' type with loopback redirect."
+        ),
+    )
+    # Build-time fallbacks. The Electron main process injects the same
     # Desktop OAuth client used by "Continue with Google" so packaged
     # installs can connect Calendar without manual configuration. The
-    # explicit GOOGLE_CALENDAR_CLIENT_ID above wins when set.
+    # explicit GOOGLE_CALENDAR_CLIENT_ID/SECRET above win when set.
     google_calendar_client_id_default: str = Field(
         default="",
         env="GOOGLE_CALENDAR_CLIENT_ID_DEFAULT",
         description=(
             "Build-time default Google Calendar Client ID, populated by"
             " the Electron main process from the signin OAuth client."
+        ),
+    )
+    google_calendar_client_secret_default: str = Field(
+        default="",
+        env="GOOGLE_CALENDAR_CLIENT_SECRET_DEFAULT",
+        description=(
+            "Build-time default Google Calendar Client Secret, populated"
+            " by the Electron main process from the signin OAuth client."
         ),
     )
 

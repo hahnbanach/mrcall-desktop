@@ -132,6 +132,15 @@ function spawnSidecar(profile: string, window: BrowserWindow): SidecarClient {
   if (GOOGLE_SIGNIN_CLIENT_ID) {
     envOverrides['GOOGLE_CALENDAR_CLIENT_ID_DEFAULT'] = GOOGLE_SIGNIN_CLIENT_ID
   }
+  // Google's token endpoint enforces client_secret for "Desktop app"
+  // type OAuth clients even on PKCE — without it the Calendar token
+  // exchange returns 400. The signin OAuth client is Desktop type, so
+  // we inject the same secret as a default for the engine's Calendar
+  // flow. The profile's GOOGLE_CALENDAR_CLIENT_SECRET wins via pydantic
+  // when set (e.g. for users who configure a different OAuth client).
+  if (GOOGLE_SIGNIN_CLIENT_SECRET) {
+    envOverrides['GOOGLE_CALENDAR_CLIENT_SECRET_DEFAULT'] = GOOGLE_SIGNIN_CLIENT_SECRET
+  }
   const sidecar = new SidecarClient({
     // Packaged builds don't need a specific cwd: the PyInstaller
     // binary is self-contained. In dev we keep the repo root so

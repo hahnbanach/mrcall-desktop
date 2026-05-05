@@ -7,7 +7,13 @@ Google Calendar. Tokens are scoped to the active Firebase UID and
 stored in the existing OAuthToken table with provider='google_calendar'.
 
 PKCE is required: Google enforces it for installed-app / public OAuth
-clients, and the desktop binary can't keep a client_secret confidential.
+clients, and the desktop binary can't keep a client_secret confidential
+in the cryptographic sense. NOTE however that Google's token endpoint
+does empirically REQUIRE a client_secret on the wire for OAuth clients
+of type "Desktop app" — PKCE alone is not sufficient and the exchange
+returns 400 without the secret. "Web application" type clients with a
+loopback redirect URI do not require a secret. The flow accepts both
+modes via the optional client_secret parameter.
 
 Listening port: 19275 (different from the legacy MrCall PKCE flow on
 :19274 — they may both be active during development without colliding).
@@ -163,8 +169,9 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 class _OAuthFlow:
     """One in-flight Google Calendar OAuth attempt."""
 
-    def __init__(self, client_id: str) -> None:
+    def __init__(self, client_id: str, client_secret: str = "") -> None:
         self.client_id = client_id
+        self.client_secret = client_secret
         self.code_verifier, self.code_challenge = _generate_pkce()
         self.state = secrets.token_urlsafe(24)
         self._future: Optional[asyncio.Future[Dict[str, Any]]] = None
@@ -219,19 +226,23 @@ class _OAuthFlow:
         _CallbackHandler._expected_state = None
 
     async def exchange_code(self, code: str) -> Dict[str, Any]:
+        data = {
+            "code": code,
+            "client_id": self.client_id,
+            "redirect_uri": REDIRECT_URI,
+            "grant_type": "authorization_code",
+            "code_verifier": self.code_verifier,
+        }
+        # Google's token endpoint enforces client_secret for OAuth
+        # clients of type "Desktop app" even on PKCE — without it the
+        # exchange returns "400 client_secret is missing". "Web
+        # application" type clients with the loopback redirect work
+        # without a secret; we send it only when configured so both
+        # client types are supported with one flow.
+        if self.client_secret:
+            data["client_secret"] = self.client_secret
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                GOOGLE_TOKEN_URL,
-                data={
-                    "code": code,
-                    "client_id": self.client_id,
-                    # Google explicitly does NOT require client_secret
-                    # for native/desktop installed-app PKCE flows.
-                    "redirect_uri": REDIRECT_URI,
-                    "grant_type": "authorization_code",
-                    "code_verifier": self.code_verifier,
-                },
-            )
+            resp = await client.post(GOOGLE_TOKEN_URL, data=data)
             resp.raise_for_status()
             return resp.json()
 
@@ -269,6 +280,21 @@ def get_google_client_id() -> Optional[str]:
     return default_cid or None
 
 
+def get_google_client_secret() -> str:
+    """Pull the OAuth client secret from settings (env / .env).
+
+    Mirrors get_google_client_id: explicit GOOGLE_CALENDAR_CLIENT_SECRET
+    wins, build-time GOOGLE_CALENDAR_CLIENT_SECRET_DEFAULT is the
+    fallback. Returns "" when neither is set, which is correct for
+    "Web application" type OAuth clients (no secret on PKCE) — the
+    exchange will simply omit client_secret from the wire payload.
+    """
+    sec = (settings.google_calendar_client_secret or "").strip()
+    if sec:
+        return sec
+    return (settings.google_calendar_client_secret_default or "").strip()
+
+
 async def run_calendar_oauth_flow(*, owner_id: str) -> Dict[str, Any]:
     """Run the full Calendar OAuth flow and persist the tokens.
 
@@ -290,6 +316,11 @@ async def run_calendar_oauth_flow(*, owner_id: str) -> Dict[str, Any]:
             "GOOGLE_CALENDAR_CLIENT_ID is not configured. "
             "Set it in Settings or in your profile .env."
         )
+    client_secret = get_google_client_secret()
+    logger.debug(
+        f"[google-cal-oauth] using client_id={client_id[:12]}... "
+        f"secret={'present' if client_secret else 'absent'}"
+    )
 
     global _active_flow
     with _active_lock:
@@ -299,7 +330,7 @@ async def run_calendar_oauth_flow(*, owner_id: str) -> Dict[str, Any]:
                 _active_flow.stop()
             except Exception:
                 pass
-        flow = _OAuthFlow(client_id=client_id)
+        flow = _OAuthFlow(client_id=client_id, client_secret=client_secret)
         _active_flow = flow
 
     loop = asyncio.get_event_loop()

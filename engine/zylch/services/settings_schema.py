@@ -157,10 +157,23 @@ SETTINGS_SCHEMA: List[SettingsField] = [
             "Leave empty to reuse the same Desktop OAuth client as "
             "'Continue with Google' sign-in (the default in packaged "
             "builds). Override only if you want Calendar consent to go "
-            "to a different OAuth client — type 'Desktop app' or 'Web "
-            "application' with redirect "
-            "http://127.0.0.1:19275/oauth2/google/callback. No client "
-            "secret is needed — the flow uses PKCE."
+            "to a different OAuth client — type 'Desktop app' (also "
+            "set GOOGLE_CALENDAR_CLIENT_SECRET) or 'Web application' "
+            "with redirect http://127.0.0.1:19275/oauth2/google/callback "
+            "(no secret needed)."
+        ),
+    },
+    {
+        "key": "GOOGLE_CALENDAR_CLIENT_SECRET",
+        "label": "Google Calendar OAuth client secret (override)",
+        "type": "password",
+        "group": "Google",
+        "optional": True,
+        "help": (
+            "Required only when GOOGLE_CALENDAR_CLIENT_ID points at a "
+            "'Desktop app' type OAuth client — Google's token endpoint "
+            "rejects PKCE-only exchanges for that type. Leave empty for "
+            "'Web application' type clients."
         ),
     },
     # ─── Personal data ──────────────────────────────────────
