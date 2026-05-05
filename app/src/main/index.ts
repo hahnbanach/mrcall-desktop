@@ -121,13 +121,25 @@ function listProfiles(): string[] {
 }
 
 function spawnSidecar(profile: string, window: BrowserWindow): SidecarClient {
+  // Reuse the "Continue with Google" Desktop OAuth client as the
+  // default Calendar client ID. Same Cloud project (`talkmeapp-e696c`),
+  // same Desktop type — Google accepts any 127.0.0.1 loopback redirect
+  // for installed-app clients, so the existing client ID works for the
+  // engine's :19275 Calendar flow without a separate Cloud Console
+  // entry. The profile's own GOOGLE_CALENDAR_CLIENT_ID still wins via
+  // pydantic when set; this only provides a fallback.
+  const envOverrides: Record<string, string> = {}
+  if (GOOGLE_SIGNIN_CLIENT_ID) {
+    envOverrides['GOOGLE_CALENDAR_CLIENT_ID_DEFAULT'] = GOOGLE_SIGNIN_CLIENT_ID
+  }
   const sidecar = new SidecarClient({
     // Packaged builds don't need a specific cwd: the PyInstaller
     // binary is self-contained. In dev we keep the repo root so
     // relative imports still resolve if anything ever regresses.
     cwd: app.isPackaged ? process.resourcesPath : ZYLCH_CWD,
     binary: ZYLCH_BINARY,
-    profile
+    profile,
+    envOverrides
   })
   sidecar.on('notification', (msg) => {
     console.log(`[main][w${window.id}] notification method=${msg.method}`)

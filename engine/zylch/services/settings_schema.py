@@ -149,15 +149,18 @@ SETTINGS_SCHEMA: List[SettingsField] = [
     # ─── Google ─────────────────────────────────────────────
     {
         "key": "GOOGLE_CALENDAR_CLIENT_ID",
-        "label": "Google Calendar OAuth client ID",
+        "label": "Google Calendar OAuth client ID (override)",
         "type": "text",
         "group": "Google",
         "optional": True,
         "help": (
-            "OAuth 2.0 client ID for the Calendar integration. Create one in "
-            "Google Cloud Console (type 'Desktop app' or 'Web application' "
-            "with redirect http://127.0.0.1:19275/oauth2/google/callback). "
-            "No client secret is needed — the desktop flow uses PKCE."
+            "Leave empty to reuse the same Desktop OAuth client as "
+            "'Continue with Google' sign-in (the default in packaged "
+            "builds). Override only if you want Calendar consent to go "
+            "to a different OAuth client — type 'Desktop app' or 'Web "
+            "application' with redirect "
+            "http://127.0.0.1:19275/oauth2/google/callback. No client "
+            "secret is needed — the flow uses PKCE."
         ),
     },
     # ─── Personal data ──────────────────────────────────────

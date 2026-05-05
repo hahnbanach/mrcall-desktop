@@ -256,11 +256,17 @@ def get_google_client_id() -> Optional[str]:
     """Pull the OAuth client ID from settings (env / .env).
 
     Read on every call so a Settings update takes effect without a
-    sidecar restart. Returns None if unset; callers must surface a
-    clear "configure GOOGLE_CALENDAR_CLIENT_ID first" error.
+    sidecar restart. Falls back to the build-time default the Electron
+    main process injects via GOOGLE_CALENDAR_CLIENT_ID_DEFAULT (the
+    same Desktop OAuth client used for "Continue with Google" sign-in)
+    so packaged installs can connect Calendar without any manual
+    configuration. Returns None if both are unset.
     """
     cid = (settings.google_calendar_client_id or "").strip()
-    return cid or None
+    if cid:
+        return cid
+    default_cid = (settings.google_calendar_client_id_default or "").strip()
+    return default_cid or None
 
 
 async def run_calendar_oauth_flow(*, owner_id: str) -> Dict[str, Any]:

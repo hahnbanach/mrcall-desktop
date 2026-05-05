@@ -12,6 +12,14 @@ export interface SidecarOptions {
   cwd: string
   binary: string
   profile: string
+  // Extra env vars merged on top of process.env when spawning the
+  // child. Used to pass build-time defaults the engine config picks up
+  // (e.g. GOOGLE_CALENDAR_CLIENT_ID_DEFAULT from the signin OAuth
+  // client) without baking them into every profile's .env. The
+  // profile's own .env still wins for the corresponding *non-default*
+  // setting (e.g. GOOGLE_CALENDAR_CLIENT_ID) because pydantic resolves
+  // it in the engine.
+  envOverrides?: Record<string, string>
 }
 
 /**
@@ -116,7 +124,7 @@ export class SidecarClient extends EventEmitter {
     console.log(`[sidecar] spawn ${this.opts.binary} ${args.join(' ')} cwd=${this.opts.cwd}`)
     this.proc = spawn(this.opts.binary, args, {
       cwd: this.opts.cwd,
-      env: { ...process.env },
+      env: { ...process.env, ...(this.opts.envOverrides ?? {}) },
       stdio: ['pipe', 'pipe', 'pipe']
     })
 

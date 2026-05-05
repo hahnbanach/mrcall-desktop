@@ -206,6 +206,18 @@ class Settings(BaseSettings):
         env="GOOGLE_CALENDAR_CLIENT_ID",
         description="Google OAuth 2.0 client ID for the Calendar integration",
     )
+    # Build-time fallback. The Electron main process injects the same
+    # Desktop OAuth client used by "Continue with Google" so packaged
+    # installs can connect Calendar without manual configuration. The
+    # explicit GOOGLE_CALENDAR_CLIENT_ID above wins when set.
+    google_calendar_client_id_default: str = Field(
+        default="",
+        env="GOOGLE_CALENDAR_CLIENT_ID_DEFAULT",
+        description=(
+            "Build-time default Google Calendar Client ID, populated by"
+            " the Electron main process from the signin OAuth client."
+        ),
+    )
 
     # Telegram bot (optional interface)
     telegram_bot_token: str = Field(
