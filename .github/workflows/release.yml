@@ -189,11 +189,16 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        # `-- --${matrix.arch}` constrains electron-builder to the
-        # matrix arch. Without it, `mac.target.arch: ["arm64", "x64"]`
-        # in package.json makes electron-builder produce both dmgs
-        # from a single runner — and the x64 dmg ends up with whatever
-        # sidecar that runner built (e.g. an arm64 binary on macos-14).
+        # `-- --${matrix.arch}` is the sole source of truth for which
+        # arch electron-builder builds. `package.json`'s `mac.target` /
+        # `win.target` deliberately do NOT carry an `arch` list — when
+        # they do, electron-builder treats the CLI flag as additive
+        # (the config-declared archs always run too), which made the
+        # default `v*` runner on macos-14 build BOTH arm64 and x64
+        # dmgs. The x64 dmg then carried an arm64 sidecar (silent
+        # corruption) and the run failed at the second electron
+        # download whenever GitHub's DNS hiccuped. v0.1.27 is the
+        # incident this comment exists for.
         run: npm run dist:${{ matrix.platform }} -- --${{ matrix.arch }}
 
       - name: List installer output

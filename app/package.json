@@ -67,11 +67,7 @@
       "icon": "build/icon.png",
       "target": [
         {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
+          "target": "dmg"
         }
       ],
       "category": "public.app-category.productivity",
@@ -85,10 +81,7 @@
       "icon": "build/icon.png",
       "target": [
         {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "target": "nsis"
         }
       ]
     },
