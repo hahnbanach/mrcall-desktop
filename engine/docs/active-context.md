@@ -202,6 +202,25 @@ Live calibration on `HxiZh…` (gmail profile, 511 emails, 598 blobs):
     unrelated, so the noise costs LLM tokens but should not corrupt
     decisions — keep an eye on it.
 
+**Channel coverage of task creation today** (audit during this work):
+
+| Channel | Generates tasks? | F1-F7 wired? |
+|---------|------------------|--------------|
+| Email   | YES — full pipeline in `process_batch` | F1, F2, F5, F6 (via reanalyze), F7 |
+| Calendar| YES — separate loop after emails        | **F7 only** (added with this commit, on top of the previously bare loop with no dedup at all) |
+| MrCall conversations (raw call data) | NO — `# TODO: Process mrcall when available` at line ~812 | n/a until task path is built |
+| WhatsApp messages | NO — never processed by the task worker | n/a until task path is built |
+
+The "MrCall Notification" tasks in the wild are tasks created from
+notification *emails* MrCall sends after a call completes — they go
+through the email path, not a dedicated MrCall path. Same for any
+WhatsApp-driven task today: it would only exist if the WA event
+generated an email that the email pipeline picked up. Building task
+creation paths for raw MrCall conversations and WA messages is a
+separate, larger piece (memory worker already handles those channels
+for blob extraction; we'd need a parallel `process_batch`-style
+analyzer with channel-specific prompts and the same F1-F7 plumbing).
+
 What F7 does NOT do, and the proper next step:
 
   * Today the bridge from "email" to "blobs extracted from this email"

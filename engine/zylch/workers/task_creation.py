@@ -779,6 +779,67 @@ class TaskWorker:
             if attendee_emails:
                 blob_context, blob_id = self._get_blob_for_contact(attendee_emails[0])
 
+            # F7 (calendar branch, 2026-05-05): same topical-sibling
+            # widening as the email branch above. The user's product
+            # premise is "a calendar event about CNIT training should
+            # see existing CNIT tasks, regardless of which sender's
+            # email created them". Build a query from summary +
+            # description + attendees, take blobs above threshold,
+            # surface tasks linked to those blobs.
+            calendar_existing_task_context = ""
+            try:
+                cal_query_parts = [
+                    str(event.get("summary") or ""),
+                    str(event.get("description") or "")[:800],
+                    " ".join(attendee_emails) if attendee_emails else "",
+                ]
+                cal_query = " ".join(p for p in cal_query_parts if p).strip()
+                cal_blob_ids: List[str] = []
+                if cal_query:
+                    namespace = f"user:{self.owner_id}"
+                    cal_results = self.hybrid_search.search(
+                        owner_id=self.owner_id,
+                        query=cal_query,
+                        namespace=namespace,
+                        limit=20,
+                    )
+                    cal_blob_ids = [
+                        str(r.blob_id)
+                        for r in cal_results
+                        if getattr(r, "blob_id", None)
+                        and getattr(r, "hybrid_score", 0.0) >= 0.30
+                    ]
+                if blob_id and str(blob_id) not in cal_blob_ids:
+                    cal_blob_ids.insert(0, str(blob_id))
+                if cal_blob_ids:
+                    cal_related = self.storage.get_open_tasks_by_blobs(
+                        owner_id=self.owner_id, blob_ids=cal_blob_ids
+                    )[:8]
+                    if cal_related:
+                        lines = [
+                            f"EXISTING OPEN TASKS FOR THIS TOPIC "
+                            f"(via memory blobs, {len(cal_related)} candidate(s) — may be a "
+                            "different contact/thread/channel):"
+                        ]
+                        for i, t in enumerate(cal_related, 1):
+                            lines.append(
+                                f"Task #{i} (ID: {t.get('id')}):\n"
+                                f"- Action: {t.get('suggested_action', 'N/A')}\n"
+                                f"- Urgency: {t.get('urgency', 'N/A')}\n"
+                                f"- Reason: {t.get('reason', 'N/A')}"
+                            )
+                        lines.append(
+                            "If this calendar event is just another touch on a problem already "
+                            "tracked, prefer UPDATE / CLOSE on the existing task over CREATE."
+                        )
+                        calendar_existing_task_context = "\n".join(lines)
+                        logger.debug(
+                            f"[TASK] F7-calendar topical-sibling tasks={len(cal_related)} "
+                            f"event_id={event_id}"
+                        )
+            except Exception as e:
+                logger.warning(f"[TASK] F7-calendar topical lookup failed: {e}")
+
             # Prepare event data
             event_data = {
                 "id": event_id,
@@ -790,7 +851,12 @@ class TaskWorker:
                 "location": event.get("location"),
             }
 
-            result = await self._analyze_event("calendar", event_data, blob_context)
+            result = await self._analyze_event(
+                "calendar",
+                event_data,
+                blob_context,
+                existing_task_context=calendar_existing_task_context,
+            )
             analyzed_count += 1
 
             # Mark as processed regardless of result
