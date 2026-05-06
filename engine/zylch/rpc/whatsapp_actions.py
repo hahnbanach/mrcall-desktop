@@ -328,6 +328,13 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
                     sync_svc.sync_contacts(client)
                 except Exception as e:
                     logger.warning(f"[rpc:whatsapp.connect] sync_contacts: {e}")
+                # Group titles too — without this the WhatsApp tab shows
+                # the *last sender's* name as the group title (cosmetic
+                # bug surfaced 2026-05-06).
+                try:
+                    sync_svc.sync_groups(client)
+                except Exception as e:
+                    logger.warning(f"[rpc:whatsapp.connect] sync_groups: {e}")
                 return {
                     "ok": True,
                     "phone": me_holder["phone"],
@@ -497,7 +504,12 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
                 if contact is not None:
                     name = contact.name or contact.push_name
                     phone = contact.phone_number
-                if not name and last is not None and last.sender_name:
+                # For 1-on-1 chats only: when no contact name is on file,
+                # the last message's sender_name is a sensible fallback.
+                # For GROUPS this fallback is wrong (it would show the
+                # last sender's name as the group title) — leave name
+                # null so the renderer falls back to phone / JID.
+                if not name and not is_group and last is not None and last.sender_name:
                     name = last.sender_name
                 if not phone:
                     # Strip the @s.whatsapp.net / @g.us suffix.

@@ -159,6 +159,73 @@ class WhatsAppSyncService:
             count = 0
         return count
 
+    # -- Group name sync ----------------------------------------------
+
+    def sync_groups(self, wa_client) -> int:
+        """Persist joined-group names to ``whatsapp_contacts`` so the
+        renderer can show the group's actual title instead of the last
+        sender's name. Group JIDs are stored as the row key (no
+        per-person contact ever has a ``@g.us`` JID, so the namespace
+        does not collide).
+
+        Returns the number of groups upserted.
+        """
+        from zylch.storage.models import WhatsAppContact
+
+        try:
+            groups = list(wa_client.get_joined_groups() or [])
+        except Exception as e:
+            logger.warning(f"[wa-sync] get_joined_groups failed: {e}")
+            return 0
+
+        count = 0
+        try:
+            with self._db_lock, get_session() as session:
+                for g in groups:
+                    try:
+                        jid_obj = getattr(g, "JID", None)
+                        user = getattr(jid_obj, "User", "") if jid_obj else ""
+                        server = getattr(jid_obj, "Server", "") if jid_obj else ""
+                        if not user:
+                            continue
+                        jid = f"{user}@{server or 'g.us'}"
+                        gname_obj = getattr(g, "GroupName", None)
+                        name = (getattr(gname_obj, "Name", "") or "").strip()
+                        if not name:
+                            continue
+
+                        existing = (
+                            session.query(WhatsAppContact)
+                            .filter_by(owner_id=self.owner_id, jid=jid)
+                            .first()
+                        )
+                        if existing:
+                            existing.name = name
+                            existing.synced_at = datetime.now(timezone.utc)
+                        else:
+                            session.add(
+                                WhatsAppContact(
+                                    owner_id=self.owner_id,
+                                    jid=jid,
+                                    phone_number=None,
+                                    name=name,
+                                    synced_at=datetime.now(timezone.utc),
+                                )
+                            )
+                        count += 1
+                    except Exception as e:
+                        logger.warning(
+                            f"[wa-sync] group upsert error: {e}",
+                        )
+                        continue
+            logger.info(f"[wa-sync] groups synced: {count}")
+        except Exception as e:
+            logger.error(
+                f"[wa-sync] sync_groups error: {e}",
+            )
+            count = 0
+        return count
+
     # -- Full sync (contacts + wait for history) -----------------------
 
     def full_sync(self, wa_client) -> Dict[str, int]:

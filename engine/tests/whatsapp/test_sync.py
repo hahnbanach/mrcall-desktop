@@ -443,6 +443,160 @@ def test_protocol_message_returns_none(fresh_db):
     assert _stored_text(sync, owner, ev) is None
 
 
+class _FakeGroupName:
+    def __init__(self, name: str):
+        self.Name = name
+
+
+class _FakeJID:
+    def __init__(self, user: str, server: str = "g.us"):
+        self.User = user
+        self.Server = server
+
+
+class _FakeGroupInfo:
+    def __init__(self, jid_user: str, name: str):
+        self.JID = _FakeJID(jid_user)
+        self.GroupName = _FakeGroupName(name)
+
+
+class _FakeWAClient:
+    def __init__(self, groups):
+        self._groups = groups
+
+    def get_joined_groups(self):
+        return list(self._groups)
+
+
+def test_sync_groups_upserts_group_names(fresh_db):
+    """``sync_groups`` should populate ``WhatsAppContact`` rows keyed
+    by group JID with the actual group title from neonize."""
+    from zylch.storage.database import get_session
+    from zylch.storage.models import WhatsAppContact
+    from zylch.whatsapp.sync import WhatsAppSyncService
+
+    owner = "test@example.com"
+    sync = WhatsAppSyncService(storage=None, owner_id=owner)
+
+    groups = [
+        _FakeGroupInfo("120363252655016357", "AI Founders"),
+        _FakeGroupInfo("120363408928080207", "Mirko fan club"),
+        _FakeGroupInfo("999999999", ""),  # missing name → must skip
+    ]
+    fake_client = _FakeWAClient(groups)
+    n = sync.sync_groups(fake_client)
+    assert n == 2
+
+    with get_session() as session:
+        rows = (
+            session.query(WhatsAppContact)
+            .filter(WhatsAppContact.owner_id == owner)
+            .all()
+        )
+    by_jid = {r.jid: r for r in rows}
+    assert by_jid["120363252655016357@g.us"].name == "AI Founders"
+    assert by_jid["120363408928080207@g.us"].name == "Mirko fan club"
+    assert "999999999@g.us" not in by_jid
+
+
+def test_sync_groups_updates_existing(fresh_db):
+    """A second call with a renamed group must update the row in
+    place, not create a duplicate."""
+    from zylch.storage.database import get_session
+    from zylch.storage.models import WhatsAppContact
+    from zylch.whatsapp.sync import WhatsAppSyncService
+
+    owner = "test@example.com"
+    sync = WhatsAppSyncService(storage=None, owner_id=owner)
+
+    sync.sync_groups(_FakeWAClient([_FakeGroupInfo("120363252655016357", "Old name")]))
+    sync.sync_groups(_FakeWAClient([_FakeGroupInfo("120363252655016357", "New name")]))
+
+    with get_session() as session:
+        rows = (
+            session.query(WhatsAppContact)
+            .filter(WhatsAppContact.owner_id == owner)
+            .all()
+        )
+    assert len(rows) == 1
+    assert rows[0].name == "New name"
+
+
+def test_list_threads_does_not_use_sender_name_for_groups(fresh_db):
+    """The pre-fix bug: ``whatsapp.list_threads`` fell back to the
+    last message's ``sender_name`` when no ``WhatsAppContact`` row
+    matched the chat JID. For groups that meant the title was
+    ALWAYS the last sender's name, not the group's. Regression test:
+    a group with no WhatsAppContact row must NOT report sender_name
+    as the thread name."""
+    import asyncio
+    import os
+
+    from zylch.rpc.whatsapp_actions import whatsapp_list_threads
+    from zylch.whatsapp.sync import WhatsAppSyncService
+
+    owner = "test@example.com"
+    os.environ["EMAIL_ADDRESS"] = owner
+
+    sync = WhatsAppSyncService(storage=None, owner_id=owner)
+    ev = _build_message_event(
+        msg_id=uuid.uuid4().hex.upper(),
+        chat_user="120363252655016357",
+        chat_server="g.us",
+        sender_user="393281234567",
+        sender_server="s.whatsapp.net",
+        push_name="Last Sender",
+        text="last sender wrote this",
+        is_group=True,
+    )
+    assert sync._store_message_from_event(ev) is True
+
+    out = asyncio.run(
+        whatsapp_list_threads({"limit": 10, "offset": 0}, notify=lambda *a, **k: None)
+    )
+    assert len(out["threads"]) == 1
+    t = out["threads"][0]
+    assert t["is_group"] is True
+    # Critical: name MUST NOT be the sender's name.
+    assert t["name"] != "Last Sender", (
+        f"Group title should not fall back to last sender; got name={t['name']!r}"
+    )
+
+
+def test_list_threads_uses_synced_group_name(fresh_db):
+    """Once sync_groups has populated WhatsAppContact for the group
+    JID, list_threads must surface that name."""
+    import asyncio
+    import os
+
+    from zylch.rpc.whatsapp_actions import whatsapp_list_threads
+    from zylch.whatsapp.sync import WhatsAppSyncService
+
+    owner = "test@example.com"
+    os.environ["EMAIL_ADDRESS"] = owner
+
+    sync = WhatsAppSyncService(storage=None, owner_id=owner)
+    sync.sync_groups(_FakeWAClient([_FakeGroupInfo("120363252655016357", "AI Founders")]))
+
+    ev = _build_message_event(
+        msg_id=uuid.uuid4().hex.upper(),
+        chat_user="120363252655016357",
+        chat_server="g.us",
+        sender_user="393281234567",
+        sender_server="s.whatsapp.net",
+        push_name="Random member",
+        text="hi",
+        is_group=True,
+    )
+    assert sync._store_message_from_event(ev) is True
+
+    out = asyncio.run(
+        whatsapp_list_threads({"limit": 10, "offset": 0}, notify=lambda *a, **k: None)
+    )
+    assert len(out["threads"]) == 1
+    assert out["threads"][0]["name"] == "AI Founders"
+
+
 def test_list_threads_filter_accepts_real_chat_jid(fresh_db):
     """End-to-end: a populated MessageEv stored via the real sync
     service must show up in ``whatsapp.list_threads`` (the filter
