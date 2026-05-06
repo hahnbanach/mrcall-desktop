@@ -60,6 +60,29 @@ async def handle_process(
 
     store = Storage.get_instance()
 
+    # Telemetry collected across the pipeline. One structured log line
+    # at the end (Fase 4.3): if a user reports "the lookup is wrong",
+    # the line tells you exactly what `update` did this run.
+    summary_stats: dict = {
+        "sync_new": 0,
+        "wa_messages": 0,
+        "wa_contacts": 0,
+        "memory_processed": 0,
+        "tasks_pending": 0,
+        "task_msg": "",
+    }
+
+    # Snapshot the open task count BEFORE the pipeline so we can
+    # report a delta in the structured log line, even when the
+    # individual sub-counts (created/closed/dedup-closed/age-closed)
+    # don't surface as single integers from inside the workers.
+    try:
+        before_open_count = len(
+            store.get_task_items(owner_id=owner_id, action_required=True, limit=10000)
+        )
+    except Exception:
+        before_open_count = -1
+
     # Force mode: reset processing timestamps so everything is reanalyzed
     if force:
         store.reset_memory_processing_timestamps(owner_id)
@@ -71,6 +94,7 @@ async def handle_process(
     try:
         sync_result = await _run_sync(owner_id, store, days_back)
         new = sync_result.get("new_messages", 0)
+        summary_stats["sync_new"] = int(new or 0)
         total = store.get_email_stats(owner_id).get("total_emails", 0)
         console.print(f"  +{new} new emails ({total} total)")
     except Exception as e:
@@ -85,6 +109,8 @@ async def handle_process(
         if wa_result.get("skipped"):
             console.print(f"  Skipped: {wa_result.get('reason', 'not configured')}")
         else:
+            summary_stats["wa_contacts"] = int(wa_result.get("contacts", 0) or 0)
+            summary_stats["wa_messages"] = int(wa_result.get("messages", 0) or 0)
             console.print(
                 f"  {wa_result.get('contacts', 0)} contacts,"
                 f" {wa_result.get('messages', 0)} messages"
@@ -104,6 +130,7 @@ async def handle_process(
         )
         try:
             mem_count = await _run_memory(owner_id, store)
+            summary_stats["memory_processed"] = int(mem_count or 0)
             console.print(f"  {mem_count}/{pending_mem} emails" f" processed")
         except Exception as e:
             logger.error(
@@ -116,6 +143,7 @@ async def handle_process(
 
     # --- Step 3: Task detection ---
     pending_tasks = len(store.get_unprocessed_emails_for_task(owner_id))
+    summary_stats["tasks_pending"] = int(pending_tasks)
     # Bug C (2026-05-06): the previous "no tasks → reprocess 60 days"
     # auto-reset has been removed. It was a leftover from a one-time
     # migration where old code had deleted every task; in steady state
@@ -128,6 +156,7 @@ async def handle_process(
         )
         try:
             task_result = await _run_tasks(owner_id, store)
+            summary_stats["task_msg"] = str(task_result or "")
             console.print(f"  {task_result}")
         except Exception as e:
             logger.error(
@@ -149,6 +178,9 @@ async def handle_process(
         # last time" instead of being a silent no-op.
         try:
             swept = await _reanalyze_only(owner_id, store)
+            summary_stats["task_msg"] = (
+                f"sweep-only: {swept} closed/updated" if swept else "sweep-only: no change"
+            )
             if swept:
                 console.print(
                     f"  [dim]Reanalyzed {swept} stale task(s)[/dim]"
@@ -159,6 +191,38 @@ async def handle_process(
                 exc_info=True,
             )
             console.print(f"[yellow]  Reanalyze sweep failed:" f" {e}[/yellow]")
+
+    # Fase 4.3: structured telemetry log line. Shows up in
+    # sidecar.stderr for every /update so a future "the assistant
+    # didn't find X" complaint can be diagnosed against what the
+    # pipeline actually did this run.
+    try:
+        after_open_count = len(
+            store.get_task_items(owner_id=owner_id, action_required=True, limit=10000)
+        )
+    except Exception:
+        after_open_count = -1
+    delta = (
+        after_open_count - before_open_count
+        if before_open_count >= 0 and after_open_count >= 0
+        else None
+    )
+    logger.info(
+        "[update.summary] sync=%+d wa=%dmsgs/%dcontacts memory=%d/%d "
+        "tasks_pending=%d open_before=%d open_after=%d delta=%s detail=%r",
+        summary_stats["sync_new"],
+        summary_stats["wa_messages"],
+        summary_stats["wa_contacts"],
+        summary_stats["memory_processed"],
+        summary_stats["memory_processed"]
+        if summary_stats["memory_processed"] > 0
+        else 0,
+        summary_stats["tasks_pending"],
+        before_open_count,
+        after_open_count,
+        f"{delta:+d}" if delta is not None else "n/a",
+        summary_stats["task_msg"],
+    )
 
     # --- Step 4: Show tasks ---
 

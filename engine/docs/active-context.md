@@ -389,21 +389,67 @@ the only meaningful behaviour change. Documented in
 
 ## What Was Completed This Session
 
-**Task pipeline overhaul, Fase 1 — five surgical fixes on `main` (2026-05-06).**
+**Task pipeline overhaul — full plan landed on `main` (2026-05-06).**
 
-Plan: [`execution-plans/task-pipeline-overhaul.md`](execution-plans/task-pipeline-overhaul.md). Status now "Fase 1 codice committato; verifica live Mac pending".
+Plan: [`execution-plans/task-pipeline-overhaul.md`](execution-plans/task-pipeline-overhaul.md). Status now "all phases code-committed; verifica live Mac pending — single-shot review".
 
-| Commit | Bug | What |
-|--------|-----|------|
-| `3473348` | E | `_collect` calls `get_tasks_by_contact` (plural) instead of `get_task_by_contact` (`.first()`). Dedup by id with `thread_tasks`. The LLM now sees every open task on a contact — the noreply@cnit.it case (5 open tasks, model only saw 1, other 4 lived as duplicates) is structurally fixed. |
-| `4048fd7` | F | `Storage.update_task_item` always bumps `analyzed_at`. Added `add_source_calendar_event` parameter while there. `task_reanalyze.reanalyze_task` on KEEP also calls `update_task_item` with no field args (pure analyzed_at touch) so the F4 sweep doesn't re-pick the same task each cycle. |
-| `01beaad` | C | Removed the `pending_tasks==0 AND open_tasks==0 → reset_processing_timestamps_for_period(60d)` block in `process_pipeline.py`. Was a one-time migration leftover that punished the user for clearing tasks manually. `--force` remains the explicit reset. |
-| `89c9398` | D | F7 topical-sibling threshold per sender class: `0.50` for notification senders, `0.30` for humans. Drop the unconditional skip introduced 2026-05-05. Also stop force-including the contact-blob anchor for notification senders (the anchor IS the platform-template blob — force-including it brought back the 35-task explosion). |
-| `d2aca2a` | B | Calendar branch honours `task_action` (close/update/create/none) the same way the email branch does. Hoisted `cal_related` out of the F7-calendar try block, mirrored the email switch including `create→update` conversion when topical siblings exist. Without this, recurring events on a CNIT-style topic produced one duplicate task per occurrence. |
+The 7-bug chain that made the task list unusable on the gmail profile (74 open tasks, ~30 call-back duplicates, Salamone-style tasks staying open after user replies) is closed end-to-end. Code is in; the verification gate is the user clicking `Update` on Mac and reviewing the resulting list.
 
-Live verification gate (per plan): on Mac, click `Update`, watch sidecar.stderr for `[TASK] Reanalyze sweep: N of M eligible (cap=10, min_age_h=1)`, count open tasks before/after. The plan's Fase 1 exit criterion is "no nuovi duplicati arrivano in 24h di uso normale". Fase 2/3/4 not started.
+### Pipeline at a glance (post-overhaul)
 
-The previously-stale `tests/workers/test_task_worker_bugs.py` set is unchanged and unverified — the LLMClient mock at `zylch.workers.task_creation.LLMClient` was removed in the 2026-05-04 transport refactor; tests need a separate harness pass before they can verify these commits.
+Every `/update` runs, in order:
+
+1. **Email sync** (IMAP).
+2. **WhatsApp sync** (neonize).
+3. **Memory extraction** — uses the new identifier-based reconsolidation query (Fase 2.3) so two records of the same person merge instead of fanning into duplicate blobs. Writes the new `email_blobs(email_id, blob_id)` index on every upsert (Fase 3.1).
+4. **Task creation** — `_collect` builds `existing_tasks_all` from thread + contact (plural, Fase 1.1) + topical siblings looked up via `email_blobs` → `get_open_tasks_by_blobs` (Fase 3.1, deterministic). The LLM decides create / update / close / none and the calendar branch now honours that decision the same way email does (Fase 1.3). Auto-replies from the user's mailbox don't trigger close paths (Fase A) and don't shadow contact emails in the threads dedup.
+5. **F4 reanalyze sweep** — picks the oldest 10 open tasks (`min_age_h=1`), asks the LLM keep / close / update on each. KEEP also bumps `analyzed_at` so the same task doesn't ride the top of the ranking every cycle (Fase 1.2).
+6. **F8 dedup sweep** — clusters open tasks by shared contact + ≥ 2 blob overlap, asks the arbiter "same problem? keeper?" per cluster of 2..12, closes non-keepers with note "Duplicate of <id>". Reopen-protection: `tasks.reopen` writes `dedup_skip_until = now + 7d` so the sweep doesn't immediately re-close a task the user just reopened. Clusters > 12 are skipped (oversize).
+7. **Stale phone close** — bulk-close `channel='phone'` tasks > 30 days old (Fase 3.3). No LLM, pure SQL.
+8. **`[update.summary]` log line** — `sync=+N wa=Mmsgs/Kcontacts memory=A/B tasks_pending=X open_before=Y open_after=Z delta=±D detail="..."` in stderr for every run (Fase 4.3). When a user reports "the list is wrong", that line tells you what the pipeline actually did.
+
+### Commit ledger
+
+| Phase | Commit | What |
+|-------|--------|------|
+| 1.1 (E) | `3473348` | `_collect` uses `get_tasks_by_contact` (plural) instead of `.first()`. |
+| 1.2 (F) | `4048fd7` | `update_task_item` bumps `analyzed_at`; reanalyze KEEP touches it too. |
+| 1.4 (C) | `01beaad` | Removed silent 60-day reset trap. `--force` remains. |
+| 1.5 (D) | `89c9398` | F7 threshold per sender class (now superseded by 3.1). |
+| 1.3 (B) | `d2aca2a` | Calendar branch honours `task_action`. |
+| —     | `b34667f` | **Auto-reply guard** on every close path (regression hardening for support@mrcall.ai). |
+| 2.1 | `2491798` | F8 dedup sweep — cluster + Opus arbiter + `dedup_skip_until` reopen protection. |
+| 2.2 | `c8331b2` | `tasks.dedup_now` + `memory.reconsolidate_now` RPCs + Settings buttons. |
+| 2.3 (G) | `3a88e96` | Identifier-based reconsolidation query + diagnostic logs. |
+| 3.1 | `8af798f` | `email_blobs` / `calendar_blobs` index + F7 deterministic lookup + backfill. |
+| 3.2 | `ac43cbf` | `task_items.channel` tag + Tasks-view filter dropdown. |
+| 3.3 | `41f46b2` | Auto-close phone tasks > 30 days. |
+| 4 | (this) | Pipeline `[update.summary]` log + active-context refresh. |
+
+### Channel coverage
+
+| Channel | Detector | Today |
+|---------|----------|-------|
+| Email | event_type='email' | full F1-F8 + `email_blobs` index |
+| Phone | contact_email matches `notification@*mrcall*` (or `transactional.mrcall.ai`) | tagged via `_infer_task_channel` on insert + backfill; UI filter; 30-day auto-close |
+| Calendar | event_type='calendar' | F7-calendar via `calendar_blobs` index, task_action honoured |
+| WhatsApp | n/a yet | tasks not generated from WA today; channel column ready |
+
+The 30+ "MrCall Notification" call-back tasks on the gmail profile now fall into channel='phone' and the user can filter them out of the email list with one click. They auto-close as they age past 30 days.
+
+### What live verification looks like
+
+The user pulls on Mac, restarts the app, clicks `Update`. Expected:
+
+- `sidecar.stderr` shows `[update.summary] sync=… wa=… memory=… tasks_pending=… open_before=N open_after=M delta=… detail="…"`
+- `[TASK] Reanalyze sweep: K of M eligible (cap=10, min_age_h=1)` if any task >1h old.
+- `[dedup] sweep complete: {clusters_examined: …, tasks_closed: …, …}` after the F4 sweep.
+- `[age-sweep] auto-closed N phone task(s) older than 30d` if any.
+- The `Update` markdown panel in-app shows `🆕 Created (n) / ✅ Closed (m) / ✏️ Updated (k)` lines (Fase 4.1, already in place from the 2026-04 surface).
+- Tasks view: dropdown `Channel: All (X) / Email (a) / Phone (b) / Calendar (c) / WhatsApp (d)`.
+- Settings → Maintenance: two new buttons "Clean up tasks" and "Reconsolidate memory" (call-on-demand, same workers).
+
+Test set on `/tmp/mrcall-test/` (DB snapshots): cluster simulation found 9/6/3 dedup clusters across the three profiles, 1103/297/423 emails carry at least one blob link post-backfill, channel inference correctly tags 12/35/0 phone tasks across support@/gmail/cafe124. Live LLM round-trip not exercised from this machine.
 
 **Firebase signin landing — engine side (commits `25e668b..11f4cbe` on `main`, all pushed).**
 
