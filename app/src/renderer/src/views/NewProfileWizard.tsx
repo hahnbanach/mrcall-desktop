@@ -1,18 +1,15 @@
 /**
- * Full-page wizard to create a brand-new profile from an already
- * signed-in window. Same visual as `Onboarding.tsx` (the first-run
- * flow) so the experience feels uniform — just rendered as an overlay
- * over the current window instead of replacing it. Submits via
- * `profiles.create` (email-keyed) so the new profile coexists with the
- * current one without disrupting this window's sidecar.
- *
- * Field set kept tight on purpose: the schema has many optional fields
- * (MrCall, personal data, notes, …) that are best edited from the new
- * profile's own Settings tab once it is opened — the wizard only
- * collects what is needed to launch.
+ * Full-page wizard to create an additional profile from an
+ * already-signed-in window. Same fields and visual as Onboarding, but
+ * submits via `profiles.create` (email-keyed) so the new profile
+ * coexists with the current one without taking over this window's
+ * sidecar. Google Calendar Connect doesn't apply here — it would
+ * connect against the current window's sidecar, not the new profile;
+ * the user finishes that from inside the new profile's window.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage } from '../lib/errors'
+import ProfileFormFields from '../components/ProfileFormFields'
 
 interface Props {
   open: boolean
@@ -44,46 +41,43 @@ function isValidEmail(s: string): boolean {
 }
 
 export default function NewProfileWizard({ open, onClose, onCreated }: Props): JSX.Element | null {
-  const [email, setEmail] = useState('')
-  const [emailPassword, setEmailPassword] = useState('')
-  const [imapHost, setImapHost] = useState('')
-  const [imapPort, setImapPort] = useState('993')
-  const [smtpHost, setSmtpHost] = useState('')
-  const [smtpPort, setSmtpPort] = useState('587')
+  const [values, setValues] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
-  // Reset the form whenever the wizard is (re-)opened so a previous
-  // attempt's leftovers don't leak into a fresh run.
+  // Reset on open so a previous attempt's leftovers don't leak into a
+  // fresh run.
   useEffect(() => {
     if (!open) return
-    setEmail('')
-    setEmailPassword('')
-    setImapHost('')
-    setImapPort('993')
-    setSmtpHost('')
-    setSmtpPort('587')
+    setValues({ IMAP_PORT: '993', SMTP_PORT: '587' })
     setFormError(null)
     setSubmitting(false)
   }, [open])
 
-  // Auto-fill IMAP/SMTP hosts when the user types an email — but only
-  // if they haven't already typed a host themselves (don't clobber).
+  // Auto-fill IMAP/SMTP hosts from the email domain — don't clobber
+  // user-typed values.
   useEffect(() => {
+    const email = values.EMAIL_ADDRESS || ''
     if (!email || !isValidEmail(email)) return
     const inferred = inferHosts(email)
-    if (!imapHost) setImapHost(inferred.imapHost)
-    if (!smtpHost) setSmtpHost(inferred.smtpHost)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [email])
+    setValues((prev) => ({
+      ...prev,
+      IMAP_HOST: prev.IMAP_HOST || inferred.imapHost,
+      SMTP_HOST: prev.SMTP_HOST || inferred.smtpHost
+    }))
+  }, [values.EMAIL_ADDRESS])
+
+  const setField = (key: string, v: string): void => {
+    setValues((prev) => ({ ...prev, [key]: v }))
+  }
 
   const canSubmit = useMemo(() => {
-    if (!isValidEmail(email)) return false
-    if (!emailPassword.trim()) return false
-    if (!imapHost.trim() || !smtpHost.trim()) return false
-    if (!imapPort.trim() || !smtpPort.trim()) return false
+    if (!isValidEmail(values.EMAIL_ADDRESS || '')) return false
+    if (!(values.EMAIL_PASSWORD || '').trim()) return false
+    if (!(values.IMAP_HOST || '').trim() || !(values.SMTP_HOST || '').trim()) return false
+    if (!(values.IMAP_PORT || '').trim() || !(values.SMTP_PORT || '').trim()) return false
     return true
-  }, [email, emailPassword, imapHost, smtpHost, imapPort, smtpPort])
+  }, [values])
 
   if (!open) return null
 
@@ -91,19 +85,15 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
     if (!canSubmit || submitting) return
     setSubmitting(true)
     setFormError(null)
-    // No SYSTEM_LLM_PROVIDER, no API key. The engine resolves transport
-    // from .env contents at runtime — see Settings → LLM to add a BYOK
-    // Anthropic key after the profile is created.
-    const values: Record<string, string> = {
-      EMAIL_ADDRESS: email.trim(),
-      EMAIL_PASSWORD: emailPassword,
-      IMAP_HOST: imapHost.trim(),
-      IMAP_PORT: imapPort.trim(),
-      SMTP_HOST: smtpHost.trim(),
-      SMTP_PORT: smtpPort.trim()
+    const payload: Record<string, string> = {}
+    for (const [k, v] of Object.entries(values)) {
+      if (v && v.trim()) payload[k] = v
+    }
+    for (const k of ['EMAIL_ADDRESS', 'IMAP_HOST', 'IMAP_PORT', 'SMTP_HOST', 'SMTP_PORT']) {
+      if (payload[k]) payload[k] = payload[k].trim()
     }
     try {
-      const r = await window.zylch.profiles.create(email.trim(), values)
+      const r = await window.zylch.profiles.create(payload.EMAIL_ADDRESS, payload)
       if (!r.ok) {
         setFormError('Server returned ok=false')
         setSubmitting(false)
@@ -111,9 +101,6 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
       }
       onCreated(r.profile)
     } catch (e: unknown) {
-      // Any server-side validation error ("Profile already exists",
-      // "Invalid email address", etc.) lands here. Render inline; this
-      // overlay is the user's current focus.
       setFormError(errorMessage(e))
       setSubmitting(false)
     }
@@ -121,12 +108,13 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
 
   return (
     <div className="fixed inset-0 z-50 min-h-screen w-full flex items-start justify-center bg-brand-light-grey p-6 overflow-auto">
-      <div className="w-full max-w-[560px]">
+      <div className="w-full max-w-[640px]">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-brand-black">Create a new profile</h1>
             <p className="text-sm text-brand-grey-80 mt-1">
-              Add another mailbox to MrCall Desktop. All data stays on this machine.
+              Add another mailbox to MrCall Desktop. Open the new profile in its own window to
+              connect Google Calendar.
             </p>
           </div>
           <button
@@ -145,76 +133,13 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
           </div>
         )}
 
-        <div className="bg-white border border-brand-mid-grey rounded-lg shadow-sm p-5 space-y-3">
-          <Field label="Email address" required>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="user@example.com"
-              autoComplete="off"
-              className="w-full px-3 py-2 border rounded text-sm"
-            />
-          </Field>
-
-          <Field
-            label="Email app password"
-            required
-            help="App password from your email provider — not your account password."
-          >
-            <input
-              type="password"
-              value={emailPassword}
-              onChange={(e) => setEmailPassword(e.target.value)}
-              autoComplete="new-password"
-              className="w-full px-3 py-2 border rounded text-sm"
-            />
-          </Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="IMAP host" required>
-              <input
-                type="text"
-                value={imapHost}
-                onChange={(e) => setImapHost(e.target.value)}
-                className="w-full px-3 py-2 border rounded text-sm"
-              />
-            </Field>
-            <Field label="IMAP port" required>
-              <input
-                type="number"
-                value={imapPort}
-                onChange={(e) => setImapPort(e.target.value)}
-                className="w-full px-3 py-2 border rounded text-sm"
-              />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="SMTP host" required>
-              <input
-                type="text"
-                value={smtpHost}
-                onChange={(e) => setSmtpHost(e.target.value)}
-                className="w-full px-3 py-2 border rounded text-sm"
-              />
-            </Field>
-            <Field label="SMTP port" required>
-              <input
-                type="number"
-                value={smtpPort}
-                onChange={(e) => setSmtpPort(e.target.value)}
-                className="w-full px-3 py-2 border rounded text-sm"
-              />
-            </Field>
-          </div>
-
-          <p className="text-xs text-brand-grey-80">
-            Other optional fields (personal data, MrCall credentials, notes…) can be edited from
-            the new profile&apos;s own Settings tab once you open it.
+        <div className="bg-white border border-brand-mid-grey rounded-lg shadow-sm p-5">
+          <p className="text-xs text-brand-grey-80 mb-4">
+            Email + IMAP/SMTP fields are required — everything else is optional and editable
+            later from the new profile&apos;s Settings tab.
           </p>
-
-          <div className="flex items-center justify-end pt-2">
+          <ProfileFormFields values={values} onChange={setField} />
+          <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t">
             <button
               onClick={handleSubmit}
               disabled={!canSubmit || submitting}
@@ -225,26 +150,6 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
           </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-interface FieldProps {
-  label: string
-  required?: boolean
-  help?: string
-  children: React.ReactNode
-}
-
-function Field({ label, required, help, children }: FieldProps): JSX.Element {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-brand-grey-80 mb-1">
-        {label}
-        {required && <span className="text-brand-danger ml-1">*</span>}
-      </label>
-      {children}
-      {help && <div className="text-xs text-brand-grey-80 mt-1">{help}</div>}
     </div>
   )
 }
