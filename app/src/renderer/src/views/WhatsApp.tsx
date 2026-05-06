@@ -27,6 +27,7 @@ export default function WhatsAppView(): JSX.Element {
   const [debugInfo, setDebugInfo] = useState<{
     totalMessages: number
     ownerId: string | null
+    breakdown: Record<string, number> | null
   } | null>(null)
   const [activeJid, setActiveJid] = useState<string | null>(null)
   const [messages, setMessages] = useState<WhatsAppMessage[]>([])
@@ -64,7 +65,8 @@ export default function WhatsAppView(): JSX.Element {
       }
       setDebugInfo({
         totalMessages: r.total_messages ?? 0,
-        ownerId: r.owner_id ?? null
+        ownerId: r.owner_id ?? null,
+        breakdown: r.breakdown_by_server ?? null
       })
     } catch (e) {
       setThreadsError(errorMessage(e))
@@ -164,13 +166,36 @@ export default function WhatsAppView(): JSX.Element {
           {!threadsLoading && !threadsError && threads.length === 0 && (
             <div className="p-3 text-xs text-brand-grey-80 space-y-2">
               {debugInfo && debugInfo.totalMessages > 0 ? (
-                <p>
-                  <strong>{debugInfo.totalMessages}</strong> message
-                  {debugInfo.totalMessages === 1 ? '' : 's'} stored locally, but no displayable
-                  conversations — they&apos;re all status broadcasts or system messages, which we
-                  filter out. Send or receive a real chat from your phone and it should appear
-                  here.
-                </p>
+                <>
+                  <p>
+                    <strong>{debugInfo.totalMessages}</strong> message
+                    {debugInfo.totalMessages === 1 ? '' : 's'} stored locally, but no displayable
+                    conversations.
+                  </p>
+                  {debugInfo.breakdown && Object.keys(debugInfo.breakdown).length > 0 && (
+                    <div className="rounded border border-brand-mid-grey/40 bg-white px-2 py-1.5">
+                      <div className="text-[10px] uppercase tracking-wide text-brand-grey-80 mb-1">
+                        breakdown by JID server
+                      </div>
+                      <ul className="space-y-0.5 font-mono text-[11px]">
+                        {Object.entries(debugInfo.breakdown)
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([server, count]) => (
+                            <li key={server} className="flex justify-between gap-2">
+                              <span>{server}</span>
+                              <span className="opacity-70">{count}</span>
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  )}
+                  <p className="opacity-80">
+                    WhatsApp&apos;s history sync delivers status updates first, then chat messages
+                    over the next minutes (sometimes longer). Wait a bit, then click Refresh.
+                    Send or receive a chat from your phone and it should appear here within
+                    seconds.
+                  </p>
+                </>
               ) : (
                 <>
                   <p>

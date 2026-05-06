@@ -279,6 +279,7 @@ export interface ZylchAPI {
       threads: WhatsAppThread[]
       total_messages?: number
       owner_id?: string
+      breakdown_by_server?: Record<string, number>
       error?: string
     }>
     listMessages: (params: {

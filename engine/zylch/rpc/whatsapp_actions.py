@@ -380,9 +380,9 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
         with get_session() as session:
             # Aggregate per chat: count + latest timestamp. Skip rows
             # without a real conversation target — empty chat_jid (junk
-            # rows from old buggy stores) and WhatsApp's status
-            # broadcast pseudo-chat which would render as a useless
-            # row in the UI.
+            # rows from old buggy stores) and any of WhatsApp's
+            # broadcast pseudo-chats (`status@broadcast`,
+            # `meta@broadcast`, …) which would render as useless rows.
             agg = (
                 session.query(
                     WhatsAppMessage.chat_jid,
@@ -393,7 +393,8 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
                     WhatsAppMessage.owner_id == owner_id,
                     WhatsAppMessage.chat_jid.isnot(None),
                     WhatsAppMessage.chat_jid != "",
-                    WhatsAppMessage.chat_jid != "status@broadcast",
+                    ~WhatsAppMessage.chat_jid.like("%@broadcast"),
+                    ~WhatsAppMessage.chat_jid.like("%@newsletter"),
                 )
                 .group_by(WhatsAppMessage.chat_jid)
                 .order_by(desc("last_ts"))
@@ -414,14 +415,37 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
                 or 0
             )
             if not agg:
+                # When everything got filtered, surface a per-server
+                # breakdown so the renderer can show "all 36 are
+                # status broadcasts" vs "30 broadcasts + 6 chats" —
+                # the latter would mean the filter is wrong.
+                breakdown_rows = (
+                    session.query(
+                        WhatsAppMessage.chat_jid,
+                        func.count(WhatsAppMessage.id).label("c"),
+                    )
+                    .filter(WhatsAppMessage.owner_id == owner_id)
+                    .group_by(WhatsAppMessage.chat_jid)
+                    .all()
+                )
+                # Bucket by the server portion of the JID — that's what
+                # actually distinguishes broadcast/status from real
+                # chats. user@s.whatsapp.net = direct, jid@g.us = group,
+                # status@broadcast = status updates, …@newsletter = channels.
+                bucket: Dict[str, int] = {}
+                for row in breakdown_rows:
+                    jid = row.chat_jid or ""
+                    server = jid.rsplit("@", 1)[1] if "@" in jid else "(no jid)"
+                    bucket[server] = bucket.get(server, 0) + int(row.c or 0)
                 logger.debug(
                     f"[rpc:whatsapp.list_threads] no threads but "
-                    f"{total_messages} messages exist for owner_id={owner_id}"
+                    f"{total_messages} messages exist; breakdown={bucket}"
                 )
                 return {
                     "threads": [],
                     "total_messages": total_messages,
                     "owner_id": owner_id,
+                    "breakdown_by_server": bucket,
                 }
 
             # Latest message body per chat — one extra query keyed off

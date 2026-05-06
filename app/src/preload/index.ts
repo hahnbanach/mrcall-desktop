@@ -407,6 +407,7 @@ const api = {
         threads: WhatsAppThread[]
         total_messages?: number
         owner_id?: string
+        breakdown_by_server?: Record<string, number>
         error?: string
       }>('whatsapp.list_threads', {
         limit: params?.limit ?? 200,
