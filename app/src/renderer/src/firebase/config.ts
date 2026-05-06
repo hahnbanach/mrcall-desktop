@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { inMemoryPersistence, initializeAuth } from 'firebase/auth'
+import { indexedDBLocalPersistence, initializeAuth } from 'firebase/auth'
 
 // Same Firebase project as mrcall-dashboard. The API key + project ID are
 // public-by-design (Firebase JS SDK config) — they identify the project,
@@ -17,19 +17,18 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 
-// In-memory persistence only. Earlier versions of this file used
-// indexedDB + localStorage so the user stayed signed in across app
-// restarts. That created a serious failure mode: a stale session for a
-// previous user (or test account) was silently restored on startup, the
-// SignIn screen never showed, and the renderer ended up bound to a
-// Firebase identity the current operator did not just authenticate as.
-// On-disk profile selection is keyed by Firebase UID (see main/index.ts
-// auth:bindProfile), so a wrong identity = wrong profile = wrong data.
+// IndexedDB-backed persistence so a signed-in user survives across app
+// launches. Profiles are UID-keyed (`auth:bindProfile(uid)` attaches
+// `~/.zylch/profiles/<firebase_uid>/`), so a restored Firebase session
+// can only ever bind to the matching profile — the "wrong account on
+// the wrong profile" drift the previous in-memory-only setup guarded
+// against is structurally prevented now. The IdentityBanner at the
+// top of every signed-in window keeps the active identity visible in
+// case a restored session catches the user by surprise.
 //
-// Trade-off: the user must sign in on every app launch. For a desktop
-// app where StarChat needs a live JWT anyway, that is a fair price for
-// removing the silent-restore trap.
-const auth = initializeAuth(app, { persistence: inMemoryPersistence })
+// To force a re-signin (debug, or to sanity-check the gate), the user
+// uses the explicit "Sign out" button on the IdentityBanner.
+const auth = initializeAuth(app, { persistence: indexedDBLocalPersistence })
 auth.useDeviceLanguage()
 
 export { app, auth }
