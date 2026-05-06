@@ -368,7 +368,15 @@ async def _run_tasks(owner_id: str, store) -> str:
 # F4 sweep tunables — exposed as module constants for tests + future
 # overrides via env if it ever needs to be runtime-configurable.
 REANALYZE_CAP = 10
-REANALYZE_MIN_AGE_HOURS = 24
+# Min age before a task becomes eligible for F4. Was 24h on F4
+# introduction (defense-in-depth, "give the thread time to settle"),
+# but in practice the user expects the task to close as soon as their
+# reply is in DB — waiting a full day is wrong UX for a desktop
+# assistant. Keep a small gate to avoid F4 re-analyzing a task that
+# `_analyze_recent_events` literally just created in the same `update`
+# run (analyzed_at == now), which would be a redundant LLM call on
+# decision the model just made.
+REANALYZE_MIN_AGE_HOURS = 1
 
 
 async def _reanalyze_only(owner_id: str, store) -> int:
