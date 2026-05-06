@@ -327,11 +327,19 @@ class TaskWorker:
                 if thread_id
                 else []
             )
-            existing_task = self.storage.get_task_by_contact(self.owner_id, from_email)
-            # Prefer thread-level task; include contact-level if distinct
+            # Bug E (2026-05-06): pull EVERY open task for this contact, not
+            # just the first one. `get_task_by_contact` (.first()) hid sibling
+            # tasks from the LLM — for a noreply@cnit.it with 5 open tasks
+            # the model only saw 1, decided UPDATE on it, the other 4 lived
+            # forever as duplicates. The plural form is canonical-lower
+            # matched and orders newest-first.
+            contact_tasks = self.storage.get_tasks_by_contact(self.owner_id, from_email)
             existing_tasks_all: List[Dict] = list(thread_tasks)
-            if existing_task and not any(t["id"] == existing_task["id"] for t in thread_tasks):
-                existing_tasks_all.append(existing_task)
+            existing_ids = {t["id"] for t in thread_tasks}
+            for ct in contact_tasks:
+                if ct["id"] not in existing_ids:
+                    existing_tasks_all.append(ct)
+                    existing_ids.add(ct["id"])
 
             # F7 (2026-05-05): topical siblings via memory blobs.
             # Search memory using the email's CONTENT (subject + body +
