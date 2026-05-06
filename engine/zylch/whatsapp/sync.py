@@ -315,8 +315,64 @@ class WhatsAppSyncService:
 # -- Helpers -----------------------------------------------------------
 
 
+# Wrappers used by WhatsApp's E2E protocol that nest the *real* Message
+# under their own ``.message`` field. Without unwrapping these, outbound
+# messages (echoed from the user's phone via ``deviceSentMessage``),
+# disappearing messages, view-once and edited messages all stored with
+# ``text=NULL`` and rendered as "[empty]" bubbles in the WhatsApp tab.
+_E2E_WRAPPER_FIELDS = (
+    "deviceSentMessage",
+    "ephemeralMessage",
+    "viewOnceMessage",
+    "viewOnceMessageV2",
+    "viewOnceMessageV2Extension",
+    "editedMessage",
+    "documentWithCaptionMessage",
+)
+
+
+def _unwrap_message(message):
+    """Descend through E2E wrapper messages to the inner content.
+
+    ``deviceSentMessage``, ``ephemeralMessage``, ``viewOnceMessage*``,
+    ``editedMessage``, and ``documentWithCaptionMessage`` all carry the
+    actual message proto on a nested ``.message`` field. Walk down up
+    to ``MAX_DEPTH`` levels (in practice ephemeral can wrap view-once,
+    or edited can wrap ephemeral, etc.) and return the leaf Message.
+    Returns the input unchanged if no wrapper is present.
+    """
+    MAX_DEPTH = 5
+    for _ in range(MAX_DEPTH):
+        if message is None:
+            return None
+        descended = False
+        for wrapper in _E2E_WRAPPER_FIELDS:
+            try:
+                has_wrapper = message.HasField(wrapper)
+            except (ValueError, AttributeError):
+                continue
+            if not has_wrapper:
+                continue
+            sub = getattr(message, wrapper, None)
+            if sub is None:
+                continue
+            try:
+                if not sub.HasField("message"):
+                    continue
+            except (ValueError, AttributeError):
+                continue
+            message = sub.message
+            descended = True
+            break
+        if not descended:
+            return message
+    return message
+
+
 def _extract_text(message) -> Optional[str]:
-    """Extract text from a WhatsApp message protobuf."""
+    """Extract text from a WhatsApp message protobuf, unwrapping any
+    deviceSentMessage / ephemeral / view-once / edited envelope first."""
+    message = _unwrap_message(message)
     if message is None:
         return None
     # Direct conversation text

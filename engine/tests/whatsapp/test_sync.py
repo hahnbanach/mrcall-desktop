@@ -213,6 +213,80 @@ def test_store_message_dedups_by_message_id(fresh_db):
     assert rows[0].text == "first"
 
 
+def test_outbound_devicesent_message_extracts_text(fresh_db):
+    """A message sent from the user's PHONE gets echoed to the linked
+    desktop wrapped in ``deviceSentMessage.message``. ``_extract_text``
+    must unwrap that envelope and pull the text from the inner Message,
+    otherwise ``is_from_me=True`` rows land with ``text=NULL`` (the
+    ``[empty]`` bubbles seen on `mario.alemi@gmail.com` 2026-05-06)."""
+    from zylch.storage.database import get_session
+    from zylch.storage.models import WhatsAppMessage
+    from zylch.whatsapp.sync import WhatsAppSyncService
+    import Neonize_pb2 as N
+
+    owner_id = "test@example.com"
+    sync = WhatsAppSyncService(storage=None, owner_id=owner_id)
+
+    ev = N.Message()
+    ev.Info.ID = uuid.uuid4().hex.upper()
+    ev.Info.Pushname = "Self"
+    ev.Info.Timestamp = 1_700_000_000
+    src = ev.Info.MessageSource
+    src.Chat.User = "393281234567"
+    src.Chat.Server = "s.whatsapp.net"
+    src.Sender.User = "393999999999"  # the user's own JID
+    src.Sender.Server = "s.whatsapp.net"
+    src.IsFromMe = True
+    src.IsGroup = False
+
+    # outbound text wrapped in deviceSentMessage
+    inner = ev.Message.deviceSentMessage.message
+    inner.conversation = "ciao io a te stesso"
+    ev.Message.deviceSentMessage.destinationJID = "393281234567@s.whatsapp.net"
+
+    assert sync._store_message_from_event(ev) is True
+    with get_session() as session:
+        row = (
+            session.query(WhatsAppMessage)
+            .filter(WhatsAppMessage.owner_id == owner_id)
+            .one()
+        )
+    assert row.is_from_me is True
+    assert row.text == "ciao io a te stesso", (
+        f"deviceSentMessage text not unwrapped: row.text={row.text!r}"
+    )
+
+
+def test_ephemeral_extended_text_extracts_text(fresh_db):
+    """A disappearing extendedTextMessage arrives wrapped in
+    ``ephemeralMessage.message``. ``_extract_text`` must unwrap and
+    pick up ``extendedTextMessage.text`` from the inner Message."""
+    from zylch.storage.database import get_session
+    from zylch.storage.models import WhatsAppMessage
+    from zylch.whatsapp.sync import WhatsAppSyncService
+    import Neonize_pb2 as N
+
+    owner_id = "test@example.com"
+    sync = WhatsAppSyncService(storage=None, owner_id=owner_id)
+
+    ev = _build_message_event(
+        msg_id=uuid.uuid4().hex.upper(), text="placeholder ignored",
+    )
+    # Replace the conversation payload with an ephemeral wrapper.
+    ev.Message.Clear()
+    inner = ev.Message.ephemeralMessage.message
+    inner.extendedTextMessage.text = "messaggio effimero"
+
+    assert sync._store_message_from_event(ev) is True
+    with get_session() as session:
+        row = (
+            session.query(WhatsAppMessage)
+            .filter(WhatsAppMessage.owner_id == owner_id)
+            .one()
+        )
+    assert row.text == "messaggio effimero"
+
+
 def test_list_threads_filter_accepts_real_chat_jid(fresh_db):
     """End-to-end: a populated MessageEv stored via the real sync
     service must show up in ``whatsapp.list_threads`` (the filter
