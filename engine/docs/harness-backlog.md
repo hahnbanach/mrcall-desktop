@@ -2,6 +2,25 @@
 
 Enforcement gaps, missing tooling, and documentation debt.
 
+## Open
+
+- [ ] **`tests/workers/test_task_worker_bugs.py` further out of sync (2026-05-06).**
+  - Already broken by the 2026-05-04 transport refactor (mocks removed
+    `LLMClient` attribute on `task_creation`).
+  - Fase 1.1 (`3473348`) widened the gap further — `_collect` now calls
+    `get_tasks_by_contact` (plural) instead of `get_task_by_contact`
+    (singular). 8 mock setups in this test file still stub the singular.
+    Even if the LLMClient mock is restored, contact-task assertions
+    will not match the new shape until they're rewritten against the
+    plural API and the new dedup'd `existing_tasks_all`.
+  - Fase 1.5 (`89c9398`) and Fase 1.3 (`d2aca2a`) further changed the
+    shape of `existing_task_context` (notification-class threshold,
+    calendar create→update conversion). Any mock relying on the
+    old skip-or-include rule will mis-assert.
+  - Recommended: rewrite this file as a harness pass, against a real
+    Storage backend (in-memory SQLite is fine) instead of MagicMock —
+    the LLMClient is the only piece worth mocking.
+
 ## Resolved
 
 - [x] `tools/factory.py` exceeds 500-line limit → split into 6 modules (2026-04-01)
