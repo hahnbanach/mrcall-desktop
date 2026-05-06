@@ -8,6 +8,7 @@ from datetime import datetime, date
 from typing import Any, Dict, Set
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -329,6 +330,12 @@ class TaskItem(DictMixin, Base):
     close_note = Column(Text)
     sources = Column(JSON, default=dict)
     pinned = Column(Boolean, default=False, nullable=False, index=True)
+    # 2026-05-06: epoch-seconds (UTC) until which the dedup sweep should
+    # ignore this task. Set to now+7d when the user reopens a task, so a
+    # subsequent dedup sweep does not immediately re-close it. Compared
+    # against time.time() — NULL means no skip. Worker:
+    # zylch.workers.task_dedup_sweep.
+    dedup_skip_until = Column(BigInteger)
 
     __table_args__ = (
         UniqueConstraint(

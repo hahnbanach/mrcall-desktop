@@ -352,9 +352,22 @@ async def _run_tasks(owner_id: str, store) -> str:
     # tasks whose analyzed_at (or created_at) is older than the threshold,
     # cap at REANALYZE_CAP per run, run serial via reanalyze_task.
     swept = await _reanalyze_sweep(owner_id, store, tasks)
+
+    # F8: deterministic dedup sweep across all open tasks. Cluster by
+    # contact + blob overlap, ask LLM arbiter per cluster, close
+    # non-keepers. Runs after F4 so we operate on the freshest set —
+    # tasks F4 just closed are no longer in the candidate pool.
+    dedup_summary = await _run_dedup_sweep(owner_id)
+
+    parts = [f"{action_count} action items detected"]
     if swept:
-        return f"{action_count} action items detected ({swept} reanalyzed)"
-    return f"{action_count} action items detected"
+        parts.append(f"{swept} reanalyzed")
+    if dedup_summary.get("tasks_closed"):
+        parts.append(
+            f"{dedup_summary['tasks_closed']} dedup-closed across "
+            f"{dedup_summary['clusters_with_dups']} cluster(s)"
+        )
+    return parts[0] + (" (" + ", ".join(parts[1:]) + ")" if len(parts) > 1 else "")
 
 
 # F4 sweep tunables — exposed as module constants for tests + future
@@ -372,21 +385,27 @@ REANALYZE_MIN_AGE_HOURS = 1
 
 
 async def _reanalyze_only(owner_id: str, store) -> int:
-    """Run only the F4 reanalyze sweep (no task creation, no IMAP).
+    """Run only the F4 reanalyze sweep + the F8 dedup sweep.
 
     Used by `update` when there are no new emails to detect tasks from
     but open tasks may still need closure based on user replies that
-    arrived in past batches. Loading tasks straight from storage avoids
-    spinning up a `TaskWorker` (which requires a trained prompt + LLM
-    client just for detection — neither is needed for the sweep, which
-    uses `try_make_llm_client` via `reanalyze_task`).
+    arrived in past batches OR be deduplicated against existing open
+    tasks. Loading tasks straight from storage avoids spinning up a
+    ``TaskWorker`` (which requires a trained prompt + LLM client just
+    for detection — neither is needed for the sweep, which uses
+    ``try_make_llm_client`` via ``reanalyze_task``).
+
+    Returns the count of (reanalyzed + dedup-closed) tasks so the
+    caller can surface a single number.
     """
     tasks = store.get_task_items(
         owner_id=owner_id,
         action_required=True,
         limit=10000,
     )
-    return await _reanalyze_sweep(owner_id, store, tasks)
+    reanalyzed = await _reanalyze_sweep(owner_id, store, tasks)
+    dedup_summary = await _run_dedup_sweep(owner_id)
+    return reanalyzed + int(dedup_summary.get("tasks_closed", 0))
 
 
 async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> int:
@@ -452,6 +471,29 @@ async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> int:
         else:
             logger.warning(f"[TASK] Reanalyze sweep task_id={task_id} " f"error={res.get('error')}")
     return ok_count
+
+
+async def _run_dedup_sweep(owner_id: str) -> dict:
+    """Wrapper around ``zylch.workers.task_dedup_sweep.run_dedup_sweep``.
+
+    Tolerates exceptions: a failure here must NOT block the rest of
+    ``update``. Returns the worker's summary dict on success, or a
+    zeroed dict shape on failure (so callers don't need to special-case
+    None).
+    """
+    from zylch.workers.task_dedup_sweep import run_dedup_sweep
+
+    try:
+        return await run_dedup_sweep(owner_id)
+    except Exception as e:
+        logger.error(f"[dedup] sweep raised: {e}", exc_info=True)
+        return {
+            "clusters_examined": 0,
+            "clusters_with_dups": 0,
+            "tasks_closed": 0,
+            "skipped_recently_reopened": 0,
+            "no_llm": False,
+        }
 
 
 async def _auto_train_memory(owner_id: str, store):

@@ -2739,13 +2739,29 @@ class Storage:
             return False
 
     def reopen_task_item(self, owner_id: str, task_id: str) -> bool:
-        """Clear completed_at + close_note so a previously-closed task is open again."""
+        """Clear completed_at + close_note and protect from dedup for 7d.
+
+        Setting `dedup_skip_until = now + 7d` (epoch seconds) prevents
+        the dedup sweep from immediately re-closing this task after the
+        user manually reopened it — a ping-pong loop that would
+        otherwise be inevitable when the user disagrees with the
+        arbiter's keeper choice.
+        """
         try:
+            import time as _time
+
+            skip_until = int(_time.time() + 7 * 24 * 3600)
             with get_session() as session:
                 count = (
                     session.query(TaskItem)
                     .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)
-                    .update({"completed_at": None, "close_note": None})
+                    .update(
+                        {
+                            "completed_at": None,
+                            "close_note": None,
+                            "dedup_skip_until": skip_until,
+                        }
+                    )
                 )
                 return count > 0
         except Exception as e:

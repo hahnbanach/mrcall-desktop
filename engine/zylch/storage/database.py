@@ -164,6 +164,11 @@ def _apply_column_migrations(engine: Engine) -> None:
         # by the user (e.g. "already paid via bank transfer"). Display-only:
         # not consumed by the task detector, never sent to any LLM prompt.
         ("task_items", "close_note", "TEXT"),
+        # 2026-05-06: epoch-seconds gate consumed by the dedup sweep
+        # (zylch.workers.task_dedup_sweep). When the user reopens a
+        # task, reopen_task_item sets this to now+7d so the sweep does
+        # not immediately re-close it. NULL means "not protected".
+        ("task_items", "dedup_skip_until", "BIGINT"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in migrations:
