@@ -389,6 +389,22 @@ the only meaningful behaviour change. Documented in
 
 ## What Was Completed This Session
 
+**Task pipeline overhaul, Fase 1 — five surgical fixes on `main` (2026-05-06).**
+
+Plan: [`execution-plans/task-pipeline-overhaul.md`](execution-plans/task-pipeline-overhaul.md). Status now "Fase 1 codice committato; verifica live Mac pending".
+
+| Commit | Bug | What |
+|--------|-----|------|
+| `3473348` | E | `_collect` calls `get_tasks_by_contact` (plural) instead of `get_task_by_contact` (`.first()`). Dedup by id with `thread_tasks`. The LLM now sees every open task on a contact — the noreply@cnit.it case (5 open tasks, model only saw 1, other 4 lived as duplicates) is structurally fixed. |
+| `4048fd7` | F | `Storage.update_task_item` always bumps `analyzed_at`. Added `add_source_calendar_event` parameter while there. `task_reanalyze.reanalyze_task` on KEEP also calls `update_task_item` with no field args (pure analyzed_at touch) so the F4 sweep doesn't re-pick the same task each cycle. |
+| `01beaad` | C | Removed the `pending_tasks==0 AND open_tasks==0 → reset_processing_timestamps_for_period(60d)` block in `process_pipeline.py`. Was a one-time migration leftover that punished the user for clearing tasks manually. `--force` remains the explicit reset. |
+| `89c9398` | D | F7 topical-sibling threshold per sender class: `0.50` for notification senders, `0.30` for humans. Drop the unconditional skip introduced 2026-05-05. Also stop force-including the contact-blob anchor for notification senders (the anchor IS the platform-template blob — force-including it brought back the 35-task explosion). |
+| `d2aca2a` | B | Calendar branch honours `task_action` (close/update/create/none) the same way the email branch does. Hoisted `cal_related` out of the F7-calendar try block, mirrored the email switch including `create→update` conversion when topical siblings exist. Without this, recurring events on a CNIT-style topic produced one duplicate task per occurrence. |
+
+Live verification gate (per plan): on Mac, click `Update`, watch sidecar.stderr for `[TASK] Reanalyze sweep: N of M eligible (cap=10, min_age_h=1)`, count open tasks before/after. The plan's Fase 1 exit criterion is "no nuovi duplicati arrivano in 24h di uso normale". Fase 2/3/4 not started.
+
+The previously-stale `tests/workers/test_task_worker_bugs.py` set is unchanged and unverified — the LLMClient mock at `zylch.workers.task_creation.LLMClient` was removed in the 2026-05-04 transport refactor; tests need a separate harness pass before they can verify these commits.
+
 **Firebase signin landing — engine side (commits `25e668b..11f4cbe` on `main`, all pushed).**
 
 - New packages: `zylch/auth/` (`FirebaseSession` singleton + `NoActiveSession`), `zylch/tools/google/` (PKCE Calendar OAuth on :19275).

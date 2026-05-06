@@ -1,8 +1,20 @@
 # Task pipeline overhaul
 
-status: in-progress (Fase 0 verifica live pending; commit `cc66279` + `a59d42a` su `main`)
+status: in-progress (Fase 1 codice committato; verifica live Mac pending)
 created: 2026-05-06
 profile observed: HxiZhWEBoRUarPzqX8eRWP21FuJ3 (mario.alemi@gmail.com)
+
+## Commit ledger
+
+| Fase | Bug | Commit | Status |
+|------|-----|--------|--------|
+| 0    | F4 sweep gating | `cc66279` + `a59d42a` | code shipped — verify live |
+| 1.1  | E (plural contact tasks) | `3473348` | code shipped — verify live |
+| 1.2  | F (analyzed_at bump) | `4048fd7` | code shipped — verify live |
+| 1.3  | B (calendar task_action) | `d2aca2a` | code shipped — verify live |
+| 1.4  | C (silent reset trap) | `01beaad` | code shipped — verify live |
+| 1.5  | D (F7 threshold per class) | `89c9398` | code shipped — verify live |
+| 2-4  | A-H (cleanup, dedup, struct., UX) | — | not started |
 
 ## TL;DR
 
