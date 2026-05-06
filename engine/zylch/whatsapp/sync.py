@@ -179,7 +179,16 @@ class WhatsAppSyncService:
     # -- Internal: store messages --------------------------------------
 
     def _store_message_from_event(self, event) -> bool:
-        """Store a single MessageEv into whatsapp_messages."""
+        """Store a single MessageEv into whatsapp_messages.
+
+        ``MessageEv.Info`` is a ``MessageInfo`` proto whose JID-bearing
+        fields (Chat, Sender, IsFromMe, IsGroup) live one level deeper
+        on the nested ``MessageSource``. The push-name field is spelled
+        ``Pushname`` (lowercase ``n``), not ``PushName``. Reading them
+        off ``info`` directly silently falls through to the default and
+        produces empty rows — that is why 36 messages stored with empty
+        ``chat_jid`` until 2026-05-06.
+        """
 
         try:
             info = event.Info if hasattr(event, "Info") else event
@@ -190,13 +199,14 @@ class WhatsAppSyncService:
             if not msg_id:
                 return False
 
-            chat_jid = str(info.Chat if hasattr(info, "Chat") else "")
-            sender_jid = str(info.Sender if hasattr(info, "Sender") else "")
-            is_from_me = bool(info.IsFromMe if hasattr(info, "IsFromMe") else False)
-            is_group = bool(info.IsGroup if hasattr(info, "IsGroup") else False)
+            src = info.MessageSource if hasattr(info, "MessageSource") else None
+            chat_jid = _format_jid(getattr(src, "Chat", None)) if src is not None else ""
+            sender_jid = _format_jid(getattr(src, "Sender", None)) if src is not None else ""
+            is_from_me = bool(getattr(src, "IsFromMe", False)) if src is not None else False
+            is_group = bool(getattr(src, "IsGroup", False)) if src is not None else False
             timestamp = _extract_timestamp(info)
             text = _extract_text(message)
-            sender_name = str(info.PushName if hasattr(info, "PushName") else "")
+            sender_name = str(info.Pushname) if hasattr(info, "Pushname") else ""
 
             return self._upsert_message(
                 msg_id=msg_id,
@@ -363,6 +373,25 @@ def _extract_timestamp(info) -> Optional[datetime]:
 def _extract_timestamp_from_int(ts) -> Optional[datetime]:
     """Convert Unix timestamp to datetime."""
     return _safe_from_timestamp(ts)
+
+
+def _format_jid(jid) -> str:
+    """Format a neonize JID proto as ``"user@server"``.
+
+    str(jid) on a populated neonize JID proto returns the protobuf debug
+    repr (e.g. ``'User: "393281234567"\\nServer: "s.whatsapp.net"\\n'``),
+    not the wire-format string the rest of the code base expects. Build
+    it explicitly from the User / Server fields. Returns ``""`` when the
+    JID is empty / unset so caller-side ``"" / NULL`` checks keep
+    working.
+    """
+    if jid is None:
+        return ""
+    user = getattr(jid, "User", "") or ""
+    server = getattr(jid, "Server", "") or ""
+    if not user and not server:
+        return ""
+    return f"{user}@{server}"
 
 
 def _jid_to_phone(jid_str: str) -> str:
