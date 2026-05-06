@@ -4,9 +4,11 @@ import { useConversations } from '../store/conversations'
 import { useTasks } from '../store/tasks'
 import { useThread } from '../store/thread'
 import { showError } from '../lib/errors'
+import { formatAbsolute, formatRelative } from '../lib/dates'
 import Icon from '../components/Icon'
 
 type StatusFilter = 'open' | 'closed'
+type SortMode = 'urgency' | 'date'
 
 interface Props {
   /**
@@ -43,6 +45,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
   const [threadLoading, setThreadLoading] = useState(false)
   const [threadError, setThreadError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('open')
+  const [sortMode, setSortMode] = useState<SortMode>('urgency')
   const [search, setSearch] = useState('')
 
   const loadThreadTasks = useCallback(async (threadId: string) => {
@@ -259,12 +262,22 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
       </div>
     )
 
-  // Client-side safety sort: pinned tasks first, preserving the existing
-  // backend order as a stable tie-breaker. This protects optimistic updates
-  // from showing pinned tasks out of place between request and refetch.
-  const sortedTasks = [...searchFiltered].sort(
-    (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)
-  )
+  // Client-side sort. Always pinned-first; within each pin bucket we
+  // either preserve the engine's urgency order ('urgency' mode) or sort
+  // by `last_signal_at` descending ('date' mode — newest signal first).
+  // Pinned-first is stable across mode changes so optimistic updates
+  // don't reshuffle.
+  const sortedTasks = [...searchFiltered].sort((a, b) => {
+    const pa = a.pinned ? 0 : 1
+    const pb = b.pinned ? 0 : 1
+    if (pa !== pb) return pa - pb
+    if (sortMode === 'date') {
+      const ta = a.last_signal_at ? new Date(a.last_signal_at).getTime() : 0
+      const tb = b.last_signal_at ? new Date(b.last_signal_at).getTime() : 0
+      return tb - ta
+    }
+    return 0 // urgency mode: trust engine's ordering (already grouped below)
+  })
 
   const pinnedTasks = sortedTasks.filter((t) => t.pinned)
   const unpinnedTasks = sortedTasks.filter((t) => !t.pinned)
@@ -306,14 +319,24 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
                 : t.contact_email}
             </div>
           </div>
-          <span
-            className={
-              'text-xs px-2 py-0.5 border rounded ' +
-              (URGENCY_STYLES[u] || URGENCY_STYLES.low)
-            }
-          >
-            {u}
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            {t.last_signal_at && (
+              <span
+                className="text-xs text-brand-grey-80"
+                title={formatAbsolute(t.last_signal_at)}
+              >
+                {formatRelative(t.last_signal_at)}
+              </span>
+            )}
+            <span
+              className={
+                'text-xs px-2 py-0.5 border rounded ' +
+                (URGENCY_STYLES[u] || URGENCY_STYLES.low)
+              }
+            >
+              {u}
+            </span>
+          </div>
         </div>
         <div className="text-brand-black whitespace-pre-wrap mb-2">
           {t.suggested_action}
@@ -541,6 +564,18 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
           </div>
         )}
         <div className="flex items-center gap-1.5 border border-brand-mid-grey rounded px-2 py-1 bg-white">
+          <span className="text-xs text-brand-grey-80 shrink-0">Sort</span>
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as SortMode)}
+            className="text-sm bg-transparent outline-none"
+            aria-label="Sort tasks by"
+          >
+            <option value="urgency">Urgency</option>
+            <option value="date">Date</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-1.5 border border-brand-mid-grey rounded px-2 py-1 bg-white">
           <Icon name="search" size={14} className="text-brand-mid-grey shrink-0" />
           <input
             type="text"
@@ -570,18 +605,26 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
           <div className="space-y-3">{pinnedTasks.map(renderTask)}</div>
         </section>
       )}
-      {URGENCY_ORDER.map((u) => {
-        const list = grouped[u]
-        if (!list || list.length === 0) return null
-        return (
-          <section key={u} className="mb-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-grey-80 mb-2">
-              {u} ({list.length})
-            </h2>
-            <div className="space-y-3">{list.map(renderTask)}</div>
+      {sortMode === 'date' ? (
+        unpinnedTasks.length > 0 && (
+          <section className="mb-6">
+            <div className="space-y-3">{unpinnedTasks.map(renderTask)}</div>
           </section>
         )
-      })}
+      ) : (
+        URGENCY_ORDER.map((u) => {
+          const list = grouped[u]
+          if (!list || list.length === 0) return null
+          return (
+            <section key={u} className="mb-6">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-brand-grey-80 mb-2">
+                {u} ({list.length})
+              </h2>
+              <div className="space-y-3">{list.map(renderTask)}</div>
+            </section>
+          )
+        })
+      )}
     </div>
   )
 }

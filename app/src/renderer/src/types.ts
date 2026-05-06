@@ -14,6 +14,13 @@ export interface ZylchTask {
   completed_at?: string | null
   close_note?: string | null
   pinned?: boolean
+  /**
+   * Most recent dated event tied to this task: latest source email
+   * date, calendar event start, etc. Falls back to `analyzed_at` →
+   * `created_at` so the field is always populated. Engine-provided
+   * (ISO 8601 UTC).
+   */
+  last_signal_at?: string | null
   sources: {
     emails: string[]
     blobs: string[]

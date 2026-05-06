@@ -2652,6 +2652,7 @@ class Storage:
                     src_emails = [str(x) for x in (src.get("emails") or [])]
                     if any(eid in thread_email_ids for eid in src_emails):
                         matches.append(r.to_dict())
+                self._enrich_tasks_with_last_signal(session, matches)
                 return matches
         except Exception as e:
             logger.error(f"Failed to get tasks by thread {thread_id}: {e}")
@@ -2803,6 +2804,92 @@ class Storage:
                 stored += 1
         return stored
 
+    def _enrich_tasks_with_last_signal(
+        self,
+        session,
+        tasks: List[Dict[str, Any]],
+    ) -> None:
+        """Add `last_signal_at` (ISO 8601 UTC string or None) to each
+        task in-place.
+
+        The "last signal" is the most recent dated event tied to the
+        task: the latest source email (`Email.date_timestamp`) or
+        calendar event (`CalendarEvent.start_time`). Tasks may in the
+        future also reference WhatsApp / phone-call sources — wire
+        them in when those become task source channels (see
+        `engine/docs/active-context.md`, channel coverage matrix).
+
+        Falls back to `analyzed_at` and then `created_at` so the field
+        is always populated for sort stability — the renderer never
+        has to special-case "no signal yet".
+        """
+        if not tasks:
+            return
+
+        # Collect every source ID across all tasks so we batch-fetch in
+        # two SELECTs total (emails + calendar_events) rather than N+1.
+        all_email_ids: set = set()
+        all_calendar_ids: set = set()
+        for t in tasks:
+            src = t.get("sources") or {}
+            for eid in src.get("emails") or []:
+                if eid:
+                    all_email_ids.add(str(eid))
+            for cid in src.get("calendar_events") or []:
+                if cid:
+                    all_calendar_ids.add(str(cid))
+
+        # email_id -> unix-seconds (Email.date_timestamp is INTEGER UTC)
+        email_ts: Dict[str, int] = {}
+        if all_email_ids:
+            for row in (
+                session.query(Email.id, Email.date_timestamp)
+                .filter(Email.id.in_(all_email_ids))
+                .all()
+            ):
+                if row.date_timestamp is not None:
+                    email_ts[str(row.id)] = int(row.date_timestamp)
+
+        # calendar_event_id -> datetime (CalendarEvent.start_time is DateTime)
+        calendar_dt: Dict[str, datetime] = {}
+        if all_calendar_ids:
+            for row in (
+                session.query(CalendarEvent.id, CalendarEvent.start_time)
+                .filter(CalendarEvent.id.in_(all_calendar_ids))
+                .all()
+            ):
+                if row.start_time is not None:
+                    calendar_dt[str(row.id)] = row.start_time
+
+        for t in tasks:
+            src = t.get("sources") or {}
+            best: Optional[datetime] = None
+
+            for eid in src.get("emails") or []:
+                ts = email_ts.get(str(eid)) if eid else None
+                if ts is not None:
+                    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+                    if best is None or dt > best:
+                        best = dt
+
+            for cid in src.get("calendar_events") or []:
+                dt = calendar_dt.get(str(cid)) if cid else None
+                if dt is not None:
+                    # CalendarEvent.start_time is naive UTC by convention.
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    if best is None or dt > best:
+                        best = dt
+
+            if best is None:
+                # Fallback: analyzed_at, then created_at. `to_dict` has
+                # already serialised these to ISO strings.
+                fallback = t.get("analyzed_at") or t.get("created_at")
+                t["last_signal_at"] = fallback
+            else:
+                # Always emit ISO 8601 UTC with explicit offset.
+                t["last_signal_at"] = best.astimezone(timezone.utc).isoformat()
+
     def get_task_items(
         self,
         owner_id: str,
@@ -2839,6 +2926,7 @@ class Storage:
                 )
 
                 tasks = [r.to_dict() for r in rows]
+                self._enrich_tasks_with_last_signal(session, tasks)
 
                 # Sort by pinned DESC, then urgency: critical -> high -> medium -> low.
                 # Stable sort preserves analyzed_at desc within each bucket.
