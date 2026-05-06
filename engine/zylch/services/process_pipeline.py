@@ -116,20 +116,12 @@ async def handle_process(
 
     # --- Step 3: Task detection ---
     pending_tasks = len(store.get_unprocessed_emails_for_task(owner_id))
-    # If no pending emails AND no open tasks, reprocess recent emails
-    # (handles transition from old code that deleted all tasks)
-    if pending_tasks == 0:
-        open_tasks = store.get_task_items(owner_id, action_required=True)
-        total_emails = store.get_email_stats(owner_id).get("total_emails", 0)
-        if len(open_tasks) == 0 and total_emails > 0:
-            console.print("  [dim]No tasks found — reprocessing" " recent emails...[/dim]")
-            store.reset_processing_timestamps_for_period(
-                owner_id,
-                days_back=days_back,
-                reset_memory=False,
-                reset_task=True,
-            )
-            pending_tasks = len(store.get_unprocessed_emails_for_task(owner_id))
+    # Bug C (2026-05-06): the previous "no tasks → reprocess 60 days"
+    # auto-reset has been removed. It was a leftover from a one-time
+    # migration where old code had deleted every task; in steady state
+    # it punished the user for clearing tasks manually — every /update
+    # silently regenerated the entire backlog. The explicit `--force`
+    # flag remains the only way to ask for that reset.
     if pending_tasks > 0:
         console.print(
             f"\n[bold cyan][4/5] Detecting tasks" f" in {pending_tasks} emails...[/bold cyan]"
