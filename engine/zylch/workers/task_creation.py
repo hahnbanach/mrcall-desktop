@@ -218,13 +218,47 @@ class TaskWorker:
             ts = email.get("date_timestamp") or 0
             from_email = email.get("from_email", "").lower()
 
-            # Track user's replies per thread (exact match only)
             is_user = from_email in user_emails
-            if is_user:
+            is_auto = self._is_auto_reply(email)
+
+            # thread_all_emails feeds the mark-processed sweep; it
+            # MUST include every sibling (user-auto, contact-auto,
+            # contact, real user reply) so the next run doesn't
+            # re-analyze them.
+            thread_all_emails.setdefault(thread_id, []).append(email)
+
+            # Auto-reply guard (2026-05-06):
+            #
+            # 1. user_replied: tracks LATEST REAL user reply per
+            #    thread. A user-from auto-response (out-of-office,
+            #    vacation responder, server auto-ack like
+            #    support@mrcall.ai) is NOT user engagement and must
+            #    not trigger the "user replied after contact → close"
+            #    path. Without this guard, support@'s auto-ack would
+            #    have closed any task on its thread on the next
+            #    update — silent regression.
+            #
+            # 2. threads-winner: a user-from auto-reply MUST NOT
+            #    shadow a real contact email behind it. Real case:
+            #    customer mails "please configure X", server auto-acks
+            #    "we received your request"; latest-by-ts is the
+            #    auto-ack, so without filtering threads[tid] would be
+            #    the auto-ack, _collect would return None (skip), and
+            #    the customer's actionable email C1 would never be
+            #    analyzed. Skip user-auto from the threads dedup so
+            #    the previous contact email surfaces as the winner
+            #    and gets analyzed normally.
+            if is_user and not is_auto:
                 prev = user_replied.get(thread_id, 0)
                 if ts > prev:
                     user_replied[thread_id] = ts
-            thread_all_emails.setdefault(thread_id, []).append(email)
+
+            if is_user and is_auto:
+                # Don't promote user-auto into the threads winner.
+                # Still kept in thread_all_emails so
+                # _mark_thread_nonuser_processed clears it on the
+                # next decision.
+                continue
 
             existing = threads.get(thread_id)
             existing_ts = existing.get("date_timestamp", 0) if existing else 0
@@ -302,7 +336,23 @@ class TaskWorker:
             # recipient is NOT the user (i.e. it's a reply to a contact).
             # Self-addressed mail (recipients ⊆ user_emails) falls through
             # to the LLM path below.
+            #
+            # Auto-reply guard (2026-05-06): user-from auto-responses
+            # (out-of-office, server auto-ack) are NOT user_reply
+            # signals — they're noise. Skip the user_reply branch for
+            # them; mark the email task_processed so we don't re-evaluate
+            # next run, and return None so Phase 2 ignores it. (Sending
+            # them through the LLM would just burn tokens on
+            # boilerplate body text.)
             if from_email in user_emails:
+                if self._is_auto_reply(email):
+                    self.storage.mark_email_task_processed(self.owner_id, email_id)
+                    logger.debug(
+                        f"[TASK] auto-reply skipped (user-from): "
+                        f"thread_id={thread_id} email_id={email_id} "
+                        f"from_email={from_email}"
+                    )
+                    return None
                 to_raw = email.get("to_email", "")
                 if isinstance(to_raw, list):
                     to_raw = ", ".join(to_raw)
@@ -573,7 +623,11 @@ class TaskWorker:
         # bailed; the task was created moments later and never closed.
         # Sorting by kind (llm < user_reply) gives the close logic a chance
         # to see a freshly created task with the matching contact_email.
-        non_exception_items = [c for c in collected if not isinstance(c, Exception)]
+        # _collect may return None for skipped emails (auto-reply guard).
+        # Filter both Exceptions and None before ordering.
+        non_exception_items = [
+            c for c in collected if c is not None and not isinstance(c, Exception)
+        ]
         for c in collected:
             if isinstance(c, Exception):
                 logger.error(f"[TASK] _collect raised: {c}")

@@ -110,7 +110,19 @@ def build_thread_history(
     for te in thread_emails:
         te_from = (te.from_email or "").lower()
         is_user = bool(user_email_lc) and te_from == user_email_lc
-        role = "USER REPLY ✓" if is_user else "CONTACT"
+        is_auto = bool(getattr(te, "is_auto_reply", False))
+        # Auto-reply guard (2026-05-06): an auto-response from the
+        # user's own mailbox (out-of-office, server auto-ack) is NOT
+        # user engagement — must not be treated as "USER REPLY ✓" by
+        # the LLM (it would close every task on a thread the user
+        # never actually answered). Keep them in the history so the
+        # model has context, but mark them clearly as auto.
+        if is_auto:
+            role = "AUTO-REPLY (system, not user engagement)"
+        elif is_user:
+            role = "USER REPLY ✓"
+        else:
+            role = "CONTACT"
         date_str = ""
         try:
             if te.date_timestamp:
@@ -128,4 +140,8 @@ def build_thread_history(
     if not blocks:
         return ""
 
-    return "THREAD HISTORY (chronological, user replies marked with ✓):\n" + "\n\n".join(blocks)
+    return (
+        "THREAD HISTORY (chronological, user replies marked with ✓; "
+        "AUTO-REPLY lines are server auto-acknowledgments and DO NOT "
+        "count as user engagement):\n" + "\n\n".join(blocks)
+    )
