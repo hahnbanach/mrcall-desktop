@@ -178,8 +178,17 @@ export default function WhatsAppView(): JSX.Element {
             </div>
           )}
           {threads.map((t) => {
-            const label = t.name || t.phone || t.jid
+            // Fallback chain: contact display name → resolved phone
+            // (from WhatsAppContact.phone_number or stripped JID) →
+            // raw JID → "Unknown contact". Last branch covers rows
+            // where everything came back null/empty (rare — usually
+            // broadcast / system messages we already filter on the
+            // engine side).
+            const label = t.name || t.phone || t.jid || 'Unknown contact'
             const isActive = t.jid === activeJid
+            const previewText = t.last_preview
+              ? (t.last_from_me ? 'You: ' : '') + t.last_preview
+              : `${t.message_count} message${t.message_count === 1 ? '' : 's'}`
             return (
               <button
                 key={t.jid}
@@ -209,12 +218,9 @@ export default function WhatsAppView(): JSX.Element {
                     </div>
                   )}
                 </div>
-                {t.last_preview && (
-                  <div className="text-xs text-brand-grey-80 truncate mt-0.5">
-                    {t.last_from_me ? 'You: ' : ''}
-                    {t.last_preview}
-                  </div>
-                )}
+                <div className="text-xs text-brand-grey-80 truncate mt-0.5">
+                  {previewText}
+                </div>
               </button>
             )
           })}

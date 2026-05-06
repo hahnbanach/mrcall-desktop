@@ -340,21 +340,45 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
 
     try:
         with get_session() as session:
-            # Aggregate per chat: count + latest timestamp.
+            # Aggregate per chat: count + latest timestamp. Skip rows
+            # without a real conversation target — empty chat_jid (junk
+            # rows from old buggy stores) and WhatsApp's status
+            # broadcast pseudo-chat which would render as a useless
+            # row in the UI.
             agg = (
                 session.query(
                     WhatsAppMessage.chat_jid,
                     func.max(WhatsAppMessage.timestamp).label("last_ts"),
                     func.count(WhatsAppMessage.id).label("msg_count"),
                 )
-                .filter(WhatsAppMessage.owner_id == owner_id)
+                .filter(
+                    WhatsAppMessage.owner_id == owner_id,
+                    WhatsAppMessage.chat_jid.isnot(None),
+                    WhatsAppMessage.chat_jid != "",
+                    WhatsAppMessage.chat_jid != "status@broadcast",
+                )
                 .group_by(WhatsAppMessage.chat_jid)
                 .order_by(desc("last_ts"))
                 .offset(offset)
                 .limit(limit)
                 .all()
             )
+            logger.debug(
+                f"[rpc:whatsapp.list_threads] owner_id={owner_id} -> {len(agg)} threads"
+            )
             if not agg:
+                # Diagnostic: total message count for this owner so the
+                # caller can tell "no messages stored" from "messages
+                # stored but all filtered out".
+                total = (
+                    session.query(func.count(WhatsAppMessage.id))
+                    .filter(WhatsAppMessage.owner_id == owner_id)
+                    .scalar()
+                )
+                logger.debug(
+                    f"[rpc:whatsapp.list_threads] no threads but "
+                    f"{total} messages exist for owner_id={owner_id}"
+                )
                 return {"threads": []}
 
             # Latest message body per chat — one extra query keyed off
