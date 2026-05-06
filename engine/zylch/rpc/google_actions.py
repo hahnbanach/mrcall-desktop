@@ -28,7 +28,7 @@ import asyncio
 import logging
 from typing import Any, Awaitable, Callable, Dict
 
-from zylch.auth import NoActiveSession, require_session
+from zylch.auth import NoActiveSession, get_session, require_session
 from zylch.tools.google.calendar_oauth import (
     cancel_active_flow,
     disconnect_calendar,
@@ -106,14 +106,20 @@ async def google_calendar_disconnect(params: Dict[str, Any], notify: NotifyFn) -
 
 
 async def google_calendar_status(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """google.calendar.status() -> {connected, email?}"""
-    try:
-        session = require_session()
-    except NoActiveSession as e:
-        raise _NotSignedInError(str(e)) from e
+    """google.calendar.status() -> {connected, signed_in, email?}
+
+    Soft-fails when there is no Firebase session: the renderer mounts
+    `ConnectGoogleCalendar` from Settings before the auth handover has
+    finished pushing the token to the sidecar, so raising here would
+    spam stderr with a stack trace for every mount in the auth-pending
+    window. "Not signed in" is a valid status answer — return it.
+    """
+    session = get_session()
+    if session is None:
+        return {"connected": False, "signed_in": False}
     connected = is_calendar_connected(session.uid)
     if not connected:
-        return {"connected": False}
+        return {"connected": False, "signed_in": True}
 
     # Read back the stored email for display only — never the token.
     from zylch.storage import Storage
@@ -126,7 +132,7 @@ async def google_calendar_status(params: Dict[str, Any], notify: NotifyFn) -> An
     except Exception as e:
         logger.warning(f"[rpc:google.calendar.status] readback failed: {e}")
         email = None
-    return {"connected": True, "email": email}
+    return {"connected": True, "signed_in": True, "email": email}
 
 
 async def google_calendar_cancel(params: Dict[str, Any], notify: NotifyFn) -> Any:

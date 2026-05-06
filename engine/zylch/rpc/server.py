@@ -163,15 +163,24 @@ async def _handle_request(raw_line: str) -> None:
     try:
         result = await handler(params, notify)
     except Exception as e:
-        logger.exception(f"[rpc] handler {method} failed")
-        if is_notification:
-            return
         # Handlers may raise errors with a `.code` attribute to map
         # cleanly to JSON-RPC application error codes (e.g. -32000
-        # for "solve already in progress").
+        # for "solve already in progress", -32010 for "no signed-in
+        # session"). Those are intentional protocol-level signals —
+        # the JSON-RPC response below carries the code, so we log a
+        # one-liner instead of a full stack trace. Unknown / unhandled
+        # exceptions still get the full traceback at ERROR.
         err_code = getattr(e, "code", None)
-        if not isinstance(err_code, int):
+        if isinstance(err_code, int):
+            logger.warning(
+                f"[rpc] handler {method} failed code={err_code} "
+                f"{type(e).__name__}: {e}"
+            )
+        else:
+            logger.exception(f"[rpc] handler {method} failed")
             err_code = INTERNAL_ERROR
+        if is_notification:
+            return
         await _write_line(
             {
                 "jsonrpc": "2.0",

@@ -333,9 +333,16 @@ const api = {
         ),
       // Drop the stored Calendar tokens for the active session.
       disconnect: () => call<{ ok: boolean }>('google.calendar.disconnect', {}),
-      // {connected: bool, email?: string} — never echoes a token.
+      // {connected, signed_in, email?} — never echoes a token.
+      // `signed_in` is false pre-Firebase-token-handshake; the renderer
+      // should treat that as "idle, not connected" without surfacing an
+      // error. Older engines without `signed_in` always have a session
+      // by the time they answer, so undefined → assume signed in.
       status: () =>
-        call<{ connected: boolean; email?: string | null }>('google.calendar.status', {}),
+        call<{ connected: boolean; signed_in?: boolean; email?: string | null }>(
+          'google.calendar.status',
+          {}
+        ),
       // User closed the browser without consenting — release :19275.
       cancel: () => call<{ cancelled: boolean }>('google.calendar.cancel', {})
     }

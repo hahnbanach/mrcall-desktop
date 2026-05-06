@@ -36,14 +36,7 @@ export default function ConnectGoogleCalendar(): JSX.Element {
       })
       .catch((e) => {
         if (cancelled) return
-        // -32010 (no signed-in session) is a soft state — the user
-        // simply isn't signed in yet; render as "idle, not connected".
-        const msg = errorMessage(e)
-        if (msg.toLowerCase().includes('sign in')) {
-          setState({ phase: 'idle', connected: false, email: null })
-        } else {
-          setState({ phase: 'error', message: msg })
-        }
+        setState({ phase: 'error', message: errorMessage(e) })
       })
     return () => {
       cancelled = true

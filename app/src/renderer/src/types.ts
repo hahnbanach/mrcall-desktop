@@ -216,7 +216,11 @@ export interface ZylchAPI {
     calendar: {
       connect: () => Promise<{ ok: boolean; email: string; scope: string }>
       disconnect: () => Promise<{ ok: boolean }>
-      status: () => Promise<{ connected: boolean; email?: string | null }>
+      status: () => Promise<{
+        connected: boolean
+        signed_in?: boolean
+        email?: string | null
+      }>
       cancel: () => Promise<{ cancelled: boolean }>
     }
   }
