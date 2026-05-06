@@ -391,133 +391,60 @@ class TaskWorker:
                     existing_tasks_all.append(ct)
                     existing_ids.add(ct["id"])
 
-            # F7 (2026-05-05): topical siblings via memory blobs.
-            # Search memory using the email's CONTENT (subject + body +
-            # sender) and pull blobs above a similarity threshold. Then
-            # ask storage which OTHER open tasks reference those blobs
-            # in their `sources.blobs`. This is the path that lets the
-            # LLM see "AIFOS noreply task and Salamone task share the
-            # CNIT/training blob — they're the same problem", which
-            # thread-only + sender-only context cannot surface.
+            # F7 (2026-05-06, Fase 3.1 refactor): topical siblings via the
+            # email_blobs association index. The memory worker writes
+            # (email_id, blob_id) on every successful upsert; we read
+            # those rows here and ask which OTHER open tasks reference
+            # the same blobs.
             #
-            # Two safety rails learned from live calibration on the
-            # gmail+cafe124 profiles (2026-05-05):
+            # This replaces the previous hybrid_search-as-bridge: full
+            # content → top-N similar blobs → tasks. The exact lookup
+            # eliminates four sources of noise the old design needed
+            # threshold heuristics to suppress:
+            #   - notification-sender platform anchors (the
+            #     "MrCall Notification → 35 unrelated tasks" case
+            #     simply doesn't arise — a noreply email's blobs are
+            #     just its blobs, not the cross-platform anchor),
+            #   - FTS dominance (body text overlap pulled in unrelated
+            #     real-estate entities for a CNIT email),
+            #   - threshold tuning per profile (every reading required
+            #     calibration on score distribution),
+            #   - candidate-cap arbitrariness (8-most-recent was a
+            #     guard against the noise cap, not a real cap).
             #
-            # 1. NOTIFICATION-ADDRESS SKIP. When the sender's local-
-            #    part is `noreply` / `notification` / etc., the blobs
-            #    extracted from such senders form a dense cluster
-            #    around the notification platform itself (e.g. MrCall
-            #    Notification → 35+ unrelated phone-call tasks share
-            #    the same anchor blob). F7 would surface a candidate
-            #    list dominated by noise. Skip topical expansion
-            #    entirely; rely on thread + contact lookup for these.
-            #
-            # 2. RECENCY CAP. The blob graph for a long-running profile
-            #    can fan out to dozens of tasks. The LLM's job is to
-            #    judge "same issue?" — its accuracy on long candidate
-            #    lists is worse than on short ones. Cap to the top N
-            #    most-recent topically-related tasks.
+            # The contact-blob anchor (looked up by from_email via
+            # _get_blob_for_contact) is still kept as a defensive
+            # fallback — useful when memory extraction failed for the
+            # current email so email_blobs is empty for it.
             try:
-                _from_local = (from_email or "").split("@", 1)[0]
-                _is_notification = _from_local in (
-                    "noreply",
-                    "no-reply",
-                    "notification",
-                    "notifications",
-                    "bounce",
-                    "mailer-daemon",
+                topical_blob_ids: List[str] = list(
+                    self.storage.get_blobs_for_email(self.owner_id, email_id)
+                    if email_id
+                    else []
                 )
-            except Exception:
-                _is_notification = False
-            try:
-                # Build the query from subject + body excerpt + sender.
-                # body_plain is much richer than snippet — the snippet
-                # often truncates before the topical keywords (signature
-                # blocks, entity names) and we lose the signal. Cap at
-                # 800 chars to bound the query cost + embedding latency.
-                body_for_query = (
-                    email.get("body_plain") or email.get("snippet") or ""
-                )
-                topical_query_parts = [
-                    str(email.get("subject") or ""),
-                    str(body_for_query)[:800],
-                    from_email,
-                ]
-                topical_query = " ".join(
-                    p for p in topical_query_parts if p
-                ).strip()
-                topical_blob_ids: List[str] = []
-                # Threshold: hybrid_search hybrid_score is roughly in
-                # [0,1] but query-dependent (FTS coverage warps the
-                # bottom). Live calibration on the gmail profile (HxiZh…)
-                # 2026-05-05: with subject + body_plain[:800] + sender,
-                # on-topic CNIT/Salamone blobs cluster at 0.35-0.40,
-                # off-topic noise (Ivan Quieti, real-estate entities)
-                # caps at 0.27-0.34. 0.30 is the sweet spot for HUMAN
-                # senders — catches the cluster, drops most outliers.
-                #
-                # Bug D (2026-05-06): for NOTIFICATION senders the same
-                # 0.30 floor is too generous. The platform-anchor blob
-                # for `notification@transactional.mrcall.ai` matches
-                # every other phone-call notification at high topical
-                # score (same template), pulling in 35+ unrelated tasks.
-                # Calibration showed legitimate cross-topic matches
-                # (AIFOS noreply about a real CNIT course) cluster at
-                # 0.50+ while platform-template matches stay below.
-                # Use the higher floor only for these senders — and
-                # SKIP the contact-blob force-include below, since the
-                # contact blob for a notification address IS the
-                # platform anchor.
-                TOPICAL_MIN_SCORE = 0.50 if _is_notification else 0.30
-                # Hard cap on candidates returned to the LLM: long
-                # candidate lists degrade the model's judgment. 8 is
-                # enough for "thread + contact + a few topical
-                # neighbours" without overwhelming.
-                F7_MAX_RELATED = 8
-                if topical_query:
-                    namespace = f"user:{self.owner_id}"
-                    topical_results = self.hybrid_search.search(
-                        owner_id=self.owner_id,
-                        query=topical_query,
-                        namespace=namespace,
-                        limit=20,
-                    )
-                    topical_blob_ids = [
-                        str(r.blob_id)
-                        for r in topical_results
-                        if getattr(r, "blob_id", None)
-                        and getattr(r, "hybrid_score", 0.0) >= TOPICAL_MIN_SCORE
-                    ]
-                # The contact-blob anchor is a strong signal regardless
-                # of FTS/semantic noise — for HUMAN senders. For
-                # notification senders the contact blob is the platform
-                # anchor (matches every notification of this type), so
-                # force-including it would re-introduce the 35-task
-                # explosion that motivated Bug D. Skip the anchor in
-                # that case and let the threshold do the work.
-                if blob_id and not _is_notification:
-                    if str(blob_id) not in topical_blob_ids:
-                        topical_blob_ids.insert(0, str(blob_id))
+                # Defensive fallback: if memory extraction had no
+                # output for this email, fall back to the contact-blob
+                # anchor so the LLM still sees existing tasks linked to
+                # the contact's PERSON/COMPANY blob.
+                if not topical_blob_ids and blob_id:
+                    topical_blob_ids = [str(blob_id)]
                 if topical_blob_ids:
                     related_via_memory = self.storage.get_open_tasks_by_blobs(
                         owner_id=self.owner_id, blob_ids=topical_blob_ids
                     )
-                    # Cap most-recent first to bound LLM noise.
-                    related_via_memory = related_via_memory[:F7_MAX_RELATED]
-                    existing_ids = {t.get("id") for t in existing_tasks_all}
+                    existing_ids_set = {t.get("id") for t in existing_tasks_all}
                     added = 0
                     for t in related_via_memory:
-                        if t.get("id") and t["id"] not in existing_ids:
+                        if t.get("id") and t["id"] not in existing_ids_set:
                             existing_tasks_all.append(t)
-                            existing_ids.add(t["id"])
+                            existing_ids_set.add(t["id"])
                             added += 1
                     if added:
                         logger.debug(
                             f"[TASK] F7 topical-sibling tasks added={added} "
                             f"thread_id={thread_id} from_email={from_email} "
-                            f"is_notification={_is_notification} "
-                            f"min_score={TOPICAL_MIN_SCORE} "
-                            f"matched_blobs={len(topical_blob_ids)}"
+                            f"matched_blobs={len(topical_blob_ids)} "
+                            f"(via email_blobs index)"
                         )
             except Exception as e:
                 # Best effort. A failure here must not block task analysis.
@@ -854,43 +781,27 @@ class TaskWorker:
             if attendee_emails:
                 blob_context, blob_id = self._get_blob_for_contact(attendee_emails[0])
 
-            # F7 (calendar branch, 2026-05-05): same topical-sibling
-            # widening as the email branch above. The user's product
-            # premise is "a calendar event about CNIT training should
-            # see existing CNIT tasks, regardless of which sender's
-            # email created them". Build a query from summary +
-            # description + attendees, take blobs above threshold,
-            # surface tasks linked to those blobs.
+            # F7-calendar (Fase 3.1, 2026-05-06): topical siblings via
+            # the calendar_blobs association index. Same shape as the
+            # email-branch refactor above — exact lookup of "blobs
+            # extracted from this event" replaces the previous
+            # similarity-search bridge. The first-attendee blob anchor
+            # remains as a defensive fallback when memory extraction
+            # produced no blobs for this event.
             cal_related: List[Dict] = []
             calendar_existing_task_context = ""
             try:
-                cal_query_parts = [
-                    str(event.get("summary") or ""),
-                    str(event.get("description") or "")[:800],
-                    " ".join(attendee_emails) if attendee_emails else "",
-                ]
-                cal_query = " ".join(p for p in cal_query_parts if p).strip()
-                cal_blob_ids: List[str] = []
-                if cal_query:
-                    namespace = f"user:{self.owner_id}"
-                    cal_results = self.hybrid_search.search(
-                        owner_id=self.owner_id,
-                        query=cal_query,
-                        namespace=namespace,
-                        limit=20,
-                    )
-                    cal_blob_ids = [
-                        str(r.blob_id)
-                        for r in cal_results
-                        if getattr(r, "blob_id", None)
-                        and getattr(r, "hybrid_score", 0.0) >= 0.30
-                    ]
-                if blob_id and str(blob_id) not in cal_blob_ids:
-                    cal_blob_ids.insert(0, str(blob_id))
+                cal_blob_ids: List[str] = list(
+                    self.storage.get_blobs_for_event(self.owner_id, event_id)
+                    if event_id
+                    else []
+                )
+                if not cal_blob_ids and blob_id:
+                    cal_blob_ids = [str(blob_id)]
                 if cal_blob_ids:
                     cal_related = self.storage.get_open_tasks_by_blobs(
                         owner_id=self.owner_id, blob_ids=cal_blob_ids
-                    )[:8]
+                    )
                     if cal_related:
                         lines = [
                             f"EXISTING OPEN TASKS FOR THIS TOPIC "
@@ -911,7 +822,7 @@ class TaskWorker:
                         calendar_existing_task_context = "\n".join(lines)
                         logger.debug(
                             f"[TASK] F7-calendar topical-sibling tasks={len(cal_related)} "
-                            f"event_id={event_id}"
+                            f"event_id={event_id} (via calendar_blobs index)"
                         )
             except Exception as e:
                 logger.warning(f"[TASK] F7-calendar topical lookup failed: {e}")

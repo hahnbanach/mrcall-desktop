@@ -220,6 +220,60 @@ class BlobSentence(DictMixin, Base):
 
 
 # -------------------------------------------------------------------
+# EMAIL ↔ BLOB / CALENDAR ↔ BLOB ASSOCIATION TABLES
+# -------------------------------------------------------------------
+#
+# 2026-05-06 (Fase 3.1): replace the F7 hybrid_search bridge with a
+# deterministic index of "which blobs were extracted from which
+# email/event". The memory worker writes these on every successful
+# upsert. The task worker reads them in _collect to find topical
+# siblings without similarity search — exact lookup, no thresholds,
+# no notification-anchor noise.
+#
+# The pair (email_id, blob_id) is the natural key; same for
+# (event_id, blob_id). A single blob may be linked to many emails
+# (the canonical "Carmine Salamone PERSON" blob is referenced by
+# every email Salamone wrote) and vice-versa (one email can extract
+# multiple entities).
+
+
+class EmailBlob(Base):
+    __tablename__ = "email_blobs"
+
+    email_id = Column(
+        String(36),
+        ForeignKey("emails.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    blob_id = Column(
+        String(36),
+        ForeignKey("blobs.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    owner_id = Column(Text, nullable=False, index=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class CalendarBlob(Base):
+    __tablename__ = "calendar_blobs"
+
+    event_id = Column(
+        String(36),
+        ForeignKey("calendar_events.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    blob_id = Column(
+        String(36),
+        ForeignKey("blobs.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    owner_id = Column(Text, nullable=False, index=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+# -------------------------------------------------------------------
 # OAUTH TOKENS
 # -------------------------------------------------------------------
 

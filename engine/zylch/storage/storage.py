@@ -618,6 +618,135 @@ class Storage:
                 )
             return out
 
+    # ─── Email/Calendar ↔ Blob index (Fase 3.1) ─────────────────────
+    #
+    # Deterministic replacement for the F7 hybrid_search bridge. The
+    # memory worker writes a row after each successful upsert; the task
+    # worker reads them in _collect to find which existing blobs were
+    # extracted from a new email/event without similarity search.
+
+    def add_email_blob_link(
+        self,
+        owner_id: str,
+        email_id: str,
+        blob_id: str,
+    ) -> bool:
+        """Idempotent (email_id, blob_id) link. Returns True when inserted."""
+        if not (owner_id and email_id and blob_id):
+            return False
+        from zylch.storage.models import EmailBlob
+
+        try:
+            with get_session() as session:
+                existing = (
+                    session.query(EmailBlob)
+                    .filter(
+                        EmailBlob.email_id == email_id,
+                        EmailBlob.blob_id == blob_id,
+                    )
+                    .one_or_none()
+                )
+                if existing:
+                    return False
+                row = EmailBlob(
+                    email_id=email_id,
+                    blob_id=blob_id,
+                    owner_id=owner_id,
+                )
+                session.add(row)
+                session.flush()
+                return True
+        except Exception as e:
+            logger.error(f"add_email_blob_link({email_id}, {blob_id}) failed: {e}")
+            return False
+
+    def get_blobs_for_email(
+        self,
+        owner_id: str,
+        email_id: str,
+    ) -> List[str]:
+        """Blob ids extracted FROM the given email."""
+        if not email_id:
+            return []
+        from zylch.storage.models import EmailBlob
+
+        try:
+            with get_session() as session:
+                rows = (
+                    session.query(EmailBlob.blob_id)
+                    .filter(
+                        EmailBlob.owner_id == owner_id,
+                        EmailBlob.email_id == email_id,
+                    )
+                    .all()
+                )
+                return [str(r[0]) for r in rows]
+        except Exception as e:
+            logger.error(f"get_blobs_for_email({email_id}) failed: {e}")
+            return []
+
+    def add_calendar_blob_link(
+        self,
+        owner_id: str,
+        event_id: str,
+        blob_id: str,
+    ) -> bool:
+        """Idempotent (event_id, blob_id) link. Returns True when inserted."""
+        if not (owner_id and event_id and blob_id):
+            return False
+        from zylch.storage.models import CalendarBlob
+
+        try:
+            with get_session() as session:
+                existing = (
+                    session.query(CalendarBlob)
+                    .filter(
+                        CalendarBlob.event_id == event_id,
+                        CalendarBlob.blob_id == blob_id,
+                    )
+                    .one_or_none()
+                )
+                if existing:
+                    return False
+                row = CalendarBlob(
+                    event_id=event_id,
+                    blob_id=blob_id,
+                    owner_id=owner_id,
+                )
+                session.add(row)
+                session.flush()
+                return True
+        except Exception as e:
+            logger.error(
+                f"add_calendar_blob_link({event_id}, {blob_id}) failed: {e}"
+            )
+            return False
+
+    def get_blobs_for_event(
+        self,
+        owner_id: str,
+        event_id: str,
+    ) -> List[str]:
+        """Blob ids extracted FROM the given calendar event."""
+        if not event_id:
+            return []
+        from zylch.storage.models import CalendarBlob
+
+        try:
+            with get_session() as session:
+                rows = (
+                    session.query(CalendarBlob.blob_id)
+                    .filter(
+                        CalendarBlob.owner_id == owner_id,
+                        CalendarBlob.event_id == event_id,
+                    )
+                    .all()
+                )
+                return [str(r[0]) for r in rows]
+        except Exception as e:
+            logger.error(f"get_blobs_for_event({event_id}) failed: {e}")
+            return []
+
     def get_open_tasks_by_blobs(
         self,
         owner_id: str,

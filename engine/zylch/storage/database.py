@@ -260,6 +260,117 @@ def _apply_data_backfills() -> None:
     finally:
         session.close()
 
+    # 2026-05-06: email_blobs / calendar_blobs association tables (Fase 3.1).
+    # Existing installations have populated `blobs.events` strings of
+    # the form "Extracted from email <uuid> (<datetime>)" but no
+    # entries in the new index. Reconstruct it once on first boot
+    # post-3.1; idempotent via INSERT OR IGNORE on the composite PK.
+    _backfill_email_blobs_index()
+
+
+def _backfill_email_blobs_index() -> None:
+    """One-shot reconstruction of the email_blobs / calendar_blobs
+    index from the legacy blob.events descriptions.
+
+    Runs on every init_db but exits cheaply when the index is already
+    populated (or there are no blobs to migrate). Mirrors the logic in
+    ``engine/scripts/backfill_email_blobs.py`` so the script remains
+    available for explicit reruns / dry-runs.
+    """
+    import json
+    import re
+
+    from zylch.storage.models import Blob, CalendarBlob, CalendarEvent, Email, EmailBlob
+
+    factory = get_session_factory()
+    session = factory()
+    try:
+        existing_links = session.query(EmailBlob.email_id).limit(1).first()
+        any_blobs = session.query(Blob.id).limit(1).first()
+        if existing_links is not None:
+            return  # already populated
+        if any_blobs is None:
+            return  # nothing to backfill
+
+        email_pattern = re.compile(
+            r"^Extracted from email\s+([^\s()]+)(?:\s*\(.*\))?\s*$",
+            re.IGNORECASE,
+        )
+        calendar_pattern = re.compile(
+            r"^Extracted from calendar event\s+'(.+?)'\s*\(.*\)\s*$",
+            re.IGNORECASE,
+        )
+
+        email_ids = {str(r[0]) for r in session.query(Email.id).all() if r[0]}
+        summary_to_events: dict[str, list[str]] = {}
+        for r in (
+            session.query(CalendarEvent.id, CalendarEvent.summary)
+            .filter(CalendarEvent.summary.isnot(None))
+            .all()
+        ):
+            eid, summary = str(r[0]), str(r[1] or "")
+            summary_to_events.setdefault(summary, []).append(eid)
+
+        n_email = 0
+        n_calendar = 0
+        for blob in session.query(Blob).all():
+            blob_id = str(blob.id)
+            owner_id = str(blob.owner_id)
+            events = blob.events or []
+            if not isinstance(events, list):
+                try:
+                    events = json.loads(events)
+                except (TypeError, ValueError):
+                    continue
+            for item in events:
+                if isinstance(item, dict):
+                    desc = item.get("description")
+                else:
+                    desc = item
+                if not isinstance(desc, str):
+                    continue
+                desc = desc.strip()
+                m_email = email_pattern.match(desc)
+                if m_email:
+                    target_email_id = m_email.group(1).strip()
+                    if target_email_id not in email_ids:
+                        continue
+                    session.merge(
+                        EmailBlob(
+                            email_id=target_email_id,
+                            blob_id=blob_id,
+                            owner_id=owner_id,
+                        )
+                    )
+                    n_email += 1
+                    continue
+                m_cal = calendar_pattern.match(desc)
+                if m_cal:
+                    summary = m_cal.group(1).strip()
+                    for eid in summary_to_events.get(summary, []):
+                        session.merge(
+                            CalendarBlob(
+                                event_id=eid,
+                                blob_id=blob_id,
+                                owner_id=owner_id,
+                            )
+                        )
+                        n_calendar += 1
+
+        if n_email or n_calendar:
+            session.commit()
+            logger.info(
+                f"[backfill] populated email_blobs index: "
+                f"{n_email} email_blobs + {n_calendar} calendar_blobs rows"
+            )
+        else:
+            session.rollback()
+    except Exception as e:
+        session.rollback()
+        logger.warning(f"[backfill] email_blobs index backfill failed: {e}")
+    finally:
+        session.close()
+
 
 def dispose_engine() -> None:
     """Dispose the engine and reset singletons. Used in tests."""

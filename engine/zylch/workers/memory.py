@@ -279,6 +279,12 @@ class MemoryWorker:
         )
 
         upserted = False
+        # Track which blob this email contributed to. Either an
+        # existing one (merge) or a freshly created one (no match).
+        # Written to email_blobs at the end so the F7 task worker can
+        # later look up "blobs from this email" without similarity
+        # search (Fase 3.1).
+        linked_blob_id: Optional[str] = None
 
         for existing in existing_blobs:
             # Try to merge with this candidate
@@ -302,6 +308,7 @@ class MemoryWorker:
             logger.info(
                 f"Reconsolidated blob {existing.blob_id} with email {email_id} (entity {entity_num}/{total_entities})"
             )
+            linked_blob_id = str(existing.blob_id)
             upserted = True
             break
 
@@ -316,6 +323,23 @@ class MemoryWorker:
             logger.info(
                 f"Created new blob {blob['id']} from email {email_id} (entity {entity_num}/{total_entities})"
             )
+            linked_blob_id = str(blob["id"])
+
+        # Write the email_blobs association (Fase 3.1). Idempotent on
+        # the (email_id, blob_id) PK — a re-run on the same email is a
+        # no-op. Failures are logged but never raise: the blob already
+        # exists, the index is a denorm hint and not load-bearing.
+        if linked_blob_id and email_id:
+            try:
+                self.storage.add_email_blob_link(
+                    owner_id=self.owner_id,
+                    email_id=email_id,
+                    blob_id=linked_blob_id,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"[memory] add_email_blob_link({email_id}, {linked_blob_id}) failed: {e}"
+                )
 
     async def process_batch(
         self,
@@ -560,6 +584,7 @@ class MemoryWorker:
 
             event_desc = f"Extracted from calendar event '{event.get('summary', '')}' ({event.get('start_time', '')})"
 
+            linked_blob_id: Optional[str] = None
             if existing:
                 merged_content = self.llm_merge.merge(existing.content, facts)
                 self.blob_storage.update_blob(
@@ -569,6 +594,7 @@ class MemoryWorker:
                     event_description=event_desc,
                 )
                 logger.info(f"Reconsolidated blob {existing.blob_id} with event {event_id}")
+                linked_blob_id = str(existing.blob_id)
             else:
                 blob = self.blob_storage.store_blob(
                     owner_id=self.owner_id,
@@ -577,6 +603,20 @@ class MemoryWorker:
                     event_description=event_desc,
                 )
                 logger.info(f"Created new blob {blob['id']} from event {event_id}")
+                linked_blob_id = str(blob["id"])
+
+            # Fase 3.1: same association table pattern as email_blobs.
+            if linked_blob_id and event_id:
+                try:
+                    self.storage.add_calendar_blob_link(
+                        owner_id=self.owner_id,
+                        event_id=event_id,
+                        blob_id=linked_blob_id,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"[memory] add_calendar_blob_link({event_id}, {linked_blob_id}) failed: {e}"
+                    )
 
             self.storage.mark_calendar_event_processed(self.owner_id, event_id)
             return True
