@@ -369,29 +369,123 @@ def _unwrap_message(message):
     return message
 
 
+def _has_field(message, name: str) -> bool:
+    """``HasField`` shim that returns False instead of raising on
+    unknown / scalar fields."""
+    if message is None:
+        return False
+    try:
+        return message.HasField(name)
+    except (ValueError, AttributeError):
+        return False
+
+
 def _extract_text(message) -> Optional[str]:
-    """Extract text from a WhatsApp message protobuf, unwrapping any
-    deviceSentMessage / ephemeral / view-once / edited envelope first."""
+    """Extract a display string from a WhatsApp message protobuf.
+
+    Order of preference:
+      1. Real text (conversation, extendedTextMessage.text).
+      2. Caption on a media message (image, video, document).
+      3. A typed placeholder for media-only / system messages so the
+         renderer shows ``[image]`` / ``[voice]`` / ``[sticker]`` /
+         ``[poll: ...]`` etc. instead of ``[empty]``.
+
+    Unwraps deviceSentMessage / ephemeral / view-once / edited envelopes
+    first via ``_unwrap_message``.
+    """
     message = _unwrap_message(message)
     if message is None:
         return None
-    # Direct conversation text
+
+    # 1. Direct text payloads
     if hasattr(message, "conversation") and message.conversation:
         return message.conversation
-    # Extended text (with link preview, etc.)
-    if hasattr(message, "extendedTextMessage"):
+    if _has_field(message, "extendedTextMessage"):
         ext = message.extendedTextMessage
-        if hasattr(ext, "text") and ext.text:
-            return ext.text
-    # Image/video/doc caption
-    for attr in (
-        "imageMessage",
-        "videoMessage",
-        "documentMessage",
+        text = getattr(ext, "text", "") or ""
+        if text:
+            return text
+
+    # 2. Media with caption (these proto fields all carry .caption).
+    for attr, label in (
+        ("imageMessage", "image"),
+        ("videoMessage", "video"),
+        ("documentMessage", "document"),
     ):
-        sub = getattr(message, attr, None)
-        if sub and hasattr(sub, "caption") and sub.caption:
-            return f"[{attr.replace('Message', '')}] {sub.caption}"
+        if _has_field(message, attr):
+            sub = getattr(message, attr)
+            caption = getattr(sub, "caption", "") or ""
+            if caption:
+                return f"[{label}] {caption}"
+
+    # 3. Typed placeholders for media-only messages. Without these the
+    # renderer shows "[empty]" for every voice note / sticker / poll —
+    # cosmetically broken, see 2026-05-06 user complaint.
+    if _has_field(message, "imageMessage"):
+        return "[image]"
+    if _has_field(message, "videoMessage"):
+        return "[video]"
+    if _has_field(message, "audioMessage"):
+        audio = message.audioMessage
+        is_ptt = bool(getattr(audio, "PTT", False)) or bool(getattr(audio, "ptt", False))
+        return "[voice]" if is_ptt else "[audio]"
+    if _has_field(message, "ptvMessage"):
+        return "[video note]"
+    if _has_field(message, "documentMessage"):
+        doc = message.documentMessage
+        fn = getattr(doc, "fileName", "") or getattr(doc, "filename", "") or ""
+        return f"[document: {fn}]" if fn else "[document]"
+    if _has_field(message, "stickerMessage") or _has_field(message, "lottieStickerMessage"):
+        return "[sticker]"
+    if _has_field(message, "stickerPackMessage"):
+        return "[sticker pack]"
+    if _has_field(message, "contactMessage"):
+        name = getattr(message.contactMessage, "displayName", "") or ""
+        return f"[contact: {name}]" if name else "[contact]"
+    if _has_field(message, "contactsArrayMessage"):
+        return "[contacts]"
+    if _has_field(message, "locationMessage") or _has_field(message, "liveLocationMessage"):
+        return "[location]"
+    for poll_field in (
+        "pollCreationMessage",
+        "pollCreationMessageV2",
+        "pollCreationMessageV3",
+        "pollCreationMessageV4",
+    ):
+        if _has_field(message, poll_field):
+            poll = getattr(message, poll_field)
+            q = getattr(poll, "name", "") or ""
+            return f"[poll: {q}]" if q else "[poll]"
+    if _has_field(message, "pollUpdateMessage"):
+        return "[poll vote]"
+    if _has_field(message, "reactionMessage"):
+        emoji = getattr(message.reactionMessage, "text", "") or ""
+        return f"[reaction: {emoji}]" if emoji else "[reaction]"
+    if _has_field(message, "groupInviteMessage"):
+        return "[group invite]"
+    if _has_field(message, "eventMessage"):
+        return "[event]"
+    if _has_field(message, "buttonsMessage") or _has_field(message, "buttonsResponseMessage"):
+        return "[buttons]"
+    if _has_field(message, "interactiveMessage") or _has_field(message, "interactiveResponseMessage"):
+        return "[interactive]"
+    if _has_field(message, "templateMessage") or _has_field(message, "templateButtonReplyMessage"):
+        return "[template]"
+    if _has_field(message, "listMessage") or _has_field(message, "listResponseMessage"):
+        return "[list]"
+    if _has_field(message, "orderMessage"):
+        return "[order]"
+    if _has_field(message, "invoiceMessage"):
+        return "[invoice]"
+    if _has_field(message, "productMessage"):
+        return "[product]"
+    if _has_field(message, "albumMessage"):
+        return "[album]"
+    if _has_field(message, "call"):
+        return "[call]"
+    # protocolMessage / senderKeyDistributionMessage / messageContextInfo /
+    # encReactionMessage / appStateSync* etc. are system-level — return
+    # None so the renderer can keep them out of the visible flow.
     return None
 
 

@@ -287,6 +287,162 @@ def test_ephemeral_extended_text_extracts_text(fresh_db):
     assert row.text == "messaggio effimero"
 
 
+def _build_event_with_message_kind(kind: str, populate, msg_id: str | None = None):
+    """Build a MessageEv with the given inner Message kind populated.
+
+    ``populate(msg)`` runs against the inner ``Message`` proto and
+    sets whatever sub-message / fields the test cares about.
+    """
+    import Neonize_pb2 as N
+
+    ev = N.Message()
+    ev.Info.ID = msg_id or uuid.uuid4().hex.upper()
+    ev.Info.Pushname = "Tester"
+    ev.Info.Timestamp = 1_700_000_000
+    src = ev.Info.MessageSource
+    src.Chat.User = "393281234567"
+    src.Chat.Server = "s.whatsapp.net"
+    src.Sender.User = "393281234567"
+    src.Sender.Server = "s.whatsapp.net"
+    src.IsFromMe = False
+    src.IsGroup = False
+    populate(ev.Message)
+    return ev
+
+
+def _stored_text(sync, owner_id, ev):
+    from zylch.storage.database import get_session
+    from zylch.storage.models import WhatsAppMessage
+
+    assert sync._store_message_from_event(ev) is True
+    with get_session() as session:
+        row = (
+            session.query(WhatsAppMessage)
+            .filter(
+                WhatsAppMessage.owner_id == owner_id,
+                WhatsAppMessage.message_id == ev.Info.ID,
+            )
+            .one()
+        )
+    return row.text
+
+
+def test_image_without_caption_renders_image_placeholder(fresh_db):
+    from zylch.whatsapp.sync import WhatsAppSyncService
+
+    owner = "test@example.com"
+    sync = WhatsAppSyncService(storage=None, owner_id=owner)
+    ev = _build_event_with_message_kind(
+        "imageMessage",
+        lambda m: m.imageMessage.SetInParent(),
+    )
+    assert _stored_text(sync, owner, ev) == "[image]"
+
+
+def test_image_with_caption_renders_caption(fresh_db):
+    from zylch.whatsapp.sync import WhatsAppSyncService
+
+    owner = "test@example.com"
+    sync = WhatsAppSyncService(storage=None, owner_id=owner)
+
+    def populate(m):
+        m.imageMessage.caption = "gatto che dorme"
+
+    ev = _build_event_with_message_kind("imageMessage", populate)
+    assert _stored_text(sync, owner, ev) == "[image] gatto che dorme"
+
+
+def test_voice_note_renders_voice_placeholder(fresh_db):
+    from zylch.whatsapp.sync import WhatsAppSyncService
+
+    owner = "test@example.com"
+    sync = WhatsAppSyncService(storage=None, owner_id=owner)
+
+    def populate(m):
+        m.audioMessage.PTT = True  # push-to-talk = voice note
+        m.audioMessage.seconds = 7
+
+    ev = _build_event_with_message_kind("audioMessage", populate)
+    assert _stored_text(sync, owner, ev) == "[voice]"
+
+
+def test_audio_file_renders_audio_placeholder(fresh_db):
+    from zylch.whatsapp.sync import WhatsAppSyncService
+
+    owner = "test@example.com"
+    sync = WhatsAppSyncService(storage=None, owner_id=owner)
+
+    def populate(m):
+        m.audioMessage.PTT = False
+        m.audioMessage.seconds = 60
+
+    ev = _build_event_with_message_kind("audioMessage", populate)
+    assert _stored_text(sync, owner, ev) == "[audio]"
+
+
+def test_sticker_renders_sticker_placeholder(fresh_db):
+    from zylch.whatsapp.sync import WhatsAppSyncService
+
+    owner = "test@example.com"
+    sync = WhatsAppSyncService(storage=None, owner_id=owner)
+    ev = _build_event_with_message_kind(
+        "stickerMessage",
+        lambda m: m.stickerMessage.SetInParent(),
+    )
+    assert _stored_text(sync, owner, ev) == "[sticker]"
+
+
+def test_poll_creation_renders_question(fresh_db):
+    from zylch.whatsapp.sync import WhatsAppSyncService
+
+    owner = "test@example.com"
+    sync = WhatsAppSyncService(storage=None, owner_id=owner)
+
+    def populate(m):
+        m.pollCreationMessageV3.name = "Pizza o sushi?"
+
+    ev = _build_event_with_message_kind("pollCreationMessageV3", populate)
+    assert _stored_text(sync, owner, ev) == "[poll: Pizza o sushi?]"
+
+
+def test_location_renders_location_placeholder(fresh_db):
+    from zylch.whatsapp.sync import WhatsAppSyncService
+
+    owner = "test@example.com"
+    sync = WhatsAppSyncService(storage=None, owner_id=owner)
+    ev = _build_event_with_message_kind(
+        "locationMessage",
+        lambda m: m.locationMessage.SetInParent(),
+    )
+    assert _stored_text(sync, owner, ev) == "[location]"
+
+
+def test_document_with_filename(fresh_db):
+    from zylch.whatsapp.sync import WhatsAppSyncService
+
+    owner = "test@example.com"
+    sync = WhatsAppSyncService(storage=None, owner_id=owner)
+
+    def populate(m):
+        m.documentMessage.fileName = "contratto.pdf"
+
+    ev = _build_event_with_message_kind("documentMessage", populate)
+    assert _stored_text(sync, owner, ev) == "[document: contratto.pdf]"
+
+
+def test_protocol_message_returns_none(fresh_db):
+    """System-level proto messages stay invisible — they aren't user content."""
+    from zylch.whatsapp.sync import WhatsAppSyncService
+
+    owner = "test@example.com"
+    sync = WhatsAppSyncService(storage=None, owner_id=owner)
+    ev = _build_event_with_message_kind(
+        "protocolMessage",
+        lambda m: m.protocolMessage.SetInParent(),
+    )
+    assert _stored_text(sync, owner, ev) is None
+
+
 def test_list_threads_filter_accepts_real_chat_jid(fresh_db):
     """End-to-end: a populated MessageEv stored via the real sync
     service must show up in ``whatsapp.list_threads`` (the filter
