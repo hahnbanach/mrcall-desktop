@@ -379,11 +379,12 @@ const api = {
     // blocking on the connect resolution. 5-minute soft cap from the
     // engine; 5.5 min on the wire to avoid client-side races.
     connect: () =>
-      call<{ ok: boolean; jid?: string; reason?: string }>(
-        'whatsapp.connect',
-        {},
-        330000
-      ),
+      call<{
+        ok: boolean
+        phone?: string | null
+        display_name?: string | null
+        reason?: string
+      }>('whatsapp.connect', {}, 330000),
     // forget_session=true also removes ~/.zylch/.../whatsapp.db so the
     // next connect requires a new QR (used as "Forget device").
     disconnect: (forgetSession = false) =>
@@ -391,19 +392,26 @@ const api = {
         'whatsapp.disconnect',
         { forget_session: forgetSession }
       ),
-    // {connected, has_session, jid?} — does NOT spin up neonize, just
-    // peeks at module state + on-disk session file.
+    // {connected, has_session, phone?, display_name?} — does NOT spin
+    // up neonize, just peeks at module state + on-disk session file.
     status: () =>
-      call<{ connected: boolean; has_session: boolean; jid?: string | null }>(
-        'whatsapp.status',
-        {}
-      ),
+      call<{
+        connected: boolean
+        has_session: boolean
+        phone?: string | null
+        display_name?: string | null
+      }>('whatsapp.status', {}),
     cancel: () => call<{ cancelled: boolean }>('whatsapp.cancel', {}),
     listThreads: (params?: { limit?: number; offset?: number }) =>
-      call<{ threads: WhatsAppThread[]; error?: string }>(
-        'whatsapp.list_threads',
-        { limit: params?.limit ?? 200, offset: params?.offset ?? 0 }
-      ),
+      call<{
+        threads: WhatsAppThread[]
+        total_messages?: number
+        owner_id?: string
+        error?: string
+      }>('whatsapp.list_threads', {
+        limit: params?.limit ?? 200,
+        offset: params?.offset ?? 0
+      }),
     listMessages: (params: { chat_jid: string; limit?: number; offset?: number }) =>
       call<{ messages: WhatsAppMessage[]; error?: string }>(
         'whatsapp.list_messages',

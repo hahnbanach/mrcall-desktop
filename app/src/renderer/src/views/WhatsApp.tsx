@@ -20,6 +20,14 @@ export default function WhatsAppView(): JSX.Element {
   const [threads, setThreads] = useState<WhatsAppThread[]>([])
   const [threadsLoading, setThreadsLoading] = useState(false)
   const [threadsError, setThreadsError] = useState<string | null>(null)
+  // Diagnostic from the engine: total messages stored for this owner_id
+  // and the owner_id itself. Surfaced in the empty state so the user
+  // can tell "0 messages stored" from "messages stored but all
+  // filtered out as broadcast".
+  const [debugInfo, setDebugInfo] = useState<{
+    totalMessages: number
+    ownerId: string | null
+  } | null>(null)
   const [activeJid, setActiveJid] = useState<string | null>(null)
   const [messages, setMessages] = useState<WhatsAppMessage[]>([])
   const [messagesLoading, setMessagesLoading] = useState(false)
@@ -54,9 +62,14 @@ export default function WhatsAppView(): JSX.Element {
       } else {
         setThreads(r.threads)
       }
+      setDebugInfo({
+        totalMessages: r.total_messages ?? 0,
+        ownerId: r.owner_id ?? null
+      })
     } catch (e) {
       setThreadsError(errorMessage(e))
       setThreads([])
+      setDebugInfo(null)
     } finally {
       setThreadsLoading(false)
     }
@@ -115,13 +128,10 @@ export default function WhatsAppView(): JSX.Element {
     )
   }
   if (!connected) {
+    // Just the connect card — it carries its own h3 + description so a
+    // wrapping h1 here would duplicate the heading text the user sees.
     return (
       <div className="p-6 max-w-3xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-2">WhatsApp</h1>
-        <p className="text-sm text-brand-grey-80 mb-6">
-          Local WhatsApp connection via the Linked Devices flow. Messages and contacts stay on
-          this machine — nothing routes through a third-party server.
-        </p>
         <ConnectWhatsApp />
       </div>
     )
@@ -153,28 +163,46 @@ export default function WhatsAppView(): JSX.Element {
           )}
           {!threadsLoading && !threadsError && threads.length === 0 && (
             <div className="p-3 text-xs text-brand-grey-80 space-y-2">
-              <p>
-                No conversations yet. WhatsApp&apos;s protocol only pushes the full history on
-                the <strong>first</strong> link — for already-paired devices it sends only new
-                live messages going forward.
-              </p>
-              <p>To pull historical chats, re-link with a fresh QR scan:</p>
-              <button
-                onClick={async () => {
-                  try {
-                    await window.zylch.whatsapp.disconnect(true)
-                    setConnected(false)
-                  } catch (e) {
-                    setThreadsError(errorMessage(e))
-                  }
-                }}
-                className="px-2 py-1 text-xs border border-brand-mid-grey rounded hover:bg-brand-light-grey"
-              >
-                Forget device and re-link
-              </button>
-              <p className="opacity-80">
-                Or just wait — any new message you send or receive will appear here automatically.
-              </p>
+              {debugInfo && debugInfo.totalMessages > 0 ? (
+                <p>
+                  <strong>{debugInfo.totalMessages}</strong> message
+                  {debugInfo.totalMessages === 1 ? '' : 's'} stored locally, but no displayable
+                  conversations — they&apos;re all status broadcasts or system messages, which we
+                  filter out. Send or receive a real chat from your phone and it should appear
+                  here.
+                </p>
+              ) : (
+                <>
+                  <p>
+                    No messages stored yet. WhatsApp&apos;s protocol only pushes the full history on
+                    the <strong>first</strong> link — for already-paired devices it sends only new
+                    live messages going forward.
+                  </p>
+                  <p>To pull historical chats, re-link with a fresh QR scan:</p>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await window.zylch.whatsapp.disconnect(true)
+                        setConnected(false)
+                      } catch (e) {
+                        setThreadsError(errorMessage(e))
+                      }
+                    }}
+                    className="px-2 py-1 text-xs border border-brand-mid-grey rounded hover:bg-brand-light-grey"
+                  >
+                    Forget device and re-link
+                  </button>
+                  <p className="opacity-80">
+                    Or just wait — any new message you send or receive will appear here
+                    automatically.
+                  </p>
+                </>
+              )}
+              {debugInfo?.ownerId && (
+                <p className="opacity-50 font-mono text-[10px] break-all">
+                  owner_id={debugInfo.ownerId}
+                </p>
+              )}
             </div>
           )}
           {threads.map((t) => {

@@ -74,6 +74,48 @@ def _resolve_owner_id() -> str:
     return get_owner_id()
 
 
+def _format_me(me) -> Dict[str, Optional[str]]:
+    """Pull a clean (display_name, phone) pair out of neonize's `me`.
+
+    The neonize `me` is a Go struct with nested ``JID`` and ``LID``
+    sub-objects (each with ``User`` = phone, ``Server``, etc.) plus
+    ``PushName`` and ``BussinessName`` (the typo is upstream). The
+    default ``str(me)`` prints the full struct repr — useless to
+    surface to the user. This helper drills into the right fields and
+    returns them as plain strings.
+    """
+    if me is None:
+        return {"display_name": None, "phone": None}
+
+    # Phone from JID.User. The attribute exists in both PascalCase
+    # ('User') and lowercase ('user') across neonize versions.
+    inner_jid = (
+        getattr(me, "JID", None)
+        or getattr(me, "Jid", None)
+        or getattr(me, "jid", None)
+    )
+    phone = None
+    if inner_jid is not None:
+        phone = (
+            getattr(inner_jid, "User", None)
+            or getattr(inner_jid, "user", None)
+        )
+
+    # BusinessName has a typo upstream (BussinessName); also accept
+    # PushName as a secondary, then no name at all.
+    name = (
+        getattr(me, "BussinessName", None)
+        or getattr(me, "BusinessName", None)
+        or getattr(me, "PushName", None)
+        or None
+    )
+    # Sanitize empty strings so the renderer can do simple `if name`.
+    return {
+        "display_name": (name.strip() if isinstance(name, str) and name.strip() else None),
+        "phone": (str(phone).strip() if phone else None),
+    }
+
+
 def _wa_db_path() -> str:
     """Mirror `WhatsAppClient._default_wa_db()` to peek at session
     presence without instantiating the client (which loads the Go
@@ -117,19 +159,13 @@ async def whatsapp_status(params: Dict[str, Any], notify: NotifyFn) -> Any:
         return {"connected": False, "has_session": has_session}
     try:
         connected = bool(client.is_connected())
-        jid_obj = client.get_me() if connected else None
-        jid = None
-        if jid_obj is not None:
-            # neonize JID has a .User attribute (phone) and .Server
-            jid = (
-                getattr(jid_obj, "user", None)
-                or getattr(jid_obj, "User", None)
-                or str(jid_obj)
-            )
+        me = client.get_me() if connected else None
+        formatted = _format_me(me)
         return {
             "connected": connected,
             "has_session": has_session,
-            "jid": jid,
+            "phone": formatted["phone"],
+            "display_name": formatted["display_name"],
         }
     except Exception as e:
         logger.warning(f"[rpc:whatsapp.status] readback failed: {e}")
@@ -199,7 +235,7 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
     history_done_ev = threading.Event()
     _cancel_event = threading.Event()
 
-    jid_holder: Dict[str, Optional[str]] = {"jid": None}
+    me_holder: Dict[str, Optional[str]] = {"phone": None, "display_name": None}
 
     def _on_qr(client, data_qr: bytes) -> None:
         # Called by neonize on every QR refresh (every 20s). Publish the
@@ -224,14 +260,12 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     def _on_connected() -> None:
         try:
-            me = client.get_me()
-            jid_holder["jid"] = (
-                getattr(me, "user", None) or getattr(me, "User", None) or str(me)
-                if me is not None
-                else None
-            )
+            formatted = _format_me(client.get_me())
+            me_holder["phone"] = formatted["phone"]
+            me_holder["display_name"] = formatted["display_name"]
         except Exception:
-            jid_holder["jid"] = None
+            me_holder["phone"] = None
+            me_holder["display_name"] = None
         connected_ev.set()
 
     def _on_history(event) -> None:
@@ -294,7 +328,11 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
                     sync_svc.sync_contacts(client)
                 except Exception as e:
                     logger.warning(f"[rpc:whatsapp.connect] sync_contacts: {e}")
-                return {"ok": True, "jid": jid_holder["jid"]}
+                return {
+                    "ok": True,
+                    "phone": me_holder["phone"],
+                    "display_name": me_holder["display_name"],
+                }
             await asyncio.sleep(step)
             elapsed += step
         # Timeout — leave the client in place; the user can retry later
@@ -336,7 +374,7 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
     offset = int(params.get("offset", 0))
     owner_id = _resolve_owner_id()
     if not owner_id:
-        return {"threads": []}
+        return {"threads": [], "total_messages": 0, "owner_id": ""}
 
     try:
         with get_session() as session:
@@ -366,20 +404,25 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
             logger.debug(
                 f"[rpc:whatsapp.list_threads] owner_id={owner_id} -> {len(agg)} threads"
             )
+            # Always count total messages for this owner so the renderer
+            # can render "X messages stored, 0 visible threads" inline —
+            # turns a silent empty list into something actionable.
+            total_messages = int(
+                session.query(func.count(WhatsAppMessage.id))
+                .filter(WhatsAppMessage.owner_id == owner_id)
+                .scalar()
+                or 0
+            )
             if not agg:
-                # Diagnostic: total message count for this owner so the
-                # caller can tell "no messages stored" from "messages
-                # stored but all filtered out".
-                total = (
-                    session.query(func.count(WhatsAppMessage.id))
-                    .filter(WhatsAppMessage.owner_id == owner_id)
-                    .scalar()
-                )
                 logger.debug(
                     f"[rpc:whatsapp.list_threads] no threads but "
-                    f"{total} messages exist for owner_id={owner_id}"
+                    f"{total_messages} messages exist for owner_id={owner_id}"
                 )
-                return {"threads": []}
+                return {
+                    "threads": [],
+                    "total_messages": total_messages,
+                    "owner_id": owner_id,
+                }
 
             # Latest message body per chat — one extra query keyed off
             # the (chat_jid, max timestamp) pairs we already have.
@@ -464,10 +507,14 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
                         "last_from_me": bool(last.is_from_me) if last is not None else False,
                     }
                 )
-            return {"threads": threads}
+            return {
+                "threads": threads,
+                "total_messages": total_messages,
+                "owner_id": owner_id,
+            }
     except Exception as e:
         logger.error(f"[rpc:whatsapp.list_threads] {e}")
-        return {"threads": [], "error": str(e)}
+        return {"threads": [], "total_messages": 0, "error": str(e)}
 
 
 async def whatsapp_list_messages(params: Dict[str, Any], notify: NotifyFn) -> Any:

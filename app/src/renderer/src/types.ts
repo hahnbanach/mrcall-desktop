@@ -256,20 +256,31 @@ export interface ZylchAPI {
     }
   }
   whatsapp: {
-    connect: () => Promise<{ ok: boolean; jid?: string; reason?: string }>
+    connect: () => Promise<{
+      ok: boolean
+      phone?: string | null
+      display_name?: string | null
+      reason?: string
+    }>
     disconnect: (
       forgetSession?: boolean
     ) => Promise<{ ok: boolean; forgot: boolean; error?: string }>
     status: () => Promise<{
       connected: boolean
       has_session: boolean
-      jid?: string | null
+      phone?: string | null
+      display_name?: string | null
     }>
     cancel: () => Promise<{ cancelled: boolean }>
     listThreads: (params?: {
       limit?: number
       offset?: number
-    }) => Promise<{ threads: WhatsAppThread[]; error?: string }>
+    }) => Promise<{
+      threads: WhatsAppThread[]
+      total_messages?: number
+      owner_id?: string
+      error?: string
+    }>
     listMessages: (params: {
       chat_jid: string
       limit?: number

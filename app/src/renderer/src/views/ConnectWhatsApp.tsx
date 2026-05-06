@@ -17,7 +17,13 @@ import { errorMessage } from '../lib/errors'
 
 type Status =
   | { phase: 'loading' }
-  | { phase: 'idle'; connected: boolean; hasSession: boolean; jid: string | null }
+  | {
+      phase: 'idle'
+      connected: boolean
+      hasSession: boolean
+      phone: string | null
+      displayName: string | null
+    }
   | {
       phase: 'connecting'
       qrPng: string | null
@@ -38,7 +44,8 @@ export default function ConnectWhatsApp(): JSX.Element {
           phase: 'idle',
           connected: r.connected,
           hasSession: r.has_session,
-          jid: r.jid ?? null
+          phone: r.phone ?? null,
+          displayName: r.display_name ?? null
         })
       })
       .catch((e) => {
@@ -57,7 +64,8 @@ export default function ConnectWhatsApp(): JSX.Element {
         phase: 'idle',
         connected: r.connected,
         hasSession: r.has_session,
-        jid: r.jid ?? null
+        phone: r.phone ?? null,
+        displayName: r.display_name ?? null
       })
     } catch (e) {
       setState({ phase: 'error', message: errorMessage(e) })
@@ -166,9 +174,14 @@ export default function ConnectWhatsApp(): JSX.Element {
         </div>
       </div>
 
-      {state.phase === 'idle' && state.connected && state.jid && (
+      {state.phase === 'idle' && state.connected && (state.phone || state.displayName) && (
         <p className="text-xs text-brand-grey-80 mt-2">
-          Connected as <strong>+{state.jid}</strong>
+          Connected as{' '}
+          <strong>
+            {state.displayName
+              ? `${state.displayName}${state.phone ? ` (+${state.phone})` : ''}`
+              : `+${state.phone}`}
+          </strong>
         </p>
       )}
 
