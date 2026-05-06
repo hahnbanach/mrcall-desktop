@@ -37,6 +37,16 @@ export ZYLCH_BINARY="$ENGINE_BIN"
 # clarity / future scripts that key off it.
 export ZYLCH_CWD="$REPO_ROOT"
 
+# python-magic (transitively imported by neonize) loads libmagic.dylib
+# via ctypes. macOS standard search paths don't include Homebrew's, so
+# add /opt/homebrew/lib (Apple Silicon) and /usr/local/lib (Intel /
+# manual installs) as a fallback. Belt + suspenders alongside the
+# python-magic >=0.4.27 pin in pyproject.toml; harmless if libmagic
+# was installed elsewhere.
+if [[ "$OSTYPE" == darwin* ]]; then
+  export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib:/usr/local/lib:${DYLD_FALLBACK_LIBRARY_PATH:-}"
+fi
+
 echo "[dev.sh] ZYLCH_BINARY=$ZYLCH_BINARY"
 echo "[dev.sh] ZYLCH_PROFILE=${ZYLCH_PROFILE:-<unset, app picks default>}"
 echo "[dev.sh] cd $APP_DIR && npm run dev"

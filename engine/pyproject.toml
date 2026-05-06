@@ -27,6 +27,10 @@ dependencies = [
     "python-telegram-bot>=22.0",
     "rich>=13.0.0",
     "segno>=1.5.0",
+    # neonize transitively imports python-magic for MIME detection.
+    # >=0.4.27 looks in /opt/homebrew/lib by default on Apple Silicon
+    # (brew's location), so users only need `brew install libmagic`.
+    "python-magic>=0.4.27",
 ]
 
 [project.scripts]

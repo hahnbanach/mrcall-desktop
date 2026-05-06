@@ -138,7 +138,28 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
         from zylch.whatsapp.client import WhatsAppClient
     except (ImportError, OSError) as e:
         logger.error(f"[rpc:whatsapp.connect] neonize unavailable: {e}")
-        return {"ok": False, "reason": f"WhatsApp not available: {e}"}
+        msg = str(e)
+        # libmagic is the most common stumble on macOS — surface a
+        # specific hint instead of bubbling the bare ctypes error so
+        # the user knows the exact recovery step.
+        if "libmagic" in msg.lower():
+            import sys as _sys
+
+            if _sys.platform == "darwin":
+                hint = (
+                    "Install libmagic with Homebrew: `brew install libmagic`, "
+                    "then restart MrCall Desktop."
+                )
+            elif _sys.platform.startswith("linux"):
+                hint = (
+                    "Install libmagic via your package manager: "
+                    "`sudo apt install libmagic1` (Debian/Ubuntu) or "
+                    "`sudo dnf install file-libs` (Fedora), then restart."
+                )
+            else:
+                hint = "Install libmagic for your platform, then restart MrCall Desktop."
+            return {"ok": False, "reason": f"libmagic missing. {hint}"}
+        return {"ok": False, "reason": f"WhatsApp not available: {msg}"}
 
     loop = asyncio.get_running_loop()
     qr_published = threading.Event()
