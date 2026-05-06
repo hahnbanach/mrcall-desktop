@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import Icon from '../components/Icon'
 import ConnectGoogleCalendar from './ConnectGoogleCalendar'
+import ConnectWhatsApp from './ConnectWhatsApp'
 import { performSignOut } from '../App'
 import { auth } from '../firebase/config'
 
@@ -180,7 +181,10 @@ export default function Settings(): JSX.Element {
         <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
           Integrations
         </h2>
-        <ConnectGoogleCalendar />
+        <div className="space-y-3">
+          <ConnectGoogleCalendar />
+          <ConnectWhatsApp />
+        </div>
       </section>
 
       {grouped.map(([group, items]) => (

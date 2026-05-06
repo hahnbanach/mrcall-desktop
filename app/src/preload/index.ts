@@ -347,6 +347,35 @@ const api = {
       cancel: () => call<{ cancelled: boolean }>('google.calendar.cancel', {})
     }
   },
+  whatsapp: {
+    // Spawns a neonize client and awaits QR scan + connect. The QR is
+    // delivered separately via the `whatsapp.qr_ready` notification —
+    // payload `{ png_base64?: string, qr_text?: string | null }` — so
+    // the renderer can render the image as soon as it arrives without
+    // blocking on the connect resolution. 5-minute soft cap from the
+    // engine; 5.5 min on the wire to avoid client-side races.
+    connect: () =>
+      call<{ ok: boolean; jid?: string; reason?: string }>(
+        'whatsapp.connect',
+        {},
+        330000
+      ),
+    // forget_session=true also removes ~/.zylch/.../whatsapp.db so the
+    // next connect requires a new QR (used as "Forget device").
+    disconnect: (forgetSession = false) =>
+      call<{ ok: boolean; forgot: boolean; error?: string }>(
+        'whatsapp.disconnect',
+        { forget_session: forgetSession }
+      ),
+    // {connected, has_session, jid?} — does NOT spin up neonize, just
+    // peeks at module state + on-disk session file.
+    status: () =>
+      call<{ connected: boolean; has_session: boolean; jid?: string | null }>(
+        'whatsapp.status',
+        {}
+      ),
+    cancel: () => call<{ cancelled: boolean }>('whatsapp.cancel', {})
+  },
   shell: {
     // Open a URL in the user's default browser. Used by the Calendar
     // OAuth flow (and any future link-out from the renderer) so

@@ -224,6 +224,18 @@ export interface ZylchAPI {
       cancel: () => Promise<{ cancelled: boolean }>
     }
   }
+  whatsapp: {
+    connect: () => Promise<{ ok: boolean; jid?: string; reason?: string }>
+    disconnect: (
+      forgetSession?: boolean
+    ) => Promise<{ ok: boolean; forgot: boolean; error?: string }>
+    status: () => Promise<{
+      connected: boolean
+      has_session: boolean
+      jid?: string | null
+    }>
+    cancel: () => Promise<{ cancelled: boolean }>
+  }
   shell: {
     openExternal: (url: string) => Promise<{ ok: boolean }>
   }

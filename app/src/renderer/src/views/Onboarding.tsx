@@ -24,6 +24,7 @@ import { auth } from '../firebase/config'
 import { performSignOut } from '../App'
 import ProfileFormFields from '../components/ProfileFormFields'
 import ConnectGoogleCalendar from './ConnectGoogleCalendar'
+import ConnectWhatsApp from './ConnectWhatsApp'
 
 interface OnboardingProps {
   onReady?: (profile: string) => void
@@ -216,6 +217,7 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
         ) : (
           <div className="space-y-4">
             <ConnectGoogleCalendar />
+            <ConnectWhatsApp />
             <p className="text-xs text-brand-grey-80">
               You can also connect / disconnect from Settings → Integrations any time.
             </p>

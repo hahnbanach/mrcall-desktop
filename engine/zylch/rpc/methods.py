@@ -1583,3 +1583,12 @@ for _name, _fn in _GOOGLE_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
+
+# WhatsApp connection (neonize / whatsmeow) — desktop UI triggers QR
+# scan flow, engine emits PNG QR via notification and awaits connect.
+from zylch.rpc.whatsapp_actions import METHODS as _WHATSAPP_METHODS  # noqa: E402
+
+for _name, _fn in _WHATSAPP_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
