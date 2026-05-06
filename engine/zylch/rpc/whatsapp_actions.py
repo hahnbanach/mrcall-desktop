@@ -52,8 +52,26 @@ NotifyFn = Callable[[str, Dict[str, Any]], None]
 # only ever has ONE WhatsApp connection per profile.
 _state_lock = threading.Lock()
 _active_client: Optional[Any] = None  # WhatsAppClient
+_active_sync: Optional[Any] = None  # WhatsAppSyncService — kept alive so
+# the on_message handler (registered on the live neonize client) keeps
+# storing new messages for as long as the sidecar runs.
 _connect_in_flight: Optional[asyncio.Task] = None
 _cancel_event: Optional[threading.Event] = None
+
+
+def _resolve_owner_id() -> str:
+    """Owner ID for the active profile.
+
+    Mirrors `_owner_id()` in methods.py without importing it (would
+    create a cycle). Falls back to the legacy `OWNER_ID` env var or
+    the email address — same chain `Storage` uses everywhere else.
+    """
+    return (
+        os.environ.get("OWNER_ID")
+        or os.environ.get("ZYLCH_PROFILE")
+        or os.environ.get("EMAIL_ADDRESS")
+        or ""
+    )
 
 
 def _wa_db_path() -> str:
@@ -161,9 +179,24 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
             return {"ok": False, "reason": f"libmagic missing. {hint}"}
         return {"ok": False, "reason": f"WhatsApp not available: {msg}"}
 
+    # Sync service mirrors what `process_pipeline.py` does in the CLI
+    # path: stores history events + live messages into whatsapp_messages.
+    # Without this, the renderer's thread/message lists stay empty even
+    # though the socket is connected.
+    try:
+        from zylch.whatsapp.sync import WhatsAppSyncService
+        from zylch.storage import Storage
+
+        owner_id = _resolve_owner_id()
+        sync_svc = WhatsAppSyncService(Storage.get_instance(), owner_id)
+    except Exception as e:
+        logger.error(f"[rpc:whatsapp.connect] sync service init failed: {e}")
+        return {"ok": False, "reason": f"sync init failed: {e}"}
+
     loop = asyncio.get_running_loop()
     qr_published = threading.Event()
     connected_ev = threading.Event()
+    history_done_ev = threading.Event()
     _cancel_event = threading.Event()
 
     jid_holder: Dict[str, Optional[str]] = {"jid": None}
@@ -201,13 +234,30 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
             jid_holder["jid"] = None
         connected_ev.set()
 
+    def _on_history(event) -> None:
+        try:
+            sync_svc.handle_history_sync(event)
+        except Exception as e:
+            logger.warning(f"[rpc:whatsapp.connect] history handler: {e}")
+        finally:
+            history_done_ev.set()
+
+    def _on_message(event) -> bool:
+        try:
+            return bool(sync_svc.handle_message(event))
+        except Exception as e:
+            logger.warning(f"[rpc:whatsapp.connect] message handler: {e}")
+            return False
+
     client = WhatsAppClient()
     client.set_qr_callback(_on_qr)
     client.on_connected(_on_connected)
+    client.on_history_sync(_on_history)
+    client.on_message(_on_message)
 
     with _state_lock:
-        _active_client = client  # noqa: F841 — assigned to module global below
         globals()["_active_client"] = client
+        globals()["_active_sync"] = sync_svc
 
     # Run the blocking neonize connect in a thread; we await an event.
     client.connect(blocking=False)
@@ -228,6 +278,22 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
                     globals()["_active_client"] = None
                 return {"ok": False, "reason": "cancelled"}
             if connected_ev.is_set():
+                # Give the history sync up to 30s to finish — usually
+                # arrives within a few seconds of CONNECTED on first
+                # link, often skipped for re-connect (already synced).
+                hist_elapsed = 0.0
+                while hist_elapsed < 30.0:
+                    if history_done_ev.is_set():
+                        break
+                    await asyncio.sleep(step)
+                    hist_elapsed += step
+                # Materialize WhatsAppContact rows from messages we
+                # just stored so the renderer's thread list shows
+                # names, not raw JIDs.
+                try:
+                    sync_svc.sync_contacts(client)
+                except Exception as e:
+                    logger.warning(f"[rpc:whatsapp.connect] sync_contacts: {e}")
                 return {"ok": True, "jid": jid_holder["jid"]}
             await asyncio.sleep(step)
             elapsed += step
@@ -254,6 +320,187 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
             globals()["_cancel_event"] = None
 
 
+async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """whatsapp.list_threads(limit=200, offset=0) -> {threads: [...]}.
+
+    One row per ``chat_jid`` with the latest message preview, sorted
+    newest first. Joins WhatsAppContact when available so the renderer
+    can show the contact name instead of the raw JID.
+    """
+    from sqlalchemy import desc, func
+
+    from zylch.storage.database import get_session
+    from zylch.storage.models import WhatsAppContact, WhatsAppMessage
+
+    limit = int(params.get("limit", 200))
+    offset = int(params.get("offset", 0))
+    owner_id = _resolve_owner_id()
+    if not owner_id:
+        return {"threads": []}
+
+    try:
+        with get_session() as session:
+            # Aggregate per chat: count + latest timestamp.
+            agg = (
+                session.query(
+                    WhatsAppMessage.chat_jid,
+                    func.max(WhatsAppMessage.timestamp).label("last_ts"),
+                    func.count(WhatsAppMessage.id).label("msg_count"),
+                )
+                .filter(WhatsAppMessage.owner_id == owner_id)
+                .group_by(WhatsAppMessage.chat_jid)
+                .order_by(desc("last_ts"))
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+            if not agg:
+                return {"threads": []}
+
+            # Latest message body per chat — one extra query keyed off
+            # the (chat_jid, max timestamp) pairs we already have.
+            jids = [r.chat_jid for r in agg]
+            last_msg_rows = (
+                session.query(
+                    WhatsAppMessage.chat_jid,
+                    WhatsAppMessage.text,
+                    WhatsAppMessage.is_from_me,
+                    WhatsAppMessage.is_group,
+                    WhatsAppMessage.sender_name,
+                    WhatsAppMessage.timestamp,
+                    WhatsAppMessage.media_type,
+                )
+                .filter(
+                    WhatsAppMessage.owner_id == owner_id,
+                    WhatsAppMessage.chat_jid.in_(jids),
+                )
+                .order_by(WhatsAppMessage.timestamp.desc())
+                .all()
+            )
+            last_by_jid: Dict[str, Any] = {}
+            for r in last_msg_rows:
+                if r.chat_jid not in last_by_jid:
+                    last_by_jid[r.chat_jid] = r
+
+            # Contacts for display name resolution.
+            contact_rows = (
+                session.query(WhatsAppContact)
+                .filter(
+                    WhatsAppContact.owner_id == owner_id,
+                    WhatsAppContact.jid.in_(jids),
+                )
+                .all()
+            )
+            contact_by_jid = {c.jid: c for c in contact_rows}
+
+            threads = []
+            for row in agg:
+                jid = row.chat_jid
+                last = last_by_jid.get(jid)
+                contact = contact_by_jid.get(jid)
+                is_group = bool(last.is_group) if last is not None else jid.endswith("@g.us")
+                # Display name: contact.name → contact.push_name → last
+                # message's sender_name → fallback to phone-from-jid.
+                name = None
+                phone = None
+                if contact is not None:
+                    name = contact.name or contact.push_name
+                    phone = contact.phone_number
+                if not name and last is not None and last.sender_name:
+                    name = last.sender_name
+                if not phone:
+                    # Strip the @s.whatsapp.net / @g.us suffix.
+                    bare = jid.split("@", 1)[0]
+                    phone = bare or None
+
+                # Preview: text body if any, otherwise a placeholder
+                # describing the media type.
+                if last is None:
+                    preview = ""
+                elif last.text:
+                    preview = last.text
+                elif last.media_type:
+                    preview = f"[{last.media_type}]"
+                else:
+                    preview = ""
+
+                threads.append(
+                    {
+                        "jid": jid,
+                        "name": name,
+                        "phone": phone,
+                        "is_group": is_group,
+                        "message_count": int(row.msg_count or 0),
+                        "last_at": (
+                            last.timestamp.isoformat()
+                            if last is not None and last.timestamp is not None
+                            else None
+                        ),
+                        "last_preview": preview,
+                        "last_from_me": bool(last.is_from_me) if last is not None else False,
+                    }
+                )
+            return {"threads": threads}
+    except Exception as e:
+        logger.error(f"[rpc:whatsapp.list_threads] {e}")
+        return {"threads": [], "error": str(e)}
+
+
+async def whatsapp_list_messages(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """whatsapp.list_messages(chat_jid, limit=200, offset=0) -> {messages}.
+
+    Oldest-first within the page so the renderer can render top-to-bottom
+    without reversing.
+    """
+    from zylch.storage.database import get_session
+    from zylch.storage.models import WhatsAppMessage
+
+    chat_jid = (params.get("chat_jid") or "").strip()
+    if not chat_jid:
+        return {"messages": []}
+    limit = int(params.get("limit", 200))
+    offset = int(params.get("offset", 0))
+    owner_id = _resolve_owner_id()
+    if not owner_id:
+        return {"messages": []}
+
+    try:
+        with get_session() as session:
+            rows = (
+                session.query(WhatsAppMessage)
+                .filter(
+                    WhatsAppMessage.owner_id == owner_id,
+                    WhatsAppMessage.chat_jid == chat_jid,
+                )
+                .order_by(WhatsAppMessage.timestamp.asc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+            return {
+                "messages": [
+                    {
+                        "id": r.id,
+                        "message_id": r.message_id,
+                        "chat_jid": r.chat_jid,
+                        "sender_jid": r.sender_jid,
+                        "sender_name": r.sender_name,
+                        "text": r.text,
+                        "media_type": r.media_type,
+                        "is_from_me": bool(r.is_from_me),
+                        "is_group": bool(r.is_group),
+                        "timestamp": (
+                            r.timestamp.isoformat() if r.timestamp is not None else None
+                        ),
+                    }
+                    for r in rows
+                ]
+            }
+    except Exception as e:
+        logger.error(f"[rpc:whatsapp.list_messages] {e}")
+        return {"messages": [], "error": str(e)}
+
+
 async def whatsapp_disconnect(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """whatsapp.disconnect(forget_session=False) -> {ok}"""
     forget = bool(params.get("forget_session", False))
@@ -266,6 +513,7 @@ async def whatsapp_disconnect(params: Dict[str, Any], notify: NotifyFn) -> Any:
             logger.warning(f"[rpc:whatsapp.disconnect] {e}")
     with _state_lock:
         globals()["_active_client"] = None
+        globals()["_active_sync"] = None
     if forget:
         path = _wa_db_path()
         try:
@@ -293,4 +541,6 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "whatsapp.disconnect": whatsapp_disconnect,
     "whatsapp.status": whatsapp_status,
     "whatsapp.cancel": whatsapp_cancel,
+    "whatsapp.list_threads": whatsapp_list_threads,
+    "whatsapp.list_messages": whatsapp_list_messages,
 }

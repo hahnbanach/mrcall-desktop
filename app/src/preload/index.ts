@@ -6,6 +6,30 @@ const listeners = new Map<string, Set<NotifyCb>>()
 type StderrCb = (chunk: string) => void
 const stderrListeners = new Set<StderrCb>()
 
+interface WhatsAppThread {
+  jid: string
+  name: string | null
+  phone: string | null
+  is_group: boolean
+  message_count: number
+  last_at: string | null
+  last_preview: string
+  last_from_me: boolean
+}
+
+interface WhatsAppMessage {
+  id: string
+  message_id: string
+  chat_jid: string
+  sender_jid: string
+  sender_name: string | null
+  text: string | null
+  media_type: string | null
+  is_from_me: boolean
+  is_group: boolean
+  timestamp: string | null
+}
+
 ipcRenderer.on('sidecar:stderr', (_e, chunk: string) => {
   for (const cb of stderrListeners) {
     try {
@@ -374,7 +398,21 @@ const api = {
         'whatsapp.status',
         {}
       ),
-    cancel: () => call<{ cancelled: boolean }>('whatsapp.cancel', {})
+    cancel: () => call<{ cancelled: boolean }>('whatsapp.cancel', {}),
+    listThreads: (params?: { limit?: number; offset?: number }) =>
+      call<{ threads: WhatsAppThread[]; error?: string }>(
+        'whatsapp.list_threads',
+        { limit: params?.limit ?? 200, offset: params?.offset ?? 0 }
+      ),
+    listMessages: (params: { chat_jid: string; limit?: number; offset?: number }) =>
+      call<{ messages: WhatsAppMessage[]; error?: string }>(
+        'whatsapp.list_messages',
+        {
+          chat_jid: params.chat_jid,
+          limit: params.limit ?? 200,
+          offset: params.offset ?? 0
+        }
+      )
   },
   shell: {
     // Open a URL in the user's default browser. Used by the Calendar

@@ -70,6 +70,30 @@ export interface InboxThread {
   last_email_id: string
 }
 
+export interface WhatsAppThread {
+  jid: string
+  name: string | null
+  phone: string | null
+  is_group: boolean
+  message_count: number
+  last_at: string | null
+  last_preview: string
+  last_from_me: boolean
+}
+
+export interface WhatsAppMessage {
+  id: string
+  message_id: string
+  chat_jid: string
+  sender_jid: string
+  sender_name: string | null
+  text: string | null
+  media_type: string | null
+  is_from_me: boolean
+  is_group: boolean
+  timestamp: string | null
+}
+
 export interface ZylchAPI {
   tasks: {
     list: (p?: { include_completed?: boolean; include_skipped?: boolean }) => Promise<ZylchTask[]>
@@ -242,6 +266,15 @@ export interface ZylchAPI {
       jid?: string | null
     }>
     cancel: () => Promise<{ cancelled: boolean }>
+    listThreads: (params?: {
+      limit?: number
+      offset?: number
+    }) => Promise<{ threads: WhatsAppThread[]; error?: string }>
+    listMessages: (params: {
+      chat_jid: string
+      limit?: number
+      offset?: number
+    }) => Promise<{ messages: WhatsAppMessage[]; error?: string }>
   }
   shell: {
     openExternal: (url: string) => Promise<{ ok: boolean }>
