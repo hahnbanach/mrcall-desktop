@@ -5,6 +5,7 @@ import Workspace from './views/Workspace'
 import Update from './views/Update'
 import Settings from './views/Settings'
 import Email from './views/Email'
+import WhatsAppView from './views/WhatsApp'
 import NewProfileWizard from './views/NewProfileWizard'
 import Onboarding from './views/Onboarding'
 import SignIn from './views/SignIn'
@@ -21,7 +22,7 @@ import mrcallIcon from './assets/logos/mrcall-icon.png'
 import mrcallWordmark from './assets/logos/mrcall-wordmark.png'
 import './types'
 
-type View = 'tasks' | 'workspace' | 'email' | 'update' | 'settings'
+type View = 'tasks' | 'workspace' | 'email' | 'whatsapp' | 'update' | 'settings'
 
 // Banner shown at the top of the window when the sidecar is dead. The
 // most common case is a profile lock: the user opened a second window on
@@ -558,6 +559,12 @@ function AppInner(): JSX.Element {
           )}
           <div
             className="absolute inset-0 overflow-auto"
+            style={{ display: view === 'whatsapp' ? 'block' : 'none' }}
+          >
+            <WhatsAppView />
+          </div>
+          <div
+            className="absolute inset-0 overflow-auto"
             style={{ display: view === 'update' ? 'block' : 'none' }}
           >
             <Update />
@@ -589,7 +596,7 @@ function AppInner(): JSX.Element {
  * Sidebar — left-aligned primary navigation. Replaces the previous top
  * nav bar. Layout (top → bottom):
  *   - profile badge + "Other profiles" dropdown (lists other profiles + "+ New Profile")
- *   - nav items (Task / Email [gated] / WhatsApp [placeholder] / MrCall [placeholder])
+ *   - nav items (Task / Chat / Email [gated] / WhatsApp / MrCall [placeholder])
  *   - divider
  *   - Update / Settings
  */
@@ -627,12 +634,9 @@ function Sidebar({
       hidden: !hasEmailConfigured
     },
     {
-      // placeholder — not yet wired; clicking does nothing.
-      id: 'tasks',
+      id: 'whatsapp',
       label: 'WhatsApp',
-      icon: 'whatsapp',
-      disabled: true,
-      disabledTitle: 'Not connected'
+      icon: 'whatsapp'
     },
     {
       id: 'tasks',
