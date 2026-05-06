@@ -274,7 +274,17 @@ async def reanalyze_task(
             tool_choice={"type": "tool", "name": "reanalyze_decision"},
         )
     except Exception as e:
-        logger.exception(f"[reanalyze_task] LLM call failed task_id={task_id}")
+        # 529 / overloaded is a known transient provider issue —
+        # logging the full stack on every retry would flood stderr.
+        # The sweep's abort-on-2-consecutive guard already prevents
+        # runaway noise; one warning per failure is enough.
+        err_str = str(e)
+        if "529" in err_str or "overloaded" in err_str.lower():
+            logger.warning(
+                f"[reanalyze_task] provider overloaded (529) task_id={task_id}"
+            )
+        else:
+            logger.exception(f"[reanalyze_task] LLM call failed task_id={task_id}")
         return {"ok": False, "error": f"LLM error: {e}", "task_id": task_id}
 
     decision: Dict[str, Any] = {}

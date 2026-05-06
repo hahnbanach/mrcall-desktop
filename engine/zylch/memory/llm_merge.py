@@ -233,14 +233,12 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
                 consecutive_overload = 0
             except Exception as e:
                 err_str = str(e)
-                logger.exception(
-                    f"[reconsolidate] merge failed for keeper={keeper['id'][:12]} "
-                    f"other={other['id'][:12]} name={name!r}: {e}"
-                )
-                # Persistent provider overload: stop hammering. The
-                # blobs that didn't get merged THIS run remain
-                # untouched; next manual click retries.
                 if "529" in err_str or "overloaded" in err_str.lower():
+                    # Single warning line for transient provider overload.
+                    logger.warning(
+                        f"[reconsolidate] merge overloaded (529) "
+                        f"keeper={keeper['id'][:12]} other={other['id'][:12]}"
+                    )
                     consecutive_overload += 1
                     if consecutive_overload >= 2:
                         aborted_overload = True
@@ -250,6 +248,11 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
                             "Re-run when capacity recovers."
                         )
                         break
+                else:
+                    logger.exception(
+                        f"[reconsolidate] merge failed for keeper={keeper['id'][:12]} "
+                        f"other={other['id'][:12]} name={name!r}: {e}"
+                    )
                 continue
             if not merged:
                 continue

@@ -354,13 +354,13 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
             consecutive_overload = 0
         except Exception as e:
             err_str = str(e)
-            logger.exception(
-                f"[dedup] arbiter call failed for cluster size={cluster_size}: {e}"
-            )
-            # Persistent provider overload: stop hammering. Remaining
-            # clusters are unchanged in DB; the next /update or a
-            # manual `Clean up tasks` retries.
+            # 529 / overloaded: known transient provider issue, single
+            # warning line. Other exceptions get the full stack.
             if "529" in err_str or "overloaded" in err_str.lower():
+                logger.warning(
+                    f"[dedup] arbiter call overloaded (529) "
+                    f"cluster size={cluster_size}"
+                )
                 consecutive_overload += 1
                 if consecutive_overload >= 2:
                     arbiter_aborted_overload = True
@@ -370,6 +370,10 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
                         "Remaining clusters left for next /update."
                     )
                     break
+            else:
+                logger.exception(
+                    f"[dedup] arbiter call failed for cluster size={cluster_size}: {e}"
+                )
             continue
 
         decision: Dict[str, Any] = {}
