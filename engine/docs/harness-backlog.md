@@ -12,6 +12,31 @@ Enforcement gaps, missing tooling, and documentation debt.
 
 ## Open
 
+- [ ] **Two functions claim to resolve `owner_id` and disagree.**
+  Discovered: 2026-05-06 (during the WhatsApp-empty-list bug investigation)
+  - ``cli/utils.get_owner_id()`` returns ``EMAIL_ADDRESS`` (fallback
+    ``"local-user"``). Used by all RPC handlers, ``process_pipeline``,
+    ``WhatsAppSyncService``.
+  - ``config.settings.owner_id`` is a Pydantic field that reads the
+    ``OWNER_ID`` env var (fallback ``"owner_default"``). Used to live
+    in three call-sites: ``telegram/bot.py:_get_owner_id`` (fixed),
+    ``api/token_storage.py:_owner`` (fixed), and
+    ``tools/config.py:ToolConfig.from_settings`` (still divergent).
+  Impact: rows written under the EMAIL_ADDRESS key are invisible to
+  any caller that resolves owner_id via ``settings.owner_id`` — and
+  vice versa. The WhatsApp tab showed zero conversations on Firebase
+  profiles because of exactly this; same shape would silently hit
+  the Telegram bot and any tool constructed via
+  ``ToolConfig.from_settings`` (no per-owner wiring).
+  Recommendation: collapse to one canonical function. The cleanest
+  is to delete ``settings.owner_id`` entirely (and the
+  ``"owner_default"`` fallback string with it) so there is only ONE
+  way to resolve owner_id. Alternative: keep the field but make
+  ``get_owner_id()`` consult it as a fallback when EMAIL_ADDRESS is
+  unset, then audit every call-site once. Tracked here because the
+  ``ToolConfig`` rewrite touches many tool factories and warrants
+  its own PR.
+
 - [ ] No linter or CI check enforcing the 500-line file limit
   Discovered: 2026-03-17
   Impact: Large files accumulate silently (command_handlers.py now 5137 lines, gmail_tools.py 988)

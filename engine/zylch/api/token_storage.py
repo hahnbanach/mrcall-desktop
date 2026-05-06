@@ -24,10 +24,18 @@ def _storage():
 
 
 def _owner():
-    """Return the configured owner_id."""
-    from zylch.config import settings
+    """Return the configured owner_id.
 
-    return settings.owner_id
+    Delegates to the canonical resolver so a future caller of this
+    helper sees the same value as everything else in the engine.
+    Reading ``settings.owner_id`` directly here was a footgun: that
+    field falls back to ``"owner_default"`` when ``OWNER_ID`` env is
+    unset, which never matches the ``EMAIL_ADDRESS`` key the rest of
+    the storage layer is written under.
+    """
+    from zylch.cli.utils import get_owner_id
+
+    return get_owner_id()
 
 
 # ------------------------------------------------------------------

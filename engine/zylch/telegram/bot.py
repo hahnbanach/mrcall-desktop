@@ -52,8 +52,19 @@ def _get_chat_service():
 
 
 def _get_owner_id() -> str:
-    """Get owner_id from settings."""
-    return settings.owner_id or "owner_default"
+    """Get owner_id for the active profile.
+
+    Delegates to the canonical resolver in cli/utils — same value the
+    RPC handlers, process_pipeline, and WhatsAppSyncService use. The
+    previous implementation read ``settings.owner_id`` (= ``OWNER_ID``
+    env var, fallback ``"owner_default"``), which doesn't match
+    ``get_owner_id()`` = ``EMAIL_ADDRESS`` — so the bot was reading
+    rows under a different key than the engine had written them under
+    and reported zero tasks on every profile.
+    """
+    from zylch.cli.utils import get_owner_id
+
+    return get_owner_id()
 
 
 def _check_authorized(user_id: int) -> bool:
