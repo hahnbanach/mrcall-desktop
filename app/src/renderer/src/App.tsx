@@ -257,22 +257,28 @@ function ProfilePickerDialog({
   )
 }
 
-// Lightweight dropdown listing all profiles. Click on a row opens a
-// new BrowserWindow bound to that profile via
-// `window.zylch.window.openForProfile(email)` — no intermediate modal.
-// The current profile is shown but disabled (clicking it would just
-// focus a duplicate). Reloads the profile list every time the menu is
-// opened, so a brand-new profile created via NewProfileWizard appears
-// without a manual refresh.
+// Lightweight dropdown listing all profiles + a "+ New Profile"
+// shortcut. Click on a profile row opens a new BrowserWindow bound to
+// that profile via `window.zylch.window.openForProfile(email)` — no
+// intermediate modal. The current profile is shown but disabled
+// (clicking it would just focus a duplicate). Clicking "+ New Profile"
+// fires `onNewProfile`. Reloads the profile list every time the menu
+// is opened, so a brand-new profile created via NewProfileWizard
+// appears without a manual refresh. `direction` controls whether the
+// menu pops up or down relative to the trigger button.
 function ProfilesDropdown({
   currentEmail,
-  refreshKey
+  refreshKey,
+  onNewProfile,
+  direction = 'up'
 }: {
   /** The current window's profile label as already displayed in the
    *  Sidebar — email when available, dir id as fallback. Used here
    *  only to mark the "current" row, not as a key. */
   currentEmail: string
   refreshKey: number
+  onNewProfile: () => void
+  direction?: 'up' | 'down'
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const [profiles, setProfiles] = useState<ProfileEntry[]>([])
@@ -346,6 +352,9 @@ function ProfilesDropdown({
     }
   }
 
+  const menuPositionClass =
+    direction === 'down' ? 'left-0 top-full mt-1' : 'left-0 bottom-full mb-1'
+
   return (
     <div ref={containerRef} className="relative">
       <button
@@ -353,16 +362,27 @@ function ProfilesDropdown({
         title="Open another profile in a new window"
         aria-haspopup="menu"
         aria-expanded={open}
-        className="px-2 py-1 rounded text-xs border border-brand-mid-grey text-brand-grey-80 bg-white hover:bg-brand-light-grey text-left flex items-center justify-between"
+        className="w-full px-2 py-1 rounded text-xs border border-brand-mid-grey text-brand-grey-80 bg-white hover:bg-brand-light-grey text-left flex items-center justify-between"
       >
-        <span>Profiles</span>
-        <span>{open ? '\u25B4' : '\u25BE'}</span>
+        <span>Other profiles</span>
+        <span>{open ? '▴' : '▾'}</span>
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute left-0 bottom-full mb-1 min-w-[220px] bg-white border border-brand-mid-grey rounded shadow-lg z-40 py-1"
+          className={`absolute ${menuPositionClass} min-w-[220px] bg-white border border-brand-mid-grey rounded shadow-lg z-40 py-1`}
         >
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              onNewProfile()
+            }}
+            className="w-full text-left px-3 py-2 text-xs text-brand-grey-80 hover:bg-brand-light-grey"
+          >
+            + New Profile
+          </button>
+          <div className="h-px bg-brand-mid-grey/60 my-1" />
           {loading && (
             <div className="px-3 py-2 text-xs text-brand-grey-80">Loading profiles...</div>
           )}
@@ -371,7 +391,7 @@ function ProfilesDropdown({
           )}
           {!loading && profiles.length === 0 && !error && (
             <div className="px-3 py-2 text-xs text-brand-grey-80">
-              No profiles found. Run <code>zylch init</code> first.
+              No other profiles yet.
             </div>
           )}
           {profiles.map((entry) => {
@@ -497,7 +517,6 @@ function AppInner(): JSX.Element {
           profileEmail={profileEmail}
           hasEmailConfigured={hasEmailConfigured}
           onNewProfile={() => setWizardOpen(true)}
-          onOpenProfilePicker={() => setPickerOpen(true)}
           profilesRefreshKey={profilesRefreshKey}
         />
         {/* All views are always mounted; inactive ones are hidden. This
@@ -569,11 +588,10 @@ function AppInner(): JSX.Element {
 /**
  * Sidebar — left-aligned primary navigation. Replaces the previous top
  * nav bar. Layout (top → bottom):
- *   - profile badge + "+ New Window" button
+ *   - profile badge + "Other profiles" dropdown (lists other profiles + "+ New Profile")
  *   - nav items (Task / Email [gated] / WhatsApp [placeholder] / MrCall [placeholder])
  *   - divider
  *   - Update / Settings
- *   - profiles footer
  */
 function Sidebar({
   view,
@@ -581,7 +599,6 @@ function Sidebar({
   profileEmail,
   hasEmailConfigured,
   onNewProfile,
-  onOpenProfilePicker,
   profilesRefreshKey
 }: {
   view: View
@@ -589,7 +606,6 @@ function Sidebar({
   profileEmail: string
   hasEmailConfigured: boolean
   onNewProfile: () => void
-  onOpenProfilePicker: () => void
   profilesRefreshKey: number
 }): JSX.Element {
   type NavItem = {
@@ -688,13 +704,12 @@ function Sidebar({
             <span className="truncate">{profileEmail}</span>
           </div>
         )}
-        <button
-          onClick={onOpenProfilePicker}
-          title="Open another profile in a new window"
-          className="px-2 py-1 rounded text-xs border border-brand-mid-grey text-brand-grey-80 bg-white hover:bg-brand-light-grey"
-        >
-          + New Window
-        </button>
+        <ProfilesDropdown
+          currentEmail={profileEmail}
+          refreshKey={profilesRefreshKey}
+          onNewProfile={onNewProfile}
+          direction="down"
+        />
       </header>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3 flex flex-col gap-1">
@@ -702,20 +717,6 @@ function Sidebar({
         <div className="h-px bg-brand-mid-grey/60 my-2 mx-1" />
         {secondary.map((it, i) => renderItem(it, `s-${i}`))}
       </nav>
-
-      <footer className="border-t border-brand-mid-grey/60 px-2 py-2 flex flex-col gap-1.5">
-        <button
-          onClick={onNewProfile}
-          title="Create a brand-new MrCall Desktop profile"
-          className="px-2 py-1 rounded text-xs border border-brand-mid-grey text-brand-grey-80 bg-white hover:bg-brand-light-grey text-left"
-        >
-          + New Profile
-        </button>
-        <ProfilesDropdown
-          currentEmail={profileEmail}
-          refreshKey={profilesRefreshKey}
-        />
-      </footer>
     </aside>
   )
 }
