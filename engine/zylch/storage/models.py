@@ -390,6 +390,16 @@ class TaskItem(DictMixin, Base):
     # against time.time() — NULL means no skip. Worker:
     # zylch.workers.task_dedup_sweep.
     dedup_skip_until = Column(BigInteger)
+    # 2026-05-06 (Fase 3.2): semantic channel the task originated
+    # from. Distinct from event_type — `event_type` is the technical
+    # event we built the task off (always "email" or "calendar"
+    # today), while `channel` is the conceptual surface ("phone" for
+    # missed-call notifications routed via email,
+    # "whatsapp" once the WA pipeline writes tasks). NULL = unknown,
+    # treated as 'email' by the UI filter for backward compat. Index
+    # used by the renderer's channel filter and by the age-based
+    # auto-close (3.3) which only sweeps `channel='phone'`.
+    channel = Column(Text, index=True)
 
     __table_args__ = (
         UniqueConstraint(

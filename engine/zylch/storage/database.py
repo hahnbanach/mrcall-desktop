@@ -169,6 +169,10 @@ def _apply_column_migrations(engine: Engine) -> None:
         # task, reopen_task_item sets this to now+7d so the sweep does
         # not immediately re-close it. NULL means "not protected".
         ("task_items", "dedup_skip_until", "BIGINT"),
+        # 2026-05-06 (Fase 3.2): semantic channel ('email', 'phone',
+        # 'calendar', 'whatsapp'). NULL means "unknown" and is
+        # treated as 'email' by the UI filter for backward compat.
+        ("task_items", "channel", "TEXT"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in migrations:
@@ -266,6 +270,11 @@ def _apply_data_backfills() -> None:
     # entries in the new index. Reconstruct it once on first boot
     # post-3.1; idempotent via INSERT OR IGNORE on the composite PK.
     _backfill_email_blobs_index()
+
+    # 2026-05-06 (Fase 3.2): backfill task_items.channel for tasks
+    # created before the column existed. Idempotent — only tasks with
+    # NULL channel are touched.
+    _backfill_task_channels()
 
 
 def _backfill_email_blobs_index() -> None:
@@ -368,6 +377,47 @@ def _backfill_email_blobs_index() -> None:
     except Exception as e:
         session.rollback()
         logger.warning(f"[backfill] email_blobs index backfill failed: {e}")
+    finally:
+        session.close()
+
+
+def _backfill_task_channels() -> None:
+    """Stamp ``task_items.channel`` for legacy tasks (Fase 3.2).
+
+    Walks rows where channel IS NULL, computes the value via
+    ``Storage._infer_task_channel`` (same rule used by new inserts),
+    and updates in place. Touches only tasks that need it, so it's
+    cheap on already-migrated DBs.
+    """
+    from zylch.storage.models import TaskItem
+    from zylch.storage.storage import _infer_task_channel
+
+    factory = get_session_factory()
+    session = factory()
+    try:
+        rows = (
+            session.query(TaskItem)
+            .filter(TaskItem.channel.is_(None))
+            .all()
+        )
+        if not rows:
+            return
+        n = 0
+        for t in rows:
+            ch = _infer_task_channel(
+                contact_email=t.contact_email or "", event_type=t.event_type
+            )
+            if ch:
+                t.channel = ch
+                n += 1
+        if n:
+            session.commit()
+            logger.info(f"[backfill] stamped channel on {n} task(s)")
+        else:
+            session.rollback()
+    except Exception as e:
+        session.rollback()
+        logger.warning(f"[backfill] task_items.channel backfill failed: {e}")
     finally:
         session.close()
 

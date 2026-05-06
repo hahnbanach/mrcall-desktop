@@ -48,6 +48,39 @@ def _get_embedding_engine():
     return _embedding_engine
 
 
+def _infer_task_channel(contact_email: str, event_type: Optional[str]) -> str:
+    """Pick the semantic channel for a task (Fase 3.2).
+
+    Distinct from event_type:
+      - event_type is the technical source (email / calendar).
+      - channel is the user-facing surface ("phone" for missed-call
+        notifications routed via email, "whatsapp" once that pipeline
+        writes tasks).
+
+    Rules (in priority order):
+      1. Calendar events → "calendar".
+      2. Email from a notification@*mrcall* / notification@*transactional*
+         address → "phone" (missed-call alerts).
+      3. Otherwise → "email".
+
+    The detection is intentionally narrow: the user wants to filter
+    "my call-back tasks" out from "my email tasks" without false
+    positives polluting either side. Add additional notification
+    domains here as new platforms get integrated.
+    """
+    if (event_type or "").lower() == "calendar":
+        return "calendar"
+    contact = (contact_email or "").strip().lower()
+    if contact and "@" in contact:
+        local, domain = contact.split("@", 1)
+        if local.startswith("notification") or local.startswith("notifications"):
+            # MrCall + the test/staging variant. Add other call-platform
+            # notifier domains here as they integrate.
+            if domain.endswith("mrcall.ai") or "transactional.mrcall" in domain:
+                return "phone"
+    return "email"
+
+
 def _generate_email_embedding(email: Dict[str, Any]) -> Optional[List[float]]:
     """Generate embedding for an email's subject + body."""
     engine = _get_embedding_engine()
@@ -2658,6 +2691,13 @@ class Storage:
                 analyzed_at = datetime.now(timezone.utc)
 
             raw_contact = item.get("contact_email") or ""
+            # Channel auto-derivation (Fase 3.2): if the caller didn't
+            # set one, infer from contact_email + event_type. The
+            # rule lives here so every store_task_item caller benefits
+            # uniformly (email branch, calendar branch, future channels).
+            channel = item.get("channel") or _infer_task_channel(
+                contact_email=raw_contact, event_type=item.get("event_type")
+            )
             data = {
                 "owner_id": owner_id,
                 "event_type": item.get("event_type"),
@@ -2670,6 +2710,7 @@ class Storage:
                 "suggested_action": item.get("suggested_action"),
                 "analyzed_at": analyzed_at,
                 "sources": item.get("sources", {}),
+                "channel": channel,
             }
             with get_session() as session:
                 stmt = sqlite_insert(TaskItem).values(**data)

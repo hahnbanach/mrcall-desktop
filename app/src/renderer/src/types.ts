@@ -21,6 +21,13 @@ export interface ZylchTask {
    * (ISO 8601 UTC).
    */
   last_signal_at?: string | null
+  /**
+   * Semantic channel ('email' / 'phone' / 'calendar' / 'whatsapp'),
+   * distinct from event_type. NULL on legacy rows that predate the
+   * Fase 3.2 column — the renderer treats null as 'email' for the
+   * filter so the dropdown stays consistent.
+   */
+  channel?: 'email' | 'phone' | 'calendar' | 'whatsapp' | string | null
   sources: {
     emails: string[]
     blobs: string[]

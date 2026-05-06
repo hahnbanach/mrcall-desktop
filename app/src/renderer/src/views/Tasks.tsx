@@ -9,6 +9,12 @@ import Icon from '../components/Icon'
 
 type StatusFilter = 'open' | 'closed'
 type SortMode = 'urgency' | 'date'
+type ChannelFilter = 'all' | 'email' | 'phone' | 'calendar' | 'whatsapp'
+
+// Persistence key for the channel filter — kept in localStorage so a
+// user who only cares about phone tasks doesn't have to flip the
+// dropdown on every reload.
+const CHANNEL_FILTER_KEY = 'mrcall.tasks.channelFilter'
 
 interface Props {
   /**
@@ -46,6 +52,22 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
   const [threadError, setThreadError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('open')
   const [sortMode, setSortMode] = useState<SortMode>('urgency')
+  const [channelFilter, setChannelFilter] = useState<ChannelFilter>(() => {
+    try {
+      const v = localStorage.getItem(CHANNEL_FILTER_KEY)
+      if (v === 'email' || v === 'phone' || v === 'calendar' || v === 'whatsapp') return v
+    } catch {
+      /* localStorage unavailable */
+    }
+    return 'all'
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHANNEL_FILTER_KEY, channelFilter)
+    } catch {
+      /* ignore */
+    }
+  }, [channelFilter])
   const [search, setSearch] = useState('')
 
   const loadThreadTasks = useCallback(async (threadId: string) => {
@@ -226,10 +248,39 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
     return tasks.filter((t) => t.completed_at == null)
   }, [tasks, statusFilter, taskThreadFilter, threadTasks])
 
+  // Channel filter (Fase 3.2): operates between status and search so
+  // the search count reflects what the user is actually looking at.
+  // 'all' is a no-op; 'email' includes legacy null-channel rows so
+  // pre-3.2 tasks don't disappear when the user picks Email.
+  const channelFiltered = useMemo(() => {
+    if (channelFilter === 'all') return statusFiltered
+    if (channelFilter === 'email') {
+      return statusFiltered.filter(
+        (t) => !t.channel || t.channel === 'email'
+      )
+    }
+    return statusFiltered.filter((t) => t.channel === channelFilter)
+  }, [statusFiltered, channelFilter])
+
+  // Channel counts feed badges in the dropdown so the user can see
+  // how many phone vs email tasks exist without scrubbing through.
+  const channelCounts = useMemo(() => {
+    const out = { all: statusFiltered.length, email: 0, phone: 0, calendar: 0, whatsapp: 0 }
+    for (const t of statusFiltered) {
+      const c = t.channel || 'email'
+      if (c === 'email' || c === 'phone' || c === 'calendar' || c === 'whatsapp') {
+        out[c] += 1
+      } else {
+        out.email += 1
+      }
+    }
+    return out
+  }, [statusFiltered])
+
   const q = search.trim().toLowerCase()
   const searchFiltered = useMemo(() => {
-    if (!q) return statusFiltered
-    return statusFiltered.filter((t) => {
+    if (!q) return channelFiltered
+    return channelFiltered.filter((t) => {
       const hay = [
         t.contact_name || '',
         t.contact_email || '',
@@ -240,7 +291,7 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
         .toLowerCase()
       return hay.includes(q)
     })
-  }, [statusFiltered, q])
+  }, [channelFiltered, q])
 
   // Loading / error states. In thread-filter mode we swap to the
   // thread-specific loading/error so the banner remains visible above.
@@ -575,6 +626,23 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
             <option value="date">Date</option>
           </select>
         </div>
+        {!isThreadMode && (
+          <div className="flex items-center gap-1.5 border border-brand-mid-grey rounded px-2 py-1 bg-white">
+            <span className="text-xs text-brand-grey-80 shrink-0">Channel</span>
+            <select
+              value={channelFilter}
+              onChange={(e) => setChannelFilter(e.target.value as ChannelFilter)}
+              className="text-sm bg-transparent outline-none"
+              aria-label="Filter tasks by channel"
+            >
+              <option value="all">All ({channelCounts.all})</option>
+              <option value="email">Email ({channelCounts.email})</option>
+              <option value="phone">Phone ({channelCounts.phone})</option>
+              <option value="calendar">Calendar ({channelCounts.calendar})</option>
+              <option value="whatsapp">WhatsApp ({channelCounts.whatsapp})</option>
+            </select>
+          </div>
+        )}
         <div className="flex items-center gap-1.5 border border-brand-mid-grey rounded px-2 py-1 bg-white">
           <Icon name="search" size={14} className="text-brand-mid-grey shrink-0" />
           <input
