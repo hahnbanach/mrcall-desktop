@@ -379,83 +379,96 @@ class TaskWorker:
                 )
             except Exception:
                 _is_notification = False
-            if _is_notification:
-                logger.debug(
-                    f"[TASK] F7 skipped (notification sender): {from_email}"
-                )
             try:
-                if not _is_notification:
-                    # Build the query from subject + body excerpt + sender.
-                    # body_plain is much richer than snippet — the snippet
-                    # often truncates before the topical keywords (signature
-                    # blocks, entity names) and we lose the signal. Cap at
-                    # 800 chars to bound the query cost + embedding latency.
-                    body_for_query = (
-                        email.get("body_plain") or email.get("snippet") or ""
+                # Build the query from subject + body excerpt + sender.
+                # body_plain is much richer than snippet — the snippet
+                # often truncates before the topical keywords (signature
+                # blocks, entity names) and we lose the signal. Cap at
+                # 800 chars to bound the query cost + embedding latency.
+                body_for_query = (
+                    email.get("body_plain") or email.get("snippet") or ""
+                )
+                topical_query_parts = [
+                    str(email.get("subject") or ""),
+                    str(body_for_query)[:800],
+                    from_email,
+                ]
+                topical_query = " ".join(
+                    p for p in topical_query_parts if p
+                ).strip()
+                topical_blob_ids: List[str] = []
+                # Threshold: hybrid_search hybrid_score is roughly in
+                # [0,1] but query-dependent (FTS coverage warps the
+                # bottom). Live calibration on the gmail profile (HxiZh…)
+                # 2026-05-05: with subject + body_plain[:800] + sender,
+                # on-topic CNIT/Salamone blobs cluster at 0.35-0.40,
+                # off-topic noise (Ivan Quieti, real-estate entities)
+                # caps at 0.27-0.34. 0.30 is the sweet spot for HUMAN
+                # senders — catches the cluster, drops most outliers.
+                #
+                # Bug D (2026-05-06): for NOTIFICATION senders the same
+                # 0.30 floor is too generous. The platform-anchor blob
+                # for `notification@transactional.mrcall.ai` matches
+                # every other phone-call notification at high topical
+                # score (same template), pulling in 35+ unrelated tasks.
+                # Calibration showed legitimate cross-topic matches
+                # (AIFOS noreply about a real CNIT course) cluster at
+                # 0.50+ while platform-template matches stay below.
+                # Use the higher floor only for these senders — and
+                # SKIP the contact-blob force-include below, since the
+                # contact blob for a notification address IS the
+                # platform anchor.
+                TOPICAL_MIN_SCORE = 0.50 if _is_notification else 0.30
+                # Hard cap on candidates returned to the LLM: long
+                # candidate lists degrade the model's judgment. 8 is
+                # enough for "thread + contact + a few topical
+                # neighbours" without overwhelming.
+                F7_MAX_RELATED = 8
+                if topical_query:
+                    namespace = f"user:{self.owner_id}"
+                    topical_results = self.hybrid_search.search(
+                        owner_id=self.owner_id,
+                        query=topical_query,
+                        namespace=namespace,
+                        limit=20,
                     )
-                    topical_query_parts = [
-                        str(email.get("subject") or ""),
-                        str(body_for_query)[:800],
-                        from_email,
+                    topical_blob_ids = [
+                        str(r.blob_id)
+                        for r in topical_results
+                        if getattr(r, "blob_id", None)
+                        and getattr(r, "hybrid_score", 0.0) >= TOPICAL_MIN_SCORE
                     ]
-                    topical_query = " ".join(
-                        p for p in topical_query_parts if p
-                    ).strip()
-                    topical_blob_ids: List[str] = []
-                    # Threshold: hybrid_search hybrid_score is roughly in
-                    # [0,1] but query-dependent (FTS coverage warps the
-                    # bottom). Live calibration on the gmail profile (HxiZh…)
-                    # 2026-05-05: with subject + body_plain[:800] + sender,
-                    # on-topic CNIT/Salamone blobs cluster at 0.35-0.40,
-                    # off-topic noise (Ivan Quieti, real-estate entities)
-                    # caps at 0.27-0.34. 0.30 is the sweet spot — catches
-                    # the cluster, drops most outliers. Anything that
-                    # slips through still has to pass the LLM's "same
-                    # issue?" judgment downstream.
-                    TOPICAL_MIN_SCORE = 0.30
-                    # Hard cap on candidates returned to the LLM: long
-                    # candidate lists degrade the model's judgment. 8 is
-                    # enough for "thread + contact + a few topical
-                    # neighbours" without overwhelming.
-                    F7_MAX_RELATED = 8
-                    if topical_query:
-                        namespace = f"user:{self.owner_id}"
-                        topical_results = self.hybrid_search.search(
-                            owner_id=self.owner_id,
-                            query=topical_query,
-                            namespace=namespace,
-                            limit=20,
-                        )
-                        topical_blob_ids = [
-                            str(r.blob_id)
-                            for r in topical_results
-                            if getattr(r, "blob_id", None)
-                            and getattr(r, "hybrid_score", 0.0) >= TOPICAL_MIN_SCORE
-                        ]
-                    # The contact-blob anchor is a strong signal
-                    # regardless of FTS/semantic noise — looked up by
-                    # the canonical sender address. Always include it.
-                    if blob_id and str(blob_id) not in topical_blob_ids:
+                # The contact-blob anchor is a strong signal regardless
+                # of FTS/semantic noise — for HUMAN senders. For
+                # notification senders the contact blob is the platform
+                # anchor (matches every notification of this type), so
+                # force-including it would re-introduce the 35-task
+                # explosion that motivated Bug D. Skip the anchor in
+                # that case and let the threshold do the work.
+                if blob_id and not _is_notification:
+                    if str(blob_id) not in topical_blob_ids:
                         topical_blob_ids.insert(0, str(blob_id))
-                    if topical_blob_ids:
-                        related_via_memory = self.storage.get_open_tasks_by_blobs(
-                            owner_id=self.owner_id, blob_ids=topical_blob_ids
+                if topical_blob_ids:
+                    related_via_memory = self.storage.get_open_tasks_by_blobs(
+                        owner_id=self.owner_id, blob_ids=topical_blob_ids
+                    )
+                    # Cap most-recent first to bound LLM noise.
+                    related_via_memory = related_via_memory[:F7_MAX_RELATED]
+                    existing_ids = {t.get("id") for t in existing_tasks_all}
+                    added = 0
+                    for t in related_via_memory:
+                        if t.get("id") and t["id"] not in existing_ids:
+                            existing_tasks_all.append(t)
+                            existing_ids.add(t["id"])
+                            added += 1
+                    if added:
+                        logger.debug(
+                            f"[TASK] F7 topical-sibling tasks added={added} "
+                            f"thread_id={thread_id} from_email={from_email} "
+                            f"is_notification={_is_notification} "
+                            f"min_score={TOPICAL_MIN_SCORE} "
+                            f"matched_blobs={len(topical_blob_ids)}"
                         )
-                        # Cap most-recent first to bound LLM noise.
-                        related_via_memory = related_via_memory[:F7_MAX_RELATED]
-                        existing_ids = {t.get("id") for t in existing_tasks_all}
-                        added = 0
-                        for t in related_via_memory:
-                            if t.get("id") and t["id"] not in existing_ids:
-                                existing_tasks_all.append(t)
-                                existing_ids.add(t["id"])
-                                added += 1
-                        if added:
-                            logger.debug(
-                                f"[TASK] F7 topical-sibling tasks added={added} "
-                                f"thread_id={thread_id} from_email={from_email} "
-                                f"matched_blobs={len(topical_blob_ids)}"
-                            )
             except Exception as e:
                 # Best effort. A failure here must not block task analysis.
                 logger.warning(f"[TASK] F7 topical-sibling lookup failed: {e}")
