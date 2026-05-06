@@ -2760,8 +2760,15 @@ class Storage:
         suggested_action: str = None,
         reason: str = None,
         add_source_email: str = None,
+        add_source_calendar_event: str = None,
     ) -> bool:
-        """Update an existing task with new information."""
+        """Update an existing task with new information.
+
+        Always bumps `analyzed_at` to "now". Bug F (2026-05-06): without
+        this, the F4 reanalyze sweep keeps re-picking the same task
+        (oldest analyzed_at first), wasting an LLM call each cycle on a
+        decision the model just made.
+        """
         try:
             with get_session() as session:
                 task = (
@@ -2781,6 +2788,12 @@ class Storage:
                         emails.append(add_source_email)
                     sources["emails"] = emails
 
+                if add_source_calendar_event:
+                    cal_events = list(sources.get("calendar_events", []))
+                    if add_source_calendar_event not in cal_events:
+                        cal_events.append(add_source_calendar_event)
+                    sources["calendar_events"] = cal_events
+
                 task.sources = sources
                 if urgency:
                     task.urgency = urgency
@@ -2788,6 +2801,7 @@ class Storage:
                     task.suggested_action = suggested_action
                 if reason:
                     task.reason = reason
+                task.analyzed_at = datetime.now(timezone.utc)
 
                 session.flush()
                 return True

@@ -315,6 +315,11 @@ async def reanalyze_task(
         if not ok:
             logger.warning(f"[reanalyze_task] update_task_item failed task_id={task_id}")
     else:
+        # Bug F (2026-05-06): on KEEP, still bump analyzed_at so the F4
+        # sweep doesn't re-pick this task (oldest first) on every cycle
+        # and waste another LLM call on the same KEEP decision.
+        # update_task_item with no field args is a pure analyzed_at touch.
+        store.update_task_item(owner_id=owner_id, task_id=task_id)
         applied = "kept"
 
     logger.debug(
