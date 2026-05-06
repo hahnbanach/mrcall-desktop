@@ -205,17 +205,38 @@ class WhatsAppClient:
                 logger.warning(f"[whatsapp] disconnect error: {e}")
             logger.info("[whatsapp] disconnected")
 
+    @staticmethod
+    def _call_or_attr(obj, name: str, default: bool = False) -> bool:
+        """Read a bool from the underlying neonize client whether the
+        wrapped library exposes it as a method or as a plain attribute.
+
+        Recent neonize versions changed several flags from methods
+        (``client.is_connected()``) to attributes
+        (``client.is_connected``). Calling the new form as a method
+        raises ``'bool' object is not callable``; reading the old form
+        without parentheses gives a bound method instead of the value.
+        Detect at runtime and use the right form.
+        """
+        raw = getattr(obj, name, default)
+        try:
+            return bool(raw() if callable(raw) else raw)
+        except Exception:
+            return default
+
     def is_connected(self) -> bool:
         """Check if currently connected to WhatsApp."""
         if self._client is None:
             return False
-        return self._client.is_connected()
+        return self._call_or_attr(self._client, "is_connected", False)
 
     def is_logged_in(self) -> bool:
         """Check if session is valid (not logged out from phone)."""
         if self._client is None:
             return False
-        return self._client.is_logged_in() and not self._logged_out
+        return (
+            self._call_or_attr(self._client, "is_logged_in", False)
+            and not self._logged_out
+        )
 
     def has_session(self) -> bool:
         """Check if a saved session exists on disk."""
