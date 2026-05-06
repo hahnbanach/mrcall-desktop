@@ -807,6 +807,7 @@ class TaskWorker:
             # email created them". Build a query from summary +
             # description + attendees, take blobs above threshold,
             # surface tasks linked to those blobs.
+            cal_related: List[Dict] = []
             calendar_existing_task_context = ""
             try:
                 cal_query_parts = [
@@ -850,8 +851,8 @@ class TaskWorker:
                                 f"- Reason: {t.get('reason', 'N/A')}"
                             )
                         lines.append(
-                            "If this calendar event is just another touch on a problem already "
-                            "tracked, prefer UPDATE / CLOSE on the existing task over CREATE."
+                            "Decide: UPDATE (target_task_id), CLOSE (target_task_id), "
+                            "CREATE (genuinely new), or NONE."
                         )
                         calendar_existing_task_context = "\n".join(lines)
                         logger.debug(
@@ -883,18 +884,96 @@ class TaskWorker:
             # Mark as processed regardless of result
             self.storage.mark_calendar_event_task_processed(self.owner_id, event_id)
 
-            if result:
-                result["event_id"] = event_id
-                result["event_type"] = "calendar"
-                result["contact_email"] = attendee_emails[0] if attendee_emails else None
-                result["contact_name"] = event.get("summary", "")
-                # Track all data sources used to create this task
-                result["sources"] = {
-                    "calendar_events": [event_id],
-                    "blobs": [str(blob_id)] if blob_id else [],
-                }
-                self.storage.store_task_item(self.owner_id, result)
+            if not result:
+                continue
+
+            # Bug B (2026-05-06): honour task_action on calendar events
+            # the same way the email branch does. Without this, a
+            # recurring event on a topic with an existing task always
+            # produced a brand-new duplicate task per occurrence —
+            # F7-calendar surfaced the candidates but the caller threw
+            # task_action / target_task_id away and unconditionally
+            # called store_task_item.
+            task_action = result.get("task_action", "create")
+            target_task_id = result.get("target_task_id")
+            target_task = None
+            if target_task_id:
+                target_task = next(
+                    (t for t in cal_related if t.get("id") == target_task_id),
+                    None,
+                )
+            if target_task is None and task_action in ("close", "update"):
+                if len(cal_related) == 1:
+                    target_task = cal_related[0]
+                    logger.debug(
+                        f"[TASK] Resolved cal target_task to sole candidate "
+                        f"{target_task['id']} for action={task_action} "
+                        f"event_id={event_id}"
+                    )
+
+            if task_action in ("create", "update"):
+                suggested = result.get("suggested_action", "").strip()
+                if not suggested or len(suggested) < 5:
+                    continue
+
+            if task_action == "close" and target_task:
+                self.storage.complete_task_item(self.owner_id, target_task["id"])
+                logger.debug(
+                    f"[TASK] dedup/close-cal task_id={target_task['id']} "
+                    f"event_id={event_id} decision=llm_close"
+                )
+            elif task_action == "update" and target_task:
+                self.storage.update_task_item(
+                    self.owner_id,
+                    target_task["id"],
+                    urgency=result.get("urgency"),
+                    suggested_action=result.get("suggested_action"),
+                    reason=result.get("reason"),
+                    add_source_calendar_event=event_id,
+                )
                 action_count += 1
+                logger.debug(
+                    f"[TASK] dedup/update-cal task_id={target_task['id']} "
+                    f"event_id={event_id} decision=llm_update"
+                )
+            elif task_action == "create" and result.get("action_required"):
+                # Convert create→update if F7-calendar surfaced any
+                # topical sibling — mirrors the email branch's policy
+                # for "thread already has open task". The LLM saw the
+                # candidates and still chose CREATE; downgrade to
+                # UPDATE on the most recent so we don't fan out
+                # duplicates.
+                if cal_related:
+                    target = cal_related[0]
+                    logger.debug(
+                        f"[TASK] Converting create→update on cal "
+                        f"task={target['id']} event_id={event_id} "
+                        f"(topical sibling already open)"
+                    )
+                    self.storage.update_task_item(
+                        self.owner_id,
+                        target["id"],
+                        urgency=result.get("urgency"),
+                        suggested_action=result.get("suggested_action"),
+                        reason=result.get("reason"),
+                        add_source_calendar_event=event_id,
+                    )
+                else:
+                    result["event_id"] = event_id
+                    result["event_type"] = "calendar"
+                    result["contact_email"] = (
+                        attendee_emails[0] if attendee_emails else None
+                    )
+                    result["contact_name"] = event.get("summary", "")
+                    result["sources"] = {
+                        "calendar_events": [event_id],
+                        "blobs": [str(blob_id)] if blob_id else [],
+                    }
+                    self.storage.store_task_item(self.owner_id, result)
+                    action_count += 1
+                    logger.debug(
+                        f"[TASK] create new cal task event_id={event_id}"
+                    )
 
         # TODO: Process mrcall when available
 
