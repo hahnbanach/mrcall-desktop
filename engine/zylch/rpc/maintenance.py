@@ -41,6 +41,23 @@ async def tasks_dedup_now(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return summary
 
 
+async def tasks_topic_dedup_now(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """tasks.topic_dedup_now() -> summary dict.
+
+    Runs the F9 cross-contact topic dedup sweep on the user's open
+    tasks. One Opus call clusters everything by underlying problem,
+    closes non-keepers. Same shape as the auto-run that fires inside
+    every /update; this is the manual button.
+    """
+    from zylch.workers.task_topic_dedup import run_topic_dedup
+
+    owner_id = _owner_id()
+    logger.debug(f"[rpc] tasks.topic_dedup_now owner_id={owner_id}")
+    summary = await run_topic_dedup(owner_id)
+    logger.debug(f"[rpc] tasks.topic_dedup_now -> {summary}")
+    return summary
+
+
 async def memory_reconsolidate_now(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """memory.reconsolidate_now() -> summary dict.
 
@@ -67,5 +84,6 @@ async def memory_reconsolidate_now(params: Dict[str, Any], notify: NotifyFn) -> 
 
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.dedup_now": tasks_dedup_now,
+    "tasks.topic_dedup_now": tasks_topic_dedup_now,
     "memory.reconsolidate_now": memory_reconsolidate_now,
 }

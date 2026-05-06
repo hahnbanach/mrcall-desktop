@@ -423,6 +423,17 @@ async def _run_tasks(owner_id: str, store) -> str:
     # tasks F4 just closed are no longer in the candidate pool.
     dedup_summary = await _run_dedup_sweep(owner_id)
 
+    # F9: cross-contact topic dedup. F8 only catches duplicates that
+    # share contact_email or memory blobs; the user's "same problem
+    # arrived via 3 channels from 3 senders" case (e.g. Salamone email
+    # + AiFOS noreply notification + MrCall missed-call alert about
+    # the SAME safety course) slips past F8 because the three rows
+    # have disjoint contact_emails AND disjoint blob ids. F9 sends the
+    # whole open list to the LLM in one prompt and lets it cluster by
+    # topic. Runs after F8 so the (cheaper) deterministic sweep
+    # already trimmed obvious in-cluster repeats first.
+    topic_summary = await _run_topic_dedup(owner_id)
+
     # Fase 3.3: age-based auto-close on phone (call-back) tasks. A
     # missed call from 30+ days ago isn't actionable any more. Pure
     # SQL bulk close, no LLM; the close_note explains why the task
@@ -438,6 +449,11 @@ async def _run_tasks(owner_id: str, store) -> str:
         parts.append(
             f"{dedup_summary['tasks_closed']} dedup-closed across "
             f"{dedup_summary['clusters_with_dups']} cluster(s)"
+        )
+    if topic_summary.get("tasks_closed"):
+        parts.append(
+            f"{topic_summary['tasks_closed']} topic-dedup-closed across "
+            f"{topic_summary['clusters_with_dups']} topic(s)"
         )
     if aged_phone:
         parts.append(f"{aged_phone} stale phone task(s) auto-closed")
@@ -486,11 +502,15 @@ async def _reanalyze_only(owner_id: str, store) -> int:
     )
     reanalyzed = await _reanalyze_sweep(owner_id, store, tasks)
     dedup_summary = await _run_dedup_sweep(owner_id)
+    topic_summary = await _run_topic_dedup(owner_id)
     aged_phone = store.auto_close_stale_phone_tasks(
         owner_id, max_age_days=PHONE_TASK_MAX_AGE_DAYS
     )
     return (
-        reanalyzed + int(dedup_summary.get("tasks_closed", 0)) + int(aged_phone or 0)
+        reanalyzed
+        + int(dedup_summary.get("tasks_closed", 0))
+        + int(topic_summary.get("tasks_closed", 0))
+        + int(aged_phone or 0)
     )
 
 
@@ -593,6 +613,28 @@ async def _run_dedup_sweep(owner_id: str) -> dict:
             "clusters_with_dups": 0,
             "tasks_closed": 0,
             "skipped_recently_reopened": 0,
+            "no_llm": False,
+        }
+
+
+async def _run_topic_dedup(owner_id: str) -> dict:
+    """Wrapper around ``zylch.workers.task_topic_dedup.run_topic_dedup``.
+
+    Same tolerance contract as ``_run_dedup_sweep``.
+    """
+    from zylch.workers.task_topic_dedup import run_topic_dedup
+
+    try:
+        return await run_topic_dedup(owner_id)
+    except Exception as e:
+        logger.error(f"[topic-dedup] sweep raised: {e}", exc_info=True)
+        return {
+            "examined": 0,
+            "clusters_with_dups": 0,
+            "tasks_closed": 0,
+            "skipped_recently_reopened": 0,
+            "skipped_too_few_tasks": False,
+            "skipped_too_many_tasks": False,
             "no_llm": False,
         }
 
