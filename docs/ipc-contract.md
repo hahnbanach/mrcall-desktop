@@ -125,6 +125,35 @@ credits toggle) on mount and on every window `focus` event so a top-up
 done in another tab is reflected when the user returns. Preload binding
 at `app/src/preload/index.ts` has a 15 s timeout.
 
+### `tasks.topic_dedup_now()`
+
+Manual trigger for the F9 cross-contact topic dedup sweep. Same
+worker that runs automatically inside `update.run`; this RPC exists
+so a Settings button ("Pulizia profonda") can fire it on demand.
+
+Returns the worker summary verbatim:
+
+```jsonc
+{
+  "examined": 30,                    // active open tasks sent to the LLM
+  "clusters_with_dups": 2,           // clusters of size >= 2 the model returned
+  "tasks_closed": 4,
+  "skipped_recently_reopened": 0,    // dedup_skip_until in the future
+  "skipped_too_few_tasks": false,    // < MIN_TASKS_FOR_TOPIC_DEDUP=4
+  "skipped_too_many_tasks": false,   // > MAX_TASKS_FOR_TOPIC_DEDUP=120
+  "no_llm": false                    // true if no Anthropic key + no Firebase session
+}
+```
+
+Idempotent: a second call right after the first returns
+`clusters_with_dups: 0, tasks_closed: 0`. One Opus 4.6 call per
+invocation (~$0.30 list price on a 50-task profile).
+
+The companion F8 endpoint `tasks.dedup_now()` (same-contact /
+blob-overlap deterministic dedup) remains. Both are exposed; the
+"Pulizia profonda" button could call either or both. F9 is the one
+that catches the cross-channel "ONE problem from 3 senders" case.
+
 ### Other methods
 
 For the rest of the surface (emails.\*, chat.\*, update.\*, settings.\*,

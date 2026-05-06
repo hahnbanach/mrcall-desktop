@@ -13,6 +13,56 @@ This file is young. Cross-cutting facts historically lived inside
 `engine/docs/active-context.md` (the engine doc tree played a dual role).
 Facts migrate here as they get touched.
 
+## 2026-05-06 evening — task-list cleanup ("4 task per UN problema") finally fixed
+
+User report (verbatim, frustrated, after 5 prior sessions had each
+declared "tutto risolto" without testing):
+
+> Da stamattina abbiamo questi 3 task: Salamone email, AiFOS noreply,
+> MrCall missed-call (in realtà 2 missed-calls). Tutti per lo stesso
+> problema (corso sicurezza CNIT). Non dovrebbero proprio esserci, e
+> se proprio devono esserci, devono essere uno.
+
+**Two distinct bugs landed this session, both pushed to `origin/main`:**
+
+1. `557e65b fix(storage): unblock Fase 3.1/3.2 backfills` — the row-level
+   backfills added on 2026-05-06 morning (`email_blobs` index,
+   `task_items.channel` column population) were never running on any
+   real install. Cause: `_apply_data_backfills` had a `return` early
+   inside the first backfill body that short-circuited the whole
+   dispatcher when the first backfill had nothing to do. Fix is a
+   pure refactor (lift the early-return into its own function).
+   Engine details: see [`../engine/docs/active-context.md`](../engine/docs/active-context.md) "Bug fix — `_apply_data_backfills` early-return".
+
+2. `ec61067 feat(tasks): F9 cross-contact topic dedup` — new step in the
+   `update` pipeline. F8 dedup only catches duplicates that share
+   `contact_email` or memory-blob overlap; the user's real case has
+   ONE problem reaching the task list via 3+ different senders /
+   channels (person, automated platform notifier, MrCall missed-call
+   notifier). F9 sends ALL active-open tasks in one Opus call, asks
+   the model to cluster by underlying topic, closes non-keepers.
+   Engine details: see [`../engine/docs/active-context.md`](../engine/docs/active-context.md) "F9 Topic Dedup".
+
+**Live verification done (the kind of test the prior sessions skipped):**
+
+- Modified the actual live DB at
+  `~/.zylch/profiles/HxiZhWEBoRUarPzqX8eRWP21FuJ3/zylch.db`
+  (user explicitly authorised: "il db lo puoi far esplodere").
+- Reopened the 3 corso-sicurezza tasks (set `completed_at=NULL`,
+  `dedup_skip_until=NULL`).
+- Ran `process_pipeline._reanalyze_only` — the exact code path
+  `update.run` invokes when there are no new emails.
+- Verified via the real JSON-RPC `tasks.list` (the call the renderer
+  issues) that the affected rows disappeared.
+- Counts: 57 → 30 active open. The 4 sicurezza tasks → 1 keeper
+  (Salamone email).
+
+**Playbook for the next session if it breaks again:**
+[`../engine/docs/execution-plans/topic-dedup-playbook.md`](../engine/docs/execution-plans/topic-dedup-playbook.md). It contains the diagnostic order, the live-reproduction recipe (no IMAP needed), the constants and where to tune them, and what F9 does NOT cover.
+
+**New JSON-RPC method:** `tasks.topic_dedup_now()`. See
+[`ipc-contract.md`](ipc-contract.md) "Maintenance".
+
 ## What Is Built and Working
 
 ### Firebase Auth as desktop identity

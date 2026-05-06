@@ -13,6 +13,110 @@ description: |
 
 # Active Context
 
+## F9 Topic Dedup — cross-contact LLM clustering (2026-05-06 evening)
+
+**Why this exists:** F8 (`task_dedup_sweep`) clusters by shared
+`contact_email` OR `sources.blobs` overlap ≥ 2. That's blind to the
+case the user keeps hitting: **one underlying problem arrives via
+multiple senders / channels** and F8 cannot pull them together
+because each row has a different contact AND disjoint blobs.
+
+Concrete reproducer on profile `HxiZhWEBoRUarPzqX8eRWP21FuJ3`
+(`mario.alemi@gmail.com`), the 4 tasks the user finally lost
+patience over:
+
+  - email task: `carmine.salamone@cnit.it` (Mar 31, "Riscontro Formazione Obbligatoria")
+  - email task: `noreply@aifos.it` (Mar 31, automated platform alert)
+  - phone task: `notification@transactional.mrcall.ai` (Apr 14, MrCall missed call from Salamone)
+  - phone task: `notification@transactional.mrcall.ai` (Apr 20, MrCall missed call from Salamone)
+
+All about ONE problem: Mario hasn't completed the mandatory CNIT
+safety course on AiFOS. F4 (`task_reanalyze`) cannot close them
+either — the noreply / notification senders trigger sibling-lookup
+suppression so the LLM never sees Mario's reply on the sibling
+thread, and on the Salamone-direct task Opus 4.6 chooses KEEP
+because "compliance obligation".
+
+**Pipeline:** F9 runs in `_run_tasks` and `_reanalyze_only` after F4
++ F8 and before the Fase 3.3 phone>30d auto-close. One Opus call per
+`/update`: send the entire active-open list (filtered by
+reopen-protection) in a single prompt with `tool_use=topic_dedup_decision`,
+ask the model to cluster by topic, close non-keepers via
+`complete_task_item(note="Duplicate of <keeper> (auto-merged by topic dedup: <topic>)")`.
+
+**Code:**
+
+- `engine/zylch/workers/task_topic_dedup.py` — `run_topic_dedup(owner_id) -> summary dict`. Constants: `MIN_TASKS_FOR_TOPIC_DEDUP=4`, `MAX_TASKS_FOR_TOPIC_DEDUP=120`, `DEDUP_SKIP_DAYS=7`. Reopen-protection honoured (uses `dedup_skip_until`, same as F8). `try_make_llm_client()` so the worker no-ops cleanly when neither BYOK key nor Firebase session is configured.
+- `engine/zylch/services/process_pipeline.py` — new wrapper `_run_topic_dedup` (mirrors `_run_dedup_sweep` shape: tolerates exceptions, returns zeroed dict on failure). Called from both `_run_tasks` (after F8) and `_reanalyze_only` (after F8). Surfaced in the return string as `"K topic-dedup-closed across N topic(s)"`.
+- `engine/zylch/rpc/maintenance.py` — `tasks.topic_dedup_now()` RPC alongside `tasks.dedup_now`. For a future "Pulizia profonda" Settings button.
+
+**Live verification (DB write done on the live profile, not a copy):**
+
+  1. Reopened the 3 sicurezza-corso tasks on the gmail profile
+     (`completed_at=NULL`, `dedup_skip_until=NULL`).
+  2. Ran `_reanalyze_only` against `~/.zylch/profiles/HxiZh…/zylch.db`
+     (the exact path `update.run` calls when there are no new emails).
+  3. Output:
+     ```
+     [TASK] Reanalyze sweep: 10 of 35 eligible (cap=10, min_age_h=1)
+     [dedup] sweep complete: {'clusters_examined': 1, 'clusters_with_dups': 0, 'tasks_closed': 0, 'skipped_oversize': 1, ...}
+     [topic-dedup] closed task c3cd5182-4ec keeper=e30581f3-353 topic='Carmine Salamone - workplace safety course'
+     [topic-dedup] closed task 157c6792-a38 keeper=e30581f3-353 topic='Carmine Salamone - workplace safety course'
+     [topic-dedup] closed task b4d3e3e4-5c9 keeper=e30581f3-353 topic='Carmine Salamone - workplace safety course'
+     [topic-dedup] closed task d80897cb-8b6 keeper=bf49929c-acf topic='MrCall sales leads - Luca Festa & Pierluigi Scardazza'
+     [topic-dedup] sweep complete: {'examined': 34, 'clusters_with_dups': 2, 'tasks_closed': 4, ...}
+     ```
+  4. Final via real JSON-RPC `tasks.list` (the call the app issues): 30 tasks, 3 sicurezza-corso rows GONE, Salamone email keeper still present.
+  5. Idempotency: rerun on the cleaned DB → `clusters_with_dups: 0, tasks_closed: 0`.
+
+**Cost:** one Opus 4.6 call per `/update` (≈ 13k input + 1.5k output
+tokens on a 57-task profile, list price ~$0.30 per call). User has
+accepted.
+
+**Playbook for the next session if it breaks again:**
+[`execution-plans/topic-dedup-playbook.md`](execution-plans/topic-dedup-playbook.md). Read it BEFORE touching code — it has the live reproduction recipe (no IMAP needed) and the diagnostic order. Five sessions before this one had landed code without ever running the real `update` against the live DB; the playbook is the antidote.
+
+## Bug fix — `_apply_data_backfills` early-return (2026-05-06 evening, commit `557e65b`)
+
+`engine/zylch/storage/database.py:_apply_data_backfills` had its
+first backfill (`sources.thread_id`, 2026-04-17) inlined inside the
+function body with `if not needs_lookup: return`. That `return`
+exited the WHOLE dispatcher — the two backfills appended below it,
+`_backfill_email_blobs_index` (Fase 3.1) and `_backfill_task_channels`
+(Fase 3.2), were silently skipped on every install whose tasks
+already had `sources.thread_id` populated. Which is every current
+install.
+
+**Symptom on the gmail profile:** all 57 open tasks had
+`channel = NULL` despite the column-add migration line
+`[migrate] Added task_items.channel (TEXT)` appearing in the log
+on 2026-05-06 17:11:09. The Tasks-view "Phone (n)" filter was
+always 0; the >30d phone auto-close had no rows to act on. F9
+relied on `channel` for some heuristics (and would have been blind
+to the `notification@*mrcall*` cluster otherwise).
+
+**Fix:** lifted the `sources.thread_id` body into a separate
+function `_backfill_task_thread_id` so its early-out becomes local.
+The dispatcher now calls every backfill unconditionally.
+
+**Test:** `engine/tests/storage/test_data_backfills.py` (new). Two
+cases — the symptom (channel populated end-to-end on a fresh init_db)
+and the orchestration shape (every backfill must run on every
+init_db). Would have failed prior to the fix.
+
+**Recognising the bug recurring:** in any sidecar log, find a line
+`[migrate] Added <table>.<col> (...)` with NO subsequent
+`[backfill] stamped <something> on N task(s)` line in the same
+`init_db` run. Quick query:
+
+```sql
+SELECT channel, COUNT(*) FROM task_items
+WHERE completed_at IS NULL AND action_required=1 GROUP BY channel;
+```
+
+If you see `(None, N)` with N > 0 on a profile that's run `update`
+since 2026-05-06, the backfill skipped again and you've regressed.
+
 ## What Is Built and Working
 
 ### Core
