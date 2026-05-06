@@ -152,9 +152,29 @@ export default function WhatsAppView(): JSX.Element {
             </div>
           )}
           {!threadsLoading && !threadsError && threads.length === 0 && (
-            <div className="p-3 text-xs text-brand-grey-80">
-              No conversations yet. WhatsApp sends history a few seconds after the first connect
-              — try Refresh in a moment.
+            <div className="p-3 text-xs text-brand-grey-80 space-y-2">
+              <p>
+                No conversations yet. WhatsApp&apos;s protocol only pushes the full history on
+                the <strong>first</strong> link — for already-paired devices it sends only new
+                live messages going forward.
+              </p>
+              <p>To pull historical chats, re-link with a fresh QR scan:</p>
+              <button
+                onClick={async () => {
+                  try {
+                    await window.zylch.whatsapp.disconnect(true)
+                    setConnected(false)
+                  } catch (e) {
+                    setThreadsError(errorMessage(e))
+                  }
+                }}
+                className="px-2 py-1 text-xs border border-brand-mid-grey rounded hover:bg-brand-light-grey"
+              >
+                Forget device and re-link
+              </button>
+              <p className="opacity-80">
+                Or just wait — any new message you send or receive will appear here automatically.
+              </p>
             </div>
           )}
           {threads.map((t) => {

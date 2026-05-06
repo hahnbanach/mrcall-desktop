@@ -62,16 +62,16 @@ _cancel_event: Optional[threading.Event] = None
 def _resolve_owner_id() -> str:
     """Owner ID for the active profile.
 
-    Mirrors `_owner_id()` in methods.py without importing it (would
-    create a cycle). Falls back to the legacy `OWNER_ID` env var or
-    the email address — same chain `Storage` uses everywhere else.
+    Delegates to the canonical resolver in cli/utils — same value
+    everything else in the engine uses (process_pipeline, tasks_list,
+    settings_*, …). Critically: `WhatsAppSyncService` writes rows
+    under this owner_id, so list_threads / list_messages MUST query
+    with the same value or messages stored by `zylch update` (CLI
+    path) won't show up in the desktop tab and vice versa.
     """
-    return (
-        os.environ.get("OWNER_ID")
-        or os.environ.get("ZYLCH_PROFILE")
-        or os.environ.get("EMAIL_ADDRESS")
-        or ""
-    )
+    from zylch.cli.utils import get_owner_id
+
+    return get_owner_id()
 
 
 def _wa_db_path() -> str:
