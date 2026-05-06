@@ -2908,6 +2908,61 @@ class Storage:
             logger.error(f"Failed to complete task {task_id}: {e}")
             return False
 
+    def auto_close_stale_phone_tasks(
+        self,
+        owner_id: str,
+        max_age_days: int = 30,
+    ) -> int:
+        """Auto-close open ``channel='phone'`` tasks older than the cutoff.
+
+        Fase 3.3: a missed call from 2 months ago that the user never
+        called back is no longer actionable. We don't ask the LLM to
+        judge — pure age-based bulk close, idempotent.
+
+        Stamps a close_note so the user (or audit) can see WHY the
+        task closed automatically. Only touches tasks whose channel
+        is exactly 'phone' — leaves email/calendar untouched, for
+        which the F4 reanalyze sweep + the LLM dedup sweep are the
+        right tools.
+
+        Returns the number of tasks closed.
+        """
+        if max_age_days <= 0:
+            return 0
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+        note = (
+            f"Auto-closed: phone call-back > {max_age_days} days old "
+            "(no longer actionable)"
+        )
+        try:
+            with get_session() as session:
+                rows = (
+                    session.query(TaskItem)
+                    .filter(
+                        TaskItem.owner_id == owner_id,
+                        TaskItem.completed_at.is_(None),
+                        TaskItem.action_required.is_(True),
+                        TaskItem.channel == "phone",
+                        TaskItem.created_at < cutoff,
+                    )
+                    .all()
+                )
+                if not rows:
+                    return 0
+                now = datetime.now(timezone.utc)
+                for r in rows:
+                    r.completed_at = now
+                    r.close_note = note
+                session.flush()
+                logger.info(
+                    f"[age-sweep] auto-closed {len(rows)} phone task(s) "
+                    f"older than {max_age_days}d"
+                )
+                return len(rows)
+        except Exception as e:
+            logger.error(f"auto_close_stale_phone_tasks failed: {e}")
+            return 0
+
     def reopen_task_item(self, owner_id: str, task_id: str) -> bool:
         """Clear completed_at + close_note and protect from dedup for 7d.
 

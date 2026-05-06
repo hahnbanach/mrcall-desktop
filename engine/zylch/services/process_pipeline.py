@@ -359,6 +359,14 @@ async def _run_tasks(owner_id: str, store) -> str:
     # tasks F4 just closed are no longer in the candidate pool.
     dedup_summary = await _run_dedup_sweep(owner_id)
 
+    # Fase 3.3: age-based auto-close on phone (call-back) tasks. A
+    # missed call from 30+ days ago isn't actionable any more. Pure
+    # SQL bulk close, no LLM; the close_note explains why the task
+    # closed.
+    aged_phone = store.auto_close_stale_phone_tasks(
+        owner_id, max_age_days=PHONE_TASK_MAX_AGE_DAYS
+    )
+
     parts = [f"{action_count} action items detected"]
     if swept:
         parts.append(f"{swept} reanalyzed")
@@ -367,6 +375,8 @@ async def _run_tasks(owner_id: str, store) -> str:
             f"{dedup_summary['tasks_closed']} dedup-closed across "
             f"{dedup_summary['clusters_with_dups']} cluster(s)"
         )
+    if aged_phone:
+        parts.append(f"{aged_phone} stale phone task(s) auto-closed")
     return parts[0] + (" (" + ", ".join(parts[1:]) + ")" if len(parts) > 1 else "")
 
 
@@ -383,20 +393,27 @@ REANALYZE_CAP = 10
 # decision the model just made.
 REANALYZE_MIN_AGE_HOURS = 1
 
+# Fase 3.3: tasks tagged channel='phone' (missed-call notifications)
+# auto-close after this many days. The user normally calls back
+# within a week or two; anything older is no longer actionable. Pure
+# age-based bulk close via SQL — no LLM, no judgment.
+PHONE_TASK_MAX_AGE_DAYS = 30
+
 
 async def _reanalyze_only(owner_id: str, store) -> int:
-    """Run only the F4 reanalyze sweep + the F8 dedup sweep.
+    """Run only the F4 reanalyze + F8 dedup + 3.3 age sweeps.
 
     Used by `update` when there are no new emails to detect tasks from
     but open tasks may still need closure based on user replies that
-    arrived in past batches OR be deduplicated against existing open
-    tasks. Loading tasks straight from storage avoids spinning up a
+    arrived in past batches, or be deduplicated against existing open
+    tasks, or auto-close because they're stale phone call-backs.
+    Loading tasks straight from storage avoids spinning up a
     ``TaskWorker`` (which requires a trained prompt + LLM client just
     for detection — neither is needed for the sweep, which uses
     ``try_make_llm_client`` via ``reanalyze_task``).
 
-    Returns the count of (reanalyzed + dedup-closed) tasks so the
-    caller can surface a single number.
+    Returns the count of (reanalyzed + dedup-closed + age-closed)
+    tasks so the caller can surface a single number.
     """
     tasks = store.get_task_items(
         owner_id=owner_id,
@@ -405,7 +422,12 @@ async def _reanalyze_only(owner_id: str, store) -> int:
     )
     reanalyzed = await _reanalyze_sweep(owner_id, store, tasks)
     dedup_summary = await _run_dedup_sweep(owner_id)
-    return reanalyzed + int(dedup_summary.get("tasks_closed", 0))
+    aged_phone = store.auto_close_stale_phone_tasks(
+        owner_id, max_age_days=PHONE_TASK_MAX_AGE_DAYS
+    )
+    return (
+        reanalyzed + int(dedup_summary.get("tasks_closed", 0)) + int(aged_phone or 0)
+    )
 
 
 async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> int:
