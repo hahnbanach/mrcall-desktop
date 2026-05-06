@@ -1,17 +1,15 @@
 /**
- * Modal wizard to create a brand-new Zylch profile.
+ * Full-page wizard to create a brand-new profile from an already
+ * signed-in window. Same visual as `Onboarding.tsx` (the first-run
+ * flow) so the experience feels uniform — just rendered as an overlay
+ * over the current window instead of replacing it. Submits via
+ * `profiles.create` (email-keyed) so the new profile coexists with the
+ * current one without disrupting this window's sidecar.
  *
- * The user fills in just the essential fields; the form posts them to
- * the backend via `window.zylch.profiles.create(email, values)`. On
- * success, the new profile is reachable from the top bar's
- * "Profiles" dropdown. We intentionally do NOT auto-open a window
- * for the new profile — opening another window from the wizard is
- * surprising; the user should choose when to switch.
- *
- * Field set kept tight on purpose: the schema has many optional
- * fields (MrCall, personal data, notes, …) that are best edited from
- * the new profile's own Settings tab once it is opened — the wizard
- * only collects what is needed to launch.
+ * Field set kept tight on purpose: the schema has many optional fields
+ * (MrCall, personal data, notes, …) that are best edited from the new
+ * profile's own Settings tab once it is opened — the wizard only
+ * collects what is needed to launch.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage } from '../lib/errors'
@@ -22,8 +20,6 @@ interface Props {
   onCreated: (email: string) => void
 }
 
-// Sensible IMAP/SMTP defaults keyed off the email's domain. Mirrors
-// what `zylch init` offers as a one-keystroke option in the CLI.
 const PRESETS: Record<string, { imapHost: string; smtpHost: string }> = {
   'gmail.com': { imapHost: 'imap.gmail.com', smtpHost: 'smtp.gmail.com' },
   'googlemail.com': { imapHost: 'imap.gmail.com', smtpHost: 'smtp.gmail.com' },
@@ -57,8 +53,8 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
-  // Reset the form whenever the modal is (re-)opened so a previous
-  // attempt's leftovers don't leak into a fresh wizard.
+  // Reset the form whenever the wizard is (re-)opened so a previous
+  // attempt's leftovers don't leak into a fresh run.
   useEffect(() => {
     if (!open) return
     setEmail('')
@@ -117,32 +113,29 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
     } catch (e: unknown) {
       // Any server-side validation error ("Profile already exists",
       // "Invalid email address", etc.) lands here. Render inline; this
-      // dialog is the user's current focus.
+      // overlay is the user's current focus.
       setFormError(errorMessage(e))
       setSubmitting(false)
     }
   }
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-      onClick={() => {
-        if (!submitting) onClose()
-      }}
-    >
-      <div
-        className="bg-white rounded-lg shadow-xl p-5 w-[520px] max-h-[90vh] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold">Create new profile</h2>
+    <div className="fixed inset-0 z-50 min-h-screen w-full flex items-start justify-center bg-brand-light-grey p-6 overflow-auto">
+      <div className="w-full max-w-[560px]">
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-brand-black">Create a new profile</h1>
+            <p className="text-sm text-brand-grey-80 mt-1">
+              Add another mailbox to MrCall Desktop. All data stays on this machine.
+            </p>
+          </div>
           <button
+            type="button"
             onClick={onClose}
             disabled={submitting}
-            className="text-brand-grey-80 hover:text-brand-black text-lg leading-none disabled:opacity-50"
-            aria-label="Close"
+            className="px-2 py-1 text-xs text-brand-grey-80 hover:text-brand-black border rounded shrink-0 disabled:opacity-50"
           >
-            x
+            Cancel
           </button>
         </div>
 
@@ -152,7 +145,7 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
           </div>
         )}
 
-        <div className="space-y-3">
+        <div className="bg-white border border-brand-mid-grey rounded-lg shadow-sm p-5 space-y-3">
           <Field label="Email address" required>
             <input
               type="email"
@@ -164,7 +157,11 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
             />
           </Field>
 
-          <Field label="Email app password" required help="App password from your email provider — not your account password.">
+          <Field
+            label="Email app password"
+            required
+            help="App password from your email provider — not your account password."
+          >
             <input
               type="password"
               value={emailPassword}
@@ -213,26 +210,19 @@ export default function NewProfileWizard({ open, onClose, onCreated }: Props): J
           </div>
 
           <p className="text-xs text-brand-grey-80">
-            Other optional fields (personal data, MrCall credentials, notes…) can be edited from the
-            new profile&apos;s own Settings tab once you open it.
+            Other optional fields (personal data, MrCall credentials, notes…) can be edited from
+            the new profile&apos;s own Settings tab once you open it.
           </p>
-        </div>
 
-        <div className="flex items-center justify-end gap-2 mt-5">
-          <button
-            onClick={onClose}
-            disabled={submitting}
-            className="px-3 py-1.5 text-sm border rounded text-brand-grey-80 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!canSubmit || submitting}
-            className="px-4 py-1.5 text-sm bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
-          >
-            {submitting ? 'Creating…' : 'Create profile'}
-          </button>
+          <div className="flex items-center justify-end pt-2">
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit || submitting}
+              className="px-4 py-2 text-sm bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
+            >
+              {submitting ? 'Creating…' : 'Create profile'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
