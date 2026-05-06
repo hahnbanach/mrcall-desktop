@@ -23,6 +23,51 @@ from zylch.memory import (
 logger = logging.getLogger(__name__)
 
 
+def _extract_identifier_query(entity_content: str) -> Optional[str]:
+    """Pull the #IDENTIFIERS block as a focused search query.
+
+    The memory extraction prompt mandates a structured block::
+
+        #IDENTIFIERS
+        Entity type: person
+        Name: Carmine Salamone
+        Email: c.salamone@cnit.it
+        Phone: ...
+
+    These literals are the same across emails about the same entity,
+    while #ABOUT/#HISTORY paragraphs vary. Searching against just
+    these lines gives a reliable >0.65 cosine match between two
+    records of the same person.
+
+    Returns ``None`` when the block is missing/unrecognised so the
+    caller can fall back to the full content (legacy or malformed
+    extraction).
+    """
+    if not entity_content:
+        return None
+    lines = entity_content.splitlines()
+    in_identifiers = False
+    out: List[str] = []
+    for raw in lines:
+        s = raw.strip()
+        if s.startswith("#IDENTIFIERS"):
+            in_identifiers = True
+            continue
+        # Any other top-level section ends the identifiers block.
+        if in_identifiers and s.startswith("#"):
+            break
+        if not in_identifiers or not s:
+            continue
+        # The merge prompt sometimes injects "**REMEMBER** ..." reminders
+        # mid-block — drop them, they're for the LLM not for indexing.
+        if s.startswith("**") or s.lower().startswith("reminder:"):
+            continue
+        out.append(s)
+    if not out:
+        return None
+    return " ".join(out).strip() or None
+
+
 class MemoryWorker:
     """Worker for extracting facts from emails and storing in entity-centric blobs.
 
@@ -167,6 +212,20 @@ class MemoryWorker:
     ) -> None:
         """Upsert a single entity blob with reconsolidation.
 
+        Bug G (2026-05-06): the previous version used the FULL
+        ``entity_content`` (#IDENTIFIERS + #ABOUT + #HISTORY) as the
+        search query. Two emails about the same person produce
+        different #ABOUT and #HISTORY paragraphs, so the cosine
+        similarity dropped under RECONSOLIDATION_THRESHOLD=0.65 and
+        the worker silently created a new blob — observed live as 8
+        distinct "Carmine Salamone PERSON" blobs on the gmail profile.
+
+        Fix: build the search query from the structured #IDENTIFIERS
+        block only (Name, Email, Phone, Company, Website etc.). Two
+        records of the same person reliably share these literals, so
+        the threshold is reached. The merge LLM still has the full
+        content and the "INSERT" safety net for false positives.
+
         Args:
             entity_content: The entity blob content
             event_desc: Event description for the blob
@@ -176,9 +235,47 @@ class MemoryWorker:
         """
         logger.info(f"Upserting entity, searching with:\n{entity_content}\n\n")
 
-        # Get top 3 candidates above threshold
+        # Identifier-based search query (Bug G fix). Falls back to the
+        # full content when the LLM didn't produce a parseable
+        # IDENTIFIERS block (legacy / malformed extraction).
+        query = _extract_identifier_query(entity_content) or entity_content
+        if query is not entity_content:
+            logger.debug(
+                f"[memory] using identifier-query for reconsolidation lookup: {query!r}"
+            )
+
+        # Diagnostic: log top-3 candidates with their scores BEFORE
+        # the threshold filter, so investigation of "why didn't it
+        # merge?" doesn't require re-running the search by hand. Pulls
+        # the same alpha=0.5 hybrid_search the threshold method uses.
+        debug_results = self.hybrid_search.search(
+            owner_id=self.owner_id,
+            query=query,
+            namespace=self.namespace,
+            limit=3,
+            alpha=0.5,
+        )
+        if debug_results:
+            for i, r in enumerate(debug_results, 1):
+                first_id_line = ""
+                for line in (r.content or "").splitlines():
+                    if line.strip().lower().startswith("name:"):
+                        first_id_line = line.strip()
+                        break
+                logger.info(
+                    f"[memory] reconsolidation candidate {i}/{len(debug_results)}: "
+                    f"blob_id={r.blob_id} hybrid={r.hybrid_score:.3f} "
+                    f"identifier={first_id_line!r}"
+                )
+        else:
+            logger.info(
+                f"[memory] reconsolidation candidate search returned 0 results "
+                f"for query={query!r}"
+            )
+
+        # Threshold-gated candidates for merge attempts.
         existing_blobs = self.hybrid_search.find_candidates_for_reconsolidation(
-            owner_id=self.owner_id, content=entity_content, namespace=self.namespace, limit=3
+            owner_id=self.owner_id, content=query, namespace=self.namespace, limit=3
         )
 
         upserted = False
@@ -632,6 +729,10 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
     ) -> None:
         """Upsert a single entity blob from MrCall with reconsolidation.
 
+        Same identifier-query treatment as ``_upsert_entity`` (Bug G):
+        the structured #IDENTIFIERS block is the stable signal across
+        records of the same caller.
+
         Args:
             entity_content: The entity blob content
             event_desc: Event description for the blob
@@ -641,9 +742,11 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
         """
         logger.debug(f"Upserting MrCall entity {entity_num}/{total_entities}")
 
+        query = _extract_identifier_query(entity_content) or entity_content
+
         # Get top 3 candidates above threshold
         existing_blobs = self.hybrid_search.find_candidates_for_reconsolidation(
-            owner_id=self.owner_id, content=entity_content, namespace=self.namespace, limit=3
+            owner_id=self.owner_id, content=query, namespace=self.namespace, limit=3
         )
 
         upserted = False
