@@ -144,7 +144,29 @@ async def handle_process(
             )
             console.print(f"[red]  Task detection failed:" f" {e}[/red]")
     else:
-        console.print("\n[bold cyan][4/5] Tasks[/bold cyan]" " — nothing to process")
+        console.print(
+            "\n[bold cyan][4/5] Tasks[/bold cyan]"
+            " — no new emails, running stale-task sweep..."
+        )
+        # Even with zero unprocessed emails, open tasks may need closure
+        # — e.g. the user replied yesterday (sent mail already
+        # task_processed) and the batch where the task was created is
+        # also long-processed. F4 reanalyze sweep is the ONLY recovery
+        # path for that asynchronous case; running it here makes
+        # `update` deliver on its promise of "see what changed since
+        # last time" instead of being a silent no-op.
+        try:
+            swept = await _reanalyze_only(owner_id, store)
+            if swept:
+                console.print(
+                    f"  [dim]Reanalyzed {swept} stale task(s)[/dim]"
+                )
+        except Exception as e:
+            logger.error(
+                f"[/process] reanalyze-only sweep failed: {e}",
+                exc_info=True,
+            )
+            console.print(f"[yellow]  Reanalyze sweep failed:" f" {e}[/yellow]")
 
     # --- Step 4: Show tasks ---
 
@@ -347,6 +369,24 @@ async def _run_tasks(owner_id: str, store) -> str:
 # overrides via env if it ever needs to be runtime-configurable.
 REANALYZE_CAP = 10
 REANALYZE_MIN_AGE_HOURS = 24
+
+
+async def _reanalyze_only(owner_id: str, store) -> int:
+    """Run only the F4 reanalyze sweep (no task creation, no IMAP).
+
+    Used by `update` when there are no new emails to detect tasks from
+    but open tasks may still need closure based on user replies that
+    arrived in past batches. Loading tasks straight from storage avoids
+    spinning up a `TaskWorker` (which requires a trained prompt + LLM
+    client just for detection — neither is needed for the sweep, which
+    uses `try_make_llm_client` via `reanalyze_task`).
+    """
+    tasks = store.get_task_items(
+        owner_id=owner_id,
+        action_required=True,
+        limit=10000,
+    )
+    return await _reanalyze_sweep(owner_id, store, tasks)
 
 
 async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> int:
