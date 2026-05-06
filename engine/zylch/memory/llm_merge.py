@@ -209,7 +209,9 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
     blobs_merged = 0
     blobs_kept_distinct = 0
     pair_cap_hit = False
+    aborted_overload = False
     pairs_done = 0
+    consecutive_overload = 0
 
     for name, group in dup_groups.items():
         # Keep the longest (most informative) blob as the keeper.
@@ -219,6 +221,8 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
             if pairs_done >= RECONSOLIDATION_PAIR_CAP:
                 pair_cap_hit = True
                 break
+            if aborted_overload:
+                break
             pairs_done += 1
             try:
                 # Run the sync merge in a thread so we don't block
@@ -226,11 +230,26 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
                 merged = await asyncio.to_thread(
                     merge_service.merge, keeper["content"], other["content"]
                 )
+                consecutive_overload = 0
             except Exception as e:
+                err_str = str(e)
                 logger.exception(
                     f"[reconsolidate] merge failed for keeper={keeper['id'][:12]} "
                     f"other={other['id'][:12]} name={name!r}: {e}"
                 )
+                # Persistent provider overload: stop hammering. The
+                # blobs that didn't get merged THIS run remain
+                # untouched; next manual click retries.
+                if "529" in err_str or "overloaded" in err_str.lower():
+                    consecutive_overload += 1
+                    if consecutive_overload >= 2:
+                        aborted_overload = True
+                        logger.warning(
+                            "[reconsolidate] sweep aborted — provider overloaded "
+                            f"after {consecutive_overload} consecutive 529s. "
+                            "Re-run when capacity recovers."
+                        )
+                        break
                 continue
             if not merged:
                 continue
@@ -267,7 +286,7 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
                     f"[reconsolidate] storage write failed for keeper={keeper['id'][:12]}: {e}"
                 )
                 continue
-        if pair_cap_hit:
+        if pair_cap_hit or aborted_overload:
             break
 
     summary = {
@@ -276,6 +295,7 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
         "blobs_merged": blobs_merged,
         "blobs_kept_distinct": blobs_kept_distinct,
         "pair_cap_hit": pair_cap_hit,
+        "aborted_overload": aborted_overload,
         "no_llm": False,
     }
     logger.info(f"[reconsolidate] sweep complete: {summary}")

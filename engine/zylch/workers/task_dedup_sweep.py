@@ -295,6 +295,8 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
     closed_total = 0
     dup_clusters = 0
     arbiter_skipped_oversize = 0
+    arbiter_aborted_overload = False
+    consecutive_overload = 0
     arbiter_system = [
         {
             "type": "text",
@@ -349,10 +351,25 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
                 tools=[ARBITER_TOOL],
                 tool_choice={"type": "tool", "name": "dedup_decision"},
             )
+            consecutive_overload = 0
         except Exception as e:
+            err_str = str(e)
             logger.exception(
                 f"[dedup] arbiter call failed for cluster size={cluster_size}: {e}"
             )
+            # Persistent provider overload: stop hammering. Remaining
+            # clusters are unchanged in DB; the next /update or a
+            # manual `Clean up tasks` retries.
+            if "529" in err_str or "overloaded" in err_str.lower():
+                consecutive_overload += 1
+                if consecutive_overload >= 2:
+                    arbiter_aborted_overload = True
+                    logger.warning(
+                        "[dedup] sweep aborted — provider overloaded after "
+                        f"{consecutive_overload} consecutive 529s. "
+                        "Remaining clusters left for next /update."
+                    )
+                    break
             continue
 
         decision: Dict[str, Any] = {}
@@ -416,6 +433,7 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
         "tasks_closed": closed_total,
         "skipped_recently_reopened": skipped_count,
         "skipped_oversize": arbiter_skipped_oversize,
+        "aborted_overload": arbiter_aborted_overload,
         "no_llm": False,
     }
     logger.info(f"[dedup] sweep complete: {summary}")

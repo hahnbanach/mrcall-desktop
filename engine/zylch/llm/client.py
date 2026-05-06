@@ -195,7 +195,17 @@ class LLMClient:
                 raise ValueError("api_key is required for transport='direct'")
             import anthropic
 
-            self._client = anthropic.Anthropic(api_key=api_key)
+            # 2026-05-06: bump max_retries from the SDK default (2) to 5.
+            # The SDK retries on 408/409/429/≥500 with exponential
+            # backoff (0.5 → 16 s in this version). Default 2 = 3 total
+            # attempts spanning ~3 s, which is too short for an
+            # overloaded_error (529) cluster — the F4 sweep + F8 dedup
+            # together fire ~20 calls per /update, all of which fail
+            # in lockstep when Anthropic is briefly overloaded.
+            # 5 retries spans ~30 s, which covers transient capacity
+            # blips without making the user wait forever on a real
+            # outage.
+            self._client = anthropic.Anthropic(api_key=api_key, max_retries=5)
             self.model = model or settings.anthropic_model
         elif transport == "proxy":
             if firebase_session is None:

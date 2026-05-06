@@ -540,6 +540,7 @@ async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> int:
     )
 
     ok_count = 0
+    consecutive_overload = 0
     for _, t in sweep_targets:
         task_id = t.get("id")
         if not task_id:
@@ -551,11 +552,25 @@ async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> int:
             continue
         if res.get("ok"):
             ok_count += 1
+            consecutive_overload = 0
             logger.debug(
                 f"[TASK] Reanalyze sweep task_id={task_id} " f"applied={res.get('action')}"
             )
         else:
-            logger.warning(f"[TASK] Reanalyze sweep task_id={task_id} " f"error={res.get('error')}")
+            err = str(res.get("error") or "")
+            logger.warning(f"[TASK] Reanalyze sweep task_id={task_id} error={err}")
+            # Persistent provider overload: stop hammering. Tasks that
+            # didn't get reanalyzed THIS run are unchanged in DB and
+            # remain eligible next /update (analyzed_at unchanged).
+            if "529" in err or "overloaded" in err.lower():
+                consecutive_overload += 1
+                if consecutive_overload >= 2:
+                    logger.warning(
+                        "[TASK] Reanalyze sweep aborted — provider overloaded "
+                        f"after {consecutive_overload} consecutive 529s. "
+                        "Remaining tasks left for next /update."
+                    )
+                    break
     return ok_count
 
 
