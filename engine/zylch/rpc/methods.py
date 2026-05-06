@@ -1575,6 +1575,16 @@ for _name, _fn in _MRCALL_METHODS.items():
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
 
+# Maintenance RPCs — manual triggers for the dedup sweep + memory
+# reconsolidation pass. These are the "Clean up tasks" /
+# "Reconsolidate memory" buttons in Settings.
+from zylch.rpc.maintenance import METHODS as _MAINT_METHODS  # noqa: E402
+
+for _name, _fn in _MAINT_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
 # Google integrations (Calendar OAuth in this iteration) — desktop UI
 # triggers consent, engine completes the PKCE flow on :19275.
 from zylch.rpc.google_actions import METHODS as _GOOGLE_METHODS  # noqa: E402

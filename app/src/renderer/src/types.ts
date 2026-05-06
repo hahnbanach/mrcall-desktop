@@ -109,6 +109,31 @@ export interface ZylchAPI {
       usage?: Record<string, unknown>
     }>
     listByThread: (thread_id: string) => Promise<ZylchTask[]>
+    /** Manual dedup sweep (Settings → Maintenance). Same worker as the
+     *  automatic post-/update path. */
+    dedupNow: () => Promise<{
+      clusters_examined: number
+      clusters_with_dups: number
+      tasks_closed: number
+      skipped_recently_reopened: number
+      skipped_oversize: number
+      no_llm: boolean
+    }>
+  }
+  memory: {
+    /** Manual memory reconsolidation (Settings → Maintenance). Walks
+     *  user:<owner_id> blobs, groups by canonical Name, calls the
+     *  LLM merge service per pair, deletes redundant duplicates. */
+    reconsolidateNow: () => Promise<{
+      ok: boolean
+      error?: string
+      groups_examined?: number
+      blobs_examined?: number
+      blobs_merged?: number
+      blobs_kept_distinct?: number
+      pair_cap_hit?: boolean
+      no_llm?: boolean
+    }>
   }
   chat: {
     send: (

@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import Icon from '../components/Icon'
@@ -185,6 +186,13 @@ export default function Settings(): JSX.Element {
           <ConnectGoogleCalendar />
           <ConnectWhatsApp />
         </div>
+      </section>
+
+      <section className="mb-6">
+        <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
+          Maintenance
+        </h2>
+        <MaintenanceCard />
       </section>
 
       {grouped.map(([group, items]) => (
@@ -401,6 +409,129 @@ function LLMProviderCard({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function MaintenanceCard(): JSX.Element {
+  // Two on-demand sweeps that mirror the automatic post-/update path.
+  // Independent state for each so a slow reconsolidation doesn't hide
+  // the result of a fast dedup, and vice versa.
+  const [dedupBusy, setDedupBusy] = React.useState(false)
+  const [memBusy, setMemBusy] = React.useState(false)
+  const [dedupResult, setDedupResult] = React.useState<string | null>(null)
+  const [memResult, setMemResult] = React.useState<string | null>(null)
+
+  const runDedup = async (): Promise<void> => {
+    setDedupBusy(true)
+    setDedupResult(null)
+    try {
+      const r = await window.zylch.tasks.dedupNow()
+      if (r.no_llm) {
+        setDedupResult('No LLM transport configured. Sign in or paste an Anthropic key.')
+        return
+      }
+      const parts: string[] = []
+      parts.push(`Examined ${r.clusters_examined} cluster(s)`)
+      if (r.tasks_closed > 0) {
+        parts.push(`closed ${r.tasks_closed} duplicate(s) across ${r.clusters_with_dups} group(s)`)
+      } else {
+        parts.push('no duplicates found')
+      }
+      if (r.skipped_oversize > 0) {
+        parts.push(`${r.skipped_oversize} oversize cluster(s) skipped`)
+      }
+      if (r.skipped_recently_reopened > 0) {
+        parts.push(`${r.skipped_recently_reopened} reopened-recently protected`)
+      }
+      setDedupResult(parts.join(' · '))
+    } catch (e) {
+      setDedupResult(`Failed: ${(e as Error).message}`)
+    } finally {
+      setDedupBusy(false)
+    }
+  }
+
+  const runReconsolidate = async (): Promise<void> => {
+    setMemBusy(true)
+    setMemResult(null)
+    try {
+      const r = await window.zylch.memory.reconsolidateNow()
+      if (!r.ok) {
+        setMemResult(`Failed: ${r.error || 'unknown error'}`)
+        return
+      }
+      if (r.no_llm) {
+        setMemResult('No LLM transport configured. Sign in or paste an Anthropic key.')
+        return
+      }
+      const parts: string[] = []
+      parts.push(`Examined ${r.blobs_examined ?? 0} blob(s) across ${r.groups_examined ?? 0} group(s)`)
+      if ((r.blobs_merged ?? 0) > 0) {
+        parts.push(`merged ${r.blobs_merged}`)
+      } else {
+        parts.push('no merges')
+      }
+      if ((r.blobs_kept_distinct ?? 0) > 0) {
+        parts.push(`${r.blobs_kept_distinct} kept as distinct entities`)
+      }
+      if (r.pair_cap_hit) {
+        parts.push('per-call cap hit — re-run to continue')
+      }
+      setMemResult(parts.join(' · '))
+    } catch (e) {
+      setMemResult(`Failed: ${(e as Error).message}`)
+    } finally {
+      setMemBusy(false)
+    }
+  }
+
+  return (
+    <div className="bg-white border border-brand-mid-grey rounded-lg shadow-sm p-4 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-brand-black">Clean up tasks</div>
+          <p className="text-xs text-brand-grey-80 mt-1">
+            Find duplicate open tasks (same contact or shared memory blobs) and merge them.
+            Runs the same sweep that fires at the end of every <code>Update</code>.
+          </p>
+          {dedupResult && (
+            <div className="text-xs text-brand-grey-80 mt-2 bg-brand-light-grey/50 rounded p-2">
+              {dedupResult}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={runDedup}
+          disabled={dedupBusy}
+          className="px-3 py-1.5 text-xs border rounded text-brand-grey-80 hover:bg-brand-light-grey disabled:opacity-50 shrink-0"
+        >
+          {dedupBusy ? 'Running…' : 'Clean up'}
+        </button>
+      </div>
+
+      <div className="border-t pt-4 flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-brand-black">Reconsolidate memory</div>
+          <p className="text-xs text-brand-grey-80 mt-1">
+            Merge duplicate entity blobs (e.g. multiple records for the same person extracted
+            from different emails). Walks the local memory namespace and asks the LLM to merge
+            same-named entities.
+          </p>
+          {memResult && (
+            <div className="text-xs text-brand-grey-80 mt-2 bg-brand-light-grey/50 rounded p-2">
+              {memResult}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={runReconsolidate}
+          disabled={memBusy}
+          className="px-3 py-1.5 text-xs border rounded text-brand-grey-80 hover:bg-brand-light-grey disabled:opacity-50 shrink-0"
+        >
+          {memBusy ? 'Running…' : 'Reconsolidate'}
+        </button>
+      </div>
     </div>
   )
 }

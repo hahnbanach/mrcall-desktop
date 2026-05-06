@@ -114,7 +114,34 @@ const api = {
     // Tasks view and filter to these ids, even when the list is empty or
     // has exactly one element. No direct-open shortcut.
     listByThread: (thread_id: string) =>
-      call<any[]>('tasks.list_by_thread', { thread_id }, 15000)
+      call<any[]>('tasks.list_by_thread', { thread_id }, 15000),
+    // Manual cleanup buttons (Settings → Maintenance). Equivalent to
+    // the sweep run automatically at the end of every /update — runs
+    // the same workers, but on demand. Long timeout (5 min) since
+    // each cluster is one LLM call and a busy account can have ~10
+    // arbitratable clusters.
+    dedupNow: () =>
+      call<{
+        clusters_examined: number
+        clusters_with_dups: number
+        tasks_closed: number
+        skipped_recently_reopened: number
+        skipped_oversize: number
+        no_llm: boolean
+      }>('tasks.dedup_now', {}, 5 * 60 * 1000)
+  },
+  memory: {
+    reconsolidateNow: () =>
+      call<{
+        ok: boolean
+        error?: string
+        groups_examined?: number
+        blobs_examined?: number
+        blobs_merged?: number
+        blobs_kept_distinct?: number
+        pair_cap_hit?: boolean
+        no_llm?: boolean
+      }>('memory.reconsolidate_now', {}, 5 * 60 * 1000)
   },
   chat: {
     send: (
