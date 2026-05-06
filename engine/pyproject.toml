@@ -29,8 +29,13 @@ dependencies = [
     "segno>=1.5.0",
     # neonize transitively imports python-magic for MIME detection.
     # >=0.4.27 looks in /opt/homebrew/lib by default on Apple Silicon
-    # (brew's location), so users only need `brew install libmagic`.
+    # (brew's location), so dev users only need `brew install libmagic`.
+    # Packaged builds bundle libmagic via zylch.spec — see the runtime
+    # hook there.
     "python-magic>=0.4.27",
+    # Windows: python-magic-bin ships its own libmagic.dll alongside, so
+    # the packaged installer doesn't need anything from the host.
+    "python-magic-bin>=0.4.14; sys_platform == 'win32'",
 ]
 
 [project.scripts]
