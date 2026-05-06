@@ -201,12 +201,35 @@ def _apply_data_backfills() -> None:
     Runs inside a single transactional session. Each backfill must be
     idempotent: re-running on an already-migrated DB must be a no-op.
     """
-    # 2026-04-17: TaskItem.sources.thread_id — the desktop "Open" button
-    # on the Tasks view needs sources.thread_id to activate the Email
-    # tab. Tasks created before task_creation.py started storing
-    # thread_id in sources have {"emails": [...], "blobs": [...],
-    # "calendar_events": [...]} with no thread_id. Derive thread_id
-    # from Email rows via sources.emails[0].
+    _backfill_task_thread_id()
+
+    # 2026-05-06: email_blobs / calendar_blobs association tables (Fase 3.1).
+    # Existing installations have populated `blobs.events` strings of
+    # the form "Extracted from email <uuid> (<datetime>)" but no
+    # entries in the new index. Reconstruct it once on first boot
+    # post-3.1; idempotent via INSERT OR IGNORE on the composite PK.
+    _backfill_email_blobs_index()
+
+    # 2026-05-06 (Fase 3.2): backfill task_items.channel for tasks
+    # created before the column existed. Idempotent — only tasks with
+    # NULL channel are touched.
+    _backfill_task_channels()
+
+
+def _backfill_task_thread_id() -> None:
+    """2026-04-17: TaskItem.sources.thread_id — the desktop "Open" button
+    on the Tasks view needs sources.thread_id to activate the Email
+    tab. Tasks created before task_creation.py started storing
+    thread_id in sources have {"emails": [...], "blobs": [...],
+    "calendar_events": [...]} with no thread_id. Derive thread_id
+    from Email rows via sources.emails[0].
+    """
+    # NOTE: this used to live inline in _apply_data_backfills with an
+    # `if not needs_lookup: return` early-out. That `return` short-circuited
+    # the whole `_apply_data_backfills` body — the new Fase 3.1 / 3.2
+    # backfills appended below were silently skipped on every install
+    # whose tasks already had thread_id (i.e. all current installs).
+    # Lifting it into its own function makes the early-out local.
     from zylch.storage.models import Email, TaskItem
 
     factory = get_session_factory()
@@ -263,18 +286,6 @@ def _apply_data_backfills() -> None:
         logger.warning(f"[backfill] sources.thread_id backfill failed: {e}")
     finally:
         session.close()
-
-    # 2026-05-06: email_blobs / calendar_blobs association tables (Fase 3.1).
-    # Existing installations have populated `blobs.events` strings of
-    # the form "Extracted from email <uuid> (<datetime>)" but no
-    # entries in the new index. Reconstruct it once on first boot
-    # post-3.1; idempotent via INSERT OR IGNORE on the composite PK.
-    _backfill_email_blobs_index()
-
-    # 2026-05-06 (Fase 3.2): backfill task_items.channel for tasks
-    # created before the column existed. Idempotent — only tasks with
-    # NULL channel are touched.
-    _backfill_task_channels()
 
 
 def _backfill_email_blobs_index() -> None:
