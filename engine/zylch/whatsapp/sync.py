@@ -226,6 +226,156 @@ class WhatsAppSyncService:
             count = 0
         return count
 
+    # -- LID → phone+name resolution (from neonize session DB) ----------
+
+    def sync_lid_contacts(self, wa_client=None) -> int:
+        """Resolve every ``@lid`` JID we've seen in messages to a real
+        phone number + display name, using neonize's own session DB
+        (``whatsapp.db``).
+
+        Two tables there give us everything:
+
+        * ``whatsmeow_lid_map(lid, pn)`` — LID ↔ phone-JID local-part.
+        * ``whatsmeow_contacts(their_jid, full_name, first_name,
+          push_name, business_name, …)`` — the user's address-book
+          entries as WhatsApp itself sees them. Populated by neonize
+          during the normal app-state sync; no extra round-trip needed.
+
+        We open the file read-only (SQLite WAL is concurrency-safe) and
+        upsert each LID into our own ``whatsapp_contacts`` table keyed
+        by the LID itself, so ``list_threads`` can render the real
+        contact name instead of a numeric pseudonym.
+
+        Returns the number of LID contacts upserted.
+        """
+        import sqlite3 as _sqlite3
+
+        from zylch.storage.models import WhatsAppContact, WhatsAppMessage
+        from zylch.whatsapp.client import _default_wa_db
+
+        # Distinct LID local-parts present in our messages (chat or sender).
+        lids: set[str] = set()
+        try:
+            with self._db_lock, get_session() as session:
+                rows = (
+                    session.query(WhatsAppMessage.chat_jid, WhatsAppMessage.sender_jid)
+                    .filter(WhatsAppMessage.owner_id == self.owner_id)
+                    .all()
+                )
+            for chat, sender in rows:
+                if chat and chat.endswith("@lid"):
+                    lids.add(chat.split("@", 1)[0])
+                if sender and sender.endswith("@lid"):
+                    lids.add(sender.split("@", 1)[0])
+        except Exception as e:
+            logger.error(f"[wa-sync] sync_lid_contacts: collect LIDs failed: {e}")
+            return 0
+
+        if not lids:
+            return 0
+
+        wa_db = _default_wa_db()
+        try:
+            conn = _sqlite3.connect(f"file:{wa_db}?mode=ro", uri=True)
+        except Exception as e:
+            logger.warning(f"[wa-sync] sync_lid_contacts: open {wa_db}: {e}")
+            return 0
+
+        # Build (lid, phone, name) tuples.
+        resolved: list = []
+        try:
+            cur = conn.cursor()
+            for lid in lids:
+                cur.execute(
+                    "SELECT pn FROM whatsmeow_lid_map WHERE lid=?",
+                    (lid,),
+                )
+                row = cur.fetchone()
+                pn_user = row[0].split("@", 1)[0] if row and row[0] else None
+
+                # Collect every name field from BOTH JID forms (LID and
+                # phone) into one bag, then pick by priority. Doing it
+                # row-by-row was wrong: e.g. the LID row may carry only
+                # ``push_name='A'`` (a single-letter status nick) while
+                # the phone row carries ``first_name='Alessandro
+                # Simonetti'`` — picking per-row would lock us to 'A'.
+                full_names: list = []
+                business_names: list = []
+                first_names: list = []
+                push_names: list = []
+                lookups = [f"{lid}@lid"]
+                if pn_user:
+                    lookups.append(f"{pn_user}@s.whatsapp.net")
+                for jid_form in lookups:
+                    cur.execute(
+                        "SELECT full_name, first_name, push_name, business_name "
+                        "FROM whatsmeow_contacts WHERE their_jid=? LIMIT 1",
+                        (jid_form,),
+                    )
+                    r = cur.fetchone()
+                    if not r:
+                        continue
+                    fn, fr, pu, bn = r
+                    if (fn or "").strip():
+                        full_names.append(fn.strip())
+                    if (bn or "").strip():
+                        business_names.append(bn.strip())
+                    if (fr or "").strip():
+                        first_names.append(fr.strip())
+                    if (pu or "").strip():
+                        push_names.append(pu.strip())
+
+                # Priority: real address-book full_name → business_name →
+                # first_name (own contact-list label) → push_name (the
+                # other side's self-set status nick, often noisy).
+                name = None
+                for bucket in (full_names, business_names, first_names, push_names):
+                    if bucket:
+                        name = bucket[0]
+                        break
+
+                phone = f"+{pn_user}" if pn_user and pn_user.isdigit() else None
+                if name or phone:
+                    resolved.append((f"{lid}@lid", phone, name))
+        finally:
+            conn.close()
+
+        if not resolved:
+            logger.info("[wa-sync] lid contacts synced: 0 (no resolutions)")
+            return 0
+
+        count = 0
+        try:
+            with self._db_lock, get_session() as session:
+                for jid, phone, name in resolved:
+                    existing = (
+                        session.query(WhatsAppContact)
+                        .filter_by(owner_id=self.owner_id, jid=jid)
+                        .first()
+                    )
+                    if existing:
+                        if name:
+                            existing.name = name
+                        if phone:
+                            existing.phone_number = phone
+                        existing.synced_at = datetime.now(timezone.utc)
+                    else:
+                        session.add(
+                            WhatsAppContact(
+                                owner_id=self.owner_id,
+                                jid=jid,
+                                phone_number=phone,
+                                name=name,
+                                synced_at=datetime.now(timezone.utc),
+                            )
+                        )
+                    count += 1
+            logger.info(f"[wa-sync] lid contacts synced: {count}")
+        except Exception as e:
+            logger.error(f"[wa-sync] sync_lid_contacts upsert error: {e}")
+            count = 0
+        return count
+
     # -- Full sync (contacts + wait for history) -----------------------
 
     def full_sync(self, wa_client) -> Dict[str, int]:
@@ -351,7 +501,36 @@ class WhatsAppSyncService:
             with self._db_lock, get_session() as session:
                 existing = session.query(WhatsAppMessage).filter_by(message_id=msg_id).first()
                 if existing:
-                    return False  # Already stored
+                    # Backfill on second arrival: WhatsApp's first delivery
+                    # of a message during history sync sometimes lands as a
+                    # placeholder with no decrypted body, then the real
+                    # MessageEv arrives later with the actual proto. Plain
+                    # ``return False`` here meant the row stayed
+                    # ``text=NULL`` forever and the renderer showed
+                    # ``[empty]``. Update the columns whose first version
+                    # was empty when the second version has something
+                    # better to offer.
+                    changed = False
+                    if text and not (existing.text or "").strip():
+                        existing.text = text
+                        changed = True
+                    if (
+                        timestamp is not None
+                        and (existing.timestamp is None
+                             or existing.timestamp.year < 2000)
+                    ):
+                        existing.timestamp = timestamp
+                        changed = True
+                    if sender_name and not existing.sender_name:
+                        existing.sender_name = sender_name
+                        changed = True
+                    if chat_jid and not existing.chat_jid:
+                        existing.chat_jid = chat_jid
+                        changed = True
+                    if sender_jid and not existing.sender_jid:
+                        existing.sender_jid = sender_jid
+                        changed = True
+                    return changed
 
                 new_msg = WhatsAppMessage(
                     owner_id=self.owner_id,
@@ -553,7 +732,28 @@ def _extract_text(message) -> Optional[str]:
     # protocolMessage / senderKeyDistributionMessage / messageContextInfo /
     # encReactionMessage / appStateSync* etc. are system-level — return
     # None so the renderer can keep them out of the visible flow.
+    #
+    # Diagnostic: log which oneof / fields ARE set on a Message that we
+    # couldn't extract anything from, so we know exactly which proto
+    # kind needs new placeholder support next. Sampled at INFO level so
+    # it's visible in zylch.log without DEBUG noise. Only logs once per
+    # unique field-set within a process to avoid log spam on chats with
+    # many of the same kind.
+    try:
+        set_fields = sorted(f.name for f, _ in message.ListFields())
+        signature = ",".join(set_fields) or "(none)"
+        if signature not in _UNHANDLED_PROTO_SIGNATURES:
+            _UNHANDLED_PROTO_SIGNATURES.add(signature)
+            logger.info(f"[wa-sync] _extract_text returned None: fields=[{signature}]")
+    except Exception:
+        pass
     return None
+
+
+# Module-level set so the diagnostic line above logs each new combination
+# only once per process — keeps zylch.log readable while still surfacing
+# every unhandled proto kind we see.
+_UNHANDLED_PROTO_SIGNATURES: set = set()
 
 
 def _safe_from_timestamp(ts) -> Optional[datetime]:
@@ -614,13 +814,22 @@ def _format_jid(jid) -> str:
 def _jid_to_phone(jid_str: str) -> str:
     """Convert WhatsApp JID to phone number.
 
+    Only ``@s.whatsapp.net`` carries a real phone number in its
+    local-part. ``@lid`` is a privacy pseudonym (opaque numeric id, not
+    a phone) and ``@g.us`` is a synthetic group id — for both we return
+    an empty string so callers don't render fake phone numbers.
+
     Example: "393281234567@s.whatsapp.net" → "+393281234567"
+             "86904452186141@lid"          → ""
     """
-    if "@" in jid_str:
-        number = jid_str.split("@")[0]
-        if number.isdigit():
-            return f"+{number}"
-    return jid_str
+    if "@" not in jid_str:
+        return ""
+    user, _, server = jid_str.partition("@")
+    if server != "s.whatsapp.net":
+        return ""
+    if user.isdigit():
+        return f"+{user}"
+    return ""
 
 
 def _extract_contact_name(contact_info) -> Optional[str]:

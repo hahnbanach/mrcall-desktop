@@ -35,20 +35,46 @@ export default function WhatsAppView(): JSX.Element {
   const [messagesError, setMessagesError] = useState<string | null>(null)
 
   // Resolve connected state on mount (cheap status RPC). Threads are
-  // loaded only once we know the engine has a chance of returning data.
+  // rendered ONLY when the WA socket is actually live — having a
+  // session DB on disk is not enough. Otherwise the chat list would
+  // stay visible after a Disconnect (or before auto-reconnect
+  // completes), and anyone glancing at the screen would see the
+  // last-known thread/contact list even though we're offline. The
+  // SQLite rows are kept on disk; the renderer just refuses to draw
+  // them until the socket is back up.
   useEffect(() => {
     let cancelled = false
-    window.zylch.whatsapp
-      .status()
-      .then((r) => {
+    let intervalId: ReturnType<typeof setInterval> | null = null
+
+    const poll = async (): Promise<void> => {
+      try {
+        const r = await window.zylch.whatsapp.status()
         if (cancelled) return
-        setConnected(r.connected || r.has_session)
-      })
-      .catch(() => {
+        setConnected(Boolean(r.connected))
+        // Once we are live, stop polling — the live socket will keep
+        // pushing MessageEv, no further status checks needed. If the
+        // socket later drops, the user re-mounts the tab (or hits
+        // Refresh on the connect card) and we resume polling.
+        if (r.connected && intervalId !== null) {
+          clearInterval(intervalId)
+          intervalId = null
+        }
+      } catch {
         if (!cancelled) setConnected(false)
-      })
+      }
+    }
+
+    void poll()
+    // Poll every 3 s while we are still off-socket so the auto-reconnect
+    // (or a manual click on Reconnect from the card) flips the UI to
+    // the live thread list without forcing the user to switch tabs.
+    intervalId = setInterval(() => {
+      void poll()
+    }, 3000)
+
     return () => {
       cancelled = true
+      if (intervalId !== null) clearInterval(intervalId)
     }
   }, [])
 

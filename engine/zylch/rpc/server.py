@@ -227,11 +227,64 @@ async def _read_lines(loop: asyncio.AbstractEventLoop):
             continue
 
 
+async def _auto_reconnect_whatsapp() -> None:
+    """Reconnect a paired WhatsApp session at boot.
+
+    Without this, every app launch leaves the neonize socket closed —
+    the renderer shows the last known thread list (read straight from
+    SQLite via ``WhatsApp.tsx:45``'s ``r.connected || r.has_session``
+    fallback) but no fresh ``MessageEv`` is delivered, so new chats
+    never appear and existing ones don't update. Forcing the user to
+    hunt for a "Reconnect" button on every launch is a UX bug.
+
+    We fire-and-forget the same RPC the renderer would call. If no
+    session is on disk we skip silently so first-run / unpaired
+    profiles don't pay the neonize Go-runtime load cost.
+    """
+    import os
+
+    from zylch.whatsapp.client import _default_wa_db
+
+    wa_db = _default_wa_db()
+    if not os.path.exists(wa_db):
+        logger.info("[rpc] auto-reconnect skipped (no WhatsApp session on disk)")
+        return
+
+    # Tiny grace period so the renderer's first ``whatsapp.status``
+    # poll lands before we mutate ``_active_client``. Not load-bearing.
+    await asyncio.sleep(1.0)
+
+    try:
+        from zylch.rpc.whatsapp_actions import whatsapp_connect
+    except Exception as e:
+        logger.warning(f"[rpc] auto-reconnect: could not import whatsapp_connect: {e}")
+        return
+
+    logger.info("[rpc] auto-reconnect: WhatsApp session found, reconnecting in background")
+    try:
+        result = await whatsapp_connect({}, notify=lambda *a, **k: None)
+        if isinstance(result, dict) and result.get("ok"):
+            logger.info(
+                "[rpc] auto-reconnect: WhatsApp connected "
+                f"phone={result.get('phone')} display_name={result.get('display_name')}"
+            )
+        else:
+            logger.warning(f"[rpc] auto-reconnect: connect returned {result}")
+    except Exception as e:
+        logger.error(f"[rpc] auto-reconnect: connect raised {type(e).__name__}: {e}")
+
+
 async def serve() -> None:
     """Main loop: read stdin lines, dispatch concurrently, write responses."""
     logger.info("[rpc] server starting")
     loop = asyncio.get_event_loop()
     tasks: set[asyncio.Task] = set()
+
+    # Best-effort: revive a paired WhatsApp session in the background so
+    # MessageEv start flowing without requiring a manual click.
+    auto_reconnect_task = asyncio.create_task(_auto_reconnect_whatsapp())
+    tasks.add(auto_reconnect_task)
+    auto_reconnect_task.add_done_callback(tasks.discard)
 
     async for line in _read_lines(loop):
         task = asyncio.create_task(_handle_request(line))

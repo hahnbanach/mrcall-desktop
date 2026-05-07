@@ -133,6 +133,12 @@ export default function ConnectWhatsApp(): JSX.Element {
             Local connection via the WhatsApp Linked Devices flow. Messages and contacts stay
             on this machine — nothing routes through a third-party server.
           </p>
+          <p className="text-xs text-brand-grey-80 mt-1">
+            History limitation: WhatsApp only delivers messages to a linked device from the
+            moment it is paired onward, plus a short offline backlog (typically days, at most a
+            couple of weeks). Older history stays on your phone — MrCall Desktop cannot fetch
+            it.
+          </p>
         </div>
         <div className="shrink-0">
           {state.phase === 'loading' && (

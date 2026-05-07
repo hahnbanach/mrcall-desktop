@@ -158,7 +158,15 @@ async def whatsapp_status(params: Dict[str, Any], notify: NotifyFn) -> Any:
     if client is None:
         return {"connected": False, "has_session": has_session}
     try:
-        connected = bool(client.is_connected())
+        # ``is_connected`` is True as soon as the WS socket to the WA
+        # server is up — including the QR-emitting phase when the local
+        # session is dead and neonize is asking the user to re-pair.
+        # In that state we are NOT actually able to read or send
+        # messages, so the renderer must NOT treat us as live. Only
+        # ``is_logged_in`` proves a usable session.
+        socket_up = bool(client.is_connected())
+        logged_in = bool(client.is_logged_in()) if socket_up else False
+        connected = socket_up and logged_in
         me = client.get_me() if connected else None
         formatted = _format_me(me)
         return {
@@ -182,9 +190,31 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """
     global _connect_in_flight, _cancel_event
 
+    # If a previous connect is still running (typically the boot-time
+    # auto-reconnect, which can sit in QR-emission limbo for up to 5
+    # minutes when the session is dead), cancel it and proceed. The
+    # caller — usually the user clicking "Reconnect" — explicitly
+    # asked for a fresh attempt; a flat "already in flight" error
+    # leaves them stuck. Best-effort: we wait briefly for the cancel
+    # to land but never block the new connect on it.
     with _state_lock:
-        if _connect_in_flight is not None and not _connect_in_flight.done():
-            return {"ok": False, "reason": "connect already in flight"}
+        prior_task = _connect_in_flight
+        prior_cancel = _cancel_event
+
+    if prior_task is not None and not prior_task.done():
+        logger.info("[rpc:whatsapp.connect] cancelling prior in-flight connect to honour new request")
+        if prior_cancel is not None:
+            prior_cancel.set()
+        try:
+            await asyncio.wait_for(asyncio.shield(prior_task), timeout=2.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+            pass
+        with _state_lock:
+            globals()["_connect_in_flight"] = None
+            globals()["_cancel_event"] = None
+            # _active_client is cleared by the prior task's finally
+            # block; if for some reason it isn't, the new client below
+            # will overwrite it anyway.
 
     # Lazy import — neonize loads a Go shared library; do NOT pay this
     # cost at sidecar boot.
@@ -335,6 +365,15 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
                     sync_svc.sync_groups(client)
                 except Exception as e:
                     logger.warning(f"[rpc:whatsapp.connect] sync_groups: {e}")
+                # LID contact resolution: WA's privacy mode returns chats
+                # and senders as ``@lid`` pseudonyms; without this the
+                # WhatsApp tab would show numeric LIDs as if they were
+                # phone numbers, even though the real phone+name is sitting
+                # in neonize's own session DB.
+                try:
+                    sync_svc.sync_lid_contacts(client)
+                except Exception as e:
+                    logger.warning(f"[rpc:whatsapp.connect] sync_lid_contacts: {e}")
                 return {
                     "ok": True,
                     "phone": me_holder["phone"],
@@ -476,9 +515,20 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
                 .all()
             )
             last_by_jid: Dict[str, Any] = {}
+            # Track the most recent INCOMING (not is_from_me) sender_name per
+            # chat too — for 1-on-1s where every stored message is outbound,
+            # `last.sender_name` would be the user's own name, which is the
+            # wrong label for the chat.
+            peer_name_by_jid: Dict[str, str] = {}
             for r in last_msg_rows:
                 if r.chat_jid not in last_by_jid:
                     last_by_jid[r.chat_jid] = r
+                if (
+                    r.chat_jid not in peer_name_by_jid
+                    and not bool(r.is_from_me)
+                    and r.sender_name
+                ):
+                    peer_name_by_jid[r.chat_jid] = r.sender_name
 
             # Contacts for display name resolution.
             contact_rows = (
@@ -497,22 +547,27 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
                 last = last_by_jid.get(jid)
                 contact = contact_by_jid.get(jid)
                 is_group = bool(last.is_group) if last is not None else jid.endswith("@g.us")
-                # Display name: contact.name → contact.push_name → last
-                # message's sender_name → fallback to phone-from-jid.
+                # `@lid` is WhatsApp's privacy-pseudonym JID namespace. The
+                # numeric local-part is NOT a phone number and must never be
+                # rendered as one. Same goes for groups (`@g.us`) — the
+                # local-part there is a synthetic group id, not a phone.
+                is_lid = jid.endswith("@lid")
+                # Display name: contact.name → contact.push_name → most
+                # recent peer (not-from-me) sender_name → null. We never
+                # fall back to the user's own outbound sender_name — that
+                # would label a chat with the user themselves.
                 name = None
                 phone = None
                 if contact is not None:
                     name = contact.name or contact.push_name
                     phone = contact.phone_number
-                # For 1-on-1 chats only: when no contact name is on file,
-                # the last message's sender_name is a sensible fallback.
-                # For GROUPS this fallback is wrong (it would show the
-                # last sender's name as the group title) — leave name
-                # null so the renderer falls back to phone / JID.
-                if not name and not is_group and last is not None and last.sender_name:
-                    name = last.sender_name
-                if not phone:
-                    # Strip the @s.whatsapp.net / @g.us suffix.
+                if not name and not is_group:
+                    peer = peer_name_by_jid.get(jid)
+                    if peer:
+                        name = peer
+                if not phone and not is_group and not is_lid:
+                    # Strip the @s.whatsapp.net suffix — the local-part is a
+                    # phone number for that namespace only.
                     bare = jid.split("@", 1)[0]
                     phone = bare or None
 
