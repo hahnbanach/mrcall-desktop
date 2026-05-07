@@ -82,6 +82,12 @@ freshest source). Facts migrate here as they get touched.
 - macOS code-signed + notarized via afterSign hook (`3a3eb522`). Windows installers not yet signed.
 - Sidecar built by `.github/workflows/release.yml` via PyInstaller in the same run, downloaded into `app/bin/` before electron-builder runs.
 
+### WhatsApp tab — privacy gate + auto-reconnect awareness (2026-05-07, commit `9eee73c2`)
+- `views/WhatsApp.tsx`: chat list rendered ONLY when `r.connected === true`. Previously the renderer used `r.connected || r.has_session` which kept the last-known thread list visible after Disconnect or while the session was expired (privacy issue: anyone glancing at the screen saw all contacts even though we were offline). SQLite rows are kept on disk; the renderer just refuses to draw them until the socket is back live.
+- The connected state is **polled every 3s** while we are offline. As soon as the engine's auto-reconnect at sidecar boot completes, or the user clicks Reconnect, the renderer flips from the `ConnectWhatsApp` card to the live thread list without forcing a tab switch. Polling stops as soon as `connected === true`.
+- `views/ConnectWhatsApp.tsx` now states the WhatsApp history limitation right under the standard "local connection" copy: *"WhatsApp only delivers messages to a linked device from the moment it is paired onward, plus a short offline backlog (typically days, at most a couple of weeks). Older history stays on your phone — MrCall Desktop cannot fetch it."* Sets honest expectations for distribution. Live-verified by Mario.
+- The privacy gate depends on the engine's `whatsapp.status` returning `connected = is_connected AND is_logged_in` (engine commit in same SHA). Without that fix the renderer would still flash the list during the QR-emit phase.
+
 ## What Was Completed This Session (2026-05-02)
 
 Recent commits on `main` (newest last):
