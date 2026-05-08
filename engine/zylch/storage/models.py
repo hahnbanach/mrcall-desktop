@@ -274,6 +274,56 @@ class CalendarBlob(Base):
 
 
 # -------------------------------------------------------------------
+# PERSON IDENTIFIERS — cross-channel identity index
+# -------------------------------------------------------------------
+#
+# 2026-05-07 (whatsapp-pipeline-parity, Phase 1a): structured index of
+# identifiers (email / phone / lid) extracted from each PERSON-blob's
+# `#IDENTIFIERS` block. Queried by future cross-channel match logic so
+# a WhatsApp message from +393395... merges into the same blob already
+# carrying that phone from a prior email signature.
+#
+# Phase 1a is additive only: rows are written by the memory worker on
+# every successful upsert; nothing reads them yet. Phase 1b switches
+# `_upsert_entity` to query this index before falling back to cosine.
+#
+# kind ∈ {'email', 'phone', 'lid'}. Names are NOT indexed here in v1
+# (false-merge risk on common names: two distinct "Mario Rossi"). Names
+# may be added later as a weak-confidence kind requiring embedding
+# co-confirmation.
+
+
+class PersonIdentifier(Base):
+    __tablename__ = "person_identifiers"
+
+    id = Column(
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
+    )
+    owner_id = Column(Text, nullable=False, index=True)
+    blob_id = Column(
+        String(36),
+        ForeignKey("blobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kind = Column(Text, nullable=False)
+    value = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id",
+            "kind",
+            "value",
+            "blob_id",
+            name="person_identifiers_owner_kind_value_blob_unique",
+        ),
+    )
+
+
+# -------------------------------------------------------------------
 # OAUTH TOKENS
 # -------------------------------------------------------------------
 

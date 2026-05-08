@@ -8,7 +8,8 @@ then LLM-merges new information with existing knowledge.
 """
 
 import logging
-from typing import Dict, List, Optional
+import re
+from typing import Dict, List, Optional, Tuple
 
 from zylch.llm import LLMClient, make_llm_client
 from zylch.storage import Storage
@@ -21,6 +22,136 @@ from zylch.memory import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------
+# Identifier parsing (Phase 1a, whatsapp-pipeline-parity)
+# ---------------------------------------------------------------------
+#
+# The memory extraction prompt emits a structured `#IDENTIFIERS` block,
+# e.g.::
+#
+#     #IDENTIFIERS
+#     Entity type: PERSON
+#     Name: Carmine Salamone
+#     Email: c.salamone@cnit.it
+#     Phone: +39 339 6584014, +393925358412
+#
+# `_parse_identifiers_block` extracts the (kind, value) tuples that we
+# index into `person_identifiers` for cross-channel identity matching.
+# Only structured input (the labelled lines inside the `#IDENTIFIERS`
+# header) is parsed — never prose. v1 indexes email / phone / lid; names
+# are excluded by design (false-merge risk on common names).
+
+_PHONE_LABEL_RE = re.compile(
+    r"^\s*[-*•]?\s*(phone|tel\.?|telefono|mobile|cellulare|cell\.?)\s*[:=]\s*(.+)$",
+    re.IGNORECASE,
+)
+_EMAIL_LABEL_RE = re.compile(
+    r"^\s*[-*•]?\s*email\s*[:=]\s*(.+)$",
+    re.IGNORECASE,
+)
+_LID_LABEL_RE = re.compile(
+    r"^\s*[-*•]?\s*lid\s*[:=]\s*(.+)$",
+    re.IGNORECASE,
+)
+
+
+def _normalise_phone(raw: str) -> Optional[str]:
+    """Canonicalise a phone string for indexing.
+
+    Strips spaces / dots / dashes / parentheses, preserves a leading '+'
+    when present (or upgrades a leading '00' to '+'). Returns None for
+    inputs that produce <8 digits — they're either placeholders ("none",
+    "unknown") or noise.
+    """
+    if not raw:
+        return None
+    s = raw.strip()
+    # Remove embedded narrative tails like "+39 339 6584014 (cell)"
+    # by clipping at the first character that is neither a digit, +,
+    # whitespace, dot, dash, parenthesis, or slash.
+    cleaned = []
+    for ch in s:
+        if ch.isdigit() or ch in "+- .()/":
+            cleaned.append(ch)
+        else:
+            break
+    s = "".join(cleaned).strip()
+    if not s:
+        return None
+    has_plus = s.startswith("+") or s.startswith("00")
+    digits = re.sub(r"\D+", "", s)
+    if has_plus and digits.startswith("00"):
+        digits = digits[2:]
+    if len(digits) < 8:
+        return None
+    return ("+" + digits) if has_plus else digits
+
+
+def _parse_identifiers_block(entity_content: str) -> List[Tuple[str, str]]:
+    """Parse the `#IDENTIFIERS` block of a blob into (kind, value) tuples.
+
+    Returns kinds in {'email', 'phone', 'lid'}. Multi-value lines (e.g.
+    ``Phone: +39 339 ..., +39 392 ...``) split on commas. Returns an
+    empty list when the block is missing — callers fall back to no-op
+    (a blob without structured identifiers cannot be cross-channel
+    matched in v1; the cosine fallback in `_upsert_entity` still runs).
+    """
+    if not entity_content:
+        return []
+    lines = entity_content.splitlines()
+    in_block = False
+    out: List[Tuple[str, str]] = []
+    for raw in lines:
+        s = raw.strip()
+        if s.startswith("#IDENTIFIERS"):
+            in_block = True
+            continue
+        if in_block and s.startswith("#"):
+            break
+        if not in_block or not s:
+            continue
+        if s.startswith("**") or s.lower().startswith("reminder:"):
+            continue
+
+        m = _EMAIL_LABEL_RE.match(s)
+        if m:
+            for piece in m.group(1).split(","):
+                v = piece.strip().strip("<>").lower()
+                # Defensive: an email must contain '@' and at least one '.'
+                # in the domain; placeholders like "(none)" / "unknown" fail.
+                if "@" in v and "." in v.split("@", 1)[-1]:
+                    out.append(("email", v))
+            continue
+
+        m = _PHONE_LABEL_RE.match(s)
+        if m:
+            for piece in m.group(2).split(","):
+                norm = _normalise_phone(piece)
+                if norm:
+                    out.append(("phone", norm))
+            continue
+
+        m = _LID_LABEL_RE.match(s)
+        if m:
+            for piece in m.group(1).split(","):
+                v = piece.strip().lower()
+                if v and "@lid" in v:
+                    out.append(("lid", v))
+                elif v.isdigit() and len(v) >= 6:
+                    out.append(("lid", v))
+            continue
+
+    # Stable de-dup preserving order
+    seen = set()
+    deduped: List[Tuple[str, str]] = []
+    for k, v in out:
+        if (k, v) in seen:
+            continue
+        seen.add((k, v))
+        deduped.append((k, v))
+    return deduped
 
 
 def _extract_identifier_query(entity_content: str) -> Optional[str]:
@@ -240,9 +371,7 @@ class MemoryWorker:
         # IDENTIFIERS block (legacy / malformed extraction).
         query = _extract_identifier_query(entity_content) or entity_content
         if query is not entity_content:
-            logger.debug(
-                f"[memory] using identifier-query for reconsolidation lookup: {query!r}"
-            )
+            logger.debug(f"[memory] using identifier-query for reconsolidation lookup: {query!r}")
 
         # Diagnostic: log top-3 candidates with their scores BEFORE
         # the threshold filter, so investigation of "why didn't it
@@ -289,7 +418,8 @@ class MemoryWorker:
         for existing in existing_blobs:
             # Try to merge with this candidate
             logger.debug(
-                f"Trying to merge with blob {existing.blob_id} (score={existing.hybrid_score:.2f})"
+                f"Trying to merge with blob {existing.blob_id} "
+                f"(score={existing.hybrid_score:.2f})"
             )
             merged_content = self.llm_merge.merge(existing.content, entity_content)
 
@@ -306,7 +436,8 @@ class MemoryWorker:
                 event_description=event_desc,
             )
             logger.info(
-                f"Reconsolidated blob {existing.blob_id} with email {email_id} (entity {entity_num}/{total_entities})"
+                f"Reconsolidated blob {existing.blob_id} with email {email_id} "
+                f"(entity {entity_num}/{total_entities})"
             )
             linked_blob_id = str(existing.blob_id)
             upserted = True
@@ -321,7 +452,8 @@ class MemoryWorker:
                 event_description=event_desc,
             )
             logger.info(
-                f"Created new blob {blob['id']} from email {email_id} (entity {entity_num}/{total_entities})"
+                f"Created new blob {blob['id']} from email {email_id} "
+                f"(entity {entity_num}/{total_entities})"
             )
             linked_blob_id = str(blob["id"])
 
@@ -340,6 +472,34 @@ class MemoryWorker:
                 logger.warning(
                     f"[memory] add_email_blob_link({email_id}, {linked_blob_id}) failed: {e}"
                 )
+
+        # Write person_identifiers rows (whatsapp-pipeline-parity, Phase 1a).
+        # Phase 1a is ADDITIVE: rows are written but no read path consults
+        # them yet. This fills the index for new email-derived blobs so
+        # that when Phase 1b switches `_upsert_entity` to identifier-first
+        # matching, profiles already have a populated index without
+        # needing to wait for a backfill. The merge case is the
+        # interesting one: when an existing blob's content gets richer
+        # (a new email exposing the contact's phone for the first time),
+        # this picks up those new identifiers without requiring the blob
+        # to be re-extracted from scratch.
+        if linked_blob_id:
+            try:
+                identifiers = _parse_identifiers_block(entity_content)
+                if identifiers:
+                    inserted = self.storage.add_person_identifiers(
+                        owner_id=self.owner_id,
+                        blob_id=linked_blob_id,
+                        identifiers=identifiers,
+                    )
+                    if inserted:
+                        logger.debug(
+                            f"[memory] add_person_identifiers blob={linked_blob_id} "
+                            f"new_rows={inserted} kinds="
+                            f"{[k for k, _ in identifiers]}"
+                        )
+            except Exception as e:
+                logger.warning(f"[memory] add_person_identifiers({linked_blob_id}) failed: {e}")
 
     async def process_batch(
         self,

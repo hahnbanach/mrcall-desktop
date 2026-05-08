@@ -613,9 +613,7 @@ class Storage:
                 has_newer_non_user = latest_user is None or (
                     latest_non_user.date_timestamp or 0
                 ) > (latest_user.date_timestamp or 0)
-                b["unread"] = bool(
-                    has_newer_non_user and latest_non_user.read_at is None
-                )
+                b["unread"] = bool(has_newer_non_user and latest_non_user.read_at is None)
 
             candidates.sort(
                 key=lambda b: (
@@ -630,9 +628,7 @@ class Storage:
             for b in page:
                 latest: Email = b["latest"]
                 date_val = latest.date
-                date_iso = (
-                    date_val.isoformat() if isinstance(date_val, datetime) else ""
-                )
+                date_iso = date_val.isoformat() if isinstance(date_val, datetime) else ""
                 out.append(
                     {
                         "thread_id": b["thread_id"],
@@ -750,9 +746,7 @@ class Storage:
                 session.flush()
                 return True
         except Exception as e:
-            logger.error(
-                f"add_calendar_blob_link({event_id}, {blob_id}) failed: {e}"
-            )
+            logger.error(f"add_calendar_blob_link({event_id}, {blob_id}) failed: {e}")
             return False
 
     def get_blobs_for_event(
@@ -778,6 +772,177 @@ class Storage:
                 return [str(r[0]) for r in rows]
         except Exception as e:
             logger.error(f"get_blobs_for_event({event_id}) failed: {e}")
+            return []
+
+    # ==========================================
+    # PERSON IDENTIFIERS — cross-channel identity
+    # ==========================================
+    #
+    # Index of (kind, value) tuples extracted from each PERSON-blob's
+    # `#IDENTIFIERS` block. Used by the memory worker to detect "the
+    # entity in this new email/WA-message is the same person we already
+    # have a blob for, even though the cosine similarity on free-text
+    # would miss it" — for example: an email signed with phone
+    # +393395040816 and a WhatsApp message from JID 393395040816@s.whatsapp.net
+    # both produce identifier kind='phone' value='+393395040816'.
+
+    def add_person_identifiers(
+        self,
+        owner_id: str,
+        blob_id: str,
+        identifiers: List[tuple],
+    ) -> int:
+        """Bulk add identifier rows for a blob.
+
+        Args:
+            owner_id: Profile owner.
+            blob_id: Blob the identifiers belong to.
+            identifiers: List of (kind, value) tuples. kind ∈ {'email','phone','lid'}.
+                Values should be already normalised by the caller (lowercased
+                emails, digit-only phones with optional leading '+', etc.).
+                Empty / None values are skipped.
+
+        Returns:
+            Number of NEW rows inserted (existing rows are silently no-op'd
+            via the unique constraint).
+        """
+        if not (owner_id and blob_id and identifiers):
+            return 0
+        from zylch.storage.models import PersonIdentifier
+
+        inserted = 0
+        try:
+            with get_session() as session:
+                # Pre-fetch existing rows so we know what to skip without
+                # round-tripping per insert. Bound the query to this blob.
+                existing_rows = (
+                    session.query(PersonIdentifier.kind, PersonIdentifier.value)
+                    .filter(
+                        PersonIdentifier.owner_id == owner_id,
+                        PersonIdentifier.blob_id == blob_id,
+                    )
+                    .all()
+                )
+                existing = {(str(k), str(v)) for k, v in existing_rows}
+
+                for kind, value in identifiers:
+                    if not kind or not value:
+                        continue
+                    k = str(kind).strip().lower()
+                    v = str(value).strip()
+                    if not k or not v:
+                        continue
+                    if (k, v) in existing:
+                        continue
+                    session.add(
+                        PersonIdentifier(
+                            owner_id=owner_id,
+                            blob_id=blob_id,
+                            kind=k,
+                            value=v,
+                        )
+                    )
+                    existing.add((k, v))
+                    inserted += 1
+        except Exception as e:
+            logger.warning(f"add_person_identifiers(blob={blob_id}) failed: {e}")
+            return 0
+        return inserted
+
+    def find_blobs_by_identifiers(
+        self,
+        owner_id: str,
+        identifiers: List[tuple],
+    ) -> List[str]:
+        """Look up blob ids that share at least one identifier with the
+        given set.
+
+        Args:
+            owner_id: Profile owner.
+            identifiers: List of (kind, value) tuples to match. ANY match
+                is enough (OR semantics) — the caller decides how to weight
+                multiple matches.
+
+        Returns:
+            Distinct blob ids in arbitrary order. Empty when no input or
+            no match.
+        """
+        if not (owner_id and identifiers):
+            return []
+        from zylch.storage.models import PersonIdentifier
+
+        # Normalise input the same way add_person_identifiers does so a
+        # value written as 'Email: Foo@Bar.com' matches 'foo@bar.com'.
+        norm: List[tuple] = []
+        seen = set()
+        for kind, value in identifiers:
+            if not kind or not value:
+                continue
+            k = str(kind).strip().lower()
+            v = str(value).strip()
+            if not k or not v:
+                continue
+            if (k, v) in seen:
+                continue
+            seen.add((k, v))
+            norm.append((k, v))
+        if not norm:
+            return []
+
+        try:
+            with get_session() as session:
+                clauses = [
+                    and_(
+                        PersonIdentifier.kind == k,
+                        PersonIdentifier.value == v,
+                    )
+                    for k, v in norm
+                ]
+                rows = (
+                    session.query(PersonIdentifier.blob_id)
+                    .filter(
+                        PersonIdentifier.owner_id == owner_id,
+                        or_(*clauses),
+                    )
+                    .distinct()
+                    .all()
+                )
+                return [str(r[0]) for r in rows]
+        except Exception as e:
+            logger.warning(f"find_blobs_by_identifiers(n={len(norm)}) failed: {e}")
+            return []
+
+    def get_identifiers_for_blob(
+        self,
+        owner_id: str,
+        blob_id: str,
+    ) -> List[Dict[str, str]]:
+        """Return identifiers attached to a blob, newest-first.
+
+        Result shape: ``[{"kind": "phone", "value": "+393..."}, ...]``.
+        """
+        if not (owner_id and blob_id):
+            return []
+        from zylch.storage.models import PersonIdentifier
+
+        try:
+            with get_session() as session:
+                rows = (
+                    session.query(
+                        PersonIdentifier.kind,
+                        PersonIdentifier.value,
+                        PersonIdentifier.created_at,
+                    )
+                    .filter(
+                        PersonIdentifier.owner_id == owner_id,
+                        PersonIdentifier.blob_id == blob_id,
+                    )
+                    .order_by(PersonIdentifier.created_at.desc())
+                    .all()
+                )
+                return [{"kind": str(r[0]), "value": str(r[1])} for r in rows]
+        except Exception as e:
+            logger.warning(f"get_identifiers_for_blob({blob_id}) failed: {e}")
             return []
 
     def get_open_tasks_by_blobs(
@@ -864,12 +1029,17 @@ class Storage:
         # Suppress notification senders — these pollute the LLM context
         # with unrelated alerts addressed to the same noreply mailbox.
         local = contact_low.split("@", 1)[0]
-        if local in ("noreply", "no-reply", "notification", "notifications", "bounce", "mailer-daemon"):
+        if local in (
+            "noreply",
+            "no-reply",
+            "notification",
+            "notifications",
+            "bounce",
+            "mailer-daemon",
+        ):
             return []
         user_low = (user_email or "").strip().lower()
-        cutoff_ts = int(
-            (datetime.now(timezone.utc) - timedelta(days=days)).timestamp()
-        )
+        cutoff_ts = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())
 
         with get_session() as session:
             rows = (
@@ -896,9 +1066,7 @@ class Storage:
             if from_addr == contact_low:
                 qualifies = True
             elif user_low and from_addr == user_low:
-                recipients = (
-                    (r.to_email or "") + "," + (r.cc_email or "")
-                ).lower()
+                recipients = ((r.to_email or "") + "," + (r.cc_email or "")).lower()
                 if contact_low in recipients:
                     qualifies = True
             if not qualifies:
@@ -908,10 +1076,7 @@ class Storage:
                 latest_per_thread[tid] = ts
 
         return [
-            tid
-            for tid, _ in sorted(
-                latest_per_thread.items(), key=lambda kv: kv[1], reverse=True
-            )
+            tid for tid, _ in sorted(latest_per_thread.items(), key=lambda kv: kv[1], reverse=True)
         ]
 
     def search_emails_flat(
@@ -955,9 +1120,7 @@ class Storage:
                     continue
                 if folder == "sent" and not is_user:
                     continue
-                date_iso = (
-                    r.date.isoformat() if isinstance(r.date, datetime) else ""
-                )
+                date_iso = r.date.isoformat() if isinstance(r.date, datetime) else ""
                 out.append(
                     {
                         "id": r.id,
@@ -2930,10 +3093,7 @@ class Storage:
         if max_age_days <= 0:
             return 0
         cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
-        note = (
-            f"Auto-closed: phone call-back > {max_age_days} days old "
-            "(no longer actionable)"
-        )
+        note = f"Auto-closed: phone call-back > {max_age_days} days old " "(no longer actionable)"
         try:
             with get_session() as session:
                 rows = (
