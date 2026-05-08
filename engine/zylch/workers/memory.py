@@ -343,19 +343,33 @@ class MemoryWorker:
     ) -> None:
         """Upsert a single entity blob with reconsolidation.
 
-        Bug G (2026-05-06): the previous version used the FULL
-        ``entity_content`` (#IDENTIFIERS + #ABOUT + #HISTORY) as the
-        search query. Two emails about the same person produce
-        different #ABOUT and #HISTORY paragraphs, so the cosine
-        similarity dropped under RECONSOLIDATION_THRESHOLD=0.65 and
-        the worker silently created a new blob — observed live as 8
-        distinct "Carmine Salamone PERSON" blobs on the gmail profile.
+        Match strategy (Phase 1b, whatsapp-pipeline-parity, 2026-05-07):
+        identifier-first, cosine fallback. Candidates are tried in this
+        order:
 
-        Fix: build the search query from the structured #IDENTIFIERS
-        block only (Name, Email, Phone, Company, Website etc.). Two
-        records of the same person reliably share these literals, so
-        the threshold is reached. The merge LLM still has the full
-        content and the "INSERT" safety net for false positives.
+          1. Blobs returned by ``find_blobs_by_identifiers`` — exact
+             match on the new entity's email / phone / lid identifiers
+             against the ``person_identifiers`` index. Catches the
+             "8 distinct Carmine Salamone PERSON blobs" case where two
+             records of the same person share `Email: c.salamone@cnit.it`
+             but their #ABOUT / #HISTORY paragraphs have drifted enough
+             that the cosine score on the full block dropped below the
+             0.65 reconsolidation threshold.
+
+          2. Blobs returned by the legacy cosine-on-`#IDENTIFIERS`
+             search — fallback for blobs that pre-date the identifier
+             index OR for entities whose `#IDENTIFIERS` block has no
+             email/phone/lid (anonymised contacts, name-only entities).
+
+        The LLM merge gate is unchanged: every candidate is shown to
+        the merge model, which returns "INSERT" when the entities don't
+        in fact match. So a stale identifier (e.g. a shared company
+        switchboard number that ends up in two distinct PERSON blobs)
+        cannot force an incorrect merge.
+
+        Bug G (2026-05-06) baseline still applies: when the cosine
+        fallback runs, the search query is the structured #IDENTIFIERS
+        block, not the full content.
 
         Args:
             entity_content: The entity blob content
@@ -365,6 +379,33 @@ class MemoryWorker:
             total_entities: Total entities from this email
         """
         logger.info(f"Upserting entity, searching with:\n{entity_content}\n\n")
+
+        # Parse identifiers ONCE: used for the new identifier-first
+        # match (below) AND for writing rows into person_identifiers
+        # after the upsert (Phase 1a).
+        identifiers = _parse_identifiers_block(entity_content)
+
+        # Phase 1b — identifier-first lookup.
+        # Returns blob ids that share at least one (kind, value) tuple
+        # with the new entity. Empty when the new entity has no
+        # email/phone/lid identifiers OR when none of its identifiers
+        # is in the index.
+        id_matched_blob_ids: List[str] = []
+        if identifiers:
+            try:
+                id_matched_blob_ids = self.storage.find_blobs_by_identifiers(
+                    owner_id=self.owner_id,
+                    identifiers=identifiers,
+                )
+            except Exception as e:
+                logger.warning(f"[memory] find_blobs_by_identifiers failed: {e}")
+                id_matched_blob_ids = []
+            if id_matched_blob_ids:
+                logger.info(
+                    f"[memory] identifier match: {len(id_matched_blob_ids)} blob(s) "
+                    f"on kinds={[k for k, _ in identifiers]} "
+                    f"hits={id_matched_blob_ids}"
+                )
 
         # Identifier-based search query (Bug G fix). Falls back to the
         # full content when the LLM didn't produce a parseable
@@ -402,10 +443,50 @@ class MemoryWorker:
                 f"for query={query!r}"
             )
 
-        # Threshold-gated candidates for merge attempts.
-        existing_blobs = self.hybrid_search.find_candidates_for_reconsolidation(
+        # Threshold-gated cosine candidates (existing path).
+        cosine_candidates = self.hybrid_search.find_candidates_for_reconsolidation(
             owner_id=self.owner_id, content=query, namespace=self.namespace, limit=3
         )
+
+        # Compose the merge-candidate list: identifier-matched first
+        # (priority), then cosine-matched not already in the identifier
+        # set. Each entry is a (blob_id, content, source) triple where
+        # `source` is just for logging — the LLM-merge gate is shared.
+        cosine_blob_ids = {str(c.blob_id) for c in cosine_candidates}
+        merge_candidates: List[Dict[str, str]] = []
+        seen_ids = set()
+
+        for bid in id_matched_blob_ids:
+            if bid in seen_ids:
+                continue
+            blob_dict = self.blob_storage.get_blob(bid, self.owner_id)
+            if not blob_dict or not blob_dict.get("content"):
+                # Stale identifier row (blob was deleted or moved owner).
+                # Skip silently — the LLM can't merge with a missing blob.
+                continue
+            seen_ids.add(bid)
+            merge_candidates.append(
+                {
+                    "blob_id": bid,
+                    "content": blob_dict["content"],
+                    "source": (
+                        "identifier+cosine" if bid in cosine_blob_ids else "identifier-only"
+                    ),
+                }
+            )
+
+        for cand in cosine_candidates:
+            bid = str(cand.blob_id)
+            if bid in seen_ids:
+                continue
+            seen_ids.add(bid)
+            merge_candidates.append(
+                {
+                    "blob_id": bid,
+                    "content": cand.content,
+                    "source": f"cosine={cand.hybrid_score:.3f}",
+                }
+            )
 
         upserted = False
         # Track which blob this email contributed to. Either an
@@ -415,31 +496,30 @@ class MemoryWorker:
         # search (Fase 3.1).
         linked_blob_id: Optional[str] = None
 
-        for existing in existing_blobs:
-            # Try to merge with this candidate
-            logger.debug(
-                f"Trying to merge with blob {existing.blob_id} "
-                f"(score={existing.hybrid_score:.2f})"
-            )
-            merged_content = self.llm_merge.merge(existing.content, entity_content)
+        for cand in merge_candidates:
+            bid = cand["blob_id"]
+            existing_content = cand["content"]
+            source = cand["source"]
+            logger.debug(f"[memory] merge attempt blob_id={bid} source={source}")
+            merged_content = self.llm_merge.merge(existing_content, entity_content)
 
             # If LLM says INSERT (entities don't match), try next candidate
             if "INSERT" in merged_content.upper() and len(merged_content) < 10:
-                logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
+                logger.debug(f"[memory] LLM merge rejected blob_id={bid} source={source}")
                 continue
 
             # Successful merge
             self.blob_storage.update_blob(
-                blob_id=existing.blob_id,
+                blob_id=bid,
                 owner_id=self.owner_id,
                 content=merged_content,
                 event_description=event_desc,
             )
             logger.info(
-                f"Reconsolidated blob {existing.blob_id} with email {email_id} "
-                f"(entity {entity_num}/{total_entities})"
+                f"Reconsolidated blob {bid} with email {email_id} "
+                f"(entity {entity_num}/{total_entities}, source={source})"
             )
-            linked_blob_id = str(existing.blob_id)
+            linked_blob_id = bid
             upserted = True
             break
 
@@ -452,8 +532,7 @@ class MemoryWorker:
                 event_description=event_desc,
             )
             logger.info(
-                f"Created new blob {blob['id']} from email {email_id} "
-                f"(entity {entity_num}/{total_entities})"
+                f"Created new blob {blob['id']} from email {email_id} (entity {entity_num}/{total_entities})"
             )
             linked_blob_id = str(blob["id"])
 
@@ -474,30 +553,26 @@ class MemoryWorker:
                 )
 
         # Write person_identifiers rows (whatsapp-pipeline-parity, Phase 1a).
-        # Phase 1a is ADDITIVE: rows are written but no read path consults
-        # them yet. This fills the index for new email-derived blobs so
-        # that when Phase 1b switches `_upsert_entity` to identifier-first
-        # matching, profiles already have a populated index without
-        # needing to wait for a backfill. The merge case is the
-        # interesting one: when an existing blob's content gets richer
-        # (a new email exposing the contact's phone for the first time),
-        # this picks up those new identifiers without requiring the blob
-        # to be re-extracted from scratch.
-        if linked_blob_id:
+        # The `identifiers` list was already parsed at the top of this
+        # method for the identifier-first lookup (Phase 1b); reuse it
+        # here so we parse the block exactly once per upsert. The merge
+        # case is load-bearing: when an existing blob's content gets
+        # richer because we just merged a new email that exposed the
+        # contact's phone for the first time, this picks up those new
+        # identifiers without requiring the blob to be re-extracted.
+        if linked_blob_id and identifiers:
             try:
-                identifiers = _parse_identifiers_block(entity_content)
-                if identifiers:
-                    inserted = self.storage.add_person_identifiers(
-                        owner_id=self.owner_id,
-                        blob_id=linked_blob_id,
-                        identifiers=identifiers,
+                inserted = self.storage.add_person_identifiers(
+                    owner_id=self.owner_id,
+                    blob_id=linked_blob_id,
+                    identifiers=identifiers,
+                )
+                if inserted:
+                    logger.debug(
+                        f"[memory] add_person_identifiers blob={linked_blob_id} "
+                        f"new_rows={inserted} kinds="
+                        f"{[k for k, _ in identifiers]}"
                     )
-                    if inserted:
-                        logger.debug(
-                            f"[memory] add_person_identifiers blob={linked_blob_id} "
-                            f"new_rows={inserted} kinds="
-                            f"{[k for k, _ in identifiers]}"
-                        )
             except Exception as e:
                 logger.warning(f"[memory] add_person_identifiers({linked_blob_id}) failed: {e}")
 

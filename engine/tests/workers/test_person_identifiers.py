@@ -13,6 +13,7 @@ upsert, but no read path consults them yet. These tests cover:
 """
 
 import uuid
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -383,3 +384,239 @@ def test_cascade_delete_blob_removes_identifiers(fresh_db):
     with get_session() as s:
         rows = s.query(PersonIdentifier).filter(PersonIdentifier.blob_id == blob_id).all()
     assert rows == [], "ON DELETE CASCADE should have removed the identifier rows"
+
+
+# ---------------------------------------------------------------------
+# _upsert_entity — Phase 1b: identifier-first match precedence
+# ---------------------------------------------------------------------
+#
+# These tests verify the matching ORDER inside `_upsert_entity` without
+# making real LLM calls. We instantiate a real MemoryWorker with all
+# external collaborators (LLMClient, LLMMergeService, HybridSearchEngine,
+# BlobStorage) replaced by mocks. The Storage / person_identifiers
+# index is real (uses fresh_db).
+#
+# The interesting case is "Carmine Salamone, 8 duplicate blobs": the
+# new entity carries `Email: carmine@cnit.it` which was indexed for
+# blob A. Cosine-search returns blob B (a different, lower-quality
+# match) because A's content has drifted past the threshold. We assert
+# that A is tried FIRST as a merge candidate, before B.
+
+
+def _make_worker_with_mocks(owner_id: str, llm_merge_returns: list):
+    """Build a MemoryWorker whose external dependencies are mocked.
+
+    `llm_merge_returns` is a list of strings the mocked `llm_merge.merge`
+    will return on successive calls (first call -> first item, etc.).
+    Returning the literal "INSERT" simulates "entities don't match";
+    any other string is treated as a successful merge and is written
+    via blob_storage.update_blob.
+    """
+    from unittest.mock import MagicMock, patch
+
+    from zylch.workers import memory as mem_mod
+
+    # `make_llm_client()` would try to construct a real Anthropic /
+    # MrCallProxyClient — neither of which is available in tests. Patch
+    # at module import time so MemoryWorker.__init__ uses the mock.
+    fake_client = MagicMock()
+    with patch.object(mem_mod, "make_llm_client", return_value=fake_client):
+        worker = mem_mod.MemoryWorker(
+            storage=__import__("zylch.storage", fromlist=["Storage"]).Storage(),
+            owner_id=owner_id,
+        )
+
+    # Replace heavy collaborators with mocks. The merge mock is a
+    # side_effect iterable so successive calls return distinct values.
+    worker.llm_merge = MagicMock()
+    worker.llm_merge.merge = MagicMock(side_effect=list(llm_merge_returns))
+    worker.hybrid_search = MagicMock()
+    # Default: no cosine candidates and no debug-search results unless
+    # the test overrides these explicitly.
+    worker.hybrid_search.find_candidates_for_reconsolidation = MagicMock(return_value=[])
+    worker.hybrid_search.search = MagicMock(return_value=[])
+    # blob_storage: provide get_blob that reads from a per-test dict,
+    # update_blob / store_blob that record calls.
+    worker.blob_storage = MagicMock()
+    worker.blob_storage._registry = {}  # blob_id -> {'content': ...}
+    worker.blob_storage.get_blob = MagicMock(
+        side_effect=lambda bid, oid: worker.blob_storage._registry.get(bid)
+    )
+    worker.blob_storage.update_blob = MagicMock()
+    worker.blob_storage.store_blob = MagicMock(
+        return_value={"id": "00000000-0000-0000-0000-NEWLY_CREATED0"}
+    )
+    return worker
+
+
+@pytest.mark.asyncio
+async def test_upsert_entity_prefers_identifier_match_over_cosine(fresh_db):
+    """Two existing blobs about Carmine Salamone:
+      - blob A is in the identifier index (kind=email, value=carmine@cnit.it)
+      - blob B is NOT in the index but is the only cosine-match.
+
+    A new entity arrives with the same email. Phase 1b must try A first
+    (the LLM merge accepts), so the merge happens on A — not B.
+    """
+    from zylch.storage.storage import Storage
+
+    storage = Storage()
+    owner = "owner@test.com"
+
+    blob_a = _make_blob(owner, content="A_OLD_CONTENT")
+    blob_b = _make_blob(owner, content="B_OLD_CONTENT")
+
+    storage.add_person_identifiers(owner, blob_a, [("email", "carmine@cnit.it")])
+    # blob_b deliberately has NO identifier rows
+
+    worker = _make_worker_with_mocks(
+        owner_id=owner,
+        # First merge call (against blob A) succeeds: returns merged content.
+        llm_merge_returns=["A_MERGED_CONTENT"],
+    )
+    # blob_storage.get_blob lookup table
+    worker.blob_storage._registry = {
+        blob_a: {"content": "A_OLD_CONTENT"},
+        blob_b: {"content": "B_OLD_CONTENT"},
+    }
+    # Cosine returns blob B (the OTHER duplicate), not A.
+    cosine_match = MagicMock_namespace(blob_id=blob_b, content="B_OLD_CONTENT", hybrid_score=0.78)
+    worker.hybrid_search.find_candidates_for_reconsolidation.return_value = [cosine_match]
+
+    new_entity = """
+#IDENTIFIERS
+Entity type: PERSON
+Name: Carmine Salamone
+Email: carmine@cnit.it
+"""
+    await worker._upsert_entity(
+        entity_content=new_entity,
+        event_desc="Extracted from email TEST123",
+        email_id="TEST123",
+        entity_num=1,
+        total_entities=1,
+    )
+
+    # llm_merge.merge must have been called exactly ONCE (matched on A,
+    # accepted, no need to try B).
+    assert worker.llm_merge.merge.call_count == 1
+    first_call_args = worker.llm_merge.merge.call_args_list[0].args
+    assert first_call_args[0] == "A_OLD_CONTENT", (
+        f"identifier-match A should be first merge candidate, "
+        f"got first call against {first_call_args[0]!r}"
+    )
+
+    # update_blob must have been called on A, NOT on B.
+    worker.blob_storage.update_blob.assert_called_once()
+    assert worker.blob_storage.update_blob.call_args.kwargs["blob_id"] == blob_a
+    worker.blob_storage.store_blob.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_upsert_entity_falls_back_to_cosine_on_identifier_reject(fresh_db):
+    """If the identifier-matched blob's LLM merge says INSERT (entities
+    don't actually match — e.g. shared switchboard phone), the cosine
+    fallback must still run."""
+    from zylch.storage.storage import Storage
+
+    storage = Storage()
+    owner = "owner@test.com"
+
+    blob_a = _make_blob(owner, content="A_SHARED_PHONE_BUT_DIFF_PERSON")
+    blob_c = _make_blob(owner, content="C_RIGHT_PERSON")
+
+    # blob_a is identifier-matched (shared switchboard)
+    storage.add_person_identifiers(owner, blob_a, [("phone", "+390212345678")])
+
+    worker = _make_worker_with_mocks(
+        owner_id=owner,
+        # First call (A) → INSERT (rejected); second call (C) → merged
+        llm_merge_returns=["INSERT", "C_MERGED"],
+    )
+    worker.blob_storage._registry = {
+        blob_a: {"content": "A_SHARED_PHONE_BUT_DIFF_PERSON"},
+        blob_c: {"content": "C_RIGHT_PERSON"},
+    }
+    # Cosine returns C (the actual right person)
+    cosine_match = MagicMock_namespace(blob_id=blob_c, content="C_RIGHT_PERSON", hybrid_score=0.81)
+    worker.hybrid_search.find_candidates_for_reconsolidation.return_value = [cosine_match]
+
+    new_entity = """
+#IDENTIFIERS
+Entity type: PERSON
+Name: Mario Rossi
+Phone: +390212345678
+"""
+    await worker._upsert_entity(
+        entity_content=new_entity,
+        event_desc="Extracted from email TEST456",
+        email_id="TEST456",
+        entity_num=1,
+        total_entities=1,
+    )
+
+    # Two merge attempts: A (rejected), then C (accepted).
+    assert worker.llm_merge.merge.call_count == 2
+    first = worker.llm_merge.merge.call_args_list[0].args[0]
+    second = worker.llm_merge.merge.call_args_list[1].args[0]
+    assert first == "A_SHARED_PHONE_BUT_DIFF_PERSON"
+    assert second == "C_RIGHT_PERSON"
+    worker.blob_storage.update_blob.assert_called_once()
+    assert worker.blob_storage.update_blob.call_args.kwargs["blob_id"] == blob_c
+
+
+@pytest.mark.asyncio
+async def test_upsert_entity_no_match_creates_new_blob(fresh_db):
+    """No identifier match, no cosine candidate → CREATE new blob.
+    The new blob's identifiers must be written to person_identifiers."""
+    from zylch.storage.storage import Storage
+
+    storage = Storage()  # noqa: F841 — instantiated to ensure singleton
+    owner = "owner@test.com"
+
+    worker = _make_worker_with_mocks(
+        owner_id=owner,
+        llm_merge_returns=[],  # never called
+    )
+    # No blobs registered, no cosine match.
+    worker.hybrid_search.find_candidates_for_reconsolidation.return_value = []
+
+    # store_blob must return a real UUID-shaped id and the row must
+    # exist in `blobs` for the FK on person_identifiers to be valid.
+    new_blob_id = _make_blob(owner, content="NEW_BLOB_CONTENT")
+    worker.blob_storage.store_blob = MagicMock(return_value={"id": new_blob_id})
+
+    new_entity = """
+#IDENTIFIERS
+Entity type: PERSON
+Name: Brand New Person
+Email: newbie@example.com
+Phone: +393331234567
+"""
+    await worker._upsert_entity(
+        entity_content=new_entity,
+        event_desc="Extracted from email TEST789",
+        email_id="TEST789",
+        entity_num=1,
+        total_entities=1,
+    )
+
+    worker.llm_merge.merge.assert_not_called()
+    worker.blob_storage.store_blob.assert_called_once()
+
+    # Verify identifier rows landed on the newly-created blob.
+    rows = storage.get_identifiers_for_blob(owner, new_blob_id)
+    assert {(r["kind"], r["value"]) for r in rows} == {
+        ("email", "newbie@example.com"),
+        ("phone", "+393331234567"),
+    }
+
+
+# Lightweight stand-in for the namedtuple-shaped result returned by
+# `hybrid_search.find_candidates_for_reconsolidation`. Real result has
+# at least .blob_id, .content, .hybrid_score.
+class MagicMock_namespace:
+    def __init__(self, blob_id: str, content: str, hybrid_score: float):
+        self.blob_id = blob_id
+        self.content = content
+        self.hybrid_score = hybrid_score
