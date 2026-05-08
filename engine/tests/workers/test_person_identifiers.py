@@ -620,3 +620,431 @@ class MagicMock_namespace:
         self.blob_id = blob_id
         self.content = content
         self.hybrid_score = hybrid_score
+
+
+# ---------------------------------------------------------------------
+# migrate_blob_references — Phase 1c: dedup sweep prerequisites
+# ---------------------------------------------------------------------
+#
+# Before deleting a duplicate blob we move every cross-reference from
+# the dup to the keeper. Without this step, the FK CASCADE on `blobs.id`
+# silently drops:
+#   - person_identifiers (the cross-channel match would lose the dup's
+#     email/phone/lid),
+#   - email_blobs / calendar_blobs (the F7 topical-sibling lookup
+#     would lose the link "this email contributed to that blob"),
+#   - dangling references in task_items.sources.blobs (existing tasks
+#     would silently miss the keeper).
+
+
+def test_migrate_person_identifiers_to_keeper(fresh_db):
+    """Identifiers on dup must end up on keeper, idempotent on rerun."""
+    from zylch.storage.storage import Storage
+
+    storage = Storage()
+    keeper = _make_blob("alice@example.com", content="KEEPER")
+    dup = _make_blob("alice@example.com", content="DUP")
+
+    storage.add_person_identifiers("alice@example.com", keeper, [("email", "shared@x.com")])
+    storage.add_person_identifiers(
+        "alice@example.com",
+        dup,
+        [("email", "shared@x.com"), ("phone", "+393331234567")],
+    )
+
+    counts = storage.migrate_blob_references(
+        owner_id="alice@example.com",
+        dup_blob_id=dup,
+        keeper_blob_id=keeper,
+    )
+    # Only the phone is new on the keeper — the email was already there.
+    assert counts["person_identifiers_migrated"] == 1
+
+    keeper_ids = storage.get_identifiers_for_blob("alice@example.com", keeper)
+    assert {(r["kind"], r["value"]) for r in keeper_ids} == {
+        ("email", "shared@x.com"),
+        ("phone", "+393331234567"),
+    }
+
+    # Re-run is a no-op
+    counts2 = storage.migrate_blob_references(
+        owner_id="alice@example.com",
+        dup_blob_id=dup,
+        keeper_blob_id=keeper,
+    )
+    assert counts2["person_identifiers_migrated"] == 0
+
+
+def test_migrate_email_blobs_to_keeper(fresh_db):
+    """email_blobs(email_id, dup) must become email_blobs(email_id, keeper)."""
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Email, EmailBlob
+    from zylch.storage.storage import Storage
+
+    storage = Storage()
+    owner = "alice@example.com"
+    keeper = _make_blob(owner, content="KEEPER")
+    dup = _make_blob(owner, content="DUP")
+
+    eid_keeper = "00000000-0000-0000-0000-eeeeeeeeeee1"
+    eid_dup = "00000000-0000-0000-0000-eeeeeeeeeee2"
+    eid_shared = "00000000-0000-0000-0000-eeeeeeeeeee3"
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    with get_session() as s:
+        for eid in (eid_keeper, eid_dup, eid_shared):
+            s.add(
+                Email(
+                    id=eid,
+                    owner_id=owner,
+                    gmail_id=eid,
+                    thread_id=eid,
+                    from_email="x@y.com",
+                    date=now,
+                )
+            )
+
+    storage.add_email_blob_link(owner, eid_keeper, keeper)
+    storage.add_email_blob_link(owner, eid_shared, keeper)
+    storage.add_email_blob_link(owner, eid_dup, dup)
+    storage.add_email_blob_link(owner, eid_shared, dup)
+
+    counts = storage.migrate_blob_references(owner_id=owner, dup_blob_id=dup, keeper_blob_id=keeper)
+    assert counts["email_blobs_migrated"] == 1  # only eid_dup is new on keeper
+
+    keeper_emails = storage.get_blobs_for_email(owner, eid_dup)
+    assert keeper in keeper_emails
+
+    # Sanity: the dup's email_blobs rows still exist; CASCADE will
+    # drop them when the blob is deleted later.
+    with get_session() as s:
+        dup_links = (
+            s.query(EmailBlob.email_id)
+            .filter(EmailBlob.blob_id == dup, EmailBlob.owner_id == owner)
+            .all()
+        )
+    assert {str(r[0]) for r in dup_links} == {eid_dup, eid_shared}
+
+
+def test_migrate_task_items_sources_blobs(fresh_db):
+    """task_items.sources.blobs lists must replace dup with keeper, dedup."""
+    from zylch.storage.database import get_session
+    from zylch.storage.models import TaskItem
+    from zylch.storage.storage import Storage
+
+    storage = Storage()
+    owner = "alice@example.com"
+    keeper = _make_blob(owner, content="KEEPER")
+    dup = _make_blob(owner, content="DUP")
+    other_blob = _make_blob(owner, content="OTHER")
+
+    with get_session() as s:
+        s.add(
+            TaskItem(
+                id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                owner_id=owner,
+                event_type="email",
+                event_id="ev_a",
+                sources={"blobs": [dup], "emails": ["e_a"]},
+            )
+        )
+        s.add(
+            TaskItem(
+                id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                owner_id=owner,
+                event_type="email",
+                event_id="ev_b",
+                sources={"blobs": [dup, keeper], "emails": ["e_b"]},
+            )
+        )
+        s.add(
+            TaskItem(
+                id="cccccccc-cccc-cccc-cccc-cccccccccccc",
+                owner_id=owner,
+                event_type="email",
+                event_id="ev_c",
+                sources={"blobs": [other_blob, dup], "emails": ["e_c"]},
+            )
+        )
+        s.add(
+            TaskItem(
+                id="dddddddd-dddd-dddd-dddd-dddddddddddd",
+                owner_id=owner,
+                event_type="email",
+                event_id="ev_d",
+                sources={"blobs": [other_blob], "emails": ["e_d"]},
+            )
+        )
+
+    counts = storage.migrate_blob_references(owner_id=owner, dup_blob_id=dup, keeper_blob_id=keeper)
+    assert counts["task_items_updated"] == 3
+
+    with get_session() as s:
+        rows = {
+            t.id: list(t.sources.get("blobs") or [])
+            for t in s.query(TaskItem).filter(TaskItem.owner_id == owner).all()
+        }
+    assert rows["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"] == [keeper]
+    assert rows["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"] == [keeper]
+    assert rows["cccccccc-cccc-cccc-cccc-cccccccccccc"] == [other_blob, keeper]
+    assert rows["dddddddd-dddd-dddd-dddd-dddddddddddd"] == [other_blob]
+
+
+def test_migrate_skips_when_dup_equals_keeper(fresh_db):
+    """Self-migrate is a no-op (defensive guard)."""
+    from zylch.storage.storage import Storage
+
+    storage = Storage()
+    blob = _make_blob("alice@example.com")
+    storage.add_person_identifiers("alice@example.com", blob, [("email", "x@y.com")])
+
+    counts = storage.migrate_blob_references(
+        owner_id="alice@example.com",
+        dup_blob_id=blob,
+        keeper_blob_id=blob,
+    )
+    assert counts == {
+        "person_identifiers_migrated": 0,
+        "email_blobs_migrated": 0,
+        "calendar_blobs_migrated": 0,
+        "task_items_updated": 0,
+    }
+
+
+def test_migrate_skips_with_empty_inputs(fresh_db):
+    from zylch.storage.storage import Storage
+
+    storage = Storage()
+    blob = _make_blob("alice@example.com")
+
+    for owner, dup, keeper in [
+        ("", blob, blob),
+        ("alice@example.com", "", blob),
+        ("alice@example.com", blob, ""),
+    ]:
+        counts = storage.migrate_blob_references(
+            owner_id=owner, dup_blob_id=dup, keeper_blob_id=keeper
+        )
+        assert all(v == 0 for v in counts.values())
+
+
+# ---------------------------------------------------------------------
+# _build_dedup_clusters — pure function, no DB
+# ---------------------------------------------------------------------
+
+
+def test_dedup_cluster_builder_groups_by_shared_identifier():
+    """Three blobs forming a chain: A↔B share email, B↔C share phone.
+    Must yield ONE cluster of {A, B, C}."""
+    from zylch.memory.llm_merge import _build_dedup_clusters
+
+    blobs = [
+        {"id": "A", "content": ""},
+        {"id": "B", "content": ""},
+        {"id": "C", "content": ""},
+    ]
+    blob_identifiers = {
+        "A": {("email", "shared@a.b")},
+        "B": {("email", "shared@a.b"), ("phone", "+391112223333")},
+        "C": {("phone", "+391112223333")},
+    }
+    clusters = _build_dedup_clusters(blobs, blob_identifiers)
+    assert len(clusters) == 1
+    assert {b["id"] for b in clusters[0]} == {"A", "B", "C"}
+
+
+def test_dedup_cluster_builder_falls_back_to_name():
+    """Blobs without structured identifiers can still cluster by Name."""
+    from zylch.memory.llm_merge import _build_dedup_clusters
+
+    blobs = [
+        {"id": "A", "content": "#IDENTIFIERS\nName: Carmine Salamone\n"},
+        {"id": "B", "content": "#IDENTIFIERS\nName: carmine salamone\n"},
+        {"id": "C", "content": "#IDENTIFIERS\nName: Different Person\n"},
+    ]
+    clusters = _build_dedup_clusters(blobs, {})
+    assert len(clusters) == 1
+    assert {b["id"] for b in clusters[0]} == {"A", "B"}
+
+
+def test_dedup_cluster_builder_drops_singletons():
+    from zylch.memory.llm_merge import _build_dedup_clusters
+
+    blobs = [
+        {"id": "A", "content": "#IDENTIFIERS\nName: alone-a"},
+        {"id": "B", "content": "#IDENTIFIERS\nName: alone-b"},
+    ]
+    blob_identifiers = {
+        "A": {("email", "a@x.com")},
+        "B": {("email", "b@x.com")},
+    }
+    clusters = _build_dedup_clusters(blobs, blob_identifiers)
+    assert clusters == []
+
+
+def test_dedup_cluster_builder_empty_input():
+    from zylch.memory.llm_merge import _build_dedup_clusters
+
+    assert _build_dedup_clusters([], {}) == []
+
+
+# ---------------------------------------------------------------------
+# reconsolidate_now — Phase 1c end-to-end (mocked LLM)
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reconsolidate_now_merges_and_migrates_refs(fresh_db, monkeypatch):
+    """Flagship Phase 1c case: 2 blobs sharing email get clustered, LLM
+    merge accepts, references migrate, dup is deleted. Models the
+    FeFarma duplicate observed live on 2026-05-08."""
+    from zylch.memory import llm_merge as merge_mod
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Email, TaskItem
+    from zylch.storage.storage import Storage
+
+    storage = Storage()
+    owner = "owner@test.com"
+
+    keeper = _make_blob(
+        owner,
+        content=(
+            "#IDENTIFIERS\nEntity type: COMPANY\nName: FEFARMA\n"
+            "Email: info@fefarma.it\n\n#ABOUT\nKeeper has more history.\n"
+            "lots of additional content to make this the longer one"
+        ),
+    )
+    dup = _make_blob(
+        owner,
+        content=(
+            "#IDENTIFIERS\nEntity type: COMPANY\nName: FeFarma\n"
+            "Email: info@fefarma.it\n\n#ABOUT\nDup."
+        ),
+    )
+    storage.add_person_identifiers(owner, keeper, [("email", "info@fefarma.it")])
+    storage.add_person_identifiers(owner, dup, [("email", "info@fefarma.it")])
+
+    dup_email_id = "00000000-0000-0000-0000-eeeeeeeeeee9"
+    from datetime import datetime as _dt, timezone as _tz
+
+    with get_session() as s:
+        s.add(
+            Email(
+                id=dup_email_id,
+                owner_id=owner,
+                gmail_id=dup_email_id,
+                thread_id=dup_email_id,
+                from_email="info@fefarma.it",
+                date=_dt.now(_tz.utc),
+            )
+        )
+    storage.add_email_blob_link(owner, dup_email_id, dup)
+
+    task_id = "11111111-1111-1111-1111-111111111111"
+    with get_session() as s:
+        s.add(
+            TaskItem(
+                id=task_id,
+                owner_id=owner,
+                event_type="email",
+                event_id="ev_t",
+                sources={"blobs": [dup], "emails": [dup_email_id]},
+            )
+        )
+
+    fake_client = MagicMock()
+    monkeypatch.setattr(merge_mod, "make_llm_client", lambda *a, **kw: fake_client)
+    monkeypatch.setattr(merge_mod, "try_make_llm_client", lambda *a, **kw: fake_client)
+    fake_merge_service = MagicMock()
+    fake_merge_service.merge = MagicMock(
+        return_value=(
+            "#IDENTIFIERS\nEntity type: COMPANY\nName: FeFarma\n"
+            "Email: info@fefarma.it\n\n#ABOUT\nMerged.\n"
+            "longer than ten chars to bypass the INSERT length check"
+        )
+    )
+    monkeypatch.setattr(merge_mod, "LLMMergeService", lambda *a, **kw: fake_merge_service)
+
+    summary = await merge_mod.reconsolidate_now(owner)
+
+    assert summary["groups_examined"] == 1
+    assert summary["blobs_merged"] == 1
+    assert summary["blobs_kept_distinct"] == 0
+    assert summary["email_blobs_migrated"] == 1
+    # The identifier was already on the keeper, so 0 net migrations.
+    assert summary["person_identifiers_migrated"] == 0
+    assert summary["task_items_updated"] == 1
+
+    keeper_ids = storage.get_identifiers_for_blob(owner, keeper)
+    assert ("email", "info@fefarma.it") in {(r["kind"], r["value"]) for r in keeper_ids}
+
+    keeper_emails = storage.get_blobs_for_email(owner, dup_email_id)
+    assert keeper in keeper_emails
+    assert dup not in keeper_emails
+
+    with get_session() as s:
+        task = s.query(TaskItem).filter(TaskItem.id == task_id).one()
+    assert task.sources["blobs"] == [keeper]
+
+
+@pytest.mark.asyncio
+async def test_reconsolidate_now_keeps_distinct_when_llm_inserts(fresh_db, monkeypatch):
+    """LLM rejects the merge — both blobs survive, no migration runs."""
+    from zylch.memory import llm_merge as merge_mod
+    from zylch.storage.storage import Storage
+
+    storage = Storage()
+    owner = "owner@test.com"
+
+    blob_a = _make_blob(
+        owner,
+        content="#IDENTIFIERS\nName: Mario Rossi\nPhone: +391112223333",
+    )
+    blob_b = _make_blob(
+        owner,
+        content="#IDENTIFIERS\nName: Mario Bianchi\nPhone: +391112223333",
+    )
+    storage.add_person_identifiers(owner, blob_a, [("phone", "+391112223333")])
+    storage.add_person_identifiers(owner, blob_b, [("phone", "+391112223333")])
+
+    fake_client = MagicMock()
+    monkeypatch.setattr(merge_mod, "make_llm_client", lambda *a, **kw: fake_client)
+    monkeypatch.setattr(merge_mod, "try_make_llm_client", lambda *a, **kw: fake_client)
+    fake_merge_service = MagicMock()
+    fake_merge_service.merge = MagicMock(return_value="INSERT")
+    monkeypatch.setattr(merge_mod, "LLMMergeService", lambda *a, **kw: fake_merge_service)
+
+    summary = await merge_mod.reconsolidate_now(owner)
+    assert summary["blobs_merged"] == 0
+    assert summary["blobs_kept_distinct"] == 1
+    a_ids = storage.get_identifiers_for_blob(owner, blob_a)
+    b_ids = storage.get_identifiers_for_blob(owner, blob_b)
+    assert a_ids and b_ids
+
+
+@pytest.mark.asyncio
+async def test_reconsolidate_now_no_clusters_returns_zero(fresh_db, monkeypatch):
+    from zylch.memory import llm_merge as merge_mod
+
+    owner = "owner@test.com"
+    _make_blob(owner, content="#IDENTIFIERS\nName: Lonely\n")
+
+    fake_client = MagicMock()
+    monkeypatch.setattr(merge_mod, "make_llm_client", lambda *a, **kw: fake_client)
+    monkeypatch.setattr(merge_mod, "try_make_llm_client", lambda *a, **kw: fake_client)
+
+    summary = await merge_mod.reconsolidate_now(owner)
+    assert summary["groups_examined"] == 0
+    assert summary["blobs_merged"] == 0
+
+
+@pytest.mark.asyncio
+async def test_reconsolidate_now_skips_when_no_llm(fresh_db, monkeypatch):
+    from zylch.memory import llm_merge as merge_mod
+
+    monkeypatch.setattr(merge_mod, "try_make_llm_client", lambda *a, **kw: None)
+
+    summary = await merge_mod.reconsolidate_now("owner@test.com")
+    assert summary["no_llm"] is True
+    assert summary["blobs_merged"] == 0

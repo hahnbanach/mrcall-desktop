@@ -24,12 +24,12 @@ NEW ENTITY:
 {new}
 
 #FIRST RULE
-If you think EXISTING_ENTITY and NEW_ENTITY are not about the same entity, JUST PRODUCE ONE WORD: 
+If you think EXISTING_ENTITY and NEW_ENTITY are not about the same entity, JUST PRODUCE ONE WORD:
 
 INSERT
 
 #OTHER Rules:
-1. There must be **1** entity in the resulting entity: the resulting #IDENTIFIERS section must describe **1** entity. 
+1. There must be **1** entity in the resulting entity: the resulting #IDENTIFIERS section must describe **1** entity.
 2. There must be **1** entity in the resulting entity: the resulting #ABOUT section must describe **1** entity
 3. #IDENTIFIERS: if the NEW ENTITY adds new IDENTIFIERS, add them. **But they must be about the same entity (IF NOT JUST RETURN "SKIP")
 5. #ABOUT: keep as ONE sentence and update it only if NEW_ENTITY adds more information
@@ -120,41 +120,104 @@ def _extract_canonical_name(content: str) -> Optional[str]:
     return None
 
 
+def _build_dedup_clusters(
+    blobs: List[Dict[str, Any]],
+    blob_identifiers: Dict[str, set],
+) -> List[List[Dict[str, Any]]]:
+    """Cluster blobs that share at least one identity key.
+
+    Identity keys come from two sources, OR-merged via union-find:
+      * structured identifiers from the ``person_identifiers`` index —
+        ``("id", kind, value)`` tuples (Phase 1a/1b);
+      * canonical Name from the blob's ``#IDENTIFIERS`` block —
+        ``("name", lowercased name)`` tuple (legacy reconsolidation
+        path, kept as a fallback for blobs without structured email /
+        phone / lid).
+
+    A chain like "A and B share email; B and C share phone" yields one
+    cluster {A, B, C}. Returns clusters with ≥ 2 blobs each; singletons
+    are dropped.
+    """
+    parent: Dict[str, str] = {b["id"]: b["id"] for b in blobs}
+
+    def find(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    # Build key → [blob_id] index from BOTH identifier table AND name.
+    key_to_blobs: Dict[tuple, List[str]] = {}
+    for b in blobs:
+        bid = b["id"]
+        # Name key (legacy fallback for blobs without structured ids)
+        name = _extract_canonical_name(b["content"])
+        if name:
+            key_to_blobs.setdefault(("name", name), []).append(bid)
+        # Identifier keys (Phase 1a/1b)
+        for kind, value in blob_identifiers.get(bid, set()):
+            key_to_blobs.setdefault(("id", kind, value), []).append(bid)
+
+    # Union every blob set sharing a key
+    for bids in key_to_blobs.values():
+        if len(bids) < 2:
+            continue
+        for i in range(1, len(bids)):
+            union(bids[0], bids[i])
+
+    # Group by root
+    clusters_by_root: Dict[str, List[Dict[str, Any]]] = {}
+    for b in blobs:
+        root = find(b["id"])
+        clusters_by_root.setdefault(root, []).append(b)
+
+    return [c for c in clusters_by_root.values() if len(c) >= 2]
+
+
 async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
-    """Walk all blobs in ``user:<owner_id>``, merge same-name groups.
+    """Walk all blobs in ``user:<owner_id>``, merge identity-equivalent groups.
 
-    Algorithm:
-      1. Fetch every blob in the namespace.
-      2. Group by canonical Name (extracted from the structured
-         #IDENTIFIERS block).
-      3. For each group of size >= 2, treat the longest blob as the
-         keeper, then pairwise merge each other blob into it. If the
-         LLM returns "INSERT" / "SKIP" (different entity), preserve
-         both. Otherwise: update keeper.content with the merged text
-         and delete the other blob.
-      4. Return summary counts.
+    Algorithm (Phase 1c, whatsapp-pipeline-parity, 2026-05-08):
+      1. Fetch every blob in the namespace plus its rows in
+         ``person_identifiers``.
+      2. Cluster blobs that share at least one identity key. Identity
+         keys are the structured ``(kind, value)`` tuples from the
+         identifier index (email / phone / lid) OR the canonical
+         ``Name:`` line from the blob's ``#IDENTIFIERS`` block. Both
+         sources are OR-merged via union-find.
+      3. For each cluster of size ≥ 2, treat the longest blob as the
+         keeper. For each other blob:
+           a. Run an LLM merge.
+           b. If the LLM returns ``INSERT`` / ``SKIP`` (entities are
+              different), keep both blobs and continue. The shared
+              identifier is then a true cross-entity collision (e.g.
+              switchboard phone) and the index correctly retains both.
+           c. Otherwise, BEFORE deleting the other blob, migrate its
+              cross-references — ``person_identifiers``,
+              ``email_blobs``, ``calendar_blobs``, and the JSON
+              ``task_items.sources.blobs`` lists — onto the keeper
+              via ``Storage.migrate_blob_references``. Then
+              ``update_blob`` with the merged content and
+              ``delete_blob`` on the other.
 
-    Returns:
-        {
-          "groups_examined": int,
-          "blobs_examined": int,
-          "blobs_merged": int,    # successful merges (other deleted)
-          "blobs_kept_distinct": int,  # LLM said different, both kept
-          "pair_cap_hit": bool,
-          "no_llm": bool,
-        }
+    Returns summary counts including the migration totals so a caller
+    can quantify the dedup impact across all four reference tables.
     """
     from zylch.memory import EmbeddingEngine, MemoryConfig
     from zylch.memory.blob_storage import BlobStorage
+    from zylch.storage import Storage as MainStorage
     from zylch.storage.database import get_session
-    from zylch.storage.models import Blob
+    from zylch.storage.models import Blob, PersonIdentifier
 
     namespace = f"user:{owner_id}"
 
     if try_make_llm_client() is None:
-        logger.warning(
-            "[reconsolidate] no LLM transport configured — sweep skipped"
-        )
+        logger.warning("[reconsolidate] no LLM transport configured — sweep skipped")
         return {
             "groups_examined": 0,
             "blobs_examined": 0,
@@ -162,32 +225,37 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
             "blobs_kept_distinct": 0,
             "pair_cap_hit": False,
             "no_llm": True,
+            "person_identifiers_migrated": 0,
+            "email_blobs_migrated": 0,
+            "calendar_blobs_migrated": 0,
+            "task_items_updated": 0,
         }
 
-    # Pull every blob in the namespace. We do not use BlobStorage.list_blobs
-    # because that limits to N most-recent; reconsolidation needs the full
-    # set so a forgotten old duplicate still surfaces.
+    # Pull every blob + identifier rows in ONE round-trip.
     with get_session() as sess:
         rows = (
             sess.query(Blob.id, Blob.content)
             .filter(Blob.owner_id == owner_id, Blob.namespace == namespace)
             .all()
         )
-        blobs: List[Dict[str, Any]] = [
-            {"id": str(r[0]), "content": r[1] or ""} for r in rows
-        ]
+        blobs: List[Dict[str, Any]] = [{"id": str(r[0]), "content": r[1] or ""} for r in rows]
+        ident_rows = (
+            sess.query(
+                PersonIdentifier.blob_id,
+                PersonIdentifier.kind,
+                PersonIdentifier.value,
+            )
+            .filter(PersonIdentifier.owner_id == owner_id)
+            .all()
+        )
 
     blobs_examined = len(blobs)
-    groups: Dict[str, List[Dict[str, Any]]] = {}
-    for b in blobs:
-        name = _extract_canonical_name(b["content"])
-        if not name:
-            continue
-        groups.setdefault(name, []).append(b)
+    blob_identifiers: Dict[str, set] = {}
+    for bid, kind, value in ident_rows:
+        blob_identifiers.setdefault(str(bid), set()).add((str(kind), str(value)))
 
-    # Filter to groups with potential duplicates.
-    dup_groups = {n: bs for n, bs in groups.items() if len(bs) >= 2}
-    if not dup_groups:
+    dup_clusters = _build_dedup_clusters(blobs, blob_identifiers)
+    if not dup_clusters:
         return {
             "groups_examined": 0,
             "blobs_examined": blobs_examined,
@@ -195,14 +263,18 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
             "blobs_kept_distinct": 0,
             "pair_cap_hit": False,
             "no_llm": False,
+            "person_identifiers_migrated": 0,
+            "email_blobs_migrated": 0,
+            "calendar_blobs_migrated": 0,
+            "task_items_updated": 0,
         }
 
-    # Need an embedding engine + BlobStorage instance for the
-    # update/delete calls (they handle sentence re-embedding +
-    # mutation hooks).
+    # BlobStorage handles sentence re-embedding + mutation hooks for
+    # the update/delete calls. MainStorage owns migrate_blob_references.
     config = MemoryConfig()
     embedding = EmbeddingEngine(config)
-    storage = BlobStorage(get_session, embedding)
+    blob_storage = BlobStorage(get_session, embedding)
+    main_storage = MainStorage.get_instance()
 
     merge_service = LLMMergeService()
 
@@ -212,12 +284,18 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
     aborted_overload = False
     pairs_done = 0
     consecutive_overload = 0
+    migrate_totals = {
+        "person_identifiers_migrated": 0,
+        "email_blobs_migrated": 0,
+        "calendar_blobs_migrated": 0,
+        "task_items_updated": 0,
+    }
 
-    for name, group in dup_groups.items():
+    for cluster in dup_clusters:
         # Keep the longest (most informative) blob as the keeper.
-        group.sort(key=lambda b: len(b["content"]), reverse=True)
-        keeper = group[0]
-        for other in group[1:]:
+        cluster.sort(key=lambda b: len(b["content"]), reverse=True)
+        keeper = cluster[0]
+        for other in cluster[1:]:
             if pairs_done >= RECONSOLIDATION_PAIR_CAP:
                 pair_cap_hit = True
                 break
@@ -234,7 +312,6 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
             except Exception as e:
                 err_str = str(e)
                 if "529" in err_str or "overloaded" in err_str.lower():
-                    # Single warning line for transient provider overload.
                     logger.warning(
                         f"[reconsolidate] merge overloaded (529) "
                         f"keeper={keeper['id'][:12]} other={other['id'][:12]}"
@@ -251,7 +328,7 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
                 else:
                     logger.exception(
                         f"[reconsolidate] merge failed for keeper={keeper['id'][:12]} "
-                        f"other={other['id'][:12]} name={name!r}: {e}"
+                        f"other={other['id'][:12]}: {e}"
                     )
                 continue
             if not merged:
@@ -261,28 +338,34 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
                 blobs_kept_distinct += 1
                 logger.debug(
                     f"[reconsolidate] kept distinct: keeper={keeper['id'][:12]} "
-                    f"other={other['id'][:12]} name={name!r}"
+                    f"other={other['id'][:12]}"
                 )
                 continue
-            # Successful merge — write merged content into keeper,
-            # delete other.
+            # Successful merge — migrate cross-references FIRST so
+            # CASCADE delete doesn't drop them, then write merged
+            # content into keeper, then delete other.
             try:
-                storage.update_blob(
+                migrated = main_storage.migrate_blob_references(
+                    owner_id=owner_id,
+                    dup_blob_id=other["id"],
+                    keeper_blob_id=keeper["id"],
+                )
+                for k, v in migrated.items():
+                    if k in migrate_totals:
+                        migrate_totals[k] += int(v)
+                blob_storage.update_blob(
                     blob_id=keeper["id"],
                     owner_id=owner_id,
                     content=merged,
-                    event_description=(
-                        f"Reconsolidated with {other['id'][:8]}… via "
-                        "manual sweep"
-                    ),
+                    event_description=(f"Reconsolidated with {other['id'][:8]}… via manual sweep"),
                 )
-                deleted = storage.delete_blob(other["id"], owner_id)
+                deleted = blob_storage.delete_blob(other["id"], owner_id)
                 if deleted:
                     keeper["content"] = merged  # so next pair sees the merged text
                     blobs_merged += 1
                     logger.info(
                         f"[reconsolidate] merged keeper={keeper['id'][:12]} "
-                        f"absorbed={other['id'][:12]} name={name!r}"
+                        f"absorbed={other['id'][:12]} migrated={migrated}"
                     )
             except Exception as e:
                 logger.exception(
@@ -293,13 +376,14 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
             break
 
     summary = {
-        "groups_examined": len(dup_groups),
+        "groups_examined": len(dup_clusters),
         "blobs_examined": blobs_examined,
         "blobs_merged": blobs_merged,
         "blobs_kept_distinct": blobs_kept_distinct,
         "pair_cap_hit": pair_cap_hit,
         "aborted_overload": aborted_overload,
         "no_llm": False,
+        **migrate_totals,
     }
     logger.info(f"[reconsolidate] sweep complete: {summary}")
     return summary

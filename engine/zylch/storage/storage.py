@@ -945,6 +945,194 @@ class Storage:
             logger.warning(f"get_identifiers_for_blob({blob_id}) failed: {e}")
             return []
 
+    def migrate_blob_references(
+        self,
+        owner_id: str,
+        dup_blob_id: str,
+        keeper_blob_id: str,
+    ) -> Dict[str, int]:
+        """Move every reference from ``dup_blob_id`` to ``keeper_blob_id``.
+
+        Used by the dedup sweep (whatsapp-pipeline-parity Phase 1c) right
+        before deleting a duplicate blob whose content has been merged
+        into the keeper. Without this step, the FK CASCADE on Blob.id
+        would silently drop:
+
+        - ``person_identifiers`` rows (cross-channel match would lose
+          the dup's email/phone/lid),
+        - ``email_blobs`` / ``calendar_blobs`` rows (F7 topical-sibling
+          lookup would lose the link "this email contributed to that
+          blob"),
+        - dangling references in ``task_items.sources.blobs``
+          (`get_open_tasks_by_blobs` would silently miss tasks whose
+          stored blob_id no longer exists).
+
+        Idempotent: re-running on already-migrated state is a no-op.
+        Cross-table inserts use INSERT OR IGNORE-style semantics via
+        the per-table UNIQUE / PK constraints.
+
+        Returns per-table migrated counts. The dup blob itself is NOT
+        deleted by this method — caller decides when to call
+        ``BlobStorage.delete_blob``.
+        """
+        result = {
+            "person_identifiers_migrated": 0,
+            "email_blobs_migrated": 0,
+            "calendar_blobs_migrated": 0,
+            "task_items_updated": 0,
+        }
+        if not (owner_id and dup_blob_id and keeper_blob_id):
+            return result
+        if dup_blob_id == keeper_blob_id:
+            return result
+
+        from zylch.storage.models import (
+            CalendarBlob,
+            EmailBlob,
+            PersonIdentifier,
+            TaskItem,
+        )
+
+        try:
+            with get_session() as session:
+                # 1. person_identifiers: for every (kind, value) on dup
+                # not already on keeper, insert a copy on keeper. The
+                # original dup row is left to be CASCADE-deleted when
+                # the blob is dropped.
+                dup_id_rows = (
+                    session.query(PersonIdentifier.kind, PersonIdentifier.value)
+                    .filter(
+                        PersonIdentifier.owner_id == owner_id,
+                        PersonIdentifier.blob_id == dup_blob_id,
+                    )
+                    .all()
+                )
+                if dup_id_rows:
+                    keeper_id_set = {
+                        (str(k), str(v))
+                        for k, v in session.query(PersonIdentifier.kind, PersonIdentifier.value)
+                        .filter(
+                            PersonIdentifier.owner_id == owner_id,
+                            PersonIdentifier.blob_id == keeper_blob_id,
+                        )
+                        .all()
+                    }
+                    for k, v in dup_id_rows:
+                        key = (str(k), str(v))
+                        if key in keeper_id_set:
+                            continue
+                        session.add(
+                            PersonIdentifier(
+                                owner_id=owner_id,
+                                blob_id=keeper_blob_id,
+                                kind=k,
+                                value=v,
+                            )
+                        )
+                        keeper_id_set.add(key)
+                        result["person_identifiers_migrated"] += 1
+
+                # 2. email_blobs: copy (email_id, dup) → (email_id, keeper)
+                # if not already present.
+                dup_email_links = (
+                    session.query(EmailBlob.email_id)
+                    .filter(
+                        EmailBlob.owner_id == owner_id,
+                        EmailBlob.blob_id == dup_blob_id,
+                    )
+                    .all()
+                )
+                if dup_email_links:
+                    keeper_email_set = {
+                        str(r[0])
+                        for r in session.query(EmailBlob.email_id)
+                        .filter(
+                            EmailBlob.owner_id == owner_id,
+                            EmailBlob.blob_id == keeper_blob_id,
+                        )
+                        .all()
+                    }
+                    for (email_id,) in dup_email_links:
+                        eid = str(email_id)
+                        if eid in keeper_email_set:
+                            continue
+                        session.add(
+                            EmailBlob(
+                                email_id=eid,
+                                blob_id=keeper_blob_id,
+                                owner_id=owner_id,
+                            )
+                        )
+                        keeper_email_set.add(eid)
+                        result["email_blobs_migrated"] += 1
+
+                # 3. calendar_blobs: same shape
+                dup_cal_links = (
+                    session.query(CalendarBlob.event_id)
+                    .filter(
+                        CalendarBlob.owner_id == owner_id,
+                        CalendarBlob.blob_id == dup_blob_id,
+                    )
+                    .all()
+                )
+                if dup_cal_links:
+                    keeper_cal_set = {
+                        str(r[0])
+                        for r in session.query(CalendarBlob.event_id)
+                        .filter(
+                            CalendarBlob.owner_id == owner_id,
+                            CalendarBlob.blob_id == keeper_blob_id,
+                        )
+                        .all()
+                    }
+                    for (event_id,) in dup_cal_links:
+                        eid = str(event_id)
+                        if eid in keeper_cal_set:
+                            continue
+                        session.add(
+                            CalendarBlob(
+                                event_id=eid,
+                                blob_id=keeper_blob_id,
+                                owner_id=owner_id,
+                            )
+                        )
+                        keeper_cal_set.add(eid)
+                        result["calendar_blobs_migrated"] += 1
+
+                # 4. task_items.sources.blobs (JSON list): replace dup
+                # with keeper, dedup. We have to fetch all tasks for the
+                # owner and check each — SQLite's JSON1 functions could
+                # narrow this server-side, but the live profiles have
+                # ~100s of tasks, so an in-memory scan is fine and
+                # simpler than relying on SQLite version detection.
+                tasks = session.query(TaskItem).filter(TaskItem.owner_id == owner_id).all()
+                for t in tasks:
+                    sources = t.sources
+                    if not isinstance(sources, dict):
+                        continue
+                    blobs_list = sources.get("blobs") or []
+                    if dup_blob_id not in blobs_list:
+                        continue
+                    new_blobs: List[str] = []
+                    seen = set()
+                    for b in blobs_list:
+                        nb = keeper_blob_id if b == dup_blob_id else b
+                        if nb in seen:
+                            continue
+                        seen.add(nb)
+                        new_blobs.append(nb)
+                    new_sources = dict(sources)
+                    new_sources["blobs"] = new_blobs
+                    t.sources = new_sources
+                    result["task_items_updated"] += 1
+        except Exception as e:
+            logger.error(
+                f"migrate_blob_references({dup_blob_id} → {keeper_blob_id}) " f"failed: {e}"
+            )
+            return result
+
+        return result
+
     def get_open_tasks_by_blobs(
         self,
         owner_id: str,
