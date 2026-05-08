@@ -26,6 +26,15 @@ const app = initializeApp(firebaseConfig)
 // top of every signed-in window keeps the active identity visible in
 // case a restored session catches the user by surprise.
 //
+// One consequence of IndexedDB persistence: `auth.currentUser` is
+// shared across all BrowserWindows of this Electron app. Legacy
+// windows ("+ New Window for Profile", `?legacy=1`) are bound to a
+// profile dir directly and skip the Firebase gate — they MUST also
+// suppress any UI that reads `auth.currentUser` (IdentityBanner,
+// AccountCard, "Sign out"), or they will advertise the identity of
+// a different window and let a Sign out from here clear the session
+// globally. See `lib/legacy.ts` for the gate helper.
+//
 // To force a re-signin (debug, or to sanity-check the gate), the user
 // uses the explicit "Sign out" button on the IdentityBanner.
 const auth = initializeAuth(app, { persistence: indexedDBLocalPersistence })

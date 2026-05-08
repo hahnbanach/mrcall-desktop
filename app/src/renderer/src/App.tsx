@@ -15,6 +15,7 @@ import { ConversationsProvider } from './store/conversations'
 import { ThreadProvider, useThread } from './store/thread'
 import { TasksProvider } from './store/tasks'
 import { profileColor } from './lib/profileColor'
+import { isLegacyWindow } from './lib/legacy'
 import type { SidecarStatusEvent } from './types'
 import { errorMessage, isProfileLockedError } from './lib/errors'
 import Icon, { type IconName } from './components/Icon'
@@ -728,8 +729,9 @@ function Sidebar({
 // Three-state machine driving the Firebase signin → profile binding
 // flow:
 //
-//   pending     — Firebase auth hasn't reported back yet (in-memory
-//                 persistence: this is one tick at most)
+//   pending     — Firebase auth hasn't reported back yet (with
+//                 IndexedDB persistence the listener fires on the
+//                 next tick with the persisted user, if any)
 //   signed-out  — user is null, render SignIn
 //   binding     — user just signed in, asking main to bindProfile
 //   bound       — sidecar attached, render AppInner
@@ -744,9 +746,10 @@ type AuthGateState =
   | { phase: 'error'; user: User; reason: string }
 
 // Gates the entire UI behind a Firebase signin AND a successful
-// profile bind. With in-memory persistence and UID-keyed profiles,
-// these two are inseparable: a window with a Firebase user but no
-// matching profile dir on disk has no engine to talk to.
+// profile bind. With UID-keyed profiles, these two are inseparable:
+// a window with a Firebase user but no matching profile dir on disk
+// has no engine to talk to. (Persistence is IndexedDB-backed, so a
+// returning user starts in 'binding' on launch instead of 'signed-out'.)
 function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Element {
   const [state, setState] = useState<AuthGateState>({ phase: 'pending' })
 
@@ -869,9 +872,15 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
 // Persistent top bar showing the current Firebase identity. Surfaces
 // at the very top of every signed-in window so a wrong-account state
 // is visible within seconds — not buried in Settings → AccountCard.
-// Hidden in legacy windows (those have no Firebase user and routinely
-// run with `auth.currentUser === null`).
+//
+// Hidden in legacy windows: those are bound to a profile dir directly
+// and never push a Firebase token to their sidecar, so showing the
+// global `auth.currentUser` (which IndexedDB persistence shares across
+// windows) would advertise the wrong identity for that profile — and
+// the Sign out button would clear the Firebase session globally,
+// kicking the proper-Firebase window back to SignIn.
 function IdentityBanner(): JSX.Element | null {
+  if (isLegacyWindow()) return null
   const user = auth.currentUser
   if (!user || user.isAnonymous) return null
   const email = user.email || '—'
@@ -958,23 +967,14 @@ function AppShell(): JSX.Element {
   )
 }
 
-// `?legacy=1` is set by main when a window is opened via the
-// "+ New Window for Profile" picker (or via ZYLCH_PROFILE). Such
-// windows already have a sidecar bound to a chosen profile dir; they
-// pre-date the Firebase-as-identity model, so we skip the auth gate
-// entirely and render AppInner directly. Engine-side StarChat /
-// mrcall.* / google.calendar.* calls will fail with -32010 in this
-// mode, since no Firebase token has been pushed — that's fine, those
-// features simply don't work in legacy windows until/unless the user
-// signs in through Settings.
-function isLegacyWindow(): boolean {
-  try {
-    const qs = new URLSearchParams(window.location.search)
-    return qs.get('legacy') === '1'
-  } catch {
-    return false
-  }
-}
+// Legacy windows ("+ New Window for Profile" or ZYLCH_PROFILE escape
+// hatch) skip FirebaseAuthGate — they already have a sidecar bound
+// to a chosen profile dir. Engine-side StarChat / mrcall.* /
+// google.calendar.* calls will fail with -32010 in this mode (no
+// Firebase token pushed); those features simply don't work in
+// legacy windows. `isLegacyWindow()` lives in `lib/legacy.ts` so
+// other surfaces (IdentityBanner, Settings → AccountCard) can gate
+// on it too.
 
 export default function App(): JSX.Element {
   if (isLegacyWindow()) {

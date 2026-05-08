@@ -13,6 +13,55 @@ This file is young. Cross-cutting facts historically lived inside
 `engine/docs/active-context.md` (the engine doc tree played a dual role).
 Facts migrate here as they get touched.
 
+## 2026-05-08 — legacy-window identity bleed (IdentityBanner + Settings)
+
+User report (Mario, on a fresh dev Mac):
+
+> Sono partito con login `mario.alemi@gmail.com`, finestra a sinistra.
+> Poi ho cliccato "+ New Window for Profile" su `mario.alemi@cafe124.it`,
+> finestra a destra. In alto dice "Signed in as mario.alemi@gmail.com".
+> E la stessa cosa nei Settings. In più, quando ho cliccato Sign out
+> dalla destra, mi si è chiusa la sinistra.
+
+**Root cause:** the renderer was switched from `inMemoryPersistence` to
+`indexedDBLocalPersistence` in commit `aa75c6ec` (signin survives
+across launches), but `IdentityBanner` (`App.tsx`) and `AccountCard`
+(`Settings.tsx`) were still written for the in-memory model where
+legacy windows had `auth.currentUser === null`. IndexedDB is shared
+across all BrowserWindows of the same Electron app, so a legacy
+window opened via "+ New Window for Profile" sees the persisted
+Firebase session of the proper-Firebase window. Two symptoms:
+
+1. Legacy window's `IdentityBanner` and Settings → Account both show
+   the *other* window's email — not the profile this window is
+   actually bound to.
+2. Sign out from the legacy window calls `signOut(auth)` which clears
+   IndexedDB globally, fires `onAuthStateChanged` in the proper
+   window, and `FirebaseAuthGate` flips it to `signed-out` (rendering
+   `<SignIn />`). Mario read this as "the left window closed".
+
+**Fix:** new `app/src/renderer/src/lib/legacy.ts` exposes
+`isLegacyWindow()` (the helper was previously private to `App.tsx`).
+Three surfaces gate on it:
+
+- `IdentityBanner` early-returns null in legacy.
+- Settings hides the entire "Account" section in legacy
+  (`AccountCard` also early-returns null defensively).
+- `LLMProviderCard`'s `signedIn` is `!!auth.currentUser && !isLegacyWindow()`
+  so the balance fetch (which would 401 in legacy because no Firebase
+  token was pushed to *this* sidecar) is suppressed.
+
+Stale comments in `App.tsx` and `firebase/config.ts` that referred to
+"in-memory persistence" updated to reflect IndexedDB reality and to
+flag the legacy-gate requirement.
+
+**Live verification:** Mario will test in `npm run dev` after pulling
+this branch — open gmail profile, sign in, click "+ New Window for
+Profile" on cafe124.it, expect: no IdentityBanner in the right
+window, Settings has no Account section in the right window, Sign
+out from the left does not affect the right (legacy window has no
+Sign out anywhere). Not committed yet.
+
 ## 2026-05-06 evening — task-list cleanup ("4 task per UN problema") finally fixed
 
 User report (verbatim, frustrated, after 5 prior sessions had each
@@ -68,7 +117,7 @@ declared "tutto risolto" without testing):
 ### Firebase Auth as desktop identity
 - The renderer is gated by `FirebaseAuthGate` (`app/src/renderer/src/App.tsx`) on `auth.currentUser`. Unsigned-in state shows `views/SignIn.tsx` — **email/password and "Continue with Google"** (PKCE → `signInWithCredential`); magic links remain deferred.
 - Same Firebase project as the dashboard (`talkmeapp-e696c`) so a single account works on both surfaces. Config hard-coded in `app/src/renderer/src/firebase/config.ts` (public-by-design — the Firebase JS SDK ships its config).
-- **Persistence is `inMemoryPersistence` (post-`bc011be`).** Every app launch shows the SignIn screen. The previous indexedDB/local-storage persistence let a stale Firebase session silently survive across launches and decouple from the on-disk profile, so a wrong-account state could surface (typing user A's credentials and ending up on user B's data).
+- **Persistence is `indexedDBLocalPersistence` (post-`aa75c6ec`).** A signed-in user survives across app launches; FirebaseAuthGate boots straight into the `binding` phase on the next start instead of `signed-out`. UID-keyed profiles structurally prevent the "wrong account on the wrong profile" drift the original in-memory setup guarded against — a restored session can only ever bind to its matching profile dir. **One consequence:** IndexedDB is shared across all BrowserWindows of the app, so `auth.currentUser` is the same in every renderer; legacy windows (`?legacy=1`, "+ New Window for Profile") MUST gate any UI that reads it on `isLegacyWindow()` (`app/src/renderer/src/lib/legacy.ts`), or they will (a) advertise the wrong identity and (b) let a Sign out clear the session globally. The IdentityBanner, Settings → AccountCard, and the LLMProviderCard's `signedIn` flag all gate on this.
 - Renderer pushes the ID token to the engine via `account.set_firebase_token`; engine holds it in-memory only (`zylch/auth/session.py` singleton). 50-min proactive refresh in `firebase/authUtils.ts`. Sign-out clears both ends.
 - **UID-keyed profile binding.** Every BrowserWindow boots into an *auth-pending* state with NO sidecar. After Firebase signin the renderer calls `auth:bindProfile(uid)`; main attaches a sidecar bound to `~/.zylch/profiles/<firebase_uid>/`. If the dir doesn't exist, the renderer routes to `Onboarding.tsx` which creates it via `onboarding:createProfileForFirebaseUser` and the same window then attaches in-place — Firebase auth state preserved, no second signin. Sign-out + re-signin as a different user swaps the sidecar in-place.
 - **IdentityBanner** at the top of every authenticated window: "Signed in as `<email>` (uid `<prefix>…`)" + one-click *Sign out*. Wrong-account state surfaces in seconds.
