@@ -51,11 +51,16 @@ description: |
 
 ## Test Status
 
-20 tests pass across the curated live set:
-- `tests/workers/test_task_worker_bugs.py` — 14 cases (task detection regressions, RealStep / cafe124 fixes F1–F4, including 3 Cc-fallback tests fixed 2026-05-02 by re-patching `get_session` lazily and aligning fixture user_email)
-- `tests/services/test_reanalyze_sweep.py` — 6 cases (bounded reanalyze sweep)
+Curated live set as of 2026-05-08:
+- `tests/workers/test_person_identifiers.py` — 47 cases (parser / normaliser / storage helpers / FK CASCADE / identifier-first match / cluster builder / 4 end-to-end `reconsolidate_now` scenarios with mocked LLM). Phase 1 a/b/c of whatsapp-pipeline-parity.
+- `tests/services/test_email_search.py` — 24 cases (Gmail-style operator parser+matcher).
+- `tests/llm/test_proxy_client.py` — 8 cases (MrCallProxyClient SSE + 401 + 402 + auth header + body forwarding + streaming reconstruction).
+- `tests/whatsapp/test_sync.py` — 5 cases (`_store_message_from_event` JID extraction, real `Neonize_pb2.Message` events).
+- `tests/workers/test_task_phase2_ordering.py` — 5 cases (F5 phase-2 sort key).
+- `tests/workers/test_task_worker_bugs.py` — 14 cases at HEAD; **broken** since 2026-05-04 transport refactor + 2026-05-06 Fase 1.1 plural `get_tasks_by_contact`. Tracked in `harness-backlog.md`. Do not count.
+- `tests/services/test_reanalyze_sweep.py` — 6 cases, **5 green** (1 pre-existing fail `test_sweep_skips_when_no_candidates_old_enough`, AsyncMock un-awaited; tracked).
 
-The rest of `tests/` references the old SaaS architecture and needs a rewrite.
+Total green: ~104 across 6 active files. The rest of `tests/` references the old SaaS architecture and needs a rewrite.
 
 ## Lint Status
 

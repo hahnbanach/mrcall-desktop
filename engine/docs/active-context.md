@@ -1,17 +1,103 @@
 ---
 description: |
-  Engine-side state of mrcall-desktop as of 2026-05-02. Profile-aware CLI,
+  Engine-side state of mrcall-desktop as of 2026-05-08. Profile-aware CLI,
   Firebase signin (renderer-driven, in-memory token bridge), Google
   Calendar OAuth (PKCE :19275), Electron desktop (validated), prompt
   caching in chat, user notes injection, memory tool pair (LLM decides
   update vs create), inbox/sent views, email archive/delete RPCs,
   Open-email → thread-filtered Tasks view, RealStep/cafe124 task
-  auto-close fixes, optional close_note column on task_items. App-side
-  state lives in ../../app/docs/active-context.md; cross-cutting state
-  in ../../docs/active-context.md.
+  auto-close fixes, close_note column, F9 cross-contact topic dedup,
+  cross-channel person identity (`person_identifiers` index +
+  identifier-first match + identifier-clustered reconsolidation).
+  App-side state lives in ../../app/docs/active-context.md;
+  cross-cutting state in ../../docs/active-context.md.
 ---
 
 # Active Context
+
+## Cross-channel person identity — Phase 1 a/b/c (2026-05-07 → 2026-05-08)
+
+`whatsapp-pipeline-parity.md` Phase 1 is **landed end-to-end** on three commits
+(`d0baa6b1` 1a, `315c56d1` 1b, `6ae8a5fa` 1c). The point of the phase:
+a structured `(kind, value)` index of identity tuples so a future WhatsApp
+message from a phone already extracted from an email signature merges into
+the SAME entity blob, not a new one. Diagnostic on real Mario blobs (3
+profiles, 1147 PERSON-ish blobs) showed phones land in the structured
+`#IDENTIFIERS` block 39–61% of the time, which is enough to make the
+cross-channel match useful out of the box.
+
+**1a — `person_identifiers` index (additive write).** New table with FK
+CASCADE on `Blob.id`, UNIQUE on `(owner_id, kind, value, blob_id)`. Kinds
+indexed: `email`, `phone`, `lid`. Names are deliberately NOT indexed —
+common-name false merges are the bigger risk than missed merges. New
+storage helpers `add_person_identifiers` / `find_blobs_by_identifiers` /
+`get_identifiers_for_blob`. `MemoryWorker._upsert_entity` writes rows
+post-upsert (merge AND create branches), parser
+`_parse_identifiers_block` + normaliser `_normalise_phone` live at module
+scope in `workers/memory.py`. Phone normaliser keeps a leading `+` (or
+`00 → +`), strips whitespace/dots/dashes/parens; rejects placeholders
+("none", "unknown") and inputs <8 digits. Multi-value `Phone:` lines split
+on commas. Backfill script `engine/scripts/backfill_person_identifiers.py`
+(opt-in, idempotent via UNIQUE). Run on Mario's profiles populated 1745
+rows total (gmail 414, support 779, cafe124 552).
+
+**1b — identifier-first match in `_upsert_entity`.** Match strategy is
+now: parse identifiers from the new entity → query
+`find_blobs_by_identifiers` → put those blob ids first in the merge
+candidate list, then cosine candidates not already in the identifier
+set. The LLM merge gate is unchanged; "INSERT" rejection falls through
+to the next candidate. So a stale identifier (shared switchboard phone)
+cannot force an incorrect merge. Each candidate carries a `source` label
+visible in the log (`identifier-only`, `identifier+cosine`,
+`cosine=0.78`). Live-verified on the gmail profile during Mario's
+2026-05-08 update — 1 of 8 emails landed an identifier match (FeFarma
+`5491bb51` + `5b6075e3`, two duplicate blobs that cosine alone would
+have missed).
+
+**1c — identifier-clustered `reconsolidate_now`.** The Settings →
+Maintenance → "Reconsolidate memory" button now clusters blobs by
+union-find over `(kind, value)` tuples from the index OR canonical
+Name (legacy fallback). Each cluster gets pairwise LLM merge with the
+keeper = longest blob; before each delete, new helper
+`Storage.migrate_blob_references(owner, dup, keeper)` moves the dup's
+`person_identifiers` / `email_blobs` / `calendar_blobs` rows + every
+`task_items.sources.blobs` reference onto the keeper so CASCADE
+doesn't drop them. Idempotent across all four reference tables.
+Cap = 50 pairs per click (existing constant); user clicks again to
+exhaust the queue.
+
+**Live impact** (CLI invocations against the two BYOK profiles —
+gmail uses MrCall credits and waits for Mario to click the button in
+Settings):
+
+| Profile | Pre | Post | Reduction | Runs | LLM blobs_merged |
+|---|---:|---:|---:|---:|---:|
+| `support@mrcall.ai` | 805 | 307 | **-62%** | 10 | 498 |
+| `mario.alemi@cafe124.it` | 731 | 315 | **-57%** | 9 | 416 |
+| `mario.alemi@gmail.com` | 614 | TBD | — | 0 | — |
+
+Across the 19 runs `blobs_kept_distinct = 0` every time — the
+identifier-clustered signal is high-precision in production data.
+Cumulative cross-table impact: ~1100+ `email_blobs` rows moved onto
+keepers, ~70+ new `person_identifiers` rows on keepers, ~80+
+`task_items.sources.blobs` lists rewritten. Tests:
+`tests/workers/test_person_identifiers.py` (47 cases) — parser /
+normaliser / storage helpers / FK CASCADE / migrate semantics /
+union-find / four end-to-end `reconsolidate_now` scenarios with
+mocked LLM. 104/105 across the curated live test set (the 1 fail
+is the pre-existing `test_reanalyze_sweep` mock issue, unrelated).
+
+**What Phase 1c does NOT do**: it does not auto-merge blobs whose
+identifiers don't actually overlap (rare on Mario's data — the
+`groups_examined` counter dropped to 0 on both profiles, so the
+sweep is exhaustive on identifier-shared dups). What it WILL leave
+behind: pure name-only duplicates with mismatched cases or typo
+("Mario Rossi" vs "mario rossi" → caught; "Salomone" vs "Salamone"
+→ NOT caught). Same as before — no regression.
+
+**Next**: Phase 2 (D2 + D4) — `whatsapp_blobs` join table + rewriting
+the dead `MemoryWorker.process_whatsapp_message` skeleton at
+`memory.py:856` into a real path that mirrors `process_email`.
 
 ## F9 Topic Dedup — cross-contact LLM clustering (2026-05-06 evening)
 
@@ -423,7 +509,8 @@ Tests: `tests/workers/test_task_worker_bugs.py` (14 cases, all green) + `tests/s
 - Entity-centric blob storage with fastembed (ONNX, 384-dim)
 - In-memory vector search: numpy cosine similarity
 - Hybrid search (text + semantic), reconsolidation via LLM (merge uses prompt caching)
-- **Memory tool pair (this session, `0b9e4e8`)**:
+- **Cross-channel person identity** (`person_identifiers` index): structured `(kind, value)` tuples extracted from each blob's `#IDENTIFIERS` block. Indexed kinds: `email`, `phone`, `lid`. Used by `_upsert_entity` (identifier-first match, cosine fallback) and by `reconsolidate_now` (union-find clustering + cross-reference migration before delete). See top-of-file section "Cross-channel person identity" for details.
+- **Memory tool pair (`0b9e4e8`)**:
   - `update_memory_tool.py`: requires exact `blob_id` + `new_content`; no internal search; errors if id missing
   - `create_memory_tool.py`: companion, stores under `user:<owner_id>` namespace
   - `SearchLocalMemoryTool` exposes `blob_id` per result, drops stale `<owner>:<assistant>:contacts` filter

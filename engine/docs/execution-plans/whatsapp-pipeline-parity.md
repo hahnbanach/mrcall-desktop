@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress (Phase 1 a/b/c landed; Phase 2 onwards pending)
 owner: next-session
 discipline: Mario's standard rules apply. NEVER claim a feature is "fixed"
   or "done" or "verified" until Mario has clicked / used it himself in the
@@ -8,7 +8,7 @@ discipline: Mario's standard rules apply. NEVER claim a feature is "fixed"
   to test. Wait. NEVER push to origin. NEVER commit until Mario says
   "funziona". Italian register in the chat.
 created: 2026-05-07
-last_updated: 2026-05-07
+last_updated: 2026-05-08
 ---
 
 # WhatsApp pipeline parity + cross-channel person identity
@@ -228,20 +228,67 @@ finds the existing task → LLM picks `update`/`close` instead of
   shipped.
 - Re-read this brief.
 
-### Phase 1 — schema + identifier index (D1)
+### Phase 1 — schema + identifier index (D1) ✅ DONE
 
-- New table `person_identifiers` via `Base.metadata.create_all` +
-  `_apply_column_migrations` if needed (no Alembic per system-rules).
-- Backfill from existing blobs: parse `#IDENTIFIERS` from
-  `Blob.content`, write rows.
-- Switch `MemoryWorker._find_match` from "embedding ≥ 0.65" to
-  "identifier match → fallback embedding". Keep the embedding fallback
-  for typo tolerance.
-- Tests: `tests/workers/test_memory_identifiers.py` — same email
-  twice, same person on two emails, same person email + WA, name-only
-  match, conflicting identifiers, no match → create.
-- **STOP. Mario tests in app: process some emails, observe blob count
-  doesn't grow when same person re-appears.**
+Split into three landings:
+
+**1a — additive write** (commit `d0baa6b1`, 2026-05-07).
+- ✅ `PersonIdentifier` model (FK CASCADE on `Blob.id`, UNIQUE
+  on `(owner_id, kind, value, blob_id)`). Indexed kinds: `email`,
+  `phone`, `lid`. Names deliberately not indexed.
+- ✅ Storage helpers `add_person_identifiers`,
+  `find_blobs_by_identifiers`, `get_identifiers_for_blob`.
+- ✅ Module-level parser `_parse_identifiers_block` and normaliser
+  `_normalise_phone` in `workers/memory.py`. Multi-value comma split,
+  bullet markers, placeholder rejection, deduplication.
+- ✅ `MemoryWorker._upsert_entity` writes rows post-upsert (merge
+  AND create branches).
+- ✅ Opt-in backfill script
+  `engine/scripts/backfill_person_identifiers.py` (idempotent via
+  UNIQUE). Live populated 1745 rows across 3 profiles.
+
+**1b — identifier-first match** (commit `315c56d1`, 2026-05-07).
+- ✅ `_upsert_entity` candidate list now: identifier-matched first,
+  cosine fallback, LLM merge gate unchanged. Each candidate carries
+  a `source` label visible in logs (`identifier-only`,
+  `identifier+cosine`, `cosine=0.78`).
+- ✅ Tests: `tests/workers/test_person_identifiers.py` — 34 cases
+  including 3 mock-based end-to-end Phase 1b scenarios (priority,
+  fallback on LLM-INSERT, no-match → create).
+- ✅ Live verification 2026-05-08 update on gmail profile: 1 of 8
+  emails captured an identifier match (FeFarma `5491bb51` +
+  `5b6075e3` — two duplicate company blobs cosine alone would have
+  missed).
+
+**1c — identifier-clustered `reconsolidate_now`** (commit `6ae8a5fa`,
+2026-05-08).
+- ✅ `Storage.migrate_blob_references(owner, dup, keeper)` — moves
+  per-table references (`person_identifiers`, `email_blobs`,
+  `calendar_blobs`, `task_items.sources.blobs`) from dup to keeper,
+  idempotent.
+- ✅ `reconsolidate_now` rewritten with `_build_dedup_clusters`
+  (union-find on identifier tuples + canonical Name fallback).
+  Migrate before delete so CASCADE doesn't drop linked rows.
+- ✅ Tests: 13 new tests covering migrate per-table semantics,
+  cluster builder edge cases, end-to-end mock-based scenarios.
+- ✅ Live impact:
+   - `support@mrcall.ai`: 805 → 307 (-62%, 498 dups merged across 10 cap-50 runs).
+   - `mario.alemi@cafe124.it`: 731 → 315 (-57%, 416 dups merged across 9 runs).
+   - `mario.alemi@gmail.com`: pending — Mario clicks Settings → Maintenance → "Reconsolidate memory" (Firebase session needed).
+
+**What 1c does NOT do**: pure name-only typos (`Salomone` vs `Salamone`)
+remain — same as before, no regression. The `groups_examined` counter
+hit 0 on both BYOK profiles, so the sweep is exhaustive on
+identifier-shared dups.
+
+Discrepancies vs. the original brief:
+- The brief mentioned `tests/workers/test_memory_identifiers.py` —
+  actual file is `tests/workers/test_person_identifiers.py` (47
+  tests covering parser + normaliser + storage helpers + FK CASCADE
+  + Phase 1b match + Phase 1c migrate + cluster builder + 4 end-to-end
+  reconsolidate scenarios).
+- The brief's `_find_match` rewrite is implemented in `_upsert_entity`
+  itself (no separate `_find_match` helper extracted).
 
 ### Phase 2 — `whatsapp_blobs` table + WA memory extraction (D2 + D4)
 

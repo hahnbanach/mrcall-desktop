@@ -45,7 +45,7 @@ zylch/
 │
 ├── storage/              # Data access layer (SQLite)
 │   ├── database.py       # SQLAlchemy engine (sqlite:///~/.zylch/zylch.db)
-│   ├── models.py         # 19 ORM models
+│   ├── models.py         # 20+ ORM models (incl. EmailBlob, CalendarBlob, PersonIdentifier)
 │   └── storage.py        # Storage class (CRUD, upserts, search)
 │
 ├── tools/                # LLM tool definitions
@@ -94,10 +94,20 @@ zylch/
 │   ├── blob_storage.py   # Blob CRUD (embeddings as BLOB)
 │   ├── embeddings.py     # fastembed (ONNX, 384-dim)
 │   ├── hybrid_search.py  # InMemoryVectorIndex + text search
-│   ├── llm_merge.py      # Memory reconsolidation
+│   ├── llm_merge.py      # Memory reconsolidation — identifier-clustered union-find + LLM merge gate + cross-reference migration before delete (Phase 1c, whatsapp-pipeline-parity)
 │   ├── pattern_detection.py # Pattern extraction
 │   ├── text_processing.py # Text normalization
 │   └── config.py         # Memory configuration
+
+# Cross-channel person identity (Phase 1, whatsapp-pipeline-parity, 2026-05-08):
+# `person_identifiers(owner_id, blob_id, kind, value)` indexes structured
+# identifiers (email/phone/lid) parsed from each blob's `#IDENTIFIERS` block.
+# `MemoryWorker._upsert_entity` matches identifier-first then falls back to
+# cosine; `reconsolidate_now` clusters via union-find on these tuples (+ Name
+# fallback). Helpers `_parse_identifiers_block` / `_normalise_phone` live in
+# `workers/memory.py`. Cross-reference migration via
+# `Storage.migrate_blob_references` before delete keeps email_blobs /
+# calendar_blobs / task_items.sources.blobs intact through dedup.
 │
 ├── llm/                  # LLM client
 │   ├── client.py         # LLMClient (direct Anthropic/OpenAI SDK; "mrcall" → MrCallProxyClient)
@@ -173,7 +183,7 @@ User
 
 - **Engine**: SQLite with WAL mode, foreign keys enabled
 - **Location**: `~/.zylch/profiles/<name>/zylch.db`
-- **Models**: 19 (Email, Blob, BlobSentence, TaskItem, OAuthToken, WhatsAppMessage, WhatsAppContact, MrcallConversation, etc.)
+- **Models**: 20+ (Email, Blob, BlobSentence, TaskItem, OAuthToken, WhatsAppMessage, WhatsAppContact, MrcallConversation, EmailBlob/CalendarBlob join tables, PersonIdentifier index for cross-channel identity, etc.)
 - **Embeddings**: stored as LargeBinary (BLOB), loaded into numpy for search
 - **No pgvector**: cosine similarity computed in-memory via numpy
 - **No Alembic**: tables created via `Base.metadata.create_all()`
