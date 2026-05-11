@@ -25,11 +25,20 @@ function loadPersisted(profile: string): State | null {
     // Reset ephemeral fields on restore: a dangling in-flight RPC can't
     // be resumed, and a stale approval prompt would fire against a tool
     // call the sidecar has already forgotten.
-    const conversations = parsed.conversations.map((c) => ({
-      ...c,
-      busy: false,
-      pendingApproval: null
-    }))
+    // Also wipe any pre-fix draftInput on task-conversations with empty
+    // history — those persist the old "Aiutami a gestire questa task…"
+    // template from before the agent-first refactor. Free-chat (no
+    // taskId) conversations keep their draft so an in-flight draft
+    // survives a reload.
+    const conversations = parsed.conversations.map((c) => {
+      const isStaleTaskDraft = !!c.taskId && (c.history?.length ?? 0) === 0
+      return {
+        ...c,
+        busy: false,
+        pendingApproval: null,
+        draftInput: isStaleTaskDraft ? '' : c.draftInput
+      }
+    })
     const activeId = conversations.some((c) => c.id === parsed.activeId)
       ? parsed.activeId
       : 'general'
@@ -260,6 +269,18 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
       task.sources && Array.isArray(task.sources.emails) && task.sources.emails.length > 0
         ? task.sources.emails[0]
         : undefined
+    // Persist the source thread id ON the conversation so the Source
+    // panel renders the right thread when the user switches between
+    // conversations in the sidebar. Without this, only the global
+    // thread-store's `activeThreadId` carries it — and that store is
+    // not refreshed on sidebar-driven conversation switches, leading
+    // to a stale thread being shown over the new conversation.
+    // Engine guarantees `sources.thread_id` is populated for task
+    // rows (see engine/zylch/storage/database._backfill_task_thread_id).
+    const sourceThreadId =
+      task.sources && typeof task.sources.thread_id === 'string'
+        ? task.sources.thread_id
+        : undefined
 
     // If we're re-opening a task conversation that already has
     // history (user clicked Open twice, or this was restored from
@@ -278,6 +299,7 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
         id,
         title,
         taskId: task.id,
+        threadId: sourceThreadId,
         sourceEmailId,
         history: existing?.history ?? [],
         draftInput: '',

@@ -52,23 +52,34 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
   const [panelExpanded, setPanelExpanded] = useState<Record<string, boolean>>({})
 
   // Thread ID to render in the Source panel. Priority:
-  //   1. A thread-only conversation carries the id via the `thread-`
-  //      prefix contract (set by `openThreadChat` in Email view) — use
-  //      that first so switching sidebar conversations always shows the
-  //      right thread, without relying on the thread store.
-  //   2. Otherwise, for task-backed conversations, the global
-  //      `activeThreadId` is the thread Tasks.tsx opened us with (when
-  //      the task matches `activeTaskId`).
+  //   1. A thread-only conversation carries its thread id via the
+  //      `thread-<threadId>` prefix contract (set by `openThreadChat`
+  //      in Email view).
+  //   2. Otherwise the conversation itself carries `threadId` — set
+  //      by openTaskChat from `task.sources.thread_id`. This is the
+  //      path that fixes the sidebar-switch staleness: every task
+  //      conv knows its own thread, so changing conversation in the
+  //      sidebar updates the Source panel without going through the
+  //      global thread store.
+  //   3. Fallback only: if a task conv was opened by a path that
+  //      didn't set Conversation.threadId (legacy persisted convs
+  //      from pre-fix) and the user navigated here via Tasks → Open,
+  //      activeThreadId in the thread store may still match. Read it
+  //      only when activeTaskId matches the active conv's taskId.
   const sourceThreadId = (() => {
     if (active.id.startsWith('thread-')) return active.id.slice('thread-'.length)
+    if (active.threadId) return active.threadId
     if (!active.taskId) return null
     if (activeTaskId === active.taskId) return activeThreadId
     return null
   })()
 
-  // Keep thread-store in sync when the user switches conversation
-  // inside the sidebar. Without this, clicking on a different task
-  // conversation would leave the old thread in the Source panel.
+  // Keep the global thread-store in sync when the user switches
+  // conversation inside the sidebar. The Source panel reads its
+  // thread id from `active.threadId` directly so this isn't strictly
+  // required for the panel — but other views (e.g. Email's open-from-
+  // thread shortcut) still consult the thread store, so we keep both
+  // in lockstep with whatever conv is on screen.
   useEffect(() => {
     if (!active.taskId) {
       // "general" — clear task context; leave threadId alone so a
@@ -78,11 +89,24 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     }
     if (activeTaskId !== active.taskId) {
       setActiveTaskId(active.taskId)
-      // We don't know the threadId of an arbitrary task conversation
-      // (the sidebar doesn't carry it). Leave threadId untouched; the
-      // panel will be empty until the user re-opens the task from Tasks.
     }
-  }, [active.id, active.taskId, activeTaskId, setActiveTaskId])
+    // Mirror the conversation's own threadId into the store. Setting
+    // null when the conv has no threadId is the right behaviour —
+    // anything else would surface a stale thread from a previous
+    // selection.
+    const next = active.threadId ?? null
+    if (next !== activeThreadId) {
+      setActiveThreadId(next)
+    }
+  }, [
+    active.id,
+    active.taskId,
+    active.threadId,
+    activeTaskId,
+    activeThreadId,
+    setActiveTaskId,
+    setActiveThreadId
+  ])
 
   // Build context for narration: prefer the last user message in history.
   const narrationContext = (() => {
