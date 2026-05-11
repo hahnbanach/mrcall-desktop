@@ -34,7 +34,7 @@ const URGENCY_STYLES: Record<string, string> = {
 }
 
 export default function Tasks({ onOpenWorkspace }: Props = {}) {
-  const { openTaskChat, setActive, state: convState } = useConversations()
+  const { openTaskChat } = useConversations()
   // Tasks live in a shared store so Update.tsx can invalidate us after
   // a pipeline run. `refresh()` always hits the sidecar — there is no
   // memoization on this path.
@@ -512,15 +512,14 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
               // agent's first response. A second Open on the same task
               // does NOT re-run solve: openTaskChat skips the solve
               // when history is non-empty, so any back-and-forth from
-              // a prior Open is preserved. We can call openTaskChat
-              // unconditionally now — the dedup lives in the store.
-              const convId = `task-${t.id}`
-              const exists = convState.conversations.some((c) => c.id === convId)
-              if (!exists) {
-                openTaskChat(t)
-              } else {
-                setActive(convId)
-              }
+              // a prior Open is preserved. Call it UNCONDITIONALLY —
+              // the dedup lives in the store, and calling it on an
+              // existing conv refreshes Conversation.threadId from
+              // the current `task.sources.thread_id`. Without this
+              // refresh, conversations restored from a pre-fix
+              // localStorage payload would never get their threadId
+              // back and the Source panel would stay hidden.
+              openTaskChat(t)
               onOpenWorkspace?.(threadId, t.id)
             }}
             className="px-3 py-1.5 text-sm bg-brand-blue text-white rounded hover:bg-brand-grey-80 transition-colors"

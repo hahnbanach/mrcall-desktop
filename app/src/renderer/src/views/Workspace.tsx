@@ -158,7 +158,17 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
         case 'thinking':
           if (event.text && event.text.trim()) {
             appendAssistant(convId, event.text)
+            // Reset narration so the static fallback ("Sto pensando…")
+            // doesn't shout over the model's own text bubble.
+            setNarrationSeed('')
           }
+          break
+        case 'tool_use_start':
+          // Replace the narration with the current activity.
+          // Italian phrasing because USER_LANGUAGE is Italian-first;
+          // we re-evaluate localisation if/when we ship in another
+          // language.
+          setNarrationSeed(narrationForTool(event.name))
           break
         case 'tool_call_pending':
           setPendingApproval(convId, {
@@ -168,21 +178,26 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
             input: event.input || {},
             preview: event.preview || ''
           })
+          // Hide the narration — the approval card is now the
+          // user's full attention.
+          setNarrationSeed('')
           break
         case 'tool_result':
-          // Intentionally not rendered — the model's next `thinking`
-          // block (or absence of one before the approval card) is
-          // what the user reads. Surfacing every tool output would
-          // dump search_memory results into the chat, which is
-          // exactly the noise the new SOLVE_SYSTEM_PROMPT tries to
-          // avoid.
+          // Intentionally not rendered as a chat bubble — the model's
+          // next `thinking` block is what the user reads, and dumping
+          // search_memory output would defeat the brief-output rule.
+          // We do however reset the narration: the tool finished and
+          // we're back to "the model is thinking".
+          setNarrationSeed('')
           break
         case 'done':
           setBusy(convId, false)
+          setNarrationSeed('')
           break
         case 'error':
           appendAssistant(convId, '⚠ ' + (event.message || 'Solve error'))
           setBusy(convId, false)
+          setNarrationSeed('')
           break
       }
     })
@@ -496,5 +511,38 @@ function labelForSolve(toolName: string): string {
       return 'Aggiorna memoria'
     default:
       return 'Conferma'
+  }
+}
+
+/**
+ * Narration line shown while a solve tool is running. The italian
+ * phrasing matches USER_LANGUAGE=it; revisit when we ship in another
+ * language. The fallback covers any tool we haven't enumerated —
+ * still beats the static "Sto pensando alla tua richiesta."
+ */
+function narrationForTool(toolName: string): string {
+  switch (toolName) {
+    case 'search_memory':
+      return 'Sto cercando nella memoria…'
+    case 'search_emails':
+      return 'Sto cercando nelle email…'
+    case 'read_document':
+      return 'Sto leggendo il documento…'
+    case 'download_attachment':
+      return 'Sto scaricando l’allegato…'
+    case 'web_search':
+      return 'Sto cercando sul web…'
+    case 'run_python':
+      return 'Sto eseguendo il codice…'
+    case 'update_memory':
+      return 'Sto aggiornando la memoria…'
+    case 'send_email':
+      return 'Sto inviando l’email…'
+    case 'send_whatsapp':
+      return 'Sto inviando il WhatsApp…'
+    case 'send_sms':
+      return 'Sto inviando l’SMS…'
+    default:
+      return `Sto eseguendo ${toolName}…`
   }
 }

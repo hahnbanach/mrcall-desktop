@@ -7,12 +7,18 @@ approve call.
 
 Events yielded:
   {"type": "thinking", "text": str}
+  {"type": "tool_use_start", "tool_use_id": str, "name": str}
   {"type": "tool_call_pending", "tool_use_id": str,
    "name": str, "input": dict, "preview": str}
   {"type": "tool_result", "tool_use_id": str,
    "name": str, "output": str, "approved": bool}
   {"type": "done", "result": {"messages": list}}
   {"type": "error", "message": str}
+
+`tool_use_start` fires for every tool right before execution (both
+read-only and approval-gated). It exists to give the UI a chance to
+show "Sto cercando…" while a tool runs, instead of a static
+"Sto pensando" between turns.
 
 Approvals: caller invokes `await executor.approve(tool_use_id,
 approved, edited_input=None)`. Auto-approved (read-only) tools do
@@ -231,6 +237,18 @@ class TaskExecutor:
                         if not approved:
                             output = "User declined this action."
                         else:
+                            # UI hint: every tool gets a start event so
+                            # the renderer can swap "Sto pensando…" for
+                            # "Sto cercando…" / "Sto eseguendo…" while
+                            # the tool runs. Without this, read-only
+                            # tools (search_*, read_document, …) ran
+                            # silently and the user saw no progress
+                            # between turns.
+                            yield {
+                                "type": "tool_use_start",
+                                "tool_use_id": tool_id,
+                                "name": tool_name,
+                            }
                             try:
                                 output = await loop.run_in_executor(
                                     None,

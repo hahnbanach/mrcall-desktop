@@ -106,6 +106,10 @@ type Action =
   | { type: 'SET_DRAFT'; id: string; text: string }
   | { type: 'SET_PENDING'; id: string; approval: Approval | null }
   | { type: 'SET_BUSY'; id: string; busy: boolean }
+  // PATCH_CONV merges a partial conversation by id without touching
+  // activeId. Used by the post-mount threadId backfill (legacy
+  // localStorage convs predate the threadId field on Conversation).
+  | { type: 'PATCH_CONV'; id: string; patch: Partial<Conversation> }
 
 const GENERAL: Conversation = {
   id: 'general',
@@ -164,6 +168,8 @@ function reducer(state: State, action: Action): State {
       return patch(state, action.id, { pendingApproval: action.approval })
     case 'SET_BUSY':
       return patch(state, action.id, { busy: action.busy })
+    case 'PATCH_CONV':
+      return patch(state, action.id, action.patch)
   }
 }
 
@@ -258,6 +264,42 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     stateRef.current = state
   }, [state])
+
+  // Backfill `Conversation.threadId` on any task-conv that lacks one.
+  // This covers legacy convs persisted before threadId was added to
+  // the Conversation shape — without this they'd render with an empty
+  // Source panel until the user opens the task from the Tasks tab
+  // (which refreshes threadId via openTaskChat). Single tasks.list
+  // call, fire-and-forget; failures degrade silently to the
+  // pre-backfill state.
+  useEffect(() => {
+    if (profileKey === 'unknown') return
+    const needBackfill = stateRef.current.conversations.filter(
+      (c) => c.id.startsWith('task-') && c.taskId && !c.threadId
+    )
+    if (needBackfill.length === 0) return
+    let cancelled = false
+    window.zylch.tasks
+      .list({ include_completed: true })
+      .then((tasks) => {
+        if (cancelled) return
+        const byId = new Map(tasks.map((t) => [t.id, t]))
+        for (const c of needBackfill) {
+          const t = c.taskId ? byId.get(c.taskId) : undefined
+          const tid = t?.sources?.thread_id
+          if (typeof tid === 'string' && tid) {
+            dispatch({ type: 'PATCH_CONV', id: c.id, patch: { threadId: tid } })
+          }
+        }
+      })
+      .catch(() => {
+        /* sidecar may be down — leave convs without threadId, they'll
+           get one the next time the user opens them from the Tasks tab */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [profileKey])
 
   const openTaskChat = useCallback((task: ZylchTask) => {
     const id = 'task-' + task.id

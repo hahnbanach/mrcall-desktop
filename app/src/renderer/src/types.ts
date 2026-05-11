@@ -115,6 +115,15 @@ export interface WhatsAppMessage {
 export type SolveEvent =
   | { type: 'thinking'; text: string }
   | {
+      // Fired right before every tool runs (both read-only and
+      // approval-gated). UI uses this to keep the user oriented while
+      // a tool is in flight — without it, search_* / read_document
+      // would run silently between turns.
+      type: 'tool_use_start'
+      tool_use_id: string
+      name: string
+    }
+  | {
       type: 'tool_call_pending'
       tool_use_id: string
       name: string
