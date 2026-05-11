@@ -101,6 +101,36 @@ export interface WhatsAppMessage {
   timestamp: string | null
 }
 
+/**
+ * Streaming event from the engine's task solve loop. Sent over the
+ * `tasks.solve.event` JSON-RPC notification; mirrored from the engine
+ * shape in `engine/zylch/services/task_executor.py`.
+ *
+ * `thinking` is the model's text output (prose between tool calls).
+ * `tool_call_pending` only fires for destructive tools — read-only
+ * tools auto-execute and surface only as `tool_result` (which the
+ * renderer currently ignores; the model's next `thinking` block is
+ * what the user reads).
+ */
+export type SolveEvent =
+  | { type: 'thinking'; text: string }
+  | {
+      type: 'tool_call_pending'
+      tool_use_id: string
+      name: string
+      input: Record<string, unknown>
+      preview: string
+    }
+  | {
+      type: 'tool_result'
+      tool_use_id: string
+      name: string
+      output: string
+      approved: boolean
+    }
+  | { type: 'done'; result: { messages: unknown[] } }
+  | { type: 'error'; message: string }
+
 export interface ZylchAPI {
   tasks: {
     list: (p?: { include_completed?: boolean; include_skipped?: boolean }) => Promise<ZylchTask[]>
@@ -125,6 +155,24 @@ export interface ZylchAPI {
       skipped_recently_reopened: number
       skipped_oversize: number
       no_llm: boolean
+    }>
+    /** Agentic solve — fires SOLVE_SYSTEM_PROMPT with the task's
+     *  pre-built context. The live event stream arrives via the
+     *  'tasks.solve.event' notification (see SolveEvent below); this
+     *  promise resolves only after `done` or `error`. Single solve at
+     *  a time engine-side (asyncio.Lock). */
+    solve: (
+      task_id: string,
+      instructions?: string
+    ) => Promise<{ ok: boolean; result?: unknown; error?: string }>
+    solveApprove: (
+      tool_use_id: string,
+      payload: { approved: boolean; edited_input?: Record<string, unknown> | null }
+    ) => Promise<{ ok: boolean }>
+    solveCancel: () => Promise<{
+      ok: boolean
+      cancelled_pending?: number
+      error?: string
     }>
   }
   memory: {

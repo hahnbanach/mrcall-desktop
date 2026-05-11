@@ -508,9 +508,12 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
           <button
             onClick={() => {
               // Task conversation is `task-<id>` — openTaskChat creates
-              // it if missing (and seeds the first draft message).
-              // Don't overwrite an existing conversation: a prior Open
-              // may already have back-and-forth we must preserve.
+              // it if missing AND fires tasks.solve to populate the
+              // agent's first response. A second Open on the same task
+              // does NOT re-run solve: openTaskChat skips the solve
+              // when history is non-empty, so any back-and-forth from
+              // a prior Open is preserved. We can call openTaskChat
+              // unconditionally now — the dedup lives in the store.
               const convId = `task-${t.id}`
               const exists = convState.conversations.some((c) => c.id === convId)
               if (!exists) {

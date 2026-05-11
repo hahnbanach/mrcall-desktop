@@ -5,6 +5,7 @@ import {
   useReducer,
   useCallback,
   useState,
+  useRef,
   ReactNode,
   createElement
 } from 'react'
@@ -49,6 +50,16 @@ function savePersisted(profile: string, state: State): void {
 export type Msg = { role: 'user' | 'assistant'; content: string }
 
 export type Approval = {
+  /**
+   * Which RPC surface produced this approval prompt — drives which
+   * engine method the renderer calls back on:
+   *   - 'chat'  → chat.approve (existing free-chat flow)
+   *   - 'solve' → tasks.solve.approve (Open-from-Tasks agentic flow)
+   * The card visual differs slightly: 'solve' has no "session"
+   * variant (a solve is one-shot — no future invocations to
+   * pre-authorise).
+   */
+  mode: 'chat' | 'solve'
   toolUseId: string
   name: string
   input: Record<string, unknown>
@@ -158,29 +169,20 @@ type Ctx = {
   setDraftInput: (id: string, text: string) => void
   setPendingApproval: (id: string, approval: Approval | null) => void
   setBusy: (id: string, busy: boolean) => void
+  /** Whether `id` is currently driving an in-flight tasks.solve.
+   *  Used by Workspace.tsx to disable the composer while the agent
+   *  is mid-run, and by closeConversation to fire solveCancel. */
+  isSolveBusy: (id: string) => boolean
 }
 
 const ConversationsContext = createContext<Ctx | null>(null)
 
-function buildTemplate(t: ZylchTask): string {
-  const name = t.contact_name || '—'
-  const email = t.contact_email || '—'
-  const urgency = t.urgency || '—'
-  const action = t.suggested_action || '—'
-  const reason = t.reason || '—'
-  return [
-    'Aiutami a gestire questa task.',
-    '',
-    `\u{1F4CB} ${name} <${email}>`,
-    `Urgenza: ${urgency}`,
-    '',
-    'Cosa fare:',
-    action,
-    '',
-    'Contesto:',
-    reason
-  ].join('\n')
-}
+// Tracks the conversation id whose tasks.solve call is in flight.
+// Module-level Map (not React state) because the solve runs as a
+// fire-and-forget Promise outside the reducer — the listener in
+// Workspace.tsx is what feeds the conversation; this map is just
+// the cancel handle used by closeConversation.
+const solvesInFlight = new Set<string>()
 
 export function ConversationsProvider({ children }: { children: ReactNode }) {
   // Resolve the profile key for localStorage on mount and remember it.
@@ -239,15 +241,37 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     savePersisted(profileKey, state)
   }, [profileKey, state])
 
+  // Mirror state into a ref so the stable-identity callbacks below can
+  // read it without re-creating themselves on every render. Without
+  // this, openTaskChat would change identity on every state update and
+  // any consumer hook calling it inside its own effect would loop.
+  const stateRef = useRef(state)
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
+
   const openTaskChat = useCallback((task: ZylchTask) => {
     const id = 'task-' + task.id
     const title = task.contact_name || task.contact_email || task.id.slice(0, 8)
-    // Source email id from task.sources.emails[0] if present — gives the LLM
-    // a direct handle instead of forcing a search_emails guess.
+    // Source email id from task.sources.emails[0] if present — kept on
+    // the conversation so free-text follow-ups (post-solve) can pass
+    // it to chat.send.
     const sourceEmailId =
       task.sources && Array.isArray(task.sources.emails) && task.sources.emails.length > 0
         ? task.sources.emails[0]
         : undefined
+
+    // If we're re-opening a task conversation that already has
+    // history (user clicked Open twice, or this was restored from
+    // localStorage after a reload), don't fire a fresh solve —
+    // single solve at a time engine-side, and the previous one
+    // already produced an answer worth keeping. The user can ask
+    // follow-ups via the composer (chat.send) without re-paying for
+    // the agent loop.
+    const existing = stateRef.current.conversations.find((c) => c.id === id)
+    const shouldStartSolve =
+      !existing || (existing.history.length === 0 && !existing.pendingApproval)
+
     dispatch({
       type: 'OPEN_TASK_CHAT',
       conv: {
@@ -255,12 +279,45 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
         title,
         taskId: task.id,
         sourceEmailId,
-        history: [],
-        draftInput: buildTemplate(task),
-        pendingApproval: null,
-        busy: false
+        history: existing?.history ?? [],
+        draftInput: '',
+        pendingApproval: existing?.pendingApproval ?? null,
+        // Busy stays true until tasks.solve resolves OR the listener
+        // sees `done` / `error`. Whichever fires first flips it back.
+        busy: shouldStartSolve
       }
     })
+
+    if (!shouldStartSolve) return
+    if (solvesInFlight.has(id)) return
+
+    solvesInFlight.add(id)
+    window.zylch.tasks
+      .solve(task.id)
+      .then((res) => {
+        if (!res?.ok) {
+          // Push an assistant bubble with the engine's error so the
+          // user sees what went wrong (most likely: no Anthropic key
+          // AND no Firebase signin — make_llm_client refuses).
+          dispatch({
+            type: 'APPEND_ASSISTANT',
+            id,
+            text: '⚠ ' + (res?.error || 'Solve failed without an error message.')
+          })
+        }
+      })
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e)
+        dispatch({
+          type: 'APPEND_ASSISTANT',
+          id,
+          text: '⚠ Solve RPC failed: ' + msg
+        })
+      })
+      .finally(() => {
+        solvesInFlight.delete(id)
+        dispatch({ type: 'SET_BUSY', id, busy: false })
+      })
   }, [])
 
   // Open a thread-only conversation (no task attached). Used by Email
@@ -289,10 +346,22 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     []
   )
 
-  const closeConversation = useCallback(
-    (id: string) => dispatch({ type: 'CLOSE', id }),
-    []
-  )
+  const closeConversation = useCallback((id: string) => {
+    // If a solve is in flight on this conversation, ask the engine to
+    // abort. Best-effort — the engine's _solve_lock releases on its
+    // own at timeout, so even if the cancel RPC fails the system
+    // recovers; we just save the user the wait.
+    if (solvesInFlight.has(id)) {
+      void window.zylch.tasks.solveCancel().catch(() => {
+        /* engine may be down or the lock may have already cleared */
+      })
+    }
+    dispatch({ type: 'CLOSE', id })
+  }, [])
+
+  const isSolveBusy = useCallback((id: string): boolean => {
+    return solvesInFlight.has(id)
+  }, [])
   const setActive = useCallback((id: string) => dispatch({ type: 'SET_ACTIVE', id }), [])
   const appendUser = useCallback(
     (id: string, text: string) => dispatch({ type: 'APPEND_USER', id, text }),
@@ -326,7 +395,8 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     appendAssistant,
     setDraftInput,
     setPendingApproval,
-    setBusy
+    setBusy,
+    isSolveBusy
   }
   return createElement(ConversationsContext.Provider, { value }, children)
 }

@@ -128,7 +128,35 @@ const api = {
         skipped_recently_reopened: number
         skipped_oversize: number
         no_llm: boolean
-      }>('tasks.dedup_now', {}, 5 * 60 * 1000)
+      }>('tasks.dedup_now', {}, 5 * 60 * 1000),
+    // Agentic solve: fires SOLVE_SYSTEM_PROMPT against the LLM with
+    // the task's pre-built context (original email + memory blobs).
+    // The result lands here only after the run completes; the live
+    // event stream arrives via the `tasks.solve.event` notification
+    // and `tasks.solve.approve` / `tasks.solve.cancel` drive
+    // approvals + abort. 10-min ceiling matches the engine's
+    // internal max_turns budget.
+    solve: (task_id: string, instructions?: string) =>
+      call<{ ok: boolean; result?: unknown; error?: string }>(
+        'tasks.solve',
+        { task_id, instructions: instructions ?? '' },
+        10 * 60 * 1000
+      ),
+    solveApprove: (
+      tool_use_id: string,
+      payload: { approved: boolean; edited_input?: Record<string, unknown> | null }
+    ) =>
+      call<{ ok: boolean }>('tasks.solve.approve', {
+        tool_use_id,
+        approved: payload.approved,
+        edited_input: payload.edited_input ?? null
+      }),
+    solveCancel: () =>
+      call<{ ok: boolean; cancelled_pending?: number; error?: string }>(
+        'tasks.solve.cancel',
+        {},
+        10000
+      )
   },
   memory: {
     reconsolidateNow: () =>

@@ -233,6 +233,18 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "group": "Personal data",
         "optional": True,
     },
+    {
+        "key": "USER_LANGUAGE",
+        "label": "Preferred language",
+        "type": "text",
+        "group": "Personal data",
+        "optional": True,
+        "help": (
+            "Two-letter code the assistant uses when talking to you: "
+            "it / en / es / fr / de. Leave empty to match the language "
+            "of the latest incoming message."
+        ),
+    },
     # ─── Documents & notes ──────────────────────────────────
     {
         "key": "DOCUMENT_PATHS",

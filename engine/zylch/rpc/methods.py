@@ -266,6 +266,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
         SOLVE_TOOLS,
         build_task_context,
         get_personal_data_section,
+        get_user_language_directive,
     )
     from zylch.services.task_executor import TaskExecutor
     from zylch.storage.storage import Storage
@@ -303,6 +304,7 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
         system = SOLVE_SYSTEM_PROMPT.format(
             user_name=user_name,
             personal_data_section=get_personal_data_section(owner_id=owner_id),
+            user_language_directive=get_user_language_directive(),
         )
 
         user_msg = (
@@ -360,6 +362,28 @@ async def tasks_solve_approve(
         return {"ok": False, "error": "no active solve"}
     ok = await ex.approve(tool_use_id, approved, edited_input)
     return {"ok": bool(ok)}
+
+
+async def tasks_solve_cancel(
+    params: Dict[str, Any],
+    notify: NotifyFn,
+) -> Any:
+    """tasks.solve.cancel() — abort the active solve.
+
+    Cancels any pending approval futures so the executor loop unwinds
+    instead of blocking until the RPC timeout. The lock is released by
+    the executor's own finally-block once it sees the cancellation.
+    """
+    ex = _active_executor
+    if ex is None:
+        return {"ok": False, "error": "no active solve"}
+    cancelled = 0
+    for fut in list(ex._pending.values()):
+        if not fut.done():
+            fut.set_exception(asyncio.CancelledError())
+            cancelled += 1
+    logger.debug(f"[rpc] tasks.solve.cancel cancelled_pending={cancelled}")
+    return {"ok": True, "cancelled_pending": cancelled}
 
 
 # ─── Chat ────────────────────────────────────────────────────
@@ -1520,6 +1544,7 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.reanalyze": tasks_reanalyze,
     "tasks.solve": tasks_solve,
     "tasks.solve.approve": tasks_solve_approve,
+    "tasks.solve.cancel": tasks_solve_cancel,
     "chat.send": chat_send,
     "chat.approve": chat_approve,
     "update.run": update_run,

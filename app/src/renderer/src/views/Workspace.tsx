@@ -6,6 +6,7 @@ import { useNarration } from '../hooks/useNarration'
 import ChatComposer, { type ChatComposerTaskContext } from '../components/ChatComposer'
 import ThreadPanel from '../components/ThreadPanel'
 import { errorMessage, isProfileLockedError, showError } from '../lib/errors'
+import type { SolveEvent } from '../types'
 
 interface Props {
   onGoToTasks?: () => void
@@ -104,6 +105,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
       if (!params || typeof params !== 'object') return
       const convId: string = params.conversation_id || 'general'
       const approval: Approval = {
+        mode: 'chat',
         toolUseId: params.tool_use_id,
         name: params.name,
         input: params.input || {},
@@ -119,6 +121,49 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
       offCtx()
     }
   }, [setPendingApproval])
+
+  // Solve events: a parallel stream to chat.pending_approval. tasks.solve
+  // runs on the *currently active* task conversation, so we route every
+  // event to active.id. Engine guarantees one solve at a time
+  // (asyncio.Lock), so there is no convId disambiguation problem here.
+  useEffect(() => {
+    const off = window.zylch.onNotification('tasks.solve.event', (event: SolveEvent) => {
+      if (!event || typeof event !== 'object') return
+      const convId = active.id
+      switch (event.type) {
+        case 'thinking':
+          if (event.text && event.text.trim()) {
+            appendAssistant(convId, event.text)
+          }
+          break
+        case 'tool_call_pending':
+          setPendingApproval(convId, {
+            mode: 'solve',
+            toolUseId: event.tool_use_id,
+            name: event.name,
+            input: event.input || {},
+            preview: event.preview || ''
+          })
+          break
+        case 'tool_result':
+          // Intentionally not rendered — the model's next `thinking`
+          // block (or absence of one before the approval card) is
+          // what the user reads. Surfacing every tool output would
+          // dump search_memory results into the chat, which is
+          // exactly the noise the new SOLVE_SYSTEM_PROMPT tries to
+          // avoid.
+          break
+        case 'done':
+          setBusy(convId, false)
+          break
+        case 'error':
+          appendAssistant(convId, '⚠ ' + (event.message || 'Solve error'))
+          setBusy(convId, false)
+          break
+      }
+    })
+    return off
+  }, [active.id, appendAssistant, setPendingApproval, setBusy])
 
   const send = async (
     text: string,
@@ -169,12 +214,20 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     }
   }
 
-  const onApproval = async (mode: 'once' | 'session' | 'deny') => {
+  const onApproval = async (decision: 'once' | 'session' | 'deny') => {
     const pending = active.pendingApproval
     if (!pending) return
     setPendingApproval(active.id, null)
     try {
-      await window.zylch.chat.approve(pending.toolUseId, { mode })
+      if (pending.mode === 'solve') {
+        // tasks.solve has no "session" concept — it's one shot.
+        // 'once' → approved=true, anything else → approved=false.
+        await window.zylch.tasks.solveApprove(pending.toolUseId, {
+          approved: decision === 'once'
+        })
+      } else {
+        await window.zylch.chat.approve(pending.toolUseId, { mode: decision })
+      }
     } catch (e: unknown) {
       if (!isProfileLockedError(e)) {
         appendAssistant(active.id, '**Approval error:** ' + errorMessage(e))
@@ -279,10 +332,10 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
         )}
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-          {active.history.length === 0 && !active.pendingApproval && (
+          {active.history.length === 0 && !active.pendingApproval && !active.busy && (
             <div className="text-brand-grey-80 text-sm">
               {active.taskId
-                ? 'Rivedi il messaggio, modificalo se vuoi, poi invialo.'
+                ? 'Chiedi un follow-up o usa il bottone Marca come fatta.'
                 : 'Ask MrCall Desktop anything about your tasks, emails, or contacts.'}
             </div>
           )}
@@ -345,6 +398,12 @@ function ApprovalCard({
   onApproveSession: () => void
   onDecline: () => void
 }) {
+  const isSolve = approval.mode === 'solve'
+  // Solve is a one-shot agentic run: there are no future invocations
+  // of this tool inside the same solve, so "Allow for session" is
+  // meaningless. Chat flow keeps the three-button shape it had.
+  const sendLabel = isSolve ? labelForSolve(approval.name) : 'Allow once'
+  const denyLabel = isSolve ? 'Annulla' : 'Deny'
   return (
     <div className="border border-brand-orange bg-brand-orange/10 rounded-lg p-4 mr-12">
       <div className="flex items-center gap-2 mb-2">
@@ -352,7 +411,7 @@ function ApprovalCard({
           {approval.name}
         </span>
         <span className="text-sm text-brand-orange font-medium">
-          Conferma richiesta
+          {isSolve ? 'Conferma per procedere' : 'Conferma richiesta'}
         </span>
       </div>
       {approval.preview && (
@@ -377,22 +436,41 @@ function ApprovalCard({
           onClick={onApproveOnce}
           className="px-3 py-1.5 text-sm bg-brand-blue text-white rounded hover:bg-brand-grey-80"
         >
-          Allow once
+          {sendLabel}
         </button>
-        <button
-          onClick={onApproveSession}
-          className="px-3 py-1.5 text-sm bg-brand-grey-80 text-white rounded hover:bg-brand-grey-80"
-          title="Auto-approve this tool for the rest of this conversation"
-        >
-          Allow for session
-        </button>
+        {!isSolve && (
+          <button
+            onClick={onApproveSession}
+            className="px-3 py-1.5 text-sm bg-brand-grey-80 text-white rounded hover:bg-brand-grey-80"
+            title="Auto-approve this tool for the rest of this conversation"
+          >
+            Allow for session
+          </button>
+        )}
         <button
           onClick={onDecline}
           className="px-3 py-1.5 text-sm bg-brand-mid-grey text-brand-black rounded hover:bg-brand-mid-grey"
         >
-          Deny
+          {denyLabel}
         </button>
       </div>
     </div>
   )
+}
+
+function labelForSolve(toolName: string): string {
+  switch (toolName) {
+    case 'send_email':
+      return 'Invia email'
+    case 'send_whatsapp':
+      return 'Invia WhatsApp'
+    case 'send_sms':
+      return 'Invia SMS'
+    case 'run_python':
+      return 'Esegui'
+    case 'update_memory':
+      return 'Aggiorna memoria'
+    default:
+      return 'Conferma'
+  }
 }

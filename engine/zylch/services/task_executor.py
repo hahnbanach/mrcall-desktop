@@ -30,13 +30,23 @@ logger = logging.getLogger(__name__)
 
 
 # Canonical set of destructive tool names that require explicit user
-# approval before execution. These are the real Tool.name values exposed
-# by ToolFactory.create_all_tools(), imported by both ChatService
-# (zylch/assistant/core.py:11) and TaskExecutor below. No aliases, no
-# legacy ghosts — the five entries here are the single source of truth.
+# approval before execution. Two surfaces consume this:
+#  - ChatService (zylch/assistant/core.py) — uses ToolFactory tool names
+#    (`send_draft`, `send_whatsapp_message`).
+#  - TaskExecutor (this file, driven by `tasks.solve`) — uses the
+#    flatter SOLVE_TOOLS naming (`send_email`, `send_whatsapp`) defined
+#    in zylch/services/solve_constants.py.
+# Both name shapes are listed here so the gate fires in either surface.
+# Adding a new write-effect tool to SOLVE_TOOLS or ToolFactory MUST also
+# add it here; the naming-coherence test in tests/services covers this.
 APPROVAL_TOOLS = {
+    # ChatService (factory) names
     "send_draft",
     "send_whatsapp_message",
+    # TaskExecutor (solve) names
+    "send_email",
+    "send_whatsapp",
+    # Shared
     "send_sms",
     "update_memory",
     "run_python",

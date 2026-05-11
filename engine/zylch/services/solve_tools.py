@@ -22,7 +22,6 @@ def execute_tool(
         "search_emails": _search_emails,
         "search_memory": _search_memory,
         "update_memory": _update_memory,
-        "draft_email": _draft_email,
         "run_python": _run_python,
         "send_email": _send_email,
         "download_attachment": _download_attachment,
@@ -227,17 +226,6 @@ def _download_attachment(
         return "\n".join(lines)
     except Exception as e:
         return f"Download failed: {e}"
-
-
-# ─── Composing / drafting ────────────────────────────
-
-
-def _draft_email(args: Dict) -> str:
-    """Format a draft email for display."""
-    to = args.get("to", "")
-    subject = args.get("subject", "")
-    body = args.get("body", "")
-    return f"DRAFT EMAIL:\n" f"To: {to}\n" f"Subject: {subject}\n\n" f"{body}"
 
 
 # ─── Code execution ─────────────────────────────────
