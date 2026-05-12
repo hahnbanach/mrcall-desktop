@@ -1,7 +1,7 @@
 {
   "name": "mrcall-desktop",
   "productName": "MrCall Desktop",
-  "version": "0.1.32",
+  "version": "0.1.33",
   "description": "MrCall Desktop (Electron + React)",
   "main": "out/main/index.js",
   "author": "Mario Alemi",
