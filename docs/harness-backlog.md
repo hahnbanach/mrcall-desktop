@@ -6,6 +6,26 @@ materialises) `app/docs/harness-backlog.md`.
 
 ## Open
 
+- [ ] **No E2E test for multi-window Firebase auth flows.**
+  Discovered: 2026-05-12 (during the pre-Firebase legacy-code sweep)
+  Impact: two distinct identity bugs in two months — IndexedDB cross-window
+  bleed (2026-05-08: legacy window inherited the proper window's
+  `auth.currentUser`) and the "no identity at all" state in legacy
+  windows post-rollback (2026-05-12). Both were caught only by Mario
+  manually opening two BrowserWindows and visually checking the
+  IdentityBanner. With per-window `inMemoryPersistence` and
+  UID-keyed bindProfile, the invariant is "one window = one signin =
+  one profile dir, never bleeds, never null on the signed-in side" —
+  but nothing automated enforces this. A regression here is silent
+  and security-relevant (wrong account seeing wrong data).
+  Recommendation: a Playwright/Spectron Electron integration test
+  that boots the app, signs in as user A in window 1, opens a second
+  window via "Other profiles" → user B, signs in as user B, and
+  asserts that each window's `IdentityBanner` shows the right
+  identity AND that `profile.current()` returns the matching dir id.
+  Today the closest thing we have is `npm run typecheck`, which
+  catches signature drift but not semantic identity invariants.
+
 - [ ] **No CI gate prevents committing the OAuth Client secret.**
   Discovered: 2026-05-02
   Impact: GitHub Secret Scanning catches the `GOCSPX-` prefix on push
