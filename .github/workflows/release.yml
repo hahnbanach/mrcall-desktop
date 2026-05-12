@@ -100,7 +100,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .
-          pip install pyinstaller
+          # PyInstaller is pinned because 6.20.0 segfaults (0xC0000005)
+          # inside the isolated subprocess while enumerating neonize's
+          # submodules on Windows — broke Win-x64 builds from v0.1.31
+          # onwards. 6.13.0 is the last 6.x line known to work end-to-end.
+          # If a future release of PyInstaller fixes the regression, raise
+          # the pin or remove it; do not just bump unpinned again.
+          pip install "pyinstaller==6.13.0"
 
       - name: Build sidecar (PyInstaller)
         shell: bash
