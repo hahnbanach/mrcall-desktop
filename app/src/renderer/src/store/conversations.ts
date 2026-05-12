@@ -90,6 +90,15 @@ export type Conversation = {
   draftInput: string
   pendingApproval: Approval | null
   busy: boolean
+  /**
+   * Mirror of `task.completed_at != null` at the time the conversation
+   * was opened. Drives the read-only UX on closed tasks: composer is
+   * disabled, no solve is fired, header button switches to "Riapri".
+   * Refreshed on every openTaskChat call and by the post-mount
+   * backfill so legacy convs converge to the right state. Undefined
+   * on non-task conversations (general chat, thread-only convs).
+   */
+  taskCompleted?: boolean
 }
 
 type State = {
@@ -188,6 +197,10 @@ type Ctx = {
    *  Used by Workspace.tsx to disable the composer while the agent
    *  is mid-run, and by closeConversation to fire solveCancel. */
   isSolveBusy: (id: string) => boolean
+  /** Patch arbitrary Conversation fields by id without changing
+   *  activeId — exposed for Workspace to flip taskCompleted after a
+   *  Riapri click. Reducer-level PATCH_CONV action under the hood. */
+  patchConversation: (id: string, patch: Partial<Conversation>) => void
 }
 
 const ConversationsContext = createContext<Ctx | null>(null)
@@ -265,36 +278,51 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     stateRef.current = state
   }, [state])
 
-  // Backfill `Conversation.threadId` on any task-conv that lacks one.
-  // This covers legacy convs persisted before threadId was added to
-  // the Conversation shape — without this they'd render with an empty
-  // Source panel until the user opens the task from the Tasks tab
-  // (which refreshes threadId via openTaskChat). Single tasks.list
-  // call, fire-and-forget; failures degrade silently to the
-  // pre-backfill state.
+  // Backfill `Conversation.threadId` and `Conversation.taskCompleted`
+  // on legacy task-convs that predate these fields. Without this they
+  // would render with an empty Source panel and an always-active
+  // composer (since taskCompleted defaults to undefined, falsy), even
+  // for tasks that are already closed.
+  //
+  // Single tasks.list call, fire-and-forget. Patches only fields that
+  // are demonstrably wrong/missing — never overwrites a fresh value
+  // already set by a more recent openTaskChat. Failures degrade
+  // silently; the user clicking Open from the Tasks tab refreshes
+  // both fields via openTaskChat.
   useEffect(() => {
     if (profileKey === 'unknown') return
-    const needBackfill = stateRef.current.conversations.filter(
-      (c) => c.id.startsWith('task-') && c.taskId && !c.threadId
+    const taskConvs = stateRef.current.conversations.filter(
+      (c) => c.id.startsWith('task-') && c.taskId
     )
-    if (needBackfill.length === 0) return
+    const needsAnyBackfill = taskConvs.some(
+      (c) => !c.threadId || typeof c.taskCompleted !== 'boolean'
+    )
+    if (!needsAnyBackfill) return
     let cancelled = false
     window.zylch.tasks
       .list({ include_completed: true })
       .then((tasks) => {
         if (cancelled) return
         const byId = new Map(tasks.map((t) => [t.id, t]))
-        for (const c of needBackfill) {
+        for (const c of taskConvs) {
           const t = c.taskId ? byId.get(c.taskId) : undefined
-          const tid = t?.sources?.thread_id
-          if (typeof tid === 'string' && tid) {
-            dispatch({ type: 'PATCH_CONV', id: c.id, patch: { threadId: tid } })
+          if (!t) continue
+          const patch: Partial<Conversation> = {}
+          const tid = t.sources?.thread_id
+          if (!c.threadId && typeof tid === 'string' && tid) {
+            patch.threadId = tid
+          }
+          if (typeof c.taskCompleted !== 'boolean') {
+            patch.taskCompleted = !!t.completed_at
+          }
+          if (Object.keys(patch).length > 0) {
+            dispatch({ type: 'PATCH_CONV', id: c.id, patch })
           }
         }
       })
       .catch(() => {
-        /* sidecar may be down — leave convs without threadId, they'll
-           get one the next time the user opens them from the Tasks tab */
+        /* sidecar may be down — leave convs as-is, they'll converge
+           the next time the user opens them from the Tasks tab */
       })
     return () => {
       cancelled = true
@@ -323,6 +351,10 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
       task.sources && typeof task.sources.thread_id === 'string'
         ? task.sources.thread_id
         : undefined
+    // Read-only marker: closed tasks open in view-only mode (history
+    // + source visible, composer disabled, no solve fired). User
+    // explicitly Reopens to act again.
+    const taskCompleted = !!task.completed_at
 
     // If we're re-opening a task conversation that already has
     // history (user clicked Open twice, or this was restored from
@@ -331,9 +363,12 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     // already produced an answer worth keeping. The user can ask
     // follow-ups via the composer (chat.send) without re-paying for
     // the agent loop.
+    // Closed tasks are read-only: never fire a solve regardless of
+    // history. To act, the user clicks Riapri first.
     const existing = stateRef.current.conversations.find((c) => c.id === id)
     const shouldStartSolve =
-      !existing || (existing.history.length === 0 && !existing.pendingApproval)
+      !taskCompleted &&
+      (!existing || (existing.history.length === 0 && !existing.pendingApproval))
 
     dispatch({
       type: 'OPEN_TASK_CHAT',
@@ -348,7 +383,8 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
         pendingApproval: existing?.pendingApproval ?? null,
         // Busy stays true until tasks.solve resolves OR the listener
         // sees `done` / `error`. Whichever fires first flips it back.
-        busy: shouldStartSolve
+        busy: shouldStartSolve,
+        taskCompleted
       }
     })
 
@@ -426,6 +462,12 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
   const isSolveBusy = useCallback((id: string): boolean => {
     return solvesInFlight.has(id)
   }, [])
+
+  const patchConversation = useCallback(
+    (id: string, patch: Partial<Conversation>) =>
+      dispatch({ type: 'PATCH_CONV', id, patch }),
+    []
+  )
   const setActive = useCallback((id: string) => dispatch({ type: 'SET_ACTIVE', id }), [])
   const appendUser = useCallback(
     (id: string, text: string) => dispatch({ type: 'APPEND_USER', id, text }),
@@ -460,7 +502,8 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     setDraftInput,
     setPendingApproval,
     setBusy,
-    isSolveBusy
+    isSolveBusy,
+    patchConversation
   }
   return createElement(ConversationsContext.Provider, { value }, children)
 }

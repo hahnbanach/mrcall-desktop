@@ -36,7 +36,8 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     appendAssistant,
     setDraftInput,
     setPendingApproval,
-    setBusy
+    setBusy,
+    patchConversation
   } = useConversations()
   const { activeThreadId, activeTaskId, setActiveThreadId, setActiveTaskId } = useThread()
 
@@ -293,6 +294,24 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     }
   }
 
+  const reopen = async () => {
+    if (!active.taskId) return
+    setCompleting(true)
+    try {
+      await window.zylch.tasks.reopen(active.taskId)
+      // Flip read-only off so composer unlocks immediately. We do NOT
+      // fire a fresh solve here: Reopen means the user wants control
+      // back, not necessarily a new agent run. To trigger the agent
+      // they just write something (chat.send) or close+open from
+      // Tasks tab.
+      patchConversation(active.id, { taskCompleted: false })
+    } catch (e: unknown) {
+      showError(e, 'Reopen failed:')
+    } finally {
+      setCompleting(false)
+    }
+  }
+
   // Decide panel expansion for the current conversation. User overrides
   // stored in `panelExpanded` win; otherwise use the default rule:
   // expanded whenever we have a thread to show.
@@ -346,11 +365,15 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
           <div className="font-semibold truncate">{active.title}</div>
           {active.taskId && (
             <button
-              onClick={markDone}
+              onClick={active.taskCompleted ? reopen : markDone}
               disabled={completing}
               className="px-3 py-1.5 text-sm bg-brand-blue text-white rounded hover:bg-brand-grey-80 disabled:bg-brand-mid-grey"
             >
-              {completing ? 'Attendere…' : 'Marca come fatta'}
+              {completing
+                ? 'Attendere…'
+                : active.taskCompleted
+                  ? 'Riapri'
+                  : 'Marca come fatta'}
             </button>
           )}
         </header>
@@ -374,7 +397,9 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
           {active.history.length === 0 && !active.pendingApproval && !active.busy && (
             <div className="text-brand-grey-80 text-sm">
               {active.taskId
-                ? 'Chiedi un follow-up o usa il bottone Marca come fatta.'
+                ? active.taskCompleted
+                  ? 'Task chiusa. Riapri per scrivere o lanciare l’agente.'
+                  : 'Chiedi un follow-up o usa il bottone Marca come fatta.'
                 : 'Ask MrCall Desktop anything about your tasks, emails, or contacts.'}
             </div>
           )}
@@ -416,8 +441,12 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
         <ChatComposer
           key={active.id}
           onSubmit={send}
-          disabled={!!active.busy}
-          placeholder="Scrivi un messaggio…"
+          disabled={!!active.busy || !!active.taskCompleted}
+          placeholder={
+            active.taskCompleted
+              ? 'Task chiusa — riaprila per scrivere.'
+              : 'Scrivi un messaggio…'
+          }
           taskContext={{ taskId: active.taskId, emailId: active.sourceEmailId }}
           initialText={active.draftInput}
         />
