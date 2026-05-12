@@ -3038,7 +3038,7 @@ async def _handle_memory_train(
     storage, owner_id: str, channel: str, user_email: str
 ) -> str:
     """Train memory extraction agent for specified channel."""
-    from zylch.agents.trainers import EmailMemoryAgentTrainer
+    from zylch.agents.trainers import MessageMemoryAgentTrainer
     from zylch.llm import try_make_llm_client
 
     if try_make_llm_client() is None:
@@ -3063,9 +3063,9 @@ Please ensure your account is properly connected via `/connect`."""
                 results.append("📧 **Email:** No emails found - skipped")
                 continue
 
-            builder = EmailMemoryAgentTrainer(storage, owner_id, user_email)
-            agent_prompt, metadata = await builder.build_memory_email_prompt()
-            storage.store_agent_prompt(owner_id, "memory_email", agent_prompt, metadata)
+            builder = MessageMemoryAgentTrainer(storage, owner_id, user_email)
+            agent_prompt, metadata = await builder.build_memory_message_prompt()
+            storage.store_agent_prompt(owner_id, "memory_message", agent_prompt, metadata)
             results.append(
                 f"📧 **Email:** Agent created ({metadata.get('threads_analyzed', 0)} threads analyzed)"
             )
@@ -3120,9 +3120,14 @@ async def _handle_memory_run(storage, owner_id: str, channel: str) -> str:
 Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
 to use MrCall credits."""
 
-    # Check for custom agent before starting job
+    # Check for custom agent before starting job. The new key is
+    # `memory_message` (Phase 2b, channel-aware); older installs may
+    # still carry the legacy `memory_email` key — accept either.
     if channel in ["email", "all"]:
-        if not storage.get_agent_prompt(owner_id, "memory_email"):
+        if not (
+            storage.get_agent_prompt(owner_id, "memory_message")
+            or storage.get_agent_prompt(owner_id, "memory_email")
+        ):
             return """⚠️ **No memory agent found for email**
 
 Train your memory agent first:

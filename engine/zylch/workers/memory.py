@@ -64,8 +64,18 @@ def _normalise_phone(raw: str) -> Optional[str]:
     when present (or upgrades a leading '00' to '+'). Returns None for
     inputs that produce <8 digits — they're either placeholders ("none",
     "unknown") or noise.
+
+    Defense-in-depth (whatsapp-pipeline-parity Phase 2c): inputs
+    containing ``@`` are rejected outright. The legacy email-only memory
+    prompt sometimes mislabels a WhatsApp ``<digits>@lid`` pseudonym as
+    ``Phone: <digits>@lid``; without this guard the digit-strip would
+    happily index the LID's numeric local-part as a phone, polluting
+    the cross-channel index with bogus matches.
     """
     if not raw:
+        return None
+    if "@" in raw:
+        # LID-shaped or email-shaped value labelled as a phone — refuse.
         return None
     s = raw.strip()
     # Remove embedded narrative tails like "+39 339 6584014 (cell)"
@@ -128,7 +138,16 @@ def _parse_identifiers_block(entity_content: str) -> List[Tuple[str, str]]:
         m = _PHONE_LABEL_RE.match(s)
         if m:
             for piece in m.group(2).split(","):
-                norm = _normalise_phone(piece)
+                p = piece.strip()
+                # Recovery path: the legacy email-only prompt sometimes
+                # writes a WhatsApp LID into the Phone: field. Reroute
+                # anything that looks like a JID (contains '@lid') to
+                # the LID kind so cross-channel match still gets the
+                # signal.
+                if "@lid" in p.lower():
+                    out.append(("lid", p.lower()))
+                    continue
+                norm = _normalise_phone(p)
                 if norm:
                     out.append(("phone", norm))
             continue
@@ -244,29 +263,35 @@ class MemoryWorker:
     def _get_extraction_prompt(self) -> Optional[str]:
         """Get extraction prompt - user-specific only.
 
-        Loads user's custom prompt from DB on first call, caches for subsequent calls.
-        Returns None if no custom prompt exists (user must run /agent train email first).
+        Loads user's custom prompt from DB on first call, caches for
+        subsequent calls. Returns None if no custom prompt exists
+        (user must train it via /agent train memory or via the
+        process pipeline's auto-train).
+
+        Reads ``memory_message`` first (the channel-aware key, since
+        whatsapp-pipeline-parity Phase 2b on 2026-05-08), falls back
+        to the legacy ``memory_email`` key for installs that haven't
+        retrained since the rename — these are still email-only
+        compatible because the legacy prompt's #IDENTIFIERS section
+        was already structured.
 
         Returns:
-            The extraction prompt, or None if not configured
+            The extraction prompt, or None if not configured.
         """
         if not self._custom_prompt_loaded:
-            raw = self.storage.get_agent_prompt(
-                self.owner_id,
-                "memory_email",
-            )
+            raw = self.storage.get_agent_prompt(self.owner_id, "memory_message")
+            source_key = "memory_message"
+            if not (raw and raw.strip()):
+                raw = self.storage.get_agent_prompt(self.owner_id, "memory_email")
+                source_key = "memory_email"
             # Treat empty string as None
             self._custom_prompt = raw if raw and raw.strip() else None
             self._custom_prompt_loaded = True
 
             if self._custom_prompt:
-                logger.info(
-                    "Using user's custom memory_email prompt",
-                )
+                logger.info(f"Using user's custom {source_key} prompt")
             else:
-                logger.debug(
-                    "No custom prompt found — will auto-train",
-                )
+                logger.debug("No custom prompt found — will auto-train")
 
         return self._custom_prompt
 
@@ -340,6 +365,7 @@ class MemoryWorker:
         email_id: str,
         entity_num: int,
         total_entities: int,
+        source_kind: str = "email",
     ) -> None:
         """Upsert a single entity blob with reconsolidation.
 
@@ -536,20 +562,30 @@ class MemoryWorker:
             )
             linked_blob_id = str(blob["id"])
 
-        # Write the email_blobs association (Fase 3.1). Idempotent on
-        # the (email_id, blob_id) PK — a re-run on the same email is a
-        # no-op. Failures are logged but never raise: the blob already
-        # exists, the index is a denorm hint and not load-bearing.
+        # Write the channel-specific (source_id, blob_id) join row.
+        # Idempotent — a re-run on the same source is a no-op. Failures
+        # are logged but never raise: the blob already exists, the
+        # index is a denorm hint and not load-bearing.
+        # `source_kind` controls which join table receives the row:
+        # `"email"` → email_blobs (Fase 3.1, default for backward compat),
+        # `"whatsapp"` → whatsapp_blobs (Phase 2c, whatsapp-pipeline-parity).
         if linked_blob_id and email_id:
             try:
-                self.storage.add_email_blob_link(
-                    owner_id=self.owner_id,
-                    email_id=email_id,
-                    blob_id=linked_blob_id,
-                )
+                if source_kind == "whatsapp":
+                    self.storage.add_whatsapp_blob_link(
+                        owner_id=self.owner_id,
+                        whatsapp_message_id=email_id,
+                        blob_id=linked_blob_id,
+                    )
+                else:
+                    self.storage.add_email_blob_link(
+                        owner_id=self.owner_id,
+                        email_id=email_id,
+                        blob_id=linked_blob_id,
+                    )
             except Exception as e:
                 logger.warning(
-                    f"[memory] add_email_blob_link({email_id}, {linked_blob_id}) failed: {e}"
+                    f"[memory] add_{source_kind}_blob_link({email_id}, {linked_blob_id}) failed: {e}"
                 )
 
         # Write person_identifiers rows (whatsapp-pipeline-parity, Phase 1a).
@@ -791,6 +827,257 @@ class MemoryWorker:
             else:
                 logging.warning("ENTITIES NOT ADDED: empty or no #IDENTIFIER")
         return entities
+
+    # =========================================================
+    # WhatsApp message processing (whatsapp-pipeline-parity Phase 2c)
+    # =========================================================
+
+    # Skip messages shorter than this — single emoji, "ok", "ciao" — that
+    # carry no extractable identity / context. Same threshold the deleted
+    # 2026-04 skeleton used; we still mark them as processed so we don't
+    # re-evaluate every Update.
+    _WA_MIN_TEXT_LEN = 20
+
+    async def process_whatsapp_message(self, message: Dict) -> bool:
+        """Process one WhatsApp message: extract entities, upsert blobs,
+        write whatsapp_blobs link, mark processed.
+
+        Mirror of ``process_email``. The per-message LLM prompt is the
+        same channel-aware ``memory_message`` prompt the email path uses
+        (Phase 2b); only the envelope shape passed as the user message
+        differs.
+
+        v1: 1-on-1 messages only (the storage helper already filters
+        ``is_group=False``).
+        """
+        wa_id = message.get("id", "unknown")
+        try:
+            text = (message.get("text") or "").strip()
+            if len(text) < self._WA_MIN_TEXT_LEN:
+                logger.debug(
+                    f"[memory] WA {wa_id} skipped — text too short "
+                    f"(len={len(text)} < {self._WA_MIN_TEXT_LEN})"
+                )
+                self.storage.mark_whatsapp_memory_processed(self.owner_id, wa_id)
+                return True
+
+            entities = self._extract_entities_for_message(
+                envelope=self._format_whatsapp_data(message),
+                channel_label="WhatsApp",
+            )
+            if not entities:
+                logger.debug(f"[memory] WA {wa_id} produced 0 entities — marking processed")
+                self.storage.mark_whatsapp_memory_processed(self.owner_id, wa_id)
+                return True
+
+            ts = message.get("timestamp", "unknown")
+            sender_label = (
+                message.get("sender_name")
+                or message.get("sender_jid")
+                or "unknown"
+            )
+            event_desc = f"Extracted from WhatsApp message {wa_id} ({ts}) from {sender_label}"
+
+            for i, entity_content in enumerate(entities):
+                await self._upsert_entity(
+                    entity_content=entity_content,
+                    event_desc=event_desc,
+                    email_id=wa_id,
+                    entity_num=i + 1,
+                    total_entities=len(entities),
+                    source_kind="whatsapp",
+                )
+
+            self.storage.mark_whatsapp_memory_processed(self.owner_id, wa_id)
+            return True
+
+        except Exception as e:
+            logger.error(f"Error processing WhatsApp message {wa_id}: {e}", exc_info=True)
+            return False
+
+    async def process_whatsapp_batch(
+        self,
+        messages: List[Dict],
+        concurrency: int = 5,
+    ) -> int:
+        """Process a batch of WhatsApp messages with bounded concurrency.
+
+        Same shape as ``process_batch`` for emails: 3 consecutive failures
+        abort the batch (the failing API key / quota will not recover
+        within a few hundred ms, hammering it just spreads the error).
+        """
+        import asyncio
+
+        if not messages:
+            return 0
+        logger.info(
+            f"Processing batch of {len(messages)} WA messages (concurrency={concurrency})"
+        )
+        sem = asyncio.Semaphore(concurrency)
+        processed = 0
+        failures = 0
+        stop = False
+
+        async def _process_one(msg: Dict):
+            nonlocal processed, failures, stop
+            if stop:
+                return
+            async with sem:
+                if stop:
+                    return
+                ok = await self.process_whatsapp_message(msg)
+                if ok:
+                    processed += 1
+                    failures = 0
+                else:
+                    failures += 1
+                    if failures >= 3:
+                        logger.error(
+                            "3 consecutive WA failures — stopping batch (check API key)"
+                        )
+                        stop = True
+
+        await asyncio.gather(
+            *[_process_one(m) for m in messages],
+            return_exceptions=True,
+        )
+        logger.info(f"WA batch complete: {processed}/{len(messages)} processed")
+        return processed
+
+    def _format_whatsapp_data(self, message: Dict) -> str:
+        """Render a WhatsApp message as the channel-aware envelope the
+        Phase 2b memory_message prompt expects.
+
+        Mirror of ``_format_email_data`` in shape — envelope first, then
+        a blank line, then the body — so the cached-system extraction
+        path can hand it straight to the LLM as a user message.
+
+        LID resolution: when the sender_jid is a privacy-mode
+        ``<digits>@lid``, look up the contact in ``whatsapp_contacts``
+        (populated locally by ``WhatsAppSyncService.sync_lid_contacts``
+        from neonize's ``whatsmeow_lid_map``). If a real phone is
+        resolved, the envelope carries BOTH ``Phone:`` and ``LID:`` so
+        the LLM-generated #IDENTIFIERS can drive cross-channel match
+        against email-derived blobs that share the same phone.
+        """
+        sender_jid = message.get("sender_jid") or ""
+        sender_name = message.get("sender_name") or ""
+        ts = message.get("timestamp") or "unknown"
+        text = message.get("text") or ""
+
+        # Resolve the sender phone for the From line. WA stores the JID
+        # canonicalised: digits + '@s.whatsapp.net' for real phone numbers,
+        # digits + '@lid' for privacy-mode pseudonyms.
+        phone = ""
+        lid = ""
+        if "@s.whatsapp.net" in sender_jid:
+            digits = sender_jid.split("@", 1)[0]
+            if digits:
+                phone = "+" + digits
+        elif "@lid" in sender_jid:
+            lid = sender_jid
+            # Resolve LID → real phone via whatsapp_contacts. Critical
+            # for cross-channel identity: an email blob about Carmine
+            # carries Phone: +393395... and a WhatsApp message from
+            # Carmine arrives with sender_jid=<lid>@lid. Without this
+            # lookup the WA blob can't match the email blob.
+            try:
+                contact = self.storage.get_whatsapp_contact_by_jid(self.owner_id, sender_jid)
+            except Exception as e:
+                logger.warning(f"[memory] LID resolve failed for {sender_jid}: {e}")
+                contact = None
+            if contact:
+                resolved = (contact.get("phone_number") or "").strip()
+                if resolved.startswith("+"):
+                    phone = resolved
+                if not sender_name:
+                    sender_name = (
+                        contact.get("name")
+                        or contact.get("push_name")
+                        or sender_name
+                    )
+
+        # Build the From line: prefer "<Name> (<phone>)" when both are
+        # present. Drop the phone when only the LID is known — emitting
+        # `+<lid>` would confuse the LLM into producing a bogus Phone:
+        # in #IDENTIFIERS.
+        if sender_name and phone:
+            from_line = f"From: {sender_name} ({phone})"
+        elif sender_name:
+            from_line = f"From: {sender_name}"
+        elif phone:
+            from_line = f"From: {phone}"
+        elif lid:
+            from_line = f"From: {lid}"
+        else:
+            from_line = "From: unknown"
+
+        # Contact line: stable identifier the worker uses internally,
+        # mirrors the email path's `Contact: <email>`. Prefer the phone
+        # when known, fall back to the LID.
+        contact_value = phone or lid or sender_name or "unknown"
+
+        envelope = (
+            "Channel: WhatsApp\n"
+            f"{from_line}\n"
+            f"At: {ts}\n"
+            "Group: (1-on-1)\n"
+            f"Contact: {contact_value}\n"
+        )
+        # Explicit Phone/LID lines below the From hint help the LLM emit
+        # them in #IDENTIFIERS without inferring from prose. Both are
+        # emitted when both are known — the email-side identifier index
+        # keys on Phone, the future MrCall integration may key on LID.
+        if phone:
+            envelope += f"Phone: {phone}\n"
+        if lid:
+            envelope += f"LID: {lid}\n"
+
+        return envelope + "\n" + text
+
+    def _extract_entities_for_message(
+        self,
+        envelope: str,
+        channel_label: str,
+    ) -> List[str]:
+        """Run the cached-system memory_message prompt on a generic
+        message envelope (channel-agnostic). Returns the parsed entity
+        blobs; empty list when the LLM returns SKIP / fails / has no
+        prompt configured.
+
+        This is the channel-aware sibling of ``_extract_entities``; the
+        latter still owns the legacy email-only ``.format()`` placeholder
+        path for prompts that pre-date Phase 2b.
+        """
+        try:
+            prompt_template = self._get_extraction_prompt()
+            if not prompt_template:
+                logger.warning(f"Skipping {channel_label} extraction — no custom prompt")
+                return []
+
+            system = [
+                {
+                    "type": "text",
+                    "text": prompt_template,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+            user_text = f"Analyze this message:\n\n{envelope}"
+            response = self.client.create_message_sync(
+                system=system,
+                messages=[{"role": "user", "content": user_text}],
+                max_tokens=1024,
+            )
+            raw_output = response.content[0].text.strip()
+            if raw_output.upper() == "SKIP":
+                return []
+            return self._parse_entities(raw_output)
+        except Exception as e:
+            logger.error(f"Failed to extract entities ({channel_label}): {e}")
+            err_str = str(e).lower()
+            if "401" in err_str or "authentication" in err_str:
+                raise
+            return []
 
     async def process_calendar_event(self, event: Dict) -> bool:
         """Process single calendar event to extract and store facts.
@@ -1084,100 +1371,6 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
                     break
 
         logger.info(f"MrCall batch complete: {processed}/{len(conversations)} processed")
-        return processed
-
-    # -- WhatsApp message processing -----------------------------------
-
-    async def process_whatsapp_message(self, message: Dict) -> bool:
-        """Process single WhatsApp message to extract and store entities.
-
-        Args:
-            message: Message dict from whatsapp_messages table
-
-        Returns:
-            True if processed successfully
-        """
-        msg_id = message.get("id", "unknown")
-        try:
-            text = message.get("text", "")
-            if not text or len(text) < 20:
-                # Skip very short messages (e.g. "ok", "si")
-                self.storage.mark_whatsapp_memory_processed(self.owner_id, msg_id)
-                return True
-
-            sender = message.get("sender_name") or message.get("sender_jid", "unknown")
-            is_from_me = message.get("is_from_me", False)
-            timestamp = message.get("timestamp", "unknown")
-
-            direction = "sent to" if is_from_me else "received from"
-            event_desc = f"WhatsApp message {direction} {sender} on {timestamp}"
-
-            # For WhatsApp, we create a simple entity blob per significant message
-            # The LLM will merge with existing blobs for the same person
-            namespace = f"PERSON:{sender}"
-            content = f"WhatsApp ({timestamp}): {text}"
-
-            # Check if blob already exists for this person
-            existing_blobs = self.hybrid_search.find_candidates_for_reconsolidation(
-                owner_id=self.owner_id,
-                content=sender,
-                namespace=namespace,
-                limit=1,
-            )
-
-            if existing_blobs:
-                # Merge with existing blob
-                existing = existing_blobs[0]
-                merged = self.llm_merge.merge(existing.content, content)
-
-                if merged and not ("INSERT" in merged.upper() and len(merged) < 10):
-                    self.blob_storage.update_blob(
-                        blob_id=existing.blob_id,
-                        owner_id=self.owner_id,
-                        content=merged,
-                        event_description=event_desc,
-                    )
-                else:
-                    self.blob_storage.store_blob(
-                        owner_id=self.owner_id,
-                        namespace=namespace,
-                        content=content,
-                        event_description=event_desc,
-                    )
-            else:
-                # Create new blob
-                self.blob_storage.store_blob(
-                    owner_id=self.owner_id,
-                    namespace=namespace,
-                    content=content,
-                    event_description=event_desc,
-                )
-
-            self.storage.mark_whatsapp_memory_processed(self.owner_id, msg_id)
-            return True
-
-        except Exception as e:
-            logger.error(f"Error processing WhatsApp message {msg_id}: {e}")
-            return False
-
-    async def process_whatsapp_batch(self, messages: List[Dict]) -> int:
-        """Process batch of WhatsApp messages for memory extraction.
-
-        Args:
-            messages: List of message dicts from whatsapp_messages
-
-        Returns:
-            Number of successfully processed messages
-        """
-        logger.info(f"Processing batch of {len(messages)} WhatsApp messages")
-        processed = 0
-
-        for msg in messages:
-            success = await self.process_whatsapp_message(msg)
-            if success:
-                processed += 1
-
-        logger.info(f"WhatsApp batch complete: {processed}/{len(messages)} processed")
         return processed
 
     def _extract_mrcall_entities(self, conversation: Dict) -> List[str]:

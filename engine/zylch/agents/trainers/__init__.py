@@ -11,12 +11,13 @@ MrCall via StarChat — see `zylch.tools.starchat_firebase` and
 
 from .base import BaseAgentTrainer
 from .emailer import EmailerAgentTrainer
-from .memory_email import EmailMemoryAgentTrainer
+from .memory_message import EmailMemoryAgentTrainer, MessageMemoryAgentTrainer
 from .task_email import EmailTaskAgentTrainer
 
 __all__ = [
     "BaseAgentTrainer",
     "EmailerAgentTrainer",
     "EmailMemoryAgentTrainer",
+    "MessageMemoryAgentTrainer",
     "EmailTaskAgentTrainer",
 ]

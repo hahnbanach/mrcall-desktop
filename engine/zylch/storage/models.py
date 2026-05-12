@@ -273,6 +273,24 @@ class CalendarBlob(Base):
     created_at = Column(DateTime, default=_utcnow)
 
 
+class WhatsAppBlob(Base):
+    __tablename__ = "whatsapp_blobs"
+
+    whatsapp_message_id = Column(
+        String(36),
+        ForeignKey("whatsapp_messages.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    blob_id = Column(
+        String(36),
+        ForeignKey("blobs.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    owner_id = Column(Text, nullable=False, index=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+
 # -------------------------------------------------------------------
 # PERSON IDENTIFIERS — cross-channel identity index
 # -------------------------------------------------------------------

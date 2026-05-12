@@ -774,6 +774,68 @@ class Storage:
             logger.error(f"get_blobs_for_event({event_id}) failed: {e}")
             return []
 
+    def add_whatsapp_blob_link(
+        self,
+        owner_id: str,
+        whatsapp_message_id: str,
+        blob_id: str,
+    ) -> bool:
+        """Idempotent (whatsapp_message_id, blob_id) link. Returns True when inserted."""
+        if not (owner_id and whatsapp_message_id and blob_id):
+            return False
+        from zylch.storage.models import WhatsAppBlob
+
+        try:
+            with get_session() as session:
+                existing = (
+                    session.query(WhatsAppBlob)
+                    .filter(
+                        WhatsAppBlob.whatsapp_message_id == whatsapp_message_id,
+                        WhatsAppBlob.blob_id == blob_id,
+                    )
+                    .one_or_none()
+                )
+                if existing:
+                    return False
+                row = WhatsAppBlob(
+                    whatsapp_message_id=whatsapp_message_id,
+                    blob_id=blob_id,
+                    owner_id=owner_id,
+                )
+                session.add(row)
+                session.flush()
+                return True
+        except Exception as e:
+            logger.error(
+                f"add_whatsapp_blob_link({whatsapp_message_id}, {blob_id}) failed: {e}"
+            )
+            return False
+
+    def get_blobs_for_whatsapp_message(
+        self,
+        owner_id: str,
+        whatsapp_message_id: str,
+    ) -> List[str]:
+        """Blob ids extracted FROM the given WhatsApp message."""
+        if not whatsapp_message_id:
+            return []
+        from zylch.storage.models import WhatsAppBlob
+
+        try:
+            with get_session() as session:
+                rows = (
+                    session.query(WhatsAppBlob.blob_id)
+                    .filter(
+                        WhatsAppBlob.owner_id == owner_id,
+                        WhatsAppBlob.whatsapp_message_id == whatsapp_message_id,
+                    )
+                    .all()
+                )
+                return [str(r[0]) for r in rows]
+        except Exception as e:
+            logger.error(f"get_blobs_for_whatsapp_message({whatsapp_message_id}) failed: {e}")
+            return []
+
     # ==========================================
     # PERSON IDENTIFIERS — cross-channel identity
     # ==========================================
@@ -960,9 +1022,9 @@ class Storage:
 
         - ``person_identifiers`` rows (cross-channel match would lose
           the dup's email/phone/lid),
-        - ``email_blobs`` / ``calendar_blobs`` rows (F7 topical-sibling
-          lookup would lose the link "this email contributed to that
-          blob"),
+        - ``email_blobs`` / ``calendar_blobs`` / ``whatsapp_blobs``
+          rows (F7 topical-sibling lookup would lose the link "this
+          email/event/WA-message contributed to that blob"),
         - dangling references in ``task_items.sources.blobs``
           (`get_open_tasks_by_blobs` would silently miss tasks whose
           stored blob_id no longer exists).
@@ -979,6 +1041,7 @@ class Storage:
             "person_identifiers_migrated": 0,
             "email_blobs_migrated": 0,
             "calendar_blobs_migrated": 0,
+            "whatsapp_blobs_migrated": 0,
             "task_items_updated": 0,
         }
         if not (owner_id and dup_blob_id and keeper_blob_id):
@@ -991,6 +1054,7 @@ class Storage:
             EmailBlob,
             PersonIdentifier,
             TaskItem,
+            WhatsAppBlob,
         )
 
         try:
@@ -1099,7 +1163,40 @@ class Storage:
                         keeper_cal_set.add(eid)
                         result["calendar_blobs_migrated"] += 1
 
-                # 4. task_items.sources.blobs (JSON list): replace dup
+                # 4. whatsapp_blobs: same shape (Phase 2, whatsapp-pipeline-parity)
+                dup_wa_links = (
+                    session.query(WhatsAppBlob.whatsapp_message_id)
+                    .filter(
+                        WhatsAppBlob.owner_id == owner_id,
+                        WhatsAppBlob.blob_id == dup_blob_id,
+                    )
+                    .all()
+                )
+                if dup_wa_links:
+                    keeper_wa_set = {
+                        str(r[0])
+                        for r in session.query(WhatsAppBlob.whatsapp_message_id)
+                        .filter(
+                            WhatsAppBlob.owner_id == owner_id,
+                            WhatsAppBlob.blob_id == keeper_blob_id,
+                        )
+                        .all()
+                    }
+                    for (wa_message_id,) in dup_wa_links:
+                        mid = str(wa_message_id)
+                        if mid in keeper_wa_set:
+                            continue
+                        session.add(
+                            WhatsAppBlob(
+                                whatsapp_message_id=mid,
+                                blob_id=keeper_blob_id,
+                                owner_id=owner_id,
+                            )
+                        )
+                        keeper_wa_set.add(mid)
+                        result["whatsapp_blobs_migrated"] += 1
+
+                # 5. task_items.sources.blobs (JSON list): replace dup
                 # with keeper, dedup. We have to fetch all tasks for the
                 # owner and check each — SQLite's JSON1 functions could
                 # narrow this server-side, but the live profiles have
@@ -2598,8 +2695,132 @@ class Storage:
                 CalendarEvent.owner_id == owner_id, CalendarEvent.id.in_(event_ids)
             ).update({"memory_processed_at": datetime.now(timezone.utc)}, synchronize_session=False)
 
+    # --- WhatsApp memory processing (whatsapp-pipeline-parity Phase 2c) ---
+
+    def get_whatsapp_contact_by_jid(
+        self, owner_id: str, jid: str
+    ) -> Optional[Dict[str, Any]]:
+        """Return the WhatsApp contact matching ``jid`` for ``owner_id``.
+
+        Used by the memory worker's ``_format_whatsapp_data`` to resolve
+        a privacy-mode LID (``<digits>@lid``) into the contact's real
+        phone number — without that resolution, the LLM cannot emit a
+        ``Phone:`` identifier that matches the email-derived blobs the
+        cross-channel index keys on.
+
+        Returns ``None`` when the JID isn't in our local whatsmeow
+        snapshot (typical for groups, or chats we've never received a
+        message from).
+        """
+        from zylch.storage.models import WhatsAppContact
+
+        if not (owner_id and jid):
+            return None
+        try:
+            with get_session() as session:
+                row = (
+                    session.query(WhatsAppContact)
+                    .filter(
+                        WhatsAppContact.owner_id == owner_id,
+                        WhatsAppContact.jid == jid,
+                    )
+                    .one_or_none()
+                )
+                if not row:
+                    return None
+                return {
+                    "jid": row.jid,
+                    "phone_number": row.phone_number,
+                    "name": row.name,
+                    "push_name": row.push_name,
+                }
+        except Exception as e:
+            logger.warning(f"get_whatsapp_contact_by_jid({jid}) failed: {e}")
+            return None
+
+    def get_unprocessed_whatsapp_messages(self, owner_id: str) -> List[Dict[str, Any]]:
+        """Return WhatsApp messages not yet seen by the memory worker.
+
+        v1 of the cross-channel pipeline (Phase 2): 1-on-1 chats only.
+        Group chats (`is_group=True`) are deferred — extraction would need
+        per-participant identifier resolution that hasn't been built yet.
+        Returns rows oldest-first so the watermark stays deterministic
+        on partial-batch failures.
+        """
+        from zylch.storage.models import WhatsAppMessage
+
+        with get_session() as session:
+            rows = (
+                session.query(
+                    WhatsAppMessage.id,
+                    WhatsAppMessage.message_id,
+                    WhatsAppMessage.chat_jid,
+                    WhatsAppMessage.sender_jid,
+                    WhatsAppMessage.sender_name,
+                    WhatsAppMessage.text,
+                    WhatsAppMessage.timestamp,
+                    WhatsAppMessage.is_from_me,
+                    WhatsAppMessage.is_group,
+                )
+                .filter(
+                    WhatsAppMessage.owner_id == owner_id,
+                    WhatsAppMessage.memory_processed_at.is_(None),
+                    WhatsAppMessage.is_group.is_(False),
+                )
+                .order_by(WhatsAppMessage.timestamp.asc())
+                .all()
+            )
+            return [
+                {
+                    "id": str(r.id),
+                    "message_id": r.message_id,
+                    "chat_jid": r.chat_jid,
+                    "sender_jid": r.sender_jid,
+                    "sender_name": r.sender_name,
+                    "text": r.text,
+                    "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                    "is_from_me": bool(r.is_from_me),
+                    "is_group": bool(r.is_group),
+                }
+                for r in rows
+            ]
+
+    def mark_whatsapp_memory_processed(self, owner_id: str, message_id: str) -> None:
+        """Mark a single WhatsApp message as processed by the Memory Agent.
+
+        ``message_id`` is the WhatsAppMessage row PK (the engine UUID),
+        NOT the protocol-level ``message_id`` column — keeping the
+        signature consistent with ``mark_email_processed``.
+        """
+        from zylch.storage.models import WhatsAppMessage
+
+        with get_session() as session:
+            session.query(WhatsAppMessage).filter(
+                WhatsAppMessage.owner_id == owner_id,
+                WhatsAppMessage.id == message_id,
+            ).update({"memory_processed_at": datetime.now(timezone.utc)})
+
+    def mark_whatsapp_messages_processed(
+        self, owner_id: str, message_ids: List[str]
+    ) -> None:
+        """Bulk variant of ``mark_whatsapp_memory_processed``."""
+        if not message_ids:
+            return
+        from zylch.storage.models import WhatsAppMessage
+
+        with get_session() as session:
+            session.query(WhatsAppMessage).filter(
+                WhatsAppMessage.owner_id == owner_id,
+                WhatsAppMessage.id.in_(message_ids),
+            ).update(
+                {"memory_processed_at": datetime.now(timezone.utc)},
+                synchronize_session=False,
+            )
+
     def reset_memory_processing_timestamps(self, owner_id: str) -> Dict[str, int]:
         """Reset memory_processed_at timestamps for all services."""
+        from zylch.storage.models import WhatsAppMessage
+
         counts: Dict[str, int] = {}
 
         with get_session() as session:
@@ -2621,6 +2842,17 @@ class Storage:
                 .update({"memory_processed_at": None}, synchronize_session=False)
             )
             counts["calendar_events"] = c
+
+            # Reset WhatsApp messages (Phase 2c, whatsapp-pipeline-parity)
+            c = (
+                session.query(WhatsAppMessage)
+                .filter(
+                    WhatsAppMessage.owner_id == owner_id,
+                    WhatsAppMessage.memory_processed_at.isnot(None),
+                )
+                .update({"memory_processed_at": None}, synchronize_session=False)
+            )
+            counts["whatsapp_messages"] = c
 
         return counts
 

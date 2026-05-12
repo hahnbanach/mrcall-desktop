@@ -808,6 +808,7 @@ def test_migrate_skips_when_dup_equals_keeper(fresh_db):
         "person_identifiers_migrated": 0,
         "email_blobs_migrated": 0,
         "calendar_blobs_migrated": 0,
+        "whatsapp_blobs_migrated": 0,
         "task_items_updated": 0,
     }
 

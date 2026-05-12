@@ -1009,8 +1009,13 @@ class JobExecutor:
 
         storage = self.storage
 
-        # Check if memory agent is trained
-        has_memory_agent = storage.get_agent_prompt(owner_id, "memory_email") is not None
+        # Check if memory agent is trained — accept either the new
+        # `memory_message` key (channel-aware, Phase 2b) or the legacy
+        # `memory_email` for installs that haven't retrained yet.
+        has_memory_agent = (
+            storage.get_agent_prompt(owner_id, "memory_message") is not None
+            or storage.get_agent_prompt(owner_id, "memory_email") is not None
+        )
 
         if not has_memory_agent:
             logger.debug(

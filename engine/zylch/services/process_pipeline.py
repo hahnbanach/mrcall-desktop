@@ -68,6 +68,7 @@ async def handle_process(
         "wa_messages": 0,
         "wa_contacts": 0,
         "memory_processed": 0,
+        "wa_memory_processed": 0,
         "tasks_pending": 0,
         "task_msg": "",
     }
@@ -122,16 +123,31 @@ async def handle_process(
         )
         console.print(f"[yellow]  WhatsApp sync failed: {e}[/yellow]")
 
-    # --- Step 3: Memory extraction ---
+    # --- Step 3: Memory extraction (email + WhatsApp) ---
+    # Phase 2c (whatsapp-pipeline-parity): WhatsApp messages now flow
+    # through the same MemoryWorker as emails. The trained prompt is the
+    # channel-aware `memory_message` (Phase 2b) so the same blob can be
+    # populated by either channel; cross-channel merge happens via the
+    # `person_identifiers` index from Phase 1.
     pending_mem = len(store.get_unprocessed_emails(owner_id))
-    if pending_mem > 0:
+    pending_wa = len(store.get_unprocessed_whatsapp_messages(owner_id))
+    if pending_mem > 0 or pending_wa > 0:
+        bits = []
+        if pending_mem:
+            bits.append(f"{pending_mem} emails")
+        if pending_wa:
+            bits.append(f"{pending_wa} WhatsApp msgs")
         console.print(
-            f"\n[bold cyan][3/5] Extracting memory" f" from {pending_mem} emails...[/bold cyan]"
+            f"\n[bold cyan][3/5] Extracting memory from {' + '.join(bits)}...[/bold cyan]"
         )
         try:
-            mem_count = await _run_memory(owner_id, store)
+            mem_count, wa_count = await _run_memory(owner_id, store)
             summary_stats["memory_processed"] = int(mem_count or 0)
-            console.print(f"  {mem_count}/{pending_mem} emails" f" processed")
+            summary_stats["wa_memory_processed"] = int(wa_count or 0)
+            if pending_mem:
+                console.print(f"  {mem_count}/{pending_mem} emails processed")
+            if pending_wa:
+                console.print(f"  {wa_count}/{pending_wa} WhatsApp messages processed")
         except Exception as e:
             logger.error(
                 f"[/process] memory failed: {e}",
@@ -208,15 +224,13 @@ async def handle_process(
         else None
     )
     logger.info(
-        "[update.summary] sync=%+d wa=%dmsgs/%dcontacts memory=%d/%d "
+        "[update.summary] sync=%+d wa=%dmsgs/%dcontacts memory=%d wa_memory=%d "
         "tasks_pending=%d open_before=%d open_after=%d delta=%s detail=%r",
         summary_stats["sync_new"],
         summary_stats["wa_messages"],
         summary_stats["wa_contacts"],
         summary_stats["memory_processed"],
-        summary_stats["memory_processed"]
-        if summary_stats["memory_processed"] > 0
-        else 0,
+        summary_stats["wa_memory_processed"],
         summary_stats["tasks_pending"],
         before_open_count,
         after_open_count,
@@ -363,8 +377,14 @@ def _run_whatsapp_sync(
         pass
 
 
-async def _run_memory(owner_id: str, store) -> int:
-    """Run memory extraction (awaitable)."""
+async def _run_memory(owner_id: str, store) -> tuple[int, int]:
+    """Run memory extraction across email + WhatsApp.
+
+    Returns ``(emails_processed, wa_processed)``. Either count is 0
+    when the channel has nothing pending; the function still iterates
+    cheaply through the empty list so the caller can rely on a flat
+    tuple shape.
+    """
     from zylch.workers.memory import MemoryWorker
 
     # Constructor raises RuntimeError if no LLM transport is available.
@@ -378,7 +398,15 @@ async def _run_memory(owner_id: str, store) -> int:
         worker._custom_prompt_loaded = False
 
     emails = store.get_unprocessed_emails(owner_id)
-    return await worker.process_batch(emails)
+    email_count = await worker.process_batch(emails)
+
+    # Phase 2c: feed unprocessed WhatsApp messages (1-on-1, since v1
+    # filters group chats at the storage layer). Same prompt is used
+    # for both — channel-awareness lives in the message envelope.
+    wa_messages = store.get_unprocessed_whatsapp_messages(owner_id)
+    wa_count = await worker.process_whatsapp_batch(wa_messages)
+
+    return email_count, wa_count
 
 
 async def _run_tasks(owner_id: str, store) -> str:
@@ -640,12 +668,17 @@ async def _run_topic_dedup(owner_id: str) -> dict:
 
 
 async def _auto_train_memory(owner_id: str, store):
-    """Auto-train memory extraction agent (first run)."""
-    from zylch.agents.trainers import EmailMemoryAgentTrainer
+    """Auto-train memory extraction agent (first run).
+
+    Writes under the new ``memory_message`` key (channel-aware, Phase 2b).
+    The worker reads ``memory_message`` first and falls back to legacy
+    ``memory_email`` for installs that haven't retrained yet.
+    """
+    from zylch.agents.trainers import MessageMemoryAgentTrainer
 
     user_email = os.environ.get("EMAIL_ADDRESS", "")
-    builder = EmailMemoryAgentTrainer(store, owner_id, user_email)
-    agent_prompt, metadata = await builder.build_memory_email_prompt()
+    builder = MessageMemoryAgentTrainer(store, owner_id, user_email)
+    agent_prompt, metadata = await builder.build_memory_message_prompt()
     if not agent_prompt or not agent_prompt.strip():
         console.print(
             "  [yellow]Memory training produced empty" " prompt — will retry next run[/yellow]",
@@ -653,7 +686,7 @@ async def _auto_train_memory(owner_id: str, store):
         return
     store.store_agent_prompt(
         owner_id,
-        "memory_email",
+        "memory_message",
         agent_prompt,
         metadata,
     )
