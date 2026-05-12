@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
-import { isLegacyWindow } from '../lib/legacy'
 import Icon from '../components/Icon'
 import ConnectGoogleCalendar from './ConnectGoogleCalendar'
 import ConnectWhatsApp from './ConnectWhatsApp'
@@ -172,20 +171,12 @@ export default function Settings(): JSX.Element {
         </div>
       )}
 
-      {/* Account section is Firebase-bound. In legacy windows the
-          sidecar is tied to a profile dir directly, no Firebase token
-          is ever pushed for it, and `auth.currentUser` (shared across
-          windows via IndexedDB persistence) would advertise the
-          identity of a *different* window. Hide the whole section so
-          the Sign out button isn't reachable from here either. */}
-      {!isLegacyWindow() && (
-        <section className="mb-6">
-          <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
-            Account
-          </h2>
-          <AccountCard />
-        </section>
-      )}
+      <section className="mb-6">
+        <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
+          Account
+        </h2>
+        <AccountCard />
+      </section>
 
       <section className="mb-6">
         <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
@@ -302,12 +293,7 @@ function LLMProviderCard({
   hasAnthropicKey: boolean
   onClearKey: () => void
 }): JSX.Element {
-  // In a legacy window the sidecar has no Firebase token — even if
-  // `auth.currentUser` is non-null thanks to cross-window IndexedDB
-  // persistence, calling `account.balance()` against this sidecar
-  // would 401. Treat the user as not-signed-in for this card so the
-  // balance fetch is suppressed and the card explains what's needed.
-  const signedIn = !!auth.currentUser && !isLegacyWindow()
+  const signedIn = !!auth.currentUser
   const isCredits = !hasAnthropicKey
 
   const [balance, setBalance] = useState<BalancePayload | null>(null)
@@ -550,12 +536,9 @@ function MaintenanceCard(): JSX.Element {
   )
 }
 
-function AccountCard(): JSX.Element | null {
+function AccountCard(): JSX.Element {
   // Read Firebase user synchronously — by the time Settings renders,
-  // FirebaseAuthGate has already accepted the session. Skip in legacy
-  // windows: even though the call site already gates on
-  // `isLegacyWindow()`, this defends against accidental future reuse.
-  if (isLegacyWindow()) return null
+  // FirebaseAuthGate has already accepted the session.
   const user = auth.currentUser
   const email = user?.email || '—'
   const uid = user?.uid || ''

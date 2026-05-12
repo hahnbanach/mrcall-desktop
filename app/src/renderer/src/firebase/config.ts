@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { indexedDBLocalPersistence, initializeAuth } from 'firebase/auth'
+import { inMemoryPersistence, initializeAuth } from 'firebase/auth'
 
 // Same Firebase project as mrcall-dashboard. The API key + project ID are
 // public-by-design (Firebase JS SDK config) — they identify the project,
@@ -17,27 +17,13 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 
-// IndexedDB-backed persistence so a signed-in user survives across app
-// launches. Profiles are UID-keyed (`auth:bindProfile(uid)` attaches
-// `~/.zylch/profiles/<firebase_uid>/`), so a restored Firebase session
-// can only ever bind to the matching profile — the "wrong account on
-// the wrong profile" drift the previous in-memory-only setup guarded
-// against is structurally prevented now. The IdentityBanner at the
-// top of every signed-in window keeps the active identity visible in
-// case a restored session catches the user by surprise.
-//
-// One consequence of IndexedDB persistence: `auth.currentUser` is
-// shared across all BrowserWindows of this Electron app. Legacy
-// windows ("+ New Window for Profile", `?legacy=1`) are bound to a
-// profile dir directly and skip the Firebase gate — they MUST also
-// suppress any UI that reads `auth.currentUser` (IdentityBanner,
-// AccountCard, "Sign out"), or they will advertise the identity of
-// a different window and let a Sign out from here clear the session
-// globally. See `lib/legacy.ts` for the gate helper.
-//
-// To force a re-signin (debug, or to sanity-check the gate), the user
-// uses the explicit "Sign out" button on the IdentityBanner.
-const auth = initializeAuth(app, { persistence: indexedDBLocalPersistence })
+// In-memory persistence: every window signs in independently and every
+// app launch shows SignIn. IndexedDB is shared across all BrowserWindows
+// of an Electron app, so a restored Firebase session would leak between
+// concurrent windows (Window A sees Window B's identity). UID-keyed
+// profile binding plus per-window in-memory auth give us the invariant
+// "one window = one signin = one profile" with no shared state to drift.
+const auth = initializeAuth(app, { persistence: inMemoryPersistence })
 auth.useDeviceLanguage()
 
 export { app, auth }

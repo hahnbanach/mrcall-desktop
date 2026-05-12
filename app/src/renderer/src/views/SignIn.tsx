@@ -51,9 +51,21 @@ function describeFirebaseError(code: string | undefined): string {
   }
 }
 
+// Pull `?email=` off the location once at module load so the SignIn
+// state initialises with it on first render. Set by main when the
+// window is opened via "Other profiles" → a specific account, so the
+// user sees the right email already filled in.
+function readEmailHint(): string {
+  try {
+    return new URLSearchParams(window.location.search).get('email') || ''
+  } catch {
+    return ''
+  }
+}
+
 export default function SignIn(): JSX.Element {
   const [mode, setMode] = useState<Mode>('signin')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(readEmailHint)
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [googleBusy, setGoogleBusy] = useState(false)

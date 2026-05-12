@@ -119,23 +119,19 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
     }
 
     try {
-      let r:
-        | { ok: true; profile: string }
-        | { ok: false; error: string }
-      if (firebaseUid && firebaseEmail) {
-        r = await window.zylch.onboarding.createProfileForFirebaseUser(
-          firebaseUid,
-          (payload.EMAIL_ADDRESS || firebaseEmail).trim(),
-          payload
-        )
-      } else {
-        // Path B: legacy email-keyed profile (FirebaseAuthGate is off
-        // or the user object went missing). Kept as a safety net.
-        r = await window.zylch.onboarding.createProfile(
-          (payload.EMAIL_ADDRESS || '').trim(),
-          payload
-        )
+      // FirebaseAuthGate is the only mount path for this component, so
+      // a Firebase user is always present here. The profile dir is
+      // keyed by their immutable UID.
+      if (!firebaseUid || !firebaseEmail) {
+        setFormError('Lost Firebase session. Sign in again.')
+        setSubmitting(false)
+        return
       }
+      const r = await window.zylch.onboarding.createProfileForFirebaseUser(
+        firebaseUid,
+        (payload.EMAIL_ADDRESS || firebaseEmail).trim(),
+        payload
+      )
       if (!r.ok) {
         setFormError(r.error || 'Failed to create profile')
         setSubmitting(false)

@@ -254,10 +254,9 @@ export interface ZylchAPI {
   }
   profile: {
     /** Resolves to the profile this window's sidecar is bound to.
-     *  `id` is the on-disk directory name (Firebase UID for new
-     *  profiles, email for legacy ones — stable, safe as a key);
-     *  `email` is the display label from the profile's `.env`,
-     *  null when the file is missing or unreadable. */
+     *  `id` is the on-disk directory name (Firebase UID — stable, safe
+     *  as a key); `email` is the display label from the profile's
+     *  `.env`, null when the file is missing or unreadable. */
     current: () => Promise<{ id: string; email: string | null }>
   }
   profiles: {
@@ -269,7 +268,9 @@ export interface ZylchAPI {
     ) => Promise<{ ok: boolean; profile: string }>
   }
   window: {
-    /** `id` is the on-disk profile directory name (UID or legacy email). */
+    /** Opens a fresh auth-pending window. `id` is the picked profile
+     *  dir (Firebase UID); the dir's email is used as a SignIn pre-fill
+     *  hint. Actual profile binding happens after Firebase signin. */
     openForProfile: (id: string) => Promise<{ ok: boolean }>
   }
   narration: {

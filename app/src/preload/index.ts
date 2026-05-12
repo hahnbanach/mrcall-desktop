@@ -282,10 +282,9 @@ const api = {
   },
   profile: {
     // Returns `{id, email}` for the profile this window's sidecar is
-    // bound to. `id` is the on-disk directory name (Firebase UID for new
-    // profiles, email for legacy ones — stable across email changes,
-    // safe as a localStorage key); `email` is the human-friendly
-    // display label read from the profile's `.env`.
+    // bound to. `id` is the on-disk directory name (Firebase UID,
+    // stable across email changes — safe as a localStorage key); `email`
+    // is the human-friendly display label read from the profile's `.env`.
     current: (): Promise<{ id: string; email: string | null }> =>
       ipcRenderer.invoke('profile:current') as Promise<{
         id: string
@@ -294,7 +293,7 @@ const api = {
   },
   profiles: {
     // Each entry carries `{id, email}` so renderer pickers can show the
-    // email even when the dir is named after a Firebase UID.
+    // email; the dir name is a Firebase UID.
     list: (): Promise<Array<{ id: string; email: string | null }>> =>
       ipcRenderer.invoke('profiles:list') as Promise<
         Array<{ id: string; email: string | null }>
@@ -303,7 +302,10 @@ const api = {
       call<{ ok: boolean; profile: string }>('profiles.create', { email, values }, 30000)
   },
   window: {
-    // `id` is the on-disk profile directory name (UID or legacy email).
+    // Opens a new auth-pending window. `id` is the on-disk profile dir
+    // (Firebase UID); its email is used by main to pre-fill the SignIn
+    // screen as a hint. Actual profile binding happens after signin
+    // keyed by the Firebase UID returned from Firebase Auth.
     openForProfile: (id: string): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('window:openForProfile', id) as Promise<{ ok: boolean }>
   },

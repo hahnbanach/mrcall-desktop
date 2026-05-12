@@ -13,54 +13,54 @@ This file is young. Cross-cutting facts historically lived inside
 `engine/docs/active-context.md` (the engine doc tree played a dual role).
 Facts migrate here as they get touched.
 
-## 2026-05-08 — legacy-window identity bleed (IdentityBanner + Settings)
+## 2026-05-12 — WhatsApp pipeline parity Phase 2 landed (engine-only)
 
-User report (Mario, on a fresh dev Mac):
+Commit `91421d2e` lands the end-to-end WhatsApp memory extraction
+pipeline (Phase 2 a/b/c of `engine/docs/execution-plans/whatsapp-pipeline-parity.md`).
+**Engine-only change**: no app code touched, no JSON-RPC contract
+change, no release-pipeline change. Engine-side facts (new
+`whatsapp_blobs` table, `memory_email → memory_message` trainer
+rename with back-compat, `process_whatsapp_message` worker + LID→phone
+resolution via `whatsapp_contacts`, parser hardening, live verification
+on the gmail profile) all live in [`../engine/docs/active-context.md`](../engine/docs/active-context.md)
+"WhatsApp pipeline parity — Phase 2 a/b/c". Next phase (3) targets
+task creation from WhatsApp and DOES touch the JSON-RPC contract
+(`task_items.sources.whatsapp_messages`, `channel='whatsapp'`).
 
-> Sono partito con login `mario.alemi@gmail.com`, finestra a sinistra.
-> Poi ho cliccato "+ New Window for Profile" su `mario.alemi@cafe124.it`,
-> finestra a destra. In alto dice "Signed in as mario.alemi@gmail.com".
-> E la stessa cosa nei Settings. In più, quando ho cliccato Sign out
-> dalla destra, mi si è chiusa la sinistra.
+## 2026-05-12 — pre-Firebase legacy code removed (`inMemoryPersistence` + every window through Firebase)
 
-**Root cause:** the renderer was switched from `inMemoryPersistence` to
-`indexedDBLocalPersistence` in commit `aa75c6ec` (signin survives
-across launches), but `IdentityBanner` (`App.tsx`) and `AccountCard`
-(`Settings.tsx`) were still written for the in-memory model where
-legacy windows had `auth.currentUser === null`. IndexedDB is shared
-across all BrowserWindows of the same Electron app, so a legacy
-window opened via "+ New Window for Profile" sees the persisted
-Firebase session of the proper-Firebase window. Two symptoms:
+Pre-alpha cleanup. The desktop now enforces "every window signs in with
+Firebase" structurally — no special cases, no escape hatches:
 
-1. Legacy window's `IdentityBanner` and Settings → Account both show
-   the *other* window's email — not the profile this window is
-   actually bound to.
-2. Sign out from the legacy window calls `signOut(auth)` which clears
-   IndexedDB globally, fires `onAuthStateChanged` in the proper
-   window, and `FirebaseAuthGate` flips it to `signed-out` (rendering
-   `<SignIn />`). Mario read this as "the left window closed".
+- **`inMemoryPersistence`** restored (`app/src/renderer/src/firebase/config.ts`). Each
+  BrowserWindow has its own auth state — no cross-window IndexedDB
+  bleed possible. Every app launch shows SignIn.
+- **`?legacy=1` URL bypass removed** (`app/src/main/index.ts`, `App.tsx`).
+- **`ZYLCH_PROFILE` env-var bypass removed.** `bootFirstWindow` always
+  creates an auth-pending window. (The engine sidecar still takes
+  `--profile <id>` internally for wiring, but it can't shortcut signin.)
+- **`createWindowForProfile` deleted.** Its callers — the picker and
+  the env-var hatch — now go through `createAuthPendingWindow`.
+- **`isLegacyWindow()` / `lib/legacy.ts` deleted.** No legacy-vs-Firebase
+  branching anywhere in the renderer.
+- **`NewProfileWizard.tsx` deleted.** It created email-keyed profiles
+  via `profiles.create`. Replaced by "+ Sign in to another account" in
+  the "Other profiles" dropdown, which opens a fresh auth-pending window.
+- **`engine/scripts/migrate_profile_to_uid.py` deleted.** Pre-Firebase
+  email-keyed profiles aren't a supported state.
+- **"Other profiles" picker behavior changed.** Clicking a profile opens
+  a new auth-pending window with the profile's email pre-filled in
+  SignIn (via `?email=` URL hint); the actual profile binding is keyed
+  off the signed-in Firebase UID, so the pre-fill is hint-only — Firebase
+  identity verification can't be short-circuited.
+- **`Onboarding.tsx` Path B (legacy email-keyed) removed.**
+  `FirebaseAuthGate` is the only mount path, so `firebaseUid && firebaseEmail`
+  is always present.
 
-**Fix:** new `app/src/renderer/src/lib/legacy.ts` exposes
-`isLegacyWindow()` (the helper was previously private to `App.tsx`).
-Three surfaces gate on it:
-
-- `IdentityBanner` early-returns null in legacy.
-- Settings hides the entire "Account" section in legacy
-  (`AccountCard` also early-returns null defensively).
-- `LLMProviderCard`'s `signedIn` is `!!auth.currentUser && !isLegacyWindow()`
-  so the balance fetch (which would 401 in legacy because no Firebase
-  token was pushed to *this* sidecar) is suppressed.
-
-Stale comments in `App.tsx` and `firebase/config.ts` that referred to
-"in-memory persistence" updated to reflect IndexedDB reality and to
-flag the legacy-gate requirement.
-
-**Live verification:** Mario will test in `npm run dev` after pulling
-this branch — open gmail profile, sign in, click "+ New Window for
-Profile" on cafe124.it, expect: no IdentityBanner in the right
-window, Settings has no Account section in the right window, Sign
-out from the left does not affect the right (legacy window has no
-Sign out anywhere). Not committed yet.
+Net delta: -558 lines. Typecheck clean. Live-verified by Mario:
+boot → SignIn; signin → bound app; "Other profiles" → support@mrcall.ai
+→ new window with email pre-filled → support signin → support's data
+appears; "+ Sign in to another account" → fresh SignIn with empty email.
 
 ## 2026-05-06 evening — task-list cleanup ("4 task per UN problema") finally fixed
 
@@ -117,12 +117,12 @@ declared "tutto risolto" without testing):
 ### Firebase Auth as desktop identity
 - The renderer is gated by `FirebaseAuthGate` (`app/src/renderer/src/App.tsx`) on `auth.currentUser`. Unsigned-in state shows `views/SignIn.tsx` — **email/password and "Continue with Google"** (PKCE → `signInWithCredential`); magic links remain deferred.
 - Same Firebase project as the dashboard (`talkmeapp-e696c`) so a single account works on both surfaces. Config hard-coded in `app/src/renderer/src/firebase/config.ts` (public-by-design — the Firebase JS SDK ships its config).
-- **Persistence is `indexedDBLocalPersistence` (post-`aa75c6ec`).** A signed-in user survives across app launches; FirebaseAuthGate boots straight into the `binding` phase on the next start instead of `signed-out`. UID-keyed profiles structurally prevent the "wrong account on the wrong profile" drift the original in-memory setup guarded against — a restored session can only ever bind to its matching profile dir. **One consequence:** IndexedDB is shared across all BrowserWindows of the app, so `auth.currentUser` is the same in every renderer; legacy windows (`?legacy=1`, "+ New Window for Profile") MUST gate any UI that reads it on `isLegacyWindow()` (`app/src/renderer/src/lib/legacy.ts`), or they will (a) advertise the wrong identity and (b) let a Sign out clear the session globally. The IdentityBanner, Settings → AccountCard, and the LLMProviderCard's `signedIn` flag all gate on this.
+- **Persistence is `inMemoryPersistence` (post-`bc011be`).** Every app launch shows the SignIn screen. The previous indexedDB/local-storage persistence let a stale Firebase session silently survive across launches and decouple from the on-disk profile, so a wrong-account state could surface (typing user A's credentials and ending up on user B's data).
 - Renderer pushes the ID token to the engine via `account.set_firebase_token`; engine holds it in-memory only (`zylch/auth/session.py` singleton). 50-min proactive refresh in `firebase/authUtils.ts`. Sign-out clears both ends.
 - **UID-keyed profile binding.** Every BrowserWindow boots into an *auth-pending* state with NO sidecar. After Firebase signin the renderer calls `auth:bindProfile(uid)`; main attaches a sidecar bound to `~/.zylch/profiles/<firebase_uid>/`. If the dir doesn't exist, the renderer routes to `Onboarding.tsx` which creates it via `onboarding:createProfileForFirebaseUser` and the same window then attaches in-place — Firebase auth state preserved, no second signin. Sign-out + re-signin as a different user swaps the sidecar in-place.
 - **IdentityBanner** at the top of every authenticated window: "Signed in as `<email>` (uid `<prefix>…`)" + one-click *Sign out*. Wrong-account state surfaces in seconds.
 - **CSP**: `app/src/renderer/index.html` carries `connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com` — Firebase Auth signin, signup, password reset, and 50-min token refresh all need these endpoints; without them the SDK throws `auth/network-request-failed`.
-- **Legacy escape hatch.** `?legacy=1` query (used by "+ New Window for Profile") and the `ZYLCH_PROFILE` env var skip the Firebase gate. StarChat / `mrcall.*` won't work in those windows until the user signs in via Settings — acceptable, those profiles are pre-Firebase. `engine/scripts/migrate_profile_to_uid.py` upgrades a legacy email-keyed profile to UID-keyed on demand.
+- **No legacy escape hatch.** Every window goes through `FirebaseAuthGate` — no `?legacy=1`, no `ZYLCH_PROFILE` env-var bypass (both removed 2026-05-12). The "Other profiles" picker opens a fresh auth-pending window with the picked profile's email as a SignIn pre-fill; binding is keyed off the signed-in UID, never off the picker selection.
 - **StarChat from the engine.** Rides the Firebase session: `engine/zylch/tools/mrcall/starchat_firebase.py:make_starchat_client_from_firebase_session()` returns a `StarChatClient(auth_type="firebase")`. First reachable surface: `mrcall.list_my_businesses` RPC (mirrors the dashboard's `Business.checkUserHasBusinesses`).
 - **Google Calendar** is an *incremental* OAuth — separate from Firebase signin. PKCE flow on `127.0.0.1:19275` in the engine (post-signin only), `calendar.readonly` scope, `access_type=offline` + `prompt=consent`. Tokens persisted via `Storage.save_provider_credentials(uid, "google_calendar", …)`. `DEFAULT_CALENDAR_ID = "primary"`. The Calendar Client ID defaults to the same Desktop OAuth client as "Continue with Google" sign-in: `app/src/main/index.ts:spawnSidecar` injects `GOOGLE_CALENDAR_CLIENT_ID_DEFAULT=GOOGLE_SIGNIN_CLIENT_ID` into the sidecar env, and the engine's `get_google_client_id()` falls back to it when `GOOGLE_CALENDAR_CLIENT_ID` is unset. Profile `.env` `GOOGLE_CALENDAR_CLIENT_ID` overrides it. No client_secret — distinct from Google sign-in, which does need one.
 - Legacy CLI MrCall PKCE flow on `:19274` (`zylch init` wizard) is untouched — orthogonal to the desktop signin.
@@ -286,5 +286,4 @@ Test ledger this session:
 - **`GOOGLE_SIGNIN_CLIENT_SECRET` repo secret not yet created.** Until it is, packaged release builds will fail at the "Materialise Google OAuth client_secret" step (the writer script exits 1 on missing env var — fail-loud rather than ship a broken signin button).
 - **Dead configurator references.** `command_handlers.py` (`/mrcall config`, `/mrcall train`, `/mrcall feature`) and `factory.py:_create_mrcall_tools` reference `MrCallConfiguratorTrainer`, `GetAssistantCatalogTool`, `ConfigureAssistantTool`, etc. — symbols that were never tracked in this repo. Currently graceful-degraded (`/mrcall config` short-circuits with "MrCall is not available"). `engine/tests/test_mrcall_integration.py` is similarly dead. Brief at `docs/execution-plans/cleanup-mrcall-configurator-deadcode.md`.
 - **No automated contract test for IPC method/payload changes.** Tracked in [`harness-backlog.md`](harness-backlog.md). The renderer-only IPCs added this session (`signin:googleStart`, `signin:googleCancel`, `auth:bindProfile`) and the engine RPC methods added across recent sessions are typed on the renderer side via `app/src/renderer/src/types.ts`, but engine ↔ preload divergence still surfaces only at runtime.
-- **Legacy email-keyed profiles** are not auto-migrated. Users who signed in with email pre-2026-05 keep working, but their on-disk profile dir name is the email. Use `engine/scripts/migrate_profile_to_uid.py` to upgrade.
 - **MrCall-credits v1 not live-verified** (branch `feat/mrcall-credits-v1`, tip `3001844`). 8/8 unit tests on `MrCallProxyClient`; preload + Settings card compile + typecheck. Live round-trip — Firebase signin → flip Settings to MrCall credits → chat → balance update → 402 path → top-up on dashboard → balance refresh — pending. Needs `mrcall-agent` deployed at `https://zylch-test.mrcall.ai` with `/api/desktop/llm/proxy` + `/api/desktop/llm/balance` reachable.

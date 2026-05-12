@@ -6,7 +6,6 @@ import Update from './views/Update'
 import Settings from './views/Settings'
 import Email from './views/Email'
 import WhatsAppView from './views/WhatsApp'
-import NewProfileWizard from './views/NewProfileWizard'
 import Onboarding from './views/Onboarding'
 import SignIn from './views/SignIn'
 import { auth } from './firebase/config'
@@ -15,7 +14,6 @@ import { ConversationsProvider } from './store/conversations'
 import { ThreadProvider, useThread } from './store/thread'
 import { TasksProvider } from './store/tasks'
 import { profileColor } from './lib/profileColor'
-import { isLegacyWindow } from './lib/legacy'
 import type { SidecarStatusEvent } from './types'
 import { errorMessage, isProfileLockedError } from './lib/errors'
 import Icon, { type IconName } from './components/Icon'
@@ -382,7 +380,7 @@ function ProfilesDropdown({
             }}
             className="w-full text-left px-3 py-2 text-xs text-brand-grey-80 hover:bg-brand-light-grey"
           >
-            + New Profile
+            + Sign in to another account
           </button>
           <div className="h-px bg-brand-mid-grey/60 my-1" />
           {loading && (
@@ -437,8 +435,7 @@ function AppInner(): JSX.Element {
   const [view, setView] = useState<View>('tasks')
   const [profileEmail, setProfileEmail] = useState<string>('')
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [wizardOpen, setWizardOpen] = useState(false)
-  const [profilesRefreshKey, setProfilesRefreshKey] = useState(0)
+  const [profilesRefreshKey] = useState(0)
   // Email address is required to render the Email nav item (we hide it
   // rather than showing a broken tab when the profile isn't set up for
   // IMAP). Loaded once via settings.get().
@@ -518,7 +515,13 @@ function AppInner(): JSX.Element {
           setView={setView}
           profileEmail={profileEmail}
           hasEmailConfigured={hasEmailConfigured}
-          onNewProfile={() => setWizardOpen(true)}
+          onNewProfile={() => {
+            // "Sign in to another account" opens a fresh auth-pending
+            // window. The Firebase signin there will key the resulting
+            // profile dir by the new UID — there's no "create profile
+            // directly" path anymore.
+            void window.zylch.window.openForProfile('')
+          }}
           profilesRefreshKey={profilesRefreshKey}
         />
         {/* All views are always mounted; inactive ones are hidden. This
@@ -578,16 +581,6 @@ function AppInner(): JSX.Element {
           </div>
         </main>
       </div>
-      <NewProfileWizard
-        open={wizardOpen}
-        onClose={() => setWizardOpen(false)}
-        onCreated={() => {
-          setWizardOpen(false)
-          // Bump key so the dropdown reloads its profile list next time
-          // it opens (cheap; no harm if it isn't currently open).
-          setProfilesRefreshKey((k) => k + 1)
-        }}
-      />
       <ProfilePickerDialog open={pickerOpen} onClose={() => setPickerOpen(false)} />
     </div>
   )
@@ -729,9 +722,8 @@ function Sidebar({
 // Three-state machine driving the Firebase signin → profile binding
 // flow:
 //
-//   pending     — Firebase auth hasn't reported back yet (with
-//                 IndexedDB persistence the listener fires on the
-//                 next tick with the persisted user, if any)
+//   pending     — Firebase auth hasn't reported back yet (in-memory
+//                 persistence: this is one tick at most)
 //   signed-out  — user is null, render SignIn
 //   binding     — user just signed in, asking main to bindProfile
 //   bound       — sidecar attached, render AppInner
@@ -746,10 +738,9 @@ type AuthGateState =
   | { phase: 'error'; user: User; reason: string }
 
 // Gates the entire UI behind a Firebase signin AND a successful
-// profile bind. With UID-keyed profiles, these two are inseparable:
-// a window with a Firebase user but no matching profile dir on disk
-// has no engine to talk to. (Persistence is IndexedDB-backed, so a
-// returning user starts in 'binding' on launch instead of 'signed-out'.)
+// profile bind. With in-memory persistence and UID-keyed profiles,
+// these two are inseparable: a window with a Firebase user but no
+// matching profile dir on disk has no engine to talk to.
 function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Element {
   const [state, setState] = useState<AuthGateState>({ phase: 'pending' })
 
@@ -870,17 +861,9 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
 }
 
 // Persistent top bar showing the current Firebase identity. Surfaces
-// at the very top of every signed-in window so a wrong-account state
-// is visible within seconds — not buried in Settings → AccountCard.
-//
-// Hidden in legacy windows: those are bound to a profile dir directly
-// and never push a Firebase token to their sidecar, so showing the
-// global `auth.currentUser` (which IndexedDB persistence shares across
-// windows) would advertise the wrong identity for that profile — and
-// the Sign out button would clear the Firebase session globally,
-// kicking the proper-Firebase window back to SignIn.
+// at the very top of every window so a wrong-account state is visible
+// within seconds — not buried in Settings → AccountCard.
 function IdentityBanner(): JSX.Element | null {
-  if (isLegacyWindow()) return null
   const user = auth.currentUser
   if (!user || user.isAnonymous) return null
   const email = user.email || '—'
@@ -967,19 +950,7 @@ function AppShell(): JSX.Element {
   )
 }
 
-// Legacy windows ("+ New Window for Profile" or ZYLCH_PROFILE escape
-// hatch) skip FirebaseAuthGate — they already have a sidecar bound
-// to a chosen profile dir. Engine-side StarChat / mrcall.* /
-// google.calendar.* calls will fail with -32010 in this mode (no
-// Firebase token pushed); those features simply don't work in
-// legacy windows. `isLegacyWindow()` lives in `lib/legacy.ts` so
-// other surfaces (IdentityBanner, Settings → AccountCard) can gate
-// on it too.
-
 export default function App(): JSX.Element {
-  if (isLegacyWindow()) {
-    return <AppShell />
-  }
   return (
     <FirebaseAuthGate>
       <AppShell />

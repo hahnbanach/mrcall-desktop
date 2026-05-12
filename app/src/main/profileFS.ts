@@ -169,9 +169,9 @@ export function readProfileEnvValue(id: string, key: string): string | null {
 }
 
 export interface ProfileSummary {
-  /** Directory name under `~/.zylch/profiles/`. Firebase UID for new
-   *  profiles, email for legacy ones. Stable across email changes —
-   *  use this as the key when opening / selecting / persisting. */
+  /** Directory name under `~/.zylch/profiles/` — Firebase UID. Stable
+   *  across email changes; use this as the key when opening /
+   *  selecting / persisting. */
   id: string
   /** `EMAIL_ADDRESS` from the profile's `.env`, or null if missing /
    *  unreadable. Display-only — never use as a lookup key. */
