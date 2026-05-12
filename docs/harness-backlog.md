@@ -6,6 +6,34 @@ materialises) `app/docs/harness-backlog.md`.
 
 ## Open
 
+- [ ] **Release workflow installs PyInstaller unpinned + the GitHub Release ships even when the Windows sidecar build fails.**
+  Discovered: 2026-05-12 (after silent Win-x64 breakage across v0.1.31,
+  v0.1.31-intel, and v0.1.32 went unnoticed for a week — the macOS arm64
+  build kept succeeding so the GitHub Release looked fine until someone
+  tried to download an EXE).
+  Impact: an upstream PyInstaller release can break the Windows sidecar
+  build without notice. v0.1.31..v0.1.32 hit `PyInstaller==6.20.0`
+  which segfaults with `ACCESS_VIOLATION` (0xC0000005) inside the
+  isolated subprocess while enumerating neonize's submodules in
+  `engine/zylch.spec:13`. Same risk applies to any other unpinned
+  build-time tool.
+  Mitigation in place: `.github/workflows/release.yml` now pins
+  `pyinstaller==6.13.0` (commit `362e1cda`).
+  Outstanding harness work:
+  (a) make `release.yml` FAIL the Release-attach job when any declared
+      arch is missing its installer. Today the Mac job ships its DMG
+      to the GitHub Release even when the Windows job exits non-zero,
+      which is the load-bearing reason this regression was invisible.
+      Even a "Release attached at least one installer per declared
+      arch" gate would have caught it on v0.1.31 instead of v0.1.32.
+  (b) consider a `requirements-build.txt` (or equivalent in the
+      workflow) covering pyinstaller + electron-builder + any future
+      codegen tool, with pins bumped deliberately rather than picked
+      up opportunistically each run.
+  (c) a scheduled smoke-build on `main` (weekly?) would catch upstream
+      regressions decoupled from the tag-release cadence, so a broken
+      runner isn't discovered the day Mario tries to ship.
+
 - [ ] **No E2E test for multi-window Firebase auth flows.**
   Discovered: 2026-05-12 (during the pre-Firebase legacy-code sweep)
   Impact: two distinct identity bugs in two months — IndexedDB cross-window

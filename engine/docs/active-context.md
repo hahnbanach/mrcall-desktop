@@ -625,6 +625,59 @@ Tests: `tests/workers/test_task_worker_bugs.py` (14 cases, all green) + `tests/s
 - **Compaction**: `zylch/services/chat_compaction.py` summarises old turns when context grows
 - Three manual cache deliverable tests under `tests/manual_test_cache_deliverable*.py`
 
+### Attachment reading — native extraction in `read_document` (2026-05-12, commit `528c5d6b`)
+
+`zylch/tools/read_document_tool.py` now extracts text from PDF, DOCX,
+and XLSX/XLSM **in-process** instead of stubbing the result with a
+`"Use run_python to read it with pypdf"` hint. The hint was a real UX
+trap: `run_python` is in `APPROVAL_TOOLS` and triggers the
+"Conferma richiesta" UI in the Workspace, so every "metti in memoria
+quest'allegato" turn forced the user to click Allow before the read
+could happen — and on a clean engine venv `pypdf` wasn't even
+installed, so an approved run would crash with `ModuleNotFoundError`.
+
+Wired tools (`zylch/tools/read_document_tool.py`):
+- `.pdf` → `pypdf.PdfReader` page-by-page (`_extract_pdf_text`)
+- `.docx` → `python-docx` paragraphs + table cells (`_extract_docx_text`)
+- `.xlsx` / `.xlsm` → `openpyxl` (read-only, `data_only=True`) per-sheet
+  TSV-style rows (`_extract_xlsx_text`)
+- All return full text, no truncation. On `ImportError` the tool
+  degrades to the old "fall back to run_python" hint instead of
+  raising, so a partial install never breaks the chat — the LLM gets
+  a usable status either way.
+
+`pyproject.toml` declares `pypdf>=4.0`, `python-docx>=1.1`,
+`openpyxl>=3.1`. The dev venv at `/Users/mal/hb/mrcall-desktop/engine/venv`
+has them installed. PyInstaller will pick them up via
+`collect_all('zylch')` in `zylch.spec` (transitive dep collection);
+no extra spec changes needed for packaged builds.
+
+`assistant/prompts.py` now states the contract explicitly:
+"use `read_document` directly for PDF/DOCX/XLSX, **never** `run_python`"
+plus a four-step "SAVING attachment content as memory" workflow
+(`read_document` → `search_local_memory` → decide → `create_memory` |
+`update_memory`). The wording flags `run_python` as approval-gated so
+the LLM avoids it for harmless reads.
+
+**Live evidence (Mario's chat, profile `HxiZhWEBoRUarPzqX8eRWP21FuJ3`,
+the same turn that motivated the fix):** both Johnny PDFs were
+processed end-to-end and `192210f4-e3be-4957-8f38-f106a2618324`
+(PET, 3557 bytes, `user:mario.alemi@gmail.com` namespace) carries the
+full structured profile — microchip `380260059102899`, breed METICCIO,
+coat MARRONE BIANCO, vet Dr. Carlo Cavalli, with the `Jonny` typo
+variant included for future search recall. The companion preference
+`aa78e877-b075-474e-8b8f-334b6ba3fc46` (`prefs:mario.alemi@gmail.com`,
+919 bytes) captures the calendar-offer rule for vet reminders.
+
+Caveat — that turn used the OLD `run_python` path (Mario had pypdf
+in the wider Python search path by luck); the NEW `read_document`
+native-extract path has been verified in-process against both PDFs
+(1975 + 3592 bytes returned) but **not yet** exercised through the
+running sidecar end-to-end. The sidecar (PIDs 29515 / 44143 at
+session end) needs a restart before the new code takes effect. The
+real chat-side gate is: send a PDF in chat, observe **no** approval
+prompt, confirm a blob lands.
+
 ### Memory
 - Entity-centric blob storage with fastembed (ONNX, 384-dim)
 - In-memory vector search: numpy cosine similarity
