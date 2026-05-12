@@ -260,11 +260,27 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     setPendingApproval(active.id, null)
     try {
       if (pending.mode === 'solve') {
-        // tasks.solve has no "session" concept — it's one shot.
-        // 'once' → approved=true, anything else → approved=false.
-        await window.zylch.tasks.solveApprove(pending.toolUseId, {
-          approved: decision === 'once'
-        })
+        if (decision === 'deny') {
+          // Cancel the whole solve, don't just decline this tool.
+          // Without this the engine would feed "User declined" back
+          // to the model, which then proposes alternatives — defeats
+          // the user's intent ("Annulla" means stop, let me write).
+          // solveCancel resolves the pending future with
+          // CancelledError; the engine's run() catches it and emits
+          // a `done` event, the listener flips busy → false.
+          await window.zylch.tasks.solveCancel()
+          // Belt-and-suspenders: flip busy immediately so the
+          // composer unlocks even if the done event is delayed by
+          // the RPC round-trip.
+          setBusy(active.id, false)
+          setNarrationSeed('')
+        } else {
+          // tasks.solve has no "session" concept — it's one shot.
+          // 'once' → approved, proceed with the tool.
+          await window.zylch.tasks.solveApprove(pending.toolUseId, {
+            approved: true
+          })
+        }
       } else {
         await window.zylch.chat.approve(pending.toolUseId, { mode: decision })
       }

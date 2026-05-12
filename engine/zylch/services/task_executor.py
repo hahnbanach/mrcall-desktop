@@ -289,6 +289,16 @@ class TaskExecutor:
                 "type": "done",
                 "result": {"messages": self._messages},
             }
+        except asyncio.CancelledError:
+            # User clicked Annulla on the approval card (renderer
+            # calls tasks.solve.cancel which set_exception's pending
+            # futures). Not an error — clean exit so the renderer
+            # doesn't show a ⚠ bubble.
+            logger.info("[executor] cancelled by user")
+            yield {
+                "type": "done",
+                "result": {"messages": self._messages, "cancelled": True},
+            }
         except Exception as e:
             logger.exception("[executor] run failed")
             yield {"type": "error", "message": f"{type(e).__name__}: {e}"}
