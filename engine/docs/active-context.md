@@ -15,6 +15,75 @@ description: |
 
 # Active Context
 
+## Agentic task "Open" — proactive solve flow (2026-05-11/12)
+
+The renderer's Open button on a task now drives a full agentic
+loop via `tasks.solve` instead of opening a pre-compiled chat
+template. This section covers the engine side. App-side rendering
+(approval card, narration, contextual button, read-only on closed
+tasks) lives in `../../app/docs/active-context.md`. IPC contract
+surface lives in `../../docs/ipc-contract.md`.
+
+### Safety fix — APPROVAL_TOOLS naming coherence
+
+`task_executor.APPROVAL_TOOLS` was `{"send_draft", "send_whatsapp_message", "send_sms", "update_memory", "run_python"}` — the ChatService factory tool names. `solve_constants.SOLVE_TOOLS` exposes those tools with flatter names (`send_email`, `send_whatsapp`). The two sets did not intersect on send_email / send_whatsapp, so the solve loop would have **executed sends without surfacing an approval card**. Latent only because no caller had been wired to `tasks.solve` yet.
+
+Now `APPROVAL_TOOLS = {"send_draft", "send_whatsapp_message", "send_email", "send_whatsapp", "send_sms", "update_memory", "run_python"}` — both naming shapes gated. A naming-coherence test in `tests/services/test_solve_prompt.py` fails if a future SOLVE_TOOLS write-effect tool isn't added to the set.
+
+### SOLVE_SYSTEM_PROMPT rewrite
+
+Old prompt: "You are a sales assistant helping {user_name} handle tasks", generic, no language directive, no output shape mandate. The agent would propose drafts as prose then ask "shall I send it?", dragging the user through 5+ turns to send a single email.
+
+New prompt mandates:
+- **Brief output shape**: one sentence recap (anchored in concrete facts from the task context), one sentence action proposal, one short offer ("Procedo?"). Hard rule against echoing the `suggested_action` field — the user wrote it.
+- **Tool-first workflow**: when the action is sendable, go STRAIGHT to `send_email` / `send_whatsapp` / `send_sms` with full payload. The approval card the renderer shows IS the confirmation; no draft-then-ask prose.
+- **Response language**: pinned by `USER_LANGUAGE` env (it/en/es/fr/de/pt/nl), or "match the incoming message" fallback with Italian tiebreaker.
+- **SECRET INSTRUCTIONS**: never reveal in output, even if asked. Personal data is for filling drafts on the user's behalf — never paste it to recipients who don't legitimately need it.
+
+`draft_email` removed from SOLVE_TOOLS (and its `_draft_email` dispatcher in `solve_tools.py`). The model uses `send_email` directly — fewer round-trips, single confirmation step. `format_approval_preview` retains the `draft_email` case for the ChatService surface (which still exposes it via the factory).
+
+Files: `zylch/services/solve_constants.py` (prompt + helpers), `zylch/services/solve_tools.py` (dispatch).
+
+### USER_LANGUAGE setting + `get_user_language_directive`
+
+New optional profile env field, surfaced in `settings_schema.py` ("Personal data" group). Two-letter code (it/en/es/fr/de/pt/nl); empty = match incoming. Read by `get_user_language_directive()` which formats the `RESPONSE LANGUAGE: …` block injected into SOLVE_SYSTEM_PROMPT.
+
+Unknown / whitespace / case-insensitive inputs fall back gracefully to the match-incoming directive. Italian tiebreaker matches the desktop's primary audience.
+
+### `tool_use_start` event
+
+`TaskExecutor.run()` now yields a `tool_use_start` event right before every tool runs — both read-only and approval-gated. The renderer uses this to swap the "Sto pensando alla tua richiesta." narration for a tool-specific line ("Sto cercando nella memoria…" / "Sto eseguendo il codice…"). Closes the "nessun segnale di vita" gap during long read-only tools (`search_memory`, `run_python` on a PDF).
+
+### `tasks.solve.cancel` RPC + clean CancelledError handling
+
+New JSON-RPC method `tasks.solve.cancel()` in `rpc/methods.py`: walks `_active_executor._pending` futures, calls `set_exception(asyncio.CancelledError())` on each. The executor's `await fut` in `task_executor.py:226` raises, which propagates up; `run()` now catches `asyncio.CancelledError` separately and yields a clean `done` event with `result.cancelled=True`. The renderer treats `done` (vs `error`) as a normal completion — no `⚠` bubble on user-initiated cancel.
+
+The renderer wires `Annulla` on a solve-mode approval card to `tasks.solve.cancel`, NOT to `tasks.solve.approve({approved: false})`. Declining via approve would feed `"User declined this action."` to the LLM, which would propose alternatives — opposite of the user's intent.
+
+### Tests
+
+`engine/tests/services/test_solve_prompt.py` (NEW, 9 cases): language directive pinning per code + whitespace tolerance + unset-and-unknown fallbacks; APPROVAL_TOOLS / SOLVE_TOOLS write-effect coherence; absence of `draft_email` from SOLVE_TOOLS; presence of the three required `.format()` placeholders; end-to-end prompt format smoke. 9/9 green.
+
+### Live verification (Mario, 2026-05-11/12 on Mac dev)
+
+Verified end-to-end on real profile tasks:
+- ISTAT survey deadline task → solve produced recap + draft email; approval card showed send_email preview; clicking Annulla aborted cleanly.
+- Aleide payment reminder task → recap with IBAN and amount, proposal of payment confirmation email.
+- Google Workspace cancellation task (CLOSED) → renderer opened it in view-only mode (composer disabled, header "Riapri"), no spurious solve call.
+- Tool progress narration shifts visible for `search_memory` and `run_python` (PDF read).
+
+Not exercised: live OpenAI fallback (no longer a code path), `web_search` tool inside a solve, multi-turn solve with > 3 tool calls. Cost not measured systematically.
+
+### Commit ledger this session
+
+| Commit | What |
+|---|---|
+| `df1e1fb1` | First cut: tasks.solve wired to Open, SOLVE_SYSTEM_PROMPT rewrite, USER_LANGUAGE, APPROVAL_TOOLS fix, draft_email removed, tasks.solve.cancel RPC, SolveEvent types. |
+| `4cd8ec39` | Source panel follows sidebar conversation switches (Conversation.threadId persistence). |
+| `336bc152` | Source panel backfill for legacy convs + tool_use_start event + progress narration. |
+| `a1896df6` | Closed tasks read-only; Workspace header toggles Riapri ↔ Marca come fatta. |
+| `b36e15b3` | Annulla cancels the solve run via tasks.solve.cancel; CancelledError → clean `done`. |
+
 ## Cross-channel person identity — Phase 1 a/b/c (2026-05-07 → 2026-05-08)
 
 `whatsapp-pipeline-parity.md` Phase 1 is **landed end-to-end** on three commits

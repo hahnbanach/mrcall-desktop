@@ -1,7 +1,32 @@
 ---
-status: proposed
+status: completed
 owner: cross-cutting (engine + app)
 created: 2026-05-10
+completed: 2026-05-12
+outcome: |
+  Landed across 5 commits (df1e1fb1, 4cd8ec39, 336bc152, a1896df6,
+  b36e15b3) on main. Live-verified by Mario on Mac dev against
+  real profile tasks (ISTAT, Aleide, Google Workspace closed
+  task). Engine + app + IPC contract all updated. See
+  - engine/docs/active-context.md "Agentic task Open"
+  - app/docs/active-context.md "Workspace + agentic Open flow"
+  - docs/active-context.md "Agentic task Open"
+  - docs/ipc-contract.md (tasks.solve / .approve / .cancel /
+    .event surface)
+
+  Beyond the original plan, the live test surfaced and we fixed:
+  - Source panel staleness on sidebar conversation switches +
+    backfill on legacy localStorage convs (Conversation.threadId
+    became a first-class field).
+  - "Nessun segnale di vita" during long tool runs → engine emits
+    tool_use_start events, renderer swaps narration per tool.
+  - Closed tasks are now read-only by design (composer disabled,
+    "Riapri" toggles back to active in place) — opens a clean
+    UX line between "active work" and "archive".
+  - Annulla on a solve approval card cancels the run via
+    tasks.solve.cancel instead of declining the tool — declining
+    used to make the model propose alternatives, opposite of
+    intent.
 ---
 
 # Proactive task "Open" — agent‑first UX

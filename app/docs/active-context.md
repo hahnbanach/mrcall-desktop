@@ -13,6 +13,132 @@ This file is young: app-side state historically lived inside
 `engine/docs/active-context.md` (which doubled as the monorepo's
 freshest source). Facts migrate here as they get touched.
 
+## Workspace + agentic Open flow (2026-05-11/12)
+
+The Tasks-list `Open` button no longer pre-fills the chat input
+with a static template (`"Aiutami a gestire questa task. …"` — the
+`buildTemplate` helper is gone). It calls `openTaskChat(t)` which
+upserts a `task-<id>` conversation AND fires
+`window.zylch.tasks.solve(task.id)`. The engine streams events on
+`tasks.solve.event`; `Workspace.tsx` listens and renders.
+
+### Renderer flow
+
+- `store/conversations.ts:openTaskChat`:
+  - Reads `task.sources.thread_id` → `Conversation.threadId`
+    (Source panel uses this directly — no longer routes through
+    `useThread` global store for the panel itself, only for
+    inter-view coordination).
+  - Reads `task.completed_at` → `Conversation.taskCompleted`.
+  - `shouldStartSolve = !taskCompleted && (!existing || (history empty AND no pendingApproval))`.
+    Skips solve on closed tasks unconditionally; skips on
+    already-populated convs so a second `Open` doesn't burn
+    ~$0.025 of Sonnet inadvertently.
+  - When solve is fired, `window.zylch.tasks.solve(taskId)` runs
+    fire-and-forget, busy=true is set, and `solvesInFlight` (a
+    module-level Set) tracks the conv id for `closeConversation`
+    to issue `tasks.solveCancel` if the user closes mid-run.
+- `views/Tasks.tsx:Open` button calls `openTaskChat(t)`
+  **unconditionally** (no `if (!exists)` branch). The store's
+  upsert preserves history and refreshes `threadId` +
+  `taskCompleted` from the latest `tasks.list` payload — legacy
+  convs in localStorage converge to the new shape on first Open.
+- `views/Workspace.tsx`:
+  - Listens to `tasks.solve.event`. `thinking` → assistant bubble;
+    `tool_use_start` → narration swap ("Sto cercando nella
+    memoria…" / "Sto eseguendo il codice…" / …, mapped by
+    `narrationForTool`); `tool_call_pending` → set
+    `pendingApproval.mode='solve'`; `tool_result` → clear
+    narration (output not rendered to keep chat clean); `done` →
+    busy false; `error` → `⚠ <message>` bubble + busy false.
+  - `onApproval` discriminates on `pending.mode`:
+    - chat → `chat.approve({ mode: 'once'|'session'|'deny' })` (3 buttons).
+    - solve → `'once'` calls `tasks.solveApprove({ approved: true })`;
+      `'deny'` calls `tasks.solveCancel()` (NOT
+      `solveApprove({approved:false})` — that would let the engine
+      feed "User declined" back into the LLM and the model would
+      propose alternatives, defeating the user's intent).
+  - `ApprovalCard` is mode-aware: solve mode hides the "Allow for
+    session" button (solves are one-shot) and renames the primary
+    button to a tool-specific label ("Invia email" / "Invia
+    WhatsApp" / "Esegui" / "Aggiorna memoria") via `labelForSolve`.
+    Cancel button reads "Annulla".
+
+### Read-only on closed tasks
+
+A `Conversation` with `taskCompleted=true` opens in view-only mode:
+- History + Source panel visible.
+- Composer disabled with placeholder *"Task chiusa — riaprila per
+  scrivere."*.
+- `openTaskChat`'s `shouldStartSolve` short-circuits to false →
+  no LLM call.
+- Header button reads "Riapri" (calls `tasks.reopen` →
+  `patchConversation(id, {taskCompleted: false})` flips the conv
+  to active in place; composer unlocks; no automatic solve — user
+  decides what to do next).
+
+The Conversation context now exposes `patchConversation(id, patch)`
+for partial mutations that don't change `activeId` (used by the
+Riapri handler and by the mount-time backfill). Reducer-level
+`PATCH_CONV` action.
+
+### Source panel persistence
+
+`Conversation.threadId` (set by `openTaskChat` from
+`task.sources.thread_id`, populated by engine's 2026-04-17
+`_backfill_task_thread_id`) is the priority source for
+`Workspace.tsx:sourceThreadId`. Fallback: thread store's
+`activeThreadId` (only when `activeTaskId` matches active conv —
+used for the Tasks → Open path). The `useEffect` on `active.id`
+mirrors `active.threadId` into the global thread store so Email
+view's open-from-thread shortcut stays in sync.
+
+**Mount-time backfill** in `ConversationsProvider`: when
+`profileKey` resolves, scans persisted task-convs for missing
+`threadId` and/or missing `taskCompleted`, calls `tasks.list`
+once with `include_completed: true`, patches both fields per
+conv. Fire-and-forget; failures degrade silently. Covers the
+case where Mario merged the refactor on top of a populated
+localStorage and would otherwise have empty Source panels on
+every pre-refactor conv until reopened from Tasks.
+
+### Closed-task UX gotcha
+
+The legacy `buildTemplate` precompiled prompt is gone, but old
+convs persisted in localStorage retain the stale `draftInput`
+string. `loadPersisted` resets `draftInput` to `""` on any
+task-conv with empty history — covers the transition without a
+forced cache wipe. Free-chat conversations (no taskId) keep
+their drafts.
+
+### Engine-side counterpart
+
+- `tasks.solve(task_id)` builds the prompt with
+  `SOLVE_SYSTEM_PROMPT` + `get_personal_data_section(owner_id)` +
+  `get_user_language_directive()` (reads `USER_LANGUAGE` env,
+  defaults to "match incoming message", Italian as final
+  tiebreaker).
+- `TaskExecutor` emits `tool_use_start` before every tool
+  (including read-only ones — fix for "nessun segnale di vita"
+  during a `search_memory` or `run_python`).
+- `APPROVAL_TOOLS` includes the SOLVE_TOOLS naming
+  (`send_email`, `send_whatsapp`) AND the ChatService factory
+  naming (`send_draft`, `send_whatsapp_message`) — both surfaces
+  share the gate. Was a latent safety gap before this session.
+- `CancelledError` caught separately in `run()`: yields a clean
+  `done` event with `result.cancelled=True` instead of `error`.
+
+Full IPC contract in [`../../docs/ipc-contract.md`](../../docs/ipc-contract.md).
+Cross-cutting recap in [`../../docs/active-context.md`](../../docs/active-context.md).
+Engine prompt + helpers in [`../../engine/docs/active-context.md`](../../engine/docs/active-context.md).
+
+Recent commits (newest first):
+- `b36e15b3` fix: Annulla on solve approval cancels the run.
+- `a1896df6` feat(app): closed tasks read-only; Riapri ↔ Marca come fatta.
+- `336bc152` fix: Source panel + progress narration for solve.
+- `4cd8ec39` fix(app): Source panel follows sidebar switches.
+- `df1e1fb1` feat: proactive task "Open" — first cut.
+
 ## What Is Built and Working
 
 ### Identity (Firebase, 2026-05-02)

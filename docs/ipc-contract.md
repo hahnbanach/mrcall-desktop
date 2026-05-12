@@ -125,6 +125,110 @@ credits toggle) on mount and on every window `focus` event so a top-up
 done in another tab is reflected when the user returns. Preload binding
 at `app/src/preload/index.ts` has a 15 s timeout.
 
+### `tasks.solve(task_id, instructions?)`
+
+Agentic loop on a single task. Builds the SOLVE_SYSTEM_PROMPT with
+the task's `build_task_context` (original email, memory blobs,
+personal data section, language directive), then runs
+`TaskExecutor` for up to 10 turns of LLM + tool use. Approval-gated
+tools (`send_email`, `send_whatsapp`, `send_sms`, `update_memory`,
+`run_python`) emit `tasks.solve.event` notifications of type
+`tool_call_pending` and pause until the renderer calls
+`tasks.solve.approve`. Read-only tools auto-execute and emit
+`tool_use_start` + `tool_result` events.
+
+| Param | Type | Required | Notes |
+|-------|------|----------|-------|
+| `task_id` | string | yes | Must reference an OPEN task. `get_task_items` here does NOT pass `include_completed=True` — solve is for active work; closed tasks return `{ok: false, error: "task not found"}`. |
+| `instructions` | string | no | Optional extra user instructions appended to the LLM's user-message context. The renderer currently passes empty string. |
+
+Returns `{ok: boolean, result?: {messages: list, cancelled?: boolean}, error?: string}` after the run completes / errors / is cancelled.
+
+**Concurrency**: `asyncio.Lock` engine-side — a second `tasks.solve`
+call while one is active raises `SolveInProgressError` (custom code).
+Renderer guards by not firing solve when busy.
+
+**10-minute timeout** on the renderer side
+(`app/src/main/index.ts:'tasks.solve'`), matching the executor's
+`max_turns=10`.
+
+### `tasks.solve.approve(tool_use_id, approved, edited_input?)`
+
+Resolves a pending approval future inside the active solve. The
+renderer's approval card in `Workspace.tsx` calls this when the
+user clicks the primary button ("Invia email" / "Invia WhatsApp" /
+…). The "Annulla" button instead calls `tasks.solve.cancel` —
+declining with `approved=false` would cause the engine to feed
+"User declined this action." back to the LLM, which then proposes
+alternatives.
+
+Returns `{ok: boolean}`. `ok=false` only when no solve is active or
+the `tool_use_id` doesn't match a pending future.
+
+### `tasks.solve.cancel()`
+
+Aborts the active solve, if any. Sets `asyncio.CancelledError` on
+every pending approval future; the executor catches it inside
+`TaskExecutor.run()` and emits a clean `done` event (with
+`result.cancelled: True`) — NOT an `error` event, so the renderer
+doesn't show a `⚠` bubble on user-initiated abort.
+
+Returns `{ok: boolean, cancelled_pending?: number, error?: string}`.
+Best-effort: if no futures are pending (the LLM is mid-call), the
+cancel only takes effect when the LLM call returns and the loop
+hits the next `await fut`. The 10-minute RPC timeout is the
+final backstop.
+
+### `tasks.solve.event` (notification stream)
+
+Emitted by the engine throughout the lifetime of a `tasks.solve`
+call. The renderer's listener in `Workspace.tsx` consumes this
+stream into chat bubbles + narration + approval card. Engine
+guarantees one solve at a time, so events route to whichever
+conversation is active at the moment.
+
+Event union (see `app/src/renderer/src/types.ts:SolveEvent`):
+
+```jsonc
+// Model produced a text block (between tool calls or final answer)
+{ "type": "thinking", "text": string }
+
+// Read-only or approval-gated tool is about to run. UI hint to swap
+// "Sto pensando…" for "Sto cercando nella memoria…" etc.
+{ "type": "tool_use_start", "tool_use_id": string, "name": string }
+
+// Approval-gated tool reached, executor paused on
+// _pending[tool_use_id] future. UI must render an approval card
+// and respond via tasks.solve.approve OR tasks.solve.cancel.
+{
+  "type": "tool_call_pending",
+  "tool_use_id": string,
+  "name": string,
+  "input": object,
+  "preview": string   // human-readable, from format_approval_preview()
+}
+
+// Tool finished. Currently not rendered as a chat bubble — the
+// model's next `thinking` block is what the user reads. The
+// renderer DOES clear the narration on this event so the stale
+// "Sto cercando…" line doesn't outlast the actual operation.
+{
+  "type": "tool_result",
+  "tool_use_id": string,
+  "name": string,
+  "output": string,
+  "approved": boolean
+}
+
+// Clean completion (incl. user-cancelled).
+{ "type": "done", "result": { "messages": list, "cancelled"?: boolean } }
+
+// Unexpected exception in run(). CancelledError does NOT come
+// through here — it's caught and emitted as `done` with
+// `result.cancelled: True`.
+{ "type": "error", "message": string }
+```
+
 ### `tasks.topic_dedup_now()`
 
 Manual trigger for the F9 cross-contact topic dedup sweep. Same

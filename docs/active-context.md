@@ -13,6 +13,50 @@ This file is young. Cross-cutting facts historically lived inside
 `engine/docs/active-context.md` (the engine doc tree played a dual role).
 Facts migrate here as they get touched.
 
+## 2026-05-12 — Agentic task "Open" — proactive solve flow
+
+The desktop's Tasks-list `Open` button no longer pre-fills the chat
+input with `"Aiutami a gestire questa task. …"` (template removed).
+It fires `tasks.solve(task_id)` directly. The engine streams events
+back via `tasks.solve.event`; the renderer renders them as
+assistant bubbles, tool-progress narration, and approval cards.
+Goal: three clicks to act (Open → "Invia email" on the approval
+card → done) instead of seven.
+
+Spans engine + app + IPC. Detail lives in each tree:
+
+- **Engine state** — see `engine/docs/active-context.md`
+  "Agentic task Open" (SOLVE_SYSTEM_PROMPT rewrite, USER_LANGUAGE,
+  draft_email removed from SOLVE_TOOLS, APPROVAL_TOOLS naming fix,
+  new `tool_use_start` event, new `tasks.solve.cancel` RPC, clean
+  cancel via CancelledError).
+- **App state** — see `app/docs/active-context.md`
+  "Workspace + agentic Open flow" (no template, Conversation
+  gains `threadId` + `taskCompleted`, contextual header button,
+  read-only on closed tasks, Annulla cancels run instead of
+  declining the tool).
+- **IPC contract** — `ipc-contract.md` carries the full
+  `tasks.solve` / `tasks.solve.approve` / `tasks.solve.cancel` /
+  `tasks.solve.event` surface.
+
+Execution plan: [`execution-plans/proactive-task-open.md`](execution-plans/proactive-task-open.md) (status: completed).
+
+**Live test status** (Mario, 2026-05-11/12 on Mac dev build):
+solve flow proven on real tasks (ISTAT, Aleide payment reminder,
+Google Workspace closed task). Source panel persistence and
+contextual button verified on legacy localStorage convs. Cancel
+flow verified. Live-cost not measured systematically — first
+Open on a fresh task costs roughly the Sonnet input on
+SOLVE_SYSTEM_PROMPT + tool defs + task context (~5-8k input,
+~500 output, ~$0.005 cached / ~$0.025 cold).
+
+Recent commits (newest first):
+- `b36e15b3` Annulla on solve approval cancels the run.
+- `a1896df6` Closed tasks read-only; header toggles Riapri ↔ Marca come fatta.
+- `336bc152` Source panel + progress narration for solve flow.
+- `4cd8ec39` Source panel follows sidebar conversation switches.
+- `df1e1fb1` Proactive task "Open" — first cut.
+
 ## 2026-05-12 — WhatsApp pipeline parity Phase 2 landed (engine-only)
 
 Commit `91421d2e` lands the end-to-end WhatsApp memory extraction
