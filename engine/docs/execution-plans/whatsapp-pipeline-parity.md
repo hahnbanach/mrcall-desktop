@@ -290,19 +290,23 @@ Discrepancies vs. the original brief:
 - The brief's `_find_match` rewrite is implemented in `_upsert_entity`
   itself (no separate `_find_match` helper extracted).
 
-### Phase 2 — `whatsapp_blobs` table + WA memory extraction (D2 + D4)
+### Phase 2 — `whatsapp_blobs` table + WA memory extraction (D2 + D4) ✅ DONE
 
-- New table.
-- `MemoryWorker.process_whatsapp_message` wired + called from
-  process_pipeline step [3/5] WA loop.
-- New `Storage.get_blobs_for_whatsapp_message` mirror.
-- `WhatsAppMessage.memory_processed_at` column.
-- Tests: `tests/workers/test_memory_whatsapp.py` — message extracted
-  into a person blob, second message merges, identifier overlap with
-  existing email-derived blob merges (cross-channel happy path).
-- **STOP. Mario tests in app: send/receive a few WA messages, observe
-  blobs created; verify a blob about a contact who also emails him is
-  ONE blob, not two.**
+Landed in a single commit (`91421d2e`, 2026-05-12) covering all three
+sub-steps the handoff planned (2a / 2b / 2c) plus parser hardening
+discovered during live verification. Full engine-side description in
+[`../active-context.md`](../active-context.md) "WhatsApp pipeline parity — Phase 2 a/b/c".
+
+- ✅ New `WhatsAppBlob` model + `add_whatsapp_blob_link` / `get_blobs_for_whatsapp_message` storage helpers. `migrate_blob_references` extended with `whatsapp_blobs_migrated` so Phase 1c reconsolidation preserves WA links.
+- ✅ `WhatsAppMessage.memory_processed_at` column already existed pre-2026-05; no migration needed.
+- ✅ `agents/trainers/memory_email.py` → `memory_message.py` rename. `MessageMemoryAgentTrainer` class + channel-aware META_PROMPT (mentions email AND WhatsApp envelopes; instructs the LLM to emit `Phone:` / `Email:` / `LID:` in #IDENTIFIERS; warns against `.format()` placeholders). Legacy module / class / method names re-exported for back-compat. Worker reads `memory_message` storage key first, falls back to legacy `memory_email`.
+- ✅ `MemoryWorker.process_whatsapp_message` mirrors `process_email`. `_format_whatsapp_data` resolves `<digits>@lid` privacy-mode senders to real phones via `whatsapp_contacts` (`Storage.get_whatsapp_contact_by_jid`, new helper) — the load-bearing piece for cross-channel match.
+- ✅ Pipeline step [3/5] iterates email AND WhatsApp; `[update.summary]` log line carries `wa_memory=` alongside `memory=`.
+- ✅ Parser hardening (discovered during live test): `_normalise_phone` rejects inputs containing `@`; `_parse_identifiers_block` reroutes `Phone: X@lid` mislabels into kind `lid`.
+- ✅ Tests: 28 new cases across `tests/storage/test_whatsapp_blobs.py` (9), `tests/workers/test_memory_whatsapp.py` (14), `tests/agents/test_memory_message_trainer.py` (9). Plus 1 update to `tests/workers/test_person_identifiers.py` for the new `whatsapp_blobs_migrated` key in `migrate_blob_references`.
+- ✅ Live-verified on gmail profile (`HxiZh…`): 106 of 106 WhatsApp 1-on-1 messages processed cleanly, 0 LID-as-phone in `person_identifiers`, first cross-channel blob landed (`CANNING ITALIA S.R.L.` n_em=1 + n_wa=1; Ivan Marchese #HISTORY combining MrCall calls 2024–2026 and WhatsApp 2026-05).
+
+Discrepancy vs. the original brief: this phase landed as ONE commit rather than the originally-planned 2a/2b/2c sub-commits — the three are functionally indivisible (none of them works without the others) so the unified landing matches the deployment reality.
 
 ### Phase 3 — task creation from WhatsApp (D3 + D5)
 

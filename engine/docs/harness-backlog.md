@@ -4,6 +4,21 @@ Enforcement gaps, missing tooling, and documentation debt.
 
 ## Open
 
+- [ ] **`tests/storage/test_data_backfills.py::test_init_db_invokes_channel_backfill_when_thread_id_backfill_is_noop` broken at HEAD (2026-05-12).**
+  - Setup fails with `sqlite3.IntegrityError: NOT NULL constraint failed: task_items.pinned` when the fixture inserts a synthetic task row that omits the `pinned` column. The schema gained a `NOT NULL` on `pinned` (probably with a column-add migration that lacked a default) some time after this test was written; the test fixture never got updated.
+  - Pre-existing on `c5c1922d` (HEAD before the whatsapp-pipeline-parity Phase 2 landing). Confirmed via `git stash; pytest …`.
+  - The sibling test in the same file (`test_apply_data_backfills_calls_every_step`) is green, so the dispatcher-orchestration regression check still runs — only the integrity check via a real init_db is broken.
+  - Fix: add `pinned=0` to the test INSERT, OR change the model to have `default=False`. Latter is the cleaner fix because production callers that insert via the ORM rely on the default being false; bare-SQL callers in tests are the exception.
+
+- [ ] **`_normalise_phone` doesn't split on `/`-separated phones (Phase 1a era, surfaced during Phase 2 live verification).**
+  - Real Mario data: a blob `#IDENTIFIERS` block containing `Phone: 02 316562 / 338 594946` is parsed as a single value. `_normalise_phone` strips spaces/dots/dashes/parens/slashes BUT does not treat ` / ` as a value separator, so the two phones get concatenated into one 18-digit "phone" `023165623385949462`, indexed in `person_identifiers` as `kind='phone'`. False-match risk if any unrelated entity has this concatenation as a substring.
+  - `_parse_identifiers_block` splits multi-value lines on `,` only. Add ` / ` (slash with whitespace) as an additional split delimiter; bare `/` mid-number must stay valid (e.g. `+39/02-…` formatting). 14 such rows visible on the gmail profile before the Phase 2 cleanup; after the cleanup the count reverts to whatever the cosine-fallback / future re-extractions produce.
+
+- [ ] **`LID:` kind never indexed on profiles that haven't retrained the memory agent.**
+  - Phase 2b added the `memory_message` storage key + channel-aware META_PROMPT that explicitly instructs the LLM to emit `LID:` lines for WhatsApp messages. The worker reads `memory_message` first and falls back to legacy `memory_email` (`engine/zylch/workers/memory.py:_get_extraction_prompt`), so an existing profile keeps booting fine — but the legacy prompt has no `LID:` instruction, so `person_identifiers.kind='lid'` rows never get written.
+  - Cross-channel match works anyway via `Phone:` (resolved from `whatsapp_contacts`), so this is a *future-proofing* gap, not a current functional break. The gap closes either when the user retrains (`/agent memory train email` or the Settings → Maintenance button if one ever exists) or when a future schema-change migration force-invalidates the legacy key.
+  - Recommendation: add a one-shot auto-retrain prompt on startup if `get_agent_prompt('memory_message')` is None but `get_agent_prompt('memory_email')` is not None, OR document the "retrain after upgrade" step in a release-notes file users can read.
+
 - [ ] **`tests/workers/test_task_worker_bugs.py` further out of sync (2026-05-06).**
   - Already broken by the 2026-05-04 transport refactor (mocks removed
     `LLMClient` attribute on `task_creation`).

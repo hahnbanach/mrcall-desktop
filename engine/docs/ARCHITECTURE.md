@@ -45,7 +45,7 @@ zylch/
 │
 ├── storage/              # Data access layer (SQLite)
 │   ├── database.py       # SQLAlchemy engine (sqlite:///~/.zylch/zylch.db)
-│   ├── models.py         # 20+ ORM models (incl. EmailBlob, CalendarBlob, PersonIdentifier)
+│   ├── models.py         # 20+ ORM models (incl. EmailBlob, CalendarBlob, WhatsAppBlob, PersonIdentifier)
 │   └── storage.py        # Storage class (CRUD, upserts, search)
 │
 ├── tools/                # LLM tool definitions
@@ -183,7 +183,7 @@ User
 
 - **Engine**: SQLite with WAL mode, foreign keys enabled
 - **Location**: `~/.zylch/profiles/<name>/zylch.db`
-- **Models**: 20+ (Email, Blob, BlobSentence, TaskItem, OAuthToken, WhatsAppMessage, WhatsAppContact, MrcallConversation, EmailBlob/CalendarBlob join tables, PersonIdentifier index for cross-channel identity, etc.)
+- **Models**: 20+ (Email, Blob, BlobSentence, TaskItem, OAuthToken, WhatsAppMessage, WhatsAppContact, MrcallConversation, EmailBlob/CalendarBlob/WhatsAppBlob join tables, PersonIdentifier index for cross-channel identity, etc.)
 - **Embeddings**: stored as LargeBinary (BLOB), loaded into numpy for search
 - **No pgvector**: cosine similarity computed in-memory via numpy
 - **No Alembic**: tables created via `Base.metadata.create_all()`

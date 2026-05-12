@@ -1,11 +1,21 @@
 ---
-status: handoff (ready for next session)
+status: completed
+completed_at: 2026-05-12
+completed_in: commit 91421d2e (single landing covering 2a + 2b + 2c + parser hardening)
 target_phase: Phase 2 (D2 + D4) — WhatsApp memory extraction
 prerequisites_done:
   - Phase 1a (`d0baa6b1`): person_identifiers index, additive write.
   - Phase 1b (`315c56d1`): identifier-first match in `_upsert_entity`.
   - Phase 1c (`6ae8a5fa`): identifier-clustered `reconsolidate_now`
     + cross-reference migration. Live-verified on support / cafe124.
+outcome: |
+  Landed end-to-end and live-verified on the gmail profile
+  (`HxiZh…`). 106 of 106 WhatsApp 1-on-1 messages processed; 0
+  LID-as-phone rows in person_identifiers; first cross-channel
+  blob landed (CANNING ITALIA S.R.L., email + WhatsApp). Detailed
+  outcome lives in `../active-context.md` "WhatsApp pipeline parity
+  — Phase 2 a/b/c". Next: Phase 3 (D3 + D5) — task creation from
+  WhatsApp.
 created: 2026-05-08
 ---
 

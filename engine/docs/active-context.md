@@ -164,9 +164,56 @@ behind: pure name-only duplicates with mismatched cases or typo
 ("Mario Rossi" vs "mario rossi" → caught; "Salomone" vs "Salamone"
 → NOT caught). Same as before — no regression.
 
-**Next**: Phase 2 (D2 + D4) — `whatsapp_blobs` join table + rewriting
-the dead `MemoryWorker.process_whatsapp_message` skeleton at
-`memory.py:856` into a real path that mirrors `process_email`.
+**Next**: Phase 3 (D3 + D5) — task creation from WhatsApp messages,
+mirroring the email task path. Phase 2 a/b/c landed on 2026-05-12
+(see next section).
+
+## WhatsApp pipeline parity — Phase 2 a/b/c (2026-05-12, commit `91421d2e`)
+
+WhatsApp messages now flow through the same `MemoryWorker` as emails,
+extracting entity blobs that merge cross-channel with email-derived
+ones via the Phase 1 `person_identifiers` index. The dead skeleton
+that historically claimed this path is gone (was unreachable: called
+`storage.mark_whatsapp_memory_processed` which never existed, wrote to
+a parallel `PERSON:{sender}` namespace, never wired to the pipeline).
+
+**Phase 2a — `whatsapp_blobs` join table + helpers.**
+- New model `WhatsAppBlob(whatsapp_message_id FK→CASCADE, blob_id FK→CASCADE, owner_id, created_at)`. Mirror of `EmailBlob` / `CalendarBlob`.
+- New `Storage.add_whatsapp_blob_link(owner_id, whatsapp_message_id, blob_id) -> bool` (idempotent on PK) and `Storage.get_blobs_for_whatsapp_message(owner_id, whatsapp_message_id) -> List[str]`.
+- `Storage.migrate_blob_references` extended with a 4th migration block (`whatsapp_blobs_migrated`) so Phase 1c reconsolidation carries WA links onto the keeper before the dup gets dropped. Result dict gains the new key — callers checking dict equality (e.g. `tests/workers/test_person_identifiers.py::test_migrate_skips_when_dup_equals_keeper`) updated.
+- `WhatsAppMessage.memory_processed_at` (already on model since pre-2026-05) serves as the watermark.
+
+**Phase 2b — `memory_email` trainer → `memory_message` (channel-aware).**
+- File renamed `agents/trainers/memory_email.py` → `agents/trainers/memory_message.py` (old file kept as a thin re-export shim for back-compat).
+- `EmailMemoryAgentTrainer` → `MessageMemoryAgentTrainer` (legacy class name preserved as module-level alias; legacy method `build_memory_email_prompt` aliased to the new `build_memory_message_prompt`).
+- `EMAIL_AGENT_META_PROMPT` → `MESSAGE_AGENT_META_PROMPT`. Updated to describe BOTH the EMAIL envelope and the WHATSAPP envelope explicitly, with a "CROSS-CHANNEL IDENTITY" section locking in: emit `Phone:` / `Email:` / `LID:` in #IDENTIFIERS for whichever channel is active, do NOT use `.format()` placeholders (new prompts are sent as cached system messages). Trainer is still trained on email history (richer signal); only the generated extraction prompt is channel-aware.
+- Storage key for the trained prompt is now `memory_message`. `MemoryWorker._get_extraction_prompt` reads `memory_message` first and falls back to legacy `memory_email` for installs that haven't retrained — both keep working untouched on existing profiles.
+- `services/process_pipeline.py:_auto_train_memory` and `services/command_handlers.py:_handle_memory_train` updated to use the new class + key. `services/job_executor.py` accepts either key when checking "is a memory agent trained?".
+
+**Phase 2c — `MemoryWorker.process_whatsapp_message` + envelope + LID resolution + pipeline wiring.**
+- New `process_whatsapp_message(msg)` mirrors `process_email`: skip when `len(text) < 20` (still marks processed so we don't re-evaluate), build envelope via `_format_whatsapp_data`, call new `_extract_entities_for_message` (cached-system path), upsert each extracted entity, write `whatsapp_blobs` link, mark watermark. New batch helper `process_whatsapp_batch(messages, concurrency=5)` mirrors `process_batch` with the same 3-consecutive-failures abort.
+- `_upsert_entity` gained a `source_kind: str = "email"` parameter; when `"whatsapp"` the join-row goes to `whatsapp_blobs` instead of `email_blobs`. Default keeps the email caller signature backward-compatible.
+- New `_format_whatsapp_data(message)` emits the channel-aware envelope (`Channel: WhatsApp` / `From: <name> (<phone>)` / `At:` / `Group: (1-on-1)` / `Contact:` / optional `Phone:` and `LID:` lines / blank / body). **LID → phone resolution via `whatsapp_contacts`** is the load-bearing piece: when sender_jid is a privacy-mode `<digits>@lid`, `Storage.get_whatsapp_contact_by_jid` (new helper) returns the contact row populated by `WhatsAppSyncService.sync_lid_contacts` (`whatsmeow_lid_map`). The envelope then carries both the real phone AND the LID, so the LLM-generated `#IDENTIFIERS` block drives a Phase 1b match against email-derived blobs that already carry the same phone. Without this resolution the LLM only sees the LID and the cross-channel signal dies.
+- New `Storage.get_unprocessed_whatsapp_messages(owner_id)` filters `is_group=False` (1-on-1 only in v1 per Mario), `memory_processed_at IS NULL`. New `mark_whatsapp_memory_processed(owner_id, msg_id)` + bulk `mark_whatsapp_messages_processed`. `reset_memory_processing_timestamps` extended to include `whatsapp_messages`.
+- `services/process_pipeline.py` step `[3/5]` now iterates email AND WhatsApp. `_run_memory` returns `(emails_processed, wa_processed)` tuple; the `[update.summary]` log line gained `wa_memory=N` alongside `memory=N`.
+
+**Parser hardening (live-test driven, in the same commit).**
+- `_normalise_phone` rejects inputs containing `@` outright. The legacy `memory_email` prompt — still active on profiles that haven't retrained — sometimes writes a WhatsApp LID into the `Phone:` field; without the guard, the digit-strip would happily index `185800503328844@lid` → `"185800503328844"` as a phone, polluting the cross-channel index with bogus matches.
+- `_parse_identifiers_block` reroutes any `Phone: X@lid` value (case-insensitive) into kind `lid` so the cross-channel signal survives even when the LLM mislabels. Phase 1b still gets to use it as a LID identifier.
+
+**Live verification (2026-05-12, gmail profile `HxiZh…/zylch.db`).**
+First Update run on the broken-prompt + missing-LID-resolution code processed 113 messages → 20 WA-only blobs, 14 LID-as-phone rows in `person_identifiers`, 0 cross-channel hits. After the hardening + LID resolution fix + targeted DB cleanup (`UPDATE whatsapp_messages SET memory_processed_at=NULL`, `DELETE FROM person_identifiers WHERE … bogus rows`, drop WA-only blobs), second Update run on the same profile: **106/106 WhatsApp messages processed, 0 LID-as-phone in person_identifiers, real phones resolved from LIDs via `whatsapp_contacts` (Tania → `+393936997034`, Alessandro Simonetti → `+393395040816`), first cross-channel blob landed** (`CANNING ITALIA S.R.L.` with `n_email=1` from a Qonto transfer + `n_wa=1` from Ivan Marchese; Ivan's blob now has `#HISTORY` combining MrCall calls 2024–2026 and WhatsApp messages 2026-05). DB backup at `~/.zylch/profiles/HxiZh…/zylch.db.bak.before-wa-reprocess` (50 MB) if rollback is ever needed.
+
+**Tests added/updated.** 28 new cases, 1 updated, all green:
+- `tests/storage/test_whatsapp_blobs.py` — 9 cases (helpers, idempotency, CASCADE both sides, `migrate_blob_references` WA branch).
+- `tests/workers/test_memory_whatsapp.py` — 14 cases (end-to-end with mocked LLM, cross-channel merge, LID→phone resolution from `whatsapp_contacts`, `_normalise_phone` @-rejection, `_parse_identifiers_block` LID-in-Phone reroute, envelope shape, group / short-text / empty-extractor paths, watermark roundtrip).
+- `tests/agents/test_memory_message_trainer.py` — 9 cases (class/alias backward-compat, meta-prompt content asserts: mentions WhatsApp + CROSS-CHANNEL section + `Phone:`/`Email:`/`LID:` + both envelope shapes + warns against `.format()` placeholders).
+- `tests/workers/test_person_identifiers.py::test_migrate_skips_when_dup_equals_keeper` — +1 expected key (`whatsapp_blobs_migrated: 0`).
+
+**Known leftovers (deferred to Phase 3 or Phase 4).**
+- `is_from_me=True` messages: the LLM occasionally labels the extracted PERSON with the wrong name (e.g. used the chat-partner's name for a blob built from outgoing messages). Acceptable in v1; Phase 3's task-creation path will need to handle direction explicitly.
+- Pre-existing slash-separated phones bug: `Phone: 02 316562 / 338 594946` enters `_normalise_phone` as one piece and gets indexed as `"023165623385949462"` (18 digits, two phones concatenated). Phase 1 era; not blocking Phase 2. Splitting on `,` only is correct as designed but doesn't catch ` / `-separated lines.
+- `LID:` in `person_identifiers` is still 0 even with the new envelope, because the active extraction prompt on every profile is still the legacy `memory_email` (Phase 2b's rename adds the new class but doesn't auto-retrain). Cross-channel match works anyway because the envelope's resolved `Phone:` line is the strong signal. The `LID:` kind starts populating once the user clicks "Train memory agent" or onboards a fresh profile.
 
 ## F9 Topic Dedup — cross-contact LLM clustering (2026-05-06 evening)
 
@@ -341,7 +388,11 @@ CLI script that prints per-profile memory pipeline state — total emails, memor
 - **2026-05-07 — diagnostic log for unhandled proto kinds.**
   - `_extract_text` logs `[wa-sync] _extract_text returned None: fields=[<sorted proto fields>]` once per unique field-set. So when a future placeholder is missing (poll-vote variant, contact-vCard variant, etc.) the message gets surfaced cleanly in `zylch.log` with the exact proto signature. So far the only kind seen is `[messageContextInfo,senderKeyDistributionMessage]` which is system-level (sender-key-distribution for groups) and correctly returns None.
 
-**Next major work (planned, not started)**: WhatsApp pipeline parity with email — memory extraction, task creation, cross-channel person identity (one blob / one task across email + WA). Full brief at [`execution-plans/whatsapp-pipeline-parity.md`](execution-plans/whatsapp-pipeline-parity.md). Five open design questions for Mario at the bottom of that file; Phase 1 (identifier index) is one PR.
+**Pipeline parity progress (full brief: [`execution-plans/whatsapp-pipeline-parity.md`](execution-plans/whatsapp-pipeline-parity.md)).**
+- Phase 1 a/b/c (identifier index + identifier-first match + identifier-clustered reconsolidation): **DONE** (commits `d0baa6b1`, `315c56d1`, `6ae8a5fa`, 2026-05-07/08).
+- Phase 2 a/b/c (whatsapp_blobs join table + channel-aware trainer + WA memory extraction wired into `update [3/5]`): **DONE** (commit `91421d2e`, 2026-05-12). See "WhatsApp pipeline parity — Phase 2 a/b/c" section above.
+- Phase 3 (D3 + D5 — task creation from WhatsApp, `task_items.sources.whatsapp_messages`, `task_items.channel='whatsapp'` flowing through F4/F8/F9 sweeps): **next**.
+- Phase 4 (UI surfacing in `Tasks.tsx`): after Phase 3.
 - The 36 historic empty-`chat_jid` rows on `HxiZh…/zylch.db` are unrecoverable garbage (no JID stored, message_id alone is not enough to reconstruct origin). They are invisible to `whatsapp.list_threads` thanks to the existing `chat_jid IS NOT NULL` / `chat_jid != ""` filter, so the only effect is the breakdown showing `{'(no jid)': 36}` until they're deleted. Cleanup is a one-shot `DELETE FROM whatsapp_messages WHERE owner_id='mario.alemi@gmail.com' AND (chat_jid IS NULL OR chat_jid='')` — the user should run it after a fresh re-link confirms the new path stores valid rows.
 - History sync events arrive but with `len(conversations) == 0` (logged repeatedly as `[wa-sync] history sync: 0 conversations` on `HxiZh…`). Live MessageEv events do come through. The empty history is a separate question — could be upstream (whatsmeow/neonize behaviour on subsequent connects after the initial link) or a missing initial-link. Not blocked by the JID fix; verify after the next clean Forget device → fresh QR scan.
 
