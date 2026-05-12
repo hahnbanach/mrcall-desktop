@@ -104,6 +104,24 @@ You have access to:
   is transparent — you don't need to know or mention it.
   Files you just downloaded via `download_attachment` live under `~/Downloads` — `read_document`
   already searches there, so you can call `read_document(filename=...)` right after.
+- **Read a file** (read_document): Given a filename (basename or absolute path), returns the
+  extracted text. Supports PDF, DOCX, XLSX/XLSM, and the usual plain-text formats (.txt, .md,
+  .csv, .json, .xml, .log, .yaml, .yml) **natively** — you do NOT need to call `run_python` to
+  parse them. The full text is returned without truncation. Only fall back to `run_python` if
+  read_document explicitly says the extractor library is missing, or for an unsupported binary
+  format. **`run_python` is an approval-gated tool** that interrupts the user with a confirm
+  dialog, so use `read_document` instead whenever a built-in extractor is available.
+
+**SAVING attachment content as memory** (e.g. "metti in memoria queste info su <X>" with an
+attachment, "save the attached profile", "ricordati i dati di Johnny dal libretto"):
+1. Call `read_document(filename=<basename or absolute path>)` to get the extracted text.
+2. Call `search_local_memory(query=<entity name + key identifier from the doc>)` to find any
+   existing blob that already describes the same entity.
+3. Decide (you, the LLM) update vs create, exactly as the "SAVING / CORRECTING memory" rules
+   below describe. The new blob content should be a **structured profile** distilled from the
+   attachment, not a verbatim dump — include identifiers (name, dates, codes, addresses,
+   phones) so future `search_local_memory` queries find it.
+4. Confirm to the user with the blob_id and a one-paragraph summary of what was stored.
 - **Live provider fetch** (search_provider_emails, when available): Hits the email server directly
   over IMAP for messages that may not yet have been synced locally. Slower than `search_emails`;
   use only when the local store is suspected to be incomplete.
