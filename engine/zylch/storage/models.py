@@ -441,6 +441,14 @@ class TaskItem(DictMixin, Base):
     event_type = Column(Text, nullable=False)
     event_id = Column(Text, nullable=False)
     contact_email = Column(Text)
+    # 2026-05-13 (whatsapp-pipeline-parity Fase 3a): phone identifier for
+    # tasks whose trigger channel is WhatsApp. For email tasks this is
+    # NULL; for WhatsApp tasks contact_email is "" and contact_phone
+    # carries the resolved phone (or LID if the LID never resolved via
+    # whatsapp_contacts). F8 dedup clusters on contact_email OR
+    # contact_phone; F4 reanalyze falls back to it when contact_email is
+    # empty. Indexed because the F8 cluster query scans by value.
+    contact_phone = Column(Text, index=True)
     contact_name = Column(Text)
     action_required = Column(Boolean, default=False)
     urgency = Column(Text)

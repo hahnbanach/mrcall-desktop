@@ -173,6 +173,23 @@ def _apply_column_migrations(engine: Engine) -> None:
         # 'calendar', 'whatsapp'). NULL means "unknown" and is
         # treated as 'email' by the UI filter for backward compat.
         ("task_items", "channel", "TEXT"),
+        # 2026-05-13 (whatsapp-pipeline-parity Fase 3a): phone identifier
+        # for WhatsApp-trigger tasks. F8 dedup clusters on
+        # contact_email OR contact_phone; F4 reanalyze uses it as
+        # contact key when contact_email is empty. NULL on existing
+        # email/phone/calendar tasks; populated by task_creation when
+        # event_type == 'whatsapp'.
+        ("task_items", "contact_phone", "TEXT"),
+    ]
+    # Indexes the SQLAlchemy `index=True` declaration creates on FRESH
+    # tables but never gets back-applied to tables that pre-date the
+    # column add. `create_all` runs BEFORE this migration and does not
+    # touch existing tables, so post-migration we CREATE INDEX IF NOT
+    # EXISTS to make `index=True` truthful on legacy DBs. (Same name
+    # convention SQLAlchemy uses: `ix_<table>_<column>`.)
+    indexes = [
+        ("task_items", "channel"),
+        ("task_items", "contact_phone"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in migrations:
@@ -193,6 +210,14 @@ def _apply_column_migrations(engine: Engine) -> None:
                 logger.info(f"[migrate] Added {table}.{column} ({ddl})")
             except Exception as e:
                 logger.warning(f"[migrate] Failed to add {table}.{column}: {e}")
+        for table, column in indexes:
+            idx_name = f"ix_{table}_{column}"
+            try:
+                conn.exec_driver_sql(
+                    f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({column})"
+                )
+            except Exception as e:
+                logger.warning(f"[migrate] Failed to ensure index {idx_name}: {e}")
 
 
 def _apply_data_backfills() -> None:

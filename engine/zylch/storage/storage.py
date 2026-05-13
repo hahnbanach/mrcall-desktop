@@ -52,24 +52,27 @@ def _infer_task_channel(contact_email: str, event_type: Optional[str]) -> str:
     """Pick the semantic channel for a task (Fase 3.2).
 
     Distinct from event_type:
-      - event_type is the technical source (email / calendar).
+      - event_type is the technical source (email / calendar / whatsapp).
       - channel is the user-facing surface ("phone" for missed-call
-        notifications routed via email, "whatsapp" once that pipeline
-        writes tasks).
+        notifications routed via email, "whatsapp" for WhatsApp tasks).
 
     Rules (in priority order):
       1. Calendar events → "calendar".
-      2. Email from a notification@*mrcall* / notification@*transactional*
+      2. WhatsApp events → "whatsapp" (whatsapp-pipeline-parity Fase 3a).
+      3. Email from a notification@*mrcall* / notification@*transactional*
          address → "phone" (missed-call alerts).
-      3. Otherwise → "email".
+      4. Otherwise → "email".
 
     The detection is intentionally narrow: the user wants to filter
     "my call-back tasks" out from "my email tasks" without false
     positives polluting either side. Add additional notification
     domains here as new platforms get integrated.
     """
-    if (event_type or "").lower() == "calendar":
+    et = (event_type or "").lower()
+    if et == "calendar":
         return "calendar"
+    if et == "whatsapp":
+        return "whatsapp"
     contact = (contact_email or "").strip().lower()
     if contact and "@" in contact:
         local, domain = contact.split("@", 1)
@@ -2919,6 +2922,95 @@ class Storage:
                 {"task_processed_at": datetime.now(timezone.utc)}, synchronize_session=False
             )
 
+    # ----- WhatsApp task processing (whatsapp-pipeline-parity Fase 3a) -----
+
+    def get_unprocessed_whatsapp_messages_for_task(
+        self, owner_id: str
+    ) -> List[Dict[str, Any]]:
+        """Return WhatsApp messages not yet seen by the Task Agent.
+
+        Mirrors ``get_unprocessed_emails_for_task`` for the WhatsApp
+        channel. v1 of the cross-channel task pipeline (Fase 3): 1-on-1
+        chats only — ``is_group=True`` rows are deferred (the task
+        prompt would need per-participant identifier resolution that
+        hasn't been built). Returns rows newest-first to match the
+        email path's ``date_timestamp DESC`` ordering, which the
+        ``_collect`` Phase-2 sort key in ``task_creation.py`` relies on
+        (LLM branch before user_reply branch).
+        """
+        from zylch.storage.models import WhatsAppMessage
+
+        with get_session() as session:
+            rows = (
+                session.query(
+                    WhatsAppMessage.id,
+                    WhatsAppMessage.message_id,
+                    WhatsAppMessage.chat_jid,
+                    WhatsAppMessage.sender_jid,
+                    WhatsAppMessage.sender_name,
+                    WhatsAppMessage.text,
+                    WhatsAppMessage.timestamp,
+                    WhatsAppMessage.is_from_me,
+                    WhatsAppMessage.is_group,
+                )
+                .filter(
+                    WhatsAppMessage.owner_id == owner_id,
+                    WhatsAppMessage.task_processed_at.is_(None),
+                    WhatsAppMessage.is_group.is_(False),
+                )
+                .order_by(WhatsAppMessage.timestamp.desc())
+                .all()
+            )
+            return [
+                {
+                    "id": str(r.id),
+                    "message_id": r.message_id,
+                    "chat_jid": r.chat_jid,
+                    "sender_jid": r.sender_jid,
+                    "sender_name": r.sender_name,
+                    "text": r.text,
+                    "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                    "timestamp_epoch": (
+                        int(r.timestamp.timestamp()) if r.timestamp else 0
+                    ),
+                    "is_from_me": bool(r.is_from_me),
+                    "is_group": bool(r.is_group),
+                }
+                for r in rows
+            ]
+
+    def mark_whatsapp_task_processed(self, owner_id: str, message_id: str) -> None:
+        """Mark a single WhatsApp message as processed by the Task Agent.
+
+        ``message_id`` is the WhatsAppMessage row PK (engine UUID), NOT
+        the protocol-level ``message_id`` column — same signature shape
+        as ``mark_email_task_processed`` and ``mark_whatsapp_memory_processed``.
+        """
+        from zylch.storage.models import WhatsAppMessage
+
+        with get_session() as session:
+            session.query(WhatsAppMessage).filter(
+                WhatsAppMessage.owner_id == owner_id,
+                WhatsAppMessage.id == message_id,
+            ).update({"task_processed_at": datetime.now(timezone.utc)})
+
+    def mark_whatsapp_messages_task_processed(
+        self, owner_id: str, message_ids: List[str]
+    ) -> None:
+        """Bulk variant of ``mark_whatsapp_task_processed``."""
+        if not message_ids:
+            return
+        from zylch.storage.models import WhatsAppMessage
+
+        with get_session() as session:
+            session.query(WhatsAppMessage).filter(
+                WhatsAppMessage.owner_id == owner_id,
+                WhatsAppMessage.id.in_(message_ids),
+            ).update(
+                {"task_processed_at": datetime.now(timezone.utc)},
+                synchronize_session=False,
+            )
+
     def get_unprocessed_calendar_events_for_task(self, owner_id: str) -> List[Dict[str, Any]]:
         """Get all calendar events not yet processed by Task Agent."""
         with get_session() as session:
@@ -2993,6 +3085,19 @@ class Storage:
                     .update({"task_processed_at": None}, synchronize_session=False)
                 )
                 counts["calendar_events"] = c
+
+            if channel in ("whatsapp", "all"):
+                from zylch.storage.models import WhatsAppMessage
+
+                c = (
+                    session.query(WhatsAppMessage)
+                    .filter(
+                        WhatsAppMessage.owner_id == owner_id,
+                        WhatsAppMessage.task_processed_at.isnot(None),
+                    )
+                    .update({"task_processed_at": None}, synchronize_session=False)
+                )
+                counts["whatsapp_messages"] = c
 
         return counts
 
@@ -3274,10 +3379,11 @@ class Storage:
                 analyzed_at = datetime.now(timezone.utc)
 
             raw_contact = item.get("contact_email") or ""
-            # Channel auto-derivation (Fase 3.2): if the caller didn't
-            # set one, infer from contact_email + event_type. The
+            raw_phone = (item.get("contact_phone") or "").strip() or None
+            # Channel auto-derivation (Fase 3.2 / WA Fase 3a): if the caller
+            # didn't set one, infer from event_type + contact_email. The
             # rule lives here so every store_task_item caller benefits
-            # uniformly (email branch, calendar branch, future channels).
+            # uniformly (email branch, calendar branch, whatsapp, …).
             channel = item.get("channel") or _infer_task_channel(
                 contact_email=raw_contact, event_type=item.get("event_type")
             )
@@ -3286,6 +3392,7 @@ class Storage:
                 "event_type": item.get("event_type"),
                 "event_id": item.get("event_id"),
                 "contact_email": raw_contact.lower(),
+                "contact_phone": raw_phone,
                 "contact_name": item.get("contact_name"),
                 "action_required": item.get("action_required", False),
                 "urgency": item.get("urgency"),
@@ -3363,6 +3470,38 @@ class Storage:
                 return [r.to_dict() for r in rows]
         except Exception as e:
             logger.error(f"Failed to get tasks by contact {contact_email}: {e}")
+            return []
+
+    def get_tasks_by_contact_phone(
+        self,
+        owner_id: str,
+        contact_phone: str,
+    ) -> List[Dict[str, Any]]:
+        """Plural lookup for open tasks by phone identifier.
+
+        Mirror of :py:meth:`get_tasks_by_contact` for the WhatsApp side
+        (whatsapp-pipeline-parity Fase 3a). Match is exact-equal on the
+        normalised phone string — callers pass values that have already
+        been through ``_normalise_phone`` in the memory worker, so
+        nothing else is needed here. Empty/whitespace input returns ``[]``.
+        """
+        if not (contact_phone or "").strip():
+            return []
+        try:
+            with get_session() as session:
+                rows = (
+                    session.query(TaskItem)
+                    .filter(
+                        TaskItem.owner_id == owner_id,
+                        TaskItem.contact_phone == contact_phone.strip(),
+                        TaskItem.completed_at.is_(None),
+                    )
+                    .order_by(TaskItem.created_at.desc())
+                    .all()
+                )
+                return [r.to_dict() for r in rows]
+        except Exception as e:
+            logger.error(f"Failed to get tasks by contact_phone {contact_phone}: {e}")
             return []
 
     def get_tasks_by_thread(
@@ -3582,6 +3721,7 @@ class Storage:
         reason: str = None,
         add_source_email: str = None,
         add_source_calendar_event: str = None,
+        add_source_whatsapp_message: str = None,
     ) -> bool:
         """Update an existing task with new information.
 
@@ -3589,6 +3729,11 @@ class Storage:
         this, the F4 reanalyze sweep keeps re-picking the same task
         (oldest analyzed_at first), wasting an LLM call each cycle on a
         decision the model just made.
+
+        ``add_source_whatsapp_message`` (whatsapp-pipeline-parity Fase 3a):
+        appends a WhatsAppMessage row PK to ``sources.whatsapp_messages``.
+        Used when a WA task path resolves an existing task (cross-channel
+        update) and wants to record the new WA touchpoint on it.
         """
         try:
             with get_session() as session:
@@ -3614,6 +3759,12 @@ class Storage:
                     if add_source_calendar_event not in cal_events:
                         cal_events.append(add_source_calendar_event)
                     sources["calendar_events"] = cal_events
+
+                if add_source_whatsapp_message:
+                    wa_msgs = list(sources.get("whatsapp_messages", []))
+                    if add_source_whatsapp_message not in wa_msgs:
+                        wa_msgs.append(add_source_whatsapp_message)
+                    sources["whatsapp_messages"] = wa_msgs
 
                 task.sources = sources
                 if urgency:
