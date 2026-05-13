@@ -3510,18 +3510,34 @@ class Storage:
         thread_id: str,
         open_only: bool = True,
     ) -> List[Dict[str, Any]]:
-        """Get tasks whose source emails belong to the given thread.
+        """Get tasks whose source emails OR sources.thread_id match the thread.
 
-        `sources.emails` is a list of email IDs. We resolve those IDs to
-        Email.thread_id and return tasks where any source email matches
-        `thread_id`. Used to close/update tasks across a thread even when
-        the sender changes (e.g. same conversation with different people).
+        Two lookup strategies, OR'd:
+
+        - **Email path**: `sources.emails` is a list of email IDs.
+          Resolve those IDs to ``Email.thread_id`` and match any source
+          email whose thread matches. This is the original email-only
+          behaviour and stays unchanged for backward compat.
+
+        - **Channel-agnostic path** (whatsapp-pipeline-parity Fase 3b):
+          ``sources.thread_id`` carries the channel-native thread
+          identifier — RFC 2822 ``message-id`` cluster for email and the
+          WhatsApp ``chat_jid`` for WhatsApp tasks. For WA there is no
+          ``Email`` row that resolves to ``chat_jid``, so the email-only
+          lookup above returns nothing. We additionally scan TaskItems
+          whose ``sources.thread_id == thread_id`` directly. Idempotent
+          — email tasks that already match via the email path simply get
+          counted once (dedup by task id).
+
+        Used by both the email task path (close/update tasks across a
+        thread even when the sender changes) and the WA task path
+        (cross-channel close when the user replies on WhatsApp).
         """
         if not thread_id:
             return []
         try:
             with get_session() as session:
-                # Email IDs belonging to the thread
+                # Email path — original behaviour
                 thread_email_ids = {
                     str(r.id)
                     for r in session.query(Email.id)
@@ -3531,19 +3547,31 @@ class Storage:
                     )
                     .all()
                 }
-                if not thread_email_ids:
-                    return []
 
                 q = session.query(TaskItem).filter(TaskItem.owner_id == owner_id)
                 if open_only:
                     q = q.filter(TaskItem.completed_at.is_(None))
                 rows = q.all()
+
                 matches: List[Dict[str, Any]] = []
+                seen_ids: set = set()
                 for r in rows:
+                    if r.id in seen_ids:
+                        continue
                     src = r.sources or {}
-                    src_emails = [str(x) for x in (src.get("emails") or [])]
-                    if any(eid in thread_email_ids for eid in src_emails):
+                    src_thread = src.get("thread_id")
+                    matched = False
+                    # Channel-agnostic: direct sources.thread_id equality
+                    if src_thread and src_thread == thread_id:
+                        matched = True
+                    # Email path: any source email belongs to the thread
+                    if not matched and thread_email_ids:
+                        src_emails = [str(x) for x in (src.get("emails") or [])]
+                        if any(eid in thread_email_ids for eid in src_emails):
+                            matched = True
+                    if matched:
                         matches.append(r.to_dict())
+                        seen_ids.add(r.id)
                 self._enrich_tasks_with_last_signal(session, matches)
                 return matches
         except Exception as e:
