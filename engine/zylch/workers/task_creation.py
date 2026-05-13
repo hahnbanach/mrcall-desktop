@@ -71,6 +71,36 @@ TASK_DECISION_TOOL = {
 _strip_quoted = strip_quoted
 
 
+def _pick_force_update_target(
+    existing_tasks_all: List[Dict[str, Any]],
+    thread_task_ids: set,
+) -> Optional[Dict[str, Any]]:
+    """Decide whether to convert task_action='create' into an update_task_item.
+
+    Returns the existing task to force-update when the LLM said CREATE but
+    the SAME thread already has an open task — the original "Fix D"
+    deduplication intent. Returns None otherwise — including the case
+    where ``existing_tasks_all`` is non-empty but contains only F7
+    topical-blob siblings or contact-only candidates from a different
+    thread, which the LLM is allowed to overrule with CREATE.
+
+    2026-05-13 incident (Inverardi/Liuzzi overwriting an Occhiaperti
+    task on support@mrcall.ai): Fix D originally fired on
+    ``existing_tasks_all[0]`` whenever the list was non-empty. After F7
+    started surfacing cross-contact topical siblings into the same
+    list, a CREATE on an unrelated customer's email could land on the
+    Occhiaperti task — corrupting contact_email vs suggested_action.
+    Restricting Fix D to thread-tasks restores the original intent
+    while keeping F7 as pure LLM context.
+    """
+    if not thread_task_ids:
+        return None
+    for t in existing_tasks_all:
+        if t.get("id") in thread_task_ids:
+            return t
+    return None
+
+
 class TaskWorker:
     """Analyzes events using trained prompt and identifies actionable items."""
 
@@ -385,6 +415,12 @@ class TaskWorker:
             # matched and orders newest-first.
             contact_tasks = self.storage.get_tasks_by_contact(self.owner_id, from_email)
             existing_tasks_all: List[Dict] = list(thread_tasks)
+            # Track which candidates came from the thread-task source
+            # specifically — Phase 2 needs this to know whether Fix D
+            # (force create→update) applies. F7 topical siblings and
+            # contact-only candidates from a different thread are
+            # context for the LLM, not auto-merge anchors.
+            thread_task_ids: set = {t["id"] for t in thread_tasks}
             existing_ids = {t["id"] for t in thread_tasks}
             for ct in contact_tasks:
                 if ct["id"] not in existing_ids:
@@ -523,6 +559,7 @@ class TaskWorker:
                     "result": result,
                     "blob_id": blob_id,
                     "existing_tasks": existing_tasks_all,
+                    "thread_task_ids": thread_task_ids,
                 },
             )
 
@@ -635,6 +672,7 @@ class TaskWorker:
             result = payload["result"]
             blob_id = payload["blob_id"]
             existing_tasks_all: List[Dict] = payload["existing_tasks"]
+            thread_task_ids: set = set(payload.get("thread_task_ids") or set())
 
             if result is None:
                 consecutive_failures += 1
@@ -722,21 +760,25 @@ class TaskWorker:
                     f"thread_id={thread_id} from_email={from_email}"
                 )
             elif task_action == "create" and result.get("action_required"):
-                # Fix D: if thread already has an open task, UPDATE it
-                # instead of creating a duplicate. (No title-similarity
-                # heuristic — the LLM already saw existing_tasks and chose
-                # task_action; if it said "create" with no existing task we
-                # trust the decision.)
-                if existing_tasks_all:
-                    target = existing_tasks_all[0]
+                # Fix D (refined 2026-05-13): if the SAME thread already
+                # has an open task, UPDATE it instead of creating a
+                # duplicate. Restricted to thread-tasks via
+                # `thread_task_ids` — F7 topical-blob siblings and
+                # contact-only candidates from a different thread are
+                # surfaced to the LLM as context but never auto-merged
+                # behind a CREATE decision. (Pre-fix incident:
+                # Inverardi/Liuzzi emails overwrote an Occhiaperti task
+                # via Fix D firing on an F7 sibling.)
+                force_update_target = _pick_force_update_target(existing_tasks_all, thread_task_ids)
+                if force_update_target is not None:
                     logger.debug(
                         f"[TASK] Converting create→update on thread "
-                        f"task_id={target['id']} thread_id={thread_id} "
+                        f"task_id={force_update_target['id']} thread_id={thread_id} "
                         f"from_email={from_email} (thread already has open task)"
                     )
                     self.storage.update_task_item(
                         self.owner_id,
-                        target["id"],
+                        force_update_target["id"],
                         urgency=result.get("urgency"),
                         suggested_action=result.get("suggested_action"),
                         reason=result.get("reason"),
