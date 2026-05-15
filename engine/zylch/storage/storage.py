@@ -3750,6 +3750,7 @@ class Storage:
         add_source_email: str = None,
         add_source_calendar_event: str = None,
         add_source_whatsapp_message: str = None,
+        whatsapp_chat_jid: str = None,
     ) -> bool:
         """Update an existing task with new information.
 
@@ -3762,6 +3763,14 @@ class Storage:
         appends a WhatsAppMessage row PK to ``sources.whatsapp_messages``.
         Used when a WA task path resolves an existing task (cross-channel
         update) and wants to record the new WA touchpoint on it.
+
+        ``whatsapp_chat_jid`` (Fase 4 cross-channel UI): sets
+        ``sources.whatsapp_chat_jid`` when not already populated. The
+        renderer's Source-panel toggle uses this to fetch the WA chat
+        for cross-channel tasks (an email task that gained WA
+        touchpoints, or vice versa). Idempotent — once set, future
+        updates do not overwrite it (the FIRST WA touchpoint on a task
+        defines its chat).
         """
         try:
             with get_session() as session:
@@ -3793,6 +3802,15 @@ class Storage:
                     if add_source_whatsapp_message not in wa_msgs:
                         wa_msgs.append(add_source_whatsapp_message)
                     sources["whatsapp_messages"] = wa_msgs
+                    # Fase 4 cross-channel: stamp the chat_jid on the
+                    # task only on its FIRST WA touchpoint. Subsequent
+                    # WA messages on the same chat must not overwrite —
+                    # and a WA message from a DIFFERENT chat_jid on the
+                    # same task (a rare cross-blob match) leaves the
+                    # original chat_jid intact (the renderer toggle
+                    # opens the first chat we associated).
+                    if whatsapp_chat_jid and not sources.get("whatsapp_chat_jid"):
+                        sources["whatsapp_chat_jid"] = whatsapp_chat_jid
 
                 task.sources = sources
                 if urgency:

@@ -55,6 +55,16 @@ export interface ZylchTask {
      * uses the suffix to pick the right rendering branch.
      */
     thread_id?: string | null
+    /**
+     * WhatsApp chat_jid pointer for cross-channel tasks
+     * (whatsapp-pipeline-parity Fase 4). Stamped on the FIRST WA
+     * touchpoint to the task — whether the task was email-derived
+     * (gained a WA touchpoint via F7 cross-channel match) or
+     * WA-derived. Renderer's Source-panel toggle reads this
+     * alongside `thread_id` to pick which channel to render. NULL
+     * on tasks with no WA touchpoint.
+     */
+    whatsapp_chat_jid?: string | null
   }
 }
 

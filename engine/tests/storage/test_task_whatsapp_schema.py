@@ -547,6 +547,106 @@ def test_update_task_item_email_and_whatsapp_coexist(fresh_db):
 
 
 # ---------------------------------------------------------------------
+# Fase 4 cross-channel: sources.whatsapp_chat_jid stamping
+# ---------------------------------------------------------------------
+
+
+def test_update_task_item_stamps_whatsapp_chat_jid_on_first_touchpoint(fresh_db):
+    """Fase 4: the first WA touchpoint added to an existing email task
+    stamps `sources.whatsapp_chat_jid` so the renderer's cross-channel
+    toggle knows which chat to fetch."""
+    from zylch.storage.database import get_session
+    from zylch.storage.models import TaskItem
+    from zylch.storage.storage import Storage
+
+    storage = Storage()
+    owner = "alice@example.com"
+    eid = _insert_task(owner, contact_email="carmine@cnit.it", event_type="email")
+
+    with get_session() as s:
+        task_id = s.query(TaskItem).filter(TaskItem.event_id == eid).one().id
+
+    storage.update_task_item(
+        owner,
+        task_id,
+        add_source_whatsapp_message="wa-1",
+        whatsapp_chat_jid="393395040816@s.whatsapp.net",
+    )
+
+    with get_session() as s:
+        row = s.query(TaskItem).filter(TaskItem.id == task_id).one()
+        assert row.sources.get("whatsapp_chat_jid") == "393395040816@s.whatsapp.net"
+        assert row.sources.get("whatsapp_messages") == ["wa-1"]
+
+
+def test_update_task_item_does_not_overwrite_existing_chat_jid(fresh_db):
+    """Fase 4: a second WA touchpoint on the same task must NOT
+    overwrite the chat_jid stamped by the first. (Defensive in case a
+    cross-blob match surfaces a WA message from a different chat — the
+    renderer toggle opens the first chat we associated; everything else
+    is reachable via the WA tab.)"""
+    from zylch.storage.database import get_session
+    from zylch.storage.models import TaskItem
+    from zylch.storage.storage import Storage
+
+    storage = Storage()
+    owner = "alice@example.com"
+    eid = _insert_task(owner, contact_email="carmine@cnit.it", event_type="email")
+
+    with get_session() as s:
+        task_id = s.query(TaskItem).filter(TaskItem.event_id == eid).one().id
+
+    storage.update_task_item(
+        owner,
+        task_id,
+        add_source_whatsapp_message="wa-1",
+        whatsapp_chat_jid="393395040816@s.whatsapp.net",
+    )
+    storage.update_task_item(
+        owner,
+        task_id,
+        add_source_whatsapp_message="wa-2",
+        whatsapp_chat_jid="999999999999@s.whatsapp.net",  # different chat
+    )
+
+    with get_session() as s:
+        row = s.query(TaskItem).filter(TaskItem.id == task_id).one()
+        # Original chat_jid preserved.
+        assert row.sources.get("whatsapp_chat_jid") == "393395040816@s.whatsapp.net"
+        # Both messages accumulated.
+        assert row.sources.get("whatsapp_messages") == ["wa-1", "wa-2"]
+
+
+def test_update_task_item_whatsapp_chat_jid_only_with_a_message(fresh_db):
+    """If the caller passes `whatsapp_chat_jid` without an
+    `add_source_whatsapp_message`, the chat_jid is NOT stamped — the
+    field only makes sense as a marker that at least one WA message is
+    associated with the task."""
+    from zylch.storage.database import get_session
+    from zylch.storage.models import TaskItem
+    from zylch.storage.storage import Storage
+
+    storage = Storage()
+    owner = "alice@example.com"
+    eid = _insert_task(owner, contact_email="carmine@cnit.it", event_type="email")
+
+    with get_session() as s:
+        task_id = s.query(TaskItem).filter(TaskItem.event_id == eid).one().id
+
+    storage.update_task_item(
+        owner,
+        task_id,
+        whatsapp_chat_jid="393395040816@s.whatsapp.net",
+        urgency="high",
+    )
+
+    with get_session() as s:
+        row = s.query(TaskItem).filter(TaskItem.id == task_id).one()
+        assert row.sources.get("whatsapp_chat_jid") is None
+        assert row.urgency == "high"
+
+
+# ---------------------------------------------------------------------
 # reset_task_processing_timestamps gains whatsapp
 # ---------------------------------------------------------------------
 

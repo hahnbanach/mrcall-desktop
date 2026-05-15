@@ -163,6 +163,11 @@ async def test_single_wa_message_creates_whatsapp_task(fresh_db):
     assert (t.sources or {}).get("whatsapp_messages") == [msg_id]
     assert (t.sources or {}).get("emails") == []
     assert (t.sources or {}).get("thread_id") == "393395040816@s.whatsapp.net"
+    # Fase 4 cross-channel: explicit chat_jid pointer for the renderer
+    # toggle (here equals thread_id since this is a WA-only task).
+    assert (
+        (t.sources or {}).get("whatsapp_chat_jid") == "393395040816@s.whatsapp.net"
+    )
 
     # watermark advanced — message no longer unprocessed
     with get_session() as s:
@@ -337,6 +342,10 @@ async def test_cross_channel_wa_updates_existing_email_task(fresh_db):
     sources = t.sources or {}
     assert wa_id in (sources.get("whatsapp_messages") or [])
     assert email_event_id in (sources.get("emails") or [])
+    # Fase 4 cross-channel: chat_jid stamped by the WA touchpoint so
+    # the renderer toggle can fetch the WhatsApp chat alongside the
+    # original email thread.
+    assert sources.get("whatsapp_chat_jid") == "393395040816@s.whatsapp.net"
 
 
 # ---------------------------------------------------------------------

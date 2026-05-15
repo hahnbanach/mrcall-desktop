@@ -85,6 +85,16 @@ export type Conversation = {
   // this field is only populated for thread-only conversations whose
   // id follows the `thread-<threadId>` convention.
   threadId?: string
+  /**
+   * WhatsApp chat_jid for cross-channel tasks
+   * (whatsapp-pipeline-parity Fase 4). Populated from
+   * `task.sources.whatsapp_chat_jid` by `openTaskChat`. When both
+   * `threadId` (email cluster) AND `waChatJid` are set, the Source
+   * panel renders a toggle between the two channels. NULL/undefined
+   * on email-only tasks; equal to `threadId` on WA-only tasks (still
+   * set explicitly to avoid the renderer having to sniff the suffix).
+   */
+  waChatJid?: string
   sourceEmailId?: string
   history: Msg[]
   draftInput: string
@@ -351,6 +361,13 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
       task.sources && typeof task.sources.thread_id === 'string'
         ? task.sources.thread_id
         : undefined
+    // WhatsApp chat_jid for cross-channel tasks (Fase 4). Engine sets
+    // this in store_task_item / update_task_item whenever the task has
+    // a WhatsApp touchpoint. NULL on email-only tasks.
+    const waChatJid =
+      task.sources && typeof (task.sources as { whatsapp_chat_jid?: unknown }).whatsapp_chat_jid === 'string'
+        ? ((task.sources as { whatsapp_chat_jid?: string }).whatsapp_chat_jid as string)
+        : undefined
     // Read-only marker: closed tasks open in view-only mode (history
     // + source visible, composer disabled, no solve fired). User
     // explicitly Reopens to act again.
@@ -377,6 +394,7 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
         title,
         taskId: task.id,
         threadId: sourceThreadId,
+        waChatJid,
         sourceEmailId,
         history: existing?.history ?? [],
         draftInput: '',

@@ -1357,6 +1357,7 @@ class TaskWorker:
                     suggested_action=result.get("suggested_action"),
                     reason=result.get("reason"),
                     add_source_whatsapp_message=msg_id,
+                    whatsapp_chat_jid=chat_jid,
                 )
                 action_count += 1
                 logger.debug(
@@ -1398,6 +1399,13 @@ class TaskWorker:
                         "blobs": ([str(blob_id)] if blob_id else []),
                         "calendar_events": [],
                         "thread_id": chat_jid,
+                        # Fase 4 cross-channel: explicit pointer the
+                        # renderer's Source-panel toggle uses. For a
+                        # WA-only task this equals `thread_id`, but
+                        # we still set it so the renderer doesn't
+                        # have to special-case "is the thread_id a
+                        # chat_jid?".
+                        "whatsapp_chat_jid": chat_jid,
                     }
                     self.storage.store_task_item(self.owner_id, result)
                     action_count += 1

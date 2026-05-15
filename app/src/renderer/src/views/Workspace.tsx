@@ -76,20 +76,25 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
   })()
 
   /**
-   * Pick the rendering branch for ThreadPanel by sniffing the
-   * thread id (whatsapp-pipeline-parity Fase 4a). WhatsApp chat_jids
-   * end in `@s.whatsapp.net` (real phone) or `@lid` (privacy-mode
-   * pseudonym). Email thread ids are RFC 2822 message-id clusters
-   * with `@<host>` but no WA suffix. Anything else → 'email'
-   * fallback so we don't break the existing path.
+   * Resolve the two channel-specific thread identifiers ThreadPanel
+   * needs (whatsapp-pipeline-parity Fase 4 cross-channel UI).
+   *
+   * `waChatJid` is the explicit pointer the engine stamps on
+   * `task.sources.whatsapp_chat_jid` whenever the task has any WA
+   * touchpoint. `openTaskChat` carries it onto `Conversation.waChatJid`.
+   *
+   * `emailThreadId` is `sourceThreadId` unless `sourceThreadId` is
+   * itself a WA chat_jid — that happens for WA-only tasks where the
+   * engine reuses `sources.thread_id` to mean "the WA chat" (no
+   * separate email cluster exists). In that case we suppress
+   * `emailThreadId` so ThreadPanel doesn't try to fetch an email
+   * thread that doesn't exist.
    */
-  const sourceType: 'email' | 'whatsapp' = (() => {
-    const tid = sourceThreadId || ''
-    if (tid.endsWith('@s.whatsapp.net') || tid.endsWith('@lid')) {
-      return 'whatsapp'
-    }
-    return 'email'
-  })()
+  const waChatJid: string | null = active.waChatJid ?? null
+  const sourceTidIsWa =
+    !!sourceThreadId &&
+    (sourceThreadId.endsWith('@s.whatsapp.net') || sourceThreadId.endsWith('@lid'))
+  const emailThreadId: string | null = sourceTidIsWa ? null : sourceThreadId
 
   // Keep the global thread-store in sync when the user switches
   // conversation inside the sidebar. The Source panel reads its
@@ -413,11 +418,11 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
         {/* Source panel: email thread preview for task OR thread-only
             conversations. Key by conversation id so React remounts and
             resets internal state when the user switches conversations. */}
-        {sourceThreadId && (
+        {(emailThreadId || waChatJid) && (
           <ThreadPanel
             key={`source-${active.id}`}
-            threadId={sourceThreadId}
-            sourceType={sourceType}
+            emailThreadId={emailThreadId}
+            whatsappChatJid={waChatJid}
             initialExpanded={isPanelExpanded}
             onToggle={(expanded) =>
               setPanelExpanded((m) => ({ ...m, [active.id]: expanded }))
