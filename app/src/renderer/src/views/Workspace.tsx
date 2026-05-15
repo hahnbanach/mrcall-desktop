@@ -75,6 +75,22 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     return null
   })()
 
+  /**
+   * Pick the rendering branch for ThreadPanel by sniffing the
+   * thread id (whatsapp-pipeline-parity Fase 4a). WhatsApp chat_jids
+   * end in `@s.whatsapp.net` (real phone) or `@lid` (privacy-mode
+   * pseudonym). Email thread ids are RFC 2822 message-id clusters
+   * with `@<host>` but no WA suffix. Anything else → 'email'
+   * fallback so we don't break the existing path.
+   */
+  const sourceType: 'email' | 'whatsapp' = (() => {
+    const tid = sourceThreadId || ''
+    if (tid.endsWith('@s.whatsapp.net') || tid.endsWith('@lid')) {
+      return 'whatsapp'
+    }
+    return 'email'
+  })()
+
   // Keep the global thread-store in sync when the user switches
   // conversation inside the sidebar. The Source panel reads its
   // thread id from `active.threadId` directly so this isn't strictly
@@ -401,7 +417,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
           <ThreadPanel
             key={`source-${active.id}`}
             threadId={sourceThreadId}
-            sourceType="email"
+            sourceType={sourceType}
             initialExpanded={isPanelExpanded}
             onToggle={(expanded) =>
               setPanelExpanded((m) => ({ ...m, [active.id]: expanded }))

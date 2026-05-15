@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { EmailThreadResult, ThreadEmail } from '../types'
+import type { EmailThreadResult, ThreadEmail, WhatsAppMessage } from '../types'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import HtmlEmailBody from './HtmlEmailBody'
 
@@ -10,7 +10,7 @@ function formatDate(iso: string): string {
   return d.toLocaleString('it-IT')
 }
 
-export type ThreadSourceType = 'email' // future: 'whatsapp' | ...
+export type ThreadSourceType = 'email' | 'whatsapp'
 
 export interface ThreadPanelProps {
   threadId: string | null
@@ -25,13 +25,21 @@ export interface ThreadPanelProps {
 
 /**
  * ThreadPanel — collapsible "Source" panel shown at the top of the
- * Workspace view. Fetches the email thread for `threadId` via
- * `emails.listByThread` and renders it in reverse-chronological order
- * (newest first), mirroring what the old Email tab used to show.
+ * Workspace view. Fetches the conversation source for `threadId` and
+ * renders it newest-first.
  *
- * sourceType is a forward hook: for now only 'email' is implemented,
- * but the rendering switch is isolated here so a future WhatsApp
- * source can slot in without changing Workspace.tsx.
+ * `sourceType` selects the rendering branch:
+ *
+ * - `email` (default): fetches via `emails.listByThread` and shows
+ *   one `<article>` per email with HTML body in a sandboxed iframe.
+ *   The original behaviour, unchanged.
+ *
+ * - `whatsapp` (added in Fase 4 of whatsapp-pipeline-parity): fetches
+ *   via `whatsapp.listMessages({ chat_jid })` and renders WA bubbles
+ *   aligned left (contact) / right (user). `chat_jid` is the same
+ *   value the engine stores in `task.sources.thread_id` for WA tasks
+ *   — either `<digits>@s.whatsapp.net` (real phone) or
+ *   `<digits>@lid` (privacy-mode pseudonym).
  */
 export default function ThreadPanel({
   threadId,
@@ -40,7 +48,8 @@ export default function ThreadPanel({
   onToggle
 }: ThreadPanelProps): JSX.Element | null {
   const [expanded, setExpanded] = useState<boolean>(initialExpanded)
-  const [result, setResult] = useState<EmailThreadResult | null>(null)
+  const [emailResult, setEmailResult] = useState<EmailThreadResult | null>(null)
+  const [waMessages, setWaMessages] = useState<WhatsAppMessage[] | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   // Panel body has a fixed height when expanded — the triangle arrow
@@ -56,8 +65,9 @@ export default function ThreadPanel({
   }, [initialExpanded, threadId])
 
   useEffect(() => {
-    if (!threadId || sourceType !== 'email') {
-      setResult(null)
+    if (!threadId) {
+      setEmailResult(null)
+      setWaMessages(null)
       setError(null)
       setLoading(false)
       return
@@ -65,13 +75,29 @@ export default function ThreadPanel({
     let cancelled = false
     setLoading(true)
     setError(null)
-    setResult(null)
-    window.zylch.emails
-      .listByThread(threadId)
-      .then((r) => {
-        if (cancelled) return
-        setResult(r)
-      })
+    setEmailResult(null)
+    setWaMessages(null)
+
+    const fetchPromise =
+      sourceType === 'whatsapp'
+        ? window.zylch.whatsapp
+            .listMessages({ chat_jid: threadId, limit: 200 })
+            .then((r) => {
+              if (cancelled) return
+              if (r.error) {
+                setError(r.error)
+                return
+              }
+              setWaMessages(r.messages ?? [])
+            })
+        : window.zylch.emails
+            .listByThread(threadId)
+            .then((r) => {
+              if (cancelled) return
+              setEmailResult(r)
+            })
+
+    fetchPromise
       .catch((e: unknown) => {
         if (cancelled) return
         if (isProfileLockedError(e)) {
@@ -91,10 +117,31 @@ export default function ThreadPanel({
 
   if (!threadId) return null
 
-  const emailsAsc: ThreadEmail[] = result?.emails ?? []
+  // Email branch — newest-first, mirrors the legacy behaviour.
+  const emailsAsc: ThreadEmail[] = emailResult?.emails ?? []
   const emails: ThreadEmail[] = emailsAsc.slice().reverse()
-  const subject = emailsAsc[0]?.subject || '(no subject)'
-  const count = emails.length
+  const emailSubject = emailsAsc[0]?.subject || '(no subject)'
+
+  // WhatsApp branch — newest-first as well, matching the email side so
+  // the most recent message is what the user sees first when the panel
+  // opens.
+  const waAsc: WhatsAppMessage[] = waMessages ?? []
+  const waNewestFirst: WhatsAppMessage[] = waAsc.slice().reverse()
+
+  // Header subtitle: WA shows the chat identifier (resolved phone if
+  // the jid is `@s.whatsapp.net`, else the LID), email shows the
+  // subject of the most recent message.
+  const headerSubtitle = (() => {
+    if (sourceType === 'whatsapp') {
+      if (threadId.endsWith('@s.whatsapp.net')) {
+        return '+' + threadId.split('@', 1)[0]
+      }
+      return threadId
+    }
+    return emailSubject
+  })()
+
+  const count = sourceType === 'whatsapp' ? waNewestFirst.length : emails.length
 
   const handleToggle = (): void => {
     const next = !expanded
@@ -103,17 +150,16 @@ export default function ThreadPanel({
   }
 
   const label = (() => {
-    if (loading) return 'Source (loading...)'
+    if (loading) return 'Source (loading…)'
     if (error) return 'Source (error)'
-    if (sourceType === 'email') {
-      return expanded
-        ? `Source - ${count} ${count === 1 ? 'message' : 'messages'}`
-        : `Source - ${count} ${count === 1 ? 'message' : 'messages'}`
+    const plural = count === 1 ? '' : 's'
+    if (sourceType === 'whatsapp') {
+      return `Source — ${count} WhatsApp message${plural}`
     }
-    return 'Source'
+    return `Source - ${count} message${plural}`
   })()
 
-  const arrow = expanded ? '\u25B2' : '\u25BC'
+  const arrow = expanded ? '▲' : '▼'
 
   return (
     <div className="border-b bg-brand-light-grey">
@@ -125,8 +171,8 @@ export default function ThreadPanel({
         <span className="font-medium truncate">
           {arrow} {label}
         </span>
-        {expanded && subject && !loading && !error && (
-          <span className="text-xs text-brand-grey-80 truncate ml-3">{subject}</span>
+        {expanded && headerSubtitle && !loading && !error && (
+          <span className="text-xs text-brand-grey-80 truncate ml-3">{headerSubtitle}</span>
         )}
       </button>
 
@@ -142,10 +188,15 @@ export default function ThreadPanel({
           {error && (
             <div className="p-4 text-brand-danger text-sm">Failed to load: {error}</div>
           )}
-          {!loading && !error && emails.length === 0 && (
+          {!loading && !error && sourceType === 'email' && emails.length === 0 && (
             <div className="p-4 text-brand-grey-80 text-sm">No messages in this thread.</div>
           )}
-          {!loading && !error && emails.length > 0 && sourceType === 'email' && (
+          {!loading && !error && sourceType === 'whatsapp' && waNewestFirst.length === 0 && (
+            <div className="p-4 text-brand-grey-80 text-sm">
+              No WhatsApp messages stored locally for this chat.
+            </div>
+          )}
+          {!loading && !error && sourceType === 'email' && emails.length > 0 && (
             <div className="p-3 space-y-2">
               {emails.map((e) => (
                 <article
@@ -177,7 +228,7 @@ export default function ThreadPanel({
                     </div>
                   </div>
                   <div className="text-xs text-brand-grey-80 mb-2 break-words">
-                    <span>To: {e.to_email || '\u2014'}</span>
+                    <span>To: {e.to_email || '—'}</span>
                     {e.cc_email && <span> &middot; Cc: {e.cc_email}</span>}
                   </div>
                   {e.body_html ? (
@@ -204,6 +255,45 @@ export default function ThreadPanel({
                             </span>
                           )}
                     </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+          {!loading && !error && sourceType === 'whatsapp' && waNewestFirst.length > 0 && (
+            <div className="p-3 space-y-2">
+              {waNewestFirst.map((m) => (
+                <article
+                  key={m.id}
+                  className={
+                    'max-w-[80%] border rounded-lg p-2.5 shadow-sm ' +
+                    (m.is_from_me
+                      ? 'ml-auto bg-brand-blue/10 border-brand-blue/30'
+                      : 'mr-auto bg-white')
+                  }
+                >
+                  <div className="flex items-baseline justify-between gap-3 mb-1">
+                    <div className="text-xs text-brand-grey-80 min-w-0 break-words">
+                      {m.is_from_me ? (
+                        <span className="font-medium text-brand-blue">You</span>
+                      ) : (
+                        <span className="font-medium">
+                          {m.sender_name || m.sender_jid}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-brand-grey-80 whitespace-nowrap">
+                      {m.timestamp ? formatDate(m.timestamp) : ''}
+                    </div>
+                  </div>
+                  {m.text ? (
+                    <pre className="text-sm text-brand-black whitespace-pre-wrap break-words font-sans select-text m-0">
+                      {m.text}
+                    </pre>
+                  ) : (
+                    <span className="text-xs italic text-brand-grey-80">
+                      {m.media_type ? `[${m.media_type}]` : '[no text]'}
+                    </span>
                   )}
                 </article>
               ))}

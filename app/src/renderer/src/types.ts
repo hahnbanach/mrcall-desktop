@@ -4,6 +4,14 @@ export interface ZylchTask {
   event_type: string
   event_id: string
   contact_email: string
+  /**
+   * Phone identifier populated for tasks whose trigger channel is
+   * WhatsApp (whatsapp-pipeline-parity Fase 3a). Email/phone/calendar
+   * tasks leave this NULL. The F8 dedup sweep clusters on
+   * `contact_email OR contact_phone` so a cross-channel duplicate
+   * collapses regardless of which channel surfaced first.
+   */
+  contact_phone?: string | null
   contact_name?: string
   action_required: boolean
   urgency: 'high' | 'medium' | 'low' | string
@@ -30,8 +38,22 @@ export interface ZylchTask {
   channel?: 'email' | 'phone' | 'calendar' | 'whatsapp' | string | null
   sources: {
     emails: string[]
+    /**
+     * WhatsApp message PKs (UUIDs) attached to this task
+     * (whatsapp-pipeline-parity Fase 3a). Optional — every task
+     * created before Fase 3 ships, and every email/calendar task,
+     * omits this field. Cross-channel tasks carry BOTH `emails` and
+     * `whatsapp_messages` populated.
+     */
+    whatsapp_messages?: string[]
     blobs: string[]
     calendar_events: string[]
+    /**
+     * Channel-native conversation id: RFC 2822 thread cluster for
+     * email, ``chat_jid`` for WhatsApp (``<digits>@s.whatsapp.net``
+     * or ``<digits>@lid`` privacy-mode pseudonym). The Source panel
+     * uses the suffix to pick the right rendering branch.
+     */
     thread_id?: string | null
   }
 }
