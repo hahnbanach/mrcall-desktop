@@ -8,6 +8,7 @@ import logging
 import os
 
 import sys
+from typing import Callable, Optional
 
 from rich.console import Console
 
@@ -19,10 +20,20 @@ logger = logging.getLogger(__name__)
 console = Console(file=sys.stderr)
 
 
+# Progress callback signature: `(pct, message, eta?)`. pct is 0..100,
+# message is a short user-facing string, eta is an optional revised ETA
+# string (None means "keep the previous ETA"). The callback runs on the
+# pipeline's thread; the RPC `notify` writer is thread-safe (see
+# `zylch/rpc/server.py:_stdout_lock`) so the callback may freely emit
+# JSON-RPC notifications.
+ProgressFn = Callable[[int, str, Optional[str]], None]
+
+
 async def handle_process(
     args: list,
     config: ToolConfig,
     owner_id: str,
+    progress: Optional[ProgressFn] = None,
 ) -> str:
     """Run the full pipeline: sync, memory extraction, task detection.
 
@@ -84,6 +95,16 @@ async def handle_process(
     except Exception:
         before_open_count = -1
 
+    def _p(pct: int, msg: str, eta: Optional[str] = None) -> None:
+        """Emit progress to the optional callback, swallowing errors so
+        a bad subscriber can't break the pipeline."""
+        if progress is None:
+            return
+        try:
+            progress(pct, msg, eta)
+        except Exception as e:
+            logger.warning(f"[/process] progress callback failed: {e}")
+
     # Force mode: reset processing timestamps so everything is reanalyzed
     if force:
         store.reset_memory_processing_timestamps(owner_id)
@@ -92,6 +113,7 @@ async def handle_process(
 
     # --- Step 1: Sync emails via IMAP ---
     console.print("\n[bold cyan][1/5] Syncing emails...[/bold cyan]")
+    _p(5, "Syncing emails…", None)
     try:
         sync_result = await _run_sync(owner_id, store, days_back)
         new = sync_result.get("new_messages", 0)
@@ -101,10 +123,12 @@ async def handle_process(
     except Exception as e:
         logger.error(f"[/process] sync failed: {e}", exc_info=True)
         console.print(f"[red]  Sync failed: {e}[/red]")
+        _p(100, f"Sync failed: {e}", None)
         return f"Sync failed: {e}"
 
     # --- Step 2: Sync WhatsApp ---
     console.print("\n[bold cyan][2/5] Syncing WhatsApp...[/bold cyan]")
+    _p(20, "Syncing WhatsApp…", None)
     try:
         wa_result = _run_whatsapp_sync(owner_id, store)
         if wa_result.get("skipped"):
@@ -140,6 +164,9 @@ async def handle_process(
         console.print(
             f"\n[bold cyan][3/5] Extracting memory from {' + '.join(bits)}...[/bold cyan]"
         )
+        # Revised ETA: now that sync is done we know exactly how many
+        # items memory will chew through (~2-3s per item, LLM-bound).
+        _p(30, f"Extracting memory from {' + '.join(bits)}…", _eta_for_memory(pending_mem + pending_wa))
         try:
             mem_count, wa_count = await _run_memory(owner_id, store)
             summary_stats["memory_processed"] = int(mem_count or 0)
@@ -156,10 +183,21 @@ async def handle_process(
             console.print(f"[red]  Memory extraction failed:" f" {e}[/red]")
     else:
         console.print("\n[bold cyan][3/5] Memory[/bold cyan]" " — nothing to process")
+        _p(30, "Memory — nothing to process", None)
 
     # --- Step 3: Task detection ---
     pending_tasks = len(store.get_unprocessed_emails_for_task(owner_id))
     summary_stats["tasks_pending"] = int(pending_tasks)
+    # Reach the boundary of memory → tasks. From here on, remaining work is
+    # task detection (LLM-bound) + 3 sweeps (F4 + F8 + F9). Open-task count
+    # drives the sweep cost so we can refine ETA once more.
+    try:
+        open_count_for_eta = len(
+            store.get_task_items(owner_id=owner_id, action_required=True, limit=10000)
+        )
+    except Exception:
+        open_count_for_eta = 0
+    _p(60, "Detecting tasks…", _eta_for_tasks(pending_tasks, open_count_for_eta))
     # Bug C (2026-05-06): the previous "no tasks → reprocess 60 days"
     # auto-reset has been removed. It was a leftover from a one-time
     # migration where old code had deleted every task; in steady state
@@ -180,11 +218,13 @@ async def handle_process(
                 exc_info=True,
             )
             console.print(f"[red]  Task detection failed:" f" {e}[/red]")
+        _p(90, "Tasks + sweeps complete", None)
     else:
         console.print(
             "\n[bold cyan][4/5] Tasks[/bold cyan]"
             " — no new emails, running stale-task sweep..."
         )
+        _p(80, "Cleaning up stale tasks (F4/F8/F9 sweeps)…", None)
         # Even with zero unprocessed emails, open tasks may need closure
         # — e.g. the user replied yesterday (sent mail already
         # task_processed) and the batch where the task was created is
@@ -241,6 +281,7 @@ async def handle_process(
     # --- Step 4: Show tasks ---
 
     console.print("\n[bold cyan][5/5] Your action items:[/bold cyan]")
+    _p(95, "Rendering action items…", "few seconds")
     from zylch.services.command_handlers import handle_tasks
 
     try:
@@ -251,6 +292,58 @@ async def handle_process(
             exc_info=True,
         )
         return f"Failed to show tasks: {e}"
+
+
+def _eta_for_memory(pending: int) -> str:
+    """Coarse ETA for memory extraction given pending items count.
+
+    Memory extraction is ~2-3s/item LLM-bound; add a small constant for
+    setup + the inevitable task stage that follows.
+    """
+    secs = pending * 3 + 60  # +60s = task stage overhead minimum
+    return _format_eta(secs)
+
+
+def _eta_for_tasks(pending_tasks: int, open_tasks: int) -> str:
+    """Coarse ETA for the task stage: task detection on pending emails
+    plus the three sweeps (F4 + F8 + F9).
+
+    - Task detection: ~3s per pending email (LLM call)
+    - F4 reanalyze: capped at REANALYZE_CAP=10 LLM calls × ~3s
+    - F8 dedup: one Opus call across clustered opens, ~20s
+    - F9 topic dedup: one Opus call on all opens, scales mildly with
+      count (input tokens), ~25s baseline
+    - +10s age-sweep + final summary
+    """
+    detection = pending_tasks * 3
+    f4 = min(open_tasks, 10) * 3
+    f8 = 20 if open_tasks >= 2 else 0
+    f9 = 25 if open_tasks >= 4 else 0  # MIN_TASKS_FOR_TOPIC_DEDUP=4
+    secs = detection + f4 + f8 + f9 + 10
+    return _format_eta(secs)
+
+
+def _format_eta(secs: int) -> str:
+    """Render a seconds count as a coarse, human-friendly ETA string.
+
+    Aligns with the buckets `_estimate_update_eta` reports at start-up
+    so the message style is consistent across the run.
+    """
+    if secs < 60:
+        return "under 1 minute"
+    if secs < 2 * 60:
+        return "1-2 minutes"
+    if secs < 5 * 60:
+        return "2-5 minutes"
+    if secs < 15 * 60:
+        return "5-15 minutes"
+    if secs < 30 * 60:
+        return "15-30 minutes"
+    if secs < 60 * 60:
+        return "30-60 minutes"
+    if secs < 2 * 60 * 60:
+        return "1-2 hours"
+    return "2+ hours"
 
 
 async def _run_sync(

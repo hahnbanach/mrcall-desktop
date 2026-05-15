@@ -14,7 +14,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -577,14 +577,22 @@ def _task_change_key(task: Dict[str, Any]) -> str:
 
 
 def _estimate_update_eta(store, owner_id: str) -> str:
-    """Rough human-readable ETA for update.run based on how many emails
-    the pipeline will have to touch.
+    """Rough human-readable ETA for update.run.
 
-    The real per-email time dominates: IMAP fetch + 2 LLM passes
-    (memory extraction, task detection). On a typical run each email
-    costs somewhere between 1 and 3 seconds wall clock. We don't try
-    to be precise — a coarse bucket is enough for the user to decide
-    whether to wait or go do something else.
+    Three big cost centres dominate wall clock:
+    - Memory extraction: ~2-3s per pending email + WhatsApp message
+      (LLM-bound, batched but serial inside the worker).
+    - Task detection: ~2-3s per pending email (separate LLM call).
+    - The three task sweeps (F4 reanalyze + F8 dedup + F9 topic dedup):
+      F4 up to ~30s (10 reanalyze calls × ~3s), F8 ~20s when there are
+      duplicates to cluster, F9 ~25s on profiles with ≥ 4 open tasks
+      (one Opus pass over the whole open list).
+
+    The previous estimator counted only pending emails and reported
+    "under 1 minute" on profiles with no pending emails — which is
+    wildly wrong on a profile with 50+ open tasks that the sweeps still
+    have to grind through. Now we sum all three centres and add a
+    first-sync bump when the email table is empty.
     """
     from sqlalchemy import or_
 
@@ -593,8 +601,23 @@ def _estimate_update_eta(store, owner_id: str) -> str:
 
     try:
         with get_session() as session:
-            # Pending = not yet memory-extracted OR not yet task-analyzed.
-            pending = (
+            # Pending memory = not yet memory-extracted
+            pending_mem = (
+                session.query(Email)
+                .filter(Email.owner_id == owner_id)
+                .filter(Email.memory_processed_at.is_(None))
+                .count()
+            )
+            # Pending tasks = not yet task-analyzed
+            pending_tasks = (
+                session.query(Email)
+                .filter(Email.owner_id == owner_id)
+                .filter(Email.task_processed_at.is_(None))
+                .count()
+            )
+            # Pending memory OR task (used as the legacy "any pending"
+            # bucket for first-sync detection).
+            pending_any = (
                 session.query(Email)
                 .filter(Email.owner_id == owner_id)
                 .filter(
@@ -613,19 +636,54 @@ def _estimate_update_eta(store, owner_id: str) -> str:
         logger.warning(f"[rpc] update ETA calc failed: {e}")
         return "unknown"
 
+    # Open task count drives F4 + F8 + F9 sweep cost. The sweeps run
+    # even when no new emails arrived — this is exactly the case where
+    # the old estimator under-reported.
+    try:
+        open_tasks = len(
+            store.get_task_items(owner_id=owner_id, action_required=True, limit=10000)
+        )
+    except Exception:
+        open_tasks = 0
+
+    # Pending WhatsApp messages — same memory-extraction cost as emails.
+    try:
+        pending_wa = len(store.get_unprocessed_whatsapp_messages(owner_id))
+    except Exception:
+        pending_wa = 0
+
     first_run_bump = 0
     if total == 0:
-        # Assume ~25 emails/day on a typical business inbox × 60 days.
+        # First run: IMAP will pull ~60 days. Assume ~25 emails/day,
+        # which is a typical business inbox shape.
         first_run_bump = 1500
 
-    load = pending + first_run_bump
-    if load < 20:
+    # Per-item LLM cost averaged across cache hits and misses.
+    secs = 0
+    secs += (pending_mem + pending_wa) * 3  # memory extraction
+    secs += pending_tasks * 3  # task detection
+    secs += min(open_tasks, 10) * 3  # F4 reanalyze (capped)
+    secs += 20 if open_tasks >= 2 else 0  # F8 dedup arbiter
+    secs += 25 if open_tasks >= 4 else 0  # F9 topic dedup (Opus)
+    secs += first_run_bump * 3  # first-sync proxy
+    secs += 20  # IMAP + WA sync + summary overhead
+
+    if pending_any == 0 and open_tasks == 0 and first_run_bump == 0:
+        # Truly nothing to do — IMAP fetch + finalisation only.
         return "under 1 minute"
-    if load < 100:
+    if secs < 60:
+        return "under 1 minute"
+    if secs < 2 * 60:
+        return "1-2 minutes"
+    if secs < 5 * 60:
         return "2-5 minutes"
-    if load < 500:
+    if secs < 15 * 60:
+        return "5-15 minutes"
+    if secs < 30 * 60:
         return "15-30 minutes"
-    if load < 2000:
+    if secs < 60 * 60:
+        return "30-60 minutes"
+    if secs < 2 * 60 * 60:
         return "1-2 hours"
     return "2+ hours (first sync — grab a coffee)"
 
@@ -742,12 +800,12 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     if not email_addr or not email_pass:
         raise RuntimeError("Email not configured for this profile — run `zylch init`.")
 
-    def _emit(pct: int, message: str) -> None:
+    def _emit(pct: int, message: str, eta: Optional[str] = None) -> None:
+        payload: Dict[str, Any] = {"pct": int(pct), "message": str(message)}
+        if eta:
+            payload["eta"] = str(eta)
         try:
-            notify(
-                "update.progress",
-                {"pct": int(pct), "message": str(message)},
-            )
+            notify("update.progress", payload)
         except Exception as e:
             logger.warning(f"[rpc] update.progress notify failed: {e}")
 
@@ -767,18 +825,17 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
         logger.warning(f"[rpc] update.run: before-snapshot failed, diff will be empty: {e}")
         before_open = {}
 
-    # Rough ETA from the number of emails the pipeline will have to
-    # touch (unprocessed memory + unprocessed tasks). Not a real
-    # estimator — just enough to tell the user "quick" vs "go walk
-    # the dog" vs "first sync, clear your afternoon".
+    # Initial ETA. Factors in pending memory + pending tasks + open-task
+    # sweep cost (F4/F8/F9) + first-sync proxy. Re-emitted at each
+    # pipeline stage boundary with a tightened estimate from the worker.
     eta_text = _estimate_update_eta(store, owner_id)
-    try:
-        notify(
-            "update.progress",
-            {"pct": 0, "message": "Starting full pipeline…", "eta": eta_text},
-        )
-    except Exception as e:
-        logger.warning(f"[rpc] update.progress eta notify failed: {e}")
+    _emit(0, "Starting full pipeline…", eta_text)
+
+    # Pipeline-side progress callback. Runs on the worker thread; the
+    # JSON-RPC writer is thread-safe (see server.py `_stdout_lock`),
+    # so we can call notify directly from here.
+    def _pipeline_progress(pct: int, msg: str, eta: Optional[str]) -> None:
+        _emit(pct, msg, eta)
 
     # Run the pipeline in a worker thread with its own event loop. The
     # pipeline is declared async but internally does blocking work
@@ -791,7 +848,10 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
         config = ToolConfig.from_settings()
         # We intentionally discard the inner summary — it is the full
         # open-tasks dump we are replacing with the diff below.
-        await asyncio.to_thread(asyncio.run, handle_process([], config, owner_id))
+        await asyncio.to_thread(
+            asyncio.run,
+            handle_process([], config, owner_id, progress=_pipeline_progress),
+        )
     except Exception as e:
         logger.exception("[rpc] update.run failed")
         _emit(100, f"Failed: {e}")
