@@ -3,11 +3,43 @@ import type { SidecarStatusEvent } from '../types'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import { useTasks } from '../store/tasks'
 
+// Coarse ETA buckets returned by the engine map to an upper-bound
+// seconds value. We use this to detect when the run has overshot its
+// own estimate and to nudge the UI copy from "expected" to "running long".
+const ETA_UPPER_BOUND_SECONDS: Array<{ pattern: RegExp; upper: number }> = [
+  { pattern: /^under 1 minute$/i, upper: 60 },
+  { pattern: /^1-2 minutes$/i, upper: 2 * 60 },
+  { pattern: /^2-5 minutes$/i, upper: 5 * 60 },
+  { pattern: /^5-15 minutes$/i, upper: 15 * 60 },
+  { pattern: /^15-30 minutes$/i, upper: 30 * 60 },
+  { pattern: /^30-60 minutes$/i, upper: 60 * 60 },
+  { pattern: /^1-2 hours$/i, upper: 2 * 60 * 60 },
+  { pattern: /^2\+ hours/i, upper: Number.POSITIVE_INFINITY },
+]
+
+function etaUpperBoundSeconds(eta: string): number | null {
+  for (const { pattern, upper } of ETA_UPPER_BOUND_SECONDS) {
+    if (pattern.test(eta.trim())) return upper
+  }
+  return null
+}
+
+function formatElapsed(secs: number): string {
+  if (secs < 60) return `${secs}s`
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  if (m < 60) return s === 0 ? `${m}m` : `${m}m${s.toString().padStart(2, '0')}s`
+  const h = Math.floor(m / 60)
+  const mm = m % 60
+  return `${h}h${mm.toString().padStart(2, '0')}m`
+}
+
 export default function Update() {
   const [running, setRunning] = useState(false)
   const [pct, setPct] = useState(0)
   const [message, setMessage] = useState<string>('')
   const [eta, setEta] = useState<string>('')
+  const [elapsed, setElapsed] = useState<number>(0)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   // Track sidecar liveness so we can disable the Update button (and
@@ -16,6 +48,8 @@ export default function Update() {
   // a fresh failed RPC and a flash of the (now-suppressed) toast.
   const [sidecarLocked, setSidecarLocked] = useState(false)
   const unsubRef = useRef<(() => void) | null>(null)
+  const startRef = useRef<number | null>(null)
+  const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Shared tasks store — we call `refresh()` after a successful run so
   // Dashboard re-fetches instead of showing stale data.
   const { refresh: refreshTasks } = useTasks()
@@ -30,6 +64,7 @@ export default function Update() {
   useEffect(() => {
     return () => {
       unsubRef.current?.()
+      if (tickerRef.current) clearInterval(tickerRef.current)
     }
   }, [])
 
@@ -38,8 +73,15 @@ export default function Update() {
     setPct(0)
     setMessage('Starting…')
     setEta('')
+    setElapsed(0)
     setResult(null)
     setError(null)
+    startRef.current = Date.now()
+    if (tickerRef.current) clearInterval(tickerRef.current)
+    tickerRef.current = setInterval(() => {
+      if (startRef.current == null) return
+      setElapsed(Math.floor((Date.now() - startRef.current) / 1000))
+    }, 1000)
     const unsub = window.zylch.onNotification('update.progress', (p: any) => {
       if (typeof p?.pct === 'number') setPct(p.pct)
       if (typeof p?.message === 'string') setMessage(p.message)
@@ -67,9 +109,16 @@ export default function Update() {
     } finally {
       unsub()
       unsubRef.current = null
+      if (tickerRef.current) {
+        clearInterval(tickerRef.current)
+        tickerRef.current = null
+      }
       setRunning(false)
     }
   }
+
+  const upper = eta ? etaUpperBoundSeconds(eta) : null
+  const overshot = upper != null && elapsed > upper
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -93,8 +142,23 @@ export default function Update() {
           </div>
           <div className="text-sm text-brand-grey-80 mt-2">
             {pct}% — {message}
-            {eta && <span className="ml-2 text-brand-grey-80">· ~{eta}</span>}
+            {eta && (
+              <span className="ml-2 text-brand-grey-80">
+                · ~{eta}
+                {running && ` · elapsed ${formatElapsed(elapsed)}`}
+              </span>
+            )}
+            {!eta && running && elapsed > 0 && (
+              <span className="ml-2 text-brand-grey-80">· elapsed {formatElapsed(elapsed)}</span>
+            )}
           </div>
+          {running && overshot && (
+            <div className="text-xs text-brand-orange mt-1">
+              Running longer than the initial estimate — large memory or task sweeps in
+              progress. Check sidecar logs if it stays here for more than a few extra
+              minutes.
+            </div>
+          )}
           {running && (
             <div className="text-xs text-brand-grey-80 mt-1">
               Safe to close — progress is saved, will resume from where it left off.
