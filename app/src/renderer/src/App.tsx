@@ -777,6 +777,14 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
           // Sidecar is attached. Wire the token pusher (now that the
           // RPC channel exists), then push the current token. The 50-
           // minute proactive refresh in authUtils picks up from here.
+          //
+          // We warn (not debug) on push failure: that single push is
+          // what makes engine-side auth-gated RPCs (google.calendar.*,
+          // mrcall.*, account.balance) work; if it silently failed,
+          // those surfaces show cryptic NoActiveSession errors until
+          // the 50-min refresh kicks in. Views that need a live
+          // session can recover by calling repushTokenForCurrentUser()
+          // themselves (see ConnectGoogleCalendar.ensureEngineSession).
           setTokenPusher(async ({ uid, email, idToken, expiresAtMs }) => {
             try {
               await window.zylch.account.setFirebaseToken({
@@ -786,10 +794,33 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
                 expiresAtMs
               })
             } catch (e) {
-              console.debug('[App] account.setFirebaseToken push failed:', e)
+              console.warn('[App] account.setFirebaseToken push failed:', e)
+              throw e
             }
           })
-          await repushTokenForCurrentUser()
+          // Best-effort retry: the sidecar's RPC dispatcher may not be
+          // ready the instant bindProfile resolves. Try up to 3 times
+          // with backoff so a transient miss doesn't leave the engine
+          // session-less for 50 minutes.
+          let pushed = false
+          for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
+            try {
+              await repushTokenForCurrentUser()
+              pushed = true
+              break
+            } catch (e) {
+              console.warn(
+                `[App] initial token push attempt ${attempt + 1}/3 failed:`,
+                e
+              )
+              await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)))
+            }
+          }
+          if (!pushed) {
+            console.warn(
+              '[App] initial token push exhausted retries — views requiring an engine session will recover lazily'
+            )
+          }
           if (cancelled) return
           setState({ phase: 'bound', user: u })
         } else if (r.ok && !r.found) {
