@@ -54,15 +54,42 @@ Identify what changed that is worth persisting. Priority order:
 
 ## Phase 3 — Consolidate (reconsolidate, don't append)
 
-All docs are declarative, present-tense, living documents. **Merge knowledge into existing content — do not append changelogs.** A short rolling "recent commits" section in `active-context.md` is acceptable, but cap it at ~10 entries and prune older items into the relevant "What is built" section.
+All docs are declarative, present-tense, living documents. **Merge knowledge into existing content — do not append changelogs.** Git log is the changelog; `active-context.md` is a working list.
+
+**Hard caps (enforce, don't drift past):**
+
+- `engine/docs/active-context.md` ≤ ~150 lines.
+- `docs/active-context.md` ≤ ~130 lines.
+- `app/docs/active-context.md` ≤ ~120 lines.
+- `CLAUDE.md` / `engine/CLAUDE.md` / `app/CLAUDE.md` ≤ ~100 lines, pointer-only.
+- "Recent landings" table in each active-context: ≤ ~12 rows, last ~2 weeks. Older entries get **deleted** (git keeps them) — do NOT migrate them into a "What is built" section.
+
+If you find an active-context file already over its cap when you arrive, prune it before adding the new session's facts. Detailed implementation history → git log + execution-plans/. Per-feature reference → `features/`. Architecture → `ARCHITECTURE.md`.
 
 Route each fact to the tree that owns it. If a single change touches two trees (e.g. a new RPC method = engine impl + app client + IPC contract), write the engine-side facts to engine, the app-side facts to app, and the contract delta to `./docs/`.
 
-5. **`./engine/docs/active-context.md`** — engine-side state. What is built and working, what was completed this session on the engine, unresolved engine issues, immediate engine next steps. Create if it doesn't yet hold the right scope; otherwise overwrite to reflect current reality.
+Each active-context follows the same shape:
 
-6. **`./app/docs/active-context.md`** — app-side state. UI views, preload/main wiring, sidecar lifecycle from the Electron side, packaging quirks. Create the file the first time an app-side change needs to land here.
+```
+---
+description: …  (≤ ~3 lines)
+---
+# Active Context — <Tree>
+## Current focus (as of YYYY-MM-DD)   ← 1-2 short paragraphs, what's in flight NOW
+## Recent landings (last ~2 weeks)    ← table, ≤ ~12 rows
+## In progress                        ← bullets
+## Next steps                         ← numbered
+## Known issues                       ← bullets, link to harness-backlog.md
+## Where stable state lives           ← pointer table
+```
 
-7. **`./docs/active-context.md`** — cross-cutting state. IPC contract drift, release pipeline, rename rollout, brand. Create the first time a cross-cutting change needs to land here.
+Do not introduce a "What is built and working" section. Stable feature state belongs in `features/`, `ARCHITECTURE.md`, or the relevant `CLAUDE.md` static layer — not in active-context.
+
+5. **`./engine/docs/active-context.md`** — engine-side state. Replace or trim sections to reflect current reality; respect the cap.
+
+6. **`./app/docs/active-context.md`** — app-side state. UI views, preload/main wiring, sidecar lifecycle from the Electron side, packaging quirks. Respect the cap.
+
+7. **`./docs/active-context.md`** — cross-cutting state. IPC contract drift, release pipeline, rename rollout, brand. Respect the cap.
 
 8. **`./engine/docs/ARCHITECTURE.md`** / **`./app/docs/ARCHITECTURE.md`** — update ONLY if structural changes occurred (new module, changed dependency direction, changed IPC surface). Remove stale descriptions of things that no longer exist.
 
@@ -83,6 +110,8 @@ Route each fact to the tree that owns it. If a single change touches two trees (
 If a doc references a feature, file, or decision that no longer exists, delete the stale reference. Stale docs are worse than no docs.
 
 If `engine/docs/active-context.md` still carries cross-cutting facts (release, IPC contract drift, brand) that now have a home in `./docs/active-context.md` or `./docs/ipc-contract.md`, migrate them — don't duplicate.
+
+**Verify line counts before finishing.** `wc -l` on each touched active-context.md. If any is over its cap, drop the oldest "Recent landings" rows and any narrative section older than ~2 weeks. Git already has the history; the working list does not need to re-tell it.
 
 ## Output
 
