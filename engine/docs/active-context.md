@@ -50,15 +50,13 @@ The work-in-flight is **live verification** of the rest of the 2026-05-15 stack:
 1. Click Update → observe staged progress: 5/20/30/60/80-90/95/100 with ETA evolving and elapsed counter ticking.
 2. Settings → Connect Google Calendar on a session where the initial token push was missed → confirm the recovery path closes the loop (no raw `_NotSignedInError` shown).
 3. Wire `tools/calendar_sync.py` to read tokens from `provider='google_calendar'` (current 469-line module is partial scaffolding — never fetches events from Google API).
-4. Open follow-up PR per [cleanup-mrcall-configurator-deadcode.md](../../docs/execution-plans/cleanup-mrcall-configurator-deadcode.md).
-5. Split oversized files: `services/command_handlers.py` (5427), `workers/task_creation.py` (well over 1100 after Fase 3b additions), `tools/gmail_tools.py` (1002), `workers/memory.py` (916).
+4. Split oversized files: `services/command_handlers.py` (5427), `workers/task_creation.py` (well over 1100 after Fase 3b additions), `tools/gmail_tools.py` (1002), `workers/memory.py` (916).
 
 ## Known issues
 
 - **Firebase round-trip not fully live-verified** — Calendar self-healing landed but recovery path hasn't been observed end-to-end on Mario's machine.
 - **MrCall-credits v1 not live-verified.**
-- **Dead `MrCallConfiguratorTrainer` references** — graceful-degraded; removal tracked at [cleanup-mrcall-configurator-deadcode.md](../../docs/execution-plans/cleanup-mrcall-configurator-deadcode.md).
-- Oversized files (see Next Steps #7).
+- Oversized files (see Next Steps #4).
 - `tools/calendar_sync.py` partial scaffolding — wiring to OAuth tokens pending.
 - Legacy trained prompts with `{from_email}` placeholders fall back to old behaviour (new prompts use cached system prompt).
 - neonize "Press Ctrl+C to exit" line printed by Go runtime — not suppressible from Python.

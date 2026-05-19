@@ -51,14 +51,12 @@ The release pipeline still has open hardening items in [`harness-backlog.md`](ha
 1. Live-test signin paths in `npm run dev` — IdentityBanner correct, `auth:bindProfile` attaches sidecar or routes to Onboarding.
 2. Add `GOOGLE_SIGNIN_CLIENT_SECRET` repo secret so the next `v*` tag push produces a working packaged build.
 3. Configure `GOOGLE_CALENDAR_CLIENT_ID` in profile Settings → "Connect Google Calendar" → confirm consent + token persistence + self-healing recovery path.
-4. Open follow-up PR per [cleanup-mrcall-configurator-deadcode.md](execution-plans/cleanup-mrcall-configurator-deadcode.md) (self-contained brief).
-5. Wire `engine/zylch/tools/calendar_sync.py` to the new `provider='google_calendar'` tokens.
+4. Wire `engine/zylch/tools/calendar_sync.py` to the new `provider='google_calendar'` tokens.
 
 ## Known issues
 
 - **No live end-to-end verification of any Firebase signin path.**
 - **MrCall-credits v1 not live-verified.**
-- **Dead `MrCallConfiguratorTrainer` references** — graceful-degraded, removal tracked at [cleanup-mrcall-configurator-deadcode.md](execution-plans/cleanup-mrcall-configurator-deadcode.md).
 - **No automated contract test for IPC method/payload changes** — tracked in [`harness-backlog.md`](harness-backlog.md). TypeScript catches signature mismatches inside the renderer but not engine↔preload divergence.
 - **No CI for `engine/make lint` and `app/npm run typecheck`** — tracked in [`harness-backlog.md`](harness-backlog.md).
 - **No CI for `pytest` on engine** — tracked in [`harness-backlog.md`](harness-backlog.md).
