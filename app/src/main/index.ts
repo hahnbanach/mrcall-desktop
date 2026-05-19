@@ -2,15 +2,19 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from 'e
 import { join } from 'path'
 import { statSync, existsSync } from 'fs'
 import { homedir } from 'os'
+import { randomUUID } from 'crypto'
 import { SidecarClient } from './sidecar'
 import {
   createProfileFS,
   createProfileForFirebaseUser,
+  findProfileByPartition,
   listProfilesWithEmail,
   ProfileSummary,
   profileDir,
-  readProfileEnvValue
+  readProfileEnvValue,
+  writeProfileEnvValue
 } from './profileFS'
+import { readLastProfile, writeLastProfile } from './lastProfile'
 import { cancelGoogleSignin, startGoogleSignin } from './googleSignin'
 import { GOOGLE_SIGNIN_CLIENT_ID, GOOGLE_SIGNIN_CLIENT_SECRET } from './oauthConfig'
 
@@ -90,6 +94,31 @@ interface WindowEntry {
   window: BrowserWindow
 }
 const windowEntries = new Map<number, WindowEntry>()
+
+// windowId → Chromium partition string used by that BrowserWindow.
+// Populated at window creation time (before bindProfile, before any
+// sidecar) so `auth:bindProfile` can persist the partition into the
+// profile's `.env` once a UID is known. Kept separate from
+// `windowEntries` because partitions exist for the entire window
+// lifetime, including the auth-pending phase when no sidecar is bound.
+const windowPartitions = new Map<number, string>()
+
+// Returns the Firebase IndexedDB partition for `uid`: if the profile's
+// `.env` already pins one via `FIREBASE_PARTITION`, reuse it (so the
+// existing Firebase session in that partition's IndexedDB is restored
+// on next open); otherwise return null and let the caller mint a fresh
+// `persist:firebase-pending-<uuid>`, which will be pinned to this UID
+// at the next successful `auth:bindProfile`.
+function partitionForProfile(uid: string): string | null {
+  if (!uid) return null
+  const stored = readProfileEnvValue(uid, 'FIREBASE_PARTITION')
+  if (stored && stored.startsWith('persist:')) return stored
+  return null
+}
+
+function freshPendingPartition(): string {
+  return `persist:firebase-pending-${randomUUID()}`
+}
 
 function listProfiles(): ProfileSummary[] {
   // Enumerate every subdirectory of ~/.zylch/profiles and resolve each
@@ -215,7 +244,23 @@ function attachSidecarToWindow(win: BrowserWindow, profile: string): SidecarClie
 // `win.on('closed')` is also registered here so that if the user
 // closes the window before binding a sidecar, we clean up the (empty)
 // entry — defensive, the entry won't exist yet but the listener stays.
-function createAuthPendingWindow(emailHint?: string): BrowserWindow {
+//
+// `partition` controls the Chromium session partition used by Firebase
+// to store its IndexedDB session. Chromium scopes IndexedDB per
+// partition, so two BrowserWindows with different partitions cannot see
+// each other's `auth.currentUser`. Two strategies:
+//   - "Open this profile" path: pass the profile's pinned
+//     `persist:firebase-<uuid>` (read from `<profile>/.env`) so the
+//     prior signed-in session is auto-restored.
+//   - First-time signin / "Sign in to another account": omit, and a
+//     fresh `persist:firebase-pending-<uuid>` is minted. After the
+//     first successful `auth:bindProfile`, that partition is pinned
+//     into the new profile's `.env` so subsequent opens reuse it.
+function createAuthPendingWindow(
+  emailHint?: string,
+  partition?: string
+): BrowserWindow {
+  const sessionPartition = partition || freshPendingPartition()
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -226,9 +271,18 @@ function createAuthPendingWindow(emailHint?: string): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Per-window Chromium partition. `persist:` prefix means IndexedDB
+      // / cookies / localStorage survive across app launches; the suffix
+      // makes the partition unique per profile (or per "fresh signin")
+      // so windows never share Firebase auth state.
+      partition: sessionPartition
     }
   })
+  windowPartitions.set(win.id, sessionPartition)
+  console.log(
+    `[main][w${win.id}] auth-pending window created partition=${sessionPartition}`
+  )
 
   win.on('ready-to-show', () => win.show())
   win.webContents.setWindowOpenHandler((d) => {
@@ -243,6 +297,7 @@ function createAuthPendingWindow(emailHint?: string): BrowserWindow {
       entry.sidecar.stop()
       windowEntries.delete(win.id)
     }
+    windowPartitions.delete(win.id)
   })
 
   // `?email=<hint>` lets the SignIn screen pre-fill the email input when
@@ -387,6 +442,8 @@ function registerIpc(): void {
   ipcMain.handle('window:openForProfile', async (_event, profile: string): Promise<{ ok: boolean }> => {
     if (typeof profile !== 'string') return { ok: false }
     if (!profile) {
+      // "Sign in to another account": always a fresh pending partition
+      // (no leaked session from any previous signin in this app).
       createAuthPendingWindow()
       return { ok: true }
     }
@@ -395,7 +452,15 @@ function registerIpc(): void {
       console.warn(`[main] window:openForProfile unknown profile=${profile}`)
       return { ok: false }
     }
-    createAuthPendingWindow(entry.email || undefined)
+    // Reuse the profile's pinned partition if it has one — that is
+    // where its prior Firebase IndexedDB session lives, and reusing it
+    // is what skips the SignIn screen on relaunch. Profiles created
+    // before this fix have no `FIREBASE_PARTITION` yet; their first
+    // signin in this window will mint a fresh pending partition and
+    // `auth:bindProfile` will pin it into the .env so future opens
+    // benefit too.
+    const pinned = partitionForProfile(profile)
+    createAuthPendingWindow(entry.email || undefined, pinned ?? undefined)
     return { ok: true }
   })
 
@@ -462,6 +527,13 @@ function registerIpc(): void {
           console.log(
             `[main][w${win.id}] auth:bindProfile uid=${trimmed} → already bound, no-op`
           )
+          // Even on no-op, refresh the last-profile pointer so the next
+          // boot opens this profile directly.
+          try {
+            writeLastProfile(trimmed)
+          } catch (e) {
+            console.warn(`[main][w${win.id}] writeLastProfile failed`, e)
+          }
           return { ok: true, found: true }
         }
         // Different profile (signOut → re-signin as another user, or
@@ -485,6 +557,57 @@ function registerIpc(): void {
         )
       }
       attachSidecarToWindow(win, trimmed)
+
+      // Pin the window's current Chromium partition into the profile's
+      // `.env` so the next "Open this profile" reuses it and Firebase
+      // restores the session from that partition's IndexedDB. If the
+      // partition was previously claimed by a DIFFERENT profile (e.g.
+      // user signed out in this window and signed back in as another
+      // account), detach it from the old profile first — otherwise the
+      // old profile would point at a partition that now holds a
+      // different identity's session.
+      const partition = windowPartitions.get(win.id)
+      if (partition) {
+        const claimed = findProfileByPartition(partition)
+        if (claimed && claimed !== trimmed) {
+          console.log(
+            `[main][w${win.id}] auth:bindProfile detaching partition from former owner profile=${claimed}`
+          )
+          try {
+            writeProfileEnvValue(claimed, 'FIREBASE_PARTITION', null)
+          } catch (e) {
+            console.warn(
+              `[main][w${win.id}] failed to clear FIREBASE_PARTITION on profile=${claimed}`,
+              e
+            )
+          }
+        }
+        const currentPinned = readProfileEnvValue(trimmed, 'FIREBASE_PARTITION')
+        if (currentPinned !== partition) {
+          try {
+            writeProfileEnvValue(trimmed, 'FIREBASE_PARTITION', partition)
+            console.log(
+              `[main][w${win.id}] auth:bindProfile pinned partition=${partition} → profile=${trimmed}`
+            )
+          } catch (e) {
+            console.warn(
+              `[main][w${win.id}] failed to pin FIREBASE_PARTITION on profile=${trimmed}`,
+              e
+            )
+          }
+        }
+      } else {
+        console.warn(
+          `[main][w${win.id}] auth:bindProfile no partition recorded — window-restore will require a fresh signin`
+        )
+      }
+
+      try {
+        writeLastProfile(trimmed)
+      } catch (e) {
+        console.warn(`[main][w${win.id}] writeLastProfile failed`, e)
+      }
+
       return { ok: true, found: true }
     }
   )
@@ -569,11 +692,44 @@ function registerIpc(): void {
       }
       try {
         attachSidecarToWindow(win, trimmed)
-        return { ok: true }
       } catch (e) {
         console.error('[main] onboarding:finalize failed', e)
         return { ok: false }
       }
+      // Mirror the partition-pinning + last-profile bookkeeping that
+      // `auth:bindProfile` does for existing profiles, so newly
+      // onboarded profiles also restore on next launch.
+      const partition = windowPartitions.get(win.id)
+      if (partition) {
+        const claimed = findProfileByPartition(partition)
+        if (claimed && claimed !== trimmed) {
+          try {
+            writeProfileEnvValue(claimed, 'FIREBASE_PARTITION', null)
+          } catch (e) {
+            console.warn(
+              `[main][w${win.id}] onboarding:finalize clear partition on former owner failed`,
+              e
+            )
+          }
+        }
+        try {
+          writeProfileEnvValue(trimmed, 'FIREBASE_PARTITION', partition)
+          console.log(
+            `[main][w${win.id}] onboarding:finalize pinned partition=${partition} → profile=${trimmed}`
+          )
+        } catch (e) {
+          console.warn(
+            `[main][w${win.id}] onboarding:finalize pin partition failed`,
+            e
+          )
+        }
+      }
+      try {
+        writeLastProfile(trimmed)
+      } catch (e) {
+        console.warn(`[main][w${win.id}] onboarding:finalize writeLastProfile failed`, e)
+      }
+      return { ok: true }
     }
   )
 
@@ -676,15 +832,41 @@ function registerIpc(): void {
 
 function bootFirstWindow(): void {
   // Every window starts in auth-pending mode (no sidecar). The
-  // renderer's FirebaseAuthGate forces Firebase signin, then asks main
-  // to bind a sidecar to the profile dir keyed by the signed-in UID. If
-  // no such profile exists, the renderer routes to the onboarding
-  // wizard which creates it and binds in-place.
+  // renderer's FirebaseAuthGate observes Firebase auth state. If the
+  // Chromium partition we opened the window with has a previously
+  // stored Firebase session in its IndexedDB, the gate sees a signed-in
+  // user almost immediately and asks main to bind the sidecar — the
+  // user never sees SignIn.
   //
-  // Profile selection is therefore a function of the signed-in Firebase
-  // identity, not of any disk-order or env-var hint — that's how we
-  // guarantee "I signed in as X" and "I see X's data" can never disagree.
-  console.log('[main] booting in auth-pending mode')
+  // The "default" partition for boot comes from `~/.zylch/last-profile`
+  // → that profile's `FIREBASE_PARTITION`. Falls back to a fresh
+  // pending partition if no last-profile is recorded yet, or the
+  // recorded profile has been removed from disk, or it never got a
+  // partition pinned (pre-fix profile).
+  //
+  // Profile selection is still a function of the signed-in Firebase
+  // identity, not of the hint we boot with: if for any reason the
+  // restored Firebase session is for a DIFFERENT UID than the
+  // last-profile UID, `auth:bindProfile` resolves the on-disk profile
+  // by that UID, refusing to silently expose another profile's data.
+  const lastUid = readLastProfile()
+  if (lastUid && profileExistsById(lastUid)) {
+    const pinned = partitionForProfile(lastUid)
+    const summary = listProfiles().find((p) => p.id === lastUid)
+    if (pinned) {
+      console.log(
+        `[main] booting with restored partition for last-profile=${lastUid}`
+      )
+      createAuthPendingWindow(summary?.email || undefined, pinned)
+      return
+    }
+    console.log(
+      `[main] last-profile=${lastUid} has no pinned partition yet; booting fresh (signin once to pin it)`
+    )
+    createAuthPendingWindow(summary?.email || undefined)
+    return
+  }
+  console.log('[main] booting in auth-pending mode (no last-profile)')
   createAuthPendingWindow()
 }
 

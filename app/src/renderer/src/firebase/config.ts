@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { inMemoryPersistence, initializeAuth } from 'firebase/auth'
+import { indexedDBLocalPersistence, initializeAuth } from 'firebase/auth'
 
 // Same Firebase project as mrcall-dashboard. The API key + project ID are
 // public-by-design (Firebase JS SDK config) — they identify the project,
@@ -17,13 +17,17 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 
-// In-memory persistence: every window signs in independently and every
-// app launch shows SignIn. IndexedDB is shared across all BrowserWindows
-// of an Electron app, so a restored Firebase session would leak between
-// concurrent windows (Window A sees Window B's identity). UID-keyed
-// profile binding plus per-window in-memory auth give us the invariant
-// "one window = one signin = one profile" with no shared state to drift.
-const auth = initializeAuth(app, { persistence: inMemoryPersistence })
+// IndexedDB-backed persistence so a signed-in user survives across app
+// launches. The historic cross-window bleed (one BrowserWindow inheriting
+// another window's `auth.currentUser`) is structurally prevented by the
+// main process: every BrowserWindow is created with its own
+// `webPreferences.partition` (`persist:firebase-<uid>` for bound profiles
+// or `persist:firebase-pending-<uuid>` for fresh signin). Chromium scopes
+// IndexedDB per partition, so each window's Firebase session is isolated
+// even though they share the same renderer code. See `main/index.ts`
+// (`createAuthPendingWindow` + `auth:bindProfile`) and
+// `main/profileFS.ts` (`FIREBASE_PARTITION` in profile `.env`).
+const auth = initializeAuth(app, { persistence: indexedDBLocalPersistence })
 auth.useDeviceLanguage()
 
 export { app, auth }

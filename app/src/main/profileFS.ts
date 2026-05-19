@@ -379,6 +379,121 @@ export function createProfileFS(
 }
 
 /**
+ * Atomically update a single key in a profile's `.env`, preserving the
+ * order, comments, and other keys of the existing file. Mirrors the
+ * server-side `update_env` semantics in `zylch/services/settings_io.py`
+ * (in-place replacement when the key exists, append at the bottom
+ * otherwise) so this helper is safe to use even on `.env` files that
+ * pre-existed or that the server has already touched.
+ *
+ * `FIREBASE_PARTITION` is stored this way: it isn't part of `KNOWN_KEYS`
+ * (the wizard never writes it) but lives in the same file because:
+ *   - `update_env` server-side preserves unknown lines verbatim, so a
+ *     subsequent Settings save won't drop the value;
+ *   - Pydantic Settings has `extra="ignore"` in `config.py`, so the
+ *     engine simply ignores the key at startup;
+ *   - putting it inside the profile dir keeps the partition mapping
+ *     co-located with the rest of the profile state (no separate index
+ *     file to keep in sync when profiles are renamed / deleted).
+ *
+ * Pass `value=null` to remove the key (used to detach an abandoned
+ * partition from a profile that the user has just signed out of).
+ */
+export function writeProfileEnvValue(
+  id: string,
+  key: string,
+  value: string | null
+): { ok: boolean; written?: boolean } {
+  const dir = profileDir(id)
+  const envPath = join(dir, '.env')
+  if (!existsSync(envPath)) {
+    return { ok: false }
+  }
+
+  let text: string
+  try {
+    text = readFileSync(envPath, 'utf-8')
+  } catch {
+    return { ok: false }
+  }
+  const lines = text.split('\n')
+  // Preserve a trailing empty token if the original file ended with `\n`
+  // so we don't drop the final newline on the rewrite.
+  const newLines: string[] = []
+  let replaced = false
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim()
+    if (!trimmed || trimmed.startsWith('#')) {
+      newLines.push(rawLine)
+      continue
+    }
+    const stripped = trimmed.startsWith('export ') ? trimmed.slice(7) : trimmed
+    const eq = stripped.indexOf('=')
+    if (eq <= 0) {
+      newLines.push(rawLine)
+      continue
+    }
+    const k = stripped.slice(0, eq).trim()
+    if (k !== key) {
+      newLines.push(rawLine)
+      continue
+    }
+    if (value === null) {
+      // Drop the line.
+      replaced = true
+      continue
+    }
+    newLines.push(`${key}=${dotenvQuote(value)}`)
+    replaced = true
+  }
+  if (!replaced && value !== null) {
+    // Append at end, preceded by a marker comment so the origin of the
+    // line is obvious on diff inspection.
+    // Ensure trailing newline before appending.
+    if (newLines.length > 0 && newLines[newLines.length - 1] !== '') {
+      newLines.push('')
+    }
+    newLines.push('# Added by MrCall Desktop (window partition mapping)')
+    newLines.push(`${key}=${dotenvQuote(value)}`)
+    newLines.push('')
+  }
+
+  const tmpPath = envPath + '.tmp'
+  const fd = openSync(tmpPath, 'w', 0o600)
+  try {
+    writeFileSync(fd, newLines.join('\n'), 'utf8')
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+  // Atomic replace via rename. `fs.renameSync` is atomic on POSIX and
+  // Windows (within the same volume), matching the server-side
+  // `os.replace` used in `settings_io.update_env`.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { renameSync } = require('fs') as typeof import('fs')
+  renameSync(tmpPath, envPath)
+  return { ok: true, written: replaced || value !== null }
+}
+
+/**
+ * Scan every profile under `~/.zylch/profiles/` and return the id of the
+ * profile whose `.env` has `FIREBASE_PARTITION=<partition>`, or null if
+ * no profile claims that partition. Used by `auth:bindProfile` to detach
+ * a partition that was previously associated with a different profile
+ * before re-associating it with the freshly signed-in UID.
+ */
+export function findProfileByPartition(partition: string): string | null {
+  if (!partition) return null
+  const profiles = listProfilesWithEmail()
+  for (const p of profiles) {
+    if (readProfileEnvValue(p.id, 'FIREBASE_PARTITION') === partition) {
+      return p.id
+    }
+  }
+  return null
+}
+
+/**
  * First-run detector. True iff `~/.zylch/profiles/` does not exist OR
  * contains no subdirectories (an empty dir or only files is treated as
  * "no profiles" — the sidecar would crash looking for any of them).
