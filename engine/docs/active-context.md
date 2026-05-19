@@ -12,14 +12,13 @@ description: |
 
 WhatsApp pipeline parity is **structurally complete through Phase 4 cross-channel**: WA messages flow end-to-end (sync → memory → tasks → UI), and a task carrying BOTH `sources.emails` and `sources.whatsapp_messages` renders the per-task Email/WhatsApp toggle in the Workspace Source panel (engine stamps `sources.whatsapp_chat_jid`, app reads it).
 
-The work-in-flight is **live verification** of the stack that landed 2026-05-13 → 2026-05-15:
+Cross-channel toggle live-verified 2026-05-19 via a synthetic SQL setup (Birger Lie email task + Ivan Marchese WA chat) — pills, body swap, count display all confirmed by Mario. Reverted post-test; profile has 0 cross-channel tasks again until a natural match lands.
 
-1. A real cross-channel task surfacing the toggle (current gmail profile has 0 cross-channel tasks — needs a fresh Update producing the match naturally, or a synthetic SQL setup).
-2. Update view's staged progress emissions reaching the UI ([Update stage progress] cb91901b/0b33fdf4).
-3. Calendar "Connect Google Calendar" self-healing path (a03f6831/1c60aebf) — confirm the renderer's `ensureEngineSession()` recovers from a missed initial token push.
-4. **MrCall-credits v1 round-trip** (branch `feat/mrcall-credits-v1`, tip `3001844`) — still pending the proxy deployed at `https://zylch-test.mrcall.ai`.
+The work-in-flight is **live verification** of the rest of the 2026-05-15 stack:
 
-The whatsapp-pipeline-parity plan's `status:` header still reads "Phase 2 onwards pending" — outdated. Will be updated at next /doc-endsession.
+1. Update view's staged progress emissions reaching the UI ([Update stage progress] cb91901b/0b33fdf4).
+2. Calendar "Connect Google Calendar" self-healing path (a03f6831/1c60aebf) — confirm the renderer's `ensureEngineSession()` recovers from a missed initial token push.
+3. **MrCall-credits v1 round-trip** (branch `feat/mrcall-credits-v1`, tip `3001844`) — still pending the proxy deployed at `https://zylch-test.mrcall.ai`.
 
 ## Recent landings (last ~2 weeks)
 
@@ -48,17 +47,14 @@ The whatsapp-pipeline-parity plan's `status:` header still reads "Phase 2 onward
 
 ## Next steps
 
-1. Open a cross-channel task in the desktop dev build (synthetic SQL or fresh Update producing a real match) → confirm the per-task Email/WhatsApp toggle renders and switches body correctly.
-2. Click Update → observe staged progress: 5/20/30/60/80-90/95/100 with ETA evolving and elapsed counter ticking.
-3. Settings → Connect Google Calendar on a session where the initial token push was missed → confirm the recovery path closes the loop (no raw `_NotSignedInError` shown).
-4. Wire `tools/calendar_sync.py` to read tokens from `provider='google_calendar'` (current 469-line module is partial scaffolding — never fetches events from Google API).
-5. Open follow-up PR per [cleanup-mrcall-configurator-deadcode.md](../../docs/execution-plans/cleanup-mrcall-configurator-deadcode.md).
-6. Update `whatsapp-pipeline-parity.md` plan status (it still says "Phase 2 onwards pending" but Phase 4 cross-channel landed).
-7. Split oversized files: `services/command_handlers.py` (5427), `workers/task_creation.py` (well over 1100 after Fase 3b additions), `tools/gmail_tools.py` (1002), `workers/memory.py` (916).
+1. Click Update → observe staged progress: 5/20/30/60/80-90/95/100 with ETA evolving and elapsed counter ticking.
+2. Settings → Connect Google Calendar on a session where the initial token push was missed → confirm the recovery path closes the loop (no raw `_NotSignedInError` shown).
+3. Wire `tools/calendar_sync.py` to read tokens from `provider='google_calendar'` (current 469-line module is partial scaffolding — never fetches events from Google API).
+4. Open follow-up PR per [cleanup-mrcall-configurator-deadcode.md](../../docs/execution-plans/cleanup-mrcall-configurator-deadcode.md).
+5. Split oversized files: `services/command_handlers.py` (5427), `workers/task_creation.py` (well over 1100 after Fase 3b additions), `tools/gmail_tools.py` (1002), `workers/memory.py` (916).
 
 ## Known issues
 
-- **No live verification of cross-channel task UI** — current gmail profile has 0 cross-channel tasks.
 - **Firebase round-trip not fully live-verified** — Calendar self-healing landed but recovery path hasn't been observed end-to-end on Mario's machine.
 - **MrCall-credits v1 not live-verified.**
 - **Dead `MrCallConfiguratorTrainer` references** — graceful-degraded; removal tracked at [cleanup-mrcall-configurator-deadcode.md](../../docs/execution-plans/cleanup-mrcall-configurator-deadcode.md).

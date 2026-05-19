@@ -1,14 +1,39 @@
 ---
-status: in-progress (Phase 1 a/b/c landed; Phase 2 onwards pending)
-owner: next-session
+status: completed
+owner: —
+created: 2026-05-07
+last_updated: 2026-05-19
+completed_at: 2026-05-19
+outcome: |
+  All 5 phases landed and live-verified on the gmail profile
+  (`HxiZh…`). Phase 1 a/b/c (`d0baa6b1` + `315c56d1` + `6ae8a5fa`) —
+  `person_identifiers` index, identifier-first match in
+  `_upsert_entity`, identifier-clustered `reconsolidate_now` with
+  cross-reference migration. Phase 2 a/b/c (`91421d2e`) — `whatsapp_blobs`
+  join + `memory_message` trainer + `MemoryWorker.process_whatsapp_message`
+  wired into `update` step [3/5]. Phase 3a (`e6fcd940`) — schema:
+  `task_items.contact_phone` + ensured indexes + storage helpers +
+  `_infer_task_channel` learns `'whatsapp'`. Phase 3b (`87a806f7`) —
+  `TaskWorker._analyze_recent_whatsapp_events` mirrors the email path
+  (dedup by chat_jid, user_replied detection, F7 via `whatsapp_blobs`,
+  Fix-D guard, channel-agnostic `get_tasks_by_thread`). Phase 4 a/b
+  (`2a8bc2c3`) — `ThreadPanel` `'whatsapp'` branch via `whatsapp.listMessages`.
+  Phase 4 cross-channel (`b57fcc4f`) — `sources.whatsapp_chat_jid`
+  stamping + ThreadPanel Email/WhatsApp tab pills. Live results on
+  the gmail profile: 6 WA tasks created, all with `contact_phone` +
+  `sources.whatsapp_chat_jid`. Cross-channel toggle live-verified
+  via a synthetic SQL setup (Birger Lie email task + Ivan Marchese
+  WA chat) on 2026-05-19. F4/F8/F9 sweeps inherit WA tasks without
+  changes (they're channel-agnostic on `contact_email`/`contact_phone`
+  OR blob overlap). The Fix-D restriction (`f5196e7f`) protects
+  both email and WA paths from F7 topical-blob siblings being
+  auto-merged behind a CREATE.
 discipline: Mario's standard rules apply. NEVER claim a feature is "fixed"
   or "done" or "verified" until Mario has clicked / used it himself in the
   real Electron app and reported back. Unit tests, typecheck, RPC probes,
   log lines do NOT count. One change at a time. Tell Mario exactly what
   to test. Wait. NEVER push to origin. NEVER commit until Mario says
   "funziona". Italian register in the chat.
-created: 2026-05-07
-last_updated: 2026-05-08
 ---
 
 # WhatsApp pipeline parity + cross-channel person identity

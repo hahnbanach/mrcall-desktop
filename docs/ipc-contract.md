@@ -51,9 +51,13 @@ reopened task starts fresh.
 
 Returns an array of `TaskItem` dicts. Each row includes (when present):
 - standard fields (id, owner_id, event_type, contact_email, …)
+- `contact_phone: string | null` — populated for WhatsApp tasks; F8 dedup clusters on `contact_email OR contact_phone`
+- `channel: 'email' | 'phone' | 'calendar' | 'whatsapp' | null`
 - `close_note: string | null`
 - `pinned: boolean`
-- `sources: { emails: string[], blobs: string[], calendar_events: string[], thread_id?: string | null }`
+- `sources: { emails: string[], whatsapp_messages?: string[], blobs: string[], calendar_events: string[], thread_id?: string | null, whatsapp_chat_jid?: string | null }`
+
+`sources.whatsapp_messages` carries WhatsAppMessage row PKs; `sources.whatsapp_chat_jid` is stamped on the FIRST WA touchpoint to the task (engine: `update_task_item(whatsapp_chat_jid=…)` is idempotent — subsequent WA messages don't overwrite). Renderer uses it as the explicit pointer for the cross-channel Source-panel toggle so it doesn't have to sniff a `thread_id` suffix.
 
 ### `emails.search(query, folder?, limit?, offset?)`
 

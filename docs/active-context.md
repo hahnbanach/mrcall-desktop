@@ -12,11 +12,10 @@ description: |
 
 ## Current focus (as of 2026-05-19)
 
-WhatsApp pipeline parity now spans engine + app + IPC through Phase 4 cross-channel — a task carrying both `sources.emails` and `sources.whatsapp_messages` triggers a per-task Email/WhatsApp toggle in the Workspace Source panel (engine stamps `sources.whatsapp_chat_jid`; renderer reads it). The IPC contract gained `sources.whatsapp_messages` and `sources.whatsapp_chat_jid` on the `tasks.list` payload.
+WhatsApp pipeline parity spans engine + app + IPC through Phase 4 cross-channel — a task carrying both `sources.emails` and `sources.whatsapp_messages` triggers a per-task Email/WhatsApp toggle in the Workspace Source panel (engine stamps `sources.whatsapp_chat_jid`; renderer reads it). The IPC contract gained `sources.whatsapp_messages` and `sources.whatsapp_chat_jid` on the `tasks.list` payload. **Cross-channel toggle live-verified 2026-05-19 via a synthetic SQL setup** (Birger Lie email task + Ivan Marchese WA chat, reverted post-test).
 
-The work-in-flight is **live verification** of the recently-landed stack:
+The work-in-flight is **live verification** of the rest of the recently-landed stack:
 
-- A real cross-channel task surfacing the UI toggle (no cross-channel tasks on the current gmail profile yet).
 - Update view staged progress emissions ([Update stage progress] cb91901b/0b33fdf4) reaching the UI.
 - Calendar "Connect Google Calendar" self-healing (a03f6831/1c60aebf) recovering from a missed initial Firebase-token push.
 - **MrCall-credits v1 round-trip** — still pending `mrcall-agent` deployed at `https://zylch-test.mrcall.ai`.
@@ -45,7 +44,6 @@ The release pipeline still has open hardening items in [`harness-backlog.md`](ha
 - End-to-end live verification of Firebase signin paths (email/password, Continue with Google) in `npm run dev` and in packaged DMG/EXE.
 - `GOOGLE_SIGNIN_CLIENT_SECRET` repo secret creation at *Settings → Secrets and variables → Actions*. Until done, packaged builds with Google signin will fail at the materialise step.
 - Mac validation of MrCall-credits v1 round-trip — needs the proxy deployed at the test URL.
-- Mac validation of cross-channel task UI — current profile has no cross-channel tasks.
 - Mac validation of Update staged progress and Calendar self-healing.
 
 ## Next steps
@@ -60,7 +58,6 @@ The release pipeline still has open hardening items in [`harness-backlog.md`](ha
 
 - **No live end-to-end verification of any Firebase signin path.**
 - **MrCall-credits v1 not live-verified.**
-- **No live verification of cross-channel task UI** — needs a real cross-channel match or synthetic SQL setup.
 - **Dead `MrCallConfiguratorTrainer` references** — graceful-degraded, removal tracked at [cleanup-mrcall-configurator-deadcode.md](execution-plans/cleanup-mrcall-configurator-deadcode.md).
 - **No automated contract test for IPC method/payload changes** — tracked in [`harness-backlog.md`](harness-backlog.md). TypeScript catches signature mismatches inside the renderer but not engine↔preload divergence.
 - **No CI for `engine/make lint` and `app/npm run typecheck`** — tracked in [`harness-backlog.md`](harness-backlog.md).
