@@ -6,6 +6,7 @@ import Update from './views/Update'
 import Settings from './views/Settings'
 import Email from './views/Email'
 import WhatsAppView from './views/WhatsApp'
+import MrcallView from './views/Mrcall'
 import Onboarding from './views/Onboarding'
 import SignIn from './views/SignIn'
 import { auth } from './firebase/config'
@@ -21,7 +22,7 @@ import mrcallIcon from './assets/logos/mrcall-icon.png'
 import mrcallWordmark from './assets/logos/mrcall-wordmark.png'
 import './types'
 
-type View = 'tasks' | 'workspace' | 'email' | 'whatsapp' | 'update' | 'settings'
+type View = 'tasks' | 'workspace' | 'email' | 'whatsapp' | 'mrcall' | 'update' | 'settings'
 
 // Banner shown at the top of the window when the sidecar is dead. The
 // most common case is a profile lock: the user opened a second window on
@@ -569,6 +570,12 @@ function AppInner(): JSX.Element {
           </div>
           <div
             className="absolute inset-0 overflow-auto"
+            style={{ display: view === 'mrcall' ? 'block' : 'none' }}
+          >
+            <MrcallView />
+          </div>
+          <div
+            className="absolute inset-0 overflow-auto"
             style={{ display: view === 'update' ? 'block' : 'none' }}
           >
             <Update />
@@ -633,11 +640,9 @@ function Sidebar({
       icon: 'whatsapp'
     },
     {
-      id: 'tasks',
+      id: 'mrcall',
       label: 'MrCall',
-      icon: 'phone',
-      disabled: true,
-      disabledTitle: 'Not connected'
+      icon: 'phone'
     }
   ]
 
