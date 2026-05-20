@@ -2465,51 +2465,6 @@ class Storage:
         return True
 
     # ==========================================
-    # MRCALL LINKING
-    # ==========================================
-
-    def set_mrcall_link(self, owner_id: str, mrcall_business_id: str) -> bool:
-        """Link user to MrCall business ID."""
-        data = {
-            "owner_id": owner_id,
-            "provider": "mrcall",
-            "email": mrcall_business_id,  # business_id stored in email field
-            "updated_at": datetime.now(timezone.utc),
-        }
-        with get_session() as session:
-            stmt = sqlite_insert(OAuthToken).values(**data)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["owner_id", "provider"],
-                set_={k: v for k, v in data.items() if k not in ("owner_id", "provider")},
-            )
-            session.execute(stmt)
-        logger.info(f"Linked MrCall business " f"{mrcall_business_id} for owner {owner_id}")
-        return True
-
-    def get_mrcall_link(self, owner_id: str) -> Optional[str]:
-        """Get MrCall business ID for user."""
-        with get_session() as session:
-            row = (
-                session.query(OAuthToken.email)
-                .filter(OAuthToken.owner_id == owner_id, OAuthToken.provider == "mrcall")
-                .first()
-            )
-
-            if row and row[0]:
-                logger.debug(f"get_mrcall_link: explicit link found in email field: {row[0]}")
-                return row[0]
-            return None
-
-    def remove_mrcall_link(self, owner_id: str) -> bool:
-        """Remove MrCall link for user."""
-        with get_session() as session:
-            session.query(OAuthToken).filter(
-                OAuthToken.owner_id == owner_id, OAuthToken.provider == "mrcall"
-            ).delete()
-        logger.info(f"Removed MrCall link for owner {owner_id}")
-        return True
-
-    # ==========================================
     # MEMORY AGENT PROCESSING
     # ==========================================
 

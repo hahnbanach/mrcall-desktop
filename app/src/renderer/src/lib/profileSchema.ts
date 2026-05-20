@@ -66,25 +66,10 @@ export const PROFILE_SCHEMA: SchemaField[] = [
     optional: true,
     help: 'Your Telegram numeric user ID (from @userinfobot).'
   },
-  // ─── MrCall ──────────────────────────────────────────────
-  { key: 'MRCALL_CLIENT_ID', label: 'MrCall client ID', type: 'text', group: 'MrCall', optional: true },
-  {
-    key: 'MRCALL_CLIENT_SECRET',
-    label: 'MrCall client secret',
-    type: 'password',
-    group: 'MrCall',
-    optional: true,
-    secret: true
-  },
-  { key: 'MRCALL_BASE_URL', label: 'MrCall base URL', type: 'text', group: 'MrCall', optional: true },
-  { key: 'MRCALL_REALM', label: 'MrCall realm', type: 'text', group: 'MrCall', optional: true },
-  {
-    key: 'MRCALL_DASHBOARD_URL',
-    label: 'MrCall dashboard URL',
-    type: 'text',
-    group: 'MrCall',
-    optional: true
-  },
+  // MrCall is authenticated via the Firebase session (no per-profile
+  // OAuth/realm config). The legacy MRCALL_CLIENT_ID/SECRET/BASE_URL/
+  // REALM/DASHBOARD_URL fields were removed with the delegated-OAuth
+  // cleanup; don't reintroduce them here.
   // ─── Google ─────────────────────────────────────────────
   {
     key: 'GOOGLE_CALENDAR_CLIENT_ID',

@@ -193,7 +193,6 @@ async def handle_help() -> str:
 
 **📡 Integrations:**
 • `/connect` - View and manage external connections
-• `/mrcall` - MrCall/StarChat phone integration
 
 **🔗 Sharing:**
 • `/share <email>` - Share data with someone
@@ -213,7 +212,6 @@ async def handle_sync(args: List[str], config, owner_id: str) -> str:
     """Handle /sync command - now using background job system."""
     from zylch.api.token_storage import get_provider
     from zylch.storage import Storage
-    from zylch.services.sync_service import SyncService  # Used for mrcall subcommand
 
     help_text = """**🔄 Sync**
 
@@ -224,15 +222,13 @@ async def handle_sync(args: List[str], config, owner_id: str) -> str:
 • `/sync reset` - Clear all synced data
 • `/sync --days N` - Sync last N days
 • `/sync --days N --force` - Sync last N days and reprocess all
-• `/sync mrcall` - Test MrCall conversation fetch (debug)
 
 **Examples:**
 • `/sync` - Quick incremental sync
 • `/sync --days 90` - Sync last 90 days
 • `/sync --force` - Force reprocess everything
 • `/sync --days 90 --force` - Sync 90 days and reprocess all
-• `/sync status` - Check last sync time
-• `/sync mrcall` - Fetch latest MrCall conversation"""
+• `/sync status` - Check last sync time"""
 
     # --help option (check first)
     if "--help" in args:
@@ -350,98 +346,6 @@ Then run `/sync --days N` to rebuild memory from re-synced emails."""
         except Exception as e:
             logger.error(f"[/sync] Failed to reset sync data: {e}")
             return f"❌ **Error resetting sync data:** {str(e)}"
-
-    # Subcommand: mrcall - Sync MrCall phone call transcriptions
-    if subcommand == "mrcall":
-        logger.info(f"[/sync] MrCall sync for owner_id={owner_id}")
-        try:
-            from zylch.api.token_storage import get_mrcall_credentials
-
-            supabase = Storage()
-
-            # Parse --days option
-            days_back = 30
-            debug_mode = False
-            for i, arg in enumerate(args):
-                if arg == "--days" and i + 1 < len(args):
-                    try:
-                        days_back = int(args[i + 1])
-                    except ValueError:
-                        return f"❌ **Error:** `{args[i + 1]}` is not a valid number"
-                elif arg == "--debug":
-                    debug_mode = True
-
-            # Get MrCall OAuth credentials (includes access_token and business_id)
-            mrcall_creds = get_mrcall_credentials(owner_id)
-            if not mrcall_creds or not mrcall_creds.get("access_token"):
-                # Check if there's a simple mrcall link (without OAuth)
-                business_id = supabase.get_mrcall_link(owner_id)
-                if business_id:
-                    return f"""📞 **MrCall Sync**
-
-⚠️ **MrCall linked but no OAuth token**
-
-Your MrCall is linked to business `{business_id}` but OAuth credentials are missing.
-
-**To complete setup:**
-1. Run `/connect mrcall` to authenticate with MrCall
-2. Then run `/sync mrcall` again"""
-                else:
-                    return """📞 **MrCall Sync**
-
-⚠️ **MrCall not connected**
-
-**To connect MrCall:**
-1. Run `/connect mrcall` to authenticate
-2. Run `/mrcall link` to link your assistant"""
-
-            # Create SyncService for MrCall
-            sync_service = SyncService(owner_id=owner_id, supabase_storage=supabase)
-
-            # Use explicitly linked business_id, not OAuth-stored one
-            business_id = supabase.get_mrcall_link(owner_id)
-            if not business_id:
-                return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
-
-            # Run MrCall sync
-            result = await sync_service.sync_mrcall(
-                days_back=days_back,
-                debug=debug_mode,
-                firebase_token=mrcall_creds.get("access_token"),
-                business_id=business_id,
-                realm=mrcall_creds.get("realm"),
-            )
-
-            if result.get("skipped"):
-                return f"""📞 **MrCall Sync**
-
-⚠️ **Skipped:** {result.get('reason', 'Unknown reason')}
-
-**To link MrCall:**
-1. Run `/connect mrcall` to authenticate
-2. Run `/mrcall link` to link your assistant"""
-
-            if result.get("success"):
-                return f"""📞 **MrCall Sync**
-
-✅ **Synced {result.get('synced', 0)} phone call(s)**
-
-• Business ID: `{result.get('business_id')}`
-• Days back: {result.get('days_back')}
-• Total available: {result.get('total_available', 'N/A')}
-• Skipped: {result.get('skipped', 0)}
-
-**Next steps:**
-• `/agent memory train mrcall` - Train memory extraction
-• `/agent memory process mrcall` - Extract entities from calls"""
-            else:
-                return f"""📞 **MrCall Sync**
-
-❌ **Error:** {result.get('error', 'Unknown error')}"""
-
-        except Exception as e:
-            logger.error(f"[/sync] MrCall sync failed: {e}", exc_info=True)
-            return f"❌ **MrCall sync failed:** {str(e)}"
 
     # Parse --days and --force options
     days_back = 30
@@ -768,482 +672,6 @@ Run `/agent process` to rebuild memory from your synced data."""
         return f"**❌ Error:** {str(e)}\n\n{help_text}"
 
 
-async def handle_mrcall(
-    args: List[str], owner_id: str, user_email: str = None, context: dict = None
-) -> str:
-    """Handle /mrcall command - MrCall integration.
-
-    Args:
-        args: Command arguments
-        owner_id: User's Owner ID
-        user_email: User's email (optional)
-        context: Request context containing source, firebase_token, etc.
-    """
-    from zylch.storage import Storage
-    from zylch.api.token_storage import get_mrcall_credentials
-    import httpx
-    from zylch.config import settings
-
-    # Dashboard detection: use firebase_token instead of OAuth
-    is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
-    firebase_token = context.get("firebase_token") if context else None
-    logger.debug(
-        f"[/mrcall] is_dashboard={is_dashboard}, has_firebase_token={bool(firebase_token)}"
-    )
-
-    help_text = """**📞 MrCall Integration**
-
-This desktop is a *consumer* of your MrCall assistants.
-Configure them at https://dashboard.mrcall.ai
-
-**Quick Commands:**
-• `/mrcall list` - List your MrCall assistants
-• `/mrcall link <business_id>` - Link to assistant by ID
-• `/mrcall unlink` - Unlink current assistant
-• `/mrcall variables [get] [--name NAME]` - List/filter variables
-• `/mrcall` - Show current link status
-
-**Setup:**
-1. Run `/connect mrcall` to authenticate with MrCall
-2. Run `/mrcall list` to see your assistants
-3. Run `/mrcall link <business_id>` to connect to an assistant"""
-
-    # --help option (check first)
-    if "--help" in args:
-        return help_text
-
-    # Separate positional args from options
-    positional = [a for a in args if not a.startswith("--")]
-    subcommand = positional[0].lower() if positional else None
-
-    try:
-        client = Storage()
-
-        # Subcommand: unlink
-        if subcommand == "unlink":
-            success = client.remove_mrcall_link(owner_id)
-            if success:
-                return "✅ **MrCall Unlinked**\n\nYour Zylch is no longer connected to a MrCall business."
-            else:
-                return "❌ **Error:** No MrCall link found to remove."
-
-        # Subcommand: list - List all businesses
-        if subcommand == "list":
-            # Dashboard: use firebase_token; CLI: use OAuth credentials
-            if is_dashboard and firebase_token:
-                access_token = firebase_token
-                logger.debug("[/mrcall list] Using firebase_token (dashboard)")
-            else:
-                # Get OAuth credentials (CLI)
-                creds = get_mrcall_credentials(owner_id)
-                logger.debug(
-                    f"handle_mrcall list: creds_keys={list(creds.keys()) if creds else None}"
-                )
-                if not creds or not creds.get("access_token"):
-                    logger.debug(
-                        f"handle_mrcall list: access_token missing, creds_keys={list(creds.keys()) if creds else None}, "
-                        + ", ".join(
-                            (
-                                f"{k}={v[:2]}...{v[-2:]}"
-                                if isinstance(v, str) and len(v) > 4
-                                else f"{k}=<short>"
-                            )
-                            for k, v in (creds or {}).items()
-                            if k in ("access_token", "refresh_token", "client_secret")
-                        )
-                    )
-                    return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
-                access_token = creds.get("access_token")
-                logger.debug(
-                    f"handle_mrcall list: access_token={access_token[:2]}...{access_token[-2:]} (len={len(access_token)})"
-                    if access_token and len(access_token) > 4
-                    else "handle_mrcall list: access_token=<short or missing>"
-                )
-
-            # Get the linked business (explicit /mrcall link takes priority over OAuth default)
-            current_business_id = client.get_mrcall_link(owner_id)
-            logger.debug(f"[/mrcall list] current_business_id={current_business_id}")
-
-            # Fetch businesses from StarChat API
-            try:
-                url = f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/{settings.mrcall_realm}/crm/business/search"
-                logger.info(f"handle_mrcall list: Fetching from {url}")
-                async with httpx.AsyncClient(
-                    timeout=30.0, verify=settings.starchat_verify_ssl
-                ) as http_client:
-                    response = await http_client.post(
-                        url,
-                        headers={"auth": access_token, "Content-Type": "application/json"},
-                        json={"from": 0, "size": 50},
-                    )
-                    response.raise_for_status()
-                    businesses = response.json()
-                    logger.debug(
-                        f"[/mrcall list] POST {url} -> status={response.status_code}, businesses={len(businesses)}"
-                    )
-            except Exception as e:
-                logger.error(f"Failed to fetch MrCall businesses: {e}")
-                return f"❌ **Error fetching businesses:** {str(e)}\n\nTry `/connect mrcall` to refresh your connection."
-
-            if not businesses:
-                return "**📞 Your MrCall Assistants**\n\nNo assistants found.\n\nCreate one at https://dashboard.mrcall.ai"
-
-            # Build list output
-            output = "**📞 Your MrCall Assistants**\n\n"
-            for i, biz in enumerate(businesses, 1):
-                biz_id = biz.get("businessId") or biz.get("id")
-                nickname = biz.get("nickname") or "Unnamed"
-                logger.debug(f"[/mrcall list] business {i}: id={biz_id}, nickname={nickname}")
-                company = biz.get("companyName") or ""
-                service_number = biz.get("serviceNumber") or ""
-                email_address = biz.get("emailAddress") or ""
-                user_phone = biz.get("userPhoneNumber") or ""
-                template = biz.get("template") or ""
-                subscription_status = biz.get("subscriptionStatus") or ""
-
-                # Mark if this is the linked business
-                linked_marker = " ← LINKED" if biz_id == current_business_id else ""
-
-                # Format: "1. **Nickname** (Company) ← LINKED"
-                if company:
-                    output += f"{i}. **{nickname}** ({company}){linked_marker}\n"
-                else:
-                    output += f"{i}. **{nickname}**{linked_marker}\n"
-
-                # Business ID (for /mrcall link)
-                output += f"   🆔 `{biz_id}`\n"
-
-                # Email
-                if email_address:
-                    output += f"   📧 {email_address}\n"
-
-                # User phone number
-                if user_phone:
-                    output += f"   📱 User: {user_phone}\n"
-
-                # Assistant (service) number - formatted as clickable link
-                if service_number:
-                    # Clean up service number display (remove duplicates like +39...#+39...)
-                    display_number = (
-                        service_number.split("#")[0] if "#" in service_number else service_number
-                    )
-                    output += f"   ☎️ Assistant: [{display_number}](tel:{display_number})\n"
-
-                # Template (assistant type)
-                if template:
-                    output += f"   🤖 {template}\n"
-
-                # Subscription status
-                if subscription_status:
-                    output += f"   📋 {subscription_status}\n"
-
-                output += "\n"
-
-            output += "---\nUse `/mrcall link <business_id>` to connect an assistant."
-            return output
-
-        # Subcommand: variables - List all variables
-        if subcommand == "variables":
-            logger.debug(f"[/mrcall variables] args={args}")
-
-            # Dashboard: skip OAuth check (use firebase_token)
-            if not is_dashboard:
-                # CLI: verify OAuth credentials exist
-                creds = get_mrcall_credentials(owner_id)
-                logger.debug(
-                    f"[/mrcall variables] get_mrcall_credentials(owner_id={owner_id}) -> keys={list(creds.keys()) if creds else None}, has_business_id={bool(creds.get('business_id')) if creds else None}"
-                )
-                if not creds or not creds.get("access_token"):
-                    return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
-
-            # Get linked business ID (explicit /mrcall link takes priority over OAuth default)
-            business_id = client.get_mrcall_link(owner_id)
-            logger.debug(
-                f"[/mrcall variables] get_mrcall_link(owner_id={owner_id}) -> business_id={business_id}"
-            )
-
-            if not business_id:
-                return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
-
-            # Create StarChat client (dashboard vs CLI)
-            from zylch.tools.starchat import StarChatClient, create_starchat_client
-
-            if is_dashboard and firebase_token:
-                sc_client = StarChatClient(
-                    base_url=settings.mrcall_base_url.rstrip("/"),
-                    auth_type="firebase",
-                    jwt_token=firebase_token,
-                    realm=settings.mrcall_realm,
-                    owner_id=owner_id,
-                    verify_ssl=settings.starchat_verify_ssl,
-                )
-                logger.debug("[/mrcall variables] Created StarChatClient with firebase_token")
-            else:
-                sc_client = await create_starchat_client(owner_id)
-                logger.debug("[/mrcall variables] Created StarChatClient with OAuth")
-
-            # Check for sub-subcommand (get/set)
-            # args[0] is 'variables'. Check args[1]
-            var_subcommand = args[1].lower() if len(args) > 1 else "get"
-            logger.debug(f"[/mrcall variables] var_subcommand={var_subcommand}")
-
-            # Sub-subcommand: set VARIABLE value
-            if var_subcommand == "set":
-                if len(args) < 4:
-                    return "❌ **Usage:** `/mrcall variables set <VARIABLE_NAME> <value>`"
-
-                var_name = args[2]
-                # Join all remaining args to allow spaces without strict quoting if user prefers
-                # But since shlex split the input, quotes are already handled.
-                # If user typed: set VAR "my value", args=['variables', 'set', 'VAR', 'my value'] -> value='my value'
-                # If user typed: set VAR my value, args=['variables', 'set', 'VAR', 'my', 'value'] -> value='my value'
-                var_value = " ".join(args[3:])
-
-                try:
-                    await sc_client.update_business_variable(business_id, var_name, var_value)
-                    await sc_client.close()
-                    return f"✅ **Variable Updated**\n\n**{var_name}** set to: `{var_value}`"
-                except Exception as e:
-                    await sc_client.close()
-                    logger.error(f"Failed to update variable: {e}")
-                    return f"❌ **Error updating variable:** {str(e)}"
-
-            # Sub-subcommand: get (default)
-            # Usage: /mrcall variables get [--name FILTER]
-            filter_name = None
-            if "--name" in args:
-                try:
-                    name_idx = args.index("--name")
-                    if name_idx + 1 < len(args):
-                        filter_name = args[name_idx + 1]
-                except ValueError:
-                    pass
-            logger.debug(
-                f"[/mrcall variables] filter: '--name' in args={('--name' in args)}, filter_name={filter_name}"
-            )
-
-            try:
-                variables = await sc_client.get_all_variables(business_id)
-                logger.debug(
-                    f"[/mrcall variables] get_all_variables(business_id={business_id}) -> {len(variables)} vars: {[v['name'] for v in variables]}"
-                )
-                await sc_client.close()
-
-                if not variables:
-                    return f"**📋 MrCall Variables**\n\nNo variables found for business `{business_id}`."
-
-                # Filter if requested
-                if filter_name:
-                    vars_before = len(variables)
-                    variables = [v for v in variables if filter_name.upper() in v["name"].upper()]
-                    logger.debug(
-                        f"[/mrcall variables] filter applied: before={vars_before}, filter={filter_name}, after={len(variables)}, matches={[v['name'] for v in variables]}"
-                    )
-                    if not variables:
-                        return f"**📋 MrCall Variables**\n\nNo variables matching `*{filter_name}*` found."
-
-                output = f"**📋 MrCall Variables** ({len(variables)} found)\n\n"
-                for var in variables:
-                    name = var["name"]
-                    desc = var["description"]
-                    val = var["value"]
-
-                    output += f"**{name}**: {desc}. Value: `{val}`\n\n"
-
-                return output
-
-            except Exception as e:
-                await sc_client.close()
-                logger.error(f"Failed to fetch variables: {e}")
-                return f"❌ **Error:** {str(e)}"
-
-        # Subcommand: link <business_id> - Link to business by ID
-        if subcommand == "link":
-            logger.debug(f"[/mrcall link] positional={positional}")
-            if len(positional) < 2:
-                return "❌ **Usage:** `/mrcall link <business_id>`\n\nCopy the business ID from `/mrcall list`"
-
-            target_business_id = positional[1]
-            logger.debug(f"[/mrcall link] target_business_id={target_business_id}")
-
-            # Validate UUID format (basic check - UUIDs are 36 chars with dashes)
-            if len(target_business_id) < 20:
-                return f"❌ **Invalid business ID:** `{target_business_id}`\n\nCopy the full ID from `/mrcall list`"
-
-            # Get OAuth credentials
-            creds = get_mrcall_credentials(owner_id)
-            if not creds or not creds.get("access_token"):
-                return (
-                    "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first to authenticate."
-                )
-
-            access_token = creds.get("access_token")
-
-            # Fetch businesses to validate the ID exists
-            try:
-                async with httpx.AsyncClient(
-                    timeout=30.0, verify=settings.starchat_verify_ssl
-                ) as http_client:
-                    response = await http_client.post(
-                        f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business/search",
-                        headers={"auth": access_token, "Content-Type": "application/json"},
-                        json={"from": 0, "size": 50},
-                    )
-                    response.raise_for_status()
-                    businesses = response.json()
-            except Exception as e:
-                logger.error(f"Failed to fetch MrCall businesses: {e}")
-                return f"❌ **Error:** {str(e)}"
-
-            # Find business by ID
-            logger.debug(f"[/mrcall link] searching for business in {len(businesses)} results")
-            business = None
-            for biz in businesses:
-                biz_id = biz.get("businessId") or biz.get("id")
-                if biz_id == target_business_id:
-                    business = biz
-                    break
-
-            if not business:
-                logger.debug(f"[/mrcall link] business not found: {target_business_id}")
-                return f"❌ **Business not found:** `{target_business_id}`\n\nRun `/mrcall list` to see your assistants."
-
-            business_id = target_business_id
-            nickname = business.get("nickname") or "Unnamed"
-            logger.debug(f"[/mrcall link] found business: nickname={nickname}")
-
-            # Save the link
-            result = client.set_mrcall_link(owner_id, business_id)
-            logger.debug(
-                f"[/mrcall link] set_mrcall_link(owner_id={owner_id}, business_id={business_id}) -> result={result}"
-            )
-
-            if result:
-                return f"""✅ **MrCall Linked**
-
-**Assistant:** {nickname}
-**Business ID:** `{business_id}`
-
-Your Zylch is now connected to this MrCall assistant!
-
-**Next steps:**
-• `/sync mrcall` - Test fetching conversations
-• `/agent mrcall train` - Train AI on your assistant"""
-            else:
-                return "❌ **Error:** Failed to link MrCall business. Please try again."
-
-        # Subcommand: show - Display current configuration context
-        if subcommand == "show":
-            # Get linked business
-            creds = get_mrcall_credentials(owner_id)
-            if not creds or not creds.get("access_token"):
-                return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
-
-            # Get linked business ID (explicit /mrcall link takes priority over OAuth default)
-            business_id = client.get_mrcall_link(owner_id)
-            logger.debug(
-                f"[/mrcall show] get_mrcall_link(owner_id={owner_id}) -> business_id={business_id}"
-            )
-            if not business_id:
-                return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
-
-            # Parse feature argument
-            feature_name = positional[1] if len(positional) > 1 else "welcome_inbound"
-            agent_type = f"mrcall_{business_id}_{feature_name}"
-
-            # Get stored sub-prompt
-            sub_prompt = client.get_agent_prompt(owner_id, agent_type)
-
-            if not sub_prompt:
-                return f"""**📋 MrCall Configuration Context**
-
-**Feature:** {feature_name}
-**Status:** Not generated yet
-
-Run `/agent mrcall train` to generate configuration context for all features."""
-
-            return f"""**📋 MrCall Configuration Context**
-
-**Feature:** {feature_name}
-**Business ID:** `{business_id}`
-**Length:** {len(sub_prompt)} characters
-
----
-
-{sub_prompt}"""
-
-        # Subcommand: config — moved to the dashboard.
-        if subcommand == "config":
-            logger.debug(f"[/mrcall config] positional={positional}")
-            return (
-                "**Configure your MrCall assistant from the dashboard:**\n\n"
-                "https://dashboard.mrcall.ai\n\n"
-                "Local desktop configuration was removed — the desktop is a "
-                "consumer of MrCall via StarChat (see `/mrcall list`, "
-                "`/mrcall link`)."
-            )
-
-        # Subcommand: feature — moved to the dashboard.
-        if subcommand == "feature":
-            return (
-                "**Manage MrCall features from the dashboard:**\n\n"
-                "https://dashboard.mrcall.ai"
-            )
-
-        # No subcommand: show status
-        if subcommand is None:
-            # Get OAuth credentials to check connection
-            creds = get_mrcall_credentials(owner_id)
-
-            if creds and creds.get("access_token"):
-                # Get linked business ID (explicit /mrcall link takes priority over OAuth default)
-                business_id = client.get_mrcall_link(owner_id)
-                logger.debug(
-                    f"[/mrcall status] get_mrcall_link(owner_id={owner_id}) -> business_id={business_id}"
-                )
-                email = (
-                    creds.get("metadata", {}).get("email")
-                    if isinstance(creds.get("metadata"), dict)
-                    else None
-                )
-
-                if business_id:
-                    return f"""**📞 MrCall Status**
-
-**Status:** Connected and linked
-**Business ID:** `{business_id}`
-**Email:** {email or 'N/A'}
-
-**Commands:**
-• `/mrcall list` - See all your assistants
-• `/mrcall unlink` - Disconnect this assistant
-• `/sync mrcall` - Test API connection
-• `/agent mrcall train` - Train AI on your assistant"""
-                else:
-                    return f"""**📞 MrCall Status**
-
-**Status:** Connected (not linked to an assistant)
-**Email:** {email or 'N/A'}
-
-Run `/mrcall list` to see your assistants, then `/mrcall link <business_id>` to connect one."""
-            else:
-                return """**📞 MrCall Status**
-
-**Status:** Not connected
-
-**To get started:**
-1. Run `/connect mrcall` to authenticate
-2. Run `/mrcall list` to see your assistants
-3. Run `/mrcall link <business_id>` to connect an assistant"""
-
-        # Unknown subcommand
-        return f"❌ **Unknown subcommand:** `{subcommand}`\n\n{help_text}"
-
-    except Exception as e:
-        logger.error(f"Error in /mrcall command: {e}", exc_info=True)
-        return f"❌ **Error:** {str(e)}\n\n{help_text}"
-
-
 async def handle_share(args: List[str], owner_id: str, user_email: str = None) -> str:
     """Handle /share command - data sharing (disabled in standalone)."""
     return "Sharing is not available in standalone mode."
@@ -1301,7 +729,6 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
 **Providers:**
 • `google` - Gmail & Google Calendar
 • `microsoft` - Outlook & Calendar
-• `mrcall` - MrCall/StarChat phone
 • `anthropic` - Claude AI (BYOK) - includes web search & prompt caching
 • `openai` - OpenAI GPT-4 (BYOK)
 • `mistral` - Mistral AI (BYOK) - EU-based for GDPR
@@ -1309,7 +736,6 @@ async def handle_connect(args: List[str], owner_id: str, user_email: str = None)
 • `vonage` - Vonage SMS
 
 **Examples:**
-• `/connect mrcall` - Connect MrCall
 • `/connect status` - Check what's connected
 • `/connect reset google` - Disconnect Google"""
 
@@ -2783,9 +2209,9 @@ async def handle_agent(
     Command structure:
         /agent <domain> <action> [channel]
 
-    Domains: memory, task, email, mrcall
+    Domains: memory, task, email
     Actions: train, run, show, reset
-    Channels: email (includes calendar automatically), all
+    Channels: email (includes calendar automatically), mrcall, all
 
     Args:
         args: Command arguments
@@ -2818,26 +2244,16 @@ async def handle_agent(
 • `/agent email show` - Show current agent prompt
 • `/agent email reset` - Delete agent prompt
 
-**MrCall Agent** (multi-tool MrCall configuration):
-• `/agent mrcall train` - Train all features and build unified agent
-• `/agent mrcall train <feature>` - Train specific feature (e.g., booking, call_transfer)
-• `/agent mrcall run "instructions"` - Configure MrCall (auto-detects feature)
-• `/agent mrcall show` - Show current agent prompt
-• `/agent mrcall reset` - Delete agent prompt
-
-  Available features: welcome_inbound, welcome_outbound, booking, caller_followup, conversation, knowledge_base, notifications_business, runtime_data, call_transfer
-
 **Channels:** `email` (includes calendar), `mrcall` (phone calls), `all`
 
 **Workflow:**
-1. `/sync` - Fetch emails + calendar + MrCall (if connected)
+1. `/sync` - Fetch emails + calendar
 2. `/agent memory train email` - Create email memory agent
 3. `/agent memory run email` - Extract facts from emails + calendar
-4. `/sync mrcall` - Sync phone call transcriptions
-5. `/agent memory train mrcall` - Create phone call memory agent
-6. `/agent memory run mrcall` - Extract facts from phone calls
-7. `/agent email train` - Learn your writing style
-8. `/agent email run "write to Mario about the offer"` - Use email agent"""
+4. `/agent memory train mrcall` - Create phone call memory agent
+5. `/agent memory run mrcall` - Extract facts from phone calls
+6. `/agent email train` - Learn your writing style
+7. `/agent email run "write to Mario about the offer"` - Use email agent"""
 
     # --help option (check first)
     if "--help" in args:
@@ -2849,10 +2265,10 @@ async def handle_agent(
     try:
         storage = Storage.get_instance()
 
-        domain = args[0].lower()  # 'memory', 'task', 'email', 'mrcall'
+        domain = args[0].lower()  # 'memory', 'task', 'email'
         action = args[1].lower()  # 'train', 'run', 'show', 'reset'
 
-        valid_domains = ["memory", "task", "email", "mrcall"]
+        valid_domains = ["memory", "task", "email"]
         valid_actions = [
             "train",
             "run",
@@ -2863,7 +2279,7 @@ async def handle_agent(
         valid_channels = ["email", "mrcall", "all"]
 
         if domain not in valid_domains:
-            return f"❌ Unknown domain: `{domain}`\n\nValid domains: `memory`, `task`, `email`, `mrcall`\n\n{help_text}"
+            return f"❌ Unknown domain: `{domain}`\n\nValid domains: `memory`, `task`, `email`\n\n{help_text}"
 
         # Normalize 'process' to 'run' for backwards compatibility
         if action == "process":
@@ -2874,10 +2290,10 @@ async def handle_agent(
                 f"❌ Unknown action: `{action}`\n\nValid actions: `train`, `run`, `show`, `reset`"
             )
 
-        # For email/mrcall: args[2:] are instructions (for run) or feature (for train), not channel
+        # For email: args[2:] are instructions (for run), not channel
         # For memory/task: args[2] is channel
-        if domain in ["email", "mrcall"]:
-            channel = None  # Not used for email/mrcall
+        if domain == "email":
+            channel = None  # Not used for email
         else:
             channel = args[2].lower() if len(args) > 2 else "email"
             # Calendar channel is now included automatically with email
@@ -2994,33 +2410,6 @@ async def handle_agent(
 
             elif action == "reset":
                 return await _handle_emailer_reset(storage, owner_id)
-
-        # =====================
-        # MRCALL DOMAIN (Unified MrCall Agent)
-        # =====================
-        elif domain == "mrcall":
-            if action == "train":
-                # Training the MrCall configurator was a platform-side
-                # responsibility that never landed in the desktop. Point
-                # the user at the dashboard.
-                return (
-                    "**Train your MrCall assistant from the dashboard:**\n\n"
-                    "https://dashboard.mrcall.ai\n\n"
-                    "Local training was removed — the desktop is a "
-                    "consumer of MrCall via StarChat."
-                )
-
-            elif action == "run":
-                instructions = " ".join(args[2:]) if len(args) > 2 else ""
-                return await _handle_mrcall_agent_run(
-                    storage, owner_id, instructions, context
-                )
-
-            elif action == "show":
-                return await _handle_mrcall_agent_show(storage, owner_id, context)
-
-            elif action == "reset":
-                return await _handle_mrcall_agent_reset(storage, owner_id, context)
 
         return help_text
 
@@ -3577,210 +2966,6 @@ async def _handle_mrcall_agent_train(
     )
 
 
-async def _handle_mrcall_agent_run(
-    storage, owner_id: str, instructions: str, context: dict = None
-) -> str:
-    """Execute the MrCall agent with given instructions.
-
-    Args:
-        storage: Supabase storage instance
-        owner_id: User's Owner ID
-        instructions: User instructions for the agent
-        context: Request context (for dashboard detection)
-    """
-    from zylch.agents.mrcall_agent import MrCallAgent
-    from zylch.llm import try_make_llm_client
-    from zylch.tools.starchat import StarChatClient, create_starchat_client
-
-    if not instructions.strip():
-        return """❌ **Missing instructions**
-
-Usage: `/agent mrcall run "your instructions"`
-
-Examples:
-• `/agent mrcall run "enable booking"`
-• `/agent mrcall run "set 30-minute appointments"`
-• `/agent mrcall run "change the welcome message"`
-• `/agent mrcall run "what are my current settings?"`"""
-
-    if try_make_llm_client() is None:
-        return """❌ **No LLM configured**
-
-Set `ANTHROPIC_API_KEY` in the profile `.env`, or sign in with Firebase
-to use MrCall credits."""
-
-    try:
-        # Create StarChat client (dashboard vs CLI)
-        is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
-        firebase_token = context.get("firebase_token") if context else None
-
-        if is_dashboard and firebase_token:
-            from zylch.config import settings
-
-            starchat = StarChatClient(
-                base_url=settings.mrcall_base_url.rstrip("/"),
-                auth_type="firebase",
-                jwt_token=firebase_token,
-                realm=settings.mrcall_realm,
-                owner_id=owner_id,
-                verify_ssl=settings.starchat_verify_ssl,
-            )
-            logger.info("[/agent mrcall run] Created StarChatClient with firebase_token")
-        else:
-            starchat = await create_starchat_client(owner_id)
-
-        # Initialize the MrCall agent
-        agent = MrCallAgent(
-            storage=storage,
-            owner_id=owner_id,
-            starchat_client=starchat,
-        )
-
-        # Detect dashboard source for dry_run
-        is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
-        dry_run = is_dashboard
-
-        # Extract conversation history for multi-turn context
-        conversation_history = context.get("_conversation_history") if context else None
-
-        # Extract attachments (file uploads from dashboard)
-        attachments = context.get("attachments") if context else None
-
-        # Run the agent with live values + conversation history
-        result = await agent.run(
-            instructions=instructions,
-            dry_run=dry_run,
-            conversation_history=conversation_history,
-            attachments=attachments,
-        )
-
-        # Check for errors
-        if result.get("error"):
-            return f"❌ {result['error']}"
-
-        tool_used = result.get("tool_used")
-        tool_result = result.get("result", {})
-
-        # Store pending_changes in context for chat_service to pick up
-        if tool_result and tool_result.get("pending_changes") and context is not None:
-            context["_pending_changes"] = tool_result["pending_changes"]
-
-        # Format response based on tool used
-        if tool_used and tool_used.startswith("configure_"):
-            if tool_result.get("success"):
-                # Use human-friendly summary if available
-                response_text = tool_result.get("response_text")
-                if response_text:
-                    return f"✅ {response_text}"
-                # Fallback
-                feature = tool_result.get("feature", "unknown")
-                return f"✅ **{feature.replace('_', ' ').title()}** updated successfully."
-            else:
-                errors = tool_result.get("errors", ["Unknown error"])
-                return f"""❌ **Configuration Failed**
-
-{chr(10).join(f'• {e}' for e in errors)}"""
-
-        elif tool_used == "respond_text":
-            response = tool_result.get("response", "")
-            return f"""💬 **Response**
-
-{response}"""
-
-        else:
-            return f"⚠️ Agent returned unexpected result: {result}"
-
-    except Exception as e:
-        logger.error(f"MrCall agent run error: {e}", exc_info=True)
-        error_str = str(e).lower()
-        if (
-            "405" in error_str
-            or "401" in error_str
-            or "403" in error_str
-            or "unauthorized" in error_str
-        ):
-            return """❌ **MrCall authentication error**
-
-Please connect your MrCall account:
-`/connect mrcall`"""
-        return f"❌ **Error:** {str(e)}"
-
-
-async def _handle_mrcall_agent_show(storage, owner_id: str, context: dict = None) -> str:
-    """Show MrCall agent prompt.
-
-    Args:
-        context: Request context (for dashboard detection)
-    """
-    # Dashboard detection - skip OAuth check for dashboard users
-    is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
-
-    if not is_dashboard:
-        from zylch.api.token_storage import get_mrcall_credentials
-
-        mrcall_creds = get_mrcall_credentials(owner_id)
-        if not mrcall_creds or not mrcall_creds.get("access_token"):
-            return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
-
-    business_id = storage.get_mrcall_link(owner_id)
-    if not business_id:
-        return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
-
-    agent_prompt = storage.get_agent_prompt(owner_id, f"mrcall_{business_id}")
-    if not agent_prompt:
-        return """❌ **No MrCall agent found**
-
-Train the agent first:
-`/agent mrcall train`"""
-
-    meta = storage.get_agent_prompt_metadata(owner_id, f"mrcall_{business_id}")
-    meta_info = ""
-    if meta:
-        metadata = meta.get("metadata", {})
-        created = meta.get("created_at", "")[:10] if meta.get("created_at") else "unknown"
-        features = metadata.get("features_included", [])
-        meta_info = f"\n_Created: {created} | Features: {', '.join(features)}_\n"
-
-    return f"""**🤖 Your MrCall Agent**
-{meta_info}
----
-{agent_prompt}
----
-
-_Use `/agent mrcall reset` to delete._"""
-
-
-async def _handle_mrcall_agent_reset(storage, owner_id: str, context: dict = None) -> str:
-    """Delete MrCall agent prompt.
-
-    Args:
-        context: Request context (for dashboard detection)
-    """
-    # Dashboard detection - skip OAuth check for dashboard users
-    is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
-
-    if not is_dashboard:
-        from zylch.api.token_storage import get_mrcall_credentials
-
-        mrcall_creds = get_mrcall_credentials(owner_id)
-        if not mrcall_creds or not mrcall_creds.get("access_token"):
-            return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
-
-    business_id = storage.get_mrcall_link(owner_id)
-    if not business_id:
-        return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
-
-    deleted = storage.delete_agent_prompt(owner_id, f"mrcall_{business_id}")
-    if deleted:
-        return """✅ **MrCall agent deleted**
-
-Your MrCall agent has been deleted.
-
-Retrain with: `/agent mrcall train`"""
-    else:
-        return "❌ No MrCall agent found"
-
-
 # =====================
 # SHARED AGENT HELPERS
 # =====================
@@ -3937,15 +3122,12 @@ async def handle_tutorial(args: List[str], owner_id: str) -> str:
         # Default: Show general getting started guide
         return _tutorial_getting_started()
 
-    # Check for --dev flag
-    dev_mode = "--dev" in args
+    # Drop the legacy --dev flag (no longer changes output)
     args = [a for a in args if a != "--dev"]
 
     topic = args[0].lower() if args else None
 
     if topic == "mrcall":
-        if dev_mode:
-            return _tutorial_mrcall_dev()
         return _tutorial_mrcall_user()
 
     if topic == "tasks":
@@ -4016,7 +3198,7 @@ def _tutorial_getting_started() -> str:
 
 | Integration | Command | Purpose |
 |-------------|---------|---------|
-| MrCall | `/connect mrcall` | Phone call handling |
+| MrCall | dashboard.mrcall.ai | Phone call handling |
 | Pipedrive | `/connect pipedrive KEY` | CRM sync |
 
 ## Quick Tips
@@ -4032,51 +3214,25 @@ def _tutorial_getting_started() -> str:
 
 
 def _tutorial_mrcall_user() -> str:
-    """Tutorial for new MrCall users."""
-    return """**MrCall Tutorial - User Guide**
+    """Tutorial for MrCall on the desktop."""
+    return """**MrCall Tutorial**
 
-MrCall lets you configure your AI phone assistant and sync call transcriptions.
-
----
-
-## Step 1: Connect
-
-```
-/connect mrcall
-```
-Opens OAuth login to StarChat. Grant `business:write` permission.
+MrCall assistants are *configured* from the dashboard at
+https://dashboard.mrcall.ai. The desktop is a *consumer* of MrCall via
+StarChat — it reads your phone calls so they can be folded into memory
+alongside email.
 
 ---
 
-## Step 2: List Your Assistants
+## Configure your assistant
 
-```
-/mrcall list
-```
-Shows all MrCall assistants linked to your account.
-
----
-
-## Step 3: Link an Assistant
-
-```
-/mrcall link <business_id>
-```
-Copy the business ID from `/mrcall list` and paste it here.
+Open https://dashboard.mrcall.ai to set up booking, greetings, call
+transfer, and the other assistant features. There is no local
+configuration on the desktop.
 
 ---
 
-## Step 4: Sync Phone Transcriptions
-
-```
-/sync mrcall
-```
-Downloads phone call transcriptions from your MrCall assistant.
-Use `--days 60` to sync more history.
-
----
-
-## Step 5: Train Memory Agent (Optional)
+## Fold phone calls into memory (optional)
 
 Build a knowledge base from your phone calls:
 
@@ -4090,84 +3246,9 @@ Then extract entities:
 
 ---
 
-## Step 6: Configure Your Assistant (Multi-turn)
-
-Enter configuration mode for interactive setup:
-
-```
-/mrcall open
-```
-
-The assistant will guide you through configurations, asking clarifying questions when needed.
-
-**Example conversation:**
-```
-> /mrcall open
-MrCall Configuration Mode
-Configuring: Mario's Restaurant
-
-> enable booking
-I can enable booking. A few questions:
-1. Appointment duration? (15, 30, or 60 minutes)
-2. Available days and hours?
-
-> 30 minutes, weekdays 9 to 5
-Booking updated successfully.
-
-> /mrcall exit
-Exited MrCall configuration mode.
-```
-
----
-
-## Step 7: Quick Commands (Single-turn Alternative)
-
-For quick changes without dialogue, use single-turn mode:
-
-```
-/agent mrcall run "enable booking with 30-min appointments, Mon-Fri 9-17"
-/agent mrcall run "is booking enabled?"
-/agent mrcall run "make the greeting more casual"
-```
-
-**Tip:** Use `/mrcall open` for complex configurations, `/agent mrcall run` for quick one-liners.
-
----
-
-## Command Reference
-
-| Command | Description |
-|---------|-------------|
-| `/mrcall open` | **Enter config mode (multi-turn)** |
-| `/mrcall exit` | **Exit config mode** |
-| `/mrcall status` | Check connection status |
-| `/mrcall list` | List your assistants |
-| `/mrcall link <id>` | Link to assistant |
-| `/mrcall unlink` | Disconnect from assistant |
-| `/mrcall variables` | List all configuration variables |
-| `/sync mrcall --days 30` | Sync call transcriptions |
-| `/agent mrcall train` | Train MrCall configuration agent |
-| `/agent mrcall run "..."` | Single-turn config (alternative) |
-| `/agent mrcall show` | Show current agent prompt |
-| `/agent mrcall reset` | Delete config agent |
-| `/agent memory train mrcall` | Train call memory extraction |
-| `/agent memory process mrcall` | Extract entities from calls |
-
----
-
-**Tip:** Use `/memory search <query>` to search across all extracted information (emails, calendar, and phone calls).
+**Tip:** Use `/memory search <query>` to search across all extracted
+information (emails, calendar, and phone calls).
 """
-
-
-def _tutorial_mrcall_dev() -> str:
-    """Pointer to the dashboard for MrCall configuration."""
-    return (
-        "**MrCall configuration**\n\n"
-        "MrCall assistants are configured from the dashboard at "
-        "https://dashboard.mrcall.ai. The desktop is a *consumer* of "
-        "MrCall via StarChat (see `/mrcall list`, `/mrcall link`, and "
-        "the `mrcall.list_my_businesses` JSON-RPC method)."
-    )
 
 
 def _tutorial_tasks() -> str:
@@ -4239,7 +3320,6 @@ COMMAND_HANDLERS = {
     "/update": None,  # lazy-loaded from process_pipeline
     "/memory": handle_memory,
     "/email": handle_email,
-    "/mrcall": handle_mrcall,
     # NOTE: /connect is partially handled client-side by CLI for OAuth. Only --help, reset, status reach backend.
     "/connect": handle_connect,
     "/share": handle_share,
@@ -4356,7 +3436,6 @@ COMMAND_PATTERNS = {
         "connect",
         "connections",
         "integrations",
-        "link mrcall",
         "link google",
         "link outlook",
         "set up integration",
@@ -4381,22 +3460,6 @@ COMMAND_PATTERNS = {
         "revoke sharing",
         "revoke access from {email:email}",
         "stop sharing with {email:email}",
-    ],
-    # --- MrCall/Phone ---
-    "/mrcall": [
-        "phone integration",
-        "mrcall status",
-        "telephone integration",
-        "starchat integration",
-        # Variables
-        "show mrcall variables",
-        "list mrcall variables",
-        "what are the mrcall variables",
-        "show mrcall variable {name:text}",
-        "get mrcall variable {name:text}",
-        "what is the value of mrcall variable {name:text}",
-        "value of mrcall variable {name:text}",
-        "search mrcall variable {name:text}",
     ],
     # --- Email ---
     "/email": [

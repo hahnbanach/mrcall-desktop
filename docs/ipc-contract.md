@@ -262,6 +262,29 @@ blob-overlap deterministic dedup) remains. Both are exposed; the
 "Pulizia profonda" button could call either or both. F9 is the one
 that catches the cross-channel "ONE problem from 3 senders" case.
 
+### `mrcall.list_my_businesses(offset?, limit?)`
+
+Lists the businesses visible to the signed-in user via StarChat
+`POST /mrcall/v1/{realm}/crm/business/search` with the Firebase JWT
+(`auth:` header, no Bearer prefix). StarChat role-scopes the result
+(`ResellerOwnerResolver`): `admin` sees all businesses cross-owner,
+`owner` only their own — the desktop adds no permission logic. Returns
+`{ businesses: CrmBusiness[], role: string }` (`role` from the
+`x-mrcall-role` response header). Errors: no Firebase session → JSON-RPC
+`-32010` (`NoActiveSession`); 401 from StarChat → same `-32010` ("Sign in
+again"). Backs the MrCall tab business list.
+
+### `mrcall.search_businesses(<filters>, offset?, limit?)`
+
+Filtered variant for customer-service lookup — same endpoint, same
+`{ businesses, role }` shape, same role-scoping and errors. Recognised
+filters: `emailAddress`, `name`, `surname`, `companyName`, `nickname`,
+`businessPhoneNumber`, `vatId`, `businessId`, `address`, `countryAlpha2`,
+`subscriptionStatus`. Only non-empty filters are forwarded; they AND
+together server-side. `owner` / `owners` are deliberately NOT accepted
+(StarChat derives owner scope from the caller's role, so a client-supplied
+owner is ignored). Backs the MrCall tab's search bar + status dropdown.
+
 ### Other methods
 
 For the rest of the surface (emails.\*, chat.\*, update.\*, settings.\*,

@@ -355,57 +355,17 @@ def _run_wizard(env: dict, profile_name: str | None):
             "  Skipped. Add TELEGRAM_BOT_TOKEN to .env later.",
         )
 
-    # ─── 5. MrCall (OAuth2) ──────────────────────────────────
+    # ─── 5. MrCall ───────────────────────────────────────────
+    #
+    # The legacy MrCall OAuth2/PKCE "delegated" connect step (loopback
+    # :19274, client_id/secret) was removed in 2026-05. MrCall is now
+    # reached through the desktop app's Firebase sign-in, which pushes a
+    # JWT to the engine — there is nothing to configure in `zylch init`.
 
-    click.echo("\n5. MrCall (phone/SMS)")
+    click.echo("\n5. MrCall (phone)")
     click.echo(
-        "   Connect MrCall to sync calls and send SMS.\n",
-    )
-
-    existing_client_id = env.get("MRCALL_CLIENT_ID", "")
-    existing_client_secret = env.get("MRCALL_CLIENT_SECRET", "")
-    mrcall_client_id = ""
-    mrcall_client_secret = ""
-    mrcall_connected = False
-
-    if existing_client_id:
-        from zylch.tools.mrcall.oauth import check_mrcall_connected
-
-        already_authed = check_mrcall_connected(
-            email or "local-user",
-        )
-        if already_authed:
-            click.echo(
-                f"  MrCall: connected" f" (client {_mask(existing_client_id)})",
-            )
-            if click.confirm(
-                "  Reconnect MrCall?",
-                default=False,
-            ):
-                mrcall_client_id, mrcall_client_secret = _prompt_mrcall_creds(
-                    existing_client_id,
-                    existing_client_secret,
-                )
-                mrcall_connected = _run_mrcall_oauth(
-                    email or "local-user",
-                )
-            else:
-                mrcall_client_id = existing_client_id
-                mrcall_client_secret = existing_client_secret
-                mrcall_connected = True
-        else:
-            click.echo(
-                "  MrCall: credentials present" " but not authorized",
-            )
-            mrcall_client_id = existing_client_id
-            mrcall_client_secret = existing_client_secret
-    elif click.confirm("  Connect MrCall?", default=False):
-        mrcall_client_id, mrcall_client_secret = _prompt_mrcall_creds("", "")
-    else:
-        click.echo("  Skipped.")
-
-    run_mrcall_oauth_after = bool(
-        mrcall_client_id and not mrcall_connected,
+        "   MrCall is connected by signing in with Firebase in the\n"
+        "   desktop app — no CLI setup needed.\n",
     )
 
     # ─── 6. Personal data ─────────────────────────────────────
@@ -567,12 +527,7 @@ def _run_wizard(env: dict, profile_name: str | None):
         if tg_user_id:
             lines.append(f"TELEGRAM_ALLOWED_USER_ID={tg_user_id}")
 
-    # MrCall
-    if mrcall_client_id:
-        lines.append("")
-        lines.append("# MrCall")
-        lines.append(f"MRCALL_CLIENT_ID={mrcall_client_id}")
-        lines.append(f"MRCALL_CLIENT_SECRET={mrcall_client_secret}")
+    # MrCall: nothing to write — legacy OAuth2 client creds removed.
 
     # Personal data
     if personal_data:
@@ -611,9 +566,6 @@ def _run_wizard(env: dict, profile_name: str | None):
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_ALLOWED_USER_ID",
         "MRCALL_BASE_URL",
-        "MRCALL_CLIENT_ID",
-        "MRCALL_CLIENT_SECRET",
-        "MRCALL_DASHBOARD_URL",
         "MRCALL_REALM",
         "DOCUMENT_PATHS",
         "USER_NOTES",
@@ -634,18 +586,6 @@ def _run_wizard(env: dict, profile_name: str | None):
         f.write("\n".join(lines))
 
     logger.info(f"[init] Profile saved to {env_path}")
-
-    # ─── MrCall OAuth (after .env written) ────────────────────
-
-    if run_mrcall_oauth_after:
-        os.environ["MRCALL_CLIENT_ID"] = mrcall_client_id
-        os.environ["MRCALL_CLIENT_SECRET"] = mrcall_client_secret
-        from zylch import config as _cfg
-
-        _cfg.settings = _cfg.Settings()
-        mrcall_connected = _run_mrcall_oauth(
-            email or "local-user",
-        )
 
     # ─── 10. Automatic updates (crontab) ─────────────────────
 
@@ -681,10 +621,6 @@ def _run_wizard(env: dict, profile_name: str | None):
         click.echo("  WhatsApp: connected")
     if tg_token:
         click.echo("  Telegram: configured")
-    if mrcall_connected:
-        click.echo("  MrCall: connected")
-    elif mrcall_client_id:
-        click.echo("  MrCall: configured (not yet authorized)")
 
     if personal_data:
         click.echo(
@@ -894,46 +830,6 @@ def _connect_whatsapp_qr():
         pass
 
 
-def _prompt_mrcall_creds(
-    existing_id: str,
-    existing_secret: str,
-) -> tuple:
-    """Prompt for MrCall OAuth2 client credentials."""
-    click.echo(
-        "  You need a client_id and client_secret" " from your MrCall admin.\n",
-    )
-    client_id = _prompt_with_existing(
-        "Client ID",
-        existing_id,
-        hide=False,
-    )
-    client_secret = _prompt_with_existing(
-        "Client secret",
-        existing_secret,
-        hide=True,
-    )
-    return client_id, client_secret
-
-
-def _run_mrcall_oauth(owner_id: str) -> bool:
-    """Run MrCall OAuth2 browser flow."""
-    from zylch.tools.mrcall.oauth import run_oauth_flow
-
-    click.echo("\n  Opening browser for MrCall authorization...")
-    click.echo("  Log in and approve Zylch access.\n")
-
-    tokens = run_oauth_flow(owner_id)
-    if tokens:
-        target = tokens.get("target_owner", "")
-        if target:
-            click.echo(
-                f"  MrCall connected! (user: {target[:12]}...)",
-            )
-        else:
-            click.echo("  MrCall connected!")
-        return True
-    else:
-        click.echo(
-            "  MrCall authorization failed." " Try /connect mrcall later.",
-        )
-        return False
+# NOTE: _prompt_mrcall_creds() and _run_mrcall_oauth() were removed in
+# 2026-05 with the legacy MrCall OAuth2/PKCE flow. MrCall now connects
+# via the desktop app's Firebase sign-in.

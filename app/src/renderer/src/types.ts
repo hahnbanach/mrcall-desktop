@@ -382,6 +382,21 @@ export interface ZylchAPI {
       offset?: number
       limit?: number
     }) => Promise<{ businesses: unknown[]; role: string }>
+    searchBusinesses: (params?: {
+      emailAddress?: string
+      name?: string
+      surname?: string
+      companyName?: string
+      nickname?: string
+      businessPhoneNumber?: string
+      vatId?: string
+      businessId?: string
+      address?: string
+      countryAlpha2?: string
+      subscriptionStatus?: string
+      offset?: number
+      limit?: number
+    }) => Promise<{ businesses: unknown[]; role: string }>
   }
   google: {
     calendar: {

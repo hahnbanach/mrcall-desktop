@@ -4,6 +4,19 @@ Enforcement gaps, missing tooling, and documentation debt.
 
 ## Open
 
+- [ ] **`sandbox_service` dangling import (discovered 2026-05-20).**
+  - `engine/zylch/services/command_handlers.py:171` and
+    `engine/zylch/services/chat_service.py:399` do
+    `from zylch.services.sandbox_service import …`, but that module does
+    not exist (absent on `main` too — the sandbox feature was dismantled,
+    leaving the imports). They're lazy local imports inside command
+    branches, so there's no boot/import error; the branch crashes at
+    runtime if reached. `SessionState.sandbox_mode` is a related orphan
+    field. Cleanup: remove the dead `/sandbox` branch + the import + the
+    field. Low-risk, low-urgency (the branch is unlikely to be hit).
+  - A grep gate for `from zylch.services.<x> import` where `<x>` has no
+    matching module would catch this class of dangling lazy import.
+
 - [ ] **`tests/storage/test_data_backfills.py::test_init_db_invokes_channel_backfill_when_thread_id_backfill_is_noop` broken at HEAD (2026-05-12).**
   - Setup fails with `sqlite3.IntegrityError: NOT NULL constraint failed: task_items.pinned` when the fixture inserts a synthetic task row that omits the `pinned` column. The schema gained a `NOT NULL` on `pinned` (probably with a column-add migration that lacked a default) some time after this test was written; the test fixture never got updated.
   - Pre-existing on `c5c1922d` (HEAD before the whatsapp-pipeline-parity Phase 2 landing). Confirmed via `git stash; pytest …`.

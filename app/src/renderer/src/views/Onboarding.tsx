@@ -21,7 +21,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { errorMessage } from '../lib/errors'
 import { auth } from '../firebase/config'
-import { performSignOut } from '../App'
+import { performSignOut, installEngineTokenPusher } from '../App'
 import ProfileFormFields from '../components/ProfileFormFields'
 import ConnectGoogleCalendar from './ConnectGoogleCalendar'
 import ConnectWhatsApp from './ConnectWhatsApp'
@@ -91,15 +91,20 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
     setValues((prev) => ({ ...prev, [key]: v }))
   }
 
-  // The minimum required to launch — IMAP-side only. Optional groups
-  // (Telegram, MrCall, personal data, notes) are all… optional.
+  // Nothing is required to launch — the user is already signed in via
+  // Firebase (MrCall + Calendar work off that). Email is opt-in: only if
+  // the user starts configuring it (enters an app password) do we
+  // require the full IMAP/SMTP set, so we never persist a broken
+  // half-config.
+  const emailStarted = !!(values.EMAIL_PASSWORD || '').trim()
   const canSubmit = useMemo(() => {
-    if (!isValidEmail(values.EMAIL_ADDRESS || '')) return false
-    if (!(values.EMAIL_PASSWORD || '').trim()) return false
-    if (!(values.IMAP_HOST || '').trim() || !(values.SMTP_HOST || '').trim()) return false
-    if (!(values.IMAP_PORT || '').trim() || !(values.SMTP_PORT || '').trim()) return false
+    if (emailStarted) {
+      if (!isValidEmail(values.EMAIL_ADDRESS || '')) return false
+      if (!(values.IMAP_HOST || '').trim() || !(values.SMTP_HOST || '').trim()) return false
+      if (!(values.IMAP_PORT || '').trim() || !(values.SMTP_PORT || '').trim()) return false
+    }
     return true
-  }, [values])
+  }, [values, emailStarted])
 
   const handleSubmit = async (): Promise<void> => {
     if (!canSubmit || submitting) return
@@ -116,6 +121,15 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
     // Trim whitespace on IMAP fields specifically — paste artifacts.
     for (const k of ['EMAIL_ADDRESS', 'IMAP_HOST', 'IMAP_PORT', 'SMTP_HOST', 'SMTP_PORT']) {
       if (payload[k]) payload[k] = payload[k].trim()
+    }
+    // Email is opt-in. Without an app password, drop the (possibly
+    // auto-inferred) IMAP/SMTP fields so we don't persist a half-config
+    // that lights up the Email tab. EMAIL_ADDRESS stays — it's the
+    // Firebase email, used for display.
+    if (!(payload.EMAIL_PASSWORD || '').trim()) {
+      for (const k of ['EMAIL_PASSWORD', 'IMAP_HOST', 'IMAP_PORT', 'SMTP_HOST', 'SMTP_PORT']) {
+        delete payload[k]
+      }
     }
 
     try {
@@ -145,6 +159,12 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
         setSubmitting(false)
         return
       }
+      // The sidecar is now attached, but the token pusher was left unset
+      // during onboarding (no RPC channel existed when the auth gate ran).
+      // Wire it + push the Firebase token now so the 'connect' step's
+      // Google Calendar RPC sees a live session instead of failing with
+      // "engine isn't seeing your Firebase session".
+      await installEngineTokenPusher()
       setCreatedProfile(r.profile)
       setSubmitting(false)
       setStep('connect')
@@ -196,10 +216,15 @@ export default function Onboarding({ onReady }: OnboardingProps = {}): JSX.Eleme
         {step === 'form' ? (
           <div className="bg-white border border-brand-mid-grey rounded-lg shadow-sm p-5">
             <p className="text-xs text-brand-grey-80 mb-4">
-              Email + IMAP/SMTP fields are required to launch — everything else is optional and
-              can be edited later in Settings.
+              Everything here is optional — you're already signed in, so MrCall and Calendar work
+              right away. Add email only if you want inbox sync; the rest can be set later in
+              Settings.
             </p>
-            <ProfileFormFields values={values} onChange={setField} />
+            <ProfileFormFields
+              values={values}
+              onChange={setField}
+              includeGroups={['Email', 'Personal data', 'Documents & notes']}
+            />
             <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t">
               <button
                 onClick={handleSubmit}

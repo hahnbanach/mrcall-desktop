@@ -31,9 +31,6 @@ class ChatService:
     Also manages task mode routing - when a user enters task mode via
     /tasks open <ID>, messages are routed to TaskOrchestratorAgent instead
     of ZylchAIAgent.
-
-    Also manages MrCall config mode routing - when a user enters MrCall config
-    mode via /mrcall open [ID], messages are routed to MrCallOrchestratorAgent.
     """
 
     # Track users who already got auto-sync this session to avoid
@@ -51,7 +48,6 @@ class ChatService:
         self.storage = Storage.get_instance()
         self._command_matcher = None  # Lazy init for semantic command matching
         self._task_orchestrator = None  # Lazy init for task mode
-        self._mrcall_orchestrator = None  # Lazy init for MrCall config mode
 
     async def _initialize_agent(self, owner_id: str = None):
         """Initialize the agent with all tools (lazy initialization).
@@ -193,25 +189,14 @@ class ChatService:
             logger.warning(f"[AUTO-SYNC] Check failed: {e}")
 
         try:
-            # Set sandbox mode based on source (MrCall Dashboard users)
-            if context and context.get("source") == "mrcall_dashboard":
-                if ToolFactory._session_state:
-                    ToolFactory._session_state.sandbox_mode = "mrcall"
-                    logger.debug("[Sandbox] Session sandbox_mode=mrcall (source=mrcall_dashboard)")
-
-            # Check if we're in task mode or MrCall config mode FIRST (before semantic matching)
+            # Check if we're in task mode FIRST (before semantic matching)
             is_in_task_mode = (
                 ToolFactory._session_state and ToolFactory._session_state.is_task_mode()
             )
-            is_in_mrcall_config_mode = (
-                ToolFactory._session_state and ToolFactory._session_state.is_mrcall_config_mode()
-            )
 
-            # SEMANTIC COMMAND MATCHING - Only when NOT in task mode or MrCall config mode
-            # In these modes, agents handle natural language directly
+            # SEMANTIC COMMAND MATCHING - Only when NOT in task mode
+            # In task mode, agents handle natural language directly
             # (e.g., "send it" should be understood as confirmation, not transformed to "/email send")
-            # Also skip for messages that already start with /mrcall (prevent rewriting valid slash commands)
-            starts_with_slash_command = user_message.strip().startswith("/mrcall")
             # Short confirmation phrases that refer to the draft the LLM
             # just created. Routing these through the semantic matcher
             # bypasses the draft-preview flow (the LLM must show the
@@ -240,8 +225,6 @@ class ChatService:
             in_task_conversation = bool(context and context.get("task_id"))
             if (
                 not is_in_task_mode
-                and not is_in_mrcall_config_mode
-                and not starts_with_slash_command
                 and not is_send_confirmation
                 and not in_task_conversation
             ):
@@ -364,93 +347,6 @@ class ChatService:
                     "session_id": session_id,
                 }
 
-            # MRCALL CONFIG MODE COMMANDS - /mrcall open [ID] and /mrcall exit
-            mrcall_open_match = re.match(
-                r"^/mrcall\s+open(?:\s+(\S+))?\s*$", user_message.strip(), re.IGNORECASE
-            )
-            mrcall_exit_match = re.match(r"^/mrcall\s+exit\b", user_message.strip(), re.IGNORECASE)
-
-            if mrcall_exit_match:
-                # 🛡️ SANDBOX GATE - Block exit in mrcall sandbox (user must stay in config mode)
-                sandbox_mode = (
-                    ToolFactory._session_state.sandbox_mode if ToolFactory._session_state else None
-                )
-                if sandbox_mode == "mrcall":
-                    from zylch.services.sandbox_service import get_sandbox_blocked_response
-
-                    logger.info("[Sandbox:mrcall] Blocked /mrcall exit")
-                    return {
-                        "response": get_sandbox_blocked_response(sandbox_mode),
-                        "tool_calls": [],
-                        "metadata": {
-                            "execution_time_ms": round((time.time() - start_time) * 1000, 2),
-                            "command": "mrcall_exit",
-                            "blocked_by_sandbox": True,
-                            "instant": True,
-                        },
-                        "session_id": session_id,
-                    }
-
-                # Exit MrCall config mode
-                if (
-                    ToolFactory._session_state
-                    and ToolFactory._session_state.is_mrcall_config_mode()
-                ):
-                    ToolFactory._session_state.exit_mrcall_config_mode()
-                    self._mrcall_orchestrator = None  # Clear orchestrator
-                    response_text = (
-                        "✅ Exited MrCall configuration mode.\n\nReturning to normal chat."
-                    )
-                else:
-                    response_text = "⚠️ Not currently in MrCall config mode. Use `/mrcall open` to enter config mode."
-                return {
-                    "response": self._prepend_notification(response_text, notification_banner),
-                    "tool_calls": [],
-                    "metadata": {
-                        "execution_time_ms": round((time.time() - start_time) * 1000, 2),
-                        "command": "mrcall_exit",
-                        "instant": True,
-                    },
-                    "session_id": session_id,
-                }
-
-            if mrcall_open_match:
-                # Enter MrCall config mode
-                business_id_input = mrcall_open_match.group(1)  # Optional business ID
-                owner_id = (context.get("user_id") if context else None) or user_id
-                response_text = await self._enter_mrcall_config_mode(
-                    business_id_input, owner_id, context
-                )
-                return {
-                    "response": self._prepend_notification(response_text, notification_banner),
-                    "tool_calls": [],
-                    "metadata": {
-                        "execution_time_ms": round((time.time() - start_time) * 1000, 2),
-                        "command": "mrcall_open",
-                        "instant": True,
-                    },
-                    "session_id": session_id,
-                }
-
-            # MRCALL CONFIG MODE ROUTING - If in MrCall config mode, route to MrCallOrchestratorAgent
-            # BUT exclude slash commands - they should go to their normal handlers (e.g., /agent mrcall train)
-            if ToolFactory._session_state and ToolFactory._session_state.is_mrcall_config_mode():
-                if not user_message.strip().startswith("/"):  # Only route free-form messages
-                    owner_id = (context.get("user_id") if context else None) or user_id
-                    response_text = await self._process_mrcall_config_message(
-                        user_message, owner_id, context
-                    )
-                    return {
-                        "response": self._prepend_notification(response_text, notification_banner),
-                        "tool_calls": [],
-                        "metadata": {
-                            "execution_time_ms": round((time.time() - start_time) * 1000, 2),
-                            "mrcall_config_mode": True,
-                            "business_id": ToolFactory._session_state.get_mrcall_config_business_id(),
-                        },
-                        "session_id": session_id,
-                    }
-
             # INTERCEPT SLASH COMMANDS - NEVER SEND TO ANTHROPIC
             if user_message.strip().startswith("/"):
                 from zylch.services.command_handlers import COMMAND_HANDLERS, COMMAND_HELP
@@ -550,9 +446,6 @@ class ChatService:
                             response_text = await handler(args, config, owner_id, context)
                         else:
                             response_text = await handler(args, config, owner_id)
-                    elif cmd == "/mrcall":
-                        # /mrcall needs args, owner_id, email, and context (for dashboard detection)
-                        response_text = await handler(args, owner_id, user_email, context)
                     elif cmd in ["/share", "/revoke", "/connect"]:
                         # These need args, owner_id, and optionally email
                         response_text = await handler(args, owner_id, user_email)
@@ -575,7 +468,7 @@ class ChatService:
                         "command": cmd,
                         "instant": True,
                     }
-                    # Extract pending_changes stored by _handle_mrcall_agent_run
+                    # Surface any pending_changes a handler stashed in context.
                     pending_changes = context.pop("_pending_changes", None) if context else None
                     if pending_changes:
                         metadata["pending_changes"] = pending_changes
@@ -601,33 +494,6 @@ class ChatService:
                     },
                     "session_id": session_id,
                 }
-
-            # 🛡️ SANDBOX GATE - Block free-form chat if sandboxed and NOT in appropriate mode
-            sandbox_mode = (
-                ToolFactory._session_state.sandbox_mode if ToolFactory._session_state else None
-            )
-            if sandbox_mode:
-                # For MrCall sandbox, require mrcall_config_mode for free-form chat
-                if (
-                    sandbox_mode == "mrcall"
-                    and not ToolFactory._session_state.is_mrcall_config_mode()
-                ):
-                    from zylch.services.sandbox_service import get_sandbox_freeform_blocked_response
-
-                    logger.info(
-                        f"[Sandbox:{sandbox_mode}] Blocked free-form chat (not in config mode)"
-                    )
-                    return {
-                        "response": get_sandbox_freeform_blocked_response(sandbox_mode),
-                        "tool_calls": [],
-                        "metadata": {
-                            "execution_time_ms": round((time.time() - start_time) * 1000, 2),
-                            "blocked_by_sandbox": True,
-                            "sandbox_mode": sandbox_mode,
-                            "reason": "not_in_config_mode",
-                        },
-                        "session_id": session_id,
-                    }
 
             # Ensure agent is initialized with user's owner_id for per-user tools
             await self._initialize_agent(owner_id=user_id)
@@ -1109,182 +975,3 @@ What would you like to do?"""
         except Exception as e:
             logger.error(f"Error in task mode: {e}", exc_info=True)
             return f"❌ **Error:** {str(e)}\n\nUse `/tasks exit` to return to normal chat."
-
-    async def _enter_mrcall_config_mode(
-        self,
-        business_id_input: Optional[str],
-        owner_id: str,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> str:
-        """Enter MrCall configuration mode.
-
-        Args:
-            business_id_input: Optional business ID (if None, uses linked business)
-            owner_id: Owner ID
-            context: Optional request context (source, firebase_token, etc.)
-
-        Returns:
-            Response message indicating success or failure
-        """
-        is_dashboard = context and context.get("source") in ("dashboard", "mrcall_dashboard")
-        firebase_token = context.get("firebase_token") if context else None
-        logger.debug(
-            f"[/mrcall open] _enter_mrcall_config_mode: business_id_input={business_id_input}, owner_id={owner_id}, is_dashboard={is_dashboard}, firebase_token={'present' if firebase_token else 'absent'}"
-        )
-
-        try:
-            # Check MrCall connection - OAuth credentials or dashboard Firebase token
-            from zylch.api.token_storage import get_mrcall_credentials
-
-            mrcall_creds = get_mrcall_credentials(owner_id)
-            has_oauth = mrcall_creds and mrcall_creds.get("access_token")
-
-            if not has_oauth and not (is_dashboard and firebase_token):
-                return "❌ **Not connected to MrCall**\n\nRun `/connect mrcall` first."
-
-            # Resolve business_id - use provided or get linked
-            if business_id_input:
-                business_id = business_id_input
-                # Auto-link business_id so subsequent commands work without /mrcall link
-                self.storage.set_mrcall_link(owner_id, business_id)
-                logger.info(
-                    f"[/mrcall open] Auto-linked business_id={business_id} for owner={owner_id}"
-                )
-            else:
-                business_id = self.storage.get_mrcall_link(owner_id)
-
-            if not business_id:
-                return "❌ **No assistant linked**\n\nRun `/mrcall list` to see available assistants, then `/mrcall link <ID>` to link one."
-
-            # Create session state if needed
-            if not ToolFactory._session_state:
-                from zylch.tools.factory import SessionState
-
-                ToolFactory._session_state = SessionState()
-
-            # Verify an LLM transport is available before constructing
-            # the (legacy) MrCall configurator agent. The agent itself
-            # will use `make_llm_client()` internally.
-            from zylch.llm import try_make_llm_client
-
-            if try_make_llm_client() is None:
-                return (
-                    "❌ No LLM configured. Set ANTHROPIC_API_KEY in the "
-                    "profile .env, or sign in with Firebase to use MrCall credits."
-                )
-
-            # Get or create StarChat client
-            if not ToolFactory._starchat_client:
-                if is_dashboard and firebase_token:
-                    # Dashboard flow: use Firebase token directly as StarChat auth
-                    # Priority over OAuth because Firebase gives full read+write
-                    from zylch.config import settings
-                    from zylch.tools.starchat import StarChatClient
-
-                    logger.info(
-                        f"[/mrcall open] Creating StarChat client with Firebase token for dashboard user owner={owner_id}"
-                    )
-                    ToolFactory._starchat_client = StarChatClient(
-                        base_url=settings.mrcall_base_url.rstrip("/"),
-                        auth_type="firebase",
-                        jwt_token=firebase_token,
-                        realm=settings.mrcall_realm,
-                        owner_id=owner_id,
-                        verify_ssl=settings.starchat_verify_ssl,
-                    )
-                elif has_oauth:
-                    # CLI/non-dashboard flow: use OAuth
-                    from zylch.tools.starchat import create_starchat_client
-
-                    ToolFactory._starchat_client = await create_starchat_client(owner_id)
-
-            # Create orchestrator
-            from zylch.agents.mrcall_orchestrator_agent import MrCallOrchestratorAgent
-
-            self._mrcall_orchestrator = MrCallOrchestratorAgent(
-                session_state=ToolFactory._session_state,
-                owner_id=owner_id,
-                storage=self.storage,
-                starchat_client=ToolFactory._starchat_client,
-            )
-
-            # Enter session (may auto-train)
-            response = await self._mrcall_orchestrator.enter_session()
-
-            # Only enter mode if session entry succeeded
-            if not response.startswith("❌"):
-                ToolFactory._session_state.enter_mrcall_config_mode(business_id)
-                logger.info(f"[/mrcall open] Entered MrCall config mode for business={business_id}")
-
-            return response
-
-        except Exception as e:
-            logger.error(f"Error entering MrCall config mode: {e}", exc_info=True)
-            return f"❌ **Error:** {str(e)}"
-
-    async def _process_mrcall_config_message(
-        self, user_message: str, owner_id: str, context: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """Process a message in MrCall config mode.
-
-        Routes directly to MrCallAgent (no orchestrator indirection).
-        Manages conversation history here.
-
-        Args:
-            user_message: User's message
-            owner_id: Owner ID
-            context: Optional context dict
-
-        Returns:
-            Response from MrCallAgent
-        """
-        try:
-            # Lazy-init conversation history
-            if not hasattr(self, "_mrcall_history"):
-                self._mrcall_history = []
-
-            # Get or create MrCallAgent directly (skip orchestrator).
-            # The agent itself constructs its LLM client via
-            # `make_llm_client()` — no credential threading here.
-            if not hasattr(self, "_mrcall_agent") or self._mrcall_agent is None:
-                logger.info("[MrCallConfigMode] Creating MrCallAgent directly")
-                from zylch.llm import try_make_llm_client
-                from zylch.agents.mrcall_agent import MrCallAgent
-
-                if try_make_llm_client() is None:
-                    return (
-                        "❌ No LLM configured. Set ANTHROPIC_API_KEY in the "
-                        "profile .env, or sign in with Firebase to use MrCall credits."
-                    )
-
-                self._mrcall_agent = MrCallAgent(
-                    storage=self.storage,
-                    owner_id=owner_id,
-                    starchat_client=ToolFactory._starchat_client,
-                )
-
-            # Track conversation history
-            self._mrcall_history.append({"role": "user", "content": user_message})
-
-            # Run agent directly with conversation history
-            result = await self._mrcall_agent.run(
-                instructions=user_message,
-                conversation_history=self._mrcall_history,
-            )
-
-            # Extract response text
-            r = result.get("result", {})
-            if isinstance(r, dict):
-                response = r.get("response_text", "") or r.get("response", "")
-            else:
-                response = str(r) if r else "No result returned."
-
-            if result.get("error"):
-                response = f"❌ {result['error']}"
-
-            self._mrcall_history.append({"role": "assistant", "content": response})
-            return response
-
-        except Exception as e:
-            logger.error(f"Error in MrCall config mode: {e}", exc_info=True)
-            return f"❌ **Error:** {str(e)}\n\nUse `/mrcall exit` to return to normal chat."

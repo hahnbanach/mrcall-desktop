@@ -9,21 +9,18 @@ description: |
 
 # Active Context — App
 
-## Current focus (as of 2026-05-19)
+## Current focus (as of 2026-05-20)
 
-Live verification of the recently-landed UI stack is the gating work:
+**MrCall tab + onboarding/Calendar fixes (live-verified by Mario 2026-05-20).** The MrCall tab is live (was a disabled placeholder): `views/Mrcall.tsx` lists the user's businesses via `mrcall.list_my_businesses` (Firebase JWT — same endpoint the dashboard uses) and, for customer-service lookup, searches by field (email / name / phone / VAT) + a `subscriptionStatus` dropdown via `mrcall.search_businesses`, with expandable anagraphic/billing cards. Onboarding no longer forces email/IMAP — a signed-in Firebase user can enter straight away; the form hides the LLM / Telegram / MrCall groups (`ProfileFormFields includeGroups`); the Email tab is now gated on a real `IMAP_HOST`, not `EMAIL_ADDRESS` (always the Firebase email). Calendar "engine isn't seeing your Firebase session" fixed: `installEngineTokenPusher()` runs right after onboarding `finalize` (the token pusher was left unset during onboarding, so the in-wizard Calendar connect ran session-less).
 
-- **Cross-channel Source-panel toggle** (`b57fcc4f`) — needs a real task with both `sources.emails` and `sources.whatsapp_messages` to exercise the Email/WhatsApp tab pills in `ThreadPanel.tsx`. Current gmail profile has 0 cross-channel tasks.
-- **WhatsApp source panel** (`2a8bc2c3`, Fase 4a + 4b) — Mario confirmed bubbles render correctly on a WA-only task; cross-channel rendering not yet exercised on a real task.
-- **Update view staged progress + elapsed timer** (`0b33fdf4`) — 1 s ticker + overshot hint compile but need a real `/update` run to confirm engine emissions land at the right percentages.
-- **Calendar self-healing** (`a03f6831`) — `ensureEngineSession()` + 3× backoff on initial token push compile; recovery path needs to be observed.
-
-Beyond that, the pre-Firebase legacy cleanup (`c43ff35e`) and `inMemoryPersistence` (`bc011be`) need one more pass of "every signin path clicked from a fresh state" — email/password and "Continue with Google" still untested from this machine.
+Residual: live verification of the 2026-05-15 stack (cross-channel `ThreadPanel`, Update staged progress, Calendar self-healing) + every Firebase signin path from a fresh state.
 
 ## Recent landings (last ~2 weeks)
 
 | Date | What | Refs |
 |---|---|---|
+| 2026-05-20 | MrCall tab live (was disabled placeholder) — `views/Mrcall.tsx`: business list via `mrcall.list_my_businesses` + search-by-field (email/name/phone/VAT) + `subscriptionStatus` dropdown via `mrcall.search_businesses`, expandable anagraphic/billing cards | `ed9ca585` · `a28c5533` |
+| 2026-05-20 | Onboarding unblocked for MrCall-only users (email opt-in, `ProfileFormFields includeGroups` hides LLM/Telegram/MrCall) + Calendar session fix (`installEngineTokenPusher` after `finalize`) + Email tab gated on `IMAP_HOST` not `EMAIL_ADDRESS` | `2b0a54ce` |
 | 2026-05-15 | Cross-channel Source-panel toggle — `ZylchTask.sources.whatsapp_chat_jid?`, `Conversation.waChatJid?`, `ThreadPanel` API `{ emailThreadId?, whatsappChatJid? }` with three modes (email-only / whatsapp-only / cross-channel); cross-channel header shows `Email (N) / WhatsApp (M)` tab pills with counters + parallel fetch + instant tab switch | `b57fcc4f` |
 | 2026-05-15 | Calendar self-healing UI — `ConnectGoogleCalendar.tsx` gains `ensureEngineSession()` + `signin-required` phase with Retry button; `App.tsx` initial token push retries 3× with backoff | `a03f6831` |
 | 2026-05-15 | Update view elapsed timer (1 s ticker, "· elapsed 1m23s") + overshot hint ("Running longer than the initial estimate") | `0b33fdf4` |
@@ -33,8 +30,6 @@ Beyond that, the pre-Firebase legacy cleanup (`c43ff35e`) and `inMemoryPersisten
 | 2026-05-11 | Profile picker shows email instead of raw Firebase UID — `profile:current` / `profiles:list` return `{id, email}` | — |
 | 2026-05-07 | WhatsApp tab privacy gate — chat list rendered ONLY when `r.connected === true`; 3 s poll while offline; `ConnectWhatsApp` view explains the history limitation | `9eee73c2` |
 | 2026-05-05 | Email-tab Gmail-style search bar (above thread list, submit-on-Enter, `?` help panel, Esc to clear) | — |
-| 2026-05-03 | MrCall-credits v1 `LLMProviderCard` in Settings + `account.balance` preload binding + "Top up" via `shell.openExternal('https://dashboard.mrcall.ai/plan')` | branch `feat/mrcall-credits-v1` |
-| 2026-05-02 | Firebase Auth gate + IdentityBanner + UID-keyed profile binding + "Continue with Google" PKCE on :19276 + CSP fix | `25e668b..b6739d5` · [`../../docs/execution-plans/google-signin.md`](../../docs/execution-plans/google-signin.md) |
 
 ## In progress
 

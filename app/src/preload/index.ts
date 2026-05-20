@@ -407,6 +407,32 @@ const api = {
         'mrcall.list_my_businesses',
         { offset: params.offset ?? 0, limit: params.limit ?? 100 },
         30000
+      ),
+    // Filtered business lookup (customer service): resolve a business by
+    // email / name / phone / VAT. StarChat applies role-based owner
+    // scoping (admin → cross-owner, owner → own). Same -32010 when no
+    // Firebase session is set.
+    searchBusinesses: (
+      params: {
+        emailAddress?: string
+        name?: string
+        surname?: string
+        companyName?: string
+        nickname?: string
+        businessPhoneNumber?: string
+        vatId?: string
+        businessId?: string
+        address?: string
+        countryAlpha2?: string
+        subscriptionStatus?: string
+        offset?: number
+        limit?: number
+      } = {}
+    ) =>
+      call<{ businesses: unknown[]; role: string }>(
+        'mrcall.search_businesses',
+        { ...params, offset: params.offset ?? 0, limit: params.limit ?? 100 },
+        30000
       )
   },
   google: {
