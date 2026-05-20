@@ -24,6 +24,31 @@ import './types'
 
 type View = 'tasks' | 'workspace' | 'email' | 'whatsapp' | 'mrcall' | 'update' | 'settings'
 
+// Wire the engine token pusher (the RPC that ships the Firebase JWT to
+// the sidecar) and push the current token, with a short retry — the
+// sidecar's dispatcher may not be ready the instant it is attached.
+// Used both after auth.bindProfile finds a profile AND after the
+// onboarding wizard finalizes a brand-new profile (which attaches a
+// sidecar while the pusher was still unset, so the 'connect' step's
+// Calendar RPC would otherwise see no Firebase session). Returns true
+// if a push succeeded.
+export async function installEngineTokenPusher(): Promise<boolean> {
+  setTokenPusher(async ({ uid, email, idToken, expiresAtMs }) => {
+    await window.zylch.account.setFirebaseToken({ uid, email, idToken, expiresAtMs })
+  })
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await repushTokenForCurrentUser()
+      return true
+    } catch (e) {
+      console.warn(`[App] engine token push attempt ${attempt + 1}/3 failed:`, e)
+      await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)))
+    }
+  }
+  console.warn('[App] engine token push exhausted retries')
+  return false
+}
+
 // Banner shown at the top of the window when the sidecar is dead. The
 // most common case is a profile lock: the user opened a second window on
 // a profile already in use, the Python child detected the lock and
@@ -495,8 +520,12 @@ function AppInner(): JSX.Element {
       .get()
       .then((r) => {
         if (cancelled) return
-        const addr = (r.values?.EMAIL_ADDRESS || '').trim()
-        setHasEmailConfigured(!!addr)
+        // Gate the Email tab on a real IMAP config, not on EMAIL_ADDRESS
+        // — the latter is always set to the Firebase email for display,
+        // so an MrCall-only user (no inbox sync) would otherwise see an
+        // empty Email tab.
+        const imapHost = (r.values?.IMAP_HOST || '').trim()
+        setHasEmailConfigured(!!imapHost)
       })
       .catch(() => {
         /* non-fatal — leave Email hidden */
