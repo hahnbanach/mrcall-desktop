@@ -166,7 +166,11 @@ async def handle_process(
         )
         # Revised ETA: now that sync is done we know exactly how many
         # items memory will chew through (~2-3s per item, LLM-bound).
-        _p(30, f"Extracting memory from {' + '.join(bits)}…", _eta_for_memory(pending_mem + pending_wa))
+        _p(
+            30,
+            f"Extracting memory from {' + '.join(bits)}…",
+            _eta_for_memory(pending_mem + pending_wa),
+        )
         try:
             mem_count, wa_count = await _run_memory(owner_id, store)
             summary_stats["memory_processed"] = int(mem_count or 0)
@@ -221,8 +225,7 @@ async def handle_process(
         _p(90, "Tasks + sweeps complete", None)
     else:
         console.print(
-            "\n[bold cyan][4/5] Tasks[/bold cyan]"
-            " — no new emails, running stale-task sweep..."
+            "\n[bold cyan][4/5] Tasks[/bold cyan]" " — no new emails, running stale-task sweep..."
         )
         _p(80, "Cleaning up stale tasks (F4/F8/F9 sweeps)…", None)
         # Even with zero unprocessed emails, open tasks may need closure
@@ -238,9 +241,7 @@ async def handle_process(
                 f"sweep-only: {swept} closed/updated" if swept else "sweep-only: no change"
             )
             if swept:
-                console.print(
-                    f"  [dim]Reanalyzed {swept} stale task(s)[/dim]"
-                )
+                console.print(f"  [dim]Reanalyzed {swept} stale task(s)[/dim]")
         except Exception as e:
             logger.error(
                 f"[/process] reanalyze-only sweep failed: {e}",
@@ -424,6 +425,8 @@ def _run_whatsapp_sync(
 
     wa_client = WhatsAppClient()
     sync_svc = WhatsAppSyncService(store, owner_id)
+    # Let the message handler download voice-note bytes at event time.
+    sync_svc.wa_client = wa_client
 
     # Wire up history sync handler
     wa_client.on_history_sync(sync_svc.handle_history_sync)
@@ -493,9 +496,35 @@ async def _run_memory(owner_id: str, store) -> tuple[int, int]:
     emails = store.get_unprocessed_emails(owner_id)
     email_count = await worker.process_batch(emails)
 
+    # Voice-note transcription pass (2026-05-20): downloaded-but-not-yet
+    # transcribed audio rows get an on-device faster-whisper transcript
+    # BEFORE memory extraction, so the freshly-fetched dicts below carry
+    # the transcript and the memory worker sees real text instead of a
+    # "[voice]" placeholder. STT failures are tolerated — a broken
+    # transcription must never break memory extraction.
+    try:
+        from zylch.whatsapp.transcription import resolve_user_language, transcribe_audio
+
+        lang = resolve_user_language()
+        pending = store.get_untranscribed_voice_messages(owner_id)
+        done = 0
+        for row in pending:
+            try:
+                t = transcribe_audio(row["media_path"], language=lang)
+                if t:
+                    store.set_whatsapp_transcription(owner_id, row["id"], t)
+                    done += 1
+            except Exception as e:
+                logger.warning(f"[stt] transcription failed for row {row.get('id')}: {e}")
+        if pending:
+            logger.info(f"[stt] transcribed {done}/{len(pending)} voice notes (lang={lang})")
+    except Exception as e:
+        logger.warning(f"[stt] transcription pass skipped: {e}")
+
     # Phase 2c: feed unprocessed WhatsApp messages (1-on-1, since v1
     # filters group chats at the storage layer). Same prompt is used
     # for both — channel-awareness lives in the message envelope.
+    # Re-fetch AFTER transcription so the dicts carry the new transcripts.
     wa_messages = store.get_unprocessed_whatsapp_messages(owner_id)
     wa_count = await worker.process_whatsapp_batch(wa_messages)
 
@@ -559,9 +588,7 @@ async def _run_tasks(owner_id: str, store) -> str:
     # missed call from 30+ days ago isn't actionable any more. Pure
     # SQL bulk close, no LLM; the close_note explains why the task
     # closed.
-    aged_phone = store.auto_close_stale_phone_tasks(
-        owner_id, max_age_days=PHONE_TASK_MAX_AGE_DAYS
-    )
+    aged_phone = store.auto_close_stale_phone_tasks(owner_id, max_age_days=PHONE_TASK_MAX_AGE_DAYS)
 
     parts = [f"{action_count} action items detected"]
     if swept:
@@ -624,9 +651,7 @@ async def _reanalyze_only(owner_id: str, store) -> int:
     reanalyzed = await _reanalyze_sweep(owner_id, store, tasks)
     dedup_summary = await _run_dedup_sweep(owner_id)
     topic_summary = await _run_topic_dedup(owner_id)
-    aged_phone = store.auto_close_stale_phone_tasks(
-        owner_id, max_age_days=PHONE_TASK_MAX_AGE_DAYS
-    )
+    aged_phone = store.auto_close_stale_phone_tasks(owner_id, max_age_days=PHONE_TASK_MAX_AGE_DAYS)
     return (
         reanalyzed
         + int(dedup_summary.get("tasks_closed", 0))

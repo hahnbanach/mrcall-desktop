@@ -24,6 +24,7 @@ Beyond that, the pre-Firebase legacy cleanup (`c43ff35e`) and `inMemoryPersisten
 
 | Date | What | Refs |
 |---|---|---|
+| 2026-05-20 | WhatsApp voice-note transcripts in the Source panel — `transcription` field added to the WhatsAppMessage type (from `whatsapp.list_messages`); `ThreadPanel.tsx` + `views/WhatsApp.tsx` render the transcript with a 🎤 marker + "vocale trascritta" hint, `[vocale]` placeholder while not yet transcribed | [`../../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../../engine/docs/execution-plans/whatsapp-voice-transcription.md) |
 | 2026-05-15 | Cross-channel Source-panel toggle — `ZylchTask.sources.whatsapp_chat_jid?`, `Conversation.waChatJid?`, `ThreadPanel` API `{ emailThreadId?, whatsappChatJid? }` with three modes (email-only / whatsapp-only / cross-channel); cross-channel header shows `Email (N) / WhatsApp (M)` tab pills with counters + parallel fetch + instant tab switch | `b57fcc4f` |
 | 2026-05-15 | Calendar self-healing UI — `ConnectGoogleCalendar.tsx` gains `ensureEngineSession()` + `signin-required` phase with Retry button; `App.tsx` initial token push retries 3× with backoff | `a03f6831` |
 | 2026-05-15 | Update view elapsed timer (1 s ticker, "· elapsed 1m23s") + overshot hint ("Running longer than the initial estimate") | `0b33fdf4` |

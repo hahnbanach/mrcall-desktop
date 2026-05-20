@@ -20,10 +20,15 @@ The work-in-flight is **live verification** of the rest of the 2026-05-15 stack:
 2. Calendar "Connect Google Calendar" self-healing path (a03f6831/1c60aebf) — confirm the renderer's `ensureEngineSession()` recovers from a missed initial token push.
 3. **MrCall-credits v1 round-trip** (branch `feat/mrcall-credits-v1`, tip `3001844`) — still pending the proxy deployed at `https://zylch-test.mrcall.ai`.
 
+## 2026-05-20 — WhatsApp voice-note transcription
+
+On-device STT for WA voice notes: download the ogg/opus at WhatsApp **event time** (URLs expire server-side) → cache to `<profile>/wa_media/<msg_id>.ogg`, then **defer** transcription to the `update` pipeline (faster-whisper `small`, int8, CPU) before memory extraction. Language follows `USER_LANGUAGE` (else auto-detect — no hardcoded Italian). `transcription`/`media_path` columns added to WhatsAppMessage; `workers/memory.py` uses `transcription or text` and bypasses the `len<20` skip gate for transcribed voice notes (plain short text still skipped). Server-side STT rejected (StarChat doesn't bill STT credits yet). **Dev-verified (97 green, incl. real on-device STT)**; live neonize download + packaged-build bundling of ctranslate2 + av (PyInstaller) still pending. New `whatsapp/transcription.py`. See [`execution-plans/whatsapp-voice-transcription.md`](execution-plans/whatsapp-voice-transcription.md).
+
 ## Recent landings (last ~2 weeks)
 
 | Date | What | Refs |
 |---|---|---|
+| 2026-05-20 | WhatsApp voice-note transcription — event-time download + deferred faster-whisper `small`/int8 pass; `transcription`/`media_path` cols; memory uses `transcription or text`, voice bypasses `len<20` gate | [whatsapp-voice-transcription.md](execution-plans/whatsapp-voice-transcription.md) |
 | 2026-05-15 | Phase 4 cross-channel: `update_task_item(whatsapp_chat_jid=…)` stamps `sources.whatsapp_chat_jid` (idempotent), TaskWorker WA path stamps on CREATE + UPDATE | `b57fcc4f` |
 | 2026-05-15 | Update pipeline staged progress callback (sync 5%, WA 20%, memory 30%, tasks 60%, sweeps 80/90%, render 95%) + rewritten `_estimate_update_eta` (memory + tasks + WA + F4/F8/F9 + first-sync proxy + setup) | `0b33fdf4` · `cb91901b` |
 | 2026-05-15 | Calendar self-healing — `ensureEngineSession()` re-pushes Firebase token + verifies via `account.whoAmI()` before Calendar RPCs; initial token push retries 3× with backoff | `a03f6831` · `1c60aebf` |
@@ -54,6 +59,7 @@ The work-in-flight is **live verification** of the rest of the 2026-05-15 stack:
 
 ## Known issues
 
+- **WA voice transcription dev-verified only** — live neonize `download_any` path (real voice-note bytes from a connected WhatsApp) and packaged-build bundling of ctranslate2 + av (PyInstaller, +~50–100 MB) not verified; tracked in [`harness-backlog.md`](harness-backlog.md).
 - **Firebase round-trip not fully live-verified** — Calendar self-healing landed but recovery path hasn't been observed end-to-end on Mario's machine.
 - **MrCall-credits v1 not live-verified.**
 - Oversized files (see Next Steps #4).

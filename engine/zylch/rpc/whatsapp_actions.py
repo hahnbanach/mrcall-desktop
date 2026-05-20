@@ -89,17 +89,10 @@ def _format_me(me) -> Dict[str, Optional[str]]:
 
     # Phone from JID.User. The attribute exists in both PascalCase
     # ('User') and lowercase ('user') across neonize versions.
-    inner_jid = (
-        getattr(me, "JID", None)
-        or getattr(me, "Jid", None)
-        or getattr(me, "jid", None)
-    )
+    inner_jid = getattr(me, "JID", None) or getattr(me, "Jid", None) or getattr(me, "jid", None)
     phone = None
     if inner_jid is not None:
-        phone = (
-            getattr(inner_jid, "User", None)
-            or getattr(inner_jid, "user", None)
-        )
+        phone = getattr(inner_jid, "User", None) or getattr(inner_jid, "user", None)
 
     # BusinessName has a typo upstream (BussinessName); also accept
     # PushName as a secondary, then no name at all.
@@ -202,7 +195,9 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
         prior_cancel = _cancel_event
 
     if prior_task is not None and not prior_task.done():
-        logger.info("[rpc:whatsapp.connect] cancelling prior in-flight connect to honour new request")
+        logger.info(
+            "[rpc:whatsapp.connect] cancelling prior in-flight connect to honour new request"
+        )
         if prior_cancel is not None:
             prior_cancel.set()
         try:
@@ -318,6 +313,11 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
     client.on_connected(_on_connected)
     client.on_history_sync(_on_history)
     client.on_message(_on_message)
+
+    # Give the sync service the live client so its message handler can
+    # download voice-note bytes at event time (URLs expire server-side).
+    # Must be set BEFORE connect() opens the socket / first MessageEv.
+    sync_svc.wa_client = client
 
     with _state_lock:
         globals()["_active_client"] = client
@@ -448,9 +448,7 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
                 .limit(limit)
                 .all()
             )
-            logger.debug(
-                f"[rpc:whatsapp.list_threads] owner_id={owner_id} -> {len(agg)} threads"
-            )
+            logger.debug(f"[rpc:whatsapp.list_threads] owner_id={owner_id} -> {len(agg)} threads")
             # Always count total messages for this owner so the renderer
             # can render "X messages stored, 0 visible threads" inline —
             # turns a silent empty list into something actionable.
@@ -523,11 +521,7 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
             for r in last_msg_rows:
                 if r.chat_jid not in last_by_jid:
                     last_by_jid[r.chat_jid] = r
-                if (
-                    r.chat_jid not in peer_name_by_jid
-                    and not bool(r.is_from_me)
-                    and r.sender_name
-                ):
+                if r.chat_jid not in peer_name_by_jid and not bool(r.is_from_me) and r.sender_name:
                     peer_name_by_jid[r.chat_jid] = r.sender_name
 
             # Contacts for display name resolution.
@@ -649,11 +643,10 @@ async def whatsapp_list_messages(params: Dict[str, Any], notify: NotifyFn) -> An
                         "sender_name": r.sender_name,
                         "text": r.text,
                         "media_type": r.media_type,
+                        "transcription": r.transcription,
                         "is_from_me": bool(r.is_from_me),
                         "is_group": bool(r.is_group),
-                        "timestamp": (
-                            r.timestamp.isoformat() if r.timestamp is not None else None
-                        ),
+                        "timestamp": (r.timestamp.isoformat() if r.timestamp is not None else None),
                     }
                     for r in rows
                 ]

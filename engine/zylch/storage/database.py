@@ -184,6 +184,12 @@ def _apply_column_migrations(engine: Engine) -> None:
         # NULL on tasks created before this column; renderer falls back to
         # contact_name / contact_email.
         ("task_items", "title", "TEXT"),
+        # 2026-05-20: WhatsApp voice-note transcription. `media_path` is
+        # stamped at event time when audio bytes are downloaded;
+        # `transcription` is filled later in batch by the update pipeline.
+        # (`media_type` already exists in the model/schema.)
+        ("whatsapp_messages", "transcription", "TEXT"),
+        ("whatsapp_messages", "media_path", "TEXT"),
     ]
     # Indexes the SQLAlchemy `index=True` declaration creates on FRESH
     # tables but never gets back-applied to tables that pre-date the
@@ -217,9 +223,7 @@ def _apply_column_migrations(engine: Engine) -> None:
         for table, column in indexes:
             idx_name = f"ix_{table}_{column}"
             try:
-                conn.exec_driver_sql(
-                    f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({column})"
-                )
+                conn.exec_driver_sql(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({column})")
             except Exception as e:
                 logger.warning(f"[migrate] Failed to ensure index {idx_name}: {e}")
 
@@ -435,18 +439,12 @@ def _backfill_task_channels() -> None:
     factory = get_session_factory()
     session = factory()
     try:
-        rows = (
-            session.query(TaskItem)
-            .filter(TaskItem.channel.is_(None))
-            .all()
-        )
+        rows = session.query(TaskItem).filter(TaskItem.channel.is_(None)).all()
         if not rows:
             return
         n = 0
         for t in rows:
-            ch = _infer_task_channel(
-                contact_email=t.contact_email or "", event_type=t.event_type
-            )
+            ch = _infer_task_channel(contact_email=t.contact_email or "", event_type=t.event_type)
             if ch:
                 t.channel = ch
                 n += 1

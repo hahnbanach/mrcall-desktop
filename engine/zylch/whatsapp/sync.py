@@ -5,13 +5,29 @@ Handles HistorySyncEv (initial) and MessageEv (ongoing).
 """
 
 import logging
+import os
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, Optional
 
 from zylch.storage.database import get_session
 
 logger = logging.getLogger(__name__)
+
+
+def _wa_media_dir() -> str:
+    """Return (and create) the per-profile WhatsApp media directory.
+
+    Mirrors ``zylch.whatsapp.client._default_wa_db``'s base resolution:
+    the profile dir when ``ZYLCH_PROFILE_DIR`` is set, otherwise
+    ``~/.zylch``. Downloaded voice-note bytes are written here so the
+    later transcription pass can read them off disk.
+    """
+    base = os.environ.get("ZYLCH_PROFILE_DIR") or os.path.expanduser("~/.zylch")
+    media_dir = os.path.join(base, "wa_media")
+    Path(media_dir).mkdir(parents=True, exist_ok=True)
+    return media_dir
 
 
 class WhatsAppSyncService:
@@ -30,6 +46,11 @@ class WhatsAppSyncService:
         self._messages_synced = 0
         self._contacts_synced = 0
         self._db_lock = threading.Lock()
+        # The WhatsAppClient wrapper, set by the connect flow before the
+        # socket opens (see rpc/whatsapp_actions.py). Required to download
+        # voice-note bytes at event time; left None in code paths that
+        # only replay history (no live download available there).
+        self.wa_client = None
 
     # -- History sync (initial connect) --------------------------------
 
@@ -425,6 +446,16 @@ class WhatsAppSyncService:
             text = _extract_text(message)
             sender_name = str(info.Pushname) if hasattr(info, "Pushname") else ""
 
+            # Voice/audio handling: classify on the UNWRAPPED proto (the
+            # one that directly carries audioMessage) and download the
+            # bytes NOW — WhatsApp media URLs expire, and only the live
+            # client can decrypt. Transcription happens later in batch.
+            unwrapped = _unwrap_message(message)
+            media_kind = _extract_media_kind(message)
+            media_path = None
+            if media_kind in ("voice", "audio") and self.wa_client is not None:
+                media_path = self._download_audio(msg_id, unwrapped)
+
             return self._upsert_message(
                 msg_id=msg_id,
                 chat_jid=chat_jid,
@@ -434,10 +465,41 @@ class WhatsAppSyncService:
                 timestamp=timestamp,
                 is_from_me=is_from_me,
                 is_group=is_group,
+                media_type=media_kind,
+                media_path=media_path,
             )
         except Exception as e:
             logger.warning(f"[wa-sync] could not store event message: {e}")
             return False
+
+    def _download_audio(self, msg_id: str, unwrapped) -> Optional[str]:
+        """Download a voice/audio blob to ``<wa_media>/<msg_id>.ogg``.
+
+        Args:
+            msg_id: Protocol message id, used as the filename stem.
+            unwrapped: The unwrapped Message proto carrying audioMessage —
+                what neonize's ``download_any`` expects.
+
+        Returns:
+            The absolute file path on success, or ``None`` if the client
+            returned no bytes or the download/write failed (defensive:
+            the caller still tags ``media_type`` so the row is not lost).
+        """
+        try:
+            data = self.wa_client.download_media(unwrapped)
+            if not data:
+                logger.warning(f"[wa-sync] _download_audio(msg_id={msg_id}) -> no bytes")
+                return None
+            path = os.path.join(_wa_media_dir(), f"{msg_id}.ogg")
+            with open(path, "wb") as fh:
+                fh.write(data)
+            logger.info(
+                f"[wa-sync] _download_audio(msg_id={msg_id}) -> " f"path={path} bytes={len(data)}"
+            )
+            return path
+        except Exception as e:
+            logger.warning(f"[wa-sync] _download_audio(msg_id={msg_id}) failed: {e}")
+            return None
 
     def _store_message_from_proto(self, msg) -> bool:
         """Store a message from history sync protobuf."""
@@ -466,6 +528,13 @@ class WhatsAppSyncService:
             )
             sender_name = str(msg.pushName if hasattr(msg, "pushName") else "")
 
+            # Tag the media kind so voice/audio rows are classifiable, but
+            # leave media_path NULL: the history-sync path has no reliable
+            # live client to download from (v1). The transcription step
+            # skips rows with media_path NULL, so these stay un-transcribed
+            # until a real-time MessageEv re-delivers them.
+            media_kind = _extract_media_kind(inner)
+
             return self._upsert_message(
                 msg_id=msg_id,
                 chat_jid=chat_jid,
@@ -475,6 +544,7 @@ class WhatsAppSyncService:
                 timestamp=timestamp,
                 is_from_me=is_from_me,
                 is_group="@g.us" in chat_jid,
+                media_type=media_kind,
             )
         except Exception as e:
             logger.warning(f"[wa-sync] could not store proto message: {e}")
@@ -490,8 +560,20 @@ class WhatsAppSyncService:
         timestamp: Optional[datetime],
         is_from_me: bool,
         is_group: bool,
+        media_type: Optional[str] = None,
+        media_path: Optional[str] = None,
     ) -> bool:
-        """Insert or skip a message in whatsapp_messages."""
+        """Insert or skip a message in whatsapp_messages.
+
+        Args:
+            media_type: ``"voice"`` / ``"audio"`` for audio messages, else
+                ``None``. Backfilled onto an existing row when currently
+                empty.
+            media_path: Local path to the downloaded audio bytes, or
+                ``None``. Backfilled onto an existing row when currently
+                empty (e.g. a history-sync placeholder later gets the live
+                download via a MessageEv).
+        """
         from zylch.storage.models import WhatsAppMessage
 
         if not msg_id:
@@ -514,10 +596,8 @@ class WhatsAppSyncService:
                     if text and not (existing.text or "").strip():
                         existing.text = text
                         changed = True
-                    if (
-                        timestamp is not None
-                        and (existing.timestamp is None
-                             or existing.timestamp.year < 2000)
+                    if timestamp is not None and (
+                        existing.timestamp is None or existing.timestamp.year < 2000
                     ):
                         existing.timestamp = timestamp
                         changed = True
@@ -529,6 +609,12 @@ class WhatsAppSyncService:
                         changed = True
                     if sender_jid and not existing.sender_jid:
                         existing.sender_jid = sender_jid
+                        changed = True
+                    if media_type and not (existing.media_type or "").strip():
+                        existing.media_type = media_type
+                        changed = True
+                    if media_path and not (existing.media_path or "").strip():
+                        existing.media_path = media_path
                         changed = True
                     return changed
 
@@ -542,6 +628,8 @@ class WhatsAppSyncService:
                     timestamp=timestamp or datetime.now(timezone.utc),
                     is_from_me=is_from_me,
                     is_group=is_group,
+                    media_type=media_type,
+                    media_path=media_path,
                 )
                 session.add(new_msg)
             return True
@@ -713,7 +801,9 @@ def _extract_text(message) -> Optional[str]:
         return "[event]"
     if _has_field(message, "buttonsMessage") or _has_field(message, "buttonsResponseMessage"):
         return "[buttons]"
-    if _has_field(message, "interactiveMessage") or _has_field(message, "interactiveResponseMessage"):
+    if _has_field(message, "interactiveMessage") or _has_field(
+        message, "interactiveResponseMessage"
+    ):
         return "[interactive]"
     if _has_field(message, "templateMessage") or _has_field(message, "templateButtonReplyMessage"):
         return "[template]"
@@ -754,6 +844,34 @@ def _extract_text(message) -> Optional[str]:
 # only once per process — keeps zylch.log readable while still surfacing
 # every unhandled proto kind we see.
 _UNHANDLED_PROTO_SIGNATURES: set = set()
+
+
+def _extract_media_kind(message) -> Optional[str]:
+    """Classify the AUDIO media kind of a WhatsApp message, if any.
+
+    Scope is deliberately narrow — only audio kinds matter for voice-note
+    transcription. Images, documents, stickers etc. are not classified
+    here (``_extract_text`` already produces their display placeholders).
+
+    Unwraps E2E envelopes via :func:`_unwrap_message` first, mirroring
+    what ``_extract_text`` does so the classification matches the proto
+    that actually carries ``audioMessage``.
+
+    Args:
+        message: The (possibly E2E-wrapped) WhatsApp Message proto.
+
+    Returns:
+        ``"voice"`` for push-to-talk audio, ``"audio"`` for a non-PTT
+        audio file, or ``None`` for anything else.
+    """
+    message = _unwrap_message(message)
+    if message is None:
+        return None
+    if not _has_field(message, "audioMessage"):
+        return None
+    audio = message.audioMessage
+    is_ptt = bool(getattr(audio, "PTT", False)) or bool(getattr(audio, "ptt", False))
+    return "voice" if is_ptt else "audio"
 
 
 def _safe_from_timestamp(ts) -> Optional[datetime]:

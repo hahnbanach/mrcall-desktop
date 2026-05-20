@@ -26,6 +26,7 @@ The release pipeline still has open hardening items in [`harness-backlog.md`](ha
 
 | Date | What | Spans | Refs |
 |---|---|---|---|
+| 2026-05-20 | WhatsApp voice-note transcription — engine downloads ogg/opus at event time + deferred on-device faster-whisper `small`/int8 pass; `transcription` field on `whatsapp.list_messages`; UI renders transcript (🎤 + "vocale trascritta" hint, `[vocale]` pending). Dev-verified only; live download + packaged bundling pending | engine + app + IPC | [`../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../engine/docs/execution-plans/whatsapp-voice-transcription.md) |
 | 2026-05-15 | Cross-channel Source-panel toggle — engine stamps `sources.whatsapp_chat_jid`; ThreadPanel renders Email/WhatsApp tab pills with counters, parallel fetch, instant tab switch | engine + app + IPC | `b57fcc4f` |
 | 2026-05-15 | Calendar self-healing Firebase session — `ensureEngineSession()` re-pushes token + verifies via `account.whoAmI()` before Calendar RPCs; initial token push retries 3× with backoff | engine + app | `a03f6831` · `1c60aebf` |
 | 2026-05-15 | Update view staged progress emissions + ETA rewrite + elapsed timer (engine progress callback, renderer 1 s ticker + overshot hint) | engine + app | `0b33fdf4` · `cb91901b` |

@@ -4,6 +4,20 @@ Enforcement gaps, missing tooling, and documentation debt.
 
 ## Open
 
+- [ ] **faster-whisper packaging unverified in a packaged build + no test for the live WhatsApp download path (2026-05-20).**
+  - The WA voice-note transcription feature pulls `faster-whisper` →
+    ctranslate2 + av (PyAV, which bundles ffmpeg libs). `engine/zylch.spec`
+    now ships `collect_all` hooks for both, but this is **unverified in a
+    packaged DMG/EXE** — only dev-verified. Needs a `v*` CI smoke build.
+    Installer grows ~50–100 MB (the `small` model itself downloads at
+    runtime like fastembed, not bundled).
+  - No automated test exercises the **live neonize `download_any`** path
+    (downloading real voice-note bytes from a connected WhatsApp session).
+    The on-device STT pass is tested against real ogg/opus, but the
+    download step is only covered by the confirmed signature
+    `download_any(message, path=None) -> Optional[bytes]`, not an end-to-end run.
+  - See [`execution-plans/whatsapp-voice-transcription.md`](execution-plans/whatsapp-voice-transcription.md).
+
 - [ ] **`tests/storage/test_data_backfills.py::test_init_db_invokes_channel_backfill_when_thread_id_backfill_is_noop` broken at HEAD (2026-05-12).**
   - Setup fails with `sqlite3.IntegrityError: NOT NULL constraint failed: task_items.pinned` when the fixture inserts a synthetic task row that omits the `pinned` column. The schema gained a `NOT NULL` on `pinned` (probably with a column-add migration that lacked a default) some time after this test was written; the test fixture never got updated.
   - Pre-existing on `c5c1922d` (HEAD before the whatsapp-pipeline-parity Phase 2 landing). Confirmed via `git stash; pytest …`.

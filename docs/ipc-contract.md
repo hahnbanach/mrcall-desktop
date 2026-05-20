@@ -59,6 +59,19 @@ Returns an array of `TaskItem` dicts. Each row includes (when present):
 
 `sources.whatsapp_messages` carries WhatsAppMessage row PKs; `sources.whatsapp_chat_jid` is stamped on the FIRST WA touchpoint to the task (engine: `update_task_item(whatsapp_chat_jid=…)` is idempotent — subsequent WA messages don't overwrite). Renderer uses it as the explicit pointer for the cross-channel Source-panel toggle so it doesn't have to sniff a `thread_id` suffix.
 
+### `whatsapp.list_messages(chat_jid, limit?)`
+
+Returns an array of WhatsAppMessage dicts for one chat (renderer:
+`whatsapp.listMessages({ chat_jid, limit })`). Each row includes (when
+present):
+- standard fields (id, chat_jid, `text`, `is_from_me`, timestamp, …)
+- `media_type: 'voice' | 'audio' | … | null` — set when the message carried media
+- `transcription: string | null` — on-device STT text for a downloaded
+  voice/audio note (faster-whisper, deferred to the `update` pipeline).
+  `null` until transcribed; the renderer shows `[vocale]` meanwhile and a
+  🎤-marked transcript once present. Engine wires it via
+  `rpc/whatsapp_actions.py`. See [`../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../engine/docs/execution-plans/whatsapp-voice-transcription.md).
+
 ### `emails.search(query, folder?, limit?, offset?)`
 
 | Param | Type | Required | Notes |

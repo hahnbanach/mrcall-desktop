@@ -391,10 +391,24 @@ export default function ThreadPanel({
                         {m.timestamp ? formatDate(m.timestamp) : ''}
                       </div>
                     </div>
-                    {m.text ? (
+                    {(m.media_type === 'voice' || m.media_type === 'audio') &&
+                    m.transcription ? (
+                      <div>
+                        <pre className="text-sm text-brand-black whitespace-pre-wrap break-words font-sans select-text m-0">
+                          {'\u{1F3A4} ' + m.transcription}
+                        </pre>
+                        <span className="text-xs italic text-brand-grey-80">
+                          vocale trascritta
+                        </span>
+                      </div>
+                    ) : m.text && m.text !== '[voice]' && m.text !== '[audio]' ? (
                       <pre className="text-sm text-brand-black whitespace-pre-wrap break-words font-sans select-text m-0">
                         {m.text}
                       </pre>
+                    ) : m.media_type === 'voice' || m.media_type === 'audio' ? (
+                      <span className="text-xs italic text-brand-grey-80">
+                        {'\u{1F3A4} [vocale]'}
+                      </span>
                     ) : (
                       <span className="text-xs italic text-brand-grey-80">
                         {m.media_type ? `[${m.media_type}]` : '[no text]'}

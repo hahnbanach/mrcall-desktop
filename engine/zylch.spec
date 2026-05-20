@@ -15,6 +15,25 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('onnxruntime')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
+# ─── faster-whisper voice-note transcription ─────────────────────────
+# On-device speech-to-text for WhatsApp voice notes. PyInstaller does NOT
+# auto-collect these native shared libs reliably, so collect_all each:
+#   - faster_whisper: pure-Python, but its datas include the bundled
+#     Silero VAD asset (assets/silero_vad_v6.onnx), run through the
+#     onnxruntime collected above.
+#   - ctranslate2: the inference runtime — ships libctranslate2 (.dylib /
+#     .so / .dll) as a native binary.
+#   - av (PyAV): bundles ffmpeg shared libs (libavcodec/libavformat/
+#     libswresample/...) used to decode ogg/opus voice notes.
+# The whisper MODEL (~250MB) is NOT bundled — it downloads to the HF cache
+# at first transcription. Only code + native libs ship in the installer.
+tmp_ret = collect_all('faster_whisper')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('ctranslate2')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('av')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+
 
 # ─── libmagic bundling ───────────────────────────────────────────────
 # python-magic (transitively imported by neonize) loads libmagic via

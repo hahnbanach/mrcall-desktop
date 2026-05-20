@@ -852,11 +852,20 @@ class MemoryWorker:
         """
         wa_id = message.get("id", "unknown")
         try:
-            text = (message.get("text") or "").strip()
-            if len(text) < self._WA_MIN_TEXT_LEN:
+            # Body source: a voice note's transcription stands in for the
+            # text (the raw `text` is just a "[voice]" placeholder).
+            effective = (message.get("transcription") or message.get("text") or "").strip()
+            is_voice = bool(message.get("media_type") in ("voice", "audio")) and bool(
+                message.get("transcription")
+            )
+            # A deliberate voice note is signal even when short ("Richiamami"),
+            # so the <20 gate does not apply to transcribed audio; plain text
+            # still gets the short-text skip.
+            too_short = len(effective) < (1 if is_voice else self._WA_MIN_TEXT_LEN)
+            if too_short:
                 logger.debug(
-                    f"[memory] WA {wa_id} skipped — text too short "
-                    f"(len={len(text)} < {self._WA_MIN_TEXT_LEN})"
+                    f"[memory] WA {wa_id} skipped — body too short "
+                    f"(len={len(effective)}, is_voice={is_voice})"
                 )
                 self.storage.mark_whatsapp_memory_processed(self.owner_id, wa_id)
                 return True
@@ -871,11 +880,7 @@ class MemoryWorker:
                 return True
 
             ts = message.get("timestamp", "unknown")
-            sender_label = (
-                message.get("sender_name")
-                or message.get("sender_jid")
-                or "unknown"
-            )
+            sender_label = message.get("sender_name") or message.get("sender_jid") or "unknown"
             event_desc = f"Extracted from WhatsApp message {wa_id} ({ts}) from {sender_label}"
 
             for i, entity_content in enumerate(entities):
@@ -910,9 +915,7 @@ class MemoryWorker:
 
         if not messages:
             return 0
-        logger.info(
-            f"Processing batch of {len(messages)} WA messages (concurrency={concurrency})"
-        )
+        logger.info(f"Processing batch of {len(messages)} WA messages (concurrency={concurrency})")
         sem = asyncio.Semaphore(concurrency)
         processed = 0
         failures = 0
@@ -932,9 +935,7 @@ class MemoryWorker:
                 else:
                     failures += 1
                     if failures >= 3:
-                        logger.error(
-                            "3 consecutive WA failures — stopping batch (check API key)"
-                        )
+                        logger.error("3 consecutive WA failures — stopping batch (check API key)")
                         stop = True
 
         await asyncio.gather(
@@ -963,7 +964,9 @@ class MemoryWorker:
         sender_jid = message.get("sender_jid") or ""
         sender_name = message.get("sender_name") or ""
         ts = message.get("timestamp") or "unknown"
-        text = message.get("text") or ""
+        # Prefer the voice-note transcription over the raw `text` (which is
+        # only a "[voice]" placeholder for audio messages).
+        text = message.get("transcription") or message.get("text") or ""
 
         # Resolve the sender phone for the From line. WA stores the JID
         # canonicalised: digits + '@s.whatsapp.net' for real phone numbers,
@@ -991,11 +994,7 @@ class MemoryWorker:
                 if resolved.startswith("+"):
                     phone = resolved
                 if not sender_name:
-                    sender_name = (
-                        contact.get("name")
-                        or contact.get("push_name")
-                        or sender_name
-                    )
+                    sender_name = contact.get("name") or contact.get("push_name") or sender_name
 
         # Build the From line: prefer "<Name> (<phone>)" when both are
         # present. Drop the phone when only the LID is known — emitting

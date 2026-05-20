@@ -233,10 +233,7 @@ class WhatsAppClient:
         """Check if session is valid (not logged out from phone)."""
         if self._client is None:
             return False
-        return (
-            self._call_or_attr(self._client, "is_logged_in", False)
-            and not self._logged_out
-        )
+        return self._call_or_attr(self._client, "is_logged_in", False) and not self._logged_out
 
     def has_session(self) -> bool:
         """Check if a saved session exists on disk."""
@@ -291,6 +288,31 @@ class WhatsAppClient:
             return resp
         except Exception as e:
             logger.error(f"[whatsapp] send_message failed: {e}")
+            return None
+
+    def download_media(self, message) -> Optional[bytes]:
+        """Download the decrypted media bytes of a media message.
+
+        Wraps neonize's ``download_any(message)``, which fetches the blob
+        from WhatsApp's servers and decrypts it. Must be called while the
+        media URL is still live (they expire server-side), i.e. at event
+        time — not later in the batch pipeline.
+
+        Args:
+            message: The neonize Message proto that directly carries the
+                media payload (e.g. ``audioMessage``). For E2E-wrapped
+                messages, pass the UNWRAPPED inner proto.
+
+        Returns:
+            The decrypted bytes, or ``None`` if the client is not
+            initialised or the download failed.
+        """
+        if not self._client:
+            return None
+        try:
+            return self._client.download_any(message)
+        except Exception as e:
+            logger.warning(f"[whatsapp] download_media failed: {e}")
             return None
 
     def is_on_whatsapp(self, phone_numbers: List[str]) -> List[Dict]:

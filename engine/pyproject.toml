@@ -42,6 +42,13 @@ dependencies = [
     "pypdf>=4.0",
     "python-docx>=1.1",
     "openpyxl>=3.1",
+    # On-device speech-to-text for WhatsApp voice notes. Pulls ctranslate2
+    # (the inference runtime) + av (PyAV, which bundles ffmpeg libs for
+    # ogg/opus decode) — NOT PyTorch. The whisper model (~250MB) downloads
+    # to the HF cache at first use, not in the installer. PyInstaller needs
+    # hooks for the ctranslate2 + av native shared libs (packaging risk,
+    # handled separately in zylch.spec).
+    "faster-whisper>=1.0",
 ]
 
 [project.scripts]

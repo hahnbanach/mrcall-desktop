@@ -809,9 +809,7 @@ class Storage:
                 session.flush()
                 return True
         except Exception as e:
-            logger.error(
-                f"add_whatsapp_blob_link({whatsapp_message_id}, {blob_id}) failed: {e}"
-            )
+            logger.error(f"add_whatsapp_blob_link({whatsapp_message_id}, {blob_id}) failed: {e}")
             return False
 
     def get_blobs_for_whatsapp_message(
@@ -2700,9 +2698,7 @@ class Storage:
 
     # --- WhatsApp memory processing (whatsapp-pipeline-parity Phase 2c) ---
 
-    def get_whatsapp_contact_by_jid(
-        self, owner_id: str, jid: str
-    ) -> Optional[Dict[str, Any]]:
+    def get_whatsapp_contact_by_jid(self, owner_id: str, jid: str) -> Optional[Dict[str, Any]]:
         """Return the WhatsApp contact matching ``jid`` for ``owner_id``.
 
         Used by the memory worker's ``_format_whatsapp_data`` to resolve
@@ -2761,6 +2757,9 @@ class Storage:
                     WhatsAppMessage.sender_jid,
                     WhatsAppMessage.sender_name,
                     WhatsAppMessage.text,
+                    WhatsAppMessage.transcription,
+                    WhatsAppMessage.media_type,
+                    WhatsAppMessage.media_path,
                     WhatsAppMessage.timestamp,
                     WhatsAppMessage.is_from_me,
                     WhatsAppMessage.is_group,
@@ -2781,12 +2780,64 @@ class Storage:
                     "sender_jid": r.sender_jid,
                     "sender_name": r.sender_name,
                     "text": r.text,
+                    "transcription": r.transcription,
+                    "media_type": r.media_type,
+                    "media_path": r.media_path,
                     "timestamp": r.timestamp.isoformat() if r.timestamp else None,
                     "is_from_me": bool(r.is_from_me),
                     "is_group": bool(r.is_group),
                 }
                 for r in rows
             ]
+
+    def get_untranscribed_voice_messages(self, owner_id: str) -> List[Dict[str, Any]]:
+        """Return voice/audio messages downloaded but not yet transcribed.
+
+        A row qualifies when it carries an audio ``media_type`` AND a
+        ``media_path`` (the bytes were saved to disk at event time) AND
+        ``transcription IS NULL``. Returned oldest-first so a partial
+        batch failure stays deterministic.
+
+        Args:
+            owner_id: Owner scope.
+
+        Returns:
+            List of ``{"id": <row PK>, "media_path": <path>}`` dicts.
+        """
+        from zylch.storage.models import WhatsAppMessage
+
+        with get_session() as session:
+            rows = (
+                session.query(WhatsAppMessage.id, WhatsAppMessage.media_path)
+                .filter(
+                    WhatsAppMessage.owner_id == owner_id,
+                    WhatsAppMessage.media_type.in_(("voice", "audio")),
+                    WhatsAppMessage.media_path.isnot(None),
+                    WhatsAppMessage.transcription.is_(None),
+                )
+                .order_by(WhatsAppMessage.timestamp.asc())
+                .all()
+            )
+            return [{"id": str(r.id), "media_path": r.media_path} for r in rows]
+
+    def set_whatsapp_transcription(
+        self, owner_id: str, message_id: str, transcription: str
+    ) -> None:
+        """Store the transcript of a voice note.
+
+        Args:
+            owner_id: Owner scope.
+            message_id: The WhatsAppMessage row PK (engine UUID), matching
+                the convention of ``mark_whatsapp_memory_processed``.
+            transcription: The full transcript text (no truncation).
+        """
+        from zylch.storage.models import WhatsAppMessage
+
+        with get_session() as session:
+            session.query(WhatsAppMessage).filter(
+                WhatsAppMessage.owner_id == owner_id,
+                WhatsAppMessage.id == message_id,
+            ).update({"transcription": transcription})
 
     def mark_whatsapp_memory_processed(self, owner_id: str, message_id: str) -> None:
         """Mark a single WhatsApp message as processed by the Memory Agent.
@@ -2803,9 +2854,7 @@ class Storage:
                 WhatsAppMessage.id == message_id,
             ).update({"memory_processed_at": datetime.now(timezone.utc)})
 
-    def mark_whatsapp_messages_processed(
-        self, owner_id: str, message_ids: List[str]
-    ) -> None:
+    def mark_whatsapp_messages_processed(self, owner_id: str, message_ids: List[str]) -> None:
         """Bulk variant of ``mark_whatsapp_memory_processed``."""
         if not message_ids:
             return
@@ -2924,9 +2973,7 @@ class Storage:
 
     # ----- WhatsApp task processing (whatsapp-pipeline-parity Fase 3a) -----
 
-    def get_unprocessed_whatsapp_messages_for_task(
-        self, owner_id: str
-    ) -> List[Dict[str, Any]]:
+    def get_unprocessed_whatsapp_messages_for_task(self, owner_id: str) -> List[Dict[str, Any]]:
         """Return WhatsApp messages not yet seen by the Task Agent.
 
         Mirrors ``get_unprocessed_emails_for_task`` for the WhatsApp
@@ -2970,9 +3017,7 @@ class Storage:
                     "sender_name": r.sender_name,
                     "text": r.text,
                     "timestamp": r.timestamp.isoformat() if r.timestamp else None,
-                    "timestamp_epoch": (
-                        int(r.timestamp.timestamp()) if r.timestamp else 0
-                    ),
+                    "timestamp_epoch": (int(r.timestamp.timestamp()) if r.timestamp else 0),
                     "is_from_me": bool(r.is_from_me),
                     "is_group": bool(r.is_group),
                 }
@@ -2994,9 +3039,7 @@ class Storage:
                 WhatsAppMessage.id == message_id,
             ).update({"task_processed_at": datetime.now(timezone.utc)})
 
-    def mark_whatsapp_messages_task_processed(
-        self, owner_id: str, message_ids: List[str]
-    ) -> None:
+    def mark_whatsapp_messages_task_processed(self, owner_id: str, message_ids: List[str]) -> None:
         """Bulk variant of ``mark_whatsapp_task_processed``."""
         if not message_ids:
             return

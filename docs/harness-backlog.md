@@ -6,6 +6,23 @@ materialises) `app/docs/harness-backlog.md`.
 
 ## Open
 
+- [ ] **faster-whisper packaging (ctranslate2 + av) unverified in a packaged build; no test for the live WhatsApp download path.**
+  Discovered: 2026-05-20 (WhatsApp voice-note transcription landing —
+  dev-verified only).
+  Impact: the feature pulls `faster-whisper` → ctranslate2 + av (PyAV,
+  bundling ffmpeg libs). `engine/zylch.spec` now ships `collect_all` hooks
+  for both, but nothing yet confirms the DMG/EXE actually loads them
+  at runtime — the same class of silent break that bit the Win-x64 sidecar
+  (see the PyInstaller item below). Installer grows ~50–100 MB; the `small`
+  model downloads at runtime (not bundled), like fastembed. Separately,
+  no automated test exercises the live neonize `download_any` path
+  (downloading real voice-note bytes from a connected WhatsApp).
+  Recommendation: a `v*` CI smoke build that imports the engine, loads the
+  faster-whisper backend, and transcribes a tiny bundled ogg in the
+  packaged sidecar — folded into the per-arch installer gate (a) below so
+  one job covers "installer exists AND its sidecar can transcribe".
+  See [`../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../engine/docs/execution-plans/whatsapp-voice-transcription.md).
+
 - [ ] **Release workflow installs PyInstaller unpinned + the GitHub Release ships even when the Windows sidecar build fails.**
   Discovered: 2026-05-12 (after silent Win-x64 breakage across v0.1.31,
   v0.1.31-intel, and v0.1.32 went unnoticed for a week — the macOS arm64
