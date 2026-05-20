@@ -52,6 +52,7 @@ The release pipeline still has open hardening items in [`harness-backlog.md`](ha
 2. Add `GOOGLE_SIGNIN_CLIENT_SECRET` repo secret so the next `v*` tag push produces a working packaged build.
 3. Configure `GOOGLE_CALENDAR_CLIENT_ID` in profile Settings → "Connect Google Calendar" → confirm consent + token persistence + self-healing recovery path.
 4. Wire `engine/zylch/tools/calendar_sync.py` to the new `provider='google_calendar'` tokens.
+5. Open **MrCall pipeline parity** workstream — memory extraction → task creation → UI tab → cross-channel toggle. Plan in [execution-plans/mrcall-pipeline-parity.md](execution-plans/mrcall-pipeline-parity.md); Phase 0 needs Mario's sample `mrcall_conversations.body` + answers to 6 design questions before Phase 1.
 
 ## Known issues
 
