@@ -69,7 +69,6 @@ def _setup_readline(profile_dir: str):
         "/agent",
         "/calendar",
         "/connect",
-        "/mrcall",
         "/jobs",
         "/clear",
         "/model",
@@ -720,8 +719,6 @@ def _handle_slash_command(
                 result = asyncio.run(handler())
         elif cmd in ("/share", "/revoke", "/connect"):
             result = asyncio.run(handler(args, owner_id, None))
-        elif cmd == "/mrcall":
-            result = asyncio.run(handler(args, owner_id, None, None))
         else:
             result = asyncio.run(handler(args, owner_id))
 

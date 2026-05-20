@@ -241,8 +241,6 @@ class SemanticCommandMatcher:
             return self._format_tutorial(params)
         elif command == "/connect":
             return self._format_connect(params)
-        elif command == "/mrcall":
-            return self._format_mrcall(params, template)
         else:
             # Default: just return the command
             return command
@@ -455,12 +453,3 @@ class SemanticCommandMatcher:
         if provider:
             return f"/connect {provider}"
         return "/connect"
-
-    def _format_mrcall(self, params: Dict[str, Any], template: str) -> str:
-        """/mrcall variables get [--name <name>]"""
-        if "variable" in template or "value" in template:
-            name = params.get("name", "")
-            if name:
-                return f"/mrcall variables get --name {name}"
-            return "/mrcall variables get"
-        return "/mrcall"
