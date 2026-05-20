@@ -16,6 +16,7 @@ import { TasksProvider } from './store/tasks'
 import { profileColor } from './lib/profileColor'
 import type { SidecarStatusEvent } from './types'
 import { errorMessage, isProfileLockedError } from './lib/errors'
+import { useAutoUpdate } from './hooks/useAutoUpdate'
 import Icon, { type IconName } from './components/Icon'
 import mrcallIcon from './assets/logos/mrcall-icon.png'
 import mrcallWordmark from './assets/logos/mrcall-wordmark.png'
@@ -441,6 +442,11 @@ function AppInner(): JSX.Element {
   // IMAP). Loaded once via settings.get().
   const [hasEmailConfigured, setHasEmailConfigured] = useState<boolean>(false)
   const { setActiveThreadId, setActiveTaskId } = useThread()
+
+  // Background auto-Update loop. No-op when settings disable it; never
+  // ticks against a locked or absent sidecar. Lives at the AppInner
+  // level so it stops cleanly when the window unbinds the profile.
+  useAutoUpdate()
 
   // Resolve the active profile once on mount, derive the accent colour, and
   // publish it as CSS custom properties so any component can theme itself

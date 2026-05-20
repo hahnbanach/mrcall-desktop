@@ -91,91 +91,46 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "group": "Email",
         "optional": True,
     },
-    # ─── Telegram ────────────────────────────────────────────
+    # ─── Sync ────────────────────────────────────────────────
+    #
+    # While the desktop app is open, the renderer schedules an
+    # automatic Update at this interval (the same RPC that the manual
+    # "Update" button calls — IMAP sync + WhatsApp + memory + task
+    # detection). Toggle off if the auto-loop gets in the way; the
+    # manual button stays available either way.
+    #
+    # No effect when the app is closed: real cron / launchd scheduling
+    # is a separate, future workstream (see docs/active-context.md).
     {
-        "key": "TELEGRAM_BOT_TOKEN",
-        "label": "Bot token",
-        "type": "password",
-        "group": "Telegram",
+        "key": "AUTO_UPDATE_ENABLED",
+        "label": "Auto-Update while app is open",
+        "type": "select",
+        "group": "Sync",
         "optional": True,
-        "secret": True,
-        "help": "From @BotFather.",
+        "options": ["y", "n"],
+        "help": (
+            "When 'y', the app re-runs Update every "
+            "AUTO_UPDATE_INTERVAL_MINUTES while it is open. The "
+            "manual Update button is always available."
+        ),
     },
     {
-        "key": "TELEGRAM_ALLOWED_USER_ID",
-        "label": "Allowed user ID",
-        "type": "text",
-        "group": "Telegram",
+        "key": "AUTO_UPDATE_INTERVAL_MINUTES",
+        "label": "Auto-Update interval (minutes)",
+        "type": "number",
+        "group": "Sync",
         "optional": True,
-        "help": "Your Telegram numeric user ID (from @userinfobot).",
-    },
-    # ─── MrCall ──────────────────────────────────────────────
-    {
-        "key": "MRCALL_CLIENT_ID",
-        "label": "MrCall client ID",
-        "type": "text",
-        "group": "MrCall",
-        "optional": True,
-    },
-    {
-        "key": "MRCALL_CLIENT_SECRET",
-        "label": "MrCall client secret",
-        "type": "password",
-        "group": "MrCall",
-        "optional": True,
-        "secret": True,
-    },
-    {
-        "key": "MRCALL_BASE_URL",
-        "label": "MrCall base URL",
-        "type": "text",
-        "group": "MrCall",
-        "optional": True,
-    },
-    {
-        "key": "MRCALL_REALM",
-        "label": "MrCall realm",
-        "type": "text",
-        "group": "MrCall",
-        "optional": True,
-    },
-    {
-        "key": "MRCALL_DASHBOARD_URL",
-        "label": "MrCall dashboard URL",
-        "type": "text",
-        "group": "MrCall",
-        "optional": True,
+        "help": "Minutes between automatic Updates. Allowed range 5–360.",
     },
     # ─── Google ─────────────────────────────────────────────
-    {
-        "key": "GOOGLE_CALENDAR_CLIENT_ID",
-        "label": "Google Calendar OAuth client ID (override)",
-        "type": "text",
-        "group": "Google",
-        "optional": True,
-        "help": (
-            "Leave empty to reuse the same Desktop OAuth client as "
-            "'Continue with Google' sign-in (the default in packaged "
-            "builds). Override only if you want Calendar consent to go "
-            "to a different OAuth client — type 'Desktop app' (also "
-            "set GOOGLE_CALENDAR_CLIENT_SECRET) or 'Web application' "
-            "with redirect http://127.0.0.1:19275/oauth2/google/callback "
-            "(no secret needed)."
-        ),
-    },
-    {
-        "key": "GOOGLE_CALENDAR_CLIENT_SECRET",
-        "label": "Google Calendar OAuth client secret (override)",
-        "type": "password",
-        "group": "Google",
-        "optional": True,
-        "help": (
-            "Required only when GOOGLE_CALENDAR_CLIENT_ID points at a "
-            "'Desktop app' type OAuth client — Google's token endpoint "
-            "rejects PKCE-only exchanges for that type. Leave empty for "
-            "'Web application' type clients."
-        ),
-    },
+    # Calendar is connected via the "Connect Google Calendar" button in
+    # the Settings → Integrations section (PKCE OAuth on :19275, using the
+    # Desktop OAuth client injected as GOOGLE_CALENDAR_CLIENT_ID_DEFAULT
+    # by the Electron main process). No editable field is exposed — the
+    # button is the whole flow. A power-user who needs a different OAuth
+    # client can still set GOOGLE_CALENDAR_CLIENT_ID / _SECRET by hand in
+    # the profile `.env` (config.py reads them via Pydantic); they're just
+    # not surfaced in the Settings UI because the override confused users.
     # ─── Personal data ──────────────────────────────────────
     {
         "key": "USER_FULL_NAME",
