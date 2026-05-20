@@ -255,7 +255,9 @@ export interface ZylchAPI {
     ) => Promise<any>
     approve: (
       tool_use_id: string,
-      approvedOrOpts?: boolean | { mode: 'once' | 'session' | 'deny' }
+      approvedOrOpts?:
+        | boolean
+        | { mode: 'once' | 'session' | 'deny'; edited_input?: Record<string, unknown> }
     ) => Promise<{ ok: boolean }>
   }
   update: {

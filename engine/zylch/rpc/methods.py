@@ -530,15 +530,19 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
         tool_use_id: str,
         tool_name: str,
         tool_input: Dict[str, Any],
-    ) -> bool:
+    ) -> tuple:
+        # Returns (approved, edited_input | None). edited_input carries
+        # any changes the user made to the draft in the approval card.
         # Session-level auto-approval: if the user previously picked
         # "Allow for session" on this tool in this conversation, skip the
-        # prompt entirely.
+        # prompt entirely. (Send tools never get a session grant — see
+        # the renderer ApprovalCard — so this only fires for tools like
+        # run_python where re-editing isn't a concern.)
         if _should_auto_approve(conversation_id, tool_name):
             logger.debug(
                 f"[approval] auto-approved by session: tool={tool_name} " f"conv={conversation_id}"
             )
-            return True
+            return (True, None)
 
         loop = asyncio.get_event_loop()
         fut: asyncio.Future = loop.create_future()
@@ -568,8 +572,15 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
             )
         except Exception as e:
             logger.warning(f"[rpc] pending_approval notify failed: {e}")
+        edited_input = None
         try:
-            approved = await asyncio.wait_for(fut, timeout=600)
+            result = await asyncio.wait_for(fut, timeout=600)
+            # chat_approve resolves the future with (approved, edited_input).
+            if isinstance(result, tuple):
+                approved = bool(result[0])
+                edited_input = result[1] if len(result) > 1 else None
+            else:
+                approved = bool(result)
         except asyncio.TimeoutError:
             logger.warning(f"[rpc] approval timeout tool_use_id={tool_use_id}")
             if not fut.done():
@@ -578,8 +589,11 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
         finally:
             _pending_approvals.pop(tool_use_id, None)
             _approval_meta.pop(tool_use_id, None)
-        logger.debug(f"[approval] tool={tool_name} approved={approved}")
-        return bool(approved)
+        logger.debug(
+            f"[approval] tool={tool_name} approved={approved} "
+            f"edited={edited_input is not None}"
+        )
+        return (bool(approved), edited_input)
 
     service = ChatService()
 
@@ -623,6 +637,12 @@ async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
     if not tool_use_id:
         raise ValueError("tool_use_id is required")
 
+    # Optional edited tool input from the approval card (e.g. a corrected
+    # WhatsApp / email body). Applied by the agent before the tool runs.
+    edited_input = params.get("edited_input")
+    if edited_input is not None and not isinstance(edited_input, dict):
+        edited_input = None
+
     mode = params.get("mode")
     if mode is None:
         # Legacy path: `approved: bool`.
@@ -651,7 +671,9 @@ async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
         logger.debug(f"[approval] session-approval added: conv={conv_id} " f"tool={tool_name}")
 
     if not fut.done():
-        fut.set_result(approved)
+        # Only forward edits when actually approving — a deny carries no
+        # input.
+        fut.set_result((approved, edited_input if approved else None))
     return {"ok": True}
 
 

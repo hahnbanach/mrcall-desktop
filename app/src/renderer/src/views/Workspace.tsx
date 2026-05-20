@@ -291,7 +291,10 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     }
   }
 
-  const onApproval = async (decision: 'once' | 'session' | 'deny') => {
+  const onApproval = async (
+    decision: 'once' | 'session' | 'deny',
+    editedInput?: Record<string, unknown>
+  ) => {
     const pending = active.pendingApproval
     if (!pending) return
     setPendingApproval(active.id, null)
@@ -313,13 +316,25 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
           setNarrationSeed('')
         } else {
           // tasks.solve has no "session" concept — it's one shot.
-          // 'once' → approved, proceed with the tool.
+          // 'once' → approved, proceed with the tool. `editedInput`
+          // carries any changes the user made to the draft (email
+          // body, WhatsApp message, recipient) in the approval card;
+          // the engine's executor swaps it in for the tool's original
+          // input (task_executor.py: decision.edited_input).
           await window.zylch.tasks.solveApprove(pending.toolUseId, {
-            approved: true
+            approved: true,
+            edited_input: editedInput ?? null
           })
         }
       } else {
-        await window.zylch.chat.approve(pending.toolUseId, { mode: decision })
+        // Chat-flow approval. For send tools the card is editable, so
+        // forward the edited input (recipient / body the user fixed);
+        // the engine swaps it in before the tool runs. A deny carries no
+        // payload.
+        await window.zylch.chat.approve(pending.toolUseId, {
+          mode: decision,
+          edited_input: decision === 'deny' ? undefined : editedInput
+        })
       }
     } catch (e: unknown) {
       if (!isProfileLockedError(e)) {
@@ -516,7 +531,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
           {active.pendingApproval && (
             <ApprovalCard
               approval={active.pendingApproval}
-              onApproveOnce={() => onApproval('once')}
+              onApproveOnce={(edited) => onApproval('once', edited)}
               onApproveSession={() => onApproval('session')}
               onDecline={() => onApproval('deny')}
             />
@@ -547,16 +562,39 @@ function ApprovalCard({
   onDecline
 }: {
   approval: Approval
-  onApproveOnce: () => void
+  onApproveOnce: (editedInput?: Record<string, unknown>) => void
   onApproveSession: () => void
   onDecline: () => void
 }) {
   const isSolve = approval.mode === 'solve'
-  // Solve is a one-shot agentic run: there are no future invocations
-  // of this tool inside the same solve, so "Allow for session" is
-  // meaningless. Chat flow keeps the three-button shape it had.
-  const sendLabel = isSolve ? labelForSolve(approval.name) : 'Allow once'
-  const denyLabel = isSolve ? 'Annulla' : 'Deny'
+  // Send tools never use "Allow once / Allow for session / Deny"
+  // permission semantics, in EITHER flow. For an outgoing message:
+  //   - "Allow for session" is dangerous — it would auto-send every
+  //     future message in the conversation with no confirmation.
+  //   - "Allow once" reads as "grant a permission", not "send THIS
+  //     now", which led a user to send an unintended message.
+  // So a send card always shows explicit Send / Cancel and never a
+  // session grant. Non-send gated tools in chat (run_python,
+  // update_memory) keep the permission triad.
+  const isSend = SEND_TOOLS.has(approval.name)
+  const sendCardUx = isSolve || isSend
+  const sendLabel = sendCardUx ? labelForSolve(approval.name) : 'Allow once'
+  const denyLabel = sendCardUx ? 'Annulla' : 'Deny'
+
+  // Editable copy of the tool input. The user can fix the draft (email
+  // body, WhatsApp/SMS message, recipient) before sending. Re-seeded
+  // whenever a new approval arrives (keyed by toolUseId) so a stale edit
+  // never leaks into a different tool call. Only string fields are
+  // editable; non-string values (rare) stay read-only JSON.
+  const [edited, setEdited] = useState<Record<string, unknown>>(approval.input)
+  useEffect(() => {
+    setEdited(approval.input)
+  }, [approval.toolUseId])
+
+  const setField = (k: string, v: string): void => {
+    setEdited((prev) => ({ ...prev, [k]: v }))
+  }
+
   return (
     <div className="border border-brand-orange bg-brand-orange/10 rounded-lg p-4 mr-12">
       <div className="flex items-center gap-2 mb-2">
@@ -573,25 +611,60 @@ function ApprovalCard({
         </div>
       )}
       <div className="bg-white border border-brand-orange/30 rounded p-3 mb-3 space-y-2">
-        {Object.entries(approval.input).map(([k, v]) => (
-          <div key={k}>
-            <div className="text-xs font-semibold uppercase tracking-wide text-brand-grey-80">
+        {Object.entries(edited).map(([k, v]) => {
+          const label = (
+            <div className="text-xs font-semibold uppercase tracking-wide text-brand-grey-80 mb-0.5">
               {k}
             </div>
-            <div className="text-sm text-brand-black whitespace-pre-wrap break-words">
-              {typeof v === 'string' ? v : JSON.stringify(v, null, 2)}
+          )
+          // Editable for send tools in BOTH flows (solve via
+          // solveApprove.edited_input, chat via chat.approve.edited_input).
+          // Non-string values, and non-send gated tools (run_python,
+          // update_memory) in chat, stay read-only.
+          if (typeof v !== 'string' || !sendCardUx) {
+            return (
+              <div key={k}>
+                {label}
+                <div className="text-sm text-brand-black whitespace-pre-wrap break-words">
+                  {typeof v === 'string' ? v : JSON.stringify(v, null, 2)}
+                </div>
+              </div>
+            )
+          }
+          // Multi-line / long values (email & WhatsApp bodies) get a
+          // textarea; short scalars (recipient, subject, phone) get a
+          // single-line input.
+          const multiline = v.includes('\n') || v.length > 80
+          return (
+            <div key={k}>
+              {label}
+              {multiline ? (
+                <textarea
+                  value={v}
+                  onChange={(e) => setField(k, e.target.value)}
+                  rows={Math.min(12, Math.max(3, v.split('\n').length + 1))}
+                  className="w-full px-2 py-1 text-sm border border-brand-mid-grey rounded focus:outline-none focus:ring-2 focus:ring-brand-orange/40 font-sans"
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={v}
+                  onChange={(e) => setField(k, e.target.value)}
+                  className="w-full px-2 py-1 text-sm border border-brand-mid-grey rounded focus:outline-none focus:ring-2 focus:ring-brand-orange/40"
+                />
+              )}
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
       <div className="flex gap-2 flex-wrap">
         <button
-          onClick={onApproveOnce}
+          onClick={() => onApproveOnce(edited)}
           className="px-3 py-1.5 text-sm bg-brand-blue text-white rounded hover:bg-brand-grey-80"
         >
           {sendLabel}
         </button>
-        {!isSolve && (
+        {!sendCardUx && (
           <button
             onClick={onApproveSession}
             className="px-3 py-1.5 text-sm bg-brand-grey-80 text-white rounded hover:bg-brand-grey-80"
@@ -611,11 +684,26 @@ function ApprovalCard({
   )
 }
 
+// Tools that send an outgoing message to a third party. These get the
+// explicit Send/Cancel approval card (never the permission triad) in
+// BOTH the chat and solve flows. Names differ between the two engines:
+// the chat ToolFactory uses `send_whatsapp_message` / `send_draft`,
+// the solve TaskExecutor uses `send_whatsapp` / `send_email`.
+const SEND_TOOLS = new Set([
+  'send_whatsapp_message',
+  'send_draft',
+  'send_sms',
+  'send_email',
+  'send_whatsapp'
+])
+
 function labelForSolve(toolName: string): string {
   switch (toolName) {
     case 'send_email':
+    case 'send_draft':
       return 'Invia email'
     case 'send_whatsapp':
+    case 'send_whatsapp_message':
       return 'Invia WhatsApp'
     case 'send_sms':
       return 'Invia SMS'

@@ -3,7 +3,7 @@
 import copy
 import logging
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from ..llm import LLMClient, make_llm_client
 from .models import ModelSelector
@@ -14,8 +14,14 @@ from ..agents.base import BaseConversationalAgent
 from ..services.solve_constants import get_personal_data_section
 from ..services.task_executor import APPROVAL_TOOLS
 
-# Type alias for approval callback: (tool_use_id, tool_name, input_dict) -> approved
-ApprovalCallback = Callable[[str, str, Dict[str, Any]], Awaitable[bool]]
+# Type alias for approval callback:
+#   (tool_use_id, tool_name, input_dict) -> (approved, edited_input | None)
+# `edited_input`, when present, replaces the tool input — it carries the
+# user's edits made in the approval card (e.g. a corrected WhatsApp /
+# email body) before the tool actually runs.
+ApprovalCallback = Callable[
+    [str, str, Dict[str, Any]], Awaitable[Tuple[bool, Optional[Dict[str, Any]]]]
+]
 
 logger = logging.getLogger(__name__)
 
@@ -361,10 +367,18 @@ class ZylchAIAgent(BaseConversationalAgent):
                 # Approval gate for destructive tools
                 if approval_callback is not None and tool_name in APPROVAL_TOOLS:
                     approved = False
+                    edited_input: Optional[Dict[str, Any]] = None
                     try:
-                        approved = bool(
-                            await approval_callback(block.id, tool_name, dict(tool_input or {}))
+                        decision = await approval_callback(
+                            block.id, tool_name, dict(tool_input or {})
                         )
+                        # New shape: (approved, edited_input). Tolerate a
+                        # bare bool for any older callback.
+                        if isinstance(decision, tuple):
+                            approved = bool(decision[0])
+                            edited_input = decision[1] if len(decision) > 1 else None
+                        else:
+                            approved = bool(decision)
                     except Exception as e:
                         logger.warning(
                             f"[approval] callback raised for tool={tool_name}: {e}; treating as declined"
@@ -386,6 +400,15 @@ class ZylchAIAgent(BaseConversationalAgent):
                             }
                         )
                         continue
+                    # The user may have edited the draft in the approval
+                    # card (corrected recipient / body). Swap the edited
+                    # input in before the tool runs.
+                    if isinstance(edited_input, dict) and edited_input:
+                        logger.info(
+                            f"[approval] tool={tool_name} using edited input "
+                            f"keys={list(edited_input.keys())}"
+                        )
+                        tool_input = edited_input
 
                 # Execute tool
                 tool_result = await self._call_tool(tool_name, tool_input)

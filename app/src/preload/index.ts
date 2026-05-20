@@ -193,15 +193,22 @@ const api = {
       ),
     approve: (
       tool_use_id: string,
-      approvedOrOpts: boolean | { mode: 'once' | 'session' | 'deny' } = true
+      approvedOrOpts:
+        | boolean
+        | { mode: 'once' | 'session' | 'deny'; edited_input?: Record<string, unknown> } = true
     ) => {
       // Back-compat: `approve(id, true/false)` still works. Preferred
-      // form is `approve(id, { mode: 'once' | 'session' | 'deny' })`.
+      // form is `approve(id, { mode, edited_input? })`. `edited_input`
+      // carries the user's edits from the approval card (corrected
+      // recipient / body); the engine swaps it in before the tool runs.
       const payload: Record<string, unknown> = { tool_use_id }
       if (typeof approvedOrOpts === 'boolean') {
         payload.approved = approvedOrOpts
       } else {
         payload.mode = approvedOrOpts.mode
+        if (approvedOrOpts.edited_input) {
+          payload.edited_input = approvedOrOpts.edited_input
+        }
       }
       return call<{ ok: boolean }>('chat.approve', payload)
     }
