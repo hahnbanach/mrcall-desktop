@@ -229,18 +229,31 @@ class ChatService:
                 "spediscilo",
             }
             is_send_confirmation = _normalized in confirm_phrases
+            # When the message comes from a task conversation (the desktop
+            # Workspace passes the task_id in context), the user is acting
+            # ON that task — "mandiamo un whatsapp ringraziando" means
+            # "send a WhatsApp", not "/tasks". Routing it through the
+            # semantic command matcher (MIN_CONFIDENCE only 0.70)
+            # hijacked it to /tasks and dumped all 117 tasks. In a task
+            # conversation the LLM has the task context + send tools, so
+            # let natural language go straight to it.
+            in_task_conversation = bool(context and context.get("task_id"))
             if (
                 not is_in_task_mode
                 and not is_in_mrcall_config_mode
                 and not starts_with_slash_command
                 and not is_send_confirmation
+                and not in_task_conversation
             ):
                 matched_command = self._match_semantic_command(user_message)
                 if matched_command:
                     logger.info(f"Semantic match: '{user_message}' -> {matched_command}")
                     user_message = matched_command  # Rewrite as slash command
             else:
-                logger.debug(f"[TaskMode] Skipping semantic match for: '{user_message}'")
+                logger.debug(
+                    f"[TaskMode] Skipping semantic match for: '{user_message}' "
+                    f"(in_task_conversation={in_task_conversation})"
+                )
 
             # TASK DETAIL PATTERN - Match "more on #N", "details #N", "show #N", "task #N"
             import re

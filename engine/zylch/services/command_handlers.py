@@ -4503,23 +4503,12 @@ COMMAND_PATTERNS = {
         "inbox summary",
     ],
     # --- Tasks (Phase 1 - replaces _GetTasksTool) ---
-    "/tasks": [
-        "tasks",
-        "my tasks",
-        "show tasks",
-        "list tasks",
-        "open tasks",
-        "pending tasks",
-        "what do I need to do",
-        "what needs doing",
-        "action items",
-        "to do list",
-        "todo list",
-        "to-do list",
-        "things to do",
-        "show {limit:int} tasks",
-        "top {limit:int} tasks",
-    ],
+    # /tasks intentionally NOT in the semantic matcher. The desktop has a
+    # dedicated Task tab (RPC tasks.list); routing natural language to a
+    # chat /tasks dump is legacy CLI behaviour and was hijacking messages
+    # like "mandiamo un whatsapp ringraziando" into a 117-task wall. The
+    # explicit "/tasks" slash command still works for CLI users; it just
+    # is no longer reachable via free-text matching.
     # --- Jobs (Phase 1 - replaces ListScheduledJobsTool) ---
     "/jobs": [
         "jobs",
