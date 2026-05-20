@@ -20,6 +20,9 @@ interface FieldDescriptor {
   secret?: boolean
   /** Render a native folder picker next to the text input. */
   picker?: 'directory' | 'directories'
+  /** Hint shown when the value is unset: placeholder for text/number
+   *  inputs, and the implicit first choice for selects. */
+  default?: string
 }
 
 const SECRET_PLACEHOLDER = '<set>'
@@ -580,8 +583,17 @@ function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Eleme
 
   let control: JSX.Element
   if (field.type === 'select' && field.options) {
+    // When the stored value is empty, show the schema default as the
+    // selected option (purely visual — we don't write it back unless the
+    // user actively changes the select, so an untouched default stays
+    // unset in the .env and the engine applies its own default).
     control = (
-      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={baseInput}>
+      <select
+        id={id}
+        value={value || field.default || ''}
+        onChange={(e) => onChange(e.target.value)}
+        className={baseInput}
+      >
         {field.options.map((opt) => (
           <option key={opt} value={opt}>
             {opt}
@@ -616,6 +628,7 @@ function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Eleme
         id={id}
         type="number"
         value={value}
+        placeholder={field.default}
         onChange={(e) => onChange(e.target.value)}
         className={baseInput}
       />
@@ -626,6 +639,7 @@ function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Eleme
         id={id}
         type="text"
         value={value}
+        placeholder={field.default}
         onChange={(e) => onChange(e.target.value)}
         className={baseInput}
       />

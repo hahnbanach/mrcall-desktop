@@ -3349,6 +3349,7 @@ class Storage:
                 "contact_email": raw_contact.lower(),
                 "contact_phone": raw_phone,
                 "contact_name": item.get("contact_name"),
+                "title": item.get("title"),
                 "action_required": item.get("action_required", False),
                 "urgency": item.get("urgency"),
                 "reason": item.get("reason"),
@@ -3702,6 +3703,7 @@ class Storage:
         urgency: str = None,
         suggested_action: str = None,
         reason: str = None,
+        title: str = None,
         add_source_email: str = None,
         add_source_calendar_event: str = None,
         add_source_whatsapp_message: str = None,
@@ -3774,6 +3776,8 @@ class Storage:
                     task.suggested_action = suggested_action
                 if reason:
                     task.reason = reason
+                if title:
+                    task.title = title
                 task.analyzed_at = datetime.now(timezone.utc)
 
                 session.flush()

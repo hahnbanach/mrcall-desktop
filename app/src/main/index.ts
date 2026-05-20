@@ -870,7 +870,51 @@ function bootFirstWindow(): void {
   createAuthPendingWindow()
 }
 
+// Single-instance lock. Critical for the per-window Chromium partition
+// model: each profile's Firebase session lives in a `persist:` partition
+// backed by a LevelDB IndexedDB store, and LevelDB allows only ONE
+// process to hold a given database open. A second app instance pointed
+// at the same partition cannot open its IndexedDB — Chromium retries
+// for ~15s, then falls back to no IndexedDB, which silently drops the
+// persisted Firebase session and forces a re-login (plus a 15s startup
+// stall). Allowing a single instance with multiple BrowserWindows (one
+// per profile) keeps every partition owned by exactly one process.
+//
+// In dev this means a second `npm run dev` won't open a window — it'll
+// signal the first instance and exit. That's intended: two dev
+// instances were exactly the cause of the LevelDB LOCK contention.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  console.log('[main] another instance already owns the single-instance lock — quitting')
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    // A second launch was attempted. Surface an existing window instead
+    // of spawning a competing process. Prefer the focused window, fall
+    // back to the first one.
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+    } else {
+      // No windows: on macOS, closing the last window with Cmd+W keeps
+      // the app (and its partition LevelDB locks) alive. A second launch
+      // in that state should re-open a window in THIS process rather
+      // than let the user think nothing happened — and crucially, the
+      // re-opened window reuses the already-held partition lock instead
+      // of a second process fighting for it.
+      bootFirstWindow()
+    }
+  })
+}
+
 app.whenReady().then(() => {
+  // If we lost the single-instance race, whenReady may still fire before
+  // the quit settles — bail so we never create a window that races for a
+  // partition lock held by the primary instance.
+  if (!gotSingleInstanceLock) return
+
   ZYLCH_BINARY = resolveSidecarBinary()
   console.log(`[main] sidecar binary=${ZYLCH_BINARY} isPackaged=${app.isPackaged}`)
 

@@ -348,8 +348,24 @@ def get_personal_data_section(owner_id: Optional[str] = None) -> str:
     import os
 
     parts = []
+    data = []
+    # Name is handled first and specially: if it isn't configured, the
+    # model must NOT invent one. Without this guard it fabricates a
+    # surname when signing messages (observed: signed a WhatsApp as
+    # "Mario Pellicciari" for a user named Mario, USER_FULL_NAME unset).
+    full_name = os.environ.get("USER_FULL_NAME", "").strip()
+    if full_name:
+        data.append(f"- Name: {full_name}")
+    else:
+        email = os.environ.get("EMAIL_ADDRESS", "").strip()
+        local = email.split("@")[0] if "@" in email else ""
+        hint = f' — when you must sign, use "{local}"' if local else ""
+        data.append(
+            "- Name: NOT CONFIGURED. Do NOT invent or guess a name or "
+            f"surname for the user{hint}; if unsure, leave the message "
+            "unsigned or ask."
+        )
     fields = {
-        "USER_FULL_NAME": "Name",
         "USER_PHONE": "Phone",
         "USER_CODICE_FISCALE": "Codice Fiscale",
         "USER_DATE_OF_BIRTH": "Date of Birth",
@@ -358,7 +374,6 @@ def get_personal_data_section(owner_id: Optional[str] = None) -> str:
         "USER_COMPANY": "Company",
         "USER_VAT_NUMBER": "VAT/P.IVA",
     }
-    data = []
     for key, label in fields.items():
         val = os.environ.get(key, "")
         if val:

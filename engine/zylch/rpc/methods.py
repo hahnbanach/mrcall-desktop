@@ -22,15 +22,40 @@ NotifyFn = Callable[[str, Dict[str, Any]], None]
 
 
 # ─── Solve state ─────────────────────────────────────────────
-# Single-user, single-process: only one solve can run at a time.
+# Single-user, single-process. Only ONE solve actually executes at a
+# time — `_solve_lock` is the serialisation point — but additional
+# `tasks.solve` calls QUEUE on the lock instead of being rejected. The
+# user can open three tasks in a row, see all three "in coda", and they
+# play out one after the other without losing work.
+#
+# `_solve_tasks` tracks every running asyncio Task (queued + active) so
+# `tasks.solve.cancel(task_id)` can interrupt either a queued solve
+# (cancelling its `await _solve_lock.acquire()`) or the active one
+# (cancellation propagates into the executor's await loops).
 _solve_lock = asyncio.Lock()
 _active_executor = None  # type: Optional[Any]
+_solve_tasks: Dict[str, asyncio.Task] = {}
+
+# Upper bound on simultaneous queued+active solves. Prevents a stuck UI
+# (or a misclick spree) from accumulating tens of LLM-burning solves
+# the user didn't actually want. 5 is arbitrary but well above any
+# realistic interactive use; raise if telemetry says otherwise.
+_MAX_SOLVE_QUEUE = 5
 
 
 class SolveInProgressError(Exception):
-    """Raised when a second tasks.solve starts while one is running."""
+    """Raised when a second tasks.solve starts for the SAME task_id while
+    the first is still running. Kept for back-compat with older clients;
+    new clients see `SolveQueueFullError` for the "too many" case."""
 
     code = -32000
+
+
+class SolveQueueFullError(Exception):
+    """Raised when more than `_MAX_SOLVE_QUEUE` solves are queued. The
+    client should drain the existing queue before opening more tasks."""
+
+    code = -32002
 
 
 class ChatBusyError(Exception):
@@ -278,69 +303,117 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
         raise ValueError("task_id is required")
     instructions = params.get("instructions", "") or ""
 
-    if _solve_lock.locked():
-        # Match JSON-RPC error path via custom exception code.
-        raise SolveInProgressError("solve already in progress")
+    if task_id in _solve_tasks:
+        # Same task already running or queued — second open is a no-op
+        # rather than a queue insert (the renderer's "Open" button is
+        # idempotent for a given task).
+        raise SolveInProgressError(
+            f"solve already running or queued for task_id={task_id}"
+        )
 
-    async with _solve_lock:
-        owner_id = _owner_id()
+    if len(_solve_tasks) >= _MAX_SOLVE_QUEUE:
+        raise SolveQueueFullError(
+            f"solve queue is full ({_MAX_SOLVE_QUEUE} simultaneous solves); "
+            f"wait for one to finish or cancel it"
+        )
+
+    # Register the asyncio task running THIS handler so
+    # `tasks.solve.cancel(task_id)` can find and cancel it whether it's
+    # still waiting on the lock (queued) or actively executing.
+    current_task = asyncio.current_task()
+    if current_task is not None:
+        _solve_tasks[task_id] = current_task
+
+    # Tag every event we emit with task_id so the client can route to
+    # the matching conversation. With multiple solves potentially queued,
+    # the previous "implicit-attribution-to-active-conv" contract breaks
+    # down — events MUST carry their owning task_id.
+    def _notify(event: Dict[str, Any]) -> None:
+        event_with_id = {**event, "task_id": task_id}
         logger.debug(
-            f"[rpc] tasks.solve owner_id={owner_id} task_id={task_id} "
-            f"instructions_len={len(instructions)}"
+            f"[rpc] tasks.solve.event type={event.get('type')} task_id={task_id}"
         )
+        notify("tasks.solve.event", event_with_id)
 
-        store = Storage.get_instance()
-        # Fetch task
-        tasks = store.get_task_items(owner_id=owner_id, limit=1000)
-        task = next((t for t in tasks if t.get("id") == task_id), None)
-        if task is None:
-            return {"ok": False, "error": "task not found"}
+    try:
+        # If the lock is currently held by another solve, this one is
+        # going to queue. Tell the renderer so it can render an "in
+        # coda" affordance instead of letting the conversation look
+        # frozen until the previous solve wraps up.
+        if _solve_lock.locked():
+            _notify({"type": "queued"})
 
-        context = build_task_context(task, store, owner_id)
-        user_email = os.environ.get("EMAIL_ADDRESS", "")
-        user_name = user_email.split("@")[0] if user_email else "the user"
+        async with _solve_lock:
+            _notify({"type": "starting"})
 
-        client = make_llm_client()
-        system = SOLVE_SYSTEM_PROMPT.format(
-            user_name=user_name,
-            personal_data_section=get_personal_data_section(owner_id=owner_id),
-            user_language_directive=get_user_language_directive(),
-        )
+            owner_id = _owner_id()
+            logger.debug(
+                f"[rpc] tasks.solve owner_id={owner_id} task_id={task_id} "
+                f"instructions_len={len(instructions)}"
+            )
 
-        user_msg = (
-            f"Solve this task. Use tools to research if needed,"
-            f" then propose a concrete solution.\n\n{context}"
-        )
-        if instructions.strip():
-            user_msg += f"\n\nUser instructions: {instructions}"
-        messages = [{"role": "user", "content": user_msg}]
+            store = Storage.get_instance()
+            tasks = store.get_task_items(owner_id=owner_id, limit=1000)
+            task = next((t for t in tasks if t.get("id") == task_id), None)
+            if task is None:
+                # Emit a done event so the client clears its busy state.
+                _notify({"type": "done", "result": {"task_missing": True}})
+                return {"ok": False, "error": "task not found"}
 
-        executor = TaskExecutor(
-            client,
-            system,
-            messages,
-            store,
-            owner_id,
-            SOLVE_TOOLS,
-        )
-        _active_executor = executor
+            context = build_task_context(task, store, owner_id)
+            user_email = os.environ.get("EMAIL_ADDRESS", "")
+            user_name = user_email.split("@")[0] if user_email else "the user"
+
+            client = make_llm_client()
+            system = SOLVE_SYSTEM_PROMPT.format(
+                user_name=user_name,
+                personal_data_section=get_personal_data_section(owner_id=owner_id),
+                user_language_directive=get_user_language_directive(),
+            )
+
+            user_msg = (
+                f"Solve this task. Use tools to research if needed,"
+                f" then propose a concrete solution.\n\n{context}"
+            )
+            if instructions.strip():
+                user_msg += f"\n\nUser instructions: {instructions}"
+            messages = [{"role": "user", "content": user_msg}]
+
+            executor = TaskExecutor(
+                client,
+                system,
+                messages,
+                store,
+                owner_id,
+                SOLVE_TOOLS,
+            )
+            _active_executor = executor
+            try:
+                final: Dict[str, Any] = {}
+                async for event in executor.run():
+                    _notify(event)
+                    if event["type"] == "done":
+                        final = {"ok": True, "result": event["result"]}
+                        break
+                    if event["type"] == "error":
+                        final = {"ok": False, "error": event["message"]}
+                        break
+                return final or {"ok": False, "error": "stream ended"}
+            finally:
+                _active_executor = None
+    except asyncio.CancelledError:
+        # Cancelled via `tasks.solve.cancel(task_id)` — either while
+        # queued (lock acquire interrupted) or mid-run (CancelledError
+        # propagated through the executor's awaits). Either way emit a
+        # clean `done` event so the renderer flips busy → false.
+        logger.debug(f"[rpc] tasks.solve cancelled task_id={task_id}")
         try:
-            final: Dict[str, Any] = {}
-            async for event in executor.run():
-                # Forward event as a notification; omit tool_input
-                # contents for pending events if they look sensitive
-                # (we still send preview text).
-                logger.debug(f"[rpc] tasks.solve.event type={event.get('type')}")
-                notify("tasks.solve.event", event)
-                if event["type"] == "done":
-                    final = {"ok": True, "result": event["result"]}
-                    break
-                if event["type"] == "error":
-                    final = {"ok": False, "error": event["message"]}
-                    break
-            return final or {"ok": False, "error": "stream ended"}
-        finally:
-            _active_executor = None
+            _notify({"type": "done", "result": {"cancelled": True}})
+        except Exception:
+            pass
+        return {"ok": True, "result": {"cancelled": True}}
+    finally:
+        _solve_tasks.pop(task_id, None)
 
 
 async def tasks_solve_approve(
@@ -368,12 +441,30 @@ async def tasks_solve_cancel(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """tasks.solve.cancel() — abort the active solve.
+    """tasks.solve.cancel(task_id?) — abort a solve.
 
-    Cancels any pending approval futures so the executor loop unwinds
-    instead of blocking until the RPC timeout. The lock is released by
-    the executor's own finally-block once it sees the cancellation.
+    With `task_id` (new clients): cancels the asyncio Task running that
+    solve. Works for both queued solves (interrupts the
+    `await _solve_lock.acquire()`) and the active one (cancellation
+    propagates into the executor's awaits, including any pending
+    approval futures).
+
+    Without `task_id` (back-compat with older renderers): cancels the
+    active executor's pending approval futures only, matching the
+    legacy single-solve semantics.
     """
+    task_id = params.get("task_id")
+
+    if task_id:
+        task = _solve_tasks.get(task_id)
+        if task is None:
+            return {"ok": False, "error": "no solve for that task_id"}
+        if not task.done():
+            task.cancel()
+        logger.debug(f"[rpc] tasks.solve.cancel task_id={task_id} → cancelled")
+        return {"ok": True, "task_id": task_id}
+
+    # Legacy path: cancel the active executor's pending approvals.
     ex = _active_executor
     if ex is None:
         return {"ok": False, "error": "no active solve"}
@@ -439,15 +530,19 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
         tool_use_id: str,
         tool_name: str,
         tool_input: Dict[str, Any],
-    ) -> bool:
+    ) -> tuple:
+        # Returns (approved, edited_input | None). edited_input carries
+        # any changes the user made to the draft in the approval card.
         # Session-level auto-approval: if the user previously picked
         # "Allow for session" on this tool in this conversation, skip the
-        # prompt entirely.
+        # prompt entirely. (Send tools never get a session grant — see
+        # the renderer ApprovalCard — so this only fires for tools like
+        # run_python where re-editing isn't a concern.)
         if _should_auto_approve(conversation_id, tool_name):
             logger.debug(
                 f"[approval] auto-approved by session: tool={tool_name} " f"conv={conversation_id}"
             )
-            return True
+            return (True, None)
 
         loop = asyncio.get_event_loop()
         fut: asyncio.Future = loop.create_future()
@@ -477,8 +572,15 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
             )
         except Exception as e:
             logger.warning(f"[rpc] pending_approval notify failed: {e}")
+        edited_input = None
         try:
-            approved = await asyncio.wait_for(fut, timeout=600)
+            result = await asyncio.wait_for(fut, timeout=600)
+            # chat_approve resolves the future with (approved, edited_input).
+            if isinstance(result, tuple):
+                approved = bool(result[0])
+                edited_input = result[1] if len(result) > 1 else None
+            else:
+                approved = bool(result)
         except asyncio.TimeoutError:
             logger.warning(f"[rpc] approval timeout tool_use_id={tool_use_id}")
             if not fut.done():
@@ -487,8 +589,11 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
         finally:
             _pending_approvals.pop(tool_use_id, None)
             _approval_meta.pop(tool_use_id, None)
-        logger.debug(f"[approval] tool={tool_name} approved={approved}")
-        return bool(approved)
+        logger.debug(
+            f"[approval] tool={tool_name} approved={approved} "
+            f"edited={edited_input is not None}"
+        )
+        return (bool(approved), edited_input)
 
     service = ChatService()
 
@@ -532,6 +637,12 @@ async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
     if not tool_use_id:
         raise ValueError("tool_use_id is required")
 
+    # Optional edited tool input from the approval card (e.g. a corrected
+    # WhatsApp / email body). Applied by the agent before the tool runs.
+    edited_input = params.get("edited_input")
+    if edited_input is not None and not isinstance(edited_input, dict):
+        edited_input = None
+
     mode = params.get("mode")
     if mode is None:
         # Legacy path: `approved: bool`.
@@ -560,7 +671,9 @@ async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
         logger.debug(f"[approval] session-approval added: conv={conv_id} " f"tool={tool_name}")
 
     if not fut.done():
-        fut.set_result(approved)
+        # Only forward edits when actually approving — a deny carries no
+        # input.
+        fut.set_result((approved, edited_input if approved else None))
     return {"ok": True}
 
 

@@ -389,6 +389,7 @@ async def analyze_recent_whatsapp_events(
                 urgency=result.get("urgency"),
                 suggested_action=result.get("suggested_action"),
                 reason=result.get("reason"),
+                title=result.get("title"),
                 add_source_whatsapp_message=msg_id,
                 whatsapp_chat_jid=chat_jid,
             )
@@ -416,6 +417,7 @@ async def analyze_recent_whatsapp_events(
                     urgency=result.get("urgency"),
                     suggested_action=result.get("suggested_action"),
                     reason=result.get("reason"),
+                    title=result.get("title"),
                     add_source_whatsapp_message=msg_id,
                 )
             else:

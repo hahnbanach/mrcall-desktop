@@ -180,6 +180,10 @@ def _apply_column_migrations(engine: Engine) -> None:
         # email/phone/calendar tasks; populated by task_creation when
         # event_type == 'whatsapp'.
         ("task_items", "contact_phone", "TEXT"),
+        # 2026-05-20: short LLM-generated task title (TASK_DECISION_TOOL).
+        # NULL on tasks created before this column; renderer falls back to
+        # contact_name / contact_email.
+        ("task_items", "title", "TEXT"),
     ]
     # Indexes the SQLAlchemy `index=True` declaration creates on FRESH
     # tables but never gets back-applied to tables that pre-date the

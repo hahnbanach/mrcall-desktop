@@ -364,10 +364,12 @@ export default function Tasks({ onOpenWorkspace }: Props = {}) {
                 aria-label="Pinned"
               />
             )}
-            <div className="text-sm text-brand-grey-80">
-              {t.contact_name
-                ? `${t.contact_name} <${t.contact_email}>`
-                : t.contact_email}
+            <div className="text-sm text-brand-grey-80 truncate">
+              {t.title
+                ? t.title
+                : t.contact_name
+                  ? `${t.contact_name} <${t.contact_email}>`
+                  : t.contact_email}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">

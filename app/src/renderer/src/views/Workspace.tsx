@@ -5,6 +5,7 @@ import { useThread } from '../store/thread'
 import { useNarration } from '../hooks/useNarration'
 import ChatComposer, { type ChatComposerTaskContext } from '../components/ChatComposer'
 import ThreadPanel from '../components/ThreadPanel'
+import Icon from '../components/Icon'
 import { errorMessage, isProfileLockedError, showError } from '../lib/errors'
 import type { SolveEvent } from '../types'
 
@@ -168,29 +169,51 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     }
   }, [setPendingApproval])
 
-  // Solve events: a parallel stream to chat.pending_approval. tasks.solve
-  // runs on the *currently active* task conversation, so we route every
-  // event to active.id. Engine guarantees one solve at a time
-  // (asyncio.Lock), so there is no convId disambiguation problem here.
+  // Solve events: a parallel stream to chat.pending_approval. With
+  // multiple solves potentially queued at once (engine serialises
+  // execution but accepts the queue), every event carries a `task_id`
+  // and we route it to the conversation `'task-' + task_id`. The old
+  // "attribute to active.id" contract is gone because more than one
+  // conversation can be running/queued simultaneously, and the user
+  // can be looking at any of them when an event for another arrives.
+  //
+  // Narration is per-window (not per-conversation today), so we only
+  // mutate it when the event belongs to the conversation the user is
+  // currently looking at.
   useEffect(() => {
     const off = window.zylch.onNotification('tasks.solve.event', (event: SolveEvent) => {
       if (!event || typeof event !== 'object') return
-      const convId = active.id
+      const taskId = event.task_id
+      // Defensive: ignore events without task_id (would only happen if
+      // an older engine is paired with this renderer — should not in
+      // practice since the engine ships in the same bundle).
+      if (!taskId) return
+      const convId = 'task-' + taskId
+      const isActive = convId === active.id
       switch (event.type) {
+        case 'queued':
+          // Engine acquired the queue slot but hasn't entered the lock
+          // yet. Keep busy=true (the conversation is in flight in the
+          // user's mental model) but skip narration — the static
+          // fallback would say "Sto pensando…" which is misleading
+          // when nothing is actually thinking yet. The user-visible
+          // "in coda" affordance lives in the conversation row /
+          // ChatComposer placeholder.
+          setBusy(convId, true)
+          break
+        case 'starting':
+          // Lock acquired, model work begins. Narration kicks in.
+          setBusy(convId, true)
+          if (isActive) setNarrationSeed('Sto pensando alla tua richiesta.')
+          break
         case 'thinking':
           if (event.text && event.text.trim()) {
             appendAssistant(convId, event.text)
-            // Reset narration so the static fallback ("Sto pensando…")
-            // doesn't shout over the model's own text bubble.
-            setNarrationSeed('')
+            if (isActive) setNarrationSeed('')
           }
           break
         case 'tool_use_start':
-          // Replace the narration with the current activity.
-          // Italian phrasing because USER_LANGUAGE is Italian-first;
-          // we re-evaluate localisation if/when we ship in another
-          // language.
-          setNarrationSeed(narrationForTool(event.name))
+          if (isActive) setNarrationSeed(narrationForTool(event.name))
           break
         case 'tool_call_pending':
           setPendingApproval(convId, {
@@ -200,26 +223,19 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
             input: event.input || {},
             preview: event.preview || ''
           })
-          // Hide the narration — the approval card is now the
-          // user's full attention.
-          setNarrationSeed('')
+          if (isActive) setNarrationSeed('')
           break
         case 'tool_result':
-          // Intentionally not rendered as a chat bubble — the model's
-          // next `thinking` block is what the user reads, and dumping
-          // search_memory output would defeat the brief-output rule.
-          // We do however reset the narration: the tool finished and
-          // we're back to "the model is thinking".
-          setNarrationSeed('')
+          if (isActive) setNarrationSeed('')
           break
         case 'done':
           setBusy(convId, false)
-          setNarrationSeed('')
+          if (isActive) setNarrationSeed('')
           break
         case 'error':
           appendAssistant(convId, '⚠ ' + (event.message || 'Solve error'))
           setBusy(convId, false)
-          setNarrationSeed('')
+          if (isActive) setNarrationSeed('')
           break
       }
     })
@@ -275,21 +291,24 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     }
   }
 
-  const onApproval = async (decision: 'once' | 'session' | 'deny') => {
+  const onApproval = async (
+    decision: 'once' | 'session' | 'deny',
+    editedInput?: Record<string, unknown>
+  ) => {
     const pending = active.pendingApproval
     if (!pending) return
     setPendingApproval(active.id, null)
     try {
       if (pending.mode === 'solve') {
         if (decision === 'deny') {
-          // Cancel the whole solve, don't just decline this tool.
-          // Without this the engine would feed "User declined" back
-          // to the model, which then proposes alternatives — defeats
-          // the user's intent ("Annulla" means stop, let me write).
-          // solveCancel resolves the pending future with
-          // CancelledError; the engine's run() catches it and emits
-          // a `done` event, the listener flips busy → false.
-          await window.zylch.tasks.solveCancel()
+          // Cancel THIS conversation's solve specifically (engine
+          // accepts task_id since the queued-solve refactor — other
+          // queued conversations stay alive). Without a task_id arg
+          // the engine falls back to the legacy "active executor"
+          // path which still works when this conversation is the
+          // active one (which it has to be, since `pending` came from
+          // its approval card).
+          await window.zylch.tasks.solveCancel(active.taskId)
           // Belt-and-suspenders: flip busy immediately so the
           // composer unlocks even if the done event is delayed by
           // the RPC round-trip.
@@ -297,13 +316,25 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
           setNarrationSeed('')
         } else {
           // tasks.solve has no "session" concept — it's one shot.
-          // 'once' → approved, proceed with the tool.
+          // 'once' → approved, proceed with the tool. `editedInput`
+          // carries any changes the user made to the draft (email
+          // body, WhatsApp message, recipient) in the approval card;
+          // the engine's executor swaps it in for the tool's original
+          // input (task_executor.py: decision.edited_input).
           await window.zylch.tasks.solveApprove(pending.toolUseId, {
-            approved: true
+            approved: true,
+            edited_input: editedInput ?? null
           })
         }
       } else {
-        await window.zylch.chat.approve(pending.toolUseId, { mode: decision })
+        // Chat-flow approval. For send tools the card is editable, so
+        // forward the edited input (recipient / body the user fixed);
+        // the engine swaps it in before the tool runs. A deny carries no
+        // payload.
+        await window.zylch.chat.approve(pending.toolUseId, {
+          mode: decision,
+          edited_input: decision === 'deny' ? undefined : editedInput
+        })
       }
     } catch (e: unknown) {
       if (!isProfileLockedError(e)) {
@@ -400,19 +431,51 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="flex items-center justify-between px-4 py-2 border-b bg-white">
           <div className="font-semibold truncate">{active.title}</div>
-          {active.taskId && (
-            <button
-              onClick={active.taskCompleted ? reopen : markDone}
-              disabled={completing}
-              className="px-3 py-1.5 text-sm bg-brand-blue text-white rounded hover:bg-brand-grey-80 disabled:bg-brand-mid-grey"
-            >
-              {completing
-                ? 'Attendere…'
-                : active.taskCompleted
-                  ? 'Riapri'
-                  : 'Marca come fatta'}
-            </button>
-          )}
+          <div className="flex items-center gap-1 shrink-0">
+            {/* Trash: discard this conversation's history. Same effect as
+                the × in the sidebar, surfaced here where it's discoverable.
+                Re-opening the task from the Tasks tab recomputes a fresh
+                solve. Available for any non-general conversation. */}
+            {active.id !== 'general' && (
+              <button
+                onClick={() => {
+                  const id = active.id
+                  closeConversation(id)
+                  setActiveThreadId(null)
+                  setActiveTaskId(null)
+                }}
+                disabled={completing}
+                className="p-1.5 rounded text-brand-grey-80 hover:text-brand-danger hover:bg-brand-light-grey disabled:opacity-50"
+                title="Trash conversation, will be re-computed if re-opened from Tasks"
+                aria-label="Trash conversation"
+              >
+                <Icon name="trash" size={18} />
+              </button>
+            )}
+            {/* Done / Reopen, now icon-only. Check = mark the task done
+                (removes it from open Tasks); reopen ring = bring a closed
+                task back under your control. */}
+            {active.taskId && (
+              <button
+                onClick={active.taskCompleted ? reopen : markDone}
+                disabled={completing}
+                className={
+                  'p-1.5 rounded disabled:opacity-50 ' +
+                  (active.taskCompleted
+                    ? 'text-brand-grey-80 hover:text-brand-black hover:bg-brand-light-grey'
+                    : 'text-brand-blue hover:bg-brand-blue/10')
+                }
+                title={
+                  active.taskCompleted
+                    ? 'Reopen this task to write or run the agent again'
+                    : 'Mark this task as done — removes it from your open Tasks'
+                }
+                aria-label={active.taskCompleted ? 'Reopen task' : 'Mark task as done'}
+              >
+                <Icon name={active.taskCompleted ? 'reopen' : 'check'} size={18} />
+              </button>
+            )}
+          </div>
         </header>
 
         {/* Source panel: email thread preview for task OR thread-only
@@ -468,7 +531,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
           {active.pendingApproval && (
             <ApprovalCard
               approval={active.pendingApproval}
-              onApproveOnce={() => onApproval('once')}
+              onApproveOnce={(edited) => onApproval('once', edited)}
               onApproveSession={() => onApproval('session')}
               onDecline={() => onApproval('deny')}
             />
@@ -499,16 +562,39 @@ function ApprovalCard({
   onDecline
 }: {
   approval: Approval
-  onApproveOnce: () => void
+  onApproveOnce: (editedInput?: Record<string, unknown>) => void
   onApproveSession: () => void
   onDecline: () => void
 }) {
   const isSolve = approval.mode === 'solve'
-  // Solve is a one-shot agentic run: there are no future invocations
-  // of this tool inside the same solve, so "Allow for session" is
-  // meaningless. Chat flow keeps the three-button shape it had.
-  const sendLabel = isSolve ? labelForSolve(approval.name) : 'Allow once'
-  const denyLabel = isSolve ? 'Annulla' : 'Deny'
+  // Send tools never use "Allow once / Allow for session / Deny"
+  // permission semantics, in EITHER flow. For an outgoing message:
+  //   - "Allow for session" is dangerous — it would auto-send every
+  //     future message in the conversation with no confirmation.
+  //   - "Allow once" reads as "grant a permission", not "send THIS
+  //     now", which led a user to send an unintended message.
+  // So a send card always shows explicit Send / Cancel and never a
+  // session grant. Non-send gated tools in chat (run_python,
+  // update_memory) keep the permission triad.
+  const isSend = SEND_TOOLS.has(approval.name)
+  const sendCardUx = isSolve || isSend
+  const sendLabel = sendCardUx ? labelForSolve(approval.name) : 'Allow once'
+  const denyLabel = sendCardUx ? 'Annulla' : 'Deny'
+
+  // Editable copy of the tool input. The user can fix the draft (email
+  // body, WhatsApp/SMS message, recipient) before sending. Re-seeded
+  // whenever a new approval arrives (keyed by toolUseId) so a stale edit
+  // never leaks into a different tool call. Only string fields are
+  // editable; non-string values (rare) stay read-only JSON.
+  const [edited, setEdited] = useState<Record<string, unknown>>(approval.input)
+  useEffect(() => {
+    setEdited(approval.input)
+  }, [approval.toolUseId])
+
+  const setField = (k: string, v: string): void => {
+    setEdited((prev) => ({ ...prev, [k]: v }))
+  }
+
   return (
     <div className="border border-brand-orange bg-brand-orange/10 rounded-lg p-4 mr-12">
       <div className="flex items-center gap-2 mb-2">
@@ -525,25 +611,60 @@ function ApprovalCard({
         </div>
       )}
       <div className="bg-white border border-brand-orange/30 rounded p-3 mb-3 space-y-2">
-        {Object.entries(approval.input).map(([k, v]) => (
-          <div key={k}>
-            <div className="text-xs font-semibold uppercase tracking-wide text-brand-grey-80">
+        {Object.entries(edited).map(([k, v]) => {
+          const label = (
+            <div className="text-xs font-semibold uppercase tracking-wide text-brand-grey-80 mb-0.5">
               {k}
             </div>
-            <div className="text-sm text-brand-black whitespace-pre-wrap break-words">
-              {typeof v === 'string' ? v : JSON.stringify(v, null, 2)}
+          )
+          // Editable for send tools in BOTH flows (solve via
+          // solveApprove.edited_input, chat via chat.approve.edited_input).
+          // Non-string values, and non-send gated tools (run_python,
+          // update_memory) in chat, stay read-only.
+          if (typeof v !== 'string' || !sendCardUx) {
+            return (
+              <div key={k}>
+                {label}
+                <div className="text-sm text-brand-black whitespace-pre-wrap break-words">
+                  {typeof v === 'string' ? v : JSON.stringify(v, null, 2)}
+                </div>
+              </div>
+            )
+          }
+          // Multi-line / long values (email & WhatsApp bodies) get a
+          // textarea; short scalars (recipient, subject, phone) get a
+          // single-line input.
+          const multiline = v.includes('\n') || v.length > 80
+          return (
+            <div key={k}>
+              {label}
+              {multiline ? (
+                <textarea
+                  value={v}
+                  onChange={(e) => setField(k, e.target.value)}
+                  rows={Math.min(12, Math.max(3, v.split('\n').length + 1))}
+                  className="w-full px-2 py-1 text-sm border border-brand-mid-grey rounded focus:outline-none focus:ring-2 focus:ring-brand-orange/40 font-sans"
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={v}
+                  onChange={(e) => setField(k, e.target.value)}
+                  className="w-full px-2 py-1 text-sm border border-brand-mid-grey rounded focus:outline-none focus:ring-2 focus:ring-brand-orange/40"
+                />
+              )}
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
       <div className="flex gap-2 flex-wrap">
         <button
-          onClick={onApproveOnce}
+          onClick={() => onApproveOnce(edited)}
           className="px-3 py-1.5 text-sm bg-brand-blue text-white rounded hover:bg-brand-grey-80"
         >
           {sendLabel}
         </button>
-        {!isSolve && (
+        {!sendCardUx && (
           <button
             onClick={onApproveSession}
             className="px-3 py-1.5 text-sm bg-brand-grey-80 text-white rounded hover:bg-brand-grey-80"
@@ -563,11 +684,26 @@ function ApprovalCard({
   )
 }
 
+// Tools that send an outgoing message to a third party. These get the
+// explicit Send/Cancel approval card (never the permission triad) in
+// BOTH the chat and solve flows. Names differ between the two engines:
+// the chat ToolFactory uses `send_whatsapp_message` / `send_draft`,
+// the solve TaskExecutor uses `send_whatsapp` / `send_email`.
+const SEND_TOOLS = new Set([
+  'send_whatsapp_message',
+  'send_draft',
+  'send_sms',
+  'send_email',
+  'send_whatsapp'
+])
+
 function labelForSolve(toolName: string): string {
   switch (toolName) {
     case 'send_email':
+    case 'send_draft':
       return 'Invia email'
     case 'send_whatsapp':
+    case 'send_whatsapp_message':
       return 'Invia WhatsApp'
     case 'send_sms':
       return 'Invia SMS'

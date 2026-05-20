@@ -52,6 +52,18 @@ REANALYZE_TOOL = {
                 "type": "string",
                 "description": "Only used when action=update — new specific action",
             },
+            "title": {
+                "type": "string",
+                "maxLength": 60,
+                "description": (
+                    "Short, scannable task title — 3 to 6 words, in the "
+                    "user's language. Name the real person or subject, "
+                    "NOT the email-sender envelope (e.g. 'Richiamare Luca "
+                    "Festa', not 'MrCall Notification'). Provide it on "
+                    "both keep and update so tasks created before titles "
+                    "existed gain one when reanalyzed."
+                ),
+            },
             "reason": {
                 "type": "string",
                 "description": ("Short reason explaining the decision. Always required."),
@@ -314,12 +326,14 @@ async def reanalyze_task(
     elif action == "update":
         suggested = (decision.get("suggested_action") or "").strip() or None
         urgency = (decision.get("urgency") or "").strip().lower() or None
+        title = (decision.get("title") or "").strip() or None
         ok = store.update_task_item(
             owner_id=owner_id,
             task_id=task_id,
             urgency=urgency,
             suggested_action=suggested,
             reason=reason or None,
+            title=title,
         )
         applied = "updated" if ok else "kept"
         if not ok:
@@ -329,7 +343,10 @@ async def reanalyze_task(
         # sweep doesn't re-pick this task (oldest first) on every cycle
         # and waste another LLM call on the same KEEP decision.
         # update_task_item with no field args is a pure analyzed_at touch.
-        store.update_task_item(owner_id=owner_id, task_id=task_id)
+        # We still pass `title` so a pre-title task gains one on the first
+        # KEEP reanalysis (the sweep migrates old tasks for free).
+        title = (decision.get("title") or "").strip() or None
+        store.update_task_item(owner_id=owner_id, task_id=task_id, title=title)
         applied = "kept"
 
     logger.debug(
