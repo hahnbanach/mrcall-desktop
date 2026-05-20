@@ -7,7 +7,8 @@ import {
   useState,
   useRef,
   ReactNode,
-  createElement
+  createElement,
+  type Dispatch
 } from 'react'
 import type { ZylchTask } from '../types'
 
@@ -215,12 +216,17 @@ type Ctx = {
 
 const ConversationsContext = createContext<Ctx | null>(null)
 
-// Tracks the conversation id whose tasks.solve call is in flight.
-// Module-level Map (not React state) because the solve runs as a
-// fire-and-forget Promise outside the reducer — the listener in
-// Workspace.tsx is what feeds the conversation; this map is just
-// the cancel handle used by closeConversation.
-const solvesInFlight = new Set<string>()
+// Set of conversation ids whose `tasks.solve` RPC promise has not yet
+// resolved. The engine serialises execution via its own
+// `_solve_lock` and accepts a queue (up to `_MAX_SOLVE_QUEUE` solves
+// at once), so the client no longer enforces "one solve at a time".
+// This set is module-level because the solve runs as a fire-and-forget
+// Promise outside the reducer; the live state per-conversation is
+// driven by `tasks.solve.event` notifications consumed in
+// `Workspace.tsx`. We track the set only so `closeConversation` can
+// fire a targeted `solveCancel(task_id)` for its conversation, and so
+// idempotent double-Opens don't double-fire the RPC.
+const solvesInFlight = new Map<string, string>() // convId → task_id
 
 export function ConversationsProvider({ children }: { children: ReactNode }) {
   // Resolve the profile key for localStorage on mount and remember it.
@@ -407,16 +413,18 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     })
 
     if (!shouldStartSolve) return
+    // Idempotent guard: a second Open on the same conversation while a
+    // solve is in flight is a no-op (the user clicked Open twice in a
+    // row). Different conversations are NOT blocked — the engine
+    // queues solves up to `_MAX_SOLVE_QUEUE` and serialises them
+    // internally; the `tasks.solve.event` stream tells each
+    // conversation when it transitions queued → starting → done.
     if (solvesInFlight.has(id)) return
-
-    solvesInFlight.add(id)
+    solvesInFlight.set(id, task.id)
     window.zylch.tasks
       .solve(task.id)
       .then((res) => {
         if (!res?.ok) {
-          // Push an assistant bubble with the engine's error so the
-          // user sees what went wrong (most likely: no Anthropic key
-          // AND no Firebase signin — make_llm_client refuses).
           dispatch({
             type: 'APPEND_ASSISTANT',
             id,
@@ -426,14 +434,28 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
       })
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e)
-        dispatch({
-          type: 'APPEND_ASSISTANT',
-          id,
-          text: '⚠ Solve RPC failed: ' + msg
-        })
+        // Engine: SolveQueueFullError (code -32002) — too many
+        // simultaneous solves. Surface to the user, don't pretend
+        // success.
+        // Engine: SolveInProgressError (code -32000) for same-task
+        // double-open — shouldn't happen given the local guard above,
+        // but if it does we swallow it since the original solve is
+        // already streaming events into this conversation.
+        if (/SolveInProgress/i.test(msg)) {
+          console.warn('[openTaskChat] SolveInProgressError swallowed', msg)
+        } else {
+          dispatch({
+            type: 'APPEND_ASSISTANT',
+            id,
+            text: '⚠ Solve RPC failed: ' + msg
+          })
+        }
       })
       .finally(() => {
         solvesInFlight.delete(id)
+        // Belt-and-suspenders: the `done` event normally flips busy
+        // back to false, but if the engine errored before emitting
+        // one, this catches it.
         dispatch({ type: 'SET_BUSY', id, busy: false })
       })
   }, [])
@@ -465,14 +487,18 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
   )
 
   const closeConversation = useCallback((id: string) => {
-    // If a solve is in flight on this conversation, ask the engine to
-    // abort. Best-effort — the engine's _solve_lock releases on its
-    // own at timeout, so even if the cancel RPC fails the system
-    // recovers; we just save the user the wait.
-    if (solvesInFlight.has(id)) {
-      void window.zylch.tasks.solveCancel().catch(() => {
-        /* engine may be down or the lock may have already cleared */
+    // If THIS conversation has an in-flight solve, ask the engine to
+    // abort it specifically. With the queued-solve model, the engine
+    // accepts `task_id` so cancellation targets THIS solve, not "the
+    // active one" (which could now be a different conversation's that
+    // happens to be running while this conversation was still
+    // queued). Best-effort — drop the local tracking either way.
+    const taskId = solvesInFlight.get(id)
+    if (taskId) {
+      void window.zylch.tasks.solveCancel(taskId).catch(() => {
+        /* engine may be down or the solve may already have cleared */
       })
+      solvesInFlight.delete(id)
     }
     dispatch({ type: 'CLOSE', id })
   }, [])

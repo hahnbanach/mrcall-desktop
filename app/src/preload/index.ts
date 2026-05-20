@@ -151,10 +151,14 @@ const api = {
         approved: payload.approved,
         edited_input: payload.edited_input ?? null
       }),
-    solveCancel: () =>
-      call<{ ok: boolean; cancelled_pending?: number; error?: string }>(
+    // tasks.solve.cancel(task_id?) — with task_id (new engine) cancels
+    // the asyncio task running that solve (works for queued and active).
+    // Without task_id, falls back to the legacy "cancel active executor's
+    // pending approvals" path on older engines.
+    solveCancel: (task_id?: string) =>
+      call<{ ok: boolean; task_id?: string; cancelled_pending?: number; error?: string }>(
         'tasks.solve.cancel',
-        {},
+        task_id ? { task_id } : {},
         10000
       )
   },

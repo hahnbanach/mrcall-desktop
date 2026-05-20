@@ -15,6 +15,8 @@ import {
   Paperclip,
   Menu,
   ArrowLeft,
+  Check,
+  Trash2,
 } from 'lucide-react'
 
 const REGISTRY = {
@@ -34,6 +36,8 @@ const REGISTRY = {
   attach: Paperclip,
   menu: Menu,
   back: ArrowLeft,
+  check: Check,
+  trash: Trash2,
 } as const
 
 export type IconName = keyof typeof REGISTRY

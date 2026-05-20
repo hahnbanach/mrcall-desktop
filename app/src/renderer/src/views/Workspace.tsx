@@ -5,6 +5,7 @@ import { useThread } from '../store/thread'
 import { useNarration } from '../hooks/useNarration'
 import ChatComposer, { type ChatComposerTaskContext } from '../components/ChatComposer'
 import ThreadPanel from '../components/ThreadPanel'
+import Icon from '../components/Icon'
 import { errorMessage, isProfileLockedError, showError } from '../lib/errors'
 import type { SolveEvent } from '../types'
 
@@ -168,29 +169,51 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     }
   }, [setPendingApproval])
 
-  // Solve events: a parallel stream to chat.pending_approval. tasks.solve
-  // runs on the *currently active* task conversation, so we route every
-  // event to active.id. Engine guarantees one solve at a time
-  // (asyncio.Lock), so there is no convId disambiguation problem here.
+  // Solve events: a parallel stream to chat.pending_approval. With
+  // multiple solves potentially queued at once (engine serialises
+  // execution but accepts the queue), every event carries a `task_id`
+  // and we route it to the conversation `'task-' + task_id`. The old
+  // "attribute to active.id" contract is gone because more than one
+  // conversation can be running/queued simultaneously, and the user
+  // can be looking at any of them when an event for another arrives.
+  //
+  // Narration is per-window (not per-conversation today), so we only
+  // mutate it when the event belongs to the conversation the user is
+  // currently looking at.
   useEffect(() => {
     const off = window.zylch.onNotification('tasks.solve.event', (event: SolveEvent) => {
       if (!event || typeof event !== 'object') return
-      const convId = active.id
+      const taskId = event.task_id
+      // Defensive: ignore events without task_id (would only happen if
+      // an older engine is paired with this renderer — should not in
+      // practice since the engine ships in the same bundle).
+      if (!taskId) return
+      const convId = 'task-' + taskId
+      const isActive = convId === active.id
       switch (event.type) {
+        case 'queued':
+          // Engine acquired the queue slot but hasn't entered the lock
+          // yet. Keep busy=true (the conversation is in flight in the
+          // user's mental model) but skip narration — the static
+          // fallback would say "Sto pensando…" which is misleading
+          // when nothing is actually thinking yet. The user-visible
+          // "in coda" affordance lives in the conversation row /
+          // ChatComposer placeholder.
+          setBusy(convId, true)
+          break
+        case 'starting':
+          // Lock acquired, model work begins. Narration kicks in.
+          setBusy(convId, true)
+          if (isActive) setNarrationSeed('Sto pensando alla tua richiesta.')
+          break
         case 'thinking':
           if (event.text && event.text.trim()) {
             appendAssistant(convId, event.text)
-            // Reset narration so the static fallback ("Sto pensando…")
-            // doesn't shout over the model's own text bubble.
-            setNarrationSeed('')
+            if (isActive) setNarrationSeed('')
           }
           break
         case 'tool_use_start':
-          // Replace the narration with the current activity.
-          // Italian phrasing because USER_LANGUAGE is Italian-first;
-          // we re-evaluate localisation if/when we ship in another
-          // language.
-          setNarrationSeed(narrationForTool(event.name))
+          if (isActive) setNarrationSeed(narrationForTool(event.name))
           break
         case 'tool_call_pending':
           setPendingApproval(convId, {
@@ -200,26 +223,19 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
             input: event.input || {},
             preview: event.preview || ''
           })
-          // Hide the narration — the approval card is now the
-          // user's full attention.
-          setNarrationSeed('')
+          if (isActive) setNarrationSeed('')
           break
         case 'tool_result':
-          // Intentionally not rendered as a chat bubble — the model's
-          // next `thinking` block is what the user reads, and dumping
-          // search_memory output would defeat the brief-output rule.
-          // We do however reset the narration: the tool finished and
-          // we're back to "the model is thinking".
-          setNarrationSeed('')
+          if (isActive) setNarrationSeed('')
           break
         case 'done':
           setBusy(convId, false)
-          setNarrationSeed('')
+          if (isActive) setNarrationSeed('')
           break
         case 'error':
           appendAssistant(convId, '⚠ ' + (event.message || 'Solve error'))
           setBusy(convId, false)
-          setNarrationSeed('')
+          if (isActive) setNarrationSeed('')
           break
       }
     })
@@ -282,14 +298,14 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     try {
       if (pending.mode === 'solve') {
         if (decision === 'deny') {
-          // Cancel the whole solve, don't just decline this tool.
-          // Without this the engine would feed "User declined" back
-          // to the model, which then proposes alternatives — defeats
-          // the user's intent ("Annulla" means stop, let me write).
-          // solveCancel resolves the pending future with
-          // CancelledError; the engine's run() catches it and emits
-          // a `done` event, the listener flips busy → false.
-          await window.zylch.tasks.solveCancel()
+          // Cancel THIS conversation's solve specifically (engine
+          // accepts task_id since the queued-solve refactor — other
+          // queued conversations stay alive). Without a task_id arg
+          // the engine falls back to the legacy "active executor"
+          // path which still works when this conversation is the
+          // active one (which it has to be, since `pending` came from
+          // its approval card).
+          await window.zylch.tasks.solveCancel(active.taskId)
           // Belt-and-suspenders: flip busy immediately so the
           // composer unlocks even if the done event is delayed by
           // the RPC round-trip.
@@ -400,19 +416,51 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="flex items-center justify-between px-4 py-2 border-b bg-white">
           <div className="font-semibold truncate">{active.title}</div>
-          {active.taskId && (
-            <button
-              onClick={active.taskCompleted ? reopen : markDone}
-              disabled={completing}
-              className="px-3 py-1.5 text-sm bg-brand-blue text-white rounded hover:bg-brand-grey-80 disabled:bg-brand-mid-grey"
-            >
-              {completing
-                ? 'Attendere…'
-                : active.taskCompleted
-                  ? 'Riapri'
-                  : 'Marca come fatta'}
-            </button>
-          )}
+          <div className="flex items-center gap-1 shrink-0">
+            {/* Trash: discard this conversation's history. Same effect as
+                the × in the sidebar, surfaced here where it's discoverable.
+                Re-opening the task from the Tasks tab recomputes a fresh
+                solve. Available for any non-general conversation. */}
+            {active.id !== 'general' && (
+              <button
+                onClick={() => {
+                  const id = active.id
+                  closeConversation(id)
+                  setActiveThreadId(null)
+                  setActiveTaskId(null)
+                }}
+                disabled={completing}
+                className="p-1.5 rounded text-brand-grey-80 hover:text-brand-danger hover:bg-brand-light-grey disabled:opacity-50"
+                title="Trash conversation, will be re-computed if re-opened from Tasks"
+                aria-label="Trash conversation"
+              >
+                <Icon name="trash" size={18} />
+              </button>
+            )}
+            {/* Done / Reopen, now icon-only. Check = mark the task done
+                (removes it from open Tasks); reopen ring = bring a closed
+                task back under your control. */}
+            {active.taskId && (
+              <button
+                onClick={active.taskCompleted ? reopen : markDone}
+                disabled={completing}
+                className={
+                  'p-1.5 rounded disabled:opacity-50 ' +
+                  (active.taskCompleted
+                    ? 'text-brand-grey-80 hover:text-brand-black hover:bg-brand-light-grey'
+                    : 'text-brand-blue hover:bg-brand-blue/10')
+                }
+                title={
+                  active.taskCompleted
+                    ? 'Reopen this task to write or run the agent again'
+                    : 'Mark this task as done — removes it from your open Tasks'
+                }
+                aria-label={active.taskCompleted ? 'Reopen task' : 'Mark task as done'}
+              >
+                <Icon name={active.taskCompleted ? 'reopen' : 'check'} size={18} />
+              </button>
+            )}
+          </div>
         </header>
 
         {/* Source panel: email thread preview for task OR thread-only

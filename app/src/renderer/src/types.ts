@@ -136,41 +136,49 @@ export interface WhatsAppMessage {
 /**
  * Streaming event from the engine's task solve loop. Sent over the
  * `tasks.solve.event` JSON-RPC notification; mirrored from the engine
- * shape in `engine/zylch/services/task_executor.py`.
+ * shape in `engine/zylch/services/task_executor.py` and the queue
+ * envelope in `engine/zylch/rpc/methods.py:tasks_solve`.
  *
- * `thinking` is the model's text output (prose between tool calls).
- * `tool_call_pending` only fires for destructive tools — read-only
- * tools auto-execute and surface only as `tool_result` (which the
- * renderer currently ignores; the model's next `thinking` block is
- * what the user reads).
+ * Every event carries `task_id` so the renderer can route to the right
+ * conversation — with multiple solves potentially queued at once, the
+ * old "implicit-attribution-to-active-conv" contract no longer holds.
+ *
+ * Lifecycle:
+ *   queued    → emitted if the engine lock is held by another solve;
+ *               renderer shows "In coda".
+ *   starting  → lock acquired, model work begins.
+ *   thinking / tool_use_start / tool_call_pending / tool_result → as before.
+ *   done      → clean finish (incl. user-cancelled, with result.cancelled).
+ *   error     → executor exception.
  */
-export type SolveEvent =
-  | { type: 'thinking'; text: string }
-  | {
-      // Fired right before every tool runs (both read-only and
-      // approval-gated). UI uses this to keep the user oriented while
-      // a tool is in flight — without it, search_* / read_document
-      // would run silently between turns.
-      type: 'tool_use_start'
-      tool_use_id: string
-      name: string
-    }
-  | {
-      type: 'tool_call_pending'
-      tool_use_id: string
-      name: string
-      input: Record<string, unknown>
-      preview: string
-    }
-  | {
-      type: 'tool_result'
-      tool_use_id: string
-      name: string
-      output: string
-      approved: boolean
-    }
-  | { type: 'done'; result: { messages: unknown[] } }
-  | { type: 'error'; message: string }
+type SolveEventBase = { task_id?: string }
+export type SolveEvent = SolveEventBase &
+  (
+    | { type: 'queued' }
+    | { type: 'starting' }
+    | { type: 'thinking'; text: string }
+    | {
+        type: 'tool_use_start'
+        tool_use_id: string
+        name: string
+      }
+    | {
+        type: 'tool_call_pending'
+        tool_use_id: string
+        name: string
+        input: Record<string, unknown>
+        preview: string
+      }
+    | {
+        type: 'tool_result'
+        tool_use_id: string
+        name: string
+        output: string
+        approved: boolean
+      }
+    | { type: 'done'; result: { messages?: unknown[]; cancelled?: boolean; task_missing?: boolean } }
+    | { type: 'error'; message: string }
+  )
 
 export interface ZylchAPI {
   tasks: {
@@ -210,8 +218,9 @@ export interface ZylchAPI {
       tool_use_id: string,
       payload: { approved: boolean; edited_input?: Record<string, unknown> | null }
     ) => Promise<{ ok: boolean }>
-    solveCancel: () => Promise<{
+    solveCancel: (task_id?: string) => Promise<{
       ok: boolean
+      task_id?: string
       cancelled_pending?: number
       error?: string
     }>
