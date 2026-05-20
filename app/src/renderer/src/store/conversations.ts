@@ -347,7 +347,11 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
 
   const openTaskChat = useCallback((task: ZylchTask) => {
     const id = 'task-' + task.id
-    const title = task.contact_name || task.contact_email || task.id.slice(0, 8)
+    // Prefer the LLM-generated task title (names the real subject, e.g.
+    // "Richiamare Luca Festa" instead of the "MrCall Notification"
+    // sender envelope). Fall back to contact for pre-title tasks.
+    const title =
+      task.title || task.contact_name || task.contact_email || task.id.slice(0, 8)
     // Source email id from task.sources.emails[0] if present — kept on
     // the conversation so free-text follow-ups (post-solve) can pass
     // it to chat.send.

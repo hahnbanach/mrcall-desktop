@@ -13,6 +13,13 @@ export interface ZylchTask {
    */
   contact_phone?: string | null
   contact_name?: string
+  /**
+   * Short action-oriented title produced by the task detector
+   * (TASK_DECISION_TOOL). Names the real subject/person, not the
+   * email-sender envelope. NULL on tasks created before this field
+   * existed — the UI falls back to contact_name / contact_email.
+   */
+  title?: string | null
   action_required: boolean
   urgency: 'high' | 'medium' | 'low' | string
   reason: string

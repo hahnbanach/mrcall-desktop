@@ -54,6 +54,20 @@ TASK_DECISION_TOOL = {
                 "minLength": 10,
                 "description": "Specific action the user should take (e.g., 'Reply to John with project timeline' not just 'Reply')",
             },
+            "title": {
+                "type": "string",
+                "maxLength": 60,
+                "description": (
+                    "Short, scannable task title — 3 to 6 words, in the "
+                    "user's language. Name the real person or subject, "
+                    "NOT the email-sender envelope: for an MrCall phone "
+                    "call notification use the caller's name (e.g. "
+                    "'Richiamare Luca Festa'), not 'MrCall Notification'. "
+                    "More examples: 'Riattivare corso Carmine Salomone', "
+                    "'Rispondere a proposta Enel'. Required for "
+                    "create/update."
+                ),
+            },
             "reason": {
                 "type": "string",
                 "minLength": 20,
@@ -737,6 +751,7 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
                 urgency=result.get("urgency"),
                 suggested_action=result.get("suggested_action"),
                 reason=result.get("reason"),
+                title=result.get("title"),
                 add_source_email=item_id if event_type == "email" else None,
             )
             logger.info(f"[TASK] Updated task {target_task['id']} for {contact_email}")
@@ -749,6 +764,7 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
                 "urgency": result.get("urgency", "medium"),
                 "suggested_action": result.get("suggested_action", ""),
                 "reason": result.get("reason", ""),
+                "title": result.get("title", ""),
                 "analyzed_at": datetime.now(timezone.utc).isoformat(),
                 "event_id": item_id,
                 "event_type": event_type,

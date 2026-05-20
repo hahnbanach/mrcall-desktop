@@ -559,6 +559,7 @@ async def analyze_recent_email_events(
                 urgency=result.get("urgency"),
                 suggested_action=result.get("suggested_action"),
                 reason=result.get("reason"),
+                title=result.get("title"),
                 add_source_email=email_id,
             )
             action_count += 1
@@ -609,6 +610,7 @@ async def analyze_recent_email_events(
                     urgency=result.get("urgency"),
                     suggested_action=result.get("suggested_action"),
                     reason=result.get("reason"),
+                    title=result.get("title"),
                     add_source_email=email_id,
                 )
             else:

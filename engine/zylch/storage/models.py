@@ -450,6 +450,13 @@ class TaskItem(DictMixin, Base):
     # empty. Indexed because the F8 cluster query scans by value.
     contact_phone = Column(Text, index=True)
     contact_name = Column(Text)
+    # 2026-05-20: short action-oriented title produced by the task
+    # detector (TASK_DECISION_TOOL). Names the real subject/person, not
+    # the email-sender envelope — e.g. for an MrCall call-notification
+    # task, the caller's name rather than "MrCall Notification". NULL on
+    # tasks created before this column existed; the renderer falls back
+    # to contact_name / contact_email for those.
+    title = Column(Text)
     action_required = Column(Boolean, default=False)
     urgency = Column(Text)
     reason = Column(Text)
