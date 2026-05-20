@@ -10,22 +10,17 @@ description: |
 
 # Active Context — Cross-cutting
 
-## Current focus (as of 2026-05-19)
+## Current focus (as of 2026-05-20)
 
-WhatsApp pipeline parity spans engine + app + IPC through Phase 4 cross-channel — a task carrying both `sources.emails` and `sources.whatsapp_messages` triggers a per-task Email/WhatsApp toggle in the Workspace Source panel (engine stamps `sources.whatsapp_chat_jid`; renderer reads it). The IPC contract gained `sources.whatsapp_messages` and `sources.whatsapp_chat_jid` on the `tasks.list` payload. **Cross-channel toggle live-verified 2026-05-19 via a synthetic SQL setup** (Birger Lie email task + Ivan Marchese WA chat, reverted post-test).
+**MrCall channel — Livello A (customer-service lookup) landed; Livello B (phone-call memory) is next.** Spans engine + app + IPC. The legacy delegated/PKCE OAuth2 auth + the `/mrcall` command surface are removed — StarChat is reached via the Firebase JWT only. The MrCall tab lists + searches businesses (`mrcall.list_my_businesses`, `mrcall.search_businesses`, role-scoped by StarChat: admin cross-owner, owner own-only). Onboarding unblocked for MrCall-only users + an in-wizard Calendar session fix landed. Live-verified by Mario 2026-05-20. **Hard constraint for Livello B**: never ingest into memory the contacts/conversations of businesses the logged-in uid doesn't own — StarChat's `FirebaseCustomerConversationService` already hard-scopes conversation search to the caller's uid; a defence-in-depth filter is still planned engine-side. Plan: [mrcall-pipeline-parity.md](execution-plans/mrcall-pipeline-parity.md). **This work lives on `worktree-sprightly-floating-anchor`, merged up to main, pending promotion to `main`.**
 
-The work-in-flight is **live verification** of the rest of the recently-landed stack:
-
-- Update view staged progress emissions ([Update stage progress] cb91901b/0b33fdf4) reaching the UI.
-- Calendar "Connect Google Calendar" self-healing (a03f6831/1c60aebf) recovering from a missed initial Firebase-token push.
-- **MrCall-credits v1 round-trip** — still pending `mrcall-agent` deployed at `https://zylch-test.mrcall.ai`.
-
-The release pipeline still has open hardening items in [`harness-backlog.md`](harness-backlog.md) — chiefly the workflow not failing when one arch's installer is missing (PyInstaller 6.20 silent-break across v0.1.31..v0.1.32 went unnoticed for a week).
+WhatsApp parity spans engine + app + IPC through Phase 4 cross-channel (live-verified 2026-05-19). Residual live verification: Update staged progress, Calendar self-healing, MrCall-credits v1 round-trip (pending `mrcall-agent` at `https://zylch-test.mrcall.ai`). Release pipeline still has open hardening items in [`harness-backlog.md`](harness-backlog.md) (workflow doesn't fail when one arch's installer is missing).
 
 ## Recent landings (last ~2 weeks)
 
 | Date | What | Spans | Refs |
 |---|---|---|---|
+| 2026-05-20 | MrCall channel: delegated/PKCE OAuth + `/mrcall` commands removed (Firebase-JWT only); MrCall tab lists + searches businesses (`mrcall.list_my_businesses`, `mrcall.search_businesses`); onboarding unblocked for MrCall-only users + in-wizard Calendar session fix; 13 stale tests removed | engine + app + IPC | `770522e8..2b0a54ce` · [mrcall-pipeline-parity.md](execution-plans/mrcall-pipeline-parity.md) |
 | 2026-05-15 | Cross-channel Source-panel toggle — engine stamps `sources.whatsapp_chat_jid`; ThreadPanel renders Email/WhatsApp tab pills with counters, parallel fetch, instant tab switch | engine + app + IPC | `b57fcc4f` |
 | 2026-05-15 | Calendar self-healing Firebase session — `ensureEngineSession()` re-pushes token + verifies via `account.whoAmI()` before Calendar RPCs; initial token push retries 3× with backoff | engine + app | `a03f6831` · `1c60aebf` |
 | 2026-05-15 | Update view staged progress emissions + ETA rewrite + elapsed timer (engine progress callback, renderer 1 s ticker + overshot hint) | engine + app | `0b33fdf4` · `cb91901b` |
@@ -37,7 +32,6 @@ The release pipeline still has open hardening items in [`harness-backlog.md`](ha
 | 2026-05-12 | WhatsApp pipeline parity Phase 2 a/b/c — memory extraction wired into update pipeline (engine-only, no IPC change) | engine | `91421d2e` |
 | 2026-05-12 | PyInstaller pin to 6.13.0 in release workflow (silent Win-x64 break across v0.1.31..v0.1.32) | release | `362e1cda` · [harness-backlog.md](harness-backlog.md) |
 | 2026-05-06 | Task-list cleanup ("4 task per UN problema"): F9 cross-contact topic dedup + `_apply_data_backfills` early-return fix. New RPC `tasks.topic_dedup_now()` | engine + IPC | `ec61067` + `557e65b` · [`../engine/docs/execution-plans/topic-dedup-playbook.md`](../engine/docs/execution-plans/topic-dedup-playbook.md) |
-| 2026-05-05 | Email-tab search: `emails.search` RPC (Gmail-style operators) + UI search bar | engine + app + IPC | — |
 
 ## In progress
 

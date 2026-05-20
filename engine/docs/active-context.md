@@ -8,22 +8,18 @@ description: |
 
 # Active Context — Engine
 
-## Current focus (as of 2026-05-19)
+## Current focus (as of 2026-05-20)
 
-WhatsApp pipeline parity is **structurally complete through Phase 4 cross-channel**: WA messages flow end-to-end (sync → memory → tasks → UI), and a task carrying BOTH `sources.emails` and `sources.whatsapp_messages` renders the per-task Email/WhatsApp toggle in the Workspace Source panel (engine stamps `sources.whatsapp_chat_jid`, app reads it).
+**MrCall channel cleanup + customer-service lookup (Livello A).** The legacy MrCall delegated/PKCE OAuth2 auth is gone (−~3000 LOC: the delegated flow in `tools/mrcall/oauth.py`, the `/mrcall` slash-command surface in `command_handlers.py`, `mrcall_link` storage, the dead configurator domain). StarChat is reached purely via the Firebase JWT now (`make_starchat_client_from_firebase_session`). New read-only RPC `mrcall.search_businesses` (CrmBusinessSearch filters — email/name/phone/VAT/status; StarChat role-scopes: admin sees cross-owner, owner own-only) backs the desktop "simplified dashboard". `sync_mrcall` is a graceful no-op pending a Firebase-path reimplementation (**Livello B** — phone-call memory ingestion). Live-verified by Mario 2026-05-20. Plan: [mrcall-pipeline-parity.md](../../docs/execution-plans/mrcall-pipeline-parity.md).
 
-Cross-channel toggle live-verified 2026-05-19 via a synthetic SQL setup (Birger Lie email task + Ivan Marchese WA chat) — pills, body swap, count display all confirmed by Mario. Reverted post-test; profile has 0 cross-channel tasks again until a natural match lands.
-
-The work-in-flight is **live verification** of the rest of the 2026-05-15 stack:
-
-1. Update view's staged progress emissions reaching the UI ([Update stage progress] cb91901b/0b33fdf4).
-2. Calendar "Connect Google Calendar" self-healing path (a03f6831/1c60aebf) — confirm the renderer's `ensureEngineSession()` recovers from a missed initial token push.
-3. **MrCall-credits v1 round-trip** (branch `feat/mrcall-credits-v1`, tip `3001844`) — still pending the proxy deployed at `https://zylch-test.mrcall.ai`.
+WhatsApp parity is structurally complete through Phase 4. Residual work-in-flight is **live verification** of the 2026-05-15 stack (Update staged progress, Calendar self-healing) + the MrCall-credits v1 round-trip (pending proxy at `https://zylch-test.mrcall.ai`).
 
 ## Recent landings (last ~2 weeks)
 
 | Date | What | Refs |
 |---|---|---|
+| 2026-05-20 | MrCall delegated/PKCE OAuth + `/mrcall` command surface + `mrcall_link` removed (−~3000 LOC); StarChat via Firebase JWT only; `sync_mrcall` graceful no-op (Livello B TODO) | `770522e8` · `6f02f7ef` |
+| 2026-05-20 | `mrcall.search_businesses` RPC (CrmBusinessSearch filters) for customer-service lookup; 13 stale SaaS-era test files removed (suite collectable again, 207 passed) | `a28c5533` · `c40dd41b` · `dd6863ca` |
 | 2026-05-15 | Phase 4 cross-channel: `update_task_item(whatsapp_chat_jid=…)` stamps `sources.whatsapp_chat_jid` (idempotent), TaskWorker WA path stamps on CREATE + UPDATE | `b57fcc4f` |
 | 2026-05-15 | Update pipeline staged progress callback (sync 5%, WA 20%, memory 30%, tasks 60%, sweeps 80/90%, render 95%) + rewritten `_estimate_update_eta` (memory + tasks + WA + F4/F8/F9 + first-sync proxy + setup) | `0b33fdf4` · `cb91901b` |
 | 2026-05-15 | Calendar self-healing — `ensureEngineSession()` re-pushes Firebase token + verifies via `account.whoAmI()` before Calendar RPCs; initial token push retries 3× with backoff | `a03f6831` · `1c60aebf` |
@@ -35,9 +31,6 @@ The work-in-flight is **live verification** of the rest of the 2026-05-15 stack:
 | 2026-05-11/12 | Agentic task "Open" — proactive solve flow: SOLVE_SYSTEM_PROMPT rewrite, `USER_LANGUAGE`, `tasks.solve.cancel` RPC, APPROVAL_TOOLS coherence fix, `tool_use_start` event | `df1e1fb1..b36e15b3` · [proactive-task-open.md](../../docs/execution-plans/proactive-task-open.md) |
 | 2026-05-08 | Cross-channel person identity Phase 1c (identifier-clustered reconsolidation + `migrate_blob_references`) | `6ae8a5fa` |
 | 2026-05-07 | Phases 1a + 1b — `person_identifiers` index + backfill + identifier-first match in `_upsert_entity` | `d0baa6b1` · `315c56d1` |
-| 2026-05-07 | WhatsApp privacy gate + LID contact resolution from whatsmeow session DB + auto-reconnect at sidecar boot | `9eee73c2` |
-| 2026-05-06 | `_apply_data_backfills` early-return fix + F9 cross-contact topic dedup + `tasks.topic_dedup_now` RPC | `557e65b` · `ec61067` · [topic-dedup-playbook.md](execution-plans/topic-dedup-playbook.md) |
-| 2026-05-06 | Task pipeline overhaul Fase 1.1–4 (plural `get_tasks_by_contact`, `analyzed_at` bump, calendar `task_action`, F8 dedup sweep, `email_blobs` index, `task_items.channel`, 30d phone auto-close, `[update.summary]` log) | [task-pipeline-overhaul.md](execution-plans/task-pipeline-overhaul.md) |
 
 ## In progress
 
@@ -63,7 +56,8 @@ The work-in-flight is **live verification** of the rest of the 2026-05-15 stack:
 - WhatsApp session DB (`~/.zylch/whatsapp.db`) is global, not per-profile — multi-profile with different WA accounts not supported.
 - Slash-separated phones (`02 316562 / 338 594946`) parsed as one value — tracked in [`harness-backlog.md`](harness-backlog.md).
 - `LID:` kind not indexed on profiles that haven't retrained memory agent (cross-channel match still works via `Phone:` resolved from `whatsapp_contacts`).
-- `tests/workers/test_task_worker_bugs.py` broken at HEAD since 2026-05-04 transport refactor — tracked in [`harness-backlog.md`](harness-backlog.md).
+- `tests/workers/test_task_worker_bugs.py` broken at HEAD since 2026-05-04 transport refactor (15 errors, mocks out of sync) — to be **rewritten**, not deleted; tracked in [`harness-backlog.md`](harness-backlog.md). (13 truly-stale SaaS-era test files were removed 2026-05-20; the suite collects again, 207 passed.)
+- **`sandbox_service` dangling import** — `command_handlers.py:171` and `chat_service.py:399` import `zylch.services.sandbox_service`, a module that no longer exists (absent on main too). Lazy local imports, so no boot/import error, but the branch crashes if reached. Pre-existing; candidate cleanup.
 
 ## Where stable state lives
 

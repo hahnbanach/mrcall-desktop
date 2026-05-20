@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress (Livello A landed 2026-05-20; Livello B = phone-call memory ingestion, next)
 owner: cross-cutting (engine + app + IPC)
 created: 2026-05-19
 template: engine/docs/execution-plans/whatsapp-pipeline-parity.md
@@ -13,6 +13,11 @@ discipline: |
 ---
 
 # MrCall pipeline parity + cross-channel toggle
+
+> **Stato 2026-05-20** (live-verified by Mario, on `worktree-sprightly-floating-anchor`):
+> - **Prerequisite DONE** — legacy delegated/PKCE OAuth2 + `/mrcall` command surface + `mrcall_link` removed; StarChat reached via Firebase JWT only.
+> - **Livello A (read-only customer-service lookup) DONE** — MrCall tab lists + searches businesses (`mrcall.list_my_businesses`, `mrcall.search_businesses`; StarChat role-scopes admin cross-owner vs owner own-only). Onboarding unblocked for MrCall-only users + in-wizard Calendar session fix.
+> - **Livello B (phone-call memory + task ingestion — the D1–D5 plan below) = NEXT.** `sync_mrcall` is currently a graceful no-op; it must be reimplemented over the **Firebase JWT path** (`{realm}/customer/conversation/search`, NOT `delegated_`) before Livello B. StarChat's `FirebaseCustomerConversationService` already hard-scopes conversation search to the caller's uid (so "only own businesses' calls" is enforced server-side), but add a defence-in-depth owner filter before ingestion anyway — Mario's hard constraint: never put another owner's contacts/calls into memory.
 
 ## Cosa Mario ha chiesto
 
