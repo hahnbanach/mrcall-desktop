@@ -24,6 +24,7 @@ class SettingsField(TypedDict, total=False):
     options: List[str]
     help: str
     secret: bool  # True for password / api keys — masked in settings_get
+    default: str  # placeholder / first-option hint shown when the value is unset
 
 
 # Order = display order. Groups are also rendered in this order.
@@ -107,9 +108,10 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "type": "select",
         "group": "Sync",
         "optional": True,
-        "options": ["y", "n"],
+        "options": ["Yes", "No"],
+        "default": "Yes",
         "help": (
-            "When 'y', the app re-runs Update every "
+            "When enabled, the app re-runs Update every "
             "AUTO_UPDATE_INTERVAL_MINUTES while it is open. The "
             "manual Update button is always available."
         ),
@@ -120,6 +122,7 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "type": "number",
         "group": "Sync",
         "optional": True,
+        "default": "30",
         "help": "Minutes between automatic Updates. Allowed range 5–360.",
     },
     # ─── Google ─────────────────────────────────────────────
