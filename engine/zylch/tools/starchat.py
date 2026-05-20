@@ -19,6 +19,11 @@ class StarChatClient:
     Most endpoints MUST use the realm, e.g., `/mrcall/v1/{realm}/crm/business`.
     Using generic paths like `/mrcall/v1/crm/business` will result in 401 Unauthorized.
     Always construct paths using `self.realm`.
+
+    Auth: the supported path is `auth_type="firebase"` (the renderer's
+    Firebase JWT, wired via `zylch.tools.mrcall.starchat_firebase`).
+    `auth_type="basic"` remains as an env-var fallback. The legacy
+    `auth_type="oauth"` / `delegated_{realm}` path was removed 2026-05.
     """
 
     def __init__(
@@ -28,7 +33,6 @@ class StarChatClient:
         username: Optional[str] = None,
         password: Optional[str] = None,
         jwt_token: Optional[str] = None,
-        access_token: Optional[str] = None,
         realm: str = "default",
         timeout: int = 30,
         verify_ssl: bool = True,
@@ -39,23 +43,21 @@ class StarChatClient:
 
         Args:
             base_url: StarChat API base URL
-            auth_type: Authentication type ("basic", "firebase", or "oauth")
+            auth_type: Authentication type ("basic" or "firebase")
             username: Username for Basic auth
             password: Password for Basic auth
             jwt_token: JWT token for Firebase auth
-            access_token: OAuth access token
             realm: Firebase realm/config group
             timeout: Request timeout in seconds
             verify_ssl: Whether to verify SSL certificates
-            owner_id: Owner ID (for OAuth token refresh)
-            supabase_storage: Storage instance (for OAuth token refresh)
+            owner_id: Owner ID (informational)
+            supabase_storage: Storage instance (unused; kept for callers)
         """
         self.base_url = base_url.rstrip("/")
         self.auth_type = auth_type
         self.username = username
         self.password = password
         self.jwt_token = jwt_token
-        self.access_token = access_token
         self.realm = realm
         self.timeout = timeout
         self.verify_ssl = verify_ssl
@@ -75,11 +77,9 @@ class StarChatClient:
             "User-Agent": "zylch/0.1.0",
         }
 
-        # Priority: OAuth > JWT (Firebase) > Basic Auth
-        # CRITICAL: MrCall uses 'auth' header for both Firebase and OAuth tokens
-        if self.auth_type == "oauth" and self.access_token:
-            headers["auth"] = self.access_token
-        elif self.auth_type == "firebase" and self.jwt_token:
+        # Priority: JWT (Firebase) > Basic Auth
+        # CRITICAL: MrCall uses the 'auth' header for the Firebase token.
+        if self.auth_type == "firebase" and self.jwt_token:
             headers["auth"] = self.jwt_token
         elif self.auth_type == "basic" and self.username and self.password:
             credentials = f"{self.username}:{self.password}"
@@ -95,46 +95,6 @@ class StarChatClient:
 
         return headers
 
-    def _realm_prefix(self) -> str:
-        """Return realm path prefix: 'delegated_{realm}' for OAuth, '{realm}' for Firebase/other."""
-        if self.auth_type == "oauth":
-            return f"delegated_{self.realm}"
-        return self.realm
-
-    async def _refresh_token_if_needed(self):
-        """Check if OAuth token expired and refresh if needed."""
-        if self.auth_type != "oauth" or not self.supabase or not self.owner_id:
-            return
-
-        from zylch.api.token_storage import get_mrcall_credentials, refresh_mrcall_token
-        from datetime import datetime, timezone, timedelta
-
-        try:
-            credentials = get_mrcall_credentials(self.owner_id)
-
-            if not credentials:
-                raise ValueError("MrCall not connected")
-
-            expires_at = credentials.get("expires_at")
-            if expires_at:
-                if isinstance(expires_at, str):
-                    expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-
-                # Refresh if expiring within 5 minutes
-                if expires_at < datetime.now(timezone.utc) + timedelta(minutes=5):
-                    logger.info(f"MrCall token expiring soon, refreshing for owner {self.owner_id}")
-                    new_credentials = await refresh_mrcall_token(self.owner_id)
-
-                    if new_credentials:
-                        # Update access token and rebuild headers
-                        self.access_token = new_credentials["access_token"]
-                        self.client.headers.update(self._build_headers())
-                        logger.info("Successfully refreshed MrCall token")
-                    else:
-                        logger.error("Failed to refresh MrCall token")
-        except Exception as e:
-            logger.error(f"Error checking/refreshing MrCall token: {e}")
-
     async def get_contact(self, contact_id: str) -> Optional[Dict[str, Any]]:
         """Get contact by ID.
 
@@ -145,9 +105,6 @@ class StarChatClient:
             Contact data or None if not found
         """
         logger.debug(f"Getting contact: {contact_id}")
-
-        # Refresh token if needed before making request
-        await self._refresh_token_if_needed()
 
         response = await self.client.request(
             "GET", f"/mrcall/v1/{self.realm}/crm/contact", json={"contactId": contact_id}
@@ -504,7 +461,7 @@ class StarChatClient:
 
         try:
             # Note: This endpoint uses POST with JSON body for search
-            # The realm should already include any prefix (e.g., "delegated_mrcall0")
+            # Realm is the plain Firebase realm (no "delegated_" prefix).
             endpoint = f"/mrcall/v1/{self.realm}/crm/business/search"
 
             logger.info(f"Using business search endpoint: {endpoint}")
@@ -582,7 +539,7 @@ class StarChatClient:
         if language_descriptions:
             params["languageDescriptions"] = language_descriptions
 
-        # The realm should already include any prefix (e.g., "delegated_mrcall0")
+        # Realm is the plain Firebase realm (no "delegated_" prefix).
         endpoint = f"/mrcall/v1/{self.realm}/crm/variables"
         logger.info(f"Fetching variable schema from: {endpoint} with params={params}")
         logger.debug(
@@ -808,7 +765,7 @@ class StarChatClient:
         }
 
         # PUT the updated business back
-        # The realm should already include any prefix (e.g., "delegated_mrcall0")
+        # Realm is the plain Firebase realm (no "delegated_" prefix).
         endpoint = f"/mrcall/v1/{self.realm}/crm/business"
         logger.info(f"Putting updated business to: {endpoint}")
         logger.debug(
@@ -971,54 +928,29 @@ class StarChatClient:
 async def create_starchat_client(
     owner_id: str, supabase_storage: Optional[Any] = None
 ) -> StarChatClient:
-    """
-    Create StarChat client with appropriate auth method.
+    """Create a StarChat client for non-Firebase (env/Basic-auth) callers.
 
-    Priority:
-    1. OAuth (if mrcall credentials exist in Supabase)
-    2. Basic Auth (fallback to env vars if configured)
+    The legacy MrCall OAuth2 ("delegated") path was removed 2026-05.
+    The supported path for signed-in desktop users is the Firebase JWT
+    factory `zylch.tools.mrcall.starchat_firebase
+    .make_starchat_client_from_firebase_session()`; callers on that path
+    do NOT use this function.
 
-    Args:
-        owner_id: Owner ID
-        supabase_storage: Storage instance (optional, will create if not provided)
-
-    Returns:
-        StarChatClient configured with best available auth method
+    This factory now only supports the Basic-auth env fallback
+    (`STARCHAT_USERNAME` / `STARCHAT_PASSWORD`). With no such
+    credentials it raises, so the remaining legacy `/mrcall` CLI
+    handlers surface a clear "not connected" error instead of silently
+    using a dead OAuth token.
 
     Raises:
-        ValueError: If no auth method available
+        ValueError: If no Basic-auth credentials are configured.
     """
     from zylch.config import settings
-    from zylch.api.token_storage import get_mrcall_credentials
 
-    # Get or create Supabase storage
-    if not supabase_storage:
-        from zylch.storage import Storage
-
-        supabase_storage = Storage()
-
-    # Try OAuth first (preferred method)
-    try:
-        credentials = get_mrcall_credentials(owner_id)
-
-        if credentials and credentials.get("access_token"):
-            logger.info(f"Creating StarChat client with OAuth for owner {owner_id}")
-            return StarChatClient(
-                base_url=settings.mrcall_base_url.rstrip("/"),
-                auth_type="oauth",
-                access_token=credentials["access_token"],
-                realm=settings.mrcall_realm,
-                owner_id=owner_id,
-                supabase_storage=supabase_storage,
-                verify_ssl=settings.starchat_verify_ssl,
-            )
-    except Exception as e:
-        logger.debug(f"OAuth credentials not available: {e}")
-
-    # Fallback to Basic Auth (for backward compatibility)
-    # Only if STARCHAT_USERNAME and STARCHAT_PASSWORD are set
-    if hasattr(settings, "starchat_username") and settings.starchat_username:
-        logger.info(f"Creating StarChat client with Basic Auth (fallback) for owner {owner_id}")
+    # Basic Auth env fallback (backward compatibility for env-configured
+    # deployments). The OAuth2 branch was removed.
+    if getattr(settings, "starchat_username", None):
+        logger.info(f"Creating StarChat client with Basic Auth (env) for owner {owner_id}")
         return StarChatClient(
             base_url=settings.mrcall_base_url.rstrip("/"),
             auth_type="basic",
@@ -1028,4 +960,7 @@ async def create_starchat_client(
             verify_ssl=settings.starchat_verify_ssl,
         )
 
-    raise ValueError("MrCall not connected. Please use /connect mrcall to authorize.")
+    raise ValueError(
+        "MrCall not connected. The legacy `/connect mrcall` OAuth flow was "
+        "removed; sign in with Firebase in the desktop app to use MrCall."
+    )

@@ -169,26 +169,15 @@ class Settings(BaseSettings):
         env="MRCALL_BASE_URL",
         description="MrCall API base URL",
     )
-    mrcall_dashboard_url: str = Field(
-        default="https://dashboard.mrcall.ai",
-        env="MRCALL_DASHBOARD_URL",
-        description="MrCall dashboard URL (OAuth consent page)",
-    )
     mrcall_realm: str = Field(
         default="mrcall0",
         env="MRCALL_REALM",
         description="MrCall realm",
     )
-    mrcall_client_id: str = Field(
-        default="",
-        env="MRCALL_CLIENT_ID",
-        description="MrCall OAuth2 client ID",
-    )
-    mrcall_client_secret: str = Field(
-        default="",
-        env="MRCALL_CLIENT_SECRET",
-        description="MrCall OAuth2 client secret",
-    )
+    # NOTE: the legacy MrCall OAuth2 fields (mrcall_dashboard_url for the
+    # consent page, mrcall_client_id, mrcall_client_secret) were removed
+    # in 2026-05 along with the delegated/PKCE flow. StarChat is now
+    # reached with the Firebase JWT (see zylch.tools.mrcall.starchat_firebase).
     starchat_verify_ssl: bool = Field(
         default=True,
         env="STARCHAT_VERIFY_SSL",

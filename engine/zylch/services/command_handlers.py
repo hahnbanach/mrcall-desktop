@@ -1084,8 +1084,13 @@ Configure them at https://dashboard.mrcall.ai
                 async with httpx.AsyncClient(
                     timeout=30.0, verify=settings.starchat_verify_ssl
                 ) as http_client:
+                    # NOTE: legacy "delegated_" realm prefix removed (2026-05).
+                    # This branch is now unreachable — get_mrcall_credentials()
+                    # always returns None, so /mrcall link returns "not
+                    # connected" above. Left for the dedicated /mrcall command
+                    # cleanup; see the engine report / Livello B.
                     response = await http_client.post(
-                        f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/delegated_{settings.mrcall_realm}/crm/business/search",
+                        f"{settings.mrcall_base_url.rstrip('/')}/mrcall/v1/{settings.mrcall_realm}/crm/business/search",
                         headers={"auth": access_token, "Content-Type": "application/json"},
                         json={"from": 0, "size": 50},
                     )

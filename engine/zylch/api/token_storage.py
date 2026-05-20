@@ -88,23 +88,29 @@ def get_graph_token(
 
 
 # ------------------------------------------------------------------
-# MrCall credentials
+# MrCall credentials  (legacy OAuth2 path — REMOVED 2026-05)
 # ------------------------------------------------------------------
+#
+# The legacy delegated/PKCE MrCall OAuth2 flow is gone. StarChat is now
+# reached exclusively via the Firebase JWT (see
+# `zylch.tools.mrcall.starchat_firebase`). There are no more
+# `OAuthToken provider='mrcall'` rows to read, refresh, or delete.
+#
+# `get_mrcall_credentials` is kept only as a compatibility shim so the
+# remaining (legacy) `/mrcall` / `/sync mrcall` CLI handlers degrade
+# cleanly to "not connected" instead of importing a missing symbol.
+# It always reports no credentials. `refresh_mrcall_token` was deleted.
 
 
 def get_mrcall_credentials(
     owner_id: str,
 ) -> Optional[Dict[str, Any]]:
-    """Return MrCall/StarChat OAuth credentials."""
-    return _storage().get_provider_credentials(owner_id, "mrcall")
+    """Always None — legacy MrCall OAuth2 credentials were removed.
 
-
-def refresh_mrcall_token(
-    owner_id: str,
-) -> Optional[Dict[str, Any]]:
-    """Placeholder — token refresh not supported standalone."""
-    logger.warning("refresh_mrcall_token called but not" " implemented in standalone mode")
-    return get_mrcall_credentials(owner_id)
+    Kept as a shim for legacy CLI handlers; the Firebase JWT path does
+    not use this. See module note above.
+    """
+    return None
 
 
 # ------------------------------------------------------------------
@@ -133,7 +139,11 @@ def delete_user_credentials(owner_id: str) -> bool:
 
 
 def delete_mrcall_credentials(owner_id: str) -> bool:
-    """Delete MrCall credentials."""
+    """No-op — legacy MrCall OAuth2 credentials were removed.
+
+    Kept so `/connect reset mrcall` still resolves; also clears any
+    stale `provider='mrcall'` row left over from before the removal.
+    """
     return _storage().delete_provider_credentials(owner_id, "mrcall")
 
 

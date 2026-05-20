@@ -110,21 +110,10 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "help": "Your Telegram numeric user ID (from @userinfobot).",
     },
     # ─── MrCall ──────────────────────────────────────────────
-    {
-        "key": "MRCALL_CLIENT_ID",
-        "label": "MrCall client ID",
-        "type": "text",
-        "group": "MrCall",
-        "optional": True,
-    },
-    {
-        "key": "MRCALL_CLIENT_SECRET",
-        "label": "MrCall client secret",
-        "type": "password",
-        "group": "MrCall",
-        "optional": True,
-        "secret": True,
-    },
+    # The legacy MrCall OAuth2 client (MRCALL_CLIENT_ID /
+    # MRCALL_CLIENT_SECRET) and the OAuth consent page URL
+    # (MRCALL_DASHBOARD_URL) were removed in 2026-05 together with the
+    # delegated/PKCE flow. StarChat is reached via the Firebase JWT now.
     {
         "key": "MRCALL_BASE_URL",
         "label": "MrCall base URL",
@@ -135,13 +124,6 @@ SETTINGS_SCHEMA: List[SettingsField] = [
     {
         "key": "MRCALL_REALM",
         "label": "MrCall realm",
-        "type": "text",
-        "group": "MrCall",
-        "optional": True,
-    },
-    {
-        "key": "MRCALL_DASHBOARD_URL",
-        "label": "MrCall dashboard URL",
         "type": "text",
         "group": "MrCall",
         "optional": True,

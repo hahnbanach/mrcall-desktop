@@ -5,7 +5,6 @@ Uses IMAPClient for email sync (replaces Gmail/Outlook OAuth).
 
 from typing import Dict, Any, Optional, TYPE_CHECKING
 import logging
-from datetime import datetime, timedelta, timezone
 
 from zylch.email.imap_client import IMAPClient
 from zylch.tools.email_archive import EmailArchiveManager
@@ -150,286 +149,44 @@ class SyncService:
     ) -> Dict[str, Any]:
         """Sync MrCall phone call conversations to DB.
 
+        NEUTRALIZED (2026-05): the previous implementation fetched
+        conversations over the legacy delegated OAuth2 path
+        (``/mrcall/v1/delegated_{realm}/customer/conversation/search``
+        with a MrCall OAuth access token). That whole auth mechanism was
+        removed. This method is now a graceful no-op so the ``update``
+        pipeline (:meth:`run_full_sync`) always completes cleanly.
+
+        The downstream consumers — the ``mrcall_conversations`` table,
+        the memory worker, and ``/agent memory ... mrcall`` — are left
+        intact; they simply have nothing new to process until fetch is
+        reimplemented.
+
+        # TODO(Livello B): reimplement MrCall sync over the Firebase JWT
+        #   path ({realm}/customer/conversation/search, no "delegated_"
+        #   prefix), using zylch.tools.mrcall.starchat_firebase. Needs
+        #   its own design + live testing; see engine/docs.
+
         Args:
-            days_back: Days to sync (default: 30)
-            limit: Max conversations per request
-            debug: Print conversation data to stdout
-            firebase_token: MrCall OAuth access token
-            business_id: Optional business ID override
-            realm: Optional realm override
+            days_back: Days to sync (default: 30) — currently ignored.
+            limit: Max conversations per request — currently ignored.
+            debug: Print conversation data — currently ignored.
+            firebase_token: Legacy MrCall OAuth token — ignored.
+            business_id: Optional business ID override — ignored.
+            realm: Optional realm override — ignored.
 
         Returns:
-            Result dict with sync statistics
+            A "skipped" result; never raises.
         """
-        import json
-        import httpx
-
-        logger.info(f"[mrcall_sync] Starting" f" (days_back={days_back}, limit={limit})")
-
-        if not self.supabase or not self.owner_id:
-            logger.info("[mrcall_sync] Skipping" " - no storage/owner_id")
-            return {
-                "success": True,
-                "skipped": True,
-                "reason": "No storage configured",
-                "synced": 0,
-            }
-
-        if not business_id:
-            business_id = self.supabase.get_mrcall_link(self.owner_id)
-
-        if not business_id:
-            logger.info("[mrcall_sync] Skipping" " - MrCall not linked")
-            return {
-                "success": True,
-                "skipped": True,
-                "reason": ("MrCall not linked." " Use /mrcall link first."),
-                "synced": 0,
-            }
-
-        if not firebase_token:
-            logger.error("[mrcall_sync] No access token")
-            return {
-                "success": False,
-                "error": ("MrCall access token required." " Run /connect mrcall."),
-                "synced": 0,
-            }
-
-        try:
-            end_date = datetime.now(timezone.utc)
-            start_date = end_date - timedelta(days=days_back)
-
-            target_realm = realm if realm else settings.mrcall_realm
-
-            logger.info(f"[mrcall_sync] Using realm:" f" '{target_realm}'")
-            logger.info(f"[mrcall_sync] Auth token len:" f" {len(firebase_token)}")
-
-            url = (
-                f"{settings.mrcall_base_url.rstrip('/')}"
-                f"/mrcall/v1/delegated_{target_realm}"
-                f"/customer/conversation/search"
-            )
-            headers = {
-                "auth": firebase_token,
-                "Content-Type": "application/json",
-            }
-            request_body = {
-                "businessId": business_id,
-                "from": 0,
-                "size": limit,
-                "lightweight": True,
-                "asc": False,
-                "startDate": start_date.isoformat(),
-                "endDate": end_date.isoformat(),
-            }
-
-            logger.info(f"[mrcall_sync] Calling API: {url}")
-            logger.debug(f"[mrcall_sync] Request body:" f" {json.dumps(request_body)}")
-
-            from zylch.api.token_storage import (
-                refresh_mrcall_token,
-            )
-
-            async with httpx.AsyncClient(
-                timeout=60.0,
-                verify=settings.starchat_verify_ssl,
-            ) as client:
-                for attempt in range(2):
-                    try:
-                        response = await client.post(
-                            url,
-                            headers=headers,
-                            json=request_body,
-                        )
-                        response.raise_for_status()
-                        data = response.json()
-                        break
-                    except httpx.HTTPStatusError as e:
-                        if e.response.status_code == 401 and attempt == 0:
-                            logger.warning("[mrcall_sync] 401." " Refreshing token...")
-                            new_creds = await refresh_mrcall_token(self.owner_id)
-                            if new_creds and new_creds.get("access_token"):
-                                logger.info("[mrcall_sync]" " Token refreshed")
-                                headers["auth"] = new_creds["access_token"]
-                                continue
-                            else:
-                                logger.error("[mrcall_sync]" " Refresh failed")
-                                raise e
-                        else:
-                            raise e
-
-            conversations = data.get("items", []) if isinstance(data, dict) else data
-            total = (
-                data.get("total", len(conversations))
-                if isinstance(data, dict)
-                else len(conversations)
-            )
-
-            logger.info(
-                f"[mrcall_sync] Fetched"
-                f" {len(conversations)} conversation(s)"
-                f" (total: {total})"
-            )
-
-            if debug and conversations:
-                self._debug_print_conversations(conversations, business_id)
-
-            synced_count = 0
-            skipped_count = 0
-
-            for conv in conversations:
-                try:
-                    conv_id = conv.get("id")
-                    if not conv_id:
-                        skipped_count += 1
-                        continue
-
-                    body_data = conv.get("body")
-                    if isinstance(body_data, str):
-                        try:
-                            body_data = json.loads(body_data)
-                        except json.JSONDecodeError:
-                            body_data = {"raw": body_data}
-
-                    if isinstance(body_data, dict):
-                        body_data = self._strip_audio_from_body(body_data)
-
-                    raw_data = {k: v for k, v in conv.items() if k != "body"}
-                    raw_data["body"] = body_data
-
-                    self.supabase.store_mrcall_conversation(
-                        owner_id=self.owner_id,
-                        conversation_id=conv_id,
-                        business_id=business_id,
-                        contact_phone=conv.get("contactNumber"),
-                        contact_name=conv.get("contactName"),
-                        call_duration_ms=conv.get("duration"),
-                        call_started_at=conv.get("startTimestamp"),
-                        subject=conv.get("subject"),
-                        body=body_data,
-                        custom_values=conv.get("values"),
-                        raw_data=raw_data,
-                    )
-                    synced_count += 1
-
-                except Exception as e:
-                    logger.warning(
-                        f"[mrcall_sync] Failed to" f" store conv" f" {conv.get('id')}: {e}"
-                    )
-                    skipped_count += 1
-                    continue
-
-            logger.info(f"[mrcall_sync] Synced {synced_count}," f" skipped {skipped_count}")
-
-            return {
-                "success": True,
-                "synced": synced_count,
-                "skipped": skipped_count,
-                "total_available": total,
-                "days_back": days_back,
-                "business_id": business_id,
-            }
-
-        except httpx.HTTPStatusError as e:
-            logger.error(
-                f"[mrcall_sync] HTTP error:" f" {e.response.status_code}" f" - {e.response.text}"
-            )
-            return {
-                "success": False,
-                "error": (f"MrCall API error:" f" {e.response.status_code}"),
-                "synced": 0,
-            }
-        except Exception as e:
-            logger.error(
-                f"[mrcall_sync] Failed: {e}",
-                exc_info=True,
-            )
-            return {
-                "success": False,
-                "error": str(e),
-                "synced": 0,
-            }
-
-    def _debug_print_conversations(
-        self,
-        conversations: list,
-        business_id: str,
-    ) -> None:
-        """Print conversation data for debugging.
-
-        Args:
-            conversations: List of conversation dicts
-            business_id: Business ID for context
-        """
-        import json
-
-        print(f"\n{'=' * 60}")
-        print(f"MrCall DEBUG: Retrieved" f" {len(conversations)} conversation(s)")
-        print(f"Business ID: {business_id}")
-        print(f"{'=' * 60}")
-        for i, conv in enumerate(conversations):
-            print(f"\n--- Conversation {i + 1} ---")
-            print(f"ID: {conv.get('id')}")
-            print(f"Timestamp:" f" {conv.get('startTimestamp')}")
-            print(
-                f"Contact:"
-                f" {conv.get('contactName', 'Unknown')}"
-                f" ({conv.get('contactNumber', 'N/A')})"
-            )
-            dur = conv.get("duration", 0) / 1000
-            print(f"Duration: {dur:.1f}s")
-            print(f"Subject:" f" {conv.get('subject', 'N/A')}")
-            body_preview = str(conv.get("body", "N/A"))
-            suffix = ""
-            print(f"Body: {body_preview}{suffix}")
-            if conv.get("values"):
-                print(f"Values:" f" {json.dumps(conv.get('values'), indent=2, default=str)}")
-        print(f"\n{'=' * 60}\n")
-
-    def _strip_audio_from_body(self, body: Dict[str, Any]) -> Dict[str, Any]:
-        """Strip base64 audio data from body.
-
-        Args:
-            body: Conversation body dict
-
-        Returns:
-            Body dict with audio fields stripped
-        """
-        if not isinstance(body, dict):
-            return body
-
-        result = {}
-        for key, value in body.items():
-            if key in (
-                "audio",
-                "audioData",
-                "audioBase64",
-                "recording",
-            ):
-                result[key] = "[AUDIO_STRIPPED]"
-            elif isinstance(value, dict):
-                result[key] = self._strip_audio_from_body(value)
-            elif isinstance(value, list):
-                result[key] = [
-                    (self._strip_audio_from_body(item) if isinstance(item, dict) else item)
-                    for item in value
-                ]
-            elif isinstance(value, str) and len(value) > 10000:
-                if value.startswith(
-                    (
-                        "data:audio/",
-                        "UklGR",
-                        "SUQz",
-                        "T2dnUw",
-                    )
-                ):
-                    result[key] = "[AUDIO_STRIPPED]"
-                else:
-                    result[key] = value
-            else:
-                result[key] = value
-
-        return result
+        logger.info(
+            "[mrcall_sync] Skipping — legacy delegated MrCall sync was removed; "
+            "Firebase-path reimplementation pending (Livello B)."
+        )
+        return {
+            "success": True,
+            "skipped": True,
+            "reason": "MrCall sync disabled (legacy delegated path removed)",
+            "synced": 0,
+        }
 
     async def run_full_sync(
         self,
@@ -511,58 +268,11 @@ class SyncService:
         return results
 
     async def _sync_mrcall_if_connected(self, days_back: int = 30) -> Dict[str, Any]:
-        """Sync MrCall if credentials are available.
+        """No-op wrapper kept for the :meth:`run_full_sync` call site.
 
-        Args:
-            days_back: Days to sync
-
-        Returns:
-            Sync result dict
+        The legacy delegated OAuth2 MrCall sync was removed (2026-05).
+        Delegates to :meth:`sync_mrcall`, which returns a clean
+        "skipped" result so the pipeline never breaks. See the TODO on
+        :meth:`sync_mrcall` for the Livello B Firebase-path plan.
         """
-        if not self.supabase or not self.owner_id:
-            return {
-                "success": True,
-                "skipped": True,
-                "reason": "No storage configured",
-                "synced": 0,
-            }
-
-        mrcall_creds = self.supabase.get_provider_credentials(self.owner_id, "mrcall")
-
-        if mrcall_creds:
-            logger.debug(f"[mrcall_sync] Loaded credentials." f" Keys: {list(mrcall_creds.keys())}")
-            logger.debug(f"[mrcall_sync] Realm:" f" '{mrcall_creds.get('realm')}'")
-            token = mrcall_creds.get("access_token")
-            if token:
-                logger.debug(f"[mrcall_sync] Access token" f" present (len={len(token)})")
-            else:
-                logger.error("[mrcall_sync] Access token" " MISSING in credentials")
-        else:
-            logger.error("[mrcall_sync] No credentials" " from get_provider_credentials")
-
-        if not mrcall_creds or not mrcall_creds.get("access_token"):
-            return {
-                "success": True,
-                "skipped": True,
-                "reason": "MrCall not connected",
-                "synced": 0,
-            }
-
-        business_id = mrcall_creds.get("business_id")
-        if not business_id:
-            business_id = self.supabase.get_mrcall_link(self.owner_id)
-
-        if not business_id:
-            return {
-                "success": True,
-                "skipped": True,
-                "reason": ("MrCall not linked to a business"),
-                "synced": 0,
-            }
-
-        return await self.sync_mrcall(
-            days_back=days_back,
-            firebase_token=mrcall_creds.get("access_token"),
-            business_id=business_id,
-            realm=mrcall_creds.get("realm"),
-        )
+        return await self.sync_mrcall(days_back=days_back)
