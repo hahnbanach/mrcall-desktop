@@ -27,7 +27,7 @@ from .email_sync import EmailSyncManager
 from ..assistant.models import ModelSelector
 
 from .sms_tools import SendSMSTool
-from .call_tools import InitiateCallTool
+from .call_tools import InitiateCallTool, ListMrCallAssistantsTool
 from .whatsapp_tools import (
     SearchWhatsAppTool,
     GetWhatsAppConversationTool,
@@ -236,6 +236,13 @@ class ToolFactory:
                 )
             )
             logger.info("Call tool initialized" " (StarChat/MrCall)")
+
+        # List MrCall assistants (read-only). Self-authenticates from the
+        # Firebase session at execute() time and degrades gracefully when
+        # not signed in, so register it UNCONDITIONALLY — not gated behind
+        # the legacy OAuth `starchat` client.
+        tools.append(ListMrCallAssistantsTool(session_state=session_state))
+        logger.info("List MrCall assistants tool initialized")
 
         # WhatsApp tools (4 tools) — local neonize
         tools.extend(
