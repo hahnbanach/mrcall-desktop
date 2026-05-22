@@ -14,12 +14,18 @@ description: |
 
 WhatsApp parity is structurally complete through Phase 4. Residual work-in-flight is **live verification** of the 2026-05-15 stack (Update staged progress, Calendar self-healing) + the MrCall-credits v1 round-trip (pending proxy at `https://zylch-test.mrcall.ai`).
 
+## 2026-05-20 — WhatsApp voice-note transcription
+
+On-device STT for WA voice notes: download the ogg/opus at WhatsApp **event time** (URLs expire server-side) → cache to `<profile>/wa_media/<msg_id>.ogg`, then **defer** transcription to the `update` pipeline (faster-whisper `small`, int8, CPU) before memory extraction. Language follows `USER_LANGUAGE` (else auto-detect — no hardcoded Italian). `transcription`/`media_path` columns added to WhatsAppMessage; `workers/memory.py` uses `transcription or text` and bypasses the `len<20` skip gate for transcribed voice notes (plain short text still skipped). Server-side STT rejected (StarChat doesn't bill STT credits yet). **Dev-verified (97 green, incl. real on-device STT)**; live neonize download + packaged-build bundling of ctranslate2 + av (PyInstaller) still pending. New `whatsapp/transcription.py`. See [`execution-plans/whatsapp-voice-transcription.md`](execution-plans/whatsapp-voice-transcription.md).
+
 ## Recent landings (last ~2 weeks)
 
 | Date | What | Refs |
 |---|---|---|
+| 2026-05-22 | WA revoke (delete-for-everyone) purges the target row locally; archived chats excluded from memory + task analysis (UI unaffected); `list_mrcall_assistants` chat tool + dashboard URL anchored in the assistant prompt; current datetime injected into EVERY LLM request | `56488528` · `140793c6` · `63f05b2a` · `5f5c73e8` |
 | 2026-05-20 | MrCall delegated/PKCE OAuth + `/mrcall` command surface + `mrcall_link` removed (−~3000 LOC); StarChat via Firebase JWT only; `sync_mrcall` graceful no-op (Livello B TODO) | `770522e8` · `6f02f7ef` |
 | 2026-05-20 | `mrcall.search_businesses` RPC (CrmBusinessSearch filters) for customer-service lookup; 13 stale SaaS-era test files removed (suite collectable again, 207 passed) | `a28c5533` · `c40dd41b` · `dd6863ca` |
+| 2026-05-20 | WhatsApp voice-note transcription — event-time download + deferred faster-whisper `small`/int8 pass; `transcription`/`media_path` cols; memory uses `transcription or text`, voice bypasses `len<20` gate | [whatsapp-voice-transcription.md](execution-plans/whatsapp-voice-transcription.md) |
 | 2026-05-15 | Phase 4 cross-channel: `update_task_item(whatsapp_chat_jid=…)` stamps `sources.whatsapp_chat_jid` (idempotent), TaskWorker WA path stamps on CREATE + UPDATE | `b57fcc4f` |
 | 2026-05-15 | Update pipeline staged progress callback (sync 5%, WA 20%, memory 30%, tasks 60%, sweeps 80/90%, render 95%) + rewritten `_estimate_update_eta` (memory + tasks + WA + F4/F8/F9 + first-sync proxy + setup) | `0b33fdf4` · `cb91901b` |
 | 2026-05-15 | Calendar self-healing — `ensureEngineSession()` re-pushes Firebase token + verifies via `account.whoAmI()` before Calendar RPCs; initial token push retries 3× with backoff | `a03f6831` · `1c60aebf` |
@@ -47,6 +53,7 @@ WhatsApp parity is structurally complete through Phase 4. Residual work-in-fligh
 
 ## Known issues
 
+- **WA voice transcription dev-verified only** — live neonize `download_any` path (real voice-note bytes from a connected WhatsApp) and packaged-build bundling of ctranslate2 + av (PyInstaller, +~50–100 MB) not verified; tracked in [`harness-backlog.md`](harness-backlog.md).
 - **Firebase round-trip not fully live-verified** — Calendar self-healing landed but recovery path hasn't been observed end-to-end on Mario's machine.
 - **MrCall-credits v1 not live-verified.**
 - Oversized files (see Next Steps #4).

@@ -353,9 +353,23 @@ export default function WhatsAppView(): JSX.Element {
                           {m.sender_name}
                         </div>
                       )}
-                      {m.text ? (
+                      {(m.media_type === 'voice' || m.media_type === 'audio') &&
+                      m.transcription ? (
+                        <div>
+                          <div className="text-sm text-brand-black whitespace-pre-wrap">
+                            {'\u{1F3A4} ' + m.transcription}
+                          </div>
+                          <div className="text-[10px] italic text-brand-grey-80">
+                            vocale trascritta
+                          </div>
+                        </div>
+                      ) : m.text && m.text !== '[voice]' && m.text !== '[audio]' ? (
                         <div className="text-sm text-brand-black whitespace-pre-wrap">
                           {m.text}
+                        </div>
+                      ) : m.media_type === 'voice' || m.media_type === 'audio' ? (
+                        <div className="text-sm italic text-brand-grey-80">
+                          {'\u{1F3A4} [vocale]'}
                         </div>
                       ) : m.media_type ? (
                         <div className="text-sm italic text-brand-grey-80">

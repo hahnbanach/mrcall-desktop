@@ -677,6 +677,12 @@ class WhatsAppMessage(DictMixin, Base):
     is_from_me = Column(Boolean, default=False)
     is_group = Column(Boolean, default=False)
     media_type = Column(Text)
+    # 2026-05-20: WhatsApp voice-note transcription. `media_path` is the
+    # local file the audio bytes were written to at event time;
+    # `transcription` is the faster-whisper output filled later in batch
+    # during the update pipeline. Both NULL on non-audio rows.
+    transcription = Column(Text)
+    media_path = Column(Text)
     status = Column(Text)
     created_at = Column(DateTime, default=_utcnow)
     memory_processed_at = Column(DateTime)

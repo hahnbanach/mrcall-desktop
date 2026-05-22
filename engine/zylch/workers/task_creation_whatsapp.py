@@ -68,11 +68,7 @@ def _resolve_wa_sender(
             if resolved.startswith("+"):
                 phone = resolved
             if not sender_name:
-                sender_name = (
-                    contact.get("name")
-                    or contact.get("push_name")
-                    or sender_name
-                )
+                sender_name = contact.get("name") or contact.get("push_name") or sender_name
     return phone, lid, sender_name
 
 
@@ -114,6 +110,27 @@ async def analyze_recent_whatsapp_events(
     all_msgs = worker.storage.get_unprocessed_whatsapp_messages_for_task(worker.owner_id)
     if not all_msgs:
         logger.debug("[TASK-WA] no unprocessed WhatsApp messages")
+        return
+
+    # Exclude messages from chats the user archived on WhatsApp (same
+    # gate as the memory path). Archived rows are simply not analysed and
+    # NOT marked task_processed — they re-enter the pipeline if the chat
+    # is un-archived. A read failure means "skip nothing". The chats stay
+    # fully visible in the UI; only task creation is gated.
+    from zylch.whatsapp.sync import drop_archived_messages, get_archived_chat_jids
+
+    try:
+        archived = get_archived_chat_jids()
+    except Exception as e:
+        logger.warning(f"[TASK-WA] archived-chat read failed, skipping nothing: {e}")
+        archived = set()
+    before = len(all_msgs)
+    all_msgs = drop_archived_messages(all_msgs, archived)
+    skipped = before - len(all_msgs)
+    if skipped:
+        logger.info(f"[TASK-WA] skipped {skipped} WA msgs from {len(archived)} archived chats")
+    if not all_msgs:
+        logger.debug("[TASK-WA] all unprocessed WhatsApp messages are in archived chats")
         return
 
     # Index: chat_jid → ALL unprocessed messages in chat, so we can
@@ -165,17 +182,13 @@ async def analyze_recent_whatsapp_events(
     for chat_jid in list(user_replied.keys()):
         reply_ts = user_replied[chat_jid]
         contact_winner = chats.get(chat_jid)
-        contact_ts = (
-            int(contact_winner.get("timestamp_epoch") or 0) if contact_winner else 0
-        )
+        contact_ts = int(contact_winner.get("timestamp_epoch") or 0) if contact_winner else 0
         if reply_ts <= contact_ts:
             # User replied BEFORE the contact's latest message —
             # the contact's message supersedes the reply, leave
             # the chat to the LLM branch.
             continue
-        thread_tasks = worker.storage.get_tasks_by_thread(
-            worker.owner_id, chat_jid, open_only=True
-        )
+        thread_tasks = worker.storage.get_tasks_by_thread(worker.owner_id, chat_jid, open_only=True)
         for t in thread_tasks:
             worker.storage.complete_task_item(worker.owner_id, t["id"])
             logger.info(
@@ -210,9 +223,7 @@ async def analyze_recent_whatsapp_events(
         contact_key = phone or lid or ""
 
         blob_context, blob_id = worker._get_blob_for_contact(contact_key)
-        thread_tasks = worker.storage.get_tasks_by_thread(
-            worker.owner_id, chat_jid, open_only=True
-        )
+        thread_tasks = worker.storage.get_tasks_by_thread(worker.owner_id, chat_jid, open_only=True)
         existing_tasks_all: List[Dict] = list(thread_tasks)
         thread_task_ids: set = {t["id"] for t in thread_tasks}
         existing_ids = {t["id"] for t in thread_tasks}
@@ -402,9 +413,7 @@ async def analyze_recent_whatsapp_events(
             # Mirror Fix-D: force create→update when the SAME chat
             # already has an open task. F7 topical siblings stay as
             # context — never auto-merged behind a CREATE.
-            force_update_target = _pick_force_update_target(
-                existing_tasks_all, thread_task_ids
-            )
+            force_update_target = _pick_force_update_target(existing_tasks_all, thread_task_ids)
             if force_update_target is not None:
                 logger.debug(
                     f"[TASK-WA] Converting create→update on chat "
@@ -454,6 +463,5 @@ async def analyze_recent_whatsapp_events(
         _mark_chat_processed(chat_jid)
 
     logger.info(
-        f"[TASK-WA] Analyzed {analyzed_count} WhatsApp messages, "
-        f"found {action_count} actions"
+        f"[TASK-WA] Analyzed {analyzed_count} WhatsApp messages, " f"found {action_count} actions"
     )

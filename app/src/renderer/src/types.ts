@@ -135,6 +135,7 @@ export interface WhatsAppMessage {
   sender_name: string | null
   text: string | null
   media_type: string | null
+  transcription: string | null
   is_from_me: boolean
   is_group: boolean
   timestamp: string | null

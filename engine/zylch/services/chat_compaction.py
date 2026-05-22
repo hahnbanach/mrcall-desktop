@@ -142,6 +142,8 @@ async def _summarize(middle_text: str) -> str:
     """
     import anthropic
 
+    from zylch.llm.client import current_datetime_line
+
     client = anthropic.AsyncAnthropic()
     system = (
         "You are a conversation summarizer. Produce a concise, faithful "
@@ -152,6 +154,9 @@ async def _summarize(middle_text: str) -> str:
         "must remember. Do NOT invent facts. Output prose only — no "
         "headings, no lists unless the original had lists."
     )
+    # This summarizer bypasses LLMClient, so inject the current moment
+    # here too — every LLM request must carry the datetime.
+    system = f"{system}\n\n{current_datetime_line()}"
     resp = await client.messages.create(
         model=_COMPACTION_MODEL,
         max_tokens=4096,
