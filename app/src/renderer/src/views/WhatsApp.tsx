@@ -318,7 +318,18 @@ export default function WhatsAppView(): JSX.Element {
                   {activeThread.name || activeThread.phone || activeThread.jid}
                 </div>
                 {activeThread.phone && activeThread.name && (
-                  <div className="text-xs text-brand-grey-80">+{activeThread.phone}</div>
+                  <button
+                    type="button"
+                    title="Apri in WhatsApp"
+                    className="text-xs text-brand-grey-80 hover:underline cursor-pointer bg-transparent border-0 p-0"
+                    onClick={() =>
+                      void window.zylch.shell.openExternal(
+                        `https://wa.me/${(activeThread.phone || '').replace(/\D/g, '')}`
+                      )
+                    }
+                  >
+                    {'+' + (activeThread.phone || '').replace(/\D/g, '')}
+                  </button>
                 )}
               </header>
               <div className="flex-1 overflow-y-auto p-4 space-y-2">
