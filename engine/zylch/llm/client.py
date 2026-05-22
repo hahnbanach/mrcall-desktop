@@ -24,10 +24,58 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional, Union
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Current-datetime injection ───────────────────────────────────────
+# Every request that goes to the LLM MUST carry the real current moment.
+# Without it the model guesses the date from its training cutoff and gets
+# every relative deadline wrong ("today is May 20, pickup is tomorrow"
+# when it is actually a different day). Injected at the single LLMClient
+# chokepoint below so it covers task detection, memory, solve, chat,
+# trainers, sweeps — everything — automatically.
+
+
+def current_datetime_line() -> str:
+    """Short, useful ``now`` line injected into every LLM system prompt.
+
+    Local, timezone-aware, with the weekday — so any model reasoning
+    about relative dates ("today", "tomorrow", a deadline) has the real
+    moment instead of guessing from its training cutoff.
+
+    Example: ``Datetime=2026-05-22T10:30+02:00 (Thursday) — current
+    moment; use it for any relative date reasoning.``
+    """
+    now = datetime.now().astimezone()
+    return (
+        f"Datetime={now.isoformat(timespec='minutes')} ({now:%A}) — "
+        "current moment; use it for any relative date reasoning."
+    )
+
+
+def _with_datetime(
+    system: Optional[Union[str, List[Dict[str, Any]]]],
+) -> Union[str, List[Dict[str, Any]]]:
+    """Return ``system`` with the current datetime appended.
+
+    Appended LAST so it never busts prompt caching: the cached prefix is
+    the caller's block(s) carrying ``cache_control``; the changing
+    datetime sits PAST that breakpoint and is sent fresh each call
+    without invalidating the cache. A bare-string ``system`` is never
+    prompt-cached (caching needs the blocks + ``cache_control`` form), so
+    plain concatenation is safe there too. ``None`` becomes the line on
+    its own — so a request with no system prompt still carries the date.
+    """
+    line = current_datetime_line()
+    if system is None:
+        return line
+    if isinstance(system, str):
+        return f"{system}\n\n{line}"
+    return list(system) + [{"type": "text", "text": line}]
 
 
 # ─── Anthropic-shape return objects (kept for backward compat) ────────
@@ -111,9 +159,7 @@ class LLMResponse:
         return {
             "input_tokens": int(getattr(u, "input_tokens", 0) or 0),
             "output_tokens": int(getattr(u, "output_tokens", 0) or 0),
-            "cache_creation_input_tokens": int(
-                getattr(u, "cache_creation_input_tokens", 0) or 0
-            ),
+            "cache_creation_input_tokens": int(getattr(u, "cache_creation_input_tokens", 0) or 0),
             "cache_read_input_tokens": int(getattr(u, "cache_read_input_tokens", 0) or 0),
         }
 
@@ -210,8 +256,7 @@ class LLMClient:
         elif transport == "proxy":
             if firebase_session is None:
                 raise ValueError(
-                    "firebase_session is required for transport='proxy' "
-                    "(no signed-in user)"
+                    "firebase_session is required for transport='proxy' " "(no signed-in user)"
                 )
             from .proxy_client import MrCallProxyClient
 
@@ -224,9 +269,7 @@ class LLMClient:
             raise ValueError(f"Unknown transport: {transport!r}")
 
         self.transport: Transport = transport
-        logger.info(
-            f"Initialized LLMClient transport={transport} model={self.model}"
-        )
+        logger.info(f"Initialized LLMClient transport={transport} model={self.model}")
 
     @property
     def is_metered(self) -> bool:
@@ -285,8 +328,9 @@ class LLMClient:
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
-        if system:
-            request_kwargs["system"] = system
+        # Always inject the current datetime (appended last → cache-safe).
+        # Every LLM request carries the real moment; no exceptions.
+        request_kwargs["system"] = _with_datetime(system)
         if tools:
             request_kwargs["tools"] = tools
         if tool_choice:
