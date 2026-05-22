@@ -496,17 +496,34 @@ async def _run_memory(owner_id: str, store) -> tuple[int, int]:
     emails = store.get_unprocessed_emails(owner_id)
     email_count = await worker.process_batch(emails)
 
+    # Archived WhatsApp chats are excluded from memory extraction (and
+    # task creation, mirrored in the task worker). The archived flag
+    # lives in neonize's session DB (app-state sync) and is read
+    # read-only. Computed ONCE here and reused for the transcription
+    # pass and the batch below. A read failure just means "nothing
+    # skipped" — these chats stay visible in the UI either way; we only
+    # gate analysis. Skipped messages are NOT marked processed, so
+    # un-archiving a chat re-includes its messages on the next run.
+    from zylch.whatsapp.sync import drop_archived_messages, get_archived_chat_jids
+
+    try:
+        archived = get_archived_chat_jids()
+    except Exception as e:
+        logger.warning(f"[memory] archived-chat read failed, skipping nothing: {e}")
+        archived = set()
+
     # Voice-note transcription pass (2026-05-20): downloaded-but-not-yet
     # transcribed audio rows get an on-device faster-whisper transcript
     # BEFORE memory extraction, so the freshly-fetched dicts below carry
     # the transcript and the memory worker sees real text instead of a
     # "[voice]" placeholder. STT failures are tolerated — a broken
-    # transcription must never break memory extraction.
+    # transcription must never break memory extraction. Skip archived
+    # chats here too so we don't spend STT on a chat we won't analyse.
     try:
         from zylch.whatsapp.transcription import resolve_user_language, transcribe_audio
 
         lang = resolve_user_language()
-        pending = store.get_untranscribed_voice_messages(owner_id)
+        pending = drop_archived_messages(store.get_untranscribed_voice_messages(owner_id), archived)
         done = 0
         for row in pending:
             try:
@@ -526,6 +543,11 @@ async def _run_memory(owner_id: str, store) -> tuple[int, int]:
     # for both — channel-awareness lives in the message envelope.
     # Re-fetch AFTER transcription so the dicts carry the new transcripts.
     wa_messages = store.get_unprocessed_whatsapp_messages(owner_id)
+    before = len(wa_messages)
+    wa_messages = drop_archived_messages(wa_messages, archived)
+    skipped = before - len(wa_messages)
+    if skipped:
+        logger.info(f"[memory] skipped {skipped} WA msgs from {len(archived)} archived chats")
     wa_count = await worker.process_whatsapp_batch(wa_messages)
 
     return email_count, wa_count

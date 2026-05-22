@@ -1060,3 +1060,58 @@ def _extract_push_name(contact_info) -> Optional[str]:
     if hasattr(contact_info, "PushName"):
         return contact_info.PushName
     return None
+
+
+def get_archived_chat_jids() -> set[str]:
+    """Return the set of ``chat_jid``s the user has archived on WhatsApp.
+
+    The archived flag lives in neonize's own session DB (``whatsapp.db``)
+    under ``whatsmeow_chat_settings(our_jid, chat_jid, muted_until,
+    pinned, archived)``; ``chat_jid`` there matches our
+    ``whatsapp_messages.chat_jid`` form verbatim
+    (``<digits>@s.whatsapp.net`` / ``@g.us`` / ``@lid``). We open the
+    file read-only — exactly like :meth:`WhatsAppSyncService.sync_lid_contacts`
+    — so we never contend with the live whatsmeow connection.
+
+    Degrades to an EMPTY set on ANY failure (file missing, the table
+    not present on an older session DB, a malformed row, …) — this is a
+    best-effort filter and must never raise into the pipeline. The
+    archived flag is populated by app-state sync, so a chat archived on
+    the phone only takes effect here after the next connect/sync.
+    """
+    import sqlite3 as _sqlite3
+
+    from zylch.whatsapp.client import _default_wa_db
+
+    wa_db = _default_wa_db()
+    conn = None
+    try:
+        conn = _sqlite3.connect(f"file:{wa_db}?mode=ro", uri=True)
+        cur = conn.cursor()
+        cur.execute("SELECT chat_jid FROM whatsmeow_chat_settings WHERE archived=1")
+        archived = {row[0] for row in cur.fetchall() if row and row[0]}
+        logger.debug(f"[wa-archived] {len(archived)} archived chat(s) in session DB")
+        return archived
+    except Exception as e:
+        # Missing file, missing table on an older session DB, locked, etc.
+        logger.debug(f"[wa-archived] could not read archived chats from {wa_db}: {e}")
+        return set()
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def drop_archived_messages(messages: list[dict], archived: set[str]) -> list[dict]:
+    """Filter out messages whose ``chat_jid`` is in ``archived``.
+
+    Pure (no DB, no I/O) so the skip logic is unit-testable on its own.
+    An empty ``archived`` set is a passthrough. Messages without a
+    ``chat_jid`` are kept (defensive — the caller decides what to do with
+    them; we never silently drop on missing data).
+    """
+    if not archived:
+        return messages
+    return [m for m in messages if (m.get("chat_jid") or "") not in archived]
