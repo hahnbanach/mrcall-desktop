@@ -437,6 +437,23 @@ class WhatsAppSyncService:
             if not msg_id:
                 return False
 
+            # "Delete for everyone" (revoke): the message names a TARGET to
+            # remove and must NOT itself be stored. Handle it before any
+            # field extraction so a recalled secret (e.g. an SSH key the
+            # sender deleted) is purged from the local store rather than
+            # persisted as a junk/empty row.
+            revoke_target = _extract_revoke_target(message)
+            if revoke_target:
+                n = 0
+                if self.storage is not None:
+                    n = self.storage.delete_whatsapp_message_by_message_id(
+                        self.owner_id, revoke_target
+                    )
+                logger.info(
+                    f"[wa-sync] revoke: deleted target message_id={revoke_target} (rows={n})"
+                )
+                return True
+
             src = info.MessageSource if hasattr(info, "MessageSource") else None
             chat_jid = _format_jid(getattr(src, "Chat", None)) if src is not None else ""
             sender_jid = _format_jid(getattr(src, "Sender", None)) if src is not None else ""
@@ -513,6 +530,27 @@ class WhatsAppSyncService:
             if not msg_id:
                 return False
 
+            inner = msg.message if hasattr(msg, "message") else msg
+
+            # Best-effort revoke handling in history replay: if a revoke
+            # rides in via HistorySyncEv, delete its target and skip the
+            # revoke row. The history proto's inner Message shape may differ
+            # from the live one; _extract_revoke_target is fully defensive
+            # and returns None (→ stored normally / skipped) if it can't
+            # find a protocolMessage, so this never crashes the replay.
+            revoke_target = _extract_revoke_target(inner)
+            if revoke_target:
+                n = 0
+                if self.storage is not None:
+                    n = self.storage.delete_whatsapp_message_by_message_id(
+                        self.owner_id, revoke_target
+                    )
+                logger.info(
+                    f"[wa-sync] revoke (history): deleted target "
+                    f"message_id={revoke_target} (rows={n})"
+                )
+                return True
+
             chat_jid = str(key.remoteJid if hasattr(key, "remoteJid") else "")
             is_from_me = bool(key.fromMe if hasattr(key, "fromMe") else False)
             sender_jid = (
@@ -521,7 +559,6 @@ class WhatsAppSyncService:
                 else chat_jid
             )
 
-            inner = msg.message if hasattr(msg, "message") else msg
             text = _extract_text(inner)
             timestamp = _extract_timestamp_from_int(
                 msg.messageTimestamp if hasattr(msg, "messageTimestamp") else 0
@@ -701,6 +738,57 @@ def _unwrap_message(message):
         if not descended:
             return message
     return message
+
+
+# waE2E ProtocolMessage.Type.REVOKE — "delete for everyone". The enum
+# value is 0 and stable in whatsmeow/waE2E (verified against neonize
+# 0.3.17: WAWebProtobufsE2E.ProtocolMessage.Type). We hardcode it rather
+# than import the proto class so a version bump that renames the module
+# can't crash the message handler — _extract_revoke_target stays purely
+# field-introspection based.
+_REVOKE_TYPE = 0
+
+
+def _extract_revoke_target(message) -> Optional[str]:
+    """Return the TARGET message id of a "delete for everyone" revoke.
+
+    A revoke arrives as a ``Message`` carrying a ``protocolMessage`` whose
+    ``type == REVOKE`` and whose ``key`` identifies the message to remove.
+    We must delete that target row and NOT store the revoke itself.
+
+    Returns the target's protocol message id (``protocolMessage.key.ID``)
+    when the message is a revoke with an actionable key, else ``None``.
+
+    Defensive by construction — proto3 enums default ``type`` to 0
+    (== REVOKE) even when unset, so a non-revoke ``protocolMessage`` (an
+    edit, an ephemeral-setting change, a history-sync notification, …)
+    would look like a revoke if we only checked ``type``. We therefore
+    require BOTH ``type == REVOKE`` AND a non-empty target key id; a bare
+    ``type=0`` with no key is not a real revoke and is ignored. Casing
+    differs by source: live ``MessageEv`` keys use ``ID``/``remoteJID``;
+    history ``WebMessageInfo`` keys use ``id``/``remoteJid`` — we try
+    both. Never raises.
+    """
+    message = _unwrap_message(message)
+    if message is None:
+        return None
+    if not _has_field(message, "protocolMessage"):
+        return None
+    pm = getattr(message, "protocolMessage", None)
+    if pm is None:
+        return None
+    try:
+        ptype = getattr(pm, "type", getattr(pm, "Type", None))
+    except Exception:
+        ptype = None
+    if ptype != _REVOKE_TYPE:
+        return None
+    key = getattr(pm, "key", None)
+    if key is None:
+        return None
+    target_id = getattr(key, "ID", None) or getattr(key, "id", None)
+    target_id = str(target_id) if target_id else ""
+    return target_id or None
 
 
 def _has_field(message, name: str) -> bool:

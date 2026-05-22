@@ -2869,6 +2869,69 @@ class Storage:
                 synchronize_session=False,
             )
 
+    def delete_whatsapp_message_by_message_id(self, owner_id: str, message_id: str) -> int:
+        """Delete WhatsApp message row(s) by PROTOCOL ``message_id``.
+
+        Used when WhatsApp delivers a "delete for everyone" (revoke):
+        the revoke names a TARGET message by its protocol id and we must
+        purge it from the local store (e.g. a leaked SSH key the sender
+        recalled).
+
+        ``message_id`` is the wire-level ``message_id`` column (the
+        whatsmeow message ID), NOT the engine UUID ``id`` PK — that is
+        the id a revoke's ``protocolMessage.key.ID`` carries.
+
+        The ``whatsapp_blobs`` FK references ``whatsapp_messages.id``
+        (engine UUID) with ``ON DELETE CASCADE``. ``database.py`` enables
+        ``PRAGMA foreign_keys=ON`` on every connect so the cascade would
+        fire, but we delete the blob links explicitly first anyway: it
+        keeps the intent obvious and is robust if this method is ever
+        called on a connection where the pragma is off.
+
+        Returns the number of ``whatsapp_messages`` rows deleted (0 when
+        the target is unknown — a revoke for a message we never stored).
+        """
+        if not (owner_id and message_id):
+            return 0
+        from zylch.storage.models import WhatsAppBlob, WhatsAppMessage
+
+        try:
+            with get_session() as session:
+                engine_ids = [
+                    str(r[0])
+                    for r in session.query(WhatsAppMessage.id)
+                    .filter(
+                        WhatsAppMessage.owner_id == owner_id,
+                        WhatsAppMessage.message_id == message_id,
+                    )
+                    .all()
+                ]
+                if not engine_ids:
+                    return 0
+
+                # Drop the blob links first so no orphan rows survive even
+                # if FK cascade is disabled on this connection.
+                session.query(WhatsAppBlob).filter(
+                    WhatsAppBlob.owner_id == owner_id,
+                    WhatsAppBlob.whatsapp_message_id.in_(engine_ids),
+                ).delete(synchronize_session=False)
+
+                deleted = (
+                    session.query(WhatsAppMessage)
+                    .filter(
+                        WhatsAppMessage.owner_id == owner_id,
+                        WhatsAppMessage.id.in_(engine_ids),
+                    )
+                    .delete(synchronize_session=False)
+                )
+            return int(deleted)
+        except Exception as e:
+            logger.error(
+                f"delete_whatsapp_message_by_message_id(owner_id={owner_id}, "
+                f"message_id={message_id}) failed: {e}"
+            )
+            return 0
+
     def reset_memory_processing_timestamps(self, owner_id: str) -> Dict[str, int]:
         """Reset memory_processed_at timestamps for all services."""
         from zylch.storage.models import WhatsAppMessage
