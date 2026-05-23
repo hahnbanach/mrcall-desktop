@@ -398,6 +398,20 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
                     if event["type"] == "error":
                         final = {"ok": False, "error": event["message"]}
                         break
+                # Learn durable rules from any edits the user made to
+                # approval-gated sends. Fire-and-forget in a thread so it
+                # never delays the response; the function never raises.
+                corrections = list(getattr(executor, "corrections", []))
+                if corrections:
+                    from zylch.services.correction_learning import (
+                        learn_from_corrections,
+                    )
+
+                    asyncio.create_task(
+                        asyncio.to_thread(
+                            learn_from_corrections, corrections, owner_id
+                        )
+                    )
                 return final or {"ok": False, "error": "stream ended"}
             finally:
                 _active_executor = None

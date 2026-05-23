@@ -122,6 +122,10 @@ class TaskExecutor:
         self._max_turns = max_turns
         # Map tool_use_id -> Future set by approve()
         self._pending: Dict[str, asyncio.Future] = {}
+        # Each user edit of an approval-gated send is a supervision
+        # signal. Captured here as {tool_name, proposed, edited} so the
+        # caller can learn durable rules from the diff after the run.
+        self.corrections: List[Dict[str, Any]] = []
 
     @property
     def messages(self) -> List[Dict]:
@@ -228,6 +232,16 @@ class TaskExecutor:
                             approved = bool(decision.get("approved"))
                             edited = decision.get("edited_input")
                             if edited and isinstance(edited, dict):
+                                # Record the diff BEFORE overwriting the
+                                # proposal — it's the gold signal for
+                                # learning durable rules from corrections.
+                                self.corrections.append(
+                                    {
+                                        "tool_name": tool_name,
+                                        "proposed": dict(tool_input),
+                                        "edited": dict(edited),
+                                    }
+                                )
                                 tool_input = edited
                                 # Reflect the edit in the recorded
                                 # assistant message so the model sees
