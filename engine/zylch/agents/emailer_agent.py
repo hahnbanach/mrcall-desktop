@@ -25,6 +25,7 @@ from zylch.storage.database import get_session
 from zylch.storage.models import Blob
 from zylch.memory import HybridSearchEngine
 from zylch.memory.hybrid_search import SearchResult
+from zylch.services.solve_constants import get_operating_rules_block
 
 logger = logging.getLogger(__name__)
 
@@ -382,12 +383,18 @@ class EmailerAgent(SpecializedAgent):
         # Build prompt context
         context_text = build_prompt_context(context)
 
+        # Always-on binding rules (same framing as the solve/chat path).
+        # Placed at the very top so they outrank the trained persona and
+        # the model's default politeness.
+        rules_block = get_operating_rules_block(self.owner_id)
+        rules_prefix = f"{rules_block}\n\n---\n\n" if rules_block else ""
+
         # Check for trained prompt (personalized style)
         trained_prompt = self._get_trained_prompt()
 
         if trained_prompt:
             # Use trained prompt - already contains style instructions
-            prompt = f"""{trained_prompt}
+            prompt = f"""{rules_prefix}{trained_prompt}
 
 ---
 
@@ -401,7 +408,7 @@ USER REQUEST: {user_request}
 Use the write_email tool to output your composed email."""
         else:
             # Fallback to generic prompt (no personalized style)
-            prompt = f"""You are writing an email for the user.
+            prompt = f"""{rules_prefix}You are writing an email for the user.
 
 {context_text}
 

@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import os
 
+from zylch.services import solve_constants
 from zylch.services.solve_constants import (
     SOLVE_TOOLS,
     SOLVE_SYSTEM_PROMPT,
+    get_operating_rules_block,
+    get_personal_data_section,
     get_user_language_directive,
 )
 from zylch.services.task_executor import APPROVAL_TOOLS
@@ -108,6 +111,45 @@ def test_system_prompt_has_required_placeholders():
             f"SOLVE_SYSTEM_PROMPT missing placeholder {placeholder}; "
             f"tasks_solve will KeyError when formatting."
         )
+
+
+# ─── OPERATING RULES (always-on, high-salience) ───────────────
+
+
+def test_operating_rules_block_framed_as_binding(monkeypatch):
+    """Learned prefs must be wrapped in override-the-politeness framing,
+    not the old soft "## Learned preferences" footer that the RLHF
+    politeness prior ignored (the "we'll happily call you" bug).
+    """
+    monkeypatch.setattr(
+        solve_constants,
+        "_get_learned_preferences",
+        lambda owner_id: "RULE: Never offer to phone a customer for support.",
+    )
+    out = get_operating_rules_block("owner-1")
+    assert "OPERATING RULES" in out
+    assert "override" in out.lower()
+    assert "Never offer to phone" in out
+
+
+def test_operating_rules_empty_without_prefs(monkeypatch):
+    monkeypatch.setattr(solve_constants, "_get_learned_preferences", lambda owner_id: "")
+    assert get_operating_rules_block("owner-1") == ""
+    assert get_operating_rules_block(None) == ""
+
+
+def test_rules_precede_personal_data(monkeypatch):
+    """The rules block must come BEFORE personal data so it sits at the
+    top of the prompt — placement is part of beating the politeness prior.
+    """
+    monkeypatch.setenv("USER_FULL_NAME", "Mario")
+    monkeypatch.setattr(
+        solve_constants,
+        "_get_learned_preferences",
+        lambda owner_id: "RULE: Never offer to phone a customer.",
+    )
+    section = get_personal_data_section(owner_id="owner-1")
+    assert section.find("OPERATING RULES") < section.find("USER PERSONAL DATA")
 
 
 def test_system_prompt_format_smoke():

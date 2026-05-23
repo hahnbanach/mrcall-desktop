@@ -302,6 +302,28 @@ def _get_learned_preferences(owner_id: str) -> str:
     return joined
 
 
+def get_operating_rules_block(owner_id: Optional[str] = None) -> str:
+    """Return the framed, always-on OPERATING RULES block, or ''.
+
+    Wraps the user's learned `prefs:` rules in binding-imperative framing
+    that overrides the model's default politeness. Shared by the solve/chat
+    personal-data section and the standalone emailer agent so the framing
+    can't drift between the two generation paths.
+    """
+    if not owner_id:
+        return ""
+    prefs = _get_learned_preferences(owner_id)
+    if not prefs:
+        return ""
+    return (
+        "OPERATING RULES — learned from this user's own corrections. "
+        "They are ABSOLUTE and override your defaults: when a rule "
+        "conflicts with sounding helpful, friendly, or accommodating, "
+        "follow the rule, not the instinct. Never offer or promise "
+        "anything a rule forbids.\n" + prefs
+    )
+
+
 _LANGUAGE_NAMES = {
     "it": "Italian",
     "en": "English",
@@ -340,10 +362,14 @@ def get_user_language_directive() -> str:
 def get_personal_data_section(owner_id: Optional[str] = None) -> str:
     """Build personal data + notes + secret + learned-prefs section.
 
-    `owner_id` enables the `## Learned preferences` sub-section, pulled
-    from blobs with `namespace == f"prefs:{owner_id}"`. Without owner_id,
-    only env-backed sections render — matches the old behaviour for call
-    sites that don't have a user in scope (cron, one-off CLI).
+    `owner_id` enables the `OPERATING RULES` block, pulled from blobs
+    with `namespace == f"prefs:{owner_id}"`. The block is placed FIRST and
+    framed as binding imperatives that override the model's default
+    helpfulness/politeness — a soft "## Learned preferences" footer lost
+    to the RLHF politeness prior (e.g. the model kept offering to phone
+    customers despite a policy never to). Without owner_id, only env-backed
+    sections render — matches the old behaviour for call sites that don't
+    have a user in scope (cron, one-off CLI).
     """
     import os
 
@@ -395,9 +421,9 @@ def get_personal_data_section(owner_id: Optional[str] = None) -> str:
         )
 
     if owner_id:
-        prefs = _get_learned_preferences(owner_id)
-        if prefs:
-            parts.append("## Learned preferences\n" + prefs)
+        rules_block = get_operating_rules_block(owner_id)
+        if rules_block:
+            parts.insert(0, rules_block)
 
     if not parts:
         return ""
