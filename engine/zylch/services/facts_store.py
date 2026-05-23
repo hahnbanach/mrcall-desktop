@@ -112,6 +112,7 @@ def upsert_fact(
     category: str,
     key: str,
     value: str,
+    event_description: Optional[str] = None,
 ) -> Optional[str]:
     """Create or update a fact, deduped by exact (Category, Key).
 
@@ -145,7 +146,7 @@ def upsert_fact(
                     blob_id=blob["blob_id"],
                     owner_id=owner_id,
                     content=content,
-                    event_description="Fact updated",
+                    event_description=event_description or "Fact updated",
                 )
                 logger.debug(f"[facts] updated {category}/{key} -> {blob['blob_id']}")
                 return blob["blob_id"]
@@ -154,7 +155,7 @@ def upsert_fact(
             owner_id=owner_id,
             namespace=facts_namespace(owner_id),
             content=content,
-            event_description="Fact created",
+            event_description=event_description or "Fact created",
         )
         blob_id = str(blob["id"])
         logger.debug(f"[facts] created {category}/{key} -> {blob_id}")

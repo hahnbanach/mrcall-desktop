@@ -84,6 +84,71 @@ _JUDGE_SYSTEM = (
     "missing one."
 )
 
+# A SECOND, independent judgment on the same diff: did the user correct a
+# concrete BUSINESS VALUE (a price, rate, lead time, minimum order,
+# opening hours, deliverable) that future offers of the same kind should
+# reuse? This is distinct from a policy rule — it updates the structured
+# facts store, not the always-on rules. Kept separate so a tone edit and
+# a price edit on the same message can both be captured.
+_RECORD_FACT_TOOL = {
+    "name": "record_fact",
+    "description": (
+        "Record whether the user's edit corrected a concrete, reusable "
+        "business value that future offers/replies should use."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "is_fact_change": {
+                "type": "boolean",
+                "description": (
+                    "True ONLY if the edit changed a STANDARD business value "
+                    "(price, rate, lead time, minimum order, hours, "
+                    "deliverable) that should be reused in FUTURE offers of "
+                    "the same kind. False for a discount or figure specific to "
+                    "this one recipient, for typo/grammar fixes, for tone "
+                    "changes, or when no concrete value changed."
+                ),
+            },
+            "category": {
+                "type": "string",
+                "description": (
+                    "The kind of offer/topic the value belongs to. Reuse an "
+                    "existing category name from the list when one fits; keep "
+                    "names stable (e.g. 'white-label'). Empty if not a fact "
+                    "change."
+                ),
+            },
+            "key": {
+                "type": "string",
+                "description": (
+                    "A short stable name for the value (e.g. 'Day rate', "
+                    "'Minimum order quantity'). Empty if not a fact change."
+                ),
+            },
+            "value": {
+                "type": "string",
+                "description": (
+                    "The corrected value WITH units (e.g. '800 EUR/day'). "
+                    "Empty if not a fact change."
+                ),
+            },
+        },
+        "required": ["is_fact_change", "category", "key", "value"],
+    },
+}
+
+_FACT_JUDGE_SYSTEM = (
+    "You maintain a store of an organisation's standard business facts "
+    "(prices, rates, lead times, minimum orders, hours, deliverables), "
+    "grouped by category. You are shown what an assistant DRAFTED and what "
+    "the user actually SENT after editing. Decide whether the user's edit "
+    "corrected a STANDARD value worth reusing in future offers of the same "
+    "kind. Be conservative: a one-off discount for a single customer is NOT "
+    "a standard fact. Reuse an existing category when one fits. Recording a "
+    "wrong fact is worse than missing one."
+)
+
 
 def _message_text(tool_input: Dict[str, Any]) -> str:
     for field in _TEXT_FIELDS:
@@ -161,6 +226,74 @@ def extract_rule(
     return None
 
 
+def _existing_fact_categories(owner_id: str) -> List[str]:
+    """Return the user's current fact category names (for reuse)."""
+    try:
+        from zylch.services.facts_store import list_categories
+
+        return [c["category"] for c in list_categories(owner_id)]
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"[learn] cannot read fact categories: {e}")
+        return []
+
+
+def _build_fact_judge_prompt(
+    proposed: str,
+    edited: str,
+    existing_categories: List[str],
+) -> str:
+    cats_text = ", ".join(existing_categories) or "(none yet)"
+    return (
+        "EXISTING CATEGORIES:\n"
+        f"{cats_text}\n\n"
+        "ASSISTANT DRAFTED:\n"
+        f"{proposed}\n\n"
+        "USER ACTUALLY SENT:\n"
+        f"{edited}\n\n"
+        "Call record_fact with your judgment."
+    )
+
+
+def extract_fact(
+    proposed: str,
+    edited: str,
+    existing_categories: List[str],
+    client,
+) -> Optional[tuple]:
+    """Ask the LLM whether the diff corrected a standard business value.
+
+    Returns (category, key, value) or None.
+    """
+    if not proposed.strip() or not edited.strip() or proposed.strip() == edited.strip():
+        return None
+    prompt = _build_fact_judge_prompt(proposed, edited, existing_categories)
+    try:
+        response = client.create_message_sync(
+            system=_FACT_JUDGE_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+            tools=[_RECORD_FACT_TOOL],
+            tool_choice={"type": "tool", "name": "record_fact"},
+            max_tokens=300,
+        )
+    except Exception as e:
+        logger.warning(f"[learn] fact judge call failed: {e}")
+        return None
+
+    for block in getattr(response, "content", []) or []:
+        data = getattr(block, "input", None)
+        if not isinstance(data, dict):
+            continue
+        if not data.get("is_fact_change"):
+            return None
+        category = (data.get("category") or "").strip()
+        key = (data.get("key") or "").strip()
+        value = (data.get("value") or "").strip()
+        if not (category and key and value):
+            return None
+        return (category, key, value)
+    return None
+
+
 def _write_rule(owner_id: str, content: str) -> Optional[str]:
     try:
         from zylch.memory import EmbeddingEngine, MemoryConfig
@@ -187,10 +320,15 @@ def learn_from_corrections(
     owner_id: str,
     client=None,
 ) -> List[str]:
-    """Turn captured (proposed, edited) diffs into durable rule blobs.
+    """Turn captured (proposed, edited) diffs into durable knowledge.
 
-    Returns the blob_ids of rules created. Safe to call with an empty
-    list. Never raises.
+    Each diff is judged twice, independently: as a possible DURABLE RULE
+    (tone/policy -> `prefs:`) and as a possible BUSINESS FACT correction
+    (price/term -> `facts:`). A single edit can yield a rule, a fact,
+    both, or neither.
+
+    Returns the blob_ids written (rules + facts). Safe to call with an
+    empty list. Never raises.
     """
     if not corrections or not owner_id:
         return []
@@ -208,21 +346,45 @@ def learn_from_corrections(
         return []
 
     existing = _existing_rules(owner_id)
+    existing_cats = _existing_fact_categories(owner_id)
     created: List[str] = []
+    n_rules = 0
+    n_facts = 0
     for corr in corrections:
         if corr.get("tool_name") not in _MESSAGE_TOOLS:
             continue
         proposed = _message_text(corr.get("proposed") or {})
         edited = _message_text(corr.get("edited") or {})
+
+        # Path 1: durable rule (tone / policy).
         content = extract_rule(proposed, edited, existing, client)
-        if not content:
-            continue
-        blob_id = _write_rule(owner_id, content)
-        if blob_id:
-            created.append(blob_id)
-            # Feed the new rule back in so a second correction in the
-            # same batch doesn't create a near-duplicate.
-            existing.append(content)
+        if content:
+            blob_id = _write_rule(owner_id, content)
+            if blob_id:
+                created.append(blob_id)
+                n_rules += 1
+                # Feed the new rule back in so a second correction in the
+                # same batch doesn't create a near-duplicate.
+                existing.append(content)
+
+        # Path 2: corrected business fact (price / term).
+        fact = extract_fact(proposed, edited, existing_cats, client)
+        if fact:
+            category, key, value = fact
+            from zylch.services.facts_store import upsert_fact
+
+            blob_id = upsert_fact(
+                owner_id,
+                category,
+                key,
+                value,
+                event_description="Learned from a message correction",
+            )
+            if blob_id:
+                created.append(blob_id)
+                n_facts += 1
+                if category not in existing_cats:
+                    existing_cats.append(category)
     if created:
-        logger.info(f"[learn] created {len(created)} rule(s) from corrections")
+        logger.info(f"[learn] wrote {n_rules} rule(s) and {n_facts} fact(s) from corrections")
     return created

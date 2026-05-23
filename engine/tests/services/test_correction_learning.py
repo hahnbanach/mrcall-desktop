@@ -8,7 +8,12 @@ not live model behaviour.
 from __future__ import annotations
 
 import zylch.services.correction_learning as cl
-from zylch.services.correction_learning import extract_rule, learn_from_corrections
+import zylch.services.facts_store as fs
+from zylch.services.correction_learning import (
+    extract_fact,
+    extract_rule,
+    learn_from_corrections,
+)
 
 
 class _FakeBlock:
@@ -50,7 +55,9 @@ def test_extract_rule_durable_formats_with_why():
         [],
         client,
     )
-    assert out == "For support, direct customers to email.\nWhy: user removed an offer to phone back"
+    assert (
+        out == "For support, direct customers to email.\nWhy: user removed an offer to phone back"
+    )
 
 
 def test_extract_rule_non_durable_returns_none():
@@ -105,3 +112,100 @@ def test_learn_writes_only_message_tool_diffs(monkeypatch):
 
 def test_learn_empty_corrections_noop():
     assert learn_from_corrections([], "owner-1", client=_FakeClient({})) == []
+
+
+# ─── extract_fact ─────────────────────────────────────────────
+
+
+def test_extract_fact_change_returns_tuple():
+    client = _FakeClient(
+        {
+            "is_fact_change": True,
+            "category": "white-label",
+            "key": "Day rate",
+            "value": "800 EUR/day",
+        }
+    )
+    out = extract_fact("Our rate is 700 EUR/day.", "Our rate is 800 EUR/day.", [], client)
+    assert out == ("white-label", "Day rate", "800 EUR/day")
+
+
+def test_extract_fact_non_change_returns_none():
+    client = _FakeClient({"is_fact_change": False, "category": "", "key": "", "value": ""})
+    assert extract_fact("a", "b", [], client) is None
+
+
+def test_extract_fact_skips_llm_when_unchanged():
+    client = _FakeClient({"is_fact_change": True, "category": "c", "key": "k", "value": "v"})
+    assert extract_fact("same", "same", [], client) is None
+    assert client.calls == 0
+
+
+def test_extract_fact_missing_value_returns_none():
+    client = _FakeClient(
+        {"is_fact_change": True, "category": "white-label", "key": "Day rate", "value": "  "}
+    )
+    assert extract_fact("a", "b", [], client) is None
+
+
+# ─── learn_from_corrections: fact path ────────────────────────
+
+
+def test_learn_writes_fact(monkeypatch):
+    monkeypatch.setattr(cl, "_existing_rules", lambda owner_id: [])
+    monkeypatch.setattr(cl, "_existing_fact_categories", lambda owner_id: [])
+    upserts = []
+    monkeypatch.setattr(
+        fs,
+        "upsert_fact",
+        lambda owner_id, c, k, v, event_description=None: (upserts.append((c, k, v)) or "fact-1"),
+    )
+    # Fact-only response: rule judge sees no is_durable_rule -> no rule.
+    client = _FakeClient(
+        {
+            "is_fact_change": True,
+            "category": "white-label",
+            "key": "Day rate",
+            "value": "800 EUR/day",
+        }
+    )
+    corrections = [
+        {
+            "tool_name": "send_email",
+            "proposed": {"body": "Our rate is 700 EUR/day."},
+            "edited": {"body": "Our rate is 800 EUR/day."},
+        }
+    ]
+    ids = learn_from_corrections(corrections, "owner-1", client=client)
+    assert ids == ["fact-1"]
+    assert upserts == [("white-label", "Day rate", "800 EUR/day")]
+
+
+def test_learn_one_diff_yields_both_rule_and_fact(monkeypatch):
+    monkeypatch.setattr(cl, "_existing_rules", lambda owner_id: [])
+    monkeypatch.setattr(cl, "_existing_fact_categories", lambda owner_id: [])
+    monkeypatch.setattr(cl, "_write_rule", lambda owner_id, content: "rule-1")
+    monkeypatch.setattr(
+        fs, "upsert_fact", lambda owner_id, c, k, v, event_description=None: "fact-1"
+    )
+    # One response carries BOTH a durable rule and a fact change.
+    client = _FakeClient(
+        {
+            "is_durable_rule": True,
+            "rule": "Quote the standard day rate.",
+            "why": "edit set the rate",
+            "is_fact_change": True,
+            "category": "white-label",
+            "key": "Day rate",
+            "value": "800 EUR/day",
+        }
+    )
+    corrections = [
+        {
+            "tool_name": "send_email",
+            "proposed": {"body": "rate 700"},
+            "edited": {"body": "rate 800"},
+        }
+    ]
+    ids = learn_from_corrections(corrections, "owner-1", client=client)
+    assert ids == ["rule-1", "fact-1"]
