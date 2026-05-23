@@ -99,6 +99,14 @@ def _normalise_phone(raw: str) -> Optional[str]:
     return ("+" + digits) if has_plus else digits
 
 
+def _entity_type(entity_content: str) -> str:
+    """Return the upper-cased ``Entity type:`` value, or ''."""
+    for line in (entity_content or "").splitlines():
+        if line.strip().lower().startswith("entity type:"):
+            return line.split(":", 1)[1].strip().upper()
+    return ""
+
+
 def _parse_identifiers_block(entity_content: str) -> List[Tuple[str, str]]:
     """Parse the `#IDENTIFIERS` block of a blob into (kind, value) tuples.
 
@@ -358,6 +366,24 @@ class MemoryWorker:
             logger.error(f"Error processing email {email_id}: {e}", exc_info=True)
             return False
 
+    def _upsert_fact_entity(self, entity_content: str) -> None:
+        """Store a FACT entity in the owner's `facts:` namespace.
+
+        Deduped by exact (Category, Key); no fuzzy reconsolidation.
+        """
+        from zylch.services.facts_store import (
+            parse_category,
+            parse_key,
+            parse_value,
+            upsert_fact,
+        )
+
+        category = parse_category(entity_content)
+        key = parse_key(entity_content)
+        value = parse_value(entity_content)
+        blob_id = upsert_fact(self.owner_id, category, key, value)
+        logger.info(f"[memory] FACT upsert category={category!r} key={key!r} -> blob_id={blob_id}")
+
     async def _upsert_entity(
         self,
         entity_content: str,
@@ -404,6 +430,15 @@ class MemoryWorker:
             entity_num: Which entity this is (1-indexed)
             total_entities: Total entities from this email
         """
+        # FACT entities are volatile business values, not relationship
+        # memory. They live in their own `facts:` namespace, keyed by
+        # exact (Category, Key), and must NOT go through the fuzzy 0.65
+        # reconsolidation path — that would merge distinct facts (two
+        # prices) or bleed white-label terms into private-label.
+        if _entity_type(entity_content) == "FACT":
+            self._upsert_fact_entity(entity_content)
+            return
+
         logger.info(f"Upserting entity, searching with:\n{entity_content}\n\n")
 
         # Parse identifiers ONCE: used for the new identifier-first
@@ -932,9 +967,7 @@ class MemoryWorker:
                 else:
                     failures += 1
                     if failures >= 3:
-                        logger.error(
-                            "3 consecutive WA failures — stopping batch (check API key)"
-                        )
+                        logger.error("3 consecutive WA failures — stopping batch (check API key)")
                         stop = True
 
         await asyncio.gather(
@@ -991,11 +1024,7 @@ class MemoryWorker:
                 if resolved.startswith("+"):
                     phone = resolved
                 if not sender_name:
-                    sender_name = (
-                        contact.get("name")
-                        or contact.get("push_name")
-                        or sender_name
-                    )
+                    sender_name = contact.get("name") or contact.get("push_name") or sender_name
 
         # Build the From line: prefer "<Name> (<phone>)" when both are
         # present. Drop the phone when only the LID is known — emitting
