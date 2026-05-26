@@ -57,10 +57,12 @@ class UpdateMemoryTool(Tool):
         self,
         blob_id: str = "",
         new_content: str = "",
+        entry_type: Optional[str] = None,
         **kwargs,
     ) -> ToolResult:
         logger.debug(
-            f"[update_memory] execute(blob_id={blob_id!r}," f" new_content_len={len(new_content)})"
+            f"[update_memory] execute(blob_id={blob_id!r}, "
+            f"new_content_len={len(new_content)}, entry_type={entry_type!r})"
         )
 
         if not blob_id or not new_content:
@@ -101,6 +103,26 @@ class UpdateMemoryTool(Tool):
                 )
             old_content = existing.get("content", "")
 
+            # Routing guard (structural — model-declared entry_type + the
+            # target blob's own namespace; never content parsing). A
+            # behavioral rule must NEVER overwrite a contact blob — that is
+            # exactly the general-feedback-into-Pautasso mis-routing. Refining
+            # an existing rule (template:/prefs:) stays allowed.
+            existing_ns = existing.get("namespace") or ""
+            if (entry_type or "").strip().lower() == "behavioral_rule" and existing_ns.startswith(
+                "user:"
+            ):
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error=(
+                        "A behavioral rule must not be written onto a contact "
+                        f"blob (namespace {existing_ns}). Save it with "
+                        "create_memory(entry_type='behavioral_rule') — it goes "
+                        "to the always-on rules, never a contact."
+                    ),
+                )
+
             blob_store.update_blob(
                 blob_id=blob_id,
                 owner_id=owner_id,
@@ -138,6 +160,17 @@ class UpdateMemoryTool(Tool):
                     "new_content": {
                         "type": "string",
                         "description": "The full new content (replaces existing).",
+                    },
+                    "entry_type": {
+                        "type": "string",
+                        "enum": ["entity_fact", "behavioral_rule"],
+                        "description": (
+                            "What KIND of edit this is. 'entity_fact' = updating"
+                            " a fact about the contact this blob describes (the"
+                            " normal use). 'behavioral_rule' = a general rule"
+                            " about how YOU should act — NOT allowed on a contact"
+                            " blob; use create_memory(entry_type='behavioral_rule')."
+                        ),
                     },
                 },
                 "required": ["blob_id", "new_content"],

@@ -247,7 +247,14 @@ SOLVE_TOOLS = [
 
 
 def _get_learned_preferences(owner_id: str) -> str:
-    """Return concatenated `prefs:<owner_id>` blob contents, or ''.
+    """Return concatenated behavioral-rule blob contents, or ''.
+
+    Reads BOTH `template:<owner_id>` (the canonical home for general
+    behavioral rules / saved feedback — Mario 2026-05-22) and the legacy
+    `prefs:<owner_id>` namespace (rules saved before the switch keep
+    firing). These are the always-on rules injected verbatim into every
+    chat + task-solve system prompt — distinct from `user:` TEMPLATE
+    response-blobs, which are relevance-fetched via search, not injected.
 
     Blobs are sorted by created_at asc so the prompt stays byte-stable
     across turns (prompt cache wouldn't rehit if they reshuffled).
@@ -265,12 +272,12 @@ def _get_learned_preferences(owner_id: str) -> str:
         logger.warning(f"[prefs] cannot import Blob/get_session: {e}")
         return ""
 
-    namespace = f"prefs:{owner_id}"
+    namespaces = [f"template:{owner_id}", f"prefs:{owner_id}"]
     try:
         with get_session() as session:
             rows = (
                 session.query(Blob)
-                .filter(Blob.owner_id == owner_id, Blob.namespace == namespace)
+                .filter(Blob.owner_id == owner_id, Blob.namespace.in_(namespaces))
                 .order_by(Blob.created_at.asc())
                 .all()
             )
@@ -395,9 +402,9 @@ def get_personal_data_section(owner_id: Optional[str] = None) -> str:
         )
 
     if owner_id:
-        prefs = _get_learned_preferences(owner_id)
-        if prefs:
-            parts.append("## Learned preferences\n" + prefs)
+        rules = _get_learned_preferences(owner_id)
+        if rules:
+            parts.append("## Rules — always apply (saved templates)\n" + rules)
 
     if not parts:
         return ""
