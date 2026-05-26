@@ -515,6 +515,25 @@ const api = {
           limit: params.limit ?? 200,
           offset: params.offset ?? 0
         }
+      ),
+    // Free-text search over the local store (message text / transcription /
+    // sender + contact name / phone). Returns matching chats in the same
+    // shape as listThreads (+ optional match_snippet per row). DB-only.
+    searchMessages: (params: { query: string; limit?: number }) =>
+      call<{
+        threads: WhatsAppThread[]
+        query?: string
+        error?: string
+      }>('whatsapp.search_messages', { query: params.query, limit: params.limit ?? 200 }, 30000),
+    // Send a text message to an existing chat over the LIVE connection.
+    // Returns the just-sent message in listMessages row shape so the
+    // renderer can append it without a full reload. 30 s — covers the
+    // blocking neonize FFI send + a slow network round-trip.
+    sendMessage: (params: { chat_jid: string; text: string }) =>
+      call<{ ok: boolean; message?: WhatsAppMessage; error?: string }>(
+        'whatsapp.send_message',
+        { chat_jid: params.chat_jid, text: params.text },
+        30000
       )
   },
   shell: {

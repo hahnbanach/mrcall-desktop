@@ -125,6 +125,8 @@ export interface WhatsAppThread {
   last_at: string | null
   last_preview: string
   last_from_me: boolean
+  /** Matching message text — present only on search results. */
+  match_snippet?: string | null
 }
 
 export interface WhatsAppMessage {
@@ -443,6 +445,14 @@ export interface ZylchAPI {
       limit?: number
       offset?: number
     }) => Promise<{ messages: WhatsAppMessage[]; error?: string }>
+    searchMessages: (params: {
+      query: string
+      limit?: number
+    }) => Promise<{ threads: WhatsAppThread[]; query?: string; error?: string }>
+    sendMessage: (params: {
+      chat_jid: string
+      text: string
+    }) => Promise<{ ok: boolean; message?: WhatsAppMessage; error?: string }>
   }
   shell: {
     openExternal: (url: string) => Promise<{ ok: boolean }>
