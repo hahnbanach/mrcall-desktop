@@ -263,6 +263,26 @@ export interface ZylchAPI {
   update: {
     run: () => Promise<any>
   }
+  agents: {
+    /** Runs the 3 personalised-agent trainers serially (memory_message —
+     *  channel-aware over email + WhatsApp; task_email — task detection;
+     *  emailer — writing style). Progress is streamed via the
+     *  ``agents.train.progress`` notification with
+     *  ``{pct, step, total, current, message}``. */
+    trainAll: () => Promise<{
+      ok: boolean
+      error?: string
+      results: Record<
+        string,
+        {
+          ok: boolean
+          error?: string
+          threads_analyzed?: number
+          whatsapp_chats_analyzed?: number
+        }
+      >
+    }>
+  }
   emails: {
     listByThread: (threadId: string) => Promise<EmailThreadResult>
     listInbox: (params?: {

@@ -262,6 +262,47 @@ blob-overlap deterministic dedup) remains. Both are exposed; the
 "Pulizia profonda" button could call either or both. F9 is the one
 that catches the cross-channel "ONE problem from 3 senders" case.
 
+### `agents.train_all()`
+
+Runs the three personalised-agent trainers serially:
+
+| Step | Key | Trainer | What |
+|---|---|---|---|
+| 1 | `memory_message` | `MessageMemoryAgentTrainer.build_memory_message_prompt` | Channel-aware entity extraction prompt. Trainer now ingests email samples **+ 1-on-1 WhatsApp chats** where the user has replied, so the prompt sees the user's voice across both registers. |
+| 2 | `task_email` | `EmailTaskAgentTrainer.build_task_prompt` | Personalised task-detection prompt from email threads + memory blobs. |
+| 3 | `emailer` | `EmailerAgentTrainer.build_emailer_prompt` | Writing-style prompt for email composition (greetings, sign-offs, tone, language). |
+
+Returns:
+
+```jsonc
+{
+  "ok": true,
+  "results": {
+    "memory_message": { "ok": true, "threads_analyzed": 20, "whatsapp_chats_analyzed": 4 },
+    "task_email":     { "ok": true, "threads_analyzed": 20 },
+    "emailer":        { "ok": true }
+  }
+}
+```
+
+`ok` is `false` if **any** step failed; per-step `results[<key>].ok` carries the granular status and `error` string. The dispatcher does not stop on a single failure — subsequent steps still run.
+
+If no LLM is configured (no Anthropic key + no Firebase session) the method short-circuits with `{ ok: false, error: "No LLM configured…", results: {} }` and emits a single explanatory progress event.
+
+Notification stream — `agents.train.progress`:
+
+```jsonc
+{
+  "pct": 0..100,
+  "step": 1..3,
+  "total": 3,
+  "current": "memory_message" | "task_email" | "emailer",
+  "message": string
+}
+```
+
+Backs the "Train assistant" card in `Update.tsx` (above the Update button). 30-minute RPC timeout in `app/src/preload/index.ts`.
+
 ### `mrcall.list_my_businesses(offset?, limit?)`
 
 Lists the businesses visible to the signed-in user via StarChat

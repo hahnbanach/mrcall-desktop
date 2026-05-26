@@ -19,6 +19,7 @@ Residual: live verification of the 2026-05-15 stack (cross-channel `ThreadPanel`
 
 | Date | What | Refs |
 |---|---|---|
+| 2026-05-26 | "Train assistant" card above Update — `views/Update.tsx` renders a Train-now button + progress bar + per-agent result row that drives `window.zylch.agents.trainAll()`. Subscribes to `agents.train.progress` for the bar; 30-min preload timeout. Each card disables the other while running. | _pending live verification_ |
 | 2026-05-20 | MrCall tab live (was disabled placeholder) — `views/Mrcall.tsx`: business list via `mrcall.list_my_businesses` + search-by-field (email/name/phone/VAT) + `subscriptionStatus` dropdown via `mrcall.search_businesses`, expandable anagraphic/billing cards | `ed9ca585` · `a28c5533` |
 | 2026-05-20 | Onboarding unblocked for MrCall-only users (email opt-in, `ProfileFormFields includeGroups` hides LLM/Telegram/MrCall) + Calendar session fix (`installEngineTokenPusher` after `finalize`) + Email tab gated on `IMAP_HOST` not `EMAIL_ADDRESS` | `2b0a54ce` |
 | 2026-05-15 | Cross-channel Source-panel toggle — `ZylchTask.sources.whatsapp_chat_jid?`, `Conversation.waChatJid?`, `ThreadPanel` API `{ emailThreadId?, whatsappChatJid? }` with three modes (email-only / whatsapp-only / cross-channel); cross-channel header shows `Email (N) / WhatsApp (M)` tab pills with counters + parallel fetch + instant tab switch | `b57fcc4f` |

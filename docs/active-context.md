@@ -20,6 +20,7 @@ WhatsApp parity spans engine + app + IPC through Phase 4 cross-channel (live-ver
 
 | Date | What | Spans | Refs |
 |---|---|---|---|
+| 2026-05-26 | "Train assistant" button above Update — new RPC `agents.train_all` runs memory_message + task_email + emailer serially with `agents.train.progress` notifications; `MessageMemoryAgentTrainer` now ingests WhatsApp 1-on-1 chats (where user has replied) in addition to email samples | engine + app + IPC | _pending live verification_ |
 | 2026-05-20 | MrCall channel: delegated/PKCE OAuth + `/mrcall` commands removed (Firebase-JWT only); MrCall tab lists + searches businesses (`mrcall.list_my_businesses`, `mrcall.search_businesses`); onboarding unblocked for MrCall-only users + in-wizard Calendar session fix; 13 stale tests removed | engine + app + IPC | `770522e8..2b0a54ce` · [mrcall-pipeline-parity.md](execution-plans/mrcall-pipeline-parity.md) |
 | 2026-05-15 | Cross-channel Source-panel toggle — engine stamps `sources.whatsapp_chat_jid`; ThreadPanel renders Email/WhatsApp tab pills with counters, parallel fetch, instant tab switch | engine + app + IPC | `b57fcc4f` |
 | 2026-05-15 | Calendar self-healing Firebase session — `ensureEngineSession()` re-pushes token + verifies via `account.whoAmI()` before Calendar RPCs; initial token push retries 3× with backoff | engine + app | `a03f6831` · `1c60aebf` |

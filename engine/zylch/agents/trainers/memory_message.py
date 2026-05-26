@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # but only if the generated prompt actually emits structured `Phone:` /
 # `Email:` / `LID:` lines in #IDENTIFIERS for whichever channel is
 # active.
-MESSAGE_AGENT_META_PROMPT = """You are analyzing a user's email history to create a personalized prompt for their AI assistant.
+MESSAGE_AGENT_META_PROMPT = """You are analyzing a user's communication history to create a personalized prompt for their AI assistant.
 
 The generated prompt will be applied to messages from MULTIPLE channels:
 - Email (from the user's mailbox)
@@ -40,7 +40,9 @@ The generated prompt will be applied to messages from MULTIPLE channels:
 
 The same entity-extraction logic applies to both channels — the user
 asking the question and the contacts they talk to are the same people
-regardless of the channel.
+regardless of the channel. You will see BELOW samples from both
+channels: study them together so the generated prompt knows the user's
+voice in both formal (email) and informal (WhatsApp) registers.
 
 Your goal: Generate a prompt that extracts entities from messages
 (email or WhatsApp).
@@ -72,6 +74,9 @@ Entity can only be of 3 types:
 
 === SAMPLE OF RECENT EMAILS ===
 {email_samples}
+
+=== SAMPLE OF RECENT WHATSAPP CHATS ===
+{whatsapp_samples}
 
 ---
 
@@ -325,8 +330,14 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
 """
 
     async def build_memory_message_prompt(self) -> Tuple[str, Dict[str, Any]]:
-        """Analyse the user's email history and generate a personalised
+        """Analyse the user's email + WhatsApp history and generate a personalised
         channel-aware extraction prompt (works on email + WhatsApp).
+
+        The trainer was email-only until the GUI "Train all" button landed
+        (2026-05-26). It now also samples 1-on-1 WhatsApp chats where the
+        user has replied, so the generated prompt sees the user's voice in
+        BOTH formal (email) and informal (WhatsApp) registers and the
+        extracted entities benefit from cross-channel context.
 
         Returns:
             Tuple of (prompt_content, metadata)
@@ -344,18 +355,29 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
         # Step 2: Analyze user profile from their sent emails
         user_profile = self._analyze_user_profile(user_domain)
         logger.debug(f"user_profile: {user_profile}")
-        # Step 4: Format samples for the meta-prompt (show variety)
+
+        # Step 3: Format samples for the meta-prompt (show variety)
         email_samples = self._format_email_samples(threads)
+
+        # Step 4: Pull WhatsApp chat samples where the user has replied.
+        # Skip silently if the WA table is empty / the schema isn't there
+        # — the trainer must still work on email-only profiles.
+        wa_chats = self._get_recent_whatsapp_chats(limit=10, messages_per_chat=15)
+        logger.info(f"Found {len(wa_chats)} WhatsApp chats for analysis")
+        whatsapp_samples = self._format_whatsapp_samples(wa_chats)
 
         # Step 5: Generate the prompt using Claude
         prompt_content = self._generate_prompt(
-            user_profile=user_profile, email_samples=email_samples
+            user_profile=user_profile,
+            email_samples=email_samples,
+            whatsapp_samples=whatsapp_samples,
         )
 
         metadata = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "user_domain": user_domain,
             "threads_analyzed": len(threads),
+            "whatsapp_chats_analyzed": len(wa_chats),
         }
 
         return prompt_content, metadata
@@ -482,10 +504,154 @@ Body: {body}
 
         return "\n".join(samples) if samples else "No samples available."
 
-    def _generate_prompt(self, user_profile: str, email_samples: str) -> str:
+    def _get_recent_whatsapp_chats(
+        self, limit: int = 10, messages_per_chat: int = 15
+    ) -> List[Dict[str, Any]]:
+        """Sample recent 1-on-1 WhatsApp chats where the user has replied.
+
+        Filters out groups and chats where ``is_from_me`` is never true
+        (incoming-only notifications, broadcasters, junk) so the meta-prompt
+        sees the user's actual conversational voice on WhatsApp.
+
+        Args:
+            limit: Max number of chats to sample.
+            messages_per_chat: Max messages to include per chat (most recent).
+
+        Returns:
+            List of ``{chat_jid, contact_name, contact_phone, messages: [...]}``
+            sorted most-recent-first. Empty if the WA store is empty or the
+            schema isn't present (older installs).
+        """
+        from zylch.storage.database import get_session
+
+        try:
+            from zylch.storage.models import WhatsAppMessage
+        except Exception as e:
+            logger.debug(f"WhatsAppMessage model unavailable, skipping WA samples: {e}")
+            return []
+
+        try:
+            with get_session() as session:
+                # Find chats where the user has replied at least once.
+                from sqlalchemy import func
+
+                replied_chats_q = (
+                    session.query(WhatsAppMessage.chat_jid)
+                    .filter(
+                        WhatsAppMessage.owner_id == self.owner_id,
+                        WhatsAppMessage.is_group.is_(False),
+                        WhatsAppMessage.is_from_me.is_(True),
+                    )
+                    .group_by(WhatsAppMessage.chat_jid)
+                    .subquery()
+                )
+
+                # Order chats by their most recent message timestamp.
+                ranked_chats = (
+                    session.query(
+                        WhatsAppMessage.chat_jid,
+                        func.max(WhatsAppMessage.timestamp).label("last_at"),
+                    )
+                    .filter(
+                        WhatsAppMessage.owner_id == self.owner_id,
+                        WhatsAppMessage.is_group.is_(False),
+                        WhatsAppMessage.chat_jid.in_(session.query(replied_chats_q.c.chat_jid)),
+                    )
+                    .group_by(WhatsAppMessage.chat_jid)
+                    .order_by(func.max(WhatsAppMessage.timestamp).desc())
+                    .limit(limit)
+                    .all()
+                )
+
+                chats: List[Dict[str, Any]] = []
+                for row in ranked_chats:
+                    chat_jid = row.chat_jid
+                    msgs = (
+                        session.query(WhatsAppMessage)
+                        .filter(
+                            WhatsAppMessage.owner_id == self.owner_id,
+                            WhatsAppMessage.chat_jid == chat_jid,
+                        )
+                        .order_by(WhatsAppMessage.timestamp.desc())
+                        .limit(messages_per_chat)
+                        .all()
+                    )
+                    # Reverse so the conversation reads top-down chronologically.
+                    msgs = list(reversed(msgs))
+
+                    # Resolve a display label: first non-empty sender_name from
+                    # the contact side, falling back to the chat_jid.
+                    contact_name = None
+                    contact_phone = None
+                    for m in msgs:
+                        if not m.is_from_me and m.sender_name:
+                            contact_name = m.sender_name
+                            break
+                    # chat_jid for 1-on-1 is typically "<phone>@s.whatsapp.net"
+                    # or "<lid>@lid"; pull the phone if it looks like one.
+                    if chat_jid and "@s.whatsapp.net" in chat_jid:
+                        contact_phone = chat_jid.split("@", 1)[0]
+
+                    chats.append(
+                        {
+                            "chat_jid": chat_jid,
+                            "contact_name": contact_name,
+                            "contact_phone": contact_phone,
+                            "messages": [
+                                {
+                                    "text": m.text or "",
+                                    "is_from_me": bool(m.is_from_me),
+                                    "timestamp": (
+                                        m.timestamp.isoformat() if m.timestamp is not None else None
+                                    ),
+                                }
+                                for m in msgs
+                            ],
+                        }
+                    )
+
+                return chats
+        except Exception as e:
+            logger.warning(f"Failed to fetch WhatsApp samples for trainer: {e}")
+            return []
+
+    def _format_whatsapp_samples(self, chats: List[Dict[str, Any]], body_limit: int = 600) -> str:
+        """Format WhatsApp chats as text samples for the meta-prompt.
+
+        Each chat is rendered as a short transcript labeling each message
+        ``User`` or ``Contact`` so the meta-prompt can study the user's
+        WhatsApp register (greetings, brevity, language) alongside email.
+        """
+        if not chats:
+            return "No WhatsApp samples available."
+
+        samples = []
+        for i, chat in enumerate(chats, 1):
+            label = (
+                chat.get("contact_name")
+                or chat.get("contact_phone")
+                or chat.get("chat_jid", "unknown")
+            )
+            lines = [f"--- WhatsApp chat {i}: {label} ---"]
+            for m in chat.get("messages", []):
+                who = "User" if m.get("is_from_me") else "Contact"
+                ts = m.get("timestamp") or ""
+                text = (m.get("text") or "").strip()
+                if not text:
+                    continue
+                if len(text) > body_limit:
+                    text = text[:body_limit] + "...[truncated]"
+                lines.append(f"[{ts}] {who}: {text}")
+            samples.append("\n".join(lines))
+
+        return "\n\n".join(samples)
+
+    def _generate_prompt(self, user_profile: str, email_samples: str, whatsapp_samples: str) -> str:
         """Generate the final extraction prompt using LLM."""
         meta_prompt = MESSAGE_AGENT_META_PROMPT.format(
-            user_profile=user_profile, email_samples=email_samples
+            user_profile=user_profile,
+            email_samples=email_samples,
+            whatsapp_samples=whatsapp_samples,
         )
 
         logger.info(f"Training message analyzer agent (transport={self.client.transport})...")

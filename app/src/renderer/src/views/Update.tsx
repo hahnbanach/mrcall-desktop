@@ -34,6 +34,25 @@ function formatElapsed(secs: number): string {
   return `${h}h${mm.toString().padStart(2, '0')}m`
 }
 
+type TrainResultEntry = {
+  ok: boolean
+  error?: string
+  threads_analyzed?: number
+  whatsapp_chats_analyzed?: number
+}
+
+type TrainResult = {
+  ok: boolean
+  error?: string
+  results: Record<string, TrainResultEntry>
+}
+
+const AGENT_LABELS: Record<string, string> = {
+  memory_message: 'Memory (email + WhatsApp)',
+  task_email: 'Task detection',
+  emailer: 'Writing style'
+}
+
 export default function Update() {
   const [running, setRunning] = useState(false)
   const [pct, setPct] = useState(0)
@@ -42,6 +61,14 @@ export default function Update() {
   const [elapsed, setElapsed] = useState<number>(0)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  // Training state — separate from the update state so the user can see
+  // both cards on the same page even if one is mid-run. Only one of the
+  // two actions can be in-flight at a time (button disable below).
+  const [trainRunning, setTrainRunning] = useState(false)
+  const [trainPct, setTrainPct] = useState(0)
+  const [trainMessage, setTrainMessage] = useState<string>('')
+  const [trainResult, setTrainResult] = useState<TrainResult | null>(null)
+  const [trainError, setTrainError] = useState<string | null>(null)
   // Track sidecar liveness so we can disable the Update button (and
   // its de-facto Retry behaviour) when the profile is locked. Without
   // this the user can keep clicking "Update now", each click producing
@@ -50,6 +77,7 @@ export default function Update() {
   const unsubRef = useRef<(() => void) | null>(null)
   const startRef = useRef<number | null>(null)
   const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const trainUnsubRef = useRef<(() => void) | null>(null)
   // Shared tasks store — we call `refresh()` after a successful run so
   // Dashboard re-fetches instead of showing stale data.
   const { refresh: refreshTasks } = useTasks()
@@ -64,9 +92,46 @@ export default function Update() {
   useEffect(() => {
     return () => {
       unsubRef.current?.()
+      trainUnsubRef.current?.()
       if (tickerRef.current) clearInterval(tickerRef.current)
     }
   }, [])
+
+  const runTrain = async () => {
+    setTrainRunning(true)
+    setTrainPct(0)
+    setTrainMessage('Starting…')
+    setTrainResult(null)
+    setTrainError(null)
+    const unsub = window.zylch.onNotification('agents.train.progress', (p: any) => {
+      if (typeof p?.pct === 'number') setTrainPct(p.pct)
+      if (typeof p?.message === 'string') setTrainMessage(p.message)
+    })
+    trainUnsubRef.current = unsub
+    try {
+      const r = await window.zylch.agents.trainAll()
+      setTrainResult(r)
+      setTrainPct(100)
+      if (!r.ok) {
+        setTrainError(
+          r.error ??
+            'One or more agents failed to train — see the per-agent results below.'
+        )
+      } else {
+        setTrainMessage('Done')
+      }
+    } catch (e: unknown) {
+      if (isProfileLockedError(e)) {
+        setTrainError(null)
+      } else {
+        setTrainError(errorMessage(e))
+      }
+    } finally {
+      unsub()
+      trainUnsubRef.current = null
+      setTrainRunning(false)
+    }
+  }
 
   const run = async () => {
     setRunning(true)
@@ -122,11 +187,98 @@ export default function Update() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-2xl font-semibold mb-4">Train assistant</h1>
+      <p className="text-sm text-brand-grey-80 mb-3">
+        Teach the assistant who you are from your email + WhatsApp history. Re-train after
+        a fresh profile or whenever you want it to relearn your style and priorities.
+      </p>
+      <button
+        onClick={runTrain}
+        disabled={trainRunning || running || sidecarLocked}
+        title={
+          sidecarLocked
+            ? 'Sidecar is locked — see banner above'
+            : running
+              ? 'Wait for the current update to finish'
+              : undefined
+        }
+        className="px-4 py-2 bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
+      >
+        {trainRunning ? 'Training…' : 'Train now'}
+      </button>
+
+      {(trainRunning || trainPct > 0) && (
+        <div className="mt-4">
+          <div className="h-2 bg-brand-mid-grey rounded overflow-hidden">
+            <div
+              className="h-full bg-brand-black transition-all"
+              style={{ width: `${Math.min(100, Math.max(0, trainPct))}%` }}
+            />
+          </div>
+          <div className="text-sm text-brand-grey-80 mt-2">
+            {trainPct}% — {trainMessage}
+          </div>
+        </div>
+      )}
+
+      {trainError && (
+        <div className="mt-3 p-3 bg-brand-danger/10 border border-brand-danger/30 text-brand-danger rounded whitespace-pre-wrap">
+          {trainError}
+        </div>
+      )}
+
+      {trainResult && (
+        <div className="mt-4">
+          <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-2">
+            Training result
+          </h2>
+          <ul className="p-3 bg-white border rounded text-sm space-y-1">
+            {Object.entries(trainResult.results).map(([key, entry]) => (
+              <li key={key} className="flex items-start gap-2">
+                <span className={entry.ok ? 'text-green-600' : 'text-brand-danger'}>
+                  {entry.ok ? '✓' : '✗'}
+                </span>
+                <span className="flex-1">
+                  <span className="font-medium">{AGENT_LABELS[key] ?? key}</span>
+                  {entry.ok ? (
+                    <>
+                      {typeof entry.threads_analyzed === 'number' && (
+                        <span className="text-brand-grey-80">
+                          {' '}
+                          — {entry.threads_analyzed} email threads
+                        </span>
+                      )}
+                      {typeof entry.whatsapp_chats_analyzed === 'number' &&
+                        entry.whatsapp_chats_analyzed > 0 && (
+                          <span className="text-brand-grey-80">
+                            {' '}
+                            + {entry.whatsapp_chats_analyzed} WhatsApp chats
+                          </span>
+                        )}
+                    </>
+                  ) : (
+                    <span className="text-brand-danger"> — {entry.error}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <hr className="my-8 border-brand-mid-grey" />
+
       <h1 className="text-2xl font-semibold mb-4">Update</h1>
       <button
         onClick={run}
-        disabled={running || sidecarLocked}
-        title={sidecarLocked ? 'Sidecar is locked — see banner above' : undefined}
+        disabled={running || trainRunning || sidecarLocked}
+        title={
+          sidecarLocked
+            ? 'Sidecar is locked — see banner above'
+            : trainRunning
+              ? 'Wait for the training to finish'
+              : undefined
+        }
         className="px-4 py-2 bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
       >
         {running ? 'Updating…' : 'Update now'}
