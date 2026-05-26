@@ -1800,3 +1800,13 @@ for _name, _fn in _WHATSAPP_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
+
+# Agent training ("Train assistant" button) — runs the 3 personalised
+# trainers (memory_message, task_email, emailer) serially with progress
+# notifications.
+from zylch.rpc.agents import METHODS as _AGENTS_METHODS  # noqa: E402
+
+for _name, _fn in _AGENTS_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn

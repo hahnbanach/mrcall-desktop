@@ -220,6 +220,28 @@ const api = {
     // "rpc timeout: update.run" error on new profiles.
     run: () => call<any>('update.run', {}, 12 * 3600 * 1000)
   },
+  agents: {
+    // Runs the 3 personalised-agent trainers serially (memory_message —
+    // channel-aware over email + WhatsApp; task_email — task detection;
+    // emailer — writing style). Each step emits `agents.train.progress`
+    // with `{pct, step, total, current, message}`. 30-min ceiling: each
+    // trainer is one LLM round-trip on Opus-sized samples (~30-60s); the
+    // ceiling absorbs slow networks + a long mailbox.
+    trainAll: () =>
+      call<{
+        ok: boolean
+        error?: string
+        results: Record<
+          string,
+          {
+            ok: boolean
+            error?: string
+            threads_analyzed?: number
+            whatsapp_chats_analyzed?: number
+          }
+        >
+      }>('agents.train_all', {}, 30 * 60 * 1000)
+  },
   emails: {
     listByThread: (threadId: string) =>
       call<any>('emails.list_by_thread', { thread_id: threadId }, 60000),

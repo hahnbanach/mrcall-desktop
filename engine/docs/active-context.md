@@ -22,6 +22,7 @@ On-device STT for WA voice notes: download the ogg/opus at WhatsApp **event time
 
 | Date | What | Refs |
 |---|---|---|
+| 2026-05-26 | New RPC `agents.train_all` (`zylch/rpc/agents.py`) runs the 3 personalised trainers serially (memory_message → task_email → emailer) with `agents.train.progress` notifications. `MessageMemoryAgentTrainer.build_memory_message_prompt` now also samples 1-on-1 WhatsApp chats where the user has replied (`_get_recent_whatsapp_chats` / `_format_whatsapp_samples`), and the meta-prompt has a new `=== SAMPLE OF RECENT WHATSAPP CHATS ===` section. `metadata.whatsapp_chats_analyzed` exposed alongside `threads_analyzed`. | _pending live verification_ |
 | 2026-05-22 | WA revoke (delete-for-everyone) purges the target row locally; archived chats excluded from memory + task analysis (UI unaffected); `list_mrcall_assistants` chat tool + dashboard URL anchored in the assistant prompt; current datetime injected into EVERY LLM request | `56488528` · `140793c6` · `63f05b2a` · `5f5c73e8` |
 | 2026-05-20 | MrCall delegated/PKCE OAuth + `/mrcall` command surface + `mrcall_link` removed (−~3000 LOC); StarChat via Firebase JWT only; `sync_mrcall` graceful no-op (Livello B TODO) | `770522e8` · `6f02f7ef` |
 | 2026-05-20 | `mrcall.search_businesses` RPC (CrmBusinessSearch filters) for customer-service lookup; 13 stale SaaS-era test files removed (suite collectable again, 207 passed) | `a28c5533` · `c40dd41b` · `dd6863ca` |
