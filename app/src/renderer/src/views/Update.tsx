@@ -92,7 +92,7 @@ export default function Update() {
       const r = await window.zylch.update.run()
       setResult(r)
       setPct(100)
-      setMessage('Done')
+      setMessage(r?.success === false ? 'Update failed' : 'Done')
       // Invalidate the Dashboard's cached tasks — the pipeline may
       // have created, closed or updated rows. Fire-and-forget; do not
       // let a refresh failure block the Update's success UI.
@@ -176,11 +176,44 @@ export default function Update() {
       {result && (
         <div className="mt-6">
           <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-2">Result</h2>
-          {typeof result?.summary === 'string' && result.summary.length > 0 ? (
+          {/* Structured errors / warnings from the pipeline — one per stage
+              that failed. Red = fatal (run blocked), amber = non-fatal
+              (e.g. WhatsApp). Replaces the old false-green "No changes". */}
+          {Array.isArray(result.errors) &&
+            result.errors.map(
+              (
+                er: { severity?: string; title?: string; detail?: string; action?: string },
+                i: number
+              ) => {
+                const isErr = er.severity !== 'warning'
+                return (
+                  <div
+                    key={i}
+                    className={
+                      'mb-2 p-3 rounded border whitespace-pre-wrap ' +
+                      (isErr
+                        ? 'bg-brand-danger/10 border-brand-danger/30 text-brand-danger'
+                        : 'bg-brand-orange/10 border-brand-orange/40 text-brand-orange')
+                    }
+                  >
+                    <div className="font-semibold">{'⚠ ' + (er.title || 'Error')}</div>
+                    {er.detail && <div className="text-sm mt-0.5">{er.detail}</div>}
+                    {er.action && (
+                      <div className="text-sm mt-1 font-medium">{'→ ' + er.action}</div>
+                    )}
+                  </div>
+                )
+              }
+            )}
+          {/* Diff summary box — only on a clean / partial-success run. On a
+              fatal failure the error block above already carries the message. */}
+          {result.success !== false &&
+          typeof result?.summary === 'string' &&
+          result.summary.length > 0 ? (
             <div className="p-3 bg-white border rounded text-sm whitespace-pre-wrap">
               {result.summary}
             </div>
-          ) : (
+          ) : result.success === false ? null : (
             <pre className="p-3 bg-white border rounded text-xs whitespace-pre-wrap overflow-auto">
               {JSON.stringify(result, null, 2)}
             </pre>
