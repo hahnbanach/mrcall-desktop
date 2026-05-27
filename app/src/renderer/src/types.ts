@@ -507,13 +507,16 @@ export interface ZylchAPI {
   onStderr: (cb: (chunk: string) => void) => () => void
   onSidecarStatus: (cb: (status: SidecarStatusEvent) => void) => () => void
   onOpenProfilePicker: (cb: () => void) => () => void
-  // Logs view: scrollback (per-window ring buffer of sidecar stderr,
-  // kept in main process) + clear. Live streaming uses the existing
-  // onStderr subscription above.
+  // Logs view: scrollback (per-window ring buffer in main, seeded from
+  // the tail of `<profileDir>/zylch.log` and kept in sync as the engine
+  // writes) + clear. Live streaming uses the separate `onLogLine`
+  // subscription below (not `onStderr` — stderr is gated to WARNING+ by
+  // the engine's console handler, the file is the rich DEBUG+ source).
   logs: {
     tail: () => Promise<string[]>
     clear: () => Promise<{ ok: boolean }>
   }
+  onLogLine: (cb: (chunk: string) => void) => () => void
 }
 
 export type SidecarStatusEvent =

@@ -488,16 +488,17 @@ function AppInner(): JSX.Element {
   // level so it stops cleanly when the window unbinds the profile.
   useAutoUpdate()
 
-  // Tally ERROR/CRITICAL lines arriving from the sidecar while the user
-  // is NOT on the Logs tab. Parses the engine's structured prefix only —
-  // unstructured lines (Python tracebacks etc.) don't increment by
-  // themselves; they ride along the preceding ERROR's count.
+  // Tally ERROR/CRITICAL lines arriving from the sidecar's log file while
+  // the user is NOT on the Logs tab. Parses the engine's structured
+  // prefix only — unstructured lines (Python tracebacks etc.) don't
+  // increment by themselves; they ride along the preceding ERROR's count.
   useEffect(() => {
-    // Console (stderr) format omits the date — file format includes it.
-    // Accept both so the counter triggers regardless of source.
+    // File format `YYYY-MM-DD HH:MM:SS module LEVEL …`. The optional
+    // date branch keeps the regex tolerant if we ever feed it stderr
+    // (which lacks the date).
     const ZYLCH_LEVEL_RE =
       /^(?:\d{4}-\d{2}-\d{2} )?\d{2}:\d{2}:\d{2}(?:[,.]\d{3})? [\w.]+ (DEBUG|INFO|WARNING|ERROR|CRITICAL)\s/
-    const off = window.zylch.onStderr((chunk: string) => {
+    const off = window.zylch.onLogLine((chunk: string) => {
       let n = 0
       for (const line of chunk.split('\n')) {
         const m = line.match(ZYLCH_LEVEL_RE)

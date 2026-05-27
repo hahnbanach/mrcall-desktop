@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from 'electron'
 import { join } from 'path'
-import { statSync, existsSync } from 'fs'
+import { statSync, existsSync, openSync, readSync, closeSync } from 'fs'
 import { homedir } from 'os'
 import { randomUUID } from 'crypto'
 import { SidecarClient } from './sidecar'
@@ -117,6 +117,104 @@ function appendLogChunk(winId: number, chunk: string): void {
   if (buf.length > MAX_LOG_LINES) {
     buf.splice(0, buf.length - MAX_LOG_LINES)
   }
+}
+
+// File-tailing for `<profileDir>/zylch.log` — the rich DEBUG+ source the
+// engine writes to disk. Stderr alone is too quiet (the console handler
+// is gated to WARNING+), so the Logs view would look broken on a healthy
+// session. Each window tracks the byte position it has already streamed;
+// every 500 ms we stat the file and read whatever's new. macOS `fs.watch`
+// is unreliable for log files written through Python's FileHandler, so we
+// poll — predictable, ~negligible cost.
+interface LogTailer {
+  path: string
+  position: number
+  poll: NodeJS.Timeout
+}
+const windowLogTailers = new Map<number, LogTailer>()
+
+// Cap the initial scrollback we slurp from a possibly-huge log file
+// (Mario's x59G6 profile already has 31 MB after a few days). 256 KB is
+// ~3000 average log lines; the buffer cap (MAX_LOG_LINES=2000) then trims
+// further. We also drop the first partial line if we started mid-line.
+const INITIAL_TAIL_BYTES = 256 * 1024
+
+function startLogTailer(winId: number, profileUid: string, win: BrowserWindow): void {
+  const logPath = join(homedir(), '.zylch', 'profiles', profileUid, 'zylch.log')
+  let position = 0
+
+  // Initial slurp from EOF − INITIAL_TAIL_BYTES so the view has scrollback
+  // immediately on first open. Wrapped in try/catch because the file may
+  // not exist yet on a brand-new profile (the engine creates it once the
+  // first log line writes).
+  try {
+    const stat = statSync(logPath)
+    const startFrom = Math.max(0, stat.size - INITIAL_TAIL_BYTES)
+    if (stat.size > startFrom) {
+      const fd = openSync(logPath, 'r')
+      try {
+        const buf = Buffer.alloc(stat.size - startFrom)
+        readSync(fd, buf, 0, buf.length, startFrom)
+        position = stat.size
+        let text = buf.toString('utf8')
+        // Started mid-line if we didn't start at 0 — drop the dangling head.
+        if (startFrom > 0) {
+          const nl = text.indexOf('\n')
+          if (nl >= 0) text = text.slice(nl + 1)
+        }
+        appendLogChunk(winId, text)
+      } finally {
+        closeSync(fd)
+      }
+    } else {
+      position = stat.size
+    }
+  } catch {
+    // File missing — start at 0; the poll loop will pick up the first
+    // bytes once the engine writes them.
+    position = 0
+  }
+
+  const poll = setInterval(() => {
+    let stat
+    try {
+      stat = statSync(logPath)
+    } catch {
+      return
+    }
+    if (stat.size < position) {
+      // Truncation / rotation — reset and re-read from 0.
+      position = 0
+    }
+    if (stat.size <= position) return
+    let text: string
+    try {
+      const fd = openSync(logPath, 'r')
+      try {
+        const buf = Buffer.alloc(stat.size - position)
+        readSync(fd, buf, 0, buf.length, position)
+        position = stat.size
+        text = buf.toString('utf8')
+      } finally {
+        closeSync(fd)
+      }
+    } catch {
+      return
+    }
+    appendLogChunk(winId, text)
+    if (!win.isDestroyed()) {
+      win.webContents.send('logs:line', text)
+    }
+  }, 500)
+
+  windowLogTailers.set(winId, { path: logPath, position, poll })
+}
+
+function stopLogTailer(winId: number): void {
+  const t = windowLogTailers.get(winId)
+  if (!t) return
+  clearInterval(t.poll)
+  windowLogTailers.delete(winId)
 }
 
 // windowId → Chromium partition string used by that BrowserWindow.
@@ -253,8 +351,12 @@ function attachSidecarToWindow(win: BrowserWindow, profile: string): SidecarClie
     try {
       existing.sidecar.stop()
     } catch {}
+    // Replacing the sidecar also means a new profile → drop the old
+    // tailer and start one for the new profile's `zylch.log`.
+    stopLogTailer(win.id)
   }
   windowEntries.set(win.id, { sidecar, profile, window: win })
+  startLogTailer(win.id, profile, win)
   if (!win.isDestroyed()) {
     win.setTitle(`MrCall Desktop — ${profile}`)
   }
@@ -325,6 +427,7 @@ function createAuthPendingWindow(
     }
     windowPartitions.delete(win.id)
     windowLogBuffers.delete(win.id)
+    stopLogTailer(win.id)
   })
 
   // `?email=<hint>` lets the SignIn screen pre-fill the email input when

@@ -2,10 +2,12 @@
  * Logs view — live tail of the sidecar's stderr stream with structured
  * colouring.
  *
- * Source: the main process keeps a per-window ring buffer (last 2000
- * lines) of `sidecar.on('stderr')` chunks. We fetch the scrollback once on
- * mount via `window.zylch.logs.tail()` and subscribe to new chunks via
- * `window.zylch.onStderr(cb)`.
+ * Source: the main process tails `<profileDir>/zylch.log` (the engine's
+ * DEBUG+ file handler — stderr alone is too quiet because the console
+ * handler is gated to WARNING+ and the Logs view would look broken on a
+ * healthy session). We fetch the scrollback once on mount via
+ * `window.zylch.logs.tail()` (seeded from the last ~256 KB of the file)
+ * and subscribe to new chunks via `window.zylch.onLogLine(cb)`.
  *
  * Colouring keys off the engine's structured prefix:
  *     YYYY-MM-DD HH:MM:SS module LEVEL message
@@ -78,11 +80,14 @@ function levelClasses(level: Level | null): string {
 
 export default function Logs(): JSX.Element {
   const [rawLines, setRawLines] = useState<string[]>([])
+  // DEBUG defaults OFF — the engine logs DEBUG very chattily (e.g. the
+  // `whatsapp.status` poll fires every 3 s while the WA tab is mounted)
+  // and the user almost never cares. They can enable it on demand.
   const [enabled, setEnabled] = useState<Record<Level, boolean>>({
     ERROR: true,
     WARNING: true,
     INFO: true,
-    DEBUG: true,
+    DEBUG: false,
     CRITICAL: true
   })
   const [paused, setPaused] = useState(false)
@@ -97,7 +102,7 @@ export default function Logs(): JSX.Element {
     void window.zylch.logs.tail().then((lines) => {
       if (!cancelled) setRawLines(lines)
     })
-    const off = window.zylch.onStderr((chunk: string) => {
+    const off = window.zylch.onLogLine((chunk: string) => {
       setRawLines((prev) => {
         const incoming = chunk.split('\n').filter((l) => l.length > 0)
         if (incoming.length === 0) return prev

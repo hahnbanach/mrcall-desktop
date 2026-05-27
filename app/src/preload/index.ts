@@ -6,6 +6,14 @@ const listeners = new Map<string, Set<NotifyCb>>()
 type StderrCb = (chunk: string) => void
 const stderrListeners = new Set<StderrCb>()
 
+// `logs:line` is a SEPARATE channel from `sidecar:stderr`. Source:
+// the main process tails `<profileDir>/zylch.log` (DEBUG+) and forwards
+// new chunks here. We don't mix into the stderr stream because
+// `useNarration` listens to stderr and would otherwise generate a
+// narration LLM call on every DEBUG log line.
+type LogLineCb = (chunk: string) => void
+const logLineListeners = new Set<LogLineCb>()
+
 interface WhatsAppThread {
   jid: string
   name: string | null
@@ -36,6 +44,16 @@ ipcRenderer.on('sidecar:stderr', (_e, chunk: string) => {
       cb(chunk)
     } catch (e) {
       console.error('[preload] stderr handler error', e)
+    }
+  }
+})
+
+ipcRenderer.on('logs:line', (_e, chunk: string) => {
+  for (const cb of logLineListeners) {
+    try {
+      cb(chunk)
+    } catch (e) {
+      console.error('[preload] logs:line handler error', e)
     }
   }
 })
@@ -665,15 +683,21 @@ const api = {
       openProfilePickerListeners.delete(cb)
     }
   },
-  // Logs view: scrollback (per-window stderr ring buffer in main) + live
-  // streaming uses the existing `onStderr` subscription. Each call to
-  // `tail()` returns a fresh copy of the buffer; `clear()` wipes ONLY the
-  // in-memory buffer for this window (the engine's `zylch.log` on disk
-  // is untouched).
+  // Logs view: scrollback (per-window buffer in main, seeded from the
+  // tail of `<profileDir>/zylch.log` and grown as the engine writes more)
+  // + live `onLogLine` subscription for new chunks. `clear()` wipes
+  // ONLY the in-memory buffer for this window (the file on disk
+  // untouched).
   logs: {
     tail: (): Promise<string[]> => ipcRenderer.invoke('logs:tail') as Promise<string[]>,
     clear: (): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('logs:clear') as Promise<{ ok: boolean }>
+  },
+  onLogLine: (cb: LogLineCb): (() => void) => {
+    logLineListeners.add(cb)
+    return () => {
+      logLineListeners.delete(cb)
+    }
   }
 }
 
