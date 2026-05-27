@@ -6,6 +6,14 @@ const listeners = new Map<string, Set<NotifyCb>>()
 type StderrCb = (chunk: string) => void
 const stderrListeners = new Set<StderrCb>()
 
+// `logs:line` is a SEPARATE channel from `sidecar:stderr`. Source:
+// the main process tails `<profileDir>/zylch.log` (DEBUG+) and forwards
+// new chunks here. We don't mix into the stderr stream because
+// `useNarration` listens to stderr and would otherwise generate a
+// narration LLM call on every DEBUG log line.
+type LogLineCb = (chunk: string) => void
+const logLineListeners = new Set<LogLineCb>()
+
 interface WhatsAppThread {
   jid: string
   name: string | null
@@ -40,10 +48,32 @@ ipcRenderer.on('sidecar:stderr', (_e, chunk: string) => {
   }
 })
 
+ipcRenderer.on('logs:line', (_e, chunk: string) => {
+  for (const cb of logLineListeners) {
+    try {
+      cb(chunk)
+    } catch (e) {
+      console.error('[preload] logs:line handler error', e)
+    }
+  }
+})
+
 // Structured sidecar liveness/health events pushed by main when the
 // child process spawns or dies. The renderer renders a banner from this.
 export type SidecarStatusEvent =
-  | { alive: true; profile: string }
+  | {
+      alive: true
+      profile: string
+      // `ready` is true once the engine has emitted `engine.ready` —
+      // i.e. all engine modules are imported and the RPC dispatcher is
+      // serving. Until then, mount-time RPCs would queue against a busy
+      // sidecar and timeout client-side. The renderer shows a splash
+      // while !ready on first boot of a brand-new profile.
+      ready?: boolean
+      // Boot duration in ms (only set on the ready:true event), for
+      // diagnostics in the renderer console.
+      bootMs?: number
+    }
   | {
       alive: false
       profile: string
@@ -54,7 +84,15 @@ export type SidecarStatusEvent =
     }
 type StatusCb = (status: SidecarStatusEvent) => void
 const statusListeners = new Set<StatusCb>()
+// Cache the latest sidecar:status so late subscribers (e.g. AppInner's
+// useEffect that mounts AFTER auth + bindProfile have already spawned
+// the sidecar and triggered `engine.ready`) don't miss it. Without this
+// the splash hangs forever if the sidecar's boot races past the React
+// mount cycle (typical on a warm profile).
+let lastSidecarStatus: SidecarStatusEvent | null = null
 ipcRenderer.on('sidecar:status', (_e, status: SidecarStatusEvent) => {
+  lastSidecarStatus = status
+  console.log('[preload] sidecar:status', JSON.stringify(status))
   for (const cb of statusListeners) {
     try {
       cb(status)
@@ -655,6 +693,17 @@ const api = {
   },
   onSidecarStatus: (cb: StatusCb): (() => void) => {
     statusListeners.add(cb)
+    // Replay the most recent status so a subscriber that mounted after
+    // `engine.ready` already fired still receives it (and the splash
+    // can dismiss). Errors here are isolated — they must not prevent
+    // the subscription from being recorded.
+    if (lastSidecarStatus) {
+      try {
+        cb(lastSidecarStatus)
+      } catch (e) {
+        console.error('[preload] status replay error', e)
+      }
+    }
     return () => {
       statusListeners.delete(cb)
     }
@@ -663,6 +712,22 @@ const api = {
     openProfilePickerListeners.add(cb)
     return () => {
       openProfilePickerListeners.delete(cb)
+    }
+  },
+  // Logs view: scrollback (per-window buffer in main, seeded from the
+  // tail of `<profileDir>/zylch.log` and grown as the engine writes more)
+  // + live `onLogLine` subscription for new chunks. `clear()` wipes
+  // ONLY the in-memory buffer for this window (the file on disk
+  // untouched).
+  logs: {
+    tail: (): Promise<string[]> => ipcRenderer.invoke('logs:tail') as Promise<string[]>,
+    clear: (): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('logs:clear') as Promise<{ ok: boolean }>
+  },
+  onLogLine: (cb: LogLineCb): (() => void) => {
+    logLineListeners.add(cb)
+    return () => {
+      logLineListeners.delete(cb)
     }
   }
 }

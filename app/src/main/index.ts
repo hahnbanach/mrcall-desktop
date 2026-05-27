@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from 'electron'
 import { join } from 'path'
-import { statSync, existsSync } from 'fs'
+import { statSync, existsSync, openSync, readSync, closeSync } from 'fs'
 import { homedir } from 'os'
 import { randomUUID } from 'crypto'
 import { SidecarClient } from './sidecar'
@@ -95,6 +95,128 @@ interface WindowEntry {
 }
 const windowEntries = new Map<number, WindowEntry>()
 
+// windowId → ring buffer of sidecar stderr lines (last MAX_LOG_LINES). The
+// Logs view fetches the scrollback on mount via `logs:tail` and subscribes
+// to live `sidecar:stderr` events for new lines. Lives separately from
+// `windowEntries` so a stderr chunk arriving before the entry is registered
+// (race with `attachSidecarToWindow`) still gets buffered.
+const MAX_LOG_LINES = 2000
+const windowLogBuffers = new Map<number, string[]>()
+
+function appendLogChunk(winId: number, chunk: string): void {
+  if (!chunk) return
+  let buf = windowLogBuffers.get(winId)
+  if (!buf) {
+    buf = []
+    windowLogBuffers.set(winId, buf)
+  }
+  // Split on \n; keep non-empty lines so the renderer can color per-line.
+  for (const line of chunk.split('\n')) {
+    if (line.length > 0) buf.push(line)
+  }
+  if (buf.length > MAX_LOG_LINES) {
+    buf.splice(0, buf.length - MAX_LOG_LINES)
+  }
+}
+
+// File-tailing for `<profileDir>/zylch.log` — the rich DEBUG+ source the
+// engine writes to disk. Stderr alone is too quiet (the console handler
+// is gated to WARNING+), so the Logs view would look broken on a healthy
+// session. Each window tracks the byte position it has already streamed;
+// every 500 ms we stat the file and read whatever's new. macOS `fs.watch`
+// is unreliable for log files written through Python's FileHandler, so we
+// poll — predictable, ~negligible cost.
+interface LogTailer {
+  path: string
+  position: number
+  poll: NodeJS.Timeout
+}
+const windowLogTailers = new Map<number, LogTailer>()
+
+// Cap the initial scrollback we slurp from a possibly-huge log file
+// (Mario's x59G6 profile already has 31 MB after a few days). 256 KB is
+// ~3000 average log lines; the buffer cap (MAX_LOG_LINES=2000) then trims
+// further. We also drop the first partial line if we started mid-line.
+const INITIAL_TAIL_BYTES = 256 * 1024
+
+function startLogTailer(winId: number, profileUid: string, win: BrowserWindow): void {
+  const logPath = join(homedir(), '.zylch', 'profiles', profileUid, 'zylch.log')
+  let position = 0
+
+  // Initial slurp from EOF − INITIAL_TAIL_BYTES so the view has scrollback
+  // immediately on first open. Wrapped in try/catch because the file may
+  // not exist yet on a brand-new profile (the engine creates it once the
+  // first log line writes).
+  try {
+    const stat = statSync(logPath)
+    const startFrom = Math.max(0, stat.size - INITIAL_TAIL_BYTES)
+    if (stat.size > startFrom) {
+      const fd = openSync(logPath, 'r')
+      try {
+        const buf = Buffer.alloc(stat.size - startFrom)
+        readSync(fd, buf, 0, buf.length, startFrom)
+        position = stat.size
+        let text = buf.toString('utf8')
+        // Started mid-line if we didn't start at 0 — drop the dangling head.
+        if (startFrom > 0) {
+          const nl = text.indexOf('\n')
+          if (nl >= 0) text = text.slice(nl + 1)
+        }
+        appendLogChunk(winId, text)
+      } finally {
+        closeSync(fd)
+      }
+    } else {
+      position = stat.size
+    }
+  } catch {
+    // File missing — start at 0; the poll loop will pick up the first
+    // bytes once the engine writes them.
+    position = 0
+  }
+
+  const poll = setInterval(() => {
+    let stat
+    try {
+      stat = statSync(logPath)
+    } catch {
+      return
+    }
+    if (stat.size < position) {
+      // Truncation / rotation — reset and re-read from 0.
+      position = 0
+    }
+    if (stat.size <= position) return
+    let text: string
+    try {
+      const fd = openSync(logPath, 'r')
+      try {
+        const buf = Buffer.alloc(stat.size - position)
+        readSync(fd, buf, 0, buf.length, position)
+        position = stat.size
+        text = buf.toString('utf8')
+      } finally {
+        closeSync(fd)
+      }
+    } catch {
+      return
+    }
+    appendLogChunk(winId, text)
+    if (!win.isDestroyed()) {
+      win.webContents.send('logs:line', text)
+    }
+  }, 500)
+
+  windowLogTailers.set(winId, { path: logPath, position, poll })
+}
+
+function stopLogTailer(winId: number): void {
+  const t = windowLogTailers.get(winId)
+  if (!t) return
+  clearInterval(t.poll)
+  windowLogTailers.delete(winId)
+}
+
 // windowId → Chromium partition string used by that BrowserWindow.
 // Populated at window creation time (before bindProfile, before any
 // sidecar) so `auth:bindProfile` can persist the partition into the
@@ -168,13 +290,35 @@ function spawnSidecar(profile: string, window: BrowserWindow): SidecarClient {
     profile,
     envOverrides
   })
+  // Track when this sidecar was spawned so we can log boot duration when
+  // `engine.ready` arrives. Useful telemetry — "first boot of a new
+  // profile" stretches into tens of seconds.
+  const spawnedAtMs = Date.now()
   sidecar.on('notification', (msg) => {
     console.log(`[main][w${window.id}] notification method=${msg.method}`)
+    if (msg.method === 'engine.ready') {
+      const bootMs = Date.now() - spawnedAtMs
+      console.log(`[main][w${window.id}] engine.ready (boot ${bootMs} ms)`)
+      if (!window.isDestroyed()) {
+        // Tell the renderer the engine can now serve RPCs. Re-uses the
+        // existing `sidecar:status` channel (the SidecarStatusBanner +
+        // the engine-ready gate both listen there).
+        window.webContents.send('sidecar:status', {
+          alive: true,
+          profile,
+          ready: true,
+          bootMs
+        })
+      }
+      return
+    }
     if (!window.isDestroyed()) {
       window.webContents.send('rpc:notification', msg)
     }
   })
   sidecar.on('stderr', (chunk: string) => {
+    // Buffer per-window so the Logs view can fetch scrollback on mount.
+    appendLogChunk(window.id, chunk)
     // Forward stderr only to the owning window, never broadcast.
     if (!window.isDestroyed()) {
       window.webContents.send('sidecar:stderr', chunk)
@@ -227,8 +371,12 @@ function attachSidecarToWindow(win: BrowserWindow, profile: string): SidecarClie
     try {
       existing.sidecar.stop()
     } catch {}
+    // Replacing the sidecar also means a new profile → drop the old
+    // tailer and start one for the new profile's `zylch.log`.
+    stopLogTailer(win.id)
   }
   windowEntries.set(win.id, { sidecar, profile, window: win })
+  startLogTailer(win.id, profile, win)
   if (!win.isDestroyed()) {
     win.setTitle(`MrCall Desktop — ${profile}`)
   }
@@ -298,6 +446,8 @@ function createAuthPendingWindow(
       windowEntries.delete(win.id)
     }
     windowPartitions.delete(win.id)
+    windowLogBuffers.delete(win.id)
+    stopLogTailer(win.id)
   })
 
   // `?email=<hint>` lets the SignIn screen pre-fill the email input when
@@ -461,6 +611,27 @@ function registerIpc(): void {
     // benefit too.
     const pinned = partitionForProfile(profile)
     createAuthPendingWindow(entry.email || undefined, pinned ?? undefined)
+    return { ok: true }
+  })
+
+  // Logs view scrollback: return the per-window stderr ring buffer.
+  // Each line is raw text (the renderer parses the structured `YYYY-MM-DD
+  // HH:MM:SS module LEVEL message` prefix for colouring). Lines arriving
+  // after this call are pushed live via the existing `sidecar:stderr`
+  // event the Logs view also subscribes to.
+  ipcMain.handle('logs:tail', async (event): Promise<string[]> => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return []
+    return [...(windowLogBuffers.get(win.id) ?? [])]
+  })
+
+  // Wipes the in-memory buffer for the calling window. Does NOT touch the
+  // engine's on-disk `zylch.log` — this is just to clear the Logs view so
+  // a reproduction can be captured from a clean slate.
+  ipcMain.handle('logs:clear', async (event): Promise<{ ok: boolean }> => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return { ok: false }
+    windowLogBuffers.set(win.id, [])
     return { ok: true }
   })
 

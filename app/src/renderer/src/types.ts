@@ -507,10 +507,27 @@ export interface ZylchAPI {
   onStderr: (cb: (chunk: string) => void) => () => void
   onSidecarStatus: (cb: (status: SidecarStatusEvent) => void) => () => void
   onOpenProfilePicker: (cb: () => void) => () => void
+  // Logs view: scrollback (per-window ring buffer in main, seeded from
+  // the tail of `<profileDir>/zylch.log` and kept in sync as the engine
+  // writes) + clear. Live streaming uses the separate `onLogLine`
+  // subscription below (not `onStderr` — stderr is gated to WARNING+ by
+  // the engine's console handler, the file is the rich DEBUG+ source).
+  logs: {
+    tail: () => Promise<string[]>
+    clear: () => Promise<{ ok: boolean }>
+  }
+  onLogLine: (cb: (chunk: string) => void) => () => void
 }
 
 export type SidecarStatusEvent =
-  | { alive: true; profile: string }
+  | {
+      alive: true
+      profile: string
+      // `ready` becomes true when the sidecar emits `engine.ready` —
+      // i.e. all modules imported and the RPC dispatcher is serving.
+      ready?: boolean
+      bootMs?: number
+    }
   | {
       alive: false
       profile: string

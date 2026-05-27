@@ -277,6 +277,19 @@ async def _auto_reconnect_whatsapp() -> None:
 async def serve() -> None:
     """Main loop: read stdin lines, dispatch concurrently, write responses."""
     logger.info("[rpc] server starting")
+
+    # Tell the desktop main process the engine is ready to serve RPCs.
+    # The renderer gates mount-time RPCs (settings.get, settings.schema,
+    # account.set_firebase_token, mrcall.list_my_businesses) on this
+    # notification — without it, the first batch fires while the engine
+    # is still importing (Go runtime for neonize, ONNX for fastembed,
+    # SQLAlchemy `Base.metadata.create_all`, initial WAL writes) and
+    # times out at the renderer's 60 s default. By the time `serve()`
+    # runs, `zylch.rpc.methods` has finished importing every domain
+    # module — so this point is the actual ready-to-dispatch marker.
+    _write_line_sync({"jsonrpc": "2.0", "method": "engine.ready", "params": {}})
+    logger.info("[rpc] engine.ready emitted")
+
     loop = asyncio.get_event_loop()
     tasks: set[asyncio.Task] = set()
 
