@@ -8,7 +8,7 @@ description: |
 
 # Active Context — Engine
 
-## Current focus (as of 2026-05-20)
+## Current focus (as of 2026-05-27)
 
 **MrCall channel cleanup + customer-service lookup (Livello A).** The legacy MrCall delegated/PKCE OAuth2 auth is gone (−~3000 LOC: the delegated flow in `tools/mrcall/oauth.py`, the `/mrcall` slash-command surface in `command_handlers.py`, `mrcall_link` storage, the dead configurator domain). StarChat is reached purely via the Firebase JWT now (`make_starchat_client_from_firebase_session`). New read-only RPC `mrcall.search_businesses` (CrmBusinessSearch filters — email/name/phone/VAT/status; StarChat role-scopes: admin sees cross-owner, owner own-only) backs the desktop "simplified dashboard". `sync_mrcall` is a graceful no-op pending a Firebase-path reimplementation (**Livello B** — phone-call memory ingestion). Live-verified by Mario 2026-05-20. Plan: [mrcall-pipeline-parity.md](../../docs/execution-plans/mrcall-pipeline-parity.md).
 
@@ -22,7 +22,8 @@ On-device STT for WA voice notes: download the ogg/opus at WhatsApp **event time
 
 | Date | What | Refs |
 |---|---|---|
-| 2026-05-26 | New RPC `agents.train_all` (`zylch/rpc/agents.py`) runs the 3 personalised trainers serially (memory_message → task_email → emailer) with `agents.train.progress` notifications. `MessageMemoryAgentTrainer.build_memory_message_prompt` now also samples 1-on-1 WhatsApp chats where the user has replied (`_get_recent_whatsapp_chats` / `_format_whatsapp_samples`), and the meta-prompt has a new `=== SAMPLE OF RECENT WHATSAPP CHATS ===` section. `metadata.whatsapp_chats_analyzed` exposed alongside `threads_analyzed`. | _pending live verification_ |
+| 2026-05-26 | New `services/error_messages.humanize_error` classifier (by exception TYPE + `__cause__` walk; never prose parsing — dns/auth/imap/network/timeout/tls/credits/no_llm/unknown). `handle_process` gains an `errors_out` collector; `update.run` returns `{success, errors[], summary, updated_tasks}` and no longer reports a false "Update complete" on stage failure. Memory: new 3rd home `template:<owner>` for behavioral rules (read by `_get_learned_preferences` together with legacy `prefs:`); `create_memory(entry_type="behavioral_rule")` forces routing to `template:`, `update_memory` blocks behavioral_rule on `user:` contact blobs. `_resolve_host` defaults unknown domains to Google. `IMAPClient.fetch_attachments` searches INBOX → All Mail → Sent. `solve_tools._download_attachment` uses `email["message_id_header"]`. New `services/whatsapp_search.py` (`build_thread_rows` + `search_thread_jids`) backs `whatsapp.send_message` + `whatsapp.search_messages`. | `ca784d0d..4e243bdb` merged via `436bb291` (2026-05-27) |
+| 2026-05-26 | New RPC `agents.train_all` (`zylch/rpc/agents.py`) runs the 3 personalised trainers serially (memory_message → task_email → emailer) with `agents.train.progress` notifications. `MessageMemoryAgentTrainer.build_memory_message_prompt` now also samples 1-on-1 WhatsApp chats where the user has replied (`_get_recent_whatsapp_chats` / `_format_whatsapp_samples`), and the meta-prompt has a new `=== SAMPLE OF RECENT WHATSAPP CHATS ===` section. `metadata.whatsapp_chats_analyzed` exposed alongside `threads_analyzed`. | `3c152cc7` |
 | 2026-05-22 | WA revoke (delete-for-everyone) purges the target row locally; archived chats excluded from memory + task analysis (UI unaffected); `list_mrcall_assistants` chat tool + dashboard URL anchored in the assistant prompt; current datetime injected into EVERY LLM request | `56488528` · `140793c6` · `63f05b2a` · `5f5c73e8` |
 | 2026-05-20 | MrCall delegated/PKCE OAuth + `/mrcall` command surface + `mrcall_link` removed (−~3000 LOC); StarChat via Firebase JWT only; `sync_mrcall` graceful no-op (Livello B TODO) | `770522e8` · `6f02f7ef` |
 | 2026-05-20 | `mrcall.search_businesses` RPC (CrmBusinessSearch filters) for customer-service lookup; 13 stale SaaS-era test files removed (suite collectable again, 207 passed) | `a28c5533` · `c40dd41b` · `dd6863ca` |
@@ -33,11 +34,6 @@ On-device STT for WA voice notes: download the ogg/opus at WhatsApp **event time
 | 2026-05-13 | Phase 3b: `TaskWorker._analyze_recent_whatsapp_events` (dedup by chat_jid, user_replied detection, F7 via `whatsapp_blobs`, Fix-D guard, channel-agnostic `get_tasks_by_thread`) | `87a806f7` |
 | 2026-05-13 | Fix-D restricted to same-thread candidates — F7 topical-blob siblings stay as LLM context, never auto-merge a CREATE onto an unrelated customer's task | `f5196e7f` |
 | 2026-05-13 | Phase 3a: `task_items.contact_phone` indexed column, `_infer_task_channel` learns `whatsapp`, `update_task_item(add_source_whatsapp_message=…)`, `get_tasks_by_contact_phone`, watermark helpers | `e6fcd940` |
-| 2026-05-12 | WhatsApp pipeline parity Phase 2 a/b/c — `whatsapp_blobs` join + `memory_message` trainer + WA memory extraction wired into update pipeline | `91421d2e` |
-| 2026-05-12 | Attachment reading — native PDF/DOCX/XLSX in `read_document` (no more `run_python` approval prompt) | `528c5d6b` |
-| 2026-05-11/12 | Agentic task "Open" — proactive solve flow: SOLVE_SYSTEM_PROMPT rewrite, `USER_LANGUAGE`, `tasks.solve.cancel` RPC, APPROVAL_TOOLS coherence fix, `tool_use_start` event | `df1e1fb1..b36e15b3` · [proactive-task-open.md](../../docs/execution-plans/proactive-task-open.md) |
-| 2026-05-08 | Cross-channel person identity Phase 1c (identifier-clustered reconsolidation + `migrate_blob_references`) | `6ae8a5fa` |
-| 2026-05-07 | Phases 1a + 1b — `person_identifiers` index + backfill + identifier-first match in `_upsert_entity` | `d0baa6b1` · `315c56d1` |
 
 ## In progress
 
@@ -47,13 +43,16 @@ On-device STT for WA voice notes: download the ogg/opus at WhatsApp **event time
 
 ## Next steps
 
-1. Click Update → observe staged progress: 5/20/30/60/80-90/95/100 with ETA evolving and elapsed counter ticking.
-2. Settings → Connect Google Calendar on a session where the initial token push was missed → confirm the recovery path closes the loop (no raw `_NotSignedInError` shown).
-3. Wire `tools/calendar_sync.py` to read tokens from `provider='google_calendar'` (current 469-line module is partial scaffolding — never fetches events from Google API).
-4. Split oversized files: `services/command_handlers.py` (5427), `workers/task_creation.py` (well over 1100 after Fase 3b additions), `tools/gmail_tools.py` (1002), `workers/memory.py` (916).
+1. Wire `humanize_error` into the other RPC surfaces that today still surface raw `httpx`/`imaplib` tracebacks (`rpc/account.py:account.balance`, Settings test-connection, chat tools, solve tools) — the classifier exists, only `update.run` consumes it today.
+3. Click Update → observe staged progress: 5/20/30/60/80-90/95/100 with ETA evolving and elapsed counter ticking.
+4. Settings → Connect Google Calendar on a session where the initial token push was missed → confirm the recovery path closes the loop (no raw `_NotSignedInError` shown).
+5. Wire `tools/calendar_sync.py` to read tokens from `provider='google_calendar'` (current 469-line module is partial scaffolding — never fetches events from Google API).
+6. Split oversized files: `services/command_handlers.py` (5427), `workers/task_creation.py` (well over 1100 after Fase 3b additions), `tools/gmail_tools.py` (1002), `workers/memory.py` (916).
 
 ## Known issues
 
+- **`humanize_error` wired only to `update.run`** — `account.balance` (and any other httpx caller) still raises through JSON-RPC and the server logs the full traceback (the `httpcore.ConnectError` → `httpx.ConnectError` chain). The classifier already understands these via `__cause__` walk; just needs catch/wrap at the RPC handler. Tracked in [`harness-backlog.md`](harness-backlog.md).
+- **Behavioral_rule guard depends on the model declaring `entry_type`** — if the model omits it, `update_memory` on a contact blob is NOT blocked. The approval card on `update_memory` is the human backstop. Content-classification fallback (LLM) deliberately deferred.
 - **WA voice transcription dev-verified only** — live neonize `download_any` path (real voice-note bytes from a connected WhatsApp) and packaged-build bundling of ctranslate2 + av (PyInstaller, +~50–100 MB) not verified; tracked in [`harness-backlog.md`](harness-backlog.md).
 - **Firebase round-trip not fully live-verified** — Calendar self-healing landed but recovery path hasn't been observed end-to-end on Mario's machine.
 - **MrCall-credits v1 not live-verified.**

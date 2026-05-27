@@ -9,7 +9,7 @@ description: |
 
 # Active Context — App
 
-## Current focus (as of 2026-05-20)
+## Current focus (as of 2026-05-27)
 
 **MrCall tab + onboarding/Calendar fixes (live-verified by Mario 2026-05-20).** The MrCall tab is live (was a disabled placeholder): `views/Mrcall.tsx` lists the user's businesses via `mrcall.list_my_businesses` (Firebase JWT — same endpoint the dashboard uses) and, for customer-service lookup, searches by field (email / name / phone / VAT) + a `subscriptionStatus` dropdown via `mrcall.search_businesses`, with expandable anagraphic/billing cards. Onboarding no longer forces email/IMAP — a signed-in Firebase user can enter straight away; the form hides the LLM / Telegram / MrCall groups (`ProfileFormFields includeGroups`); the Email tab is now gated on a real `IMAP_HOST`, not `EMAIL_ADDRESS` (always the Firebase email). Calendar "engine isn't seeing your Firebase session" fixed: `installEngineTokenPusher()` runs right after onboarding `finalize` (the token pusher was left unset during onboarding, so the in-wizard Calendar connect ran session-less).
 
@@ -19,7 +19,8 @@ Residual: live verification of the 2026-05-15 stack (cross-channel `ThreadPanel`
 
 | Date | What | Refs |
 |---|---|---|
-| 2026-05-26 | "Train assistant" card above Update — `views/Update.tsx` renders a Train-now button + progress bar + per-agent result row that drives `window.zylch.agents.trainAll()`. Subscribes to `agents.train.progress` for the bar; 30-min preload timeout. Each card disables the other while running. | _pending live verification_ |
+| 2026-05-26 | `views/WhatsApp.tsx`: composer at the bottom of the reading pane (Enter=send, Shift+Enter=newline, optimistic append + scroll-to-bottom) + search bar atop the thread list (Enter=search, Esc=clear); `match_snippet` rendered on search hits. `views/Update.tsx` renders `result.errors[]` as red (fatal) / amber (warning) blocks with title + detail + action — replaces the false-green "No changes" on a failed sync. `views/Onboarding.tsx` `inferHosts` defaults unknown email domains to `imap.gmail.com`/`smtp.gmail.com` instead of `imap.<domain>` (was always NXDOMAIN for non-preset domains, e.g. `@mrcall.ai`). New preload bindings `whatsapp.sendMessage` + `whatsapp.searchMessages`. | `ca784d0d..4e243bdb` merged via `436bb291` (2026-05-27) |
+| 2026-05-26 | "Train assistant" card above Update — `views/Update.tsx` renders a Train-now button + progress bar + per-agent result row that drives `window.zylch.agents.trainAll()`. Subscribes to `agents.train.progress` for the bar; 30-min preload timeout. Each card disables the other while running. | `3c152cc7` |
 | 2026-05-20 | MrCall tab live (was disabled placeholder) — `views/Mrcall.tsx`: business list via `mrcall.list_my_businesses` + search-by-field (email/name/phone/VAT) + `subscriptionStatus` dropdown via `mrcall.search_businesses`, expandable anagraphic/billing cards | `ed9ca585` · `a28c5533` |
 | 2026-05-20 | Onboarding unblocked for MrCall-only users (email opt-in, `ProfileFormFields includeGroups` hides LLM/Telegram/MrCall) + Calendar session fix (`installEngineTokenPusher` after `finalize`) + Email tab gated on `IMAP_HOST` not `EMAIL_ADDRESS` | `2b0a54ce` |
 | 2026-05-20 | WhatsApp voice-note transcripts in the Source panel — `transcription` field added to the WhatsAppMessage type (from `whatsapp.list_messages`); `ThreadPanel.tsx` + `views/WhatsApp.tsx` render the transcript with a 🎤 marker + "vocale trascritta" hint, `[vocale]` placeholder while not yet transcribed | [`../../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../../engine/docs/execution-plans/whatsapp-voice-transcription.md) |
@@ -30,8 +31,6 @@ Residual: live verification of the 2026-05-15 stack (cross-channel `ThreadPanel`
 | 2026-05-12 | Agentic task "Open" — `openTaskChat` fires `tasks.solve` directly, `Conversation.threadId` + `taskCompleted` carried in store, Source-panel persistence with mount-time backfill for legacy convs, contextual header button (Riapri ↔ Marca come fatta), Annulla calls `tasks.solve.cancel` (not approve(false)), ApprovalCard mode-aware | `df1e1fb1..b36e15b3` |
 | 2026-05-12 | Pre-Firebase legacy code removed (`inMemoryPersistence`, every window through Firebase, `?legacy=1` + `ZYLCH_PROFILE` bypasses deleted, `NewProfileWizard.tsx` deleted, -558 lines) | `c43ff35e` |
 | 2026-05-11 | Profile picker shows email instead of raw Firebase UID — `profile:current` / `profiles:list` return `{id, email}` | — |
-| 2026-05-07 | WhatsApp tab privacy gate — chat list rendered ONLY when `r.connected === true`; 3 s poll while offline; `ConnectWhatsApp` view explains the history limitation | `9eee73c2` |
-| 2026-05-05 | Email-tab Gmail-style search bar (above thread list, submit-on-Enter, `?` help panel, Esc to clear) | — |
 
 ## In progress
 
@@ -52,6 +51,8 @@ Residual: live verification of the 2026-05-15 stack (cross-channel `ThreadPanel`
 
 ## Known issues
 
+- **WhatsApp send + search not live-verified** — typecheck passes; engine-side test against a real temp DB passes (12 tests); the actual send to a real recipient + search rendering needs Mario QA with a connected WhatsApp.
+- **Update error blocks not live-verified visually** — engine returns the structured `errors[]` correctly (proven end-to-end via the real RPC with a bogus host); the red/amber render path needs eyes-on in the app.
 - **No live end-to-end verification of any Firebase signin path** from this machine.
 - **MrCall-credits v1 not live-verified.**
 - **Cross-channel `ThreadPanel` mode not exercised** on a real task.

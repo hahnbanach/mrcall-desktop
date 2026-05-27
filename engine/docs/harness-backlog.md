@@ -4,6 +4,36 @@ Enforcement gaps, missing tooling, and documentation debt.
 
 ## Open
 
+- [ ] **`humanize_error` only wired into `update.run` (discovered 2026-05-26).**
+  - The `services/error_messages.humanize_error` classifier (added on
+    `feat/session-may-26`) is currently consumed only by
+    `rpc/methods.update_run`. Other RPC handlers that hit the network
+    still raise raw `httpx`/`imaplib` errors and the dispatcher logs
+    the full traceback: `rpc/account.py:account_balance` (the
+    "DNS flaky" case Mario hit on his hotspot), `rpc/email_actions.py`
+    test-connection, chat tools, solve tools. The classifier already
+    walks `__cause__` so the wrapped `httpx.ConnectError` →
+    `socket.gaierror` chain classifies as `dns` — just needs each
+    handler to `try/except` and humanise.
+  - Action: catch at each transport-touching RPC handler, call
+    `humanize_error(exc, stage=<name>)`, and return a clean
+    `{error: {...}}` envelope (or log + raise with the humanised
+    title) so the renderer/log stop showing the full traceback.
+
+- [ ] **Behavioral_rule routing guard depends on the model declaring `entry_type` (discovered 2026-05-26).**
+  - `update_memory` blocks `entry_type="behavioral_rule"` writes onto
+    a `user:` contact blob (the structural guard added on
+    `feat/session-may-26`), but the gate only fires when the model
+    sets `entry_type`. A misbehaving model that omits the field can
+    still pollute a contact blob with a behavioral rule. The approval
+    card on `update_memory` is the human backstop (it already let
+    Mario decline the Pautasso write).
+  - Action options: (a) require `entry_type` (reject calls without
+    it); (b) add an LLM content-classification step on contact-targeted
+    update_memory calls (heavier, but airtight); (c) accept the
+    residual risk and rely on the approval card. Deferred — current
+    prompt routing + approval gate are an acceptable defence in depth.
+
 - [ ] **`sandbox_service` dangling import (discovered 2026-05-20).**
   - `engine/zylch/services/command_handlers.py:171` and
     `engine/zylch/services/chat_service.py:399` do
