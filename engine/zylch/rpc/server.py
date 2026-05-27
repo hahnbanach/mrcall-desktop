@@ -278,15 +278,32 @@ async def serve() -> None:
     """Main loop: read stdin lines, dispatch concurrently, write responses."""
     logger.info("[rpc] server starting")
 
+    # Warm up the costly lazy-init pieces before declaring ready, so the
+    # renderer's first batch of mount-time RPCs (settings.get,
+    # settings.schema, account.set_firebase_token, tasks.list,
+    # mrcall.list_my_businesses) doesn't pay that cost individually and
+    # time out at the renderer's 60 s default. On a brand-new profile
+    # Storage.init_db (Base.metadata.create_all) + Pydantic Settings .env
+    # parse take several seconds on first touch — without the warm-up,
+    # `engine.ready` was technically true (dispatcher running) but the
+    # first real RPC stretched past the timeout. Idempotent, fast on a
+    # warm profile (subsequent boots find the schema already created).
+    try:
+        from zylch.config import settings as _settings
+        from zylch.storage.storage import Storage
+
+        _ = _settings.email_address  # forces Pydantic Settings + .env load
+        Storage.get_instance().init_db()  # SQLAlchemy create_all
+        logger.info("[rpc] warmup done (Storage + Settings)")
+    except Exception as e:
+        # Never let a warmup failure prevent the server from starting —
+        # the renderer will surface the real error via the per-RPC
+        # path (humanize_error) anyway. Log and continue.
+        logger.warning(f"[rpc] warmup failed (non-fatal): {e}")
+
     # Tell the desktop main process the engine is ready to serve RPCs.
-    # The renderer gates mount-time RPCs (settings.get, settings.schema,
-    # account.set_firebase_token, mrcall.list_my_businesses) on this
-    # notification — without it, the first batch fires while the engine
-    # is still importing (Go runtime for neonize, ONNX for fastembed,
-    # SQLAlchemy `Base.metadata.create_all`, initial WAL writes) and
-    # times out at the renderer's 60 s default. By the time `serve()`
-    # runs, `zylch.rpc.methods` has finished importing every domain
-    # module — so this point is the actual ready-to-dispatch marker.
+    # The renderer gates mount-time RPCs on this notification; the splash
+    # in `views/EngineReadySplash` stays visible until it arrives.
     _write_line_sync({"jsonrpc": "2.0", "method": "engine.ready", "params": {}})
     logger.info("[rpc] engine.ready emitted")
 

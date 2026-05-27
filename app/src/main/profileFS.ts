@@ -60,34 +60,41 @@ export const KNOWN_KEYS: ReadonlySet<string> = new Set([
 
 const NEEDS_QUOTE = new Set([' ', '\t', '\n', '\r', '"', "'", '\\', '#', '=', '$', '`'])
 
-// Byte-for-byte parity with python3 `shlex.quote`: wrap in single
-// quotes and escape any embedded single quote as `'"'"'` (close single,
-// quoted single, open single). Both `'\''` and `'"'"'` are legal and
-// semantically equivalent, but CPython uses the latter and matching its
-// output keeps the written .env files diff-identical with those
-// produced by `zylch init` / the server-side `profiles.create` RPC.
-function shlexQuote(value: string): string {
-  if (value === '') return "''"
-  return "'" + value.split("'").join("'\"'\"'") + "'"
-}
-
 /**
  * Quote `value` for inclusion as `KEY=value` in a .env file.
- * Parity with zylch/services/settings_io.py::_quote.
+ *
+ * Always uses double-quoted form when any quoting is needed, because
+ * python-dotenv's parser understands double-quoted values with `\n` and
+ * `\"` escapes, but NOT shell-style apostrophe escaping like `'"'"'`
+ * that `shlex.quote` emits for values containing `'`. The previous
+ * implementation here used the shell form and broke .env parse the
+ * moment a user typed an apostrophe in a free-text field (e.g.
+ * `USER_COMPANY=Cafe' 124 Srl` got written as
+ * `USER_COMPANY='Cafe'"'"' 124 Srl'`, which python-dotenv could not
+ * parse — yielding 4× "could not parse statement starting at line 10"
+ * warnings and a corrupted profile).
+ *
+ * Plain alphanumerics (no whitespace, no quotes, no `#`, no `=`, no
+ * backslash) stay unquoted so diffs read cleanly. Byte-for-byte parity
+ * with `engine/zylch/services/settings_io.py::_quote`.
  */
 export function dotenvQuote(value: string): string {
   if (value === '') return ''
-  if (value.includes('\n') || value.includes('\r')) {
-    let escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-    escaped = escaped.replace(/\r\n/g, '\\n').replace(/\n/g, '\\n').replace(/\r/g, '\\n')
-    return `"${escaped}"`
-  }
+  let needsQuote = false
   for (const ch of value) {
     if (NEEDS_QUOTE.has(ch)) {
-      return shlexQuote(value)
+      needsQuote = true
+      break
     }
   }
-  return value
+  if (!needsQuote) return value
+  const escaped = value
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r\n/g, '\\n')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\n')
+  return `"${escaped}"`
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
