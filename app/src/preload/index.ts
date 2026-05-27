@@ -84,7 +84,15 @@ export type SidecarStatusEvent =
     }
 type StatusCb = (status: SidecarStatusEvent) => void
 const statusListeners = new Set<StatusCb>()
+// Cache the latest sidecar:status so late subscribers (e.g. AppInner's
+// useEffect that mounts AFTER auth + bindProfile have already spawned
+// the sidecar and triggered `engine.ready`) don't miss it. Without this
+// the splash hangs forever if the sidecar's boot races past the React
+// mount cycle (typical on a warm profile).
+let lastSidecarStatus: SidecarStatusEvent | null = null
 ipcRenderer.on('sidecar:status', (_e, status: SidecarStatusEvent) => {
+  lastSidecarStatus = status
+  console.log('[preload] sidecar:status', JSON.stringify(status))
   for (const cb of statusListeners) {
     try {
       cb(status)
@@ -685,6 +693,17 @@ const api = {
   },
   onSidecarStatus: (cb: StatusCb): (() => void) => {
     statusListeners.add(cb)
+    // Replay the most recent status so a subscriber that mounted after
+    // `engine.ready` already fired still receives it (and the splash
+    // can dismiss). Errors here are isolated — they must not prevent
+    // the subscription from being recorded.
+    if (lastSidecarStatus) {
+      try {
+        cb(lastSidecarStatus)
+      } catch (e) {
+        console.error('[preload] status replay error', e)
+      }
+    }
     return () => {
       statusListeners.delete(cb)
     }
