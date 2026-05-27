@@ -3,6 +3,7 @@ import { signOut, type User } from 'firebase/auth'
 import Tasks from './views/Tasks'
 import Workspace from './views/Workspace'
 import Update from './views/Update'
+import Logs from './views/Logs'
 import Settings from './views/Settings'
 import Email from './views/Email'
 import WhatsAppView from './views/WhatsApp'
@@ -23,7 +24,15 @@ import mrcallIcon from './assets/logos/mrcall-icon.png'
 import mrcallWordmark from './assets/logos/mrcall-wordmark.png'
 import './types'
 
-type View = 'tasks' | 'workspace' | 'email' | 'whatsapp' | 'mrcall' | 'update' | 'settings'
+type View =
+  | 'tasks'
+  | 'workspace'
+  | 'email'
+  | 'whatsapp'
+  | 'mrcall'
+  | 'update'
+  | 'logs'
+  | 'settings'
 
 // Wire the engine token pusher (the RPC that ships the Firebase JWT to
 // the sidecar) and push the current token, with a short retry — the
@@ -467,12 +476,46 @@ function AppInner(): JSX.Element {
   // rather than showing a broken tab when the profile isn't set up for
   // IMAP). Loaded once via settings.get().
   const [hasEmailConfigured, setHasEmailConfigured] = useState<boolean>(false)
+  // Count of ERROR/CRITICAL log lines emitted since the user last
+  // visited the Logs tab. Drives the red badge on the Logs nav item so a
+  // background auto-update failure (or any sidecar-side error) is
+  // visible without forcing the user to babysit stderr.
+  const [unreadErrors, setUnreadErrors] = useState<number>(0)
   const { setActiveThreadId, setActiveTaskId } = useThread()
 
   // Background auto-Update loop. No-op when settings disable it; never
   // ticks against a locked or absent sidecar. Lives at the AppInner
   // level so it stops cleanly when the window unbinds the profile.
   useAutoUpdate()
+
+  // Tally ERROR/CRITICAL lines arriving from the sidecar while the user
+  // is NOT on the Logs tab. Parses the engine's structured prefix only —
+  // unstructured lines (Python tracebacks etc.) don't increment by
+  // themselves; they ride along the preceding ERROR's count.
+  useEffect(() => {
+    // Console (stderr) format omits the date — file format includes it.
+    // Accept both so the counter triggers regardless of source.
+    const ZYLCH_LEVEL_RE =
+      /^(?:\d{4}-\d{2}-\d{2} )?\d{2}:\d{2}:\d{2}(?:[,.]\d{3})? [\w.]+ (DEBUG|INFO|WARNING|ERROR|CRITICAL)\s/
+    const off = window.zylch.onStderr((chunk: string) => {
+      let n = 0
+      for (const line of chunk.split('\n')) {
+        const m = line.match(ZYLCH_LEVEL_RE)
+        if (m && (m[1] === 'ERROR' || m[1] === 'CRITICAL')) n++
+      }
+      if (n > 0) {
+        // Snapshot view via closure — we always check the CURRENT view at
+        // increment time so a switch to Logs mid-stream stops the badge.
+        setUnreadErrors((prev) => (view === 'logs' ? 0 : prev + n))
+      }
+    })
+    return off
+  }, [view])
+
+  // Reset the badge as soon as the user opens Logs.
+  useEffect(() => {
+    if (view === 'logs') setUnreadErrors(0)
+  }, [view])
 
   // Resolve the active profile once on mount, derive the accent colour, and
   // publish it as CSS custom properties so any component can theme itself
@@ -551,6 +594,7 @@ function AppInner(): JSX.Element {
           setView={setView}
           profileEmail={profileEmail}
           hasEmailConfigured={hasEmailConfigured}
+          unreadErrors={unreadErrors}
           onNewProfile={() => {
             // "Sign in to another account" opens a fresh auth-pending
             // window. The Firebase signin there will key the resulting
@@ -616,6 +660,12 @@ function AppInner(): JSX.Element {
             <Update />
           </div>
           <div
+            className="absolute inset-0 overflow-hidden"
+            style={{ display: view === 'logs' ? 'block' : 'none' }}
+          >
+            <Logs />
+          </div>
+          <div
             className="absolute inset-0 overflow-auto"
             style={{ display: view === 'settings' ? 'block' : 'none' }}
           >
@@ -641,6 +691,7 @@ function Sidebar({
   setView,
   profileEmail,
   hasEmailConfigured,
+  unreadErrors,
   onNewProfile,
   profilesRefreshKey
 }: {
@@ -648,6 +699,7 @@ function Sidebar({
   setView: (v: View) => void
   profileEmail: string
   hasEmailConfigured: boolean
+  unreadErrors: number
   onNewProfile: () => void
   profilesRefreshKey: number
 }): JSX.Element {
@@ -658,6 +710,9 @@ function Sidebar({
     disabled?: boolean
     disabledTitle?: string
     hidden?: boolean
+    // Numeric badge rendered on the right of the label (e.g. "Logs · 3"
+    // for 3 unread ERROR/CRITICAL lines since the user last opened Logs).
+    badge?: number
   }
 
   const primary: NavItem[] = [
@@ -683,6 +738,7 @@ function Sidebar({
 
   const secondary: NavItem[] = [
     { id: 'update', label: 'Update', icon: 'refresh' },
+    { id: 'logs', label: 'Logs', icon: 'terminal', badge: unreadErrors },
     { id: 'settings', label: 'Settings', icon: 'settings' }
   ]
 
@@ -708,7 +764,18 @@ function Sidebar({
         }
       >
         <Icon name={item.icon} size={18} className="shrink-0" />
-        <span className="truncate">{item.label}</span>
+        <span className="truncate flex-1">{item.label}</span>
+        {item.badge != null && item.badge > 0 && (
+          <span
+            className={
+              'shrink-0 text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full ' +
+              (active ? 'bg-white text-brand-danger' : 'bg-brand-danger text-white')
+            }
+            title={`${item.badge} new error${item.badge === 1 ? '' : 's'} since last visit`}
+          >
+            {item.badge > 99 ? '99+' : item.badge}
+          </span>
+        )}
       </button>
     )
   }

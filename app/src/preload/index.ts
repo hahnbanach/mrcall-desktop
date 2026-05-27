@@ -664,6 +664,16 @@ const api = {
     return () => {
       openProfilePickerListeners.delete(cb)
     }
+  },
+  // Logs view: scrollback (per-window stderr ring buffer in main) + live
+  // streaming uses the existing `onStderr` subscription. Each call to
+  // `tail()` returns a fresh copy of the buffer; `clear()` wipes ONLY the
+  // in-memory buffer for this window (the engine's `zylch.log` on disk
+  // is untouched).
+  logs: {
+    tail: (): Promise<string[]> => ipcRenderer.invoke('logs:tail') as Promise<string[]>,
+    clear: (): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('logs:clear') as Promise<{ ok: boolean }>
   }
 }
 

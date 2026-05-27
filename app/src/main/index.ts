@@ -95,6 +95,30 @@ interface WindowEntry {
 }
 const windowEntries = new Map<number, WindowEntry>()
 
+// windowId → ring buffer of sidecar stderr lines (last MAX_LOG_LINES). The
+// Logs view fetches the scrollback on mount via `logs:tail` and subscribes
+// to live `sidecar:stderr` events for new lines. Lives separately from
+// `windowEntries` so a stderr chunk arriving before the entry is registered
+// (race with `attachSidecarToWindow`) still gets buffered.
+const MAX_LOG_LINES = 2000
+const windowLogBuffers = new Map<number, string[]>()
+
+function appendLogChunk(winId: number, chunk: string): void {
+  if (!chunk) return
+  let buf = windowLogBuffers.get(winId)
+  if (!buf) {
+    buf = []
+    windowLogBuffers.set(winId, buf)
+  }
+  // Split on \n; keep non-empty lines so the renderer can color per-line.
+  for (const line of chunk.split('\n')) {
+    if (line.length > 0) buf.push(line)
+  }
+  if (buf.length > MAX_LOG_LINES) {
+    buf.splice(0, buf.length - MAX_LOG_LINES)
+  }
+}
+
 // windowId → Chromium partition string used by that BrowserWindow.
 // Populated at window creation time (before bindProfile, before any
 // sidecar) so `auth:bindProfile` can persist the partition into the
@@ -175,6 +199,8 @@ function spawnSidecar(profile: string, window: BrowserWindow): SidecarClient {
     }
   })
   sidecar.on('stderr', (chunk: string) => {
+    // Buffer per-window so the Logs view can fetch scrollback on mount.
+    appendLogChunk(window.id, chunk)
     // Forward stderr only to the owning window, never broadcast.
     if (!window.isDestroyed()) {
       window.webContents.send('sidecar:stderr', chunk)
@@ -298,6 +324,7 @@ function createAuthPendingWindow(
       windowEntries.delete(win.id)
     }
     windowPartitions.delete(win.id)
+    windowLogBuffers.delete(win.id)
   })
 
   // `?email=<hint>` lets the SignIn screen pre-fill the email input when
@@ -461,6 +488,27 @@ function registerIpc(): void {
     // benefit too.
     const pinned = partitionForProfile(profile)
     createAuthPendingWindow(entry.email || undefined, pinned ?? undefined)
+    return { ok: true }
+  })
+
+  // Logs view scrollback: return the per-window stderr ring buffer.
+  // Each line is raw text (the renderer parses the structured `YYYY-MM-DD
+  // HH:MM:SS module LEVEL message` prefix for colouring). Lines arriving
+  // after this call are pushed live via the existing `sidecar:stderr`
+  // event the Logs view also subscribes to.
+  ipcMain.handle('logs:tail', async (event): Promise<string[]> => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return []
+    return [...(windowLogBuffers.get(win.id) ?? [])]
+  })
+
+  // Wipes the in-memory buffer for the calling window. Does NOT touch the
+  // engine's on-disk `zylch.log` — this is just to clear the Logs view so
+  // a reproduction can be captured from a clean slate.
+  ipcMain.handle('logs:clear', async (event): Promise<{ ok: boolean }> => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return { ok: false }
+    windowLogBuffers.set(win.id, [])
     return { ok: true }
   })
 
