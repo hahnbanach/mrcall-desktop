@@ -61,7 +61,19 @@ ipcRenderer.on('logs:line', (_e, chunk: string) => {
 // Structured sidecar liveness/health events pushed by main when the
 // child process spawns or dies. The renderer renders a banner from this.
 export type SidecarStatusEvent =
-  | { alive: true; profile: string }
+  | {
+      alive: true
+      profile: string
+      // `ready` is true once the engine has emitted `engine.ready` —
+      // i.e. all engine modules are imported and the RPC dispatcher is
+      // serving. Until then, mount-time RPCs would queue against a busy
+      // sidecar and timeout client-side. The renderer shows a splash
+      // while !ready on first boot of a brand-new profile.
+      ready?: boolean
+      // Boot duration in ms (only set on the ready:true event), for
+      // diagnostics in the renderer console.
+      bootMs?: number
+    }
   | {
       alive: false
       profile: string

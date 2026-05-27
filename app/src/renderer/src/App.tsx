@@ -5,6 +5,7 @@ import Workspace from './views/Workspace'
 import Update from './views/Update'
 import Logs from './views/Logs'
 import Settings from './views/Settings'
+import EngineReadySplash from './components/EngineReadySplash'
 import Email from './views/Email'
 import WhatsAppView from './views/WhatsApp'
 import MrcallView from './views/Mrcall'
@@ -481,7 +482,32 @@ function AppInner(): JSX.Element {
   // background auto-update failure (or any sidecar-side error) is
   // visible without forcing the user to babysit stderr.
   const [unreadErrors, setUnreadErrors] = useState<number>(0)
+  // Engine boot gate: false until the sidecar emits `engine.ready`.
+  // Drives the splash overlay so mount-time RPCs don't fire against a
+  // sidecar that's still importing modules (and timeout at 60 s).
+  const [engineReady, setEngineReady] = useState<boolean>(false)
+  // User can bypass the splash by clicking "Vedi Logs" after the
+  // grace period — they accept that some RPCs may still queue/timeout
+  // until the engine is actually ready, but they get to monitor what's
+  // going on in the Logs tab.
+  const [bypassedSplash, setBypassedSplash] = useState<boolean>(false)
   const { setActiveThreadId, setActiveTaskId } = useThread()
+
+  // Track `engine.ready` from the sidecar:status channel. A sidecar
+  // crash (alive:false) resets the gate so the next start shows the
+  // splash again until the new sidecar is ready.
+  useEffect(() => {
+    const off = window.zylch.onSidecarStatus((s) => {
+      if (s.alive && s.ready) {
+        setEngineReady(true)
+        setBypassedSplash(false)
+      } else if (!s.alive) {
+        setEngineReady(false)
+        setBypassedSplash(false)
+      }
+    })
+    return off
+  }, [])
 
   // Background auto-Update loop. No-op when settings disable it; never
   // ticks against a locked or absent sidecar. Lives at the AppInner
@@ -585,10 +611,20 @@ function AppInner(): JSX.Element {
     }
   }, [])
 
+  const showSplash = !engineReady && !bypassedSplash
+
   return (
     <div className="flex flex-col h-full">
       <IdentityBanner />
       <SidecarStatusBanner />
+      {showSplash ? (
+        <EngineReadySplash
+          onShowLogs={() => {
+            setBypassedSplash(true)
+            setView('logs')
+          }}
+        />
+      ) : (
       <div className="flex flex-1 min-h-0">
         <Sidebar
           view={view}
@@ -674,6 +710,7 @@ function AppInner(): JSX.Element {
           </div>
         </main>
       </div>
+      )}
       <ProfilePickerDialog open={pickerOpen} onClose={() => setPickerOpen(false)} />
     </div>
   )

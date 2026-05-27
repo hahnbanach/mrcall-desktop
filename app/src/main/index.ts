@@ -290,8 +290,28 @@ function spawnSidecar(profile: string, window: BrowserWindow): SidecarClient {
     profile,
     envOverrides
   })
+  // Track when this sidecar was spawned so we can log boot duration when
+  // `engine.ready` arrives. Useful telemetry — "first boot of a new
+  // profile" stretches into tens of seconds.
+  const spawnedAtMs = Date.now()
   sidecar.on('notification', (msg) => {
     console.log(`[main][w${window.id}] notification method=${msg.method}`)
+    if (msg.method === 'engine.ready') {
+      const bootMs = Date.now() - spawnedAtMs
+      console.log(`[main][w${window.id}] engine.ready (boot ${bootMs} ms)`)
+      if (!window.isDestroyed()) {
+        // Tell the renderer the engine can now serve RPCs. Re-uses the
+        // existing `sidecar:status` channel (the SidecarStatusBanner +
+        // the engine-ready gate both listen there).
+        window.webContents.send('sidecar:status', {
+          alive: true,
+          profile,
+          ready: true,
+          bootMs
+        })
+      }
+      return
+    }
     if (!window.isDestroyed()) {
       window.webContents.send('rpc:notification', msg)
     }

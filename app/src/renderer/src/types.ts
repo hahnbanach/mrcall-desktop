@@ -520,7 +520,14 @@ export interface ZylchAPI {
 }
 
 export type SidecarStatusEvent =
-  | { alive: true; profile: string }
+  | {
+      alive: true
+      profile: string
+      // `ready` becomes true when the sidecar emits `engine.ready` —
+      // i.e. all modules imported and the RPC dispatcher is serving.
+      ready?: boolean
+      bootMs?: number
+    }
   | {
       alive: false
       profile: string
