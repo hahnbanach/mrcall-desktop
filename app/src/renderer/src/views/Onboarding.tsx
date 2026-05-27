@@ -46,7 +46,12 @@ function inferHosts(email: string): { imapHost: string; smtpHost: string } {
   const domain = email.slice(at + 1).toLowerCase()
   const preset = PRESETS[domain]
   if (preset) return preset
-  return { imapHost: `imap.${domain}`, smtpHost: `smtp.${domain}` }
+  // Default unknown domains to Google. Most custom domains are on Google
+  // Workspace (e.g. @mrcall.ai — MX aspmx.l.google.com), whose mail is at
+  // imap.gmail.com / smtp.gmail.com. The old `imap.<domain>` guess was
+  // almost always a non-existent host (NXDOMAIN → sync failed). The field
+  // stays editable for the rare self-hosted case.
+  return { imapHost: 'imap.gmail.com', smtpHost: 'smtp.gmail.com' }
 }
 
 function isValidEmail(s: string): boolean {

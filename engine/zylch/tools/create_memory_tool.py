@@ -48,10 +48,12 @@ class CreateMemoryTool(Tool):
         self,
         content: str = "",
         namespace: Optional[str] = None,
+        entry_type: Optional[str] = None,
         **kwargs,
     ) -> ToolResult:
         logger.debug(
-            f"[create_memory] execute(content_len={len(content)}, namespace={namespace!r})"
+            f"[create_memory] execute(content_len={len(content)}, "
+            f"namespace={namespace!r}, entry_type={entry_type!r})"
         )
 
         if not content:
@@ -69,14 +71,37 @@ class CreateMemoryTool(Tool):
                 error="No owner_id available",
             )
 
-        # Match the namespace the memory worker uses so that newly
-        # created blobs are discoverable by the same search path.
-        # Also accept a bare category ("user", "prefs", …) as shorthand
-        # and scope it to this owner — the LLM doesn't know its own id.
-        if not namespace:
-            namespace = f"user:{owner_id}"
-        elif ":" not in namespace:
-            namespace = f"{namespace}:{owner_id}"
+        # Routing guard (structural — keyed on the model-declared
+        # `entry_type`, NEVER on parsing the free-text content). A
+        # behavioral rule / feedback about how the assistant should act is
+        # NOT a fact about a contact: it always lands in the
+        # always-injected `template:` bucket, never in a `user:` contact
+        # blob. An entity fact may not be saved into a rule namespace.
+        # See "SAVING a RULE" in the system prompt.
+        et = (entry_type or "").strip().lower()
+        if et == "behavioral_rule":
+            namespace = f"template:{owner_id}"
+        else:
+            # Match the namespace the memory worker uses so that newly
+            # created blobs are discoverable by the same search path.
+            # Also accept a bare category ("user", "template", …) as
+            # shorthand and scope it to this owner — the LLM doesn't know
+            # its own id.
+            if not namespace:
+                namespace = f"user:{owner_id}"
+            elif ":" not in namespace:
+                namespace = f"{namespace}:{owner_id}"
+            if et == "entity_fact" and namespace.split(":", 1)[0] in ("template", "prefs"):
+                return ToolResult(
+                    status=ToolStatus.ERROR,
+                    data=None,
+                    error=(
+                        f"entry_type='entity_fact' cannot be saved to the "
+                        f"'{namespace.split(':', 1)[0]}' rule namespace. Facts about a "
+                        "contact use the default 'user' namespace; a general "
+                        "behavioral rule uses entry_type='behavioral_rule'."
+                    ),
+                )
 
         try:
             from zylch.memory import EmbeddingEngine, MemoryConfig
@@ -127,12 +152,25 @@ class CreateMemoryTool(Tool):
                         "type": "string",
                         "description": (
                             "Optional namespace. Default: 'user' (contact"
-                            " profile, matches auto-extracted blobs). Use"
-                            " 'prefs' to save a user preference / working"
-                            " rule (see 'SAVING a PREFERENCE' in the system"
-                            " prompt). A bare category is auto-scoped to"
-                            " this owner; a fully qualified string is kept"
-                            " verbatim."
+                            " profile, matches auto-extracted blobs). For a"
+                            " general behavioral rule prefer entry_type="
+                            "'behavioral_rule' (routes to the always-injected"
+                            " 'template' bucket) over setting this. A bare"
+                            " category is auto-scoped to this owner."
+                        ),
+                    },
+                    "entry_type": {
+                        "type": "string",
+                        "enum": ["entity_fact", "behavioral_rule"],
+                        "description": (
+                            "What KIND of memory this is. 'behavioral_rule' ="
+                            " a general working rule / correction about how YOU"
+                            " (the assistant) should act in future (e.g. 'never"
+                            " invent settings'); it is saved to the always-on"
+                            " 'template' bucket and MUST NOT be attached to a"
+                            " contact. 'entity_fact' = a fact about a specific"
+                            " contact/company; saved to 'user'. When the user"
+                            " corrects your behavior, this is 'behavioral_rule'."
                         ),
                     },
                 },

@@ -202,7 +202,14 @@ def _download_attachment(
     if not email:
         return f"Email {email_id} not found"
 
-    message_id = email.get("message_id", email_id)
+    # IMAP attachment fetch keys off the RFC822 Message-ID header. The
+    # `emails` table has NO `message_id` column (only `gmail_id` +
+    # `message_id_header`), so `email.get("message_id")` is always None —
+    # the old `email.get("message_id", email_id)` therefore fell back to
+    # the internal UUID and the `HEADER Message-ID "<uuid>"` search never
+    # matched (→ "no attachments found"). Mirror the canonical
+    # DownloadAttachmentTool's resolution order.
+    message_id = email.get("message_id") or email.get("message_id_header") or email_id
 
     try:
         from zylch.email.imap_client import IMAPClient

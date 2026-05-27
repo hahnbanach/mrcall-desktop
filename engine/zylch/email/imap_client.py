@@ -63,7 +63,8 @@ def _resolve_host(
         explicit_host: Explicitly provided host (overrides preset)
         explicit_port: Explicitly provided port (overrides preset)
         presets: Dict mapping domain -> (host, port)
-        fallback_prefix: Prefix for fallback host (e.g. "imap")
+        fallback_prefix: Protocol prefix for the Google fallback host
+            ("imap" -> imap.gmail.com, "smtp" -> smtp.gmail.com)
         fallback_port: Default port when no preset matches
 
     Returns:
@@ -71,7 +72,11 @@ def _resolve_host(
     """
     domain = email_addr.split("@")[1].lower()
     preset = presets.get(domain)
-    host = explicit_host or (preset[0] if preset else f"{fallback_prefix}.{domain}")
+    # No preset for this domain → default to Google (imap.gmail.com /
+    # smtp.gmail.com). Most custom domains are on Google Workspace (e.g.
+    # @mrcall.ai, MX aspmx.l.google.com); the old `<prefix>.<domain>` guess
+    # was usually a non-existent host. An explicit host always wins.
+    host = explicit_host or (preset[0] if preset else f"{fallback_prefix}.gmail.com")
     port = explicit_port or (preset[1] if preset else fallback_port)
     return host, port
 
@@ -785,21 +790,46 @@ class IMAPClient:
         import os
 
         conn = self._ensure_connected()
-        conn.select("INBOX", readonly=True)
 
-        status, data = conn.search(
-            None,
-            f'(HEADER Message-ID "{message_id}")',
-        )
-        if status != "OK" or not data[0]:
-            return []
+        # Search across folders, not just INBOX. On Gmail an *archived*
+        # message lives only in "[Gmail]/All Mail" (the Archive button just
+        # removes the INBOX label), and a message the user sent lives in
+        # Sent — INBOX-only meant attachments on archived/sent mail came
+        # back as "no attachments found" even though the file is right
+        # there. INBOX first (cheapest, the common case), then archive,
+        # then Sent; stop at the first folder that has the message.
+        folders = ["INBOX"]
+        archive = self.find_archive_folder()
+        if archive and archive not in folders:
+            folders.append(archive)
+        sent = self._find_sent_folder()
+        if sent and sent not in folders:
+            folders.append(sent)
 
-        msg_num = data[0].split()[-1]
-        status, msg_data = conn.fetch(
-            msg_num,
-            "(RFC822)",
-        )
-        if status != "OK" or not msg_data[0]:
+        msg_data = None
+        for folder in folders:
+            try:
+                status, _ = conn.select(folder, readonly=True)
+                if status != "OK":
+                    continue
+                status, data = conn.search(
+                    None,
+                    f'(HEADER Message-ID "{message_id}")',
+                )
+                if status != "OK" or not data or not data[0]:
+                    continue
+                msg_num = data[0].split()[-1]
+                status, fetched = conn.fetch(msg_num, "(RFC822)")
+                if status == "OK" and fetched and fetched[0]:
+                    msg_data = fetched
+                    logger.debug(f"[IMAP] fetch_attachments: found {message_id} in {folder}")
+                    break
+            except Exception as e:
+                logger.warning(f"[IMAP] fetch_attachments: folder {folder}: {e}")
+                continue
+
+        if msg_data is None:
+            logger.debug(f"[IMAP] fetch_attachments: message {message_id} not found in {folders}")
             return []
 
         msg = email_lib.message_from_bytes(msg_data[0][1])

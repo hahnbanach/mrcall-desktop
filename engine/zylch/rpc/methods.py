@@ -950,6 +950,12 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
     def _pipeline_progress(pct: int, msg: str, eta: Optional[str]) -> None:
         _emit(pct, msg, eta)
 
+    # Per-stage failures are collected here instead of being swallowed:
+    # the pipeline appends {stage, error} for every stage that failed, so
+    # we can surface a decent message rather than the old false "Update
+    # complete / No changes" when (e.g.) the IMAP sync threw.
+    pipeline_errors: list = []
+
     # Run the pipeline in a worker thread with its own event loop. The
     # pipeline is declared async but internally does blocking work
     # (IMAP, SQLAlchemy sync, FTS) that would otherwise starve the
@@ -963,12 +969,16 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
         # open-tasks dump we are replacing with the diff below.
         await asyncio.to_thread(
             asyncio.run,
-            handle_process([], config, owner_id, progress=_pipeline_progress),
+            handle_process(
+                [], config, owner_id, progress=_pipeline_progress, errors_out=pipeline_errors
+            ),
         )
     except Exception as e:
+        # Unexpected crash outside the per-stage guards: treat it as a
+        # fatal pipeline error and surface it below, rather than raising a
+        # raw JSON-RPC error the renderer would show verbatim.
         logger.exception("[rpc] update.run failed")
-        _emit(100, f"Failed: {e}")
-        raise
+        pipeline_errors.append({"stage": "pipeline", "error": e})
 
     # ── Snapshot AFTER ───────────────────────────────────────
     try:
@@ -1006,17 +1016,40 @@ async def update_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
             logger.warning(f"[rpc] update.run: closed-lookup failed: {e}")
 
     diff = build_update_diff_summary(before_open, after_open_by_id, closed_after)
-    _emit(100, "Done")
+
+    # Turn any collected stage failures into clear, structured messages.
+    from zylch.services.error_messages import humanize_error
+
+    humanized = [humanize_error(item.get("error"), item.get("stage")) for item in pipeline_errors]
+    fatal = [h for h in humanized if h.get("severity") == "error"]
 
     logger.debug(
-        "[rpc] update.run -> diff created=%d closed=%d updated=%d",
+        "[rpc] update.run -> diff created=%d closed=%d updated=%d errors=%d (fatal=%d)",
         len(diff["updated_tasks"]["created"]),
         len(diff["updated_tasks"]["closed"]),
         len(diff["updated_tasks"]["updated"]),
+        len(humanized),
+        len(fatal),
     )
+
+    if fatal:
+        lead = fatal[0]
+        _emit(100, lead["title"])
+        summary = f"**Update failed**\n\n{lead['title']}\n\n{lead['detail']}"
+        if lead.get("action"):
+            summary += f"\n\n→ {lead['action']}"
+        return {
+            "success": False,
+            "summary": summary,
+            "errors": humanized,
+            "updated_tasks": diff["updated_tasks"],
+        }
+
+    _emit(100, "Done")
     return {
         "success": True,
         "summary": diff["summary"],
+        "errors": humanized,  # non-fatal warnings only (e.g. WhatsApp), if any
         "updated_tasks": diff["updated_tasks"],
     }
 

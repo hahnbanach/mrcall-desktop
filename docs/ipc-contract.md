@@ -72,6 +72,53 @@ present):
   🎤-marked transcript once present. Engine wires it via
   `rpc/whatsapp_actions.py`. See [`../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../engine/docs/execution-plans/whatsapp-voice-transcription.md).
 
+### `whatsapp.search_messages(query, limit?)`
+
+| Param | Type | Required | Notes |
+|-------|------|----------|-------|
+| `query` | string | yes | Free-text. Whitespace-only → `{ threads: [] }`. |
+| `limit` | int | no | Default 200. Caps the number of matching chats. |
+
+Returns `{ threads: WhatsAppThread[], query: string, error?: string }`.
+Each thread row is the SAME shape as `whatsapp.list_threads` (so the
+renderer reuses the thread-row component) plus an optional
+`match_snippet: string | null` — the matching message text (the
+transcript for a voice-note hit, never the `[voice]` placeholder).
+
+A chat matches when any of its messages' `text` / `transcription` /
+`sender_name` contains the query, OR a contact row for the chat matches
+on `name` / `push_name` / `phone_number`, OR (when the query has a digit
+run ≥ 4) the chat_jid or contact phone contains those digits. Results are
+newest-first by latest activity. Mirrors `list_threads`' exclusion of
+`@broadcast` / `@newsletter` / empty-jid rows, so search never surfaces a
+chat the listing would hide. SQLite-only — no live socket required.
+Implemented in `engine/zylch/services/whatsapp_search.py` (shared
+`build_thread_rows` + `search_thread_jids`), exposed via
+`rpc/whatsapp_actions.py`.
+
+### `whatsapp.send_message(chat_jid, text)`
+
+| Param | Type | Required | Notes |
+|-------|------|----------|-------|
+| `chat_jid` | string | yes | The chat to send to — `<digits>@s.whatsapp.net`, `@g.us` (group), or `@lid`. The recipient JID is rebuilt from this, server preserved. |
+| `text` | string | yes | Trimmed server-side; empty → `{ ok: false, error }`. |
+
+Returns `{ ok: boolean, message?: WhatsAppMessage, error?: string }`. On
+success, `message` is the just-sent row in `whatsapp.list_messages` shape
+(`is_from_me: true`) so the renderer appends it without a full reload.
+
+Sends over the **live** persistent connection (`_active_client` kept
+alive by `whatsapp.connect`) — never a throwaway client like the LLM
+`send_whatsapp` tool, since two neonize clients on one session DB clash.
+Requires the socket up AND logged in (else `{ ok: false, error:
+"WhatsApp not connected" }`). The blocking neonize FFI send runs in a
+thread executor. The outgoing row is persisted keyed on the real
+`SendResponse.ID`, so if the live socket later echoes the message
+(`deviceSentMessage`) the existing `_upsert_message` dedup collapses it
+onto the same row. This is a direct user action (typed + sent), so it is
+**not** approval-gated — unlike the LLM-initiated `send_whatsapp` inside
+`tasks.solve`. Preload binding has a 30 s timeout.
+
 ### `emails.search(query, folder?, limit?, offset?)`
 
 | Param | Type | Required | Notes |

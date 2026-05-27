@@ -413,8 +413,9 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
     """
     from sqlalchemy import desc, func
 
+    from zylch.services.whatsapp_search import build_thread_rows
     from zylch.storage.database import get_session
-    from zylch.storage.models import WhatsAppContact, WhatsAppMessage
+    from zylch.storage.models import WhatsAppMessage
 
     limit = int(params.get("limit", 200))
     offset = int(params.get("offset", 0))
@@ -492,106 +493,12 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
                     "breakdown_by_server": bucket,
                 }
 
-            # Latest message body per chat — one extra query keyed off
-            # the (chat_jid, max timestamp) pairs we already have.
+            # Build display rows through the shared helper so the plain
+            # listing and search results render identically (name fallback
+            # chain, LID/group phone handling, preview). `agg` already
+            # ordered the jids newest-first + paginated.
             jids = [r.chat_jid for r in agg]
-            last_msg_rows = (
-                session.query(
-                    WhatsAppMessage.chat_jid,
-                    WhatsAppMessage.text,
-                    WhatsAppMessage.is_from_me,
-                    WhatsAppMessage.is_group,
-                    WhatsAppMessage.sender_name,
-                    WhatsAppMessage.timestamp,
-                    WhatsAppMessage.media_type,
-                )
-                .filter(
-                    WhatsAppMessage.owner_id == owner_id,
-                    WhatsAppMessage.chat_jid.in_(jids),
-                )
-                .order_by(WhatsAppMessage.timestamp.desc())
-                .all()
-            )
-            last_by_jid: Dict[str, Any] = {}
-            # Track the most recent INCOMING (not is_from_me) sender_name per
-            # chat too — for 1-on-1s where every stored message is outbound,
-            # `last.sender_name` would be the user's own name, which is the
-            # wrong label for the chat.
-            peer_name_by_jid: Dict[str, str] = {}
-            for r in last_msg_rows:
-                if r.chat_jid not in last_by_jid:
-                    last_by_jid[r.chat_jid] = r
-                if r.chat_jid not in peer_name_by_jid and not bool(r.is_from_me) and r.sender_name:
-                    peer_name_by_jid[r.chat_jid] = r.sender_name
-
-            # Contacts for display name resolution.
-            contact_rows = (
-                session.query(WhatsAppContact)
-                .filter(
-                    WhatsAppContact.owner_id == owner_id,
-                    WhatsAppContact.jid.in_(jids),
-                )
-                .all()
-            )
-            contact_by_jid = {c.jid: c for c in contact_rows}
-
-            threads = []
-            for row in agg:
-                jid = row.chat_jid
-                last = last_by_jid.get(jid)
-                contact = contact_by_jid.get(jid)
-                is_group = bool(last.is_group) if last is not None else jid.endswith("@g.us")
-                # `@lid` is WhatsApp's privacy-pseudonym JID namespace. The
-                # numeric local-part is NOT a phone number and must never be
-                # rendered as one. Same goes for groups (`@g.us`) — the
-                # local-part there is a synthetic group id, not a phone.
-                is_lid = jid.endswith("@lid")
-                # Display name: contact.name → contact.push_name → most
-                # recent peer (not-from-me) sender_name → null. We never
-                # fall back to the user's own outbound sender_name — that
-                # would label a chat with the user themselves.
-                name = None
-                phone = None
-                if contact is not None:
-                    name = contact.name or contact.push_name
-                    phone = contact.phone_number
-                if not name and not is_group:
-                    peer = peer_name_by_jid.get(jid)
-                    if peer:
-                        name = peer
-                if not phone and not is_group and not is_lid:
-                    # Strip the @s.whatsapp.net suffix — the local-part is a
-                    # phone number for that namespace only.
-                    bare = jid.split("@", 1)[0]
-                    phone = bare or None
-
-                # Preview: text body if any, otherwise a placeholder
-                # describing the media type.
-                if last is None:
-                    preview = ""
-                elif last.text:
-                    preview = last.text
-                elif last.media_type:
-                    preview = f"[{last.media_type}]"
-                else:
-                    preview = ""
-
-                threads.append(
-                    {
-                        "jid": jid,
-                        "name": name,
-                        "phone": phone,
-                        "is_group": is_group,
-                        "message_count": int(row.msg_count or 0),
-                        "last_at": (
-                            last.timestamp.isoformat()
-                            if last is not None and last.timestamp is not None
-                            else None
-                        ),
-                        "last_preview": preview,
-                        "last_from_me": bool(last.is_from_me) if last is not None else False,
-                    }
-                )
+            threads = build_thread_rows(session, owner_id, jids)
             return {
                 "threads": threads,
                 "total_messages": total_messages,
@@ -691,6 +598,145 @@ async def whatsapp_cancel(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"cancelled": True}
 
 
+async def whatsapp_search_messages(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """whatsapp.search_messages(query, limit=200) -> {threads, query}.
+
+    Free-text search across the local store. Matches message text /
+    transcription / sender name AND contact name / phone, returns the
+    matching chats newest-first in the SAME shape as ``list_threads`` (so
+    the renderer reuses the thread-row component) with a per-row
+    ``match_snippet`` of the matching message. Reads SQLite only — no live
+    socket required.
+    """
+    from zylch.services.whatsapp_search import build_thread_rows, search_thread_jids
+    from zylch.storage.database import get_session
+
+    query = (params.get("query") or "").strip()
+    limit = int(params.get("limit", 200))
+    owner_id = _resolve_owner_id()
+    if not owner_id or not query:
+        return {"threads": [], "query": query}
+
+    try:
+        with get_session() as session:
+            jids, snippet_by_jid = search_thread_jids(session, owner_id, query, limit)
+            threads = build_thread_rows(session, owner_id, jids, snippet_by_jid=snippet_by_jid)
+            logger.debug(
+                f"[rpc:whatsapp.search_messages] query={query!r} -> {len(threads)} threads"
+            )
+            return {"threads": threads, "query": query}
+    except Exception as e:
+        logger.error(f"[rpc:whatsapp.search_messages] {e}")
+        return {"threads": [], "query": query, "error": str(e)}
+
+
+async def whatsapp_send_message(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """whatsapp.send_message(chat_jid, text) -> {ok, message?, error?}.
+
+    Sends a text message to an existing chat over the LIVE connection
+    (the persistent ``_active_client`` the connect flow keeps alive) —
+    deliberately NOT a throwaway client like the LLM ``send_whatsapp``
+    tool, since two neonize clients on the same session DB clash. The
+    blocking neonize FFI send runs in a thread executor so the JSON-RPC
+    event loop stays responsive.
+
+    On success the just-sent message is persisted (keyed on the real
+    ``SendResponse.ID`` so the live-socket echo dedups) and returned in
+    ``list_messages`` row shape so the renderer can append it without a
+    full reload.
+    """
+    from datetime import datetime, timezone
+
+    chat_jid = (params.get("chat_jid") or "").strip()
+    text = params.get("text")
+    text = text.strip() if isinstance(text, str) else ""
+    if not chat_jid:
+        return {"ok": False, "error": "chat_jid required"}
+    if not text:
+        return {"ok": False, "error": "message text is empty"}
+
+    with _state_lock:
+        client = _active_client
+        sync = _active_sync
+
+    if client is None:
+        return {"ok": False, "error": "WhatsApp not connected"}
+    try:
+        usable = bool(client.is_connected()) and bool(client.is_logged_in())
+    except Exception:
+        usable = False
+    if not usable:
+        return {"ok": False, "error": "WhatsApp not connected"}
+
+    # Build the recipient JID from the stored chat_jid, preserving the
+    # server so direct (@s.whatsapp.net), group (@g.us) and privacy-LID
+    # (@lid) chats all address correctly. build_jid defaults the server
+    # to s.whatsapp.net, which would be wrong for groups/LIDs.
+    user, sep, server = chat_jid.partition("@")
+    if not user or not sep or not server:
+        return {"ok": False, "error": f"invalid chat_jid: {chat_jid}"}
+
+    try:
+        from neonize.utils import build_jid
+
+        to_jid = build_jid(user, server)
+    except Exception as e:
+        logger.error(f"[rpc:whatsapp.send_message] build_jid({chat_jid}) failed: {e}")
+        return {"ok": False, "error": f"could not address chat: {e}"}
+
+    loop = asyncio.get_running_loop()
+
+    def _do_send():
+        # WhatsAppClient.send_message returns the SendResponse on success
+        # or None on failure (it catches + logs the neonize exception).
+        return client.send_message(to_jid, text)
+
+    try:
+        resp = await loop.run_in_executor(None, _do_send)
+    except Exception as e:
+        logger.error(f"[rpc:whatsapp.send_message] send raised: {e}")
+        return {"ok": False, "error": f"send failed: {e}"}
+
+    if not resp:
+        # Detail is in zylch.log via WhatsAppClient.send_message.
+        return {"ok": False, "error": "send failed — see logs"}
+
+    msg_id = str(getattr(resp, "ID", "") or "")
+    ts = datetime.now(timezone.utc)
+
+    # Persist so the message survives a thread reload. _active_sync is set
+    # by the connect flow; fall back to a transient sync service (no
+    # neonize cost) if for some reason it isn't.
+    try:
+        store = sync
+        if store is None:
+            from zylch.storage import Storage
+            from zylch.whatsapp.sync import WhatsAppSyncService
+
+            store = WhatsAppSyncService(Storage.get_instance(), _resolve_owner_id())
+        if msg_id:
+            store.store_outgoing(chat_jid=chat_jid, text=text, msg_id=msg_id, timestamp=ts)
+    except Exception as e:
+        logger.warning(f"[rpc:whatsapp.send_message] persist failed: {e}")
+
+    return {
+        "ok": True,
+        "message": {
+            "id": msg_id or f"out-{ts.timestamp()}",
+            "message_id": msg_id,
+            "chat_jid": chat_jid,
+            "sender_jid": "me",
+            "sender_name": None,
+            "text": text,
+            "media_type": None,
+            "transcription": None,
+            "is_from_me": True,
+            "is_group": chat_jid.endswith("@g.us"),
+            "timestamp": ts.isoformat(),
+        },
+    }
+
+
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "whatsapp.connect": whatsapp_connect,
     "whatsapp.disconnect": whatsapp_disconnect,
@@ -698,4 +744,6 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "whatsapp.cancel": whatsapp_cancel,
     "whatsapp.list_threads": whatsapp_list_threads,
     "whatsapp.list_messages": whatsapp_list_messages,
+    "whatsapp.search_messages": whatsapp_search_messages,
+    "whatsapp.send_message": whatsapp_send_message,
 }

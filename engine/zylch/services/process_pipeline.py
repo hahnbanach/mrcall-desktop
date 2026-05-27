@@ -34,6 +34,7 @@ async def handle_process(
     config: ToolConfig,
     owner_id: str,
     progress: Optional[ProgressFn] = None,
+    errors_out: Optional[list] = None,
 ) -> str:
     """Run the full pipeline: sync, memory extraction, task detection.
 
@@ -123,6 +124,8 @@ async def handle_process(
     except Exception as e:
         logger.error(f"[/process] sync failed: {e}", exc_info=True)
         console.print(f"[red]  Sync failed: {e}[/red]")
+        if errors_out is not None:
+            errors_out.append({"stage": "email_sync", "error": e})
         _p(100, f"Sync failed: {e}", None)
         return f"Sync failed: {e}"
 
@@ -146,6 +149,8 @@ async def handle_process(
             exc_info=True,
         )
         console.print(f"[yellow]  WhatsApp sync failed: {e}[/yellow]")
+        if errors_out is not None:
+            errors_out.append({"stage": "whatsapp", "error": e})
 
     # --- Step 3: Memory extraction (email + WhatsApp) ---
     # Phase 2c (whatsapp-pipeline-parity): WhatsApp messages now flow
@@ -185,6 +190,8 @@ async def handle_process(
                 exc_info=True,
             )
             console.print(f"[red]  Memory extraction failed:" f" {e}[/red]")
+            if errors_out is not None:
+                errors_out.append({"stage": "memory", "error": e})
     else:
         console.print("\n[bold cyan][3/5] Memory[/bold cyan]" " — nothing to process")
         _p(30, "Memory — nothing to process", None)
@@ -222,6 +229,8 @@ async def handle_process(
                 exc_info=True,
             )
             console.print(f"[red]  Task detection failed:" f" {e}[/red]")
+            if errors_out is not None:
+                errors_out.append({"stage": "tasks", "error": e})
         _p(90, "Tasks + sweeps complete", None)
     else:
         console.print(

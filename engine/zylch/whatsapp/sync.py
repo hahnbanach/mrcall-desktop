@@ -674,6 +674,37 @@ class WhatsAppSyncService:
             logger.warning(f"[wa-sync] upsert error: {e}")
             return False
 
+    def store_outgoing(
+        self,
+        chat_jid: str,
+        text: str,
+        msg_id: str,
+        timestamp: Optional[datetime] = None,
+        sender_jid: str = "me",
+    ) -> bool:
+        """Persist a message THIS device just sent.
+
+        Used by the desktop send path (``whatsapp.send_message``) so the
+        outgoing message shows in the thread immediately and survives a
+        reload, without waiting for a possible ``deviceSentMessage`` echo.
+        Keyed on ``msg_id`` (the ``SendResponse.ID`` whatsmeow returned),
+        so if that echo *does* arrive over the live socket the existing
+        :meth:`_upsert_message` dedup collapses it onto this row instead
+        of duplicating it.
+
+        Returns True when a row was inserted (False if it already existed).
+        """
+        return self._upsert_message(
+            msg_id=msg_id,
+            chat_jid=chat_jid,
+            sender_jid=sender_jid,
+            sender_name=None,
+            text=text,
+            timestamp=timestamp or datetime.now(timezone.utc),
+            is_from_me=True,
+            is_group=chat_jid.endswith("@g.us"),
+        )
+
     @property
     def stats(self) -> Dict[str, int]:
         """Return sync statistics."""
