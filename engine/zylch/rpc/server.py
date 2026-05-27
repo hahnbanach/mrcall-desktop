@@ -293,7 +293,13 @@ async def serve() -> None:
         from zylch.storage.storage import Storage
 
         _ = _settings.email_address  # forces Pydantic Settings + .env load
-        Storage.get_instance().init_db()  # SQLAlchemy create_all
+        # `Storage.get_instance()` is a singleton — its `__init__` already
+        # calls `database.init_db()` (which runs `Base.metadata.create_all`).
+        # Just constructing the instance triggers the schema creation; the
+        # previous `.init_db()` call here was a non-existent attribute
+        # on Storage and failed silently (`'Storage' object has no
+        # attribute 'init_db'`), making the entire warmup a no-op.
+        Storage.get_instance()
         logger.info("[rpc] warmup done (Storage + Settings)")
     except Exception as e:
         # Never let a warmup failure prevent the server from starting —
