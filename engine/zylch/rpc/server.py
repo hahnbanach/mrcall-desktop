@@ -17,18 +17,11 @@ import json
 import logging
 import sys
 import threading
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-from zylch.rpc.methods import METHODS
+from zylch.rpc.dispatch import dispatch_raw
 
 logger = logging.getLogger(__name__)
-
-# JSON-RPC 2.0 standard error codes
-PARSE_ERROR = -32700
-INVALID_REQUEST = -32600
-METHOD_NOT_FOUND = -32601
-INVALID_PARAMS = -32602
-INTERNAL_ERROR = -32603
 
 # Thread-safe lock for stdout writes. We use threading.Lock (not asyncio.Lock)
 # so sync callbacks (e.g. SyncService on_progress) can write immediately,
@@ -71,137 +64,18 @@ def _make_notify():
 
 
 async def _handle_request(raw_line: str) -> None:
-    """Parse one line and dispatch. Always produces one response (unless notification)."""
-    line = raw_line.strip()
-    if not line:
-        return
+    """Dispatch one stdin line and write its response (if any) to stdout.
 
-    # Parse
-    try:
-        req = json.loads(line)
-    except json.JSONDecodeError as e:
-        logger.debug(f"[rpc] parse error: {e}")
-        await _write_line(
-            {
-                "jsonrpc": "2.0",
-                "id": None,
-                "error": {
-                    "code": PARSE_ERROR,
-                    "message": f"Parse error: {e}",
-                },
-            }
-        )
-        return
-
-    if not isinstance(req, dict):
-        await _write_line(
-            {
-                "jsonrpc": "2.0",
-                "id": None,
-                "error": {
-                    "code": INVALID_REQUEST,
-                    "message": "Request must be a JSON object",
-                },
-            }
-        )
-        return
-
-    req_id: Optional[Any] = req.get("id")
-    method: Optional[str] = req.get("method")
-    params: Dict[str, Any] = req.get("params") or {}
-    is_notification = "id" not in req
-
-    if not isinstance(method, str) or not method:
-        if is_notification:
-            return
-        await _write_line(
-            {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "error": {
-                    "code": INVALID_REQUEST,
-                    "message": "Missing or invalid 'method'",
-                },
-            }
-        )
-        return
-
-    if not isinstance(params, dict):
-        if is_notification:
-            return
-        await _write_line(
-            {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "error": {
-                    "code": INVALID_PARAMS,
-                    "message": "'params' must be an object",
-                },
-            }
-        )
-        return
-
-    handler = METHODS.get(method)
-    if handler is None:
-        logger.debug(f"[rpc] unknown method={method}")
-        if is_notification:
-            return
-        await _write_line(
-            {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "error": {
-                    "code": METHOD_NOT_FOUND,
-                    "message": f"Method not found: {method}",
-                },
-            }
-        )
-        return
-
-    logger.debug(f"[rpc] method={method} params={params}")
-    notify = _make_notify()
-    try:
-        result = await handler(params, notify)
-    except Exception as e:
-        # Handlers may raise errors with a `.code` attribute to map
-        # cleanly to JSON-RPC application error codes (e.g. -32000
-        # for "solve already in progress", -32010 for "no signed-in
-        # session"). Those are intentional protocol-level signals —
-        # the JSON-RPC response below carries the code, so we log a
-        # one-liner instead of a full stack trace. Unknown / unhandled
-        # exceptions still get the full traceback at ERROR.
-        err_code = getattr(e, "code", None)
-        if isinstance(err_code, int):
-            logger.warning(
-                f"[rpc] handler {method} failed code={err_code} "
-                f"{type(e).__name__}: {e}"
-            )
-        else:
-            logger.exception(f"[rpc] handler {method} failed")
-            err_code = INTERNAL_ERROR
-        if is_notification:
-            return
-        await _write_line(
-            {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "error": {
-                    "code": err_code,
-                    "message": f"{type(e).__name__}: {e}",
-                },
-            }
-        )
-        return
-
-    if is_notification:
-        return
-    await _write_line(
-        {
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "result": result,
-        }
-    )
+    The parse + dispatch + error-mapping logic lives in
+    ``zylch.rpc.dispatch.dispatch_raw`` so the WebSocket transport
+    (``zylch.rpc.server_ws``) shares exactly the same code-path. This
+    wrapper owns only the stdio I/O: it hands the raw line to the
+    dispatcher with a stdout-backed ``notify`` and writes whatever
+    response comes back.
+    """
+    resp = await dispatch_raw(raw_line, _make_notify())
+    if resp is not None:
+        await _write_line(resp)
 
 
 async def _read_lines(loop: asyncio.AbstractEventLoop):

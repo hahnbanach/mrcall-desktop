@@ -392,6 +392,75 @@ def rpc(ctx):
 
 
 @cli.command()
+@click.option(
+    "--ws",
+    "ws_addr",
+    default="127.0.0.1:5174",
+    help="WebSocket bind address HOST:PORT (default 127.0.0.1:5174)",
+)
+@click.pass_context
+def serve(ctx, ws_addr):
+    """WebSocket JSON-RPC backend for cross-machine clients.
+
+    Same RPC surface as `rpc` (stdio) but over a WebSocket, so an
+    Electron / mobile client on another machine can drive this engine.
+    Every connection must present a Firebase ID token whose uid owns this
+    profile (OWNER_ID in the profile .env):
+
+        zylch -p <uid> serve --ws 127.0.0.1:5174
+    """
+    import asyncio
+    import sys
+
+    _configure_logging()
+
+    # Activate profile manually (not _setup_profile — it calls
+    # _show_update which writes to stdout). Mirrors the `rpc` subcommand.
+    from zylch.cli.profiles import (
+        activate_profile,
+        acquire_lock,
+        migrate_legacy_profile,
+        release_lock,
+        select_profile,
+    )
+    from zylch.cli.utils import load_env
+
+    profile_name = ctx.obj.get("profile") if ctx.obj else None
+    migrate_legacy_profile()
+    profile = select_profile(profile_name)
+    if not acquire_lock(profile):
+        sys.stderr.write(f"Profile '{profile}' is already in use by another session.\n")
+        raise SystemExit(1)
+    atexit.register(release_lock)
+    activate_profile(profile)
+    _setup_log_file()
+    load_env()
+
+    owner_uid = os.environ.get("OWNER_ID", "")
+    if not owner_uid:
+        sys.stderr.write(
+            "This profile has no OWNER_ID (Firebase uid). Cross-machine "
+            "serving requires a Firebase-keyed profile — sign in via the "
+            "desktop app first.\n"
+        )
+        raise SystemExit(1)
+
+    host, sep, port_str = ws_addr.rpartition(":")
+    if not sep or not host or not port_str.isdigit():
+        sys.stderr.write(f"Invalid --ws address {ws_addr!r}; expected HOST:PORT.\n")
+        raise SystemExit(2)
+    port = int(port_str)
+
+    logger.info(f"[CLI] serve --ws {host}:{port} profile={profile} owner={owner_uid}")
+    from zylch.rpc.server_ws import serve_ws
+
+    try:
+        asyncio.run(serve_ws(host, port))
+    except KeyboardInterrupt:
+        logger.info("[CLI] serve interrupted, shutting down")
+
+
+@cli.command()
 def telegram():
     """Start Telegram bot interface."""
     logger.info("[CLI] Starting Telegram bot")

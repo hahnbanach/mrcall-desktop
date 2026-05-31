@@ -124,9 +124,7 @@ async def account_balance(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """
     sess = require_session()
     url = f"{settings.mrcall_proxy_url.rstrip('/')}/api/desktop/llm/balance"
-    logger.debug(
-        f"[rpc:account.balance] GET {url} token_len={len(sess.id_token)}"
-    )
+    logger.debug(f"[rpc:account.balance] GET {url} token_len={len(sess.id_token)}")
     try:
         async with httpx.AsyncClient(timeout=10.0) as c:
             r = await c.get(url, headers={"auth": sess.id_token})
@@ -145,9 +143,50 @@ async def account_balance(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return payload
 
 
+async def auth_refresh(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """auth.refresh(id_token) -> {ok, uid, expires_at_ms}.
+
+    Verify a fresh Firebase ID token server-side and replace the cached
+    session. WebSocket clients call this before their old token expires
+    (the WS server enforces expiry and closes 4401 otherwise). Harmless
+    over stdio.
+
+    Unlike `account.set_firebase_token`, this VERIFIES the token (RS256
+    against Google's certs) rather than trusting the caller — the
+    cross-machine WS backend has no trusted parent process to vouch for
+    it. `expires_at_ms` is derived from the token's own `exp`, not from a
+    client-supplied value.
+    """
+    from zylch.rpc.firebase_auth import FirebaseAuthError, verify_firebase_id_token
+
+    id_token = params.get("id_token")
+    if not isinstance(id_token, str) or not id_token:
+        raise ValueError("id_token is required")
+
+    try:
+        claims = verify_firebase_id_token(id_token)
+    except FirebaseAuthError as e:
+        err = ValueError(f"token verification failed: {e}")
+        err.code = getattr(e, "code", -32011)  # type: ignore[attr-defined]
+        raise err
+
+    uid = claims["sub"]
+    email = claims.get("email")
+    expires_at_ms = int(claims["exp"]) * 1000
+    set_session(
+        uid=uid,
+        email=email if isinstance(email, str) else None,
+        id_token=id_token,
+        expires_at_ms=expires_at_ms,
+    )
+    logger.debug(f"[rpc:auth.refresh] uid={uid} expires_at_ms={expires_at_ms}")
+    return {"ok": True, "uid": uid, "expires_at_ms": expires_at_ms}
+
+
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "account.set_firebase_token": account_set_firebase_token,
     "account.sign_out": account_sign_out,
     "account.who_am_i": account_who_am_i,
     "account.balance": account_balance,
+    "auth.refresh": auth_refresh,
 }

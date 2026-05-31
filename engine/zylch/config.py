@@ -111,6 +111,17 @@ class Settings(BaseSettings):
         description="Model used by the MrCall-credits proxy transport",
     )
 
+    # Firebase identity — the project whose ID tokens the cross-machine
+    # WebSocket backend (`zylch serve --ws`) verifies on connect. Same
+    # `talkmeapp-e696c` project the desktop renderer and dashboard use.
+    # ID tokens carry this as their `aud`; the issuer is
+    # https://securetoken.google.com/<project_id>.
+    firebase_project_id: str = Field(
+        default="talkmeapp-e696c",
+        env="FIREBASE_PROJECT_ID",
+        description="Firebase project ID for verifying ID tokens on the WS backend",
+    )
+
     # LLM models
     default_model: str = Field(
         default="claude-opus-4-6",
