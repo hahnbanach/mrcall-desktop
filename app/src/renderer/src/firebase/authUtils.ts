@@ -97,3 +97,40 @@ export async function repushTokenForCurrentUser(): Promise<void> {
   if (!user || user.isAnonymous) return
   await pushToken(user)
 }
+
+/**
+ * Re-push the Firebase token to the engine and verify the engine sees
+ * us as signed-in via `account.whoAmI`. Returns true when the engine
+ * confirms the session, false otherwise.
+ *
+ * Why this exists: the engine holds the Firebase token in-memory only
+ * (per `app/CLAUDE.md` "Identity (Firebase)"). Every sidecar restart
+ * starts session-less. Calls like `account.balance` /
+ * `mrcall.list_my_businesses` require an active session and raise
+ * `NoActiveSession` (code -32010) until the renderer's auth listener
+ * gets around to pushing the token again. Views that depend on the
+ * session can call this helper FIRST to self-heal instead of letting
+ * a stale RPC fail in the user's face.
+ *
+ * Shared by `ConnectGoogleCalendar.tsx` (calendar wiring) and
+ * `Settings.tsx`'s `LLMProviderCard` (credit balance refresh) — both
+ * hit account.* on mount/focus immediately after a sidecar swap.
+ */
+export async function ensureEngineSession(): Promise<boolean> {
+  const user = auth.currentUser
+  if (!user || user.isAnonymous) return false
+  try {
+    await repushTokenForCurrentUser()
+  } catch (e) {
+    console.warn('[firebase/authUtils] token re-push failed:', e)
+    // Continue — the engine may still have a usable session from a
+    // prior push. The whoAmI check below is the real arbiter.
+  }
+  try {
+    const who = await window.zylch.account.whoAmI()
+    return !!who.signed_in
+  } catch (e) {
+    console.warn('[firebase/authUtils] account.whoAmI failed:', e)
+    return false
+  }
+}

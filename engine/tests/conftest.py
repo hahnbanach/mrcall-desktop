@@ -10,6 +10,31 @@ from zylch.config import settings
 from zylch.storage import Storage
 
 
+@pytest.fixture(autouse=True)
+def _isolate_profile_dir(tmp_path_factory, monkeypatch):
+    """Give every test a throwaway profile dir with a dummy ANTHROPIC key.
+
+    Background — 2026-05-31: ``make_llm_client`` was changed to read
+    ``ANTHROPIC_API_KEY`` ONLY from the active profile's ``.env`` file
+    (no longer from the shell env) so a key exported in ``~/.bash_profile``
+    can't silently route the desktop's LLM calls through BYOK and
+    bypass MrCall credits. Before that fix, the engine's tests
+    happened to work because the dev machine had the key exported.
+
+    After the fix, instantiating ``MemoryWorker`` /
+    ``LLMMergeService`` / ``TaskWorker`` in a test raises ``RuntimeError:
+    No LLM configured`` because the engine looks at the (non-existent)
+    profile ``.env``. Wiring a per-test temp profile with a placeholder
+    key restores construction — and downstream test code that mocks
+    the LLM client (``patch.object(mem_mod, "make_llm_client", …)`` /
+    ``worker.llm_merge = MagicMock()``) keeps working as before.
+    """
+    test_profile = tmp_path_factory.mktemp("zylch-test-profile", numbered=True)
+    (test_profile / ".env").write_text("ANTHROPIC_API_KEY=sk-ant-test-dummy-key\n")
+    monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(test_profile))
+    yield
+
+
 @pytest.fixture(scope="session")
 def event_loop():
     """Create an event loop for async tests."""

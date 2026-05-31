@@ -21,8 +21,7 @@
  * the same way.
  */
 import { useEffect, useState } from 'react'
-import { auth } from '../firebase/config'
-import { repushTokenForCurrentUser } from '../firebase/authUtils'
+import { ensureEngineSession } from '../firebase/authUtils'
 import { errorMessage } from '../lib/errors'
 
 type Status =
@@ -31,32 +30,6 @@ type Status =
   | { phase: 'connecting' }
   | { phase: 'signin-required' }
   | { phase: 'error'; message: string }
-
-/**
- * Ensure the engine has a current Firebase token in memory. Returns
- * true when the engine reports `signed_in: true` after the push.
- *
- * Used as a defensive guard before every Calendar RPC because the
- * one-shot push at auth-bind time can fail silently.
- */
-async function ensureEngineSession(): Promise<boolean> {
-  const user = auth.currentUser
-  if (!user || user.isAnonymous) return false
-  try {
-    await repushTokenForCurrentUser()
-  } catch (e) {
-    console.warn('[ConnectGoogleCalendar] token re-push failed:', e)
-    // Continue — the engine may still have a usable session from a
-    // prior push. The whoAmI check below is the real arbiter.
-  }
-  try {
-    const who = await window.zylch.account.whoAmI()
-    return !!who.signed_in
-  } catch (e) {
-    console.warn('[ConnectGoogleCalendar] account.whoAmI failed:', e)
-    return false
-  }
-}
 
 export default function ConnectGoogleCalendar(): JSX.Element {
   const [state, setState] = useState<Status>({ phase: 'loading' })

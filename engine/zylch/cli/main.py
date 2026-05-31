@@ -138,9 +138,16 @@ def _configure_logging():
     File gets everything (DEBUG) for troubleshooting.
     Override console with LOG_LEVEL env var if needed.
     """
+    # Console (stderr) defaults to DEBUG — Mario's standing policy is
+    # that mrcall-desktop must boot loud. The Electron sidecar pipe
+    # surfaces every line to the dev console so the proxy /
+    # task_executor breadcrumbs (`[mrcall-proxy]`, `[executor]`) are
+    # immediately visible when something goes sideways with Solve.
+    # Set LOG_LEVEL=WARNING on the env if you really want it quiet for
+    # a packaged build.
     console_level = os.environ.get(
         "LOG_LEVEL",
-        "WARNING",
+        "DEBUG",
     ).upper()
     # Root logger at DEBUG so file handler catches all
     logging.basicConfig(

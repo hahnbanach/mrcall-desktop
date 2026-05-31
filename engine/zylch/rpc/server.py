@@ -55,6 +55,57 @@ async def _write_line(obj: Dict[str, Any]) -> None:
     _write_line_sync(obj)
 
 
+# Secrets MUST never reach the DEBUG-level "method=X params=Y" line —
+# stderr is captured by the renderer's narration pipeline and forwarded
+# to the LLM proxy for summarisation, so anything that lands here ends
+# up in Anthropic's request logs. Keep this list sync'd with any RPC
+# method that takes a JWT, API key, password, OTP, OAuth code, etc.
+# 2026-05-31: Mario observed the Firebase id_token (1160 chars) flowing
+# all the way to Anthropic via narration.summarize because the dispatcher
+# was dumping `account.set_firebase_token`'s full params at DEBUG. After
+# switching the engine's default log level to DEBUG that became a
+# silent data-leak channel.
+_SECRET_PARAM_KEYS_BY_METHOD: Dict[str, set[str]] = {
+    "account.set_firebase_token": {"id_token"},
+}
+_SECRET_PARAM_KEYS_GLOBAL: set[str] = {
+    # Defence-in-depth: redact these regardless of method, in case a
+    # new RPC ships before this table is updated. Keep names broad but
+    # not so broad we redact innocent fields like "passenger" or "tokens"
+    # (output_tokens, input_tokens etc. in usage payloads).
+    "id_token",
+    "access_token",
+    "refresh_token",
+    "api_key",
+    "password",
+    "client_secret",
+    "secret",
+}
+
+
+def _redact_params(method: Optional[str], params: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a copy of ``params`` with known-sensitive fields masked.
+
+    The dispatcher's "method=X params=Y" debug line ends up on stderr,
+    which the renderer's narration pipeline forwards to the LLM proxy
+    for summarisation. We never want a Firebase JWT, an Anthropic key,
+    or any other bearer credential to flow that path.
+    """
+    if not isinstance(params, dict) or not params:
+        return params
+    per_method = _SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set())
+    secret_keys = per_method | _SECRET_PARAM_KEYS_GLOBAL
+    redacted = dict(params)
+    for k in list(redacted.keys()):
+        if k in secret_keys and redacted[k]:
+            v = redacted[k]
+            if isinstance(v, str):
+                redacted[k] = f"<redacted len={len(v)}>"
+            else:
+                redacted[k] = "<redacted>"
+    return redacted
+
+
 def _make_notify():
     """Return a sync `notify(method, params)` that writes immediately."""
 
@@ -158,7 +209,7 @@ async def _handle_request(raw_line: str) -> None:
         )
         return
 
-    logger.debug(f"[rpc] method={method} params={params}")
+    logger.debug(f"[rpc] method={method} params={_redact_params(method, params)}")
     notify = _make_notify()
     try:
         result = await handler(params, notify)
@@ -262,7 +313,14 @@ async def _auto_reconnect_whatsapp() -> None:
 
     logger.info("[rpc] auto-reconnect: WhatsApp session found, reconnecting in background")
     try:
-        result = await whatsapp_connect({}, notify=lambda *a, **k: None)
+        # Use the REAL notify (writes to stdout) — `whatsapp.qr_ready`
+        # and `whatsapp.threads.changed` notifications emitted by
+        # `_on_message` / `_on_history` reach the renderer this way.
+        # The previous no-op silently dropped every WA notification
+        # emitted on the auto-reconnect path, which is the most common
+        # case (engine boot → auto-reconnect → history sync delivers
+        # the queued messages). The renderer never saw they arrived.
+        result = await whatsapp_connect({}, notify=_make_notify())
         if isinstance(result, dict) and result.get("ok"):
             logger.info(
                 "[rpc] auto-reconnect: WhatsApp connected "

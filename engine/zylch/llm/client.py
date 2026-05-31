@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional, Union
@@ -350,12 +351,53 @@ class LLMClient:
 # ─── Factory ──────────────────────────────────────────────────────────
 
 
+def _read_profile_anthropic_key() -> Optional[str]:
+    """Read ``ANTHROPIC_API_KEY`` directly from the active profile's
+    ``.env`` file, ignoring the global shell env.
+
+    Why bypass Pydantic Settings: ``settings.anthropic_api_key`` is the
+    MERGED value (env var > .env file > default), so a key exported in
+    the user's ``~/.bash_profile`` silently bleeds into the desktop
+    sidecar (Electron spawns the sidecar with the parent process env)
+    and routes every LLM call through BYOK ``direct`` transport. The
+    user thinks they're on MrCall credits (no key in the Settings UI,
+    `LLMProviderCard` shows "MrCall credits") but the credit balance
+    never decreases because no call ever reaches the proxy. Mario
+    chased this for days on ``production@cafe124.it``.
+
+    The profile ``.env`` is the source of truth the Settings UI writes
+    to, so anchoring the BYOK decision there closes the leak. Returns
+    the key string when present (non-empty after stripping quotes) or
+    ``None`` when absent / file missing / unreadable.
+    """
+    profile_dir = os.environ.get("ZYLCH_PROFILE_DIR") or os.path.expanduser("~/.zylch")
+    env_path = os.path.join(profile_dir, ".env")
+    if not os.path.isfile(env_path):
+        return None
+    try:
+        with open(env_path, "r", encoding="utf-8") as fh:
+            for raw_line in fh:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if not line.startswith("ANTHROPIC_API_KEY"):
+                    continue
+                # Match KEY=value, KEY = value, KEY="value", KEY='value'
+                _, _, value = line.partition("=")
+                value = value.strip().strip('"').strip("'")
+                return value or None
+    except Exception as e:
+        logger.warning(f"[llm] failed to read {env_path}: {e}")
+    return None
+
+
 def make_llm_client(model: Optional[str] = None) -> LLMClient:
     """Build an :class:`LLMClient` for the active profile.
 
     Resolution order:
 
-    1. ``ANTHROPIC_API_KEY`` set in the profile ``.env`` → BYOK
+    1. ``ANTHROPIC_API_KEY`` present in the **profile** ``.env`` (NOT
+       the shell env — see :func:`_read_profile_anthropic_key`) → BYOK
        (``transport='direct'``).
     2. Otherwise → MrCall credits (``transport='proxy'``). Requires a
        live Firebase session; raises :class:`RuntimeError` otherwise.
@@ -364,20 +406,22 @@ def make_llm_client(model: Optional[str] = None) -> LLMClient:
     (e.g. background workers) use :func:`try_make_llm_client` instead.
     """
     from zylch.auth import get_session
-    from zylch.config import settings
 
-    if settings.anthropic_api_key:
+    profile_key = _read_profile_anthropic_key()
+    if profile_key:
+        logger.debug("[llm] make_llm_client: profile has ANTHROPIC_API_KEY → direct")
         return LLMClient(
             transport="direct",
-            api_key=settings.anthropic_api_key,
+            api_key=profile_key,
             model=model,
         )
     session = get_session()
     if session is None:
         raise RuntimeError(
             "No LLM configured: set ANTHROPIC_API_KEY in the profile .env "
-            "or sign in with Firebase to use MrCall credits."
+            "(Settings → LLM) or sign in with Firebase to use MrCall credits."
         )
+    logger.debug("[llm] make_llm_client: no profile key → proxy (MrCall credits)")
     return LLMClient(
         transport="proxy",
         firebase_session=session,
