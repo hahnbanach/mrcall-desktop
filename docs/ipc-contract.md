@@ -363,6 +363,73 @@ Notification stream — `agents.train.progress`:
 
 Backs the "Train assistant" card in `Update.tsx` (above the Update button). 30-minute RPC timeout in `app/src/preload/index.ts`.
 
+### `sync.run(days_back?)`
+
+Data-fetch phase of the pipeline (IMAP email + WhatsApp). Skips memory
+extraction and task detection — those still belong to `update.run`.
+Backs the new **Sync** card on the Update view; the full `update.run`
+button calls this implicitly as its first step.
+
+| Param | Type | Required | Notes |
+|-------|------|----------|-------|
+| `days_back` | int | no | Default 60. Same semantics as the CLI `/process --days N`. |
+
+Returns:
+
+```jsonc
+{
+  "success": true,                       // false only on a FATAL stage (email_sync)
+  "summary": "12 new emails, 4 WhatsApp messages",
+  "result": {
+    "sync_new": 12,
+    "wa_messages": 4,
+    "wa_contacts": 0,
+    "wa_skipped_reason": null            // string when WA wasn't configured
+  },
+  "errors": [                            // one entry per failed stage, humanized
+    { "severity": "error"|"warning", "title": "...", "detail": "...", "action": "..." }
+  ]
+}
+```
+
+WhatsApp failures are non-fatal (`severity: "warning"`) and don't flip
+`success`. Email-sync failure is fatal. Email credentials missing →
+short-circuits with a single structured error (does NOT raise).
+
+Notification stream — `sync.progress`:
+
+```jsonc
+{ "pct": 0..100, "message": string }
+```
+
+12-hour RPC timeout (same as `update.run` — a first sync on a busy
+inbox is the slow part). Implementation: `engine/zylch/rpc/setup.py`
+delegating to `process_pipeline.run_sync_only`.
+
+### `setup.state()`
+
+Read-only snapshot driving the gating of the Train + Update cards on
+the Update view. Each card's enabled state derives from a different
+field of this payload (Sync is always enabled).
+
+Returns:
+
+```jsonc
+{
+  "has_synced": true,                    // ≥1 email OR WA msg in this profile's DB
+  "has_trained": true,                   // ≥1 agent_prompts row exists
+  "emails_count": 1234,
+  "whatsapp_messages_count": 0,
+  "agents_trained": ["memory_message", "task_email", "emailer"]
+}
+```
+
+Per-profile (driven by the active SQLite DB), so a brand-new profile
+starts gated even if a sibling profile on the same machine is fully
+set up. Cheap (one COUNT + three indexed lookups) — the renderer
+refetches on mount, after every Sync/Train/Update completion, and on
+`engine.ready` revival.
+
 ### `mrcall.list_my_businesses(offset?, limit?)`
 
 Lists the businesses visible to the signed-in user via StarChat

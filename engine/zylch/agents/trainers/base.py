@@ -89,7 +89,7 @@ class BaseAgentTrainer:
             rows = query.order_by(Blob.updated_at.desc()).limit(limit).all()
             return [r.to_dict() for r in rows]
 
-    def _generate_prompt(self, meta_prompt: str, max_tokens: int = 4000) -> str:
+    async def _generate_prompt(self, meta_prompt: str, max_tokens: int = 4000) -> str:
         """Generate a prompt by calling the LLM with a meta-prompt.
 
         Args:
@@ -98,10 +98,18 @@ class BaseAgentTrainer:
 
         Returns:
             Generated prompt content
+
+        Note:
+            Uses :meth:`LLMClient.create_message` (the async wrapper that
+            runs the blocking SDK call in an executor) rather than
+            :meth:`create_message_sync`. The trainer is invoked from the
+            RPC dispatcher's asyncio loop; a sync LLM call here would
+            block ``whatsapp.status`` polls and any other concurrent RPC
+            for the full duration of the LLM round-trip (5–30 s).
         """
         logger.info(f"Generating agent prompt (transport={self.client.transport})...")
 
-        response = self.client.create_message_sync(
+        response = await self.client.create_message(
             model=self.model,
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": meta_prompt}],

@@ -367,7 +367,7 @@ In December 2025 John Doe from Acme Corp initiated discussions about the offer..
         whatsapp_samples = self._format_whatsapp_samples(wa_chats)
 
         # Step 5: Generate the prompt using Claude
-        prompt_content = self._generate_prompt(
+        prompt_content = await self._generate_prompt(
             user_profile=user_profile,
             email_samples=email_samples,
             whatsapp_samples=whatsapp_samples,
@@ -646,8 +646,17 @@ Body: {body}
 
         return "\n\n".join(samples)
 
-    def _generate_prompt(self, user_profile: str, email_samples: str, whatsapp_samples: str) -> str:
-        """Generate the final extraction prompt using LLM."""
+    async def _generate_prompt(
+        self, user_profile: str, email_samples: str, whatsapp_samples: str
+    ) -> str:
+        """Generate the final extraction prompt using LLM.
+
+        Uses the async wrapper so the blocking SDK call runs in an
+        executor and the RPC dispatcher's event loop keeps serving
+        concurrent requests (e.g. the renderer's 3 s ``whatsapp.status``
+        poll). The sync variant was blocking the whole loop for the
+        full meta-prompt round-trip.
+        """
         meta_prompt = MESSAGE_AGENT_META_PROMPT.format(
             user_profile=user_profile,
             email_samples=email_samples,
@@ -657,7 +666,7 @@ Body: {body}
         logger.info(f"Training message analyzer agent (transport={self.client.transport})...")
         logger.debug(f"Prompt size: {len(meta_prompt)} chars (~{len(meta_prompt)//4} tokens)")
 
-        response = self.client.create_message_sync(
+        response = await self.client.create_message(
             model=self.model, max_tokens=4000, messages=[{"role": "user", "content": meta_prompt}]
         )
 

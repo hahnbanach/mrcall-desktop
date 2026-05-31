@@ -240,7 +240,7 @@ class EmailTaskAgentTrainer:
         blobs_text = self._format_blobs(blobs)
 
         # Step 5: Generate the prompt using Claude
-        prompt_content = self._generate_prompt(threads_text, blobs_text)
+        prompt_content = await self._generate_prompt(threads_text, blobs_text)
 
         metadata = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -370,8 +370,13 @@ Body: {body}
 
         return "\n".join(formatted)
 
-    def _generate_prompt(self, threads_text: str, blobs_text: str) -> str:
-        """Generate the final task detection prompt using LLM."""
+    async def _generate_prompt(self, threads_text: str, blobs_text: str) -> str:
+        """Generate the final task detection prompt using LLM.
+
+        Uses the async wrapper so the LLM round-trip runs in an
+        executor instead of blocking the RPC dispatcher's event loop.
+        See ``base.py:_generate_prompt`` for the same rationale.
+        """
         meta_prompt = TASK_AGENT_META_PROMPT.format(
             threads=threads_text, blobs=blobs_text, search_limit=self.search_limit
         )
@@ -379,7 +384,7 @@ Body: {body}
         logger.info(f"Training task detection agent (transport={self.client.transport})...")
         logger.debug(f"Prompt size: {len(meta_prompt)} chars (~{len(meta_prompt)//4} tokens)")
 
-        response = self.client.create_message_sync(
+        response = await self.client.create_message(
             model=self.model, max_tokens=4000, messages=[{"role": "user", "content": meta_prompt}]
         )
 
@@ -429,7 +434,11 @@ Body: {body}
             f"[build_task_prompt_incremental] Update prompt size: {len(update_prompt)} chars (~{len(update_prompt) // 4} tokens)"
         )
 
-        response = self.client.create_message_sync(
+        # Async wrapper so the incremental update doesn't starve the RPC
+        # dispatcher's event loop — same rationale as ``_generate_prompt``
+        # above (sync calls were blocking ``whatsapp.status`` polls during
+        # ``agents.train_all``).
+        response = await self.client.create_message(
             model=self.model,
             max_tokens=4000,
             messages=[{"role": "user", "content": update_prompt}],

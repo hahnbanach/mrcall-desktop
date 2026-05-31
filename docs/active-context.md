@@ -10,7 +10,9 @@ description: |
 
 # Active Context — Cross-cutting
 
-## Current focus (as of 2026-05-27)
+## Current focus (as of 2026-05-28)
+
+**Post-signup onboarding hub on the Update view.** Spans engine + app + IPC. The contract gains two new RPCs: `sync.run({days_back?})` (data-fetch only — IMAP email + WhatsApp, emits `sync.progress`, `humanize_error`-enveloped result) and `setup.state()` (read-only `{has_synced, has_trained, emails_count, whatsapp_messages_count, agents_trained}`). The app exposes them as a three-card flow in `views/Update.tsx` (Sync → Train → Update, gated on `has_synced` / `has_trained`); default view after the splash is now `'update'`. Engine-side, the trainers' sync LLM calls were starving the asyncio loop during `agents.train_all`, leaking as `rpc timeout: whatsapp.status` in the renderer — `_generate_prompt` is now `async` and awaits `LLMClient.create_message` (the existing `run_in_executor` wrapper). Live-verify pending across all of: 3-card gating, default-view change, asyncio-loop fairness during Train.
 
 **MrCall channel — Livello A (customer-service lookup) landed; Livello B (phone-call memory) is next.** Spans engine + app + IPC. The legacy delegated/PKCE OAuth2 auth + the `/mrcall` command surface are removed — StarChat is reached via the Firebase JWT only. The MrCall tab lists + searches businesses (`mrcall.list_my_businesses`, `mrcall.search_businesses`, role-scoped by StarChat: admin cross-owner, owner own-only). Onboarding unblocked for MrCall-only users + an in-wizard Calendar session fix landed. Live-verified by Mario 2026-05-20. **Hard constraint for Livello B**: never ingest into memory the contacts/conversations of businesses the logged-in uid doesn't own — StarChat's `FirebaseCustomerConversationService` already hard-scopes conversation search to the caller's uid; a defence-in-depth filter is still planned engine-side. Plan: [mrcall-pipeline-parity.md](execution-plans/mrcall-pipeline-parity.md). **This work lives on `worktree-sprightly-floating-anchor`, merged up to main, pending promotion to `main`.**
 
@@ -20,6 +22,7 @@ WhatsApp parity spans engine + app + IPC through Phase 4 cross-channel (live-ver
 
 | Date | What | Spans | Refs |
 |---|---|---|---|
+| 2026-05-27 | Onboarding hub on the Update view (3 ordered cards Sync → Train → Update with `setup.state` gating + Quick-start banner; default view `'update'` after the splash). New RPCs `sync.run` (email + WA fetch only, `sync.progress` stream) and `setup.state` (per-profile snapshot). Engine: trainers no longer monopolise the asyncio loop during `agents.train_all` — fixes the `rpc timeout: whatsapp.status` Mario hit. New `services/process_pipeline.run_sync_only` exposed for the `sync.run` RPC. See [`ipc-contract.md`](ipc-contract.md) §`sync.run` + §`setup.state`. Live-verify pending. | engine + app + IPC | uncommitted |
 | 2026-05-26 | WhatsApp tab gains send (`whatsapp.send_message`) + search (`whatsapp.search_messages`); solve attachment fix (uses RFC822 Message-ID header + multi-folder IMAP search — Aleide invoices download for real); Onboarding + engine `_resolve_host` default unknown email domains to Google (no more `imap.<domain>` NXDOMAIN); memory: new namespace `template:<owner>` for behavioral rules + `entry_type` structural guard so feedback can't land on a contact blob; Update view surfaces structured errors via `humanize_error` (no more false "Update complete" on a failed sync) | engine + app + IPC | `ca784d0d..4e243bdb` merged via `436bb291` (2026-05-27) |
 | 2026-05-26 | "Train assistant" button above Update — new RPC `agents.train_all` runs memory_message + task_email + emailer serially with `agents.train.progress` notifications; `MessageMemoryAgentTrainer` now ingests WhatsApp 1-on-1 chats (where user has replied) in addition to email samples | engine + app + IPC | `3c152cc7` |
 | 2026-05-22 | Current datetime injected into EVERY LLM request (single LLMClient chokepoint + chat_compaction bypass) — fixes task-detection guessing the date; cache-safe append after cache_control blocks | engine | `5f5c73e8` |
@@ -29,9 +32,6 @@ WhatsApp parity spans engine + app + IPC through Phase 4 cross-channel (live-ver
 | 2026-05-15 | Calendar self-healing Firebase session — `ensureEngineSession()` re-pushes token + verifies via `account.whoAmI()` before Calendar RPCs; initial token push retries 3× with backoff | engine + app | `a03f6831` · `1c60aebf` |
 | 2026-05-15 | Update view staged progress emissions + ETA rewrite + elapsed timer (engine progress callback, renderer 1 s ticker + overshot hint) | engine + app | `0b33fdf4` · `cb91901b` |
 | 2026-05-15 | WhatsApp source panel in Workspace (Fase 4a + 4b) — `ThreadSourceType` widened to `'email' \| 'whatsapp'`; WA branch renders bubbles via `whatsapp.listMessages` | app | `2a8bc2c3` |
-| 2026-05-13 | WhatsApp task creation pipeline (Fase 3b) — `TaskWorker._analyze_recent_whatsapp_events`, channel-agnostic `get_tasks_by_thread`, cross-channel F7 via `whatsapp_blobs` | engine + IPC (`sources.whatsapp_messages`) | `87a806f7` · `e6fcd940` |
-| 2026-05-13 | Fix-D create→update restricted to same-thread candidates (F7 topical siblings stay as LLM context only) | engine | `f5196e7f` |
-| 2026-05-12 | Agentic task "Open" — `tasks.solve` direct from Tasks list (no template), `tasks.solve.cancel` RPC, contextual header button, read-only closed tasks, Annulla cancels run | engine + app + IPC | `b36e15b3..df1e1fb1` · [proactive-task-open.md](execution-plans/proactive-task-open.md) (status: completed) |
 
 ## In progress
 

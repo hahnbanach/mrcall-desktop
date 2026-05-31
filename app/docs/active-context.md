@@ -9,7 +9,9 @@ description: |
 
 # Active Context — App
 
-## Current focus (as of 2026-05-27)
+## Current focus (as of 2026-05-28)
+
+**Update view becomes the post-signup hub.** Default view after the engine-ready splash is now `'update'` (was `'tasks'`) — that's where a new user lands and where the three onboarding steps live. `views/Update.tsx` is rebuilt as three sequential cards driven by the new `setup.state` RPC: Sync (always actionable) → Train (gated on `has_synced`) → Update (gated on `has_trained`), with a Quick-start banner that strikes through each step as it completes and disappears once both gates are open. `window.zylch.sync.run({days_back?})` + `window.zylch.setup.state()` added to the preload + `ZylchAPI` interface. Live-verify pending — both new card flows and the asyncio-loop fix during Train (`whatsapp.status` should no longer time out while training).
 
 **MrCall tab + onboarding/Calendar fixes (live-verified by Mario 2026-05-20).** The MrCall tab is live (was a disabled placeholder): `views/Mrcall.tsx` lists the user's businesses via `mrcall.list_my_businesses` (Firebase JWT — same endpoint the dashboard uses) and, for customer-service lookup, searches by field (email / name / phone / VAT) + a `subscriptionStatus` dropdown via `mrcall.search_businesses`, with expandable anagraphic/billing cards. Onboarding no longer forces email/IMAP — a signed-in Firebase user can enter straight away; the form hides the LLM / Telegram / MrCall groups (`ProfileFormFields includeGroups`); the Email tab is now gated on a real `IMAP_HOST`, not `EMAIL_ADDRESS` (always the Firebase email). Calendar "engine isn't seeing your Firebase session" fixed: `installEngineTokenPusher()` runs right after onboarding `finalize` (the token pusher was left unset during onboarding, so the in-wizard Calendar connect ran session-less).
 
@@ -19,6 +21,7 @@ Residual: live verification of the 2026-05-15 stack (cross-channel `ThreadPanel`
 
 | Date | What | Refs |
 |---|---|---|
+| 2026-05-27 | `views/Update.tsx` rebuilt as 3 ordered cards (Sync → Train → Update) gated by `setup.state`; Quick-start banner with strike-through steps; default `View` is now `'update'` after the splash. New preload bindings `window.zylch.sync.run({days_back?})` + `window.zylch.setup.state()` with matching `ZylchAPI` types. Update card refetches `setup.state` on mount, after each Sync/Train/Update completion, and on `engine.ready` revival. Live-verify pending. | uncommitted |
 | 2026-05-26 | `views/WhatsApp.tsx`: composer at the bottom of the reading pane (Enter=send, Shift+Enter=newline, optimistic append + scroll-to-bottom) + search bar atop the thread list (Enter=search, Esc=clear); `match_snippet` rendered on search hits. `views/Update.tsx` renders `result.errors[]` as red (fatal) / amber (warning) blocks with title + detail + action — replaces the false-green "No changes" on a failed sync. `views/Onboarding.tsx` `inferHosts` defaults unknown email domains to `imap.gmail.com`/`smtp.gmail.com` instead of `imap.<domain>` (was always NXDOMAIN for non-preset domains, e.g. `@mrcall.ai`). New preload bindings `whatsapp.sendMessage` + `whatsapp.searchMessages`. | `ca784d0d..4e243bdb` merged via `436bb291` (2026-05-27) |
 | 2026-05-26 | "Train assistant" card above Update — `views/Update.tsx` renders a Train-now button + progress bar + per-agent result row that drives `window.zylch.agents.trainAll()`. Subscribes to `agents.train.progress` for the bar; 30-min preload timeout. Each card disables the other while running. | `3c152cc7` |
 | 2026-05-20 | MrCall tab live (was disabled placeholder) — `views/Mrcall.tsx`: business list via `mrcall.list_my_businesses` + search-by-field (email/name/phone/VAT) + `subscriptionStatus` dropdown via `mrcall.search_businesses`, expandable anagraphic/billing cards | `ed9ca585` · `a28c5533` |
@@ -28,9 +31,6 @@ Residual: live verification of the 2026-05-15 stack (cross-channel `ThreadPanel`
 | 2026-05-15 | Calendar self-healing UI — `ConnectGoogleCalendar.tsx` gains `ensureEngineSession()` + `signin-required` phase with Retry button; `App.tsx` initial token push retries 3× with backoff | `a03f6831` |
 | 2026-05-15 | Update view elapsed timer (1 s ticker, "· elapsed 1m23s") + overshot hint ("Running longer than the initial estimate") | `0b33fdf4` |
 | 2026-05-15 | WhatsApp source panel (Fase 4a + 4b) — `ThreadSourceType` widened to `'email' \| 'whatsapp'`; WA branch via `whatsapp.listMessages({ chat_jid, limit: 200 })`, bubble alignment by `is_from_me`, header shows resolved phone for `@s.whatsapp.net` jids | `2a8bc2c3` |
-| 2026-05-12 | Agentic task "Open" — `openTaskChat` fires `tasks.solve` directly, `Conversation.threadId` + `taskCompleted` carried in store, Source-panel persistence with mount-time backfill for legacy convs, contextual header button (Riapri ↔ Marca come fatta), Annulla calls `tasks.solve.cancel` (not approve(false)), ApprovalCard mode-aware | `df1e1fb1..b36e15b3` |
-| 2026-05-12 | Pre-Firebase legacy code removed (`inMemoryPersistence`, every window through Firebase, `?legacy=1` + `ZYLCH_PROFILE` bypasses deleted, `NewProfileWizard.tsx` deleted, -558 lines) | `c43ff35e` |
-| 2026-05-11 | Profile picker shows email instead of raw Firebase UID — `profile:current` / `profiles:list` return `{id, email}` | — |
 
 ## In progress
 
