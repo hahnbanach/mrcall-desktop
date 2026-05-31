@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useConversations, type Approval } from '../store/conversations'
+import { useTasks } from '../store/tasks'
 import { useThread } from '../store/thread'
 import { useNarration } from '../hooks/useNarration'
 import ChatComposer, { type ChatComposerTaskContext } from '../components/ChatComposer'
@@ -38,8 +39,11 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
     setDraftInput,
     setPendingApproval,
     setBusy,
+    markSolveStarted,
+    markSolveFinished,
     patchConversation
   } = useConversations()
+  const { refresh: refreshTasks } = useTasks()
   const { activeThreadId, activeTaskId, setActiveThreadId, setActiveTaskId } = useThread()
 
   const active = state.conversations.find((c) => c.id === state.activeId)!
@@ -230,17 +234,102 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
           break
         case 'done':
           setBusy(convId, false)
+          markSolveFinished(convId)
           if (isActive) setNarrationSeed('')
+          // Auto-reanalyze decision from the engine. When a mutating
+          // solve flips the task to "closed", reflect it here so the
+          // composer locks and the user sees the result without
+          // navigating back to Tasks. Crucially we also refresh the
+          // shared Tasks store — without that the Tasks tab keeps
+          // showing the just-closed row until the user manually
+          // refreshes (the symptom Mario hit on the Samo Vojnovic
+          // task: "in Chat dice chiusa ma in Task la vedo sempre").
+          if (event.result?.auto_reanalyzed?.action === 'closed') {
+            patchConversation(convId, { taskCompleted: true })
+            appendAssistant(
+              convId,
+              '✓ Task chiusa automaticamente — ' +
+                (event.result.auto_reanalyzed.reason || 'la riconciliazione ha rilevato la risoluzione.')
+            )
+            void refreshTasks()
+          } else if (event.result?.auto_reanalyzed?.action === 'updated') {
+            appendAssistant(
+              convId,
+              'ℹ Task aggiornata — ' +
+                (event.result.auto_reanalyzed.reason || 'nuovo stato applicato.')
+            )
+            void refreshTasks()
+          }
           break
         case 'error':
           appendAssistant(convId, '⚠ ' + (event.message || 'Solve error'))
           setBusy(convId, false)
+          markSolveFinished(convId)
           if (isActive) setNarrationSeed('')
           break
       }
     })
     return off
-  }, [active.id, appendAssistant, setPendingApproval, setBusy])
+  }, [
+    active.id,
+    appendAssistant,
+    setPendingApproval,
+    setBusy,
+    markSolveFinished,
+    patchConversation,
+    refreshTasks
+  ])
+
+  // Solve handler — wired to the lightbulb button next to "Invia". Pipes
+  // the user's typed text into `tasks.solve(task_id, instructions=text)`
+  // so the engine builds SOLVE_SYSTEM_PROMPT with the task context AND
+  // appends the user's instructions as the first user message. Empty
+  // text is allowed (acts as "fire the agent with no extra hints",
+  // same as the legacy auto-solve that used to fire on Open). Live
+  // progress streams through the existing `tasks.solve.event` listener
+  // above; this function only kicks off the RPC and echoes the text
+  // into the visible history.
+  const solve = async (
+    text: string,
+    _attachmentPaths: string[],
+    _ctx?: ChatComposerTaskContext
+  ): Promise<void> => {
+    if (active.busy) return
+    if (!active.taskId) {
+      // Defensive — Workspace only renders the Solve button on task
+      // conversations, but a stale render or a future caller might
+      // slip through. Surface it instead of silently swallowing.
+      appendAssistant(active.id, '**Solve unavailable:** this conversation has no task.')
+      return
+    }
+    setDraftInput(active.id, '')
+    if (text) appendUser(active.id, text)
+    setBusy(active.id, true)
+    setNarrationSeed('Sto pensando alla tua richiesta.')
+    // Register the in-flight solve so closeConversation can target the
+    // right task_id when the user dismisses the tab mid-run.
+    markSolveStarted(active.id, active.taskId)
+    try {
+      const res = await window.zylch.tasks.solve(active.taskId, text || undefined)
+      if (!res?.ok) {
+        appendAssistant(active.id, '⚠ ' + (res?.error || 'Solve failed without an error message.'))
+        setBusy(active.id, false)
+        setNarrationSeed('')
+        markSolveFinished(active.id)
+      }
+    } catch (e: unknown) {
+      if (!isProfileLockedError(e)) {
+        appendAssistant(active.id, '**Solve error:** ' + errorMessage(e))
+      }
+      setBusy(active.id, false)
+      setNarrationSeed('')
+      markSolveFinished(active.id)
+      throw e
+    }
+    // Note: we do NOT flip busy=false on success. The `tasks.solve.event`
+    // 'done' (or 'error') event handles it — same path the legacy
+    // auto-solve relied on. `markSolveFinished` is also called there.
+  }
 
   const send = async (
     text: string,
@@ -541,6 +630,7 @@ export default function Workspace({ onGoToTasks }: Props = {}) {
         <ChatComposer
           key={active.id}
           onSubmit={send}
+          onSolve={active.taskId ? solve : undefined}
           disabled={!!active.busy || !!active.taskCompleted}
           placeholder={
             active.taskCompleted

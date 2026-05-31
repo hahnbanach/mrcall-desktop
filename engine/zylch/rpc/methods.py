@@ -280,6 +280,47 @@ async def tasks_reanalyze(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return result
 
 
+async def _maybe_reanalyze_after_solve(
+    executor: "Any",
+    task_id: str,
+    owner_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Run a single reanalyze pass after a solve that mutated state.
+
+    Returns a small dict the caller folds into the `done` event payload
+    (``{action: 'kept'|'closed'|'updated'|'skipped', reason: str?}``),
+    or ``None`` on hard failure / no reanalyze needed.
+
+    Skipped when ``executor.mutating_actions_taken == 0`` — pure
+    research solves (the LLM just searched memory and answered) don't
+    change the world, so reanalyze would burn one LLM call to confirm
+    "still open".
+    """
+    from zylch.workers.task_reanalyze import reanalyze_task
+
+    try:
+        n = getattr(executor, "mutating_actions_taken", 0)
+    except Exception:
+        n = 0
+    if n <= 0:
+        return None
+    logger.info(
+        f"[rpc] tasks.solve post-run auto-reanalyze task_id={task_id} "
+        f"mutating_actions={n}"
+    )
+    try:
+        result = await reanalyze_task(task_id=task_id, owner_id=owner_id)
+    except Exception as e:
+        logger.warning(f"[rpc] auto-reanalyze raised: {e}")
+        return {"action": "skipped", "error": str(e)}
+    if not isinstance(result, dict):
+        return {"action": "skipped"}
+    return {
+        "action": result.get("action") or "skipped",
+        "reason": result.get("reason"),
+    }
+
+
 async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.solve(task_id, instructions="") — streams `tasks.solve.event`
     notifications; pauses on tool approval (waits for tasks.solve.approve).
@@ -390,14 +431,44 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
             _active_executor = executor
             try:
                 final: Dict[str, Any] = {}
+                done_event: Dict[str, Any] = {}
                 async for event in executor.run():
-                    _notify(event)
                     if event["type"] == "done":
-                        final = {"ok": True, "result": event["result"]}
+                        # Hold the done event back — we may decorate it
+                        # with auto-reanalyze fields below before
+                        # emitting, so the renderer can flip the task
+                        # from open to closed in a single beat.
+                        done_event = event
                         break
                     if event["type"] == "error":
+                        _notify(event)
                         final = {"ok": False, "error": event["message"]}
                         break
+                    _notify(event)
+
+                if done_event:
+                    # Auto-reanalyze after a solve that mutated state
+                    # (send_email, send_whatsapp, send_sms,
+                    # update_memory, run_python). Without this, the
+                    # task stays "open" until the next manual Update on
+                    # the row OR the next global update.run — exactly
+                    # the friction Mario hit when the assistant sent a
+                    # reply via solve and the task list didn't flip.
+                    # Read-only solves (search-only conversations) skip
+                    # this to save the extra LLM call.
+                    auto = await _maybe_reanalyze_after_solve(
+                        executor=executor,
+                        task_id=task_id,
+                        owner_id=owner_id,
+                    )
+                    if auto is not None:
+                        done_event = {
+                            **done_event,
+                            "result": {**done_event.get("result", {}), "auto_reanalyzed": auto},
+                        }
+                    _notify(done_event)
+                    final = {"ok": True, "result": done_event["result"]}
+
                 return final or {"ok": False, "error": "stream ended"}
             finally:
                 _active_executor = None
@@ -1840,6 +1911,16 @@ for _name, _fn in _WHATSAPP_METHODS.items():
 from zylch.rpc.agents import METHODS as _AGENTS_METHODS  # noqa: E402
 
 for _name, _fn in _AGENTS_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
+# Update-view setup helpers — `sync.run` (data-fetch only, used by the
+# new Sync card) and `setup.state` (read-only snapshot used to gate the
+# Train + Update cards on having data / trained agents).
+from zylch.rpc.setup import METHODS as _SETUP_METHODS  # noqa: E402
+
+for _name, _fn in _SETUP_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn

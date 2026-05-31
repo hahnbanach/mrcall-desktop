@@ -208,6 +208,13 @@ type Ctx = {
    *  Used by Workspace.tsx to disable the composer while the agent
    *  is mid-run, and by closeConversation to fire solveCancel. */
   isSolveBusy: (id: string) => boolean
+  /** Tracker hooks for the lightbulb-triggered solve. Workspace
+   *  calls `markSolveStarted` right before its `tasks.solve` RPC and
+   *  `markSolveFinished` from the `done`/`error` event handler so the
+   *  map stays in sync. closeConversation reads it to target a
+   *  cancel at the right task_id. */
+  markSolveStarted: (convId: string, taskId: string) => void
+  markSolveFinished: (convId: string) => void
   /** Patch arbitrary Conversation fields by id without changing
    *  activeId — exposed for Workspace to flip taskCompleted after a
    *  Riapri click. Reducer-level PATCH_CONV action under the hood. */
@@ -216,16 +223,14 @@ type Ctx = {
 
 const ConversationsContext = createContext<Ctx | null>(null)
 
-// Set of conversation ids whose `tasks.solve` RPC promise has not yet
-// resolved. The engine serialises execution via its own
-// `_solve_lock` and accepts a queue (up to `_MAX_SOLVE_QUEUE` solves
-// at once), so the client no longer enforces "one solve at a time".
-// This set is module-level because the solve runs as a fire-and-forget
-// Promise outside the reducer; the live state per-conversation is
-// driven by `tasks.solve.event` notifications consumed in
-// `Workspace.tsx`. We track the set only so `closeConversation` can
-// fire a targeted `solveCancel(task_id)` for its conversation, and so
-// idempotent double-Opens don't double-fire the RPC.
+// Conversation-id → task-id for solves that are currently running.
+// Populated by `markSolveStarted` (called from Workspace.tsx when the
+// user clicks the lightbulb button) and cleared by
+// `markSolveFinished` (called from the `tasks.solve.event` 'done' /
+// 'error' branch). `closeConversation` consults it to fire a targeted
+// `solveCancel(task_id)` before tearing the conversation down — without
+// this the engine keeps churning on a conversation the user already
+// dismissed.
 const solvesInFlight = new Map<string, string>() // convId → task_id
 
 export function ConversationsProvider({ children }: { children: ReactNode }) {
@@ -383,19 +388,16 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     // explicitly Reopens to act again.
     const taskCompleted = !!task.completed_at
 
-    // If we're re-opening a task conversation that already has
-    // history (user clicked Open twice, or this was restored from
-    // localStorage after a reload), don't fire a fresh solve —
-    // single solve at a time engine-side, and the previous one
-    // already produced an answer worth keeping. The user can ask
-    // follow-ups via the composer (chat.send) without re-paying for
-    // the agent loop.
-    // Closed tasks are read-only: never fire a solve regardless of
-    // history. To act, the user clicks Riapri first.
+    // 2026-05-28: Open no longer auto-fires `tasks.solve`. The user
+    // explicitly clicks the lightbulb (Solve) button in the chat
+    // composer to trigger the agent loop, optionally with typed
+    // instructions. Rationale (Mario): clicking Open should be a
+    // navigation primitive ("show me this task in chat") — separating
+    // it from "spend tokens on a solve run" lets him read the source +
+    // memory blobs first and decide what hints to give. Empty
+    // instructions on the Solve button reproduce the legacy
+    // auto-trigger.
     const existing = stateRef.current.conversations.find((c) => c.id === id)
-    const shouldStartSolve =
-      !taskCompleted &&
-      (!existing || (existing.history.length === 0 && !existing.pendingApproval))
 
     dispatch({
       type: 'OPEN_TASK_CHAT',
@@ -409,59 +411,13 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
         history: existing?.history ?? [],
         draftInput: '',
         pendingApproval: existing?.pendingApproval ?? null,
-        // Busy stays true until tasks.solve resolves OR the listener
-        // sees `done` / `error`. Whichever fires first flips it back.
-        busy: shouldStartSolve,
+        // Idle — no in-flight solve to wait for. The lightbulb button
+        // is the trigger; the `tasks.solve.event` listener will flip
+        // busy back to true via 'starting' when the user clicks it.
+        busy: false,
         taskCompleted
       }
     })
-
-    if (!shouldStartSolve) return
-    // Idempotent guard: a second Open on the same conversation while a
-    // solve is in flight is a no-op (the user clicked Open twice in a
-    // row). Different conversations are NOT blocked — the engine
-    // queues solves up to `_MAX_SOLVE_QUEUE` and serialises them
-    // internally; the `tasks.solve.event` stream tells each
-    // conversation when it transitions queued → starting → done.
-    if (solvesInFlight.has(id)) return
-    solvesInFlight.set(id, task.id)
-    window.zylch.tasks
-      .solve(task.id)
-      .then((res) => {
-        if (!res?.ok) {
-          dispatch({
-            type: 'APPEND_ASSISTANT',
-            id,
-            text: '⚠ ' + (res?.error || 'Solve failed without an error message.')
-          })
-        }
-      })
-      .catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : String(e)
-        // Engine: SolveQueueFullError (code -32002) — too many
-        // simultaneous solves. Surface to the user, don't pretend
-        // success.
-        // Engine: SolveInProgressError (code -32000) for same-task
-        // double-open — shouldn't happen given the local guard above,
-        // but if it does we swallow it since the original solve is
-        // already streaming events into this conversation.
-        if (/SolveInProgress/i.test(msg)) {
-          console.warn('[openTaskChat] SolveInProgressError swallowed', msg)
-        } else {
-          dispatch({
-            type: 'APPEND_ASSISTANT',
-            id,
-            text: '⚠ Solve RPC failed: ' + msg
-          })
-        }
-      })
-      .finally(() => {
-        solvesInFlight.delete(id)
-        // Belt-and-suspenders: the `done` event normally flips busy
-        // back to false, but if the engine errored before emitting
-        // one, this catches it.
-        dispatch({ type: 'SET_BUSY', id, busy: false })
-      })
   }, [])
 
   // Open a thread-only conversation (no task attached). Used by Email
@@ -511,6 +467,14 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     return solvesInFlight.has(id)
   }, [])
 
+  const markSolveStarted = useCallback((convId: string, taskId: string) => {
+    solvesInFlight.set(convId, taskId)
+  }, [])
+
+  const markSolveFinished = useCallback((convId: string) => {
+    solvesInFlight.delete(convId)
+  }, [])
+
   const patchConversation = useCallback(
     (id: string, patch: Partial<Conversation>) =>
       dispatch({ type: 'PATCH_CONV', id, patch }),
@@ -551,6 +515,8 @@ export function ConversationsProvider({ children }: { children: ReactNode }) {
     setPendingApproval,
     setBusy,
     isSolveBusy,
+    markSolveStarted,
+    markSolveFinished,
     patchConversation
   }
   return createElement(ConversationsContext.Provider, { value }, children)
