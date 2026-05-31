@@ -293,6 +293,27 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
             me_holder["display_name"] = None
         connected_ev.set()
 
+    def _emit_threads_changed() -> None:
+        """Tell the renderer that the thread list / open chat is stale.
+
+        Without this, `whatsapp.list_threads` runs ONCE when the
+        renderer's `connected` state flips and is never refreshed —
+        every message neonize delivers afterwards (history batch on
+        re-connect or live MessageEv) goes invisible until the user
+        clicks Refresh. The renderer subscribes to this notification,
+        debounces, and re-fetches threads + the active chat. Emission
+        is throttled at the engine for the history-sync burst case;
+        the renderer also debounces, so duplicates are cheap.
+        """
+        try:
+            loop.call_soon_threadsafe(
+                notify,
+                "whatsapp.threads.changed",
+                {},
+            )
+        except Exception as e:
+            logger.debug(f"[rpc:whatsapp.connect] notify threads.changed: {e}")
+
     def _on_history(event) -> None:
         try:
             sync_svc.handle_history_sync(event)
@@ -300,10 +321,17 @@ async def whatsapp_connect(params: Dict[str, Any], notify: NotifyFn) -> Any:
             logger.warning(f"[rpc:whatsapp.connect] history handler: {e}")
         finally:
             history_done_ev.set()
+            # One notification per HistorySyncEv batch — the worker just
+            # stored hundreds of rows in one go; the renderer needs to
+            # re-fetch the list once.
+            _emit_threads_changed()
 
     def _on_message(event) -> bool:
         try:
-            return bool(sync_svc.handle_message(event))
+            stored = bool(sync_svc.handle_message(event))
+            if stored:
+                _emit_threads_changed()
+            return stored
         except Exception as e:
             logger.warning(f"[rpc:whatsapp.connect] message handler: {e}")
             return False

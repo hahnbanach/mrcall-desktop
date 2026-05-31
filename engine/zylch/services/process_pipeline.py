@@ -304,6 +304,74 @@ async def handle_process(
         return f"Failed to show tasks: {e}"
 
 
+async def run_sync_only(
+    owner_id: str,
+    *,
+    days_back: int = 60,
+    progress: Optional[ProgressFn] = None,
+    errors_out: Optional[list] = None,
+) -> dict:
+    """Run only the data-fetch phases of the pipeline (email + WhatsApp),
+    skipping memory extraction and task detection.
+
+    Used by the JSON-RPC ``sync.run`` method backing the renderer's
+    "Sync" card on the Update view. The full pipeline (``handle_process``)
+    remains the CLI / ``update.run`` entrypoint that ALSO does memory +
+    tasks afterwards.
+
+    Returns:
+        ``{"sync_new": int, "wa_messages": int, "wa_contacts": int,
+           "wa_skipped_reason": Optional[str]}``
+    """
+    from zylch.storage.storage import Storage
+
+    store = Storage.get_instance()
+
+    def _p(pct: int, msg: str, eta: Optional[str] = None) -> None:
+        if progress is None:
+            return
+        try:
+            progress(pct, msg, eta)
+        except Exception as e:
+            logger.warning(f"[sync] progress callback failed: {e}")
+
+    result: dict = {
+        "sync_new": 0,
+        "wa_messages": 0,
+        "wa_contacts": 0,
+        "wa_skipped_reason": None,
+    }
+
+    # --- Step 1: Email ---
+    _p(5, "Syncing emails…", None)
+    try:
+        sync_result = await _run_sync(owner_id, store, days_back)
+        result["sync_new"] = int(sync_result.get("new_messages", 0) or 0)
+    except Exception as e:
+        logger.error(f"[sync.run] email sync failed: {e}", exc_info=True)
+        if errors_out is not None:
+            errors_out.append({"stage": "email_sync", "error": e})
+        _p(100, f"Sync failed: {e}", None)
+        return result
+
+    # --- Step 2: WhatsApp ---
+    _p(60, "Syncing WhatsApp…", None)
+    try:
+        wa_result = _run_whatsapp_sync(owner_id, store)
+        if wa_result.get("skipped"):
+            result["wa_skipped_reason"] = str(wa_result.get("reason", "not configured"))
+        else:
+            result["wa_contacts"] = int(wa_result.get("contacts", 0) or 0)
+            result["wa_messages"] = int(wa_result.get("messages", 0) or 0)
+    except Exception as e:
+        logger.error(f"[sync.run] WhatsApp sync failed: {e}", exc_info=True)
+        if errors_out is not None:
+            errors_out.append({"stage": "whatsapp", "error": e})
+
+    _p(100, "Sync complete", None)
+    return result
+
+
 def _eta_for_memory(pending: int) -> str:
     """Coarse ETA for memory extraction given pending items count.
 
@@ -403,7 +471,30 @@ def _run_whatsapp_sync(
     owner_id: str,
     store,
 ) -> dict:
-    """Connect to WhatsApp, fetch history + contacts, disconnect.
+    """Run the WhatsApp-side sync.
+
+    First tries to reuse the persistent client already kept alive by
+    ``whatsapp_actions._active_client`` (set up by the boot
+    auto-reconnect and refreshed by every desktop Connect). Only if no
+    live client is available do we spin up a fresh one — that path is
+    the legacy ``zylch update`` CLI use case, where the sidecar wasn't
+    a long-lived server.
+
+    Opening a second client on top of a live one used to log
+
+        whatsmeow.Client.Socket ERROR Error reading from websocket:
+        … EOF
+        whatsmeow.Client     OnDisconnect() called, but it was
+        expected, so not emitting event
+
+    on every desktop Update, because WhatsApp enforces one session per
+    device: the new socket authenticates, the server kicks the old one
+    with ``<stream:error><conflict type="replaced"/></stream:error>``,
+    and the read pump on the old socket reads EOF. The actual error is
+    cosmetic-plus-wasteful: a 2-second gap in MessageEv during the
+    swap, plus the engine's ``_active_client`` left pointing at a dead
+    handle until the next auto-reconnect. Reusing the live client
+    avoids the kick entirely.
 
     Synchronous — blocks until done or timeout (60s).
     Returns dict with contacts/messages counts or skipped reason.
@@ -432,6 +523,58 @@ def _run_whatsapp_sync(
             "reason": "neonize not installed",
         }
 
+    # ── Reuse the persistent client when available ───────────────────
+    live_client = None
+    live_sync = None
+    try:
+        from zylch.rpc import whatsapp_actions as _wa_actions
+
+        with _wa_actions._state_lock:
+            candidate = _wa_actions._active_client
+            candidate_sync = _wa_actions._active_sync
+        if candidate is not None:
+            try:
+                socket_up = bool(candidate.is_connected())
+                logged_in = bool(candidate.is_logged_in()) if socket_up else False
+            except Exception as e:
+                logger.debug(f"[wa-sync] live-client liveness check failed: {e}")
+                socket_up = False
+                logged_in = False
+            if socket_up and logged_in:
+                live_client = candidate
+                live_sync = candidate_sync
+    except Exception as e:
+        # Module unimportable in standalone CLI runs (no rpc package
+        # loaded) — drop to the fresh-connect path silently.
+        logger.debug(f"[wa-sync] whatsapp_actions inspection skipped: {e}")
+
+    if live_client is not None:
+        logger.info("[wa-sync] reusing persistent WhatsApp client (no new socket)")
+        sync_svc = live_sync if live_sync is not None else WhatsAppSyncService(store, owner_id)
+        # Ensure the live download path stays wired even if the live
+        # sync_svc came from a path that didn't set wa_client.
+        sync_svc.wa_client = live_client
+        contacts = 0
+        try:
+            contacts = sync_svc.sync_contacts(live_client)
+        except Exception as e:
+            logger.warning(f"[wa-sync] reuse sync_contacts failed: {e}")
+        try:
+            sync_svc.sync_groups(live_client)
+        except Exception as e:
+            logger.warning(f"[wa-sync] reuse sync_groups failed: {e}")
+        try:
+            sync_svc.sync_lid_contacts(live_client)
+        except Exception as e:
+            logger.warning(f"[wa-sync] reuse sync_lid_contacts failed: {e}")
+        stats = sync_svc.stats
+        return {
+            "contacts": contacts,
+            "messages": stats.get("messages_synced", 0),
+            "reused_persistent_client": True,
+        }
+
+    # ── Fresh-connect fallback (CLI path, or live client is dead) ────
     wa_client = WhatsAppClient()
     sync_svc = WhatsAppSyncService(store, owner_id)
     # Let the message handler download voice-note bytes at event time.
