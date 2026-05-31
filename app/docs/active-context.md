@@ -9,56 +9,56 @@ description: |
 
 # Active Context — App
 
-## Current focus (as of 2026-05-28)
+## Current focus (as of 2026-05-31)
 
-**Update view becomes the post-signup hub.** Default view after the engine-ready splash is now `'update'` (was `'tasks'`) — that's where a new user lands and where the three onboarding steps live. `views/Update.tsx` is rebuilt as three sequential cards driven by the new `setup.state` RPC: Sync (always actionable) → Train (gated on `has_synced`) → Update (gated on `has_trained`), with a Quick-start banner that strikes through each step as it completes and disappears once both gates are open. `window.zylch.sync.run({days_back?})` + `window.zylch.setup.state()` added to the preload + `ZylchAPI` interface. Live-verify pending — both new card flows and the asyncio-loop fix during Train (`whatsapp.status` should no longer time out while training).
+**Solve button on the chat composer.** `views/Workspace.tsx` no longer auto-fires `tasks.solve` on Open — the conversation opens idle. `ChatComposer.tsx` renders a lightbulb button (`Icon.solve = Lightbulb`) next to "Invia" when an `onSolve` callback is provided. Clicking it pipes the typed text into `tasks.solve(task_id, instructions=text)`; empty text replicates the legacy auto-trigger. The renderer subscribes to the `tasks.solve.event` `done` payload's new `auto_reanalyzed` field — when the engine ran a mutating solve and the post-run reanalyze returned `action: 'closed'`, the conversation flips to `taskCompleted=true` AND `useTasks().refresh()` is called so the Tasks tab updates without a manual reload. `store/conversations.ts` exposes `markSolveStarted`/`markSolveFinished` for explicit in-flight tracking (closeConversation uses it to fire a targeted `solveCancel(task_id)`).
 
-**MrCall tab + onboarding/Calendar fixes (live-verified by Mario 2026-05-20).** The MrCall tab is live (was a disabled placeholder): `views/Mrcall.tsx` lists the user's businesses via `mrcall.list_my_businesses` (Firebase JWT — same endpoint the dashboard uses) and, for customer-service lookup, searches by field (email / name / phone / VAT) + a `subscriptionStatus` dropdown via `mrcall.search_businesses`, with expandable anagraphic/billing cards. Onboarding no longer forces email/IMAP — a signed-in Firebase user can enter straight away; the form hides the LLM / Telegram / MrCall groups (`ProfileFormFields includeGroups`); the Email tab is now gated on a real `IMAP_HOST`, not `EMAIL_ADDRESS` (always the Firebase email). Calendar "engine isn't seeing your Firebase session" fixed: `installEngineTokenPusher()` runs right after onboarding `finalize` (the token pusher was left unset during onboarding, so the in-wizard Calendar connect ran session-less).
+**WhatsApp tab live refresh.** `views/WhatsApp.tsx` subscribes to `whatsapp.threads.changed` and debounces 600 ms before re-fetching `whatsapp.list_threads` + the active chat's messages. `reloadActiveMessages` extracted into a `useCallback` so the subscriber and the `activeJid` effect share the same path.
 
-Residual: live verification of the 2026-05-15 stack (cross-channel `ThreadPanel`, Update staged progress, Calendar self-healing) + every Firebase signin path from a fresh state.
+**Settings credit-balance self-heal.** `firebase/authUtils.ts` exposes a shared `ensureEngineSession()` (re-push token + verify via `account.whoAmI()`). `views/ConnectGoogleCalendar.tsx` drops its local copy; `views/Settings.tsx`'s `LLMProviderCard` uses it before every `account.balance()` call and retries once on `auth_expired`. Closes the "balance frozen at last successful fetch" loop Mario hit when the sidecar restarted before the token push.
+
+Residual live verification: every Firebase signin path from a fresh state, packaged DMG/EXE behaviour, Update staged progress UI on the 3-card flow.
 
 ## Recent landings (last ~2 weeks)
 
 | Date | What | Refs |
 |---|---|---|
-| 2026-05-27 | `views/Update.tsx` rebuilt as 3 ordered cards (Sync → Train → Update) gated by `setup.state`; Quick-start banner with strike-through steps; default `View` is now `'update'` after the splash. New preload bindings `window.zylch.sync.run({days_back?})` + `window.zylch.setup.state()` with matching `ZylchAPI` types. Update card refetches `setup.state` on mount, after each Sync/Train/Update completion, and on `engine.ready` revival. Live-verify pending. | uncommitted |
-| 2026-05-26 | `views/WhatsApp.tsx`: composer at the bottom of the reading pane (Enter=send, Shift+Enter=newline, optimistic append + scroll-to-bottom) + search bar atop the thread list (Enter=search, Esc=clear); `match_snippet` rendered on search hits. `views/Update.tsx` renders `result.errors[]` as red (fatal) / amber (warning) blocks with title + detail + action — replaces the false-green "No changes" on a failed sync. `views/Onboarding.tsx` `inferHosts` defaults unknown email domains to `imap.gmail.com`/`smtp.gmail.com` instead of `imap.<domain>` (was always NXDOMAIN for non-preset domains, e.g. `@mrcall.ai`). New preload bindings `whatsapp.sendMessage` + `whatsapp.searchMessages`. | `ca784d0d..4e243bdb` merged via `436bb291` (2026-05-27) |
-| 2026-05-26 | "Train assistant" card above Update — `views/Update.tsx` renders a Train-now button + progress bar + per-agent result row that drives `window.zylch.agents.trainAll()`. Subscribes to `agents.train.progress` for the bar; 30-min preload timeout. Each card disables the other while running. | `3c152cc7` |
-| 2026-05-20 | MrCall tab live (was disabled placeholder) — `views/Mrcall.tsx`: business list via `mrcall.list_my_businesses` + search-by-field (email/name/phone/VAT) + `subscriptionStatus` dropdown via `mrcall.search_businesses`, expandable anagraphic/billing cards | `ed9ca585` · `a28c5533` |
-| 2026-05-20 | Onboarding unblocked for MrCall-only users (email opt-in, `ProfileFormFields includeGroups` hides LLM/Telegram/MrCall) + Calendar session fix (`installEngineTokenPusher` after `finalize`) + Email tab gated on `IMAP_HOST` not `EMAIL_ADDRESS` | `2b0a54ce` |
-| 2026-05-20 | WhatsApp voice-note transcripts in the Source panel — `transcription` field added to the WhatsAppMessage type (from `whatsapp.list_messages`); `ThreadPanel.tsx` + `views/WhatsApp.tsx` render the transcript with a 🎤 marker + "vocale trascritta" hint, `[vocale]` placeholder while not yet transcribed | [`../../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../../engine/docs/execution-plans/whatsapp-voice-transcription.md) |
-| 2026-05-15 | Cross-channel Source-panel toggle — `ZylchTask.sources.whatsapp_chat_jid?`, `Conversation.waChatJid?`, `ThreadPanel` API `{ emailThreadId?, whatsappChatJid? }` with three modes (email-only / whatsapp-only / cross-channel); cross-channel header shows `Email (N) / WhatsApp (M)` tab pills with counters + parallel fetch + instant tab switch | `b57fcc4f` |
-| 2026-05-15 | Calendar self-healing UI — `ConnectGoogleCalendar.tsx` gains `ensureEngineSession()` + `signin-required` phase with Retry button; `App.tsx` initial token push retries 3× with backoff | `a03f6831` |
-| 2026-05-15 | Update view elapsed timer (1 s ticker, "· elapsed 1m23s") + overshot hint ("Running longer than the initial estimate") | `0b33fdf4` |
-| 2026-05-15 | WhatsApp source panel (Fase 4a + 4b) — `ThreadSourceType` widened to `'email' \| 'whatsapp'`; WA branch via `whatsapp.listMessages({ chat_jid, limit: 200 })`, bubble alignment by `is_from_me`, header shows resolved phone for `@s.whatsapp.net` jids | `2a8bc2c3` |
+| 2026-05-31 | `views/Settings.tsx`'s `LLMProviderCard.refreshBalance` self-heals via shared `ensureEngineSession`. `firebase/authUtils` exports the helper; `ConnectGoogleCalendar` migrates to it. | `ed6eeef8` |
+| 2026-05-31 | `views/Workspace.tsx` gains `solve()` handler + auto-reanalyzed handling (✓ closed bubble / ℹ updated bubble + `useTasks().refresh()`). `store/conversations.openTaskChat` no longer auto-fires solve; `markSolveStarted`/`markSolveFinished` track in-flight explicitly. `components/ChatComposer` gains optional `onSolve` prop + Lightbulb button (`Icon.solve`). `types.ts` SolveEvent.done.result.auto_reanalyzed added. | `9be36c9b` |
+| 2026-05-31 | `views/WhatsApp.tsx` subscribes to `whatsapp.threads.changed` (600 ms trailing debounce → loadThreads + active-chat reload). `reloadActiveMessages` extracted as useCallback. | `0e576197` |
+| 2026-05-28 | `views/Update.tsx` rebuilt as 3 ordered cards (Sync → Train → Update) gated by `setup.state`; Quick-start banner; default `View` is now `'update'` after the splash. New preload bindings `window.zylch.sync.run` + `window.zylch.setup.state`. Update card refetches `setup.state` on mount, after each Sync/Train/Update completion, and on `engine.ready` revival. | `d3de37ac` |
+| 2026-05-26 | `views/WhatsApp.tsx` composer (Enter=send, Shift+Enter=newline) + search bar (Enter=search, Esc=clear) with `match_snippet` on hits. `views/Update.tsx` renders `result.errors[]` as red/amber blocks (replaces false-green "No changes"). `views/Onboarding.tsx` `inferHosts` defaults unknown email domains to Google. | `ca784d0d..4e243bdb` |
+| 2026-05-26 | "Train assistant" card above Update — Train button + progress bar + per-agent result row driven by `window.zylch.agents.trainAll()`. Subscribes to `agents.train.progress`. | `3c152cc7` |
+| 2026-05-20 | MrCall tab live: `views/Mrcall.tsx` lists businesses + search-by-field with subscription-status dropdown + expandable anagraphic/billing cards. | `ed9ca585` |
+| 2026-05-20 | Onboarding unblocked for MrCall-only users (`ProfileFormFields includeGroups`); Calendar session fix (`installEngineTokenPusher` after `finalize`); Email tab gated on `IMAP_HOST`. | `2b0a54ce` |
+| 2026-05-20 | WhatsApp voice-note transcripts in the Source panel — 🎤 marker + "vocale trascritta" hint; `[vocale]` placeholder while pending. | [`../../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../../engine/docs/execution-plans/whatsapp-voice-transcription.md) |
+| 2026-05-15 | Cross-channel Source-panel toggle; Calendar self-healing UI; Update view elapsed timer + overshot hint; WhatsApp source panel Fase 4a+4b. | `b57fcc4f` · `a03f6831` · `0b33fdf4` · `2a8bc2c3` |
 
 ## In progress
 
-- Click-test every signin path in `npm run dev`.
+- Click-test every signin path in `npm run dev` (Continue with Google + email/password).
 - Click-test on a packaged DMG/EXE (blocked on `GOOGLE_SIGNIN_CLIENT_SECRET` repo secret).
 - Mac validation of cross-channel task UI (needs a real cross-channel task).
-- Mac validation of Update staged progress emissions.
-- Mac validation of Calendar self-healing recovery path.
+- Mac validation of Update staged progress emissions on the 3-card flow.
 - Mac validation of pre-existing UI flows (close-note composer, IMAP archive, Open → Tasks filter, end-to-end memory tool round-trip in chat).
 
 ## Next steps
 
 1. `cd app && npm run dev` → exercise Continue with Google + email/password → IdentityBanner correct → `auth:bindProfile` attaches sidecar or routes to Onboarding.
-2. Trigger `/update` in the dev build → confirm progress emissions at 5/20/30/60/80-90/95/100 and the elapsed timer ticks.
-3. Settings → "Connect Google Calendar" on a session where the initial token push was missed → confirm the recovery path closes the loop (no raw `_NotSignedInError`).
-4. Produce a cross-channel task (synthetic SQL or fresh Update) → confirm the Email/WhatsApp toggle in `ThreadPanel` renders both tabs with correct counters.
+2. Open a task → click Solve with typed instructions → approve send_email → bubble "✓ Task chiusa automaticamente" → tab Tasks reflects the closure without a refresh click.
+3. Settings → balance should refresh on focus AND after an Update grosso (delta visible).
+4. Trigger `/update` in the dev build → confirm progress emissions at 5/20/30/60/80-90/95/100 and the elapsed timer ticks.
 5. Add `GOOGLE_SIGNIN_CLIENT_SECRET` repo secret at *Settings → Secrets and variables → Actions*.
 
 ## Known issues
 
-- **WhatsApp send + search not live-verified** — typecheck passes; engine-side test against a real temp DB passes (12 tests); the actual send to a real recipient + search rendering needs Mario QA with a connected WhatsApp.
-- **Update error blocks not live-verified visually** — engine returns the structured `errors[]` correctly (proven end-to-end via the real RPC with a bogus host); the red/amber render path needs eyes-on in the app.
-- **No live end-to-end verification of any Firebase signin path** from this machine.
-- **MrCall-credits v1 not live-verified.**
+- **Packaged DMG hasn't seen any of 2026-05-31's changes yet** — `npm run dev` flows worked; PyInstaller bundle needs a fresh `v*` tag.
+- **Open no longer auto-solves**: users expecting the old behaviour need to click the lightbulb (empty-text Solve reproduces the legacy auto-trigger).
+- **`tasks.complete` / `tasks.skip` / `tasks.reopen` have no `*.changed` notification** — other windows on the same profile won't update their task list until manual refresh. The new `auto_reanalyzed` field on `tasks.solve.event.done` partially addresses this for the Solve-then-close path; the other paths are still silent.
 - **Cross-channel `ThreadPanel` mode not exercised** on a real task.
-- **Update staged progress and Calendar self-healing not live-verified.**
+- **No live end-to-end verification of any Firebase signin path** from this machine.
+- **Update staged progress and Calendar self-healing not live-verified** end-to-end.
 - **Onboarding-mode invariants not stress-tested** on a fresh Mac with empty `~/.zylch/profiles/`.
-- `tasks.complete` / `tasks.skip` / `tasks.reopen` have no `*.changed` notification — other windows on the same profile won't update their task list until manual refresh.
 - No unit test coverage on the renderer side. IPC contract is the only enforcement; payload-shape mismatches surface only at runtime.
 
 ## Where stable state lives

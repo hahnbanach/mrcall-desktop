@@ -6,6 +6,54 @@ materialises) `app/docs/harness-backlog.md`.
 
 ## Open
 
+- [ ] **No contract test for the desktop ↔ mrcall-agent transport (gzip / SSE / streaming shape).**
+  Discovered: 2026-05-31 (the "credits never decrease" investigation).
+  Impact: the production proxy was forwarding `httpx.aiter_raw()` bytes
+  with `Content-Encoding` stripped, so a gzipped SSE body landed at the
+  desktop as a parseable-as-text-stream that the SSE parser silently
+  dropped — `events=0 stop_reason=end_turn` with no useful error. The
+  desktop also had no diagnostic for "200 OK SSE, body empty" until we
+  added byte-preview + event-count logging in `proxy_client`. Same
+  class of gap as the IPC contract test below, but at the HTTP
+  boundary.
+  Recommendation: a tiny contract test that POSTs a hello-world payload
+  to `https://zylch.mrcall.ai/api/desktop/llm/proxy` and asserts the
+  raw first chunk starts with `event:` (text), not `\x1f\x8b` (gzip).
+  Can live in `mrcall-agent` since it's a server invariant; the
+  desktop's `_wrap_gzip_iter` keeps a defensive fallback either way.
+
+- [ ] **No CI check that the dispatcher's DEBUG `params=` log redacts new secret-bearing RPC params.**
+  Discovered: 2026-05-31 (Firebase JWT leak via narration pipeline).
+  Impact: stderr is captured by the renderer's narration feature and
+  forwarded to the LLM proxy for summarisation. `rpc/server._redact_params`
+  masks `id_token` / `access_token` / `api_key` / `password` /
+  `client_secret` / `secret`, plus a per-method table. A new RPC that
+  accepts (say) `otp_code` or `session_cookie` without updating the
+  tables would leak silently. No test enforces "all RPCs that accept a
+  bearer-like param are in the table".
+  Recommendation: a pytest that walks the JSON-RPC dispatch table,
+  introspects each handler's expected params via the schema / docstring,
+  and asserts any field name that matches a "looks secret" heuristic
+  (regex on field name only, the value is structured) is in the redact
+  table.
+
+- [ ] **No CI check that mrcall-agent's pricing YAML stays aligned with Anthropic's published prices.**
+  Discovered: 2026-05-31 (Opus 4.7 priced at $15/$75, the Opus 4.1
+  price; Mario was overcharged for weeks).
+  Impact: `mrcall-agent/config/llm_pricing.yaml` is hand-maintained.
+  Anthropic's docs page lists current pricing per model ID. A drift
+  here either overcharges (user pain) or undercharges (revenue leak)
+  silently. Same class of gap as the model allowlist: Haiku 4.5's
+  dated ID `claude-haiku-4-5-20251001` was missing entirely until the
+  desktop hit "unknown_model".
+  Recommendation: a scheduled (weekly?) CI job in `mrcall-agent` that
+  fetches `https://platform.claude.com/docs/en/about-claude/models/overview`,
+  parses the latest comparison table, and asserts each model in the
+  YAML matches the published `input` / `output` price. New models
+  not in YAML → warn, don't fail (we may not be ready to bill them).
+  This is a `mrcall-agent` harness gap technically, listed here for
+  cross-cutting visibility.
+
 - [ ] **faster-whisper packaging (ctranslate2 + av) unverified in a packaged build; no test for the live WhatsApp download path.**
   Discovered: 2026-05-20 (WhatsApp voice-note transcription landing —
   dev-verified only).

@@ -284,14 +284,46 @@ Event union (see `app/src/renderer/src/types.ts:SolveEvent`):
   "approved": boolean
 }
 
-// Clean completion (incl. user-cancelled).
-{ "type": "done", "result": { "messages": list, "cancelled"?: boolean } }
+// Clean completion (incl. user-cancelled). When the executor ran at
+// least one mutating tool (send_email, send_whatsapp, send_sms,
+// update_memory, run_python), the engine kicks off `tasks.reanalyze`
+// before emitting `done` and decorates the payload with
+// `auto_reanalyzed`. Renderer uses `auto_reanalyzed.action='closed'`
+// to flip the conversation to read-only and refresh `tasks.list`;
+// pure-research solves omit the field entirely (no extra LLM call).
+{
+  "type": "done",
+  "result": {
+    "messages": list,
+    "cancelled"?: boolean,
+    "auto_reanalyzed"?: {
+      "action": "kept" | "closed" | "updated" | "skipped",
+      "reason"?: string,
+      "error"?: string
+    }
+  }
+}
 
 // Unexpected exception in run(). CancelledError does NOT come
 // through here — it's caught and emitted as `done` with
 // `result.cancelled: True`.
 { "type": "error", "message": string }
 ```
+
+### `whatsapp.threads.changed` (notification, no payload)
+
+Emitted by the engine after a successful `_on_message` (live MessageEv)
+or `_on_history` (HistorySyncEv batch) stores at least one row into
+`whatsapp_messages`. The renderer's `views/WhatsApp.tsx` subscribes and
+debounces (~600 ms trailing) before re-fetching `whatsapp.list_threads`
++ the active chat's messages. Without this, the thread list reflected
+the state at first connect and never updated — Mario reported 4-hour-old
+messages still showing "6d ago" because no fresh `loadThreads()` ran.
+
+Important nuance: the engine boot-time auto-reconnect in
+`rpc/server.py:_auto_reconnect_whatsapp` must use the real
+`_make_notify()` (not a no-op) for these notifications to reach the
+renderer on the most common path.
 
 ### `tasks.topic_dedup_now()`
 
