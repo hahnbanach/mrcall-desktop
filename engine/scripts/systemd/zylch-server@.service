@@ -1,0 +1,25 @@
+[Unit]
+# Cross-machine WS engine, one instance per profile (%i = Firebase uid).
+# Start:  sudo systemctl enable --now zylch-server@<uid>
+# Each instance reads its bind address from /etc/zylch/<uid>.conf
+# (ZYLCH_WS_ADDR=127.0.0.1:<port>) and serves that profile's data over a
+# loopback WebSocket — reachable via SSH tunnel or a Caddy reverse-proxy.
+Description=zylch cross-machine WS engine (profile %i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mal
+Group=mal
+Environment=HOME=/home/mal
+WorkingDirectory=/home/mal
+EnvironmentFile=/etc/zylch/%i.conf
+ExecStart=/home/mal/zylch-engine/venv/bin/zylch -p %i serve --ws ${ZYLCH_WS_ADDR}
+Restart=on-failure
+RestartSec=3
+# Engine logs INFO/DEBUG to ~/.zylch/profiles/%i/zylch.log; only WARNING+
+# reaches journald (journalctl -u zylch-server@%i).
+
+[Install]
+WantedBy=multi-user.target

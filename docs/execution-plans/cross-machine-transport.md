@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-progress
 owner: cross-cutting (engine + app + IPC + release)
 created: 2026-05-31
 discipline: |
@@ -14,6 +14,51 @@ discipline: |
 ---
 
 # Cross-machine transport (backend remoto + client thin)
+
+## Status — 2026-06-01 (in-progress)
+
+- **Phase 1 ✅** (commit `5294587a`) — engine WS (`zylch serve --ws`), Firebase
+  JWT handshake gate (`uid == OWNER_ID`), shared `dispatch_raw`, `auth.refresh`,
+  4401-on-expiry. Live-validated on Mac.
+- **Phase 2 ✅** (commit `5a4f378a`) — Electron thin client: `RpcClient`
+  interface, `WebSocketRpcClient`, `Settings → Backend location` (Local/Remote),
+  per-window token cache (`account:pushToken`, out-of-band so main can set the
+  WS handshake header). Live-validated: identity + Tasks + Emails over WS.
+  Fixes that landed here:
+  - the WS client **queues early RPCs** and flushes on `open`, mirroring the
+    stdio pipe — without it, views that mount before the socket connects fail
+    with "not connected" (this was hiding the Email tab);
+  - `ws`'s optional natives (`bufferutil`/`utf-8-validate`) must be `external`
+    in `electron.vite.config.ts` or `electron-vite dev` won't bundle;
+  - a spawn ENOENT now emits a clean `{alive:false}` status instead of crashing.
+- **Phase 3a ✅** — engine deployed on the Scaleway VPS (`51.158.109.183`,
+  Ubuntu 24.04 aarch64, py3.12) at `~/zylch-engine`, reached from the Mac via an
+  **SSH tunnel** (`ssh -L 5174:127.0.0.1:5174 claude`). Proven: `settings.get` +
+  `emails.list_inbox` served from the VPS, live.
+- **Phase 3c ✅** — systemd **template** `zylch-server@<uid>.service` (artifact:
+  `engine/scripts/systemd/zylch-server@.service`) + per-profile
+  `/etc/zylch/<uid>.conf` (`ZYLCH_WS_ADDR=127.0.0.1:<port>`). Enabled (boot),
+  auto-restart proven (`kill -9` → respawn, `NRestarts=1`).
+
+### Architecture correction (2026-06-01)
+"One daemon per **Linux user**" — NOT per-Firebase-tenant. The engine is **one
+process per profile** (fcntl lock + single active-profile globals: `settings`,
+`Storage`, `owner_id`-from-env), so a user's N profiles map to N template
+instances under their Linux account, fronted as one logical service. A true
+single-process-multi-profile engine would be a meaningful refactor — deferred
+unless required.
+
+### VPS landscape
+Already running: `mrcall-agent` (Docker `:8000`) + postgres (`:5432`); a node on
+`:8080`. `:80`/`:443` free. No reverse proxy yet. `~/.zylch/profiles/` already
+holds 4 profiles. All heavy aarch64/py3.12 wheels resolved cleanly.
+
+### Pending
+- **3b — Caddy + TLS + domain** for a public `wss://` (needs a DNS name → the IP).
+  The SSH tunnel is already a valid, secure endpoint (nothing public); Caddy is
+  only for tunnel-free / future-mobile access.
+- The other 3 VPS profiles: trivial via the template (one conf + `enable --now`).
+- Multi-client broadcast + reconnect-resume → Phase 5.
 
 ## Cosa Mario ha chiesto
 
