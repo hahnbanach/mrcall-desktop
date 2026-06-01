@@ -1,5 +1,6 @@
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process'
 import { EventEmitter } from 'events'
+import type { RpcClient } from './rpcClient'
 
 type Pending = {
   resolve: (v: unknown) => void
@@ -23,16 +24,24 @@ export interface SidecarOptions {
 }
 
 /**
- * SidecarClient — owns the `zylch rpc` child process.
+ * StdioRpcClient — owns the local `zylch rpc` child process (the default,
+ * privacy-first transport: engine spawned on the same machine, JSON-RPC
+ * over the child's stdin/stdout). Implements the transport-agnostic
+ * `RpcClient` interface so `index.ts` treats it interchangeably with the
+ * cross-machine `WebSocketRpcClient`.
+ *
  * - Line-buffers stdout, parses JSON-RPC 2.0.
  * - Dispatches responses by `id` to pending promises.
  * - Emits 'notification' events for server-initiated messages.
+ *   `engine.ready` flows through as a `'notification'` exactly as before —
+ *   `index.ts` intercepts it to synthesise the `ready:true` status. This
+ *   path is deliberately left byte-identical to the pre-Phase-2 behaviour.
  * - Keeps the last N lines of stderr in a ring so callers can build a
  *   helpful error after the child dies (Bug 2: "sidecar not running" was
  *   shown to the renderer with no context — now we attach the captured
  *   reason via `lastError` and `lastStderrLines`).
  */
-export class SidecarClient extends EventEmitter {
+export class StdioRpcClient extends EventEmitter implements RpcClient {
   private proc: ChildProcessWithoutNullStreams | null = null
   private pending = new Map<number, Pending>()
   private nextId = 1
@@ -160,9 +169,31 @@ export class SidecarClient extends EventEmitter {
       this.pending.clear()
       this.emit('exit', { code, signal, classified: cls })
     })
-    this.proc.on('error', (err) => {
-      console.error('[sidecar] error', err)
-      this.emit('error', err)
+    this.proc.on('error', (err: NodeJS.ErrnoException) => {
+      // spawn() failed — most commonly ENOENT (the zylch binary isn't at
+      // this path; in dev that means ZYLCH_BINARY is unset and the stale
+      // default doesn't exist). Emitting a bare 'error' on THIS
+      // EventEmitter with no 'error' listener re-throws it as an UNCAUGHT
+      // exception and crashes the app. Treat it like a fatal start
+      // instead: classify it and surface the same `'exit'` event index.ts
+      // already renders as a clean {alive:false} status banner.
+      console.error('[sidecar] spawn error', err)
+      this.dead = true
+      this.lastError = err.message
+      const cls =
+        err.code === 'ENOENT'
+          ? {
+              code: 'binary_not_found',
+              message: `Engine binary not found at ${this.opts.binary}.`,
+              hint: 'Set ZYLCH_BINARY to a valid zylch path, or reinstall the app.'
+            }
+          : { code: 'spawn_failed', message: `Could not start engine: ${err.message}` }
+      for (const [, p] of this.pending) {
+        clearTimeout(p.timer)
+        p.reject(new Error(cls.message))
+      }
+      this.pending.clear()
+      this.emit('exit', { code: null, signal: null, classified: cls })
     })
   }
 
@@ -248,3 +279,11 @@ export class SidecarClient extends EventEmitter {
     }
   }
 }
+
+/**
+ * Back-compat alias. The class was renamed `SidecarClient` →
+ * `StdioRpcClient` when the transport abstraction landed (cross-machine
+ * transport, Phase 2). Existing imports keep working.
+ */
+export const SidecarClient = StdioRpcClient
+export type SidecarClient = StdioRpcClient

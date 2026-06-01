@@ -68,11 +68,15 @@ export type SidecarStatusEvent =
       // i.e. all engine modules are imported and the RPC dispatcher is
       // serving. Until then, mount-time RPCs would queue against a busy
       // sidecar and timeout client-side. The renderer shows a splash
-      // while !ready on first boot of a brand-new profile.
+      // while !ready on first boot of a brand-new profile. Over the remote
+      // WebSocket transport there is no `engine.ready`; `ready` is
+      // synthesised when the socket reaches OPEN.
       ready?: boolean
       // Boot duration in ms (only set on the ready:true event), for
       // diagnostics in the renderer console.
       bootMs?: number
+      // Remote WebSocket transport only: the connected endpoint.
+      remoteUrl?: string
     }
   | {
       alive: false
@@ -406,17 +410,68 @@ const api = {
         'settings.update',
         { updates },
         30000
-      )
+      ),
+    // ── Backend location (per-installation, cross-machine transport) ──
+    // These are renderer-only IPCs (no sidecar): the choice of LOCAL
+    // stdio vs REMOTE WebSocket is a property of THIS machine, persisted
+    // machine-global in ~/.zylch/backend-config.json, read at
+    // window-creation time to pick the transport.
+    getBackendLocation: (): Promise<{ location: 'local' | 'remote'; url?: string }> =>
+      ipcRenderer.invoke('settings:getBackendLocation') as Promise<{
+        location: 'local' | 'remote'
+        url?: string
+      }>,
+    setBackendLocation: (
+      location: 'local' | 'remote',
+      url?: string
+    ): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('settings:setBackendLocation', location, url) as Promise<{
+        ok: boolean
+      }>,
+    // Opens a transient WS to `url` with the current Firebase token and
+    // calls account.who_am_i, reporting the identity on success or the
+    // classified failure (401 / 403 / refused / timeout) otherwise.
+    // Diagnostic only — does not change the saved config or the live
+    // client.
+    testBackendConnection: (
+      url: string
+    ): Promise<
+      | { ok: true; signedIn: boolean; uid?: string; email?: string | null }
+      | { ok: false; code: string; message: string }
+    > =>
+      ipcRenderer.invoke('backend:testConnection', url) as Promise<
+        | { ok: true; signedIn: boolean; uid?: string; email?: string | null }
+        | { ok: false; code: string; message: string }
+      >
   },
   sidecar: {
     restart: (): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('sidecar:restart') as Promise<{ ok: boolean }>
   },
   account: {
-    // Push a freshly-issued Firebase ID token from the renderer into the
-    // engine. The engine holds it in-memory and uses it as the Bearer
-    // token for outgoing StarChat calls. Called after signin and on
-    // every proactive refresh (~50 min cadence in authUtils.ts).
+    // Out-of-band Firebase token push to the MAIN process (Phase 2,
+    // cross-machine transport). This is the CANONICAL token path: main
+    // needs a token to open the remote WebSocket handshake BEFORE any RPC
+    // channel exists, so the token cannot ride in-band over
+    // `account.set_firebase_token`. Main caches it per window; in LOCAL
+    // mode it forwards into the engine via `account.set_firebase_token`
+    // (preserving today's effect — the local engine needs the in-memory
+    // token for outbound StarChat / mrcall calls); in REMOTE mode the WS
+    // client uses it for the `Authorization: Bearer` handshake header and
+    // `auth.refresh`. Wired from `firebase/authUtils.ts setTokenPusher`.
+    pushToken: (args: {
+      uid: string
+      email: string | null
+      idToken: string
+      expiresAtMs: number
+    }): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('account:pushToken', args) as Promise<{ ok: boolean }>,
+    // Push a freshly-issued Firebase ID token from the renderer DIRECTLY
+    // into the engine over JSON-RPC. Kept for back-compat; the canonical
+    // flow is `pushToken` above (which also covers the remote-WS handshake
+    // that this in-band RPC cannot reach). Safe to keep calling — over WS
+    // the engine derives its session from the verified handshake token, so
+    // a redundant set_firebase_token is harmless.
     setFirebaseToken: (args: {
       uid: string
       email: string | null

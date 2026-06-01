@@ -367,11 +367,41 @@ export interface ZylchAPI {
     update: (
       updates: Record<string, string>
     ) => Promise<{ ok: boolean; applied: string[]; skipped_unchanged: string[] }>
+    /** Per-installation backend location (LOCAL stdio vs REMOTE
+     *  WebSocket). Persisted machine-global in
+     *  ~/.zylch/backend-config.json, NOT in the profile .env. Renderer-only
+     *  IPC (no sidecar). */
+    getBackendLocation: () => Promise<{ location: 'local' | 'remote'; url?: string }>
+    setBackendLocation: (
+      location: 'local' | 'remote',
+      url?: string
+    ) => Promise<{ ok: boolean }>
+    /** Diagnostic: open a transient WS to `url` with the current Firebase
+     *  token + probe identity via account.who_am_i. Reports the identity
+     *  on success or the classified failure (401/403/refused/timeout). */
+    testBackendConnection: (
+      url: string
+    ) => Promise<
+      | { ok: true; signedIn: boolean; uid?: string; email?: string | null }
+      | { ok: false; code: string; message: string }
+    >
   }
   sidecar: {
     restart: () => Promise<{ ok: boolean }>
   }
   account: {
+    /** Out-of-band Firebase token push to the MAIN process (canonical
+     *  Phase-2 path). Main caches it per window for the remote-WS
+     *  handshake AND forwards it into a LOCAL engine via
+     *  set_firebase_token. */
+    pushToken: (args: {
+      uid: string
+      email: string | null
+      idToken: string
+      expiresAtMs: number
+    }) => Promise<{ ok: boolean }>
+    /** Direct in-band push to the engine. Back-compat; prefer pushToken
+     *  (which also covers the remote-WS handshake). */
     setFirebaseToken: (args: {
       uid: string
       email: string | null
@@ -525,8 +555,14 @@ export type SidecarStatusEvent =
       profile: string
       // `ready` becomes true when the sidecar emits `engine.ready` —
       // i.e. all modules imported and the RPC dispatcher is serving.
+      // Over the remote WebSocket transport there is no `engine.ready`;
+      // `ready` is synthesised the instant the socket reaches OPEN.
       ready?: boolean
       bootMs?: number
+      // Present only for the remote WebSocket transport: the endpoint the
+      // window is connected to (e.g. `wss://desktop.mrcall.ai`). Lets the
+      // IdentityBanner surface "Remote: …" so a remote session is obvious.
+      remoteUrl?: string
     }
   | {
       alive: false

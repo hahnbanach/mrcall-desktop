@@ -6,7 +6,16 @@ export default defineConfig({
   main: {
     build: {
       outDir: 'out/main',
-      rollupOptions: { input: { index: resolve(__dirname, 'src/main/index.ts') } }
+      rollupOptions: {
+        input: { index: resolve(__dirname, 'src/main/index.ts') },
+        // `ws` does an OPTIONAL `require('bufferutil')` / `require('utf-8-validate')`
+        // (native speedups it works fine without — it try/catches their absence).
+        // electron-vite's dev bundle tries to resolve them and dies with
+        // "Could not resolve 'bufferutil' imported by 'ws'". Marking them external
+        // leaves the requires as runtime calls; ws falls back to pure JS. (The prod
+        // `build` already tolerated this; this makes `dev` match.)
+        external: ['bufferutil', 'utf-8-validate']
+      }
     }
   },
   preload: {

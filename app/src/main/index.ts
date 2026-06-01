@@ -3,7 +3,15 @@ import { join } from 'path'
 import { statSync, existsSync, openSync, readSync, closeSync } from 'fs'
 import { homedir } from 'os'
 import { randomUUID } from 'crypto'
-import { SidecarClient } from './sidecar'
+import { StdioRpcClient } from './sidecar'
+import { WebSocketRpcClient } from './wsRpcClient'
+import type { RpcClient, RpcStatusEvent } from './rpcClient'
+import {
+  readBackendConfig,
+  writeBackendConfig,
+  type BackendConfig,
+  type BackendLocation
+} from './backendConfig'
 import {
   createProfileFS,
   createProfileForFirebaseUser,
@@ -85,11 +93,14 @@ const METHOD_TIMEOUTS: Record<string, number> = {
   // while a parallel chat.send initialises — 60s avoids spurious timeouts.
 }
 
-// windowId → { sidecar, profile }. Each BrowserWindow has its own sidecar
-// bound to a specific profile. Lookup is driven by `event.sender` in IPC
-// handlers so every RPC goes to the correct child process.
+// windowId → { sidecar, profile }. Each BrowserWindow has its own RPC
+// client (local stdio child OR remote WebSocket) bound to a specific
+// profile. Lookup is driven by `event.sender` in IPC handlers so every
+// RPC goes to the correct transport. The field is still named `sidecar`
+// for historical continuity, but it is now an `RpcClient` — the concrete
+// type depends on the per-installation backend config.
 interface WindowEntry {
-  sidecar: SidecarClient
+  sidecar: RpcClient
   profile: string
   window: BrowserWindow
 }
@@ -225,6 +236,24 @@ function stopLogTailer(winId: number): void {
 // lifetime, including the auth-pending phase when no sidecar is bound.
 const windowPartitions = new Map<number, string>()
 
+// windowId → latest Firebase token payload pushed by the renderer
+// (`account:pushToken`). Kept SEPARATE from `windowEntries` for the same
+// reason `windowPartitions` is: the renderer may push a token while no
+// client is bound yet, and — critically for remote mode — the WS client's
+// `getToken()` must be able to read the freshest token at connect time,
+// which can be before the entry is fully registered. `account:pushToken`
+// writes here unconditionally. The full payload is retained because the
+// LOCAL-mode forward to `account.set_firebase_token` needs uid + expiry,
+// while the REMOTE-mode WS handshake needs only the raw `idToken`. Never
+// persisted to disk.
+interface CachedToken {
+  uid: string
+  email: string | null
+  idToken: string
+  expiresAtMs: number
+}
+const windowTokens = new Map<number, CachedToken>()
+
 // Returns the Firebase IndexedDB partition for `uid`: if the profile's
 // `.env` already pins one via `FIREBASE_PARTITION`, reuse it (so the
 // existing Firebase session in that partition's IndexedDB is restored
@@ -260,7 +289,11 @@ function profileExistsById(id: string): boolean {
   return listProfiles().some((p) => p.id === id)
 }
 
-function spawnSidecar(profile: string, window: BrowserWindow): SidecarClient {
+// Build the LOCAL stdio client (the default, privacy-first transport).
+// This body is the pre-Phase-2 `spawnSidecar` verbatim — wiring, status
+// synthesis, and timers are deliberately unchanged so a local session
+// behaves byte-identically to before the transport abstraction landed.
+function makeStdioClient(profile: string, window: BrowserWindow): RpcClient {
   // Reuse the "Continue with Google" Desktop OAuth client as the
   // default Calendar client ID. Same Cloud project (`talkmeapp-e696c`),
   // same Desktop type — Google accepts any 127.0.0.1 loopback redirect
@@ -281,7 +314,7 @@ function spawnSidecar(profile: string, window: BrowserWindow): SidecarClient {
   if (GOOGLE_SIGNIN_CLIENT_SECRET) {
     envOverrides['GOOGLE_CALENDAR_CLIENT_SECRET_DEFAULT'] = GOOGLE_SIGNIN_CLIENT_SECRET
   }
-  const sidecar = new SidecarClient({
+  const sidecar = new StdioRpcClient({
     // Packaged builds don't need a specific cwd: the PyInstaller
     // binary is self-contained. In dev we keep the repo root so
     // relative imports still resolve if anything ever regresses.
@@ -350,6 +383,157 @@ function spawnSidecar(profile: string, window: BrowserWindow): SidecarClient {
   return sidecar
 }
 
+// Build the REMOTE WebSocket client. The engine runs elsewhere
+// (`zylch -p <uid> serve --ws HOST:PORT`); we connect with the cached
+// Firebase token as the `Authorization: Bearer` handshake header.
+//
+// Unlike stdio, this client OWNS its liveness synthesis via a unified
+// `'status'` event (the WS engine never emits `engine.ready`). We forward
+// that event verbatim to the existing `sidecar:status` channel, so the
+// renderer's boot splash + SidecarStatusBanner + engine-ready gate all
+// work unchanged. `'notification'` is forwarded exactly like stdio.
+function makeWsClient(
+  profile: string,
+  window: BrowserWindow,
+  url: string
+): RpcClient {
+  const client = new WebSocketRpcClient(
+    url,
+    // getToken: read the freshest token the renderer has pushed for this
+    // window. Resolves null until the first `account:pushToken`, which the
+    // client handles by surfacing "not signed in" and retrying.
+    async () => windowTokens.get(window.id)?.idToken ?? null,
+    profile
+  )
+  client.on('notification', (msg) => {
+    console.log(`[main][w${window.id}][ws] notification method=${msg.method}`)
+    if (!window.isDestroyed()) {
+      window.webContents.send('rpc:notification', msg)
+    }
+  })
+  client.on('status', (status: RpcStatusEvent) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send('sidecar:status', status)
+    }
+  })
+  client.on('exit', (info: { code: number | null; classified?: { code: string; message: string } }) => {
+    console.log(`[main][w${window.id}][ws] client exit code=${info?.code}`)
+  })
+  client.start()
+  return client
+}
+
+// Transport factory. Reads the per-installation backend config and
+// returns the matching `RpcClient`. The field name `sidecar` survives in
+// `WindowEntry` for continuity, but it may now be a WebSocket client.
+function spawnSidecar(profile: string, window: BrowserWindow): RpcClient {
+  const cfg = readBackendConfig()
+  if (cfg.location === 'remote' && cfg.url) {
+    console.log(`[main][w${window.id}] backend=remote url=${cfg.url} profile=${profile}`)
+    return makeWsClient(profile, window, cfg.url)
+  }
+  console.log(`[main][w${window.id}] backend=local profile=${profile}`)
+  return makeStdioClient(profile, window)
+}
+
+// Push the cached Firebase token into a LOCAL engine via
+// `account.set_firebase_token`, preserving the pre-Phase-2 effect: the
+// local sidecar needs the in-memory token for outbound StarChat / mrcall
+// calls. No-op in remote mode (the WS engine derives its session from the
+// VERIFIED handshake token instead). Best-effort + isolated so a transient
+// miss never throws into the IPC handler. The engine requires uid +
+// expires_at_ms, so we forward the full cached payload (same shape the
+// renderer's legacy RPC pusher sent).
+async function forwardTokenToLocalEngine(
+  entry: WindowEntry,
+  token: CachedToken
+): Promise<void> {
+  if (readBackendConfig().location === 'remote') return
+  try {
+    await entry.sidecar.call(
+      'account.set_firebase_token',
+      {
+        uid: token.uid,
+        email: token.email,
+        id_token: token.idToken,
+        expires_at_ms: token.expiresAtMs
+      },
+      15000
+    )
+  } catch (e) {
+    console.warn(`[main][w${entry.window.id}] forwardTokenToLocalEngine failed`, e)
+  }
+}
+
+// Open a TRANSIENT WebSocket to `url` with `token` and probe identity via
+// `account.who_am_i`. Used by the Settings "Test connection" button. The
+// throwaway client never auto-reconnects past the single attempt we wait
+// on: we resolve on the first `'status'` event (up → probe, down → report
+// the failure) or a hard timeout, then tear it down. The token getter is
+// a fixed snapshot — a test never refreshes.
+async function testBackendConnection(
+  url: string,
+  token: CachedToken,
+  profile: string
+): Promise<
+  | { ok: true; signedIn: boolean; uid?: string; email?: string | null }
+  | { ok: false; code: string; message: string }
+> {
+  const client = new WebSocketRpcClient(url, async () => token.idToken, profile)
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (
+      r:
+        | { ok: true; signedIn: boolean; uid?: string; email?: string | null }
+        | { ok: false; code: string; message: string }
+    ): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      try {
+        client.stop()
+      } catch {}
+      resolve(r)
+    }
+    const timer = setTimeout(() => {
+      finish({ ok: false, code: 'timeout', message: 'Connection timed out (10s).' })
+    }, 10000)
+
+    client.on('status', (status: RpcStatusEvent) => {
+      if (settled) return
+      if (status.alive) {
+        // Socket is open + authenticated. Probe identity.
+        client
+          .call<{ signed_in: boolean; uid?: string; email?: string | null }>(
+            'account.who_am_i',
+            {},
+            10000
+          )
+          .then((who) => {
+            finish({
+              ok: true,
+              signedIn: !!who.signed_in,
+              uid: who.uid,
+              email: who.email ?? null
+            })
+          })
+          .catch((e) => {
+            finish({
+              ok: false,
+              code: 'rpc_failed',
+              message: e instanceof Error ? e.message : String(e)
+            })
+          })
+      } else {
+        // Handshake/connect failed (401 / 403 / refused / bad url). The
+        // client already classified it.
+        finish({ ok: false, code: status.code, message: status.message })
+      }
+    })
+    client.start()
+  })
+}
+
 // Resolver used by IPC handlers — `event.sender` is a WebContents.
 function entryFromEvent(event: Electron.IpcMainInvokeEvent): WindowEntry | null {
   const win = BrowserWindow.fromWebContents(event.sender)
@@ -360,7 +544,7 @@ function entryFromEvent(event: Electron.IpcMainInvokeEvent): WindowEntry | null 
 // Spawn a sidecar for an existing window and register it in
 // windowEntries. Called by `auth:bindProfile` after Firebase signin
 // attaches a sidecar to an auth-pending window in-place.
-function attachSidecarToWindow(win: BrowserWindow, profile: string): SidecarClient {
+function attachSidecarToWindow(win: BrowserWindow, profile: string): RpcClient {
   const sidecar = spawnSidecar(profile, win)
   const existing = windowEntries.get(win.id)
   if (existing) {
@@ -447,6 +631,7 @@ function createAuthPendingWindow(
     }
     windowPartitions.delete(win.id)
     windowLogBuffers.delete(win.id)
+    windowTokens.delete(win.id)
     stopLogTailer(win.id)
   })
 
@@ -999,6 +1184,115 @@ function registerIpc(): void {
       return { ok: false }
     }
   })
+
+  // Out-of-band Firebase token push (Phase 2, cross-machine transport).
+  // The renderer's `setTokenPusher` calls this on signin + every refresh.
+  // This is the CANONICAL token path now: main needs a token to open the
+  // WS handshake BEFORE any RPC channel exists, so the token cannot ride
+  // in-band over `account.set_firebase_token`. We cache it per window
+  // (`windowTokens`) so the WS client's `getToken()` can read it, and —
+  // in LOCAL mode — forward it into the engine via
+  // `account.set_firebase_token` to preserve today's effect (the local
+  // engine still needs the in-memory token for outbound StarChat / mrcall
+  // calls). Never persisted to disk.
+  ipcMain.handle(
+    'account:pushToken',
+    async (
+      event,
+      args: { uid: string; email: string | null; idToken: string; expiresAtMs: number }
+    ): Promise<{ ok: boolean }> => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (!win) return { ok: false }
+      if (
+        !args ||
+        typeof args.idToken !== 'string' ||
+        !args.idToken ||
+        typeof args.uid !== 'string' ||
+        !args.uid
+      ) {
+        return { ok: false }
+      }
+      const cached: CachedToken = {
+        uid: args.uid,
+        email: typeof args.email === 'string' ? args.email : null,
+        idToken: args.idToken,
+        expiresAtMs:
+          typeof args.expiresAtMs === 'number' && args.expiresAtMs > 0
+            ? args.expiresAtMs
+            : Date.now() + 3600_000
+      }
+      windowTokens.set(win.id, cached)
+      // LOCAL mode: forward to the engine so set_firebase_token's effect
+      // is preserved. REMOTE mode: forwardTokenToLocalEngine no-ops; the
+      // WS handshake/auth.refresh uses the cached token instead.
+      const entry = windowEntries.get(win.id)
+      if (entry) {
+        await forwardTokenToLocalEngine(entry, cached)
+      }
+      return { ok: true }
+    }
+  )
+
+  // Per-installation backend location (Settings → "Backend location").
+  // Read at window-creation time to choose the transport. Stored
+  // machine-global in ~/.zylch/backend-config.json — NOT in the profile
+  // .env (the choice is a property of THIS machine, not the identity).
+  ipcMain.handle(
+    'settings:getBackendLocation',
+    async (): Promise<BackendConfig> => readBackendConfig()
+  )
+
+  ipcMain.handle(
+    'settings:setBackendLocation',
+    async (
+      _event,
+      location: BackendLocation,
+      url?: string
+    ): Promise<{ ok: boolean }> => {
+      if (location !== 'local' && location !== 'remote') return { ok: false }
+      if (location === 'remote') {
+        const u = (url || '').trim()
+        if (!u || !/^wss?:\/\//i.test(u)) return { ok: false }
+        writeBackendConfig({ location: 'remote', url: u })
+      } else {
+        writeBackendConfig({ location: 'local' })
+      }
+      console.log(`[main] backend location set to ${location}${url ? ` url=${url}` : ''}`)
+      return { ok: true }
+    }
+  )
+
+  // "Test connection" for the BackendLocationCard. Opens a TRANSIENT WS to
+  // the given URL with the originating window's cached Firebase token and
+  // calls `account.who_am_i`, reporting the identity on success or the
+  // classified failure (401 / 403 / refused) otherwise. Does NOT touch the
+  // persisted config or the window's live client — purely diagnostic.
+  ipcMain.handle(
+    'backend:testConnection',
+    async (
+      event,
+      url: string
+    ): Promise<
+      | { ok: true; signedIn: boolean; uid?: string; email?: string | null }
+      | { ok: false; code: string; message: string }
+    > => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (!win) return { ok: false, code: 'no_window', message: 'No window' }
+      const u = (url || '').trim()
+      if (!u || !/^wss?:\/\//i.test(u)) {
+        return { ok: false, code: 'bad_url', message: 'URL must start with ws:// or wss://' }
+      }
+      const cached = windowTokens.get(win.id)
+      if (!cached?.idToken) {
+        return {
+          ok: false,
+          code: 'not_signed_in',
+          message: 'Not signed in — sign in before testing a remote backend.'
+        }
+      }
+      return testBackendConnection(u, cached, windowEntries.get(win.id)?.profile ?? '')
+    }
+  )
 }
 
 function bootFirstWindow(): void {

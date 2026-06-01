@@ -183,6 +183,13 @@ export default function Settings(): JSX.Element {
 
       <section className="mb-6">
         <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
+          Backend location
+        </h2>
+        <BackendLocationCard />
+      </section>
+
+      <section className="mb-6">
+        <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
           Integrations
         </h2>
         <div className="space-y-3">
@@ -288,6 +295,256 @@ interface BalancePayload {
 // from the Firebase JWT server-side). Bare /plan lets the dashboard
 // pick up the business from the user's auth state.
 const TOPUP_URL = 'https://dashboard.mrcall.ai/plan'
+
+// ─── Backend location card (Local stdio vs Remote WebSocket) ─────────
+//
+// Cross-machine transport, Phase 2. Mirrors the LLMProviderCard radio
+// pattern. The choice is PER-INSTALLATION (this machine), persisted
+// machine-global in ~/.zylch/backend-config.json — NOT in the profile
+// .env. Local (default) spawns the on-device sidecar exactly as today;
+// Remote connects to `zylch -p <uid> serve --ws HOST:PORT` running on
+// another machine, authenticating with the window's Firebase token.
+//
+// Applying a change requires re-establishing the transport, so this card
+// owns its own Apply button that writes the config and then restarts the
+// window's client (`sidecar.restart()` re-reads the config and builds the
+// matching transport).
+function BackendLocationCard(): JSX.Element {
+  const signedIn = !!auth.currentUser
+  const [loading, setLoading] = useState(true)
+  // The persisted state (what's actually live after the last apply).
+  const [savedLocation, setSavedLocation] = useState<'local' | 'remote'>('local')
+  const [savedUrl, setSavedUrl] = useState('')
+  // The in-progress edits.
+  const [location, setLocation] = useState<'local' | 'remote'>('local')
+  const [url, setUrl] = useState('')
+  const [applying, setApplying] = useState(false)
+  const [applyMsg, setApplyMsg] = useState<{ kind: 'idle' | 'ok' | 'err'; text: string }>({
+    kind: 'idle',
+    text: ''
+  })
+  const [testMsg, setTestMsg] = useState<{ kind: 'idle' | 'ok' | 'err' | 'busy'; text: string }>(
+    { kind: 'idle', text: '' }
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const cfg = await window.zylch.settings.getBackendLocation()
+        if (cancelled) return
+        setSavedLocation(cfg.location)
+        setSavedUrl(cfg.url ?? '')
+        setLocation(cfg.location)
+        setUrl(cfg.url ?? '')
+      } catch {
+        /* fall back to local defaults already in state */
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const urlValid = location === 'local' || /^wss?:\/\/.+/i.test(url.trim())
+  const dirty = location !== savedLocation || (location === 'remote' && url.trim() !== savedUrl)
+
+  const handleTest = async (): Promise<void> => {
+    const u = url.trim()
+    if (!/^wss?:\/\/.+/i.test(u)) {
+      setTestMsg({ kind: 'err', text: 'Enter a ws:// or wss:// URL first.' })
+      return
+    }
+    setTestMsg({ kind: 'busy', text: 'Testing…' })
+    try {
+      const r = await window.zylch.settings.testBackendConnection(u)
+      if (r.ok) {
+        setTestMsg({
+          kind: 'ok',
+          text: r.signedIn
+            ? `Connected as ${r.email || r.uid || 'unknown'}.`
+            : 'Connected, but the engine reports no active session.'
+        })
+      } else {
+        setTestMsg({ kind: 'err', text: `${r.message} (${r.code})` })
+      }
+    } catch (e) {
+      setTestMsg({ kind: 'err', text: errorMessage(e) })
+    }
+  }
+
+  const handleApply = async (): Promise<void> => {
+    setApplying(true)
+    setApplyMsg({ kind: 'idle', text: '' })
+    try {
+      const r = await window.zylch.settings.setBackendLocation(
+        location,
+        location === 'remote' ? url.trim() : undefined
+      )
+      if (!r.ok) {
+        setApplyMsg({ kind: 'err', text: 'Failed to save backend location.' })
+        return
+      }
+      setSavedLocation(location)
+      setSavedUrl(location === 'remote' ? url.trim() : '')
+      // Re-establish the transport: restart() re-reads backend-config.json
+      // and builds the matching client (stdio ↔ ws).
+      setApplyMsg({ kind: 'idle', text: 'Reconnecting…' })
+      try {
+        await window.zylch.sidecar.restart()
+      } catch {
+        /* the restart banner / next RPC will surface failures */
+      }
+      setApplyMsg({
+        kind: 'ok',
+        text:
+          location === 'remote'
+            ? 'Saved. Reconnecting to the remote engine…'
+            : 'Saved. Restarting the local engine…'
+      })
+    } catch (e) {
+      setApplyMsg({ kind: 'err', text: errorMessage(e) })
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="bg-white border border-brand-mid-grey rounded-lg p-4">
+        <div className="text-xs text-brand-grey-80">Loading…</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white border border-brand-mid-grey rounded-lg p-4 space-y-3">
+      <div className="text-xs font-medium text-brand-grey-80">Where does the engine run?</div>
+
+      <label className="flex items-start gap-2 cursor-pointer">
+        <input
+          type="radio"
+          name="backend-location"
+          checked={location === 'local'}
+          onChange={() => setLocation('local')}
+          className="mt-0.5"
+        />
+        <span className="text-sm text-brand-black">
+          <strong>Local</strong> <span className="text-brand-grey-80">(default)</span>
+          <div className="text-xs text-brand-grey-80 mt-0.5">
+            The engine runs on this machine. Your data never leaves the device.
+          </div>
+        </span>
+      </label>
+
+      <label className="flex items-start gap-2 cursor-pointer">
+        <input
+          type="radio"
+          name="backend-location"
+          checked={location === 'remote'}
+          onChange={() => setLocation('remote')}
+          className="mt-0.5"
+        />
+        <span className="text-sm text-brand-black flex-1">
+          <strong>Remote</strong>{' '}
+          <span className="text-brand-grey-80 font-mono text-[11px]">(wss://…)</span>
+          <div className="text-xs text-brand-grey-80 mt-0.5">
+            Connect to an engine running on another machine
+            (<code className="text-[11px]">zylch -p &lt;uid&gt; serve --ws HOST:PORT</code>).
+            Authenticated with your signed-in MrCall account.
+          </div>
+        </span>
+      </label>
+
+      {location === 'remote' && (
+        <div className="mt-2 border-t pt-3 space-y-2">
+          <label className="block text-xs font-medium text-brand-grey-80">
+            Backend URL
+            <input
+              type="text"
+              value={url}
+              onChange={(e) => {
+                setUrl(e.target.value)
+                setTestMsg({ kind: 'idle', text: '' })
+              }}
+              placeholder="wss://desktop.mrcall.ai  (or ws://127.0.0.1:5174 for a local test)"
+              spellCheck={false}
+              autoCapitalize="off"
+              autoCorrect="off"
+              className={
+                'mt-1 w-full px-3 py-2 border rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-mid-grey ' +
+                (url.trim() && !urlValid
+                  ? 'border-brand-danger bg-brand-danger/5'
+                  : 'border-brand-mid-grey')
+              }
+            />
+          </label>
+          {url.trim() && !urlValid && (
+            <div className="text-xs text-brand-danger">URL must start with ws:// or wss://</div>
+          )}
+          {!signedIn && (
+            <div className="text-xs text-brand-danger">
+              Sign in first — the remote engine authenticates with your MrCall account.
+            </div>
+          )}
+          <div className="flex items-center gap-3 text-xs">
+            <button
+              type="button"
+              onClick={() => void handleTest()}
+              disabled={!urlValid || !signedIn || testMsg.kind === 'busy'}
+              className="px-3 py-1.5 border rounded text-brand-grey-80 hover:bg-brand-light-grey disabled:opacity-50"
+            >
+              {testMsg.kind === 'busy' ? 'Testing…' : 'Test connection'}
+            </button>
+            {testMsg.kind !== 'idle' && (
+              <span
+                className={
+                  testMsg.kind === 'ok'
+                    ? 'text-brand-blue'
+                    : testMsg.kind === 'err'
+                      ? 'text-brand-danger'
+                      : 'text-brand-grey-80'
+                }
+              >
+                {testMsg.text}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="border-t pt-3 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => void handleApply()}
+          disabled={!dirty || applying || (location === 'remote' && (!urlValid || !signedIn))}
+          className="px-4 py-2 bg-brand-black text-white rounded text-sm disabled:bg-brand-mid-grey"
+        >
+          {applying ? 'Applying…' : 'Apply & reconnect'}
+        </button>
+        {applyMsg.kind !== 'idle' && applyMsg.text && (
+          <span
+            className={
+              'text-sm ' +
+              (applyMsg.kind === 'ok'
+                ? 'text-brand-blue'
+                : applyMsg.kind === 'err'
+                  ? 'text-brand-danger'
+                  : 'text-brand-grey-80')
+            }
+          >
+            {applyMsg.text}
+          </span>
+        )}
+        {!dirty && savedLocation === 'remote' && (
+          <span className="text-xs text-brand-grey-80 font-mono">Active: {savedUrl}</span>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function LLMProviderCard({
   hasAnthropicKey,

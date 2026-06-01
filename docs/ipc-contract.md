@@ -8,12 +8,31 @@ description: |
 
 # IPC Contract — Engine ↔ App
 
-Transport: line-delimited JSON-RPC over stdio. The main process spawns
-the sidecar (`engine/zylch/rpc/server.py`) and bridges renderer calls
-through `ipcMain.handle('rpc:call', method, params, timeout)`.
+Transport: JSON-RPC 2.0, transport-agnostic on the engine side
+(`engine/zylch/rpc/dispatch.py` parses one frame and routes it; the
+read/write of bytes is the adapter's job). Two adapters:
+
+- **Local (default)** — line-delimited over stdio. Main spawns the sidecar
+  (`engine/zylch/rpc/server.py`) and bridges renderer calls through
+  `ipcMain.handle('rpc:call', method, params, timeout)`. Client:
+  `app/src/main/sidecar.ts` (`StdioRpcClient`).
+- **Remote (cross-machine, Phase 2)** — one JSON object per WebSocket TEXT
+  message, against an engine running `zylch -p <uid> serve --ws HOST:PORT`
+  (`engine/zylch/rpc/server_ws.py`). The upgrade carries `Authorization:
+  Bearer <firebaseIdToken>`; the engine verifies it (RS256) and gates
+  `token.sub == profile OWNER_ID`, rejecting with HTTP **401** (no/invalid
+  token) or **403** (valid token, wrong owner). Token renewal via
+  `auth.refresh`; expiry closes the socket with code **4401**. Client:
+  `app/src/main/wsRpcClient.ts` (`WebSocketRpcClient`). The two clients
+  share the `RpcClient` interface (`app/src/main/rpcClient.ts`) so main is
+  transport-agnostic; the choice is per-installation
+  (`~/.zylch/backend-config.json`).
+
+The method surface, payload shapes, and notification streams below are
+**identical across both transports** — only the framing differs.
 
 - **Server**: `engine/zylch/rpc/methods.py` (dispatch table, line ~1480) + per-domain modules (`email_actions.py`, `task_queries.py`).
-- **Client**: `app/src/preload/index.ts` exposes `window.zylch.*` to the renderer; `app/src/main/` brokers stdio.
+- **Client**: `app/src/preload/index.ts` exposes `window.zylch.*` to the renderer; `app/src/main/` brokers stdio or WebSocket.
 - **Owner identity**: every call resolves `owner_id` server-side from the active profile — the client never sends it.
 
 This file is incomplete. It tracks methods that have been touched
@@ -386,6 +405,34 @@ together server-side. `owner` / `owners` are deliberately NOT accepted
 (StarChat derives owner scope from the caller's role, so a client-supplied
 owner is ignored). Backs the MrCall tab's search bar + status dropdown.
 
+### `auth.refresh(id_token)`
+
+Cross-machine transport (WebSocket backend). Verifies a fresh Firebase ID
+token server-side (RS256 against Google's certs — unlike
+`account.set_firebase_token`, which trusts the caller) and replaces the
+engine's in-memory session. The WebSocket client
+(`app/src/main/wsRpcClient.ts`) calls this on a ~30-min timer to keep the
+remote session alive well inside the token's ~1h lifetime; the engine
+otherwise closes the socket with code **4401** when the token lapses, and
+the client reconnects with a freshly-minted token.
+
+| Param | Type | Required | Notes |
+|-------|------|----------|-------|
+| `id_token` | string | yes | A current Firebase ID token. `expires_at_ms` is derived from the token's own `exp` (not client-supplied). |
+
+Returns `{ ok: true, uid: string, expires_at_ms: int }`. Token
+verification failure → JSON-RPC error code `-32011`. **Harmless over
+stdio** (the local engine simply re-installs the session); it exists for
+parity so the same client code path works on both transports.
+
+Engine: `engine/zylch/rpc/account.py::auth_refresh` (registered in
+`engine/zylch/rpc/dispatch.py::METHODS`). The same notification set
+(`tasks.solve.event`, `update.progress`, `chat.pending_approval`, …)
+flows over WebSocket exactly as over stdio — only the framing differs (one
+JSON object per WS TEXT message instead of one per stdout line). The WS
+engine does NOT emit `engine.ready` (stdio-only); the client synthesises
+the renderer's ready signal when the socket reaches OPEN.
+
 ### Other methods
 
 For the rest of the surface (emails.\*, chat.\*, update.\*, settings.\*,
@@ -413,6 +460,30 @@ contract and live only in `app/src/preload/index.ts` /
   `signin:googleCancel`, `auth:bindProfile`.
 - Filesystem dialogs / shell: `dialog:selectFiles`,
   `dialog:selectDirectories`, `shell:openExternal`.
+- **Token + transport (cross-machine, Phase 2):**
+  - `account:pushToken({uid, email, idToken, expiresAtMs})` — the
+    CANONICAL Firebase-token path. The renderer pushes the token
+    out-of-band to MAIN (not in-band over `account.set_firebase_token`)
+    because main needs it to open the remote WebSocket handshake BEFORE
+    any RPC channel exists. Main caches it per window; in **local** mode it
+    forwards into the engine via `account.set_firebase_token` (preserving
+    the pre-Phase-2 effect — the local engine needs the in-memory token
+    for outbound StarChat / mrcall calls); in **remote** mode the WS
+    client uses it as the `Authorization: Bearer` handshake header and for
+    `auth.refresh`. The legacy in-band `account.set_firebase_token` IPC
+    stays exported for back-compat. Never persisted to disk.
+  - `settings:getBackendLocation()` → `{ location: 'local' | 'remote',
+    url? }` and `settings:setBackendLocation(location, url?)` — the
+    per-installation backend choice, persisted machine-global in
+    `~/.zylch/backend-config.json` (NOT in the profile `.env` — it's a
+    property of THIS machine). Read at window-creation time to choose the
+    transport. Default (and fresh-install value) is `{ location: 'local'
+    }`.
+  - `backend:testConnection(url)` → `{ ok: true, signedIn, uid?, email? }
+    | { ok: false, code, message }` — opens a TRANSIENT WS to `url` with
+    the window's cached Firebase token and probes identity via
+    `account.who_am_i`. Diagnostic only (the Settings "Test connection"
+    button); never touches the saved config or the live client.
 
 Don't document them here — add new entries to `app/docs/active-context.md`
 under "IPC client (preload)" instead.

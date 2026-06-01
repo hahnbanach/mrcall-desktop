@@ -8,9 +8,12 @@ const REFRESH_INTERVAL_MS = 50 * 60 * 1000
 
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
-// Renderer-side handler that pushes a fresh token to the engine over
-// JSON-RPC. Phase 2 wires this up via window.zylch.account.setFirebaseToken;
-// Phase 1 leaves it as a hook so the surface is stable.
+// Renderer-side handler that ships a fresh Firebase token out of the
+// renderer. Wired in App.tsx to `window.zylch.account.pushToken` — the
+// out-of-band path to the MAIN process (cross-machine transport): main
+// caches it per window for the remote-WS handshake and, in local mode,
+// forwards it into the engine via `account.set_firebase_token`. Kept as a
+// hook here so this module stays transport-agnostic.
 type TokenPusher = (info: {
   uid: string
   email: string | null

@@ -44,8 +44,14 @@ type View =
 // Calendar RPC would otherwise see no Firebase session). Returns true
 // if a push succeeded.
 export async function installEngineTokenPusher(): Promise<boolean> {
+  // Canonical Phase-2 path: push the token OUT-OF-BAND to main
+  // (`account:pushToken`). Main caches it per window so the remote-WS
+  // handshake can use it BEFORE any RPC channel exists, and — in local
+  // mode — forwards it into the engine via `account.set_firebase_token`
+  // (preserving the pre-Phase-2 effect). This replaces the direct in-band
+  // `account.setFirebaseToken` RPC, which could not reach the WS handshake.
   setTokenPusher(async ({ uid, email, idToken, expiresAtMs }) => {
-    await window.zylch.account.setFirebaseToken({ uid, email, idToken, expiresAtMs })
+    await window.zylch.account.pushToken({ uid, email, idToken, expiresAtMs })
   })
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -932,14 +938,17 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
           // themselves (see ConnectGoogleCalendar.ensureEngineSession).
           setTokenPusher(async ({ uid, email, idToken, expiresAtMs }) => {
             try {
-              await window.zylch.account.setFirebaseToken({
+              // Out-of-band push to main (canonical Phase-2 path). Main
+              // caches it for the remote-WS handshake and forwards it into
+              // a local engine via set_firebase_token.
+              await window.zylch.account.pushToken({
                 uid,
                 email,
                 idToken,
                 expiresAtMs
               })
             } catch (e) {
-              console.warn('[App] account.setFirebaseToken push failed:', e)
+              console.warn('[App] account.pushToken push failed:', e)
               throw e
             }
           })
@@ -1038,9 +1047,20 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
 
 // Persistent top bar showing the current Firebase identity. Surfaces
 // at the very top of every window so a wrong-account state is visible
-// within seconds — not buried in Settings → AccountCard.
+// within seconds — not buried in Settings → AccountCard. When the window
+// is talking to a REMOTE engine over WebSocket, also surfaces the remote
+// endpoint so "where am I connected" is never ambiguous.
 function IdentityBanner(): JSX.Element | null {
   const user = auth.currentUser
+  // Captured from the sidecar:status `alive:true` event — set only by the
+  // WebSocket transport (`remoteUrl`); stays null for local stdio.
+  const [remoteUrl, setRemoteUrl] = useState<string | null>(null)
+  useEffect(() => {
+    const off = window.zylch.onSidecarStatus((s) => {
+      if (s.alive) setRemoteUrl(s.remoteUrl ?? null)
+    })
+    return off
+  }, [])
   if (!user || user.isAnonymous) return null
   const email = user.email || '—'
   const uid = user.uid || ''
@@ -1054,6 +1074,14 @@ function IdentityBanner(): JSX.Element | null {
       {uid && (
         <span className="font-mono opacity-50" title={uid}>
           (uid {uid.slice(0, 8)}…)
+        </span>
+      )}
+      {remoteUrl && (
+        <span
+          className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-brand-blue/10 text-brand-blue"
+          title={`Connected to remote engine at ${remoteUrl}`}
+        >
+          Remote: {remoteUrl}
         </span>
       )}
       <button
