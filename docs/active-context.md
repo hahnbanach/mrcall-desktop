@@ -10,7 +10,9 @@ description: |
 
 # Active Context — Cross-cutting
 
-## Current focus (as of 2026-05-31)
+## Current focus (as of 2026-06-02)
+
+**Cross-machine backend live.** The desktop engine can now run as a persistent daemon on a remote machine; the Electron app reaches it over `wss://desktop.mrcall.ai` (Caddy + Let's Encrypt) instead of spawning a local stdio sidecar. Engine: a transport-agnostic dispatch core (`rpc/dispatch.py`) feeds both stdio and a new WebSocket server (`rpc/server_ws.py`, `serve --ws`/`--unix`), gated by a Firebase-JWT handshake (`uid == OWNER_ID`, RS256). App: `WebSocketRpcClient` vs `StdioRpcClient` chosen per-installation (`~/.zylch/backend-config.json`), connecting to `<base>/ws/<uid>` with the token in the handshake header. Deployed on the Scaleway VPS (alongside `mrcall-agent`): a `zylch-server@<uid>` systemd template behind Caddy. IPC additions: `auth.refresh`, `account:pushToken`, backend-location IPCs. NEXT: multi-profile per-uid routing (Unix sockets + Caddy `path_regexp`) — see [`execution-plans/cross-machine-transport.md`](execution-plans/cross-machine-transport.md).
 
 **MrCall credits routing now actually consumes credits.** Five-part fix split across `mrcall-desktop` and `mrcall-agent`. Desktop side: `ANTHROPIC_API_KEY` shell-env leak closed (engine reads ONLY the profile `.env`); defensive gzip-SSE inflate in the proxy client; Firebase JWT redacted in the RPC dispatcher's DEBUG `params=` line (was being shipped to Anthropic via the renderer's narration pipeline); `LOG_LEVEL` default flipped to DEBUG; balance card self-heals via shared `ensureEngineSession`. Server side (`mrcall-agent/production` already deployed): `accept-encoding: identity` upstream + `aiter_bytes()` forward so the proxy stops leaking gzipped bytes downstream; pricing YAML aligned with Anthropic 2026-05 (Opus 4.7 mispriced at $15/$75 = Opus 4.1 pricing; Haiku 4.5 dated ID `claude-haiku-4-5-20251001` was missing from the allowlist).
 
@@ -24,6 +26,7 @@ description: |
 
 | Date | What | Spans | Refs |
 |---|---|---|---|
+| 2026-06-02 | **Cross-machine transport — Phase 1–3b live** (`wss://desktop.mrcall.ai`, no tunnel). Engine `serve --ws`/`--unix` + shared `rpc/dispatch.py` + Firebase-JWT gate (`rpc/server_ws.py`, `rpc/firebase_auth.py`, `auth.refresh`/4401); app `WebSocketRpcClient` (base URL + `/ws/<uid>`, `account:pushToken` token flow, `BackendLocationCard`); VPS deploy = `zylch-server@<uid>` systemd + Caddy/LE. Next: multi-profile per-uid sockets. | engine + app + IPC + ops | [cross-machine-transport.md](execution-plans/cross-machine-transport.md) |
 | 2026-05-31 | **MrCall credits — leak fix, gzip SSE, secret redaction, balance self-heal, DEBUG default** + companion server-side fixes in `mrcall-agent/production` (allowlist + identity encoding + aiter_bytes). End-to-end verified: 10 230 in / 264 out / 3 303 cache_creation on a Sonnet 4.5 reanalyze actually billed. | engine + app + server | `ed6eeef8` |
 | 2026-05-31 | **Solve lightbulb + auto-reanalyze + outbound mirror.** Open from Tasks idle; Lightbulb button → `tasks.solve(task_id, instructions)`. Engine emits `tasks.solve.event.done.result.auto_reanalyzed`; renderer closes conversation + refreshes Tasks. `_send_email` / `_send_whatsapp` mirror outbound into local store. | engine + app + IPC | `9be36c9b` · [`ipc-contract.md`](ipc-contract.md) §`tasks.solve.event` |
 | 2026-05-31 | **Tasks reanalyze with WhatsApp history + urgency cap + EMAIL_ALIASES.** `build_whatsapp_thread_history` parity with email side; cap medium/high → low when user replied last (proactive nudge); `EMAIL_ALIASES` config recognised by `_is_user_email` + thread renderer. | engine | `109bfd99` |
@@ -69,6 +72,7 @@ description: |
 | What | Where |
 |---|---|
 | JSON-RPC method surface (engine ↔ app contract) | [`ipc-contract.md`](ipc-contract.md) |
+| Cross-machine transport (WS engine, Caddy/TLS, VPS deploy) + multi-profile brief | [`execution-plans/cross-machine-transport.md`](execution-plans/cross-machine-transport.md) |
 | Firebase Auth as desktop identity | [`../CLAUDE.md`](../CLAUDE.md) "Identity (Firebase)" |
 | LLM billing modes (BYOK ↔ MrCall credits) | [`../CLAUDE.md`](../CLAUDE.md) "LLM billing modes" |
 | Brand / rename rollout (zylch → mrcall) | [`../CLAUDE.md`](../CLAUDE.md) "Naming and identifiers" |

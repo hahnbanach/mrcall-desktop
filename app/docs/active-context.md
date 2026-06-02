@@ -9,7 +9,9 @@ description: |
 
 # Active Context — App
 
-## Current focus (as of 2026-05-31)
+## Current focus (as of 2026-06-02)
+
+**Remote backend (cross-machine).** The renderer can now drive an engine running on another machine over `wss://`. `main/index.ts`'s sidecar spawn became a transport factory keyed on `main/backendConfig.ts` (`~/.zylch/backend-config.json`, machine-global): `StdioRpcClient` (local, unchanged) or `WebSocketRpcClient` (`main/wsRpcClient.ts`, remote). The WS client connects to `<base>/ws/<uid>` — one base URL, per-window routing — with the Firebase token in an `Authorization: Bearer` handshake header (main caches it out-of-band via the `account:pushToken` IPC, since the token is needed before the RPC channel exists). `Settings → BackendLocationCard` (Local / Remote + Test connection). Live: production@cafe124 over `wss://desktop.mrcall.ai`, no tunnel. Fixes: WS client queues early RPCs + flushes on open (was hiding the Email tab); `bufferutil`/`utf-8-validate` marked `external` in `electron.vite.config.ts`; reconnect crash on `terminate()` of a CONNECTING socket; no retry-loop on 403.
 
 **Solve button on the chat composer.** `views/Workspace.tsx` no longer auto-fires `tasks.solve` on Open — the conversation opens idle. `ChatComposer.tsx` renders a lightbulb button (`Icon.solve = Lightbulb`) next to "Invia" when an `onSolve` callback is provided. Clicking it pipes the typed text into `tasks.solve(task_id, instructions=text)`; empty text replicates the legacy auto-trigger. The renderer subscribes to the `tasks.solve.event` `done` payload's new `auto_reanalyzed` field — when the engine ran a mutating solve and the post-run reanalyze returned `action: 'closed'`, the conversation flips to `taskCompleted=true` AND `useTasks().refresh()` is called so the Tasks tab updates without a manual reload. `store/conversations.ts` exposes `markSolveStarted`/`markSolveFinished` for explicit in-flight tracking (closeConversation uses it to fire a targeted `solveCancel(task_id)`).
 
@@ -23,6 +25,7 @@ Residual live verification: every Firebase signin path from a fresh state, packa
 
 | Date | What | Refs |
 |---|---|---|
+| 2026-06-02 | **Cross-machine thin client**: `main/rpcClient.ts` interface + `StdioRpcClient`/`WebSocketRpcClient` (`main/wsRpcClient.ts`); transport factory in `index.ts` keyed on `main/backendConfig.ts`; `account:pushToken` out-of-band token cache; `Settings` `BackendLocationCard` (Local/Remote + Test); WS client appends `/ws/<uid>`. Fixes: early-RPC queue, ws-natives `external`, terminate-on-CONNECTING crash, 403 no-loop. | [cross-machine-transport.md](../../docs/execution-plans/cross-machine-transport.md) |
 | 2026-05-31 | `views/Settings.tsx`'s `LLMProviderCard.refreshBalance` self-heals via shared `ensureEngineSession`. `firebase/authUtils` exports the helper; `ConnectGoogleCalendar` migrates to it. | `ed6eeef8` |
 | 2026-05-31 | `views/Workspace.tsx` gains `solve()` handler + auto-reanalyzed handling (✓ closed bubble / ℹ updated bubble + `useTasks().refresh()`). `store/conversations.openTaskChat` no longer auto-fires solve; `markSolveStarted`/`markSolveFinished` track in-flight explicitly. `components/ChatComposer` gains optional `onSolve` prop + Lightbulb button (`Icon.solve`). `types.ts` SolveEvent.done.result.auto_reanalyzed added. | `9be36c9b` |
 | 2026-05-31 | `views/WhatsApp.tsx` subscribes to `whatsapp.threads.changed` (600 ms trailing debounce → loadThreads + active-chat reload). `reloadActiveMessages` extracted as useCallback. | `0e576197` |
