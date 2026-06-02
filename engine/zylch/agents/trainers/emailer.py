@@ -156,7 +156,7 @@ class EmailerAgentTrainer(BaseAgentTrainer):
         meta_prompt = EMAILER_META_PROMPT.format(
             user_profile=user_profile, sent_email_samples=sent_samples
         )
-        prompt_content = self._generate_prompt(meta_prompt, max_tokens=4000)
+        prompt_content = await self._generate_prompt(meta_prompt, max_tokens=4000)
 
         # Step 5: Build metadata using inherited method
         metadata = self._build_metadata(sent_emails_analyzed=len(sent_emails))

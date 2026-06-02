@@ -6,7 +6,7 @@ Read-only tools auto-execute; write tools need user approval
 """
 
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,20 @@ def execute_tool(
     fn = dispatch.get(name)
     if not fn:
         return f"Unknown tool: {name}"
-    if fn in (_search_emails, _search_memory, _download_attachment, _send_sms, _update_memory):
+    # `_send_email` and `_send_whatsapp` need ``store`` + ``owner_id`` to
+    # write the just-sent outbound message back into the local DB. Without
+    # that the next `tasks.reanalyze` rebuilds the thread history without
+    # seeing the user's reply and keeps the task open until the next full
+    # ``update.run`` does an IMAP sync of the Sent folder.
+    if fn in (
+        _search_emails,
+        _search_memory,
+        _download_attachment,
+        _send_sms,
+        _update_memory,
+        _send_email,
+        _send_whatsapp,
+    ):
         return fn(args, store, owner_id)
     return fn(args)
 
@@ -294,8 +307,22 @@ def _run_python(args: Dict) -> str:
 # ─── Send actions (need approval) ────────────────────
 
 
-def _send_email(args: Dict) -> str:
-    """Send email via SMTP."""
+def _send_email(args: Dict, store, owner_id: str) -> str:
+    """Send email via SMTP, then mirror the outbound row into the local DB.
+
+    Without the local mirror, `build_thread_history` (consumed by
+    `tasks.reanalyze` AND the memory/task workers) doesn't see the
+    user's reply until the next full `update.run` IMAP-syncs the Sent
+    folder — so right after a solve sends the answer, reanalyze still
+    decides the task is open. Mario reported this: solve sends mail,
+    task stays open until a global Update.
+
+    The mirror upserts on ``(owner_id, gmail_id)`` where ``gmail_id`` is
+    the RFC 5322 ``Message-ID`` header — the same key the IMAP archive
+    uses (``email_archive.py:301``). When IMAP later pulls the same
+    message from the Sent folder it lands on the same row and just
+    refreshes labels/date.
+    """
     import os
 
     to = args.get("to", "")
@@ -309,8 +336,9 @@ def _send_email(args: Dict) -> str:
     try:
         from zylch.email.imap_client import IMAPClient
 
+        email_addr = os.environ.get("EMAIL_ADDRESS", "")
         client = IMAPClient(
-            email_addr=os.environ.get("EMAIL_ADDRESS", ""),
+            email_addr=email_addr,
             password=os.environ.get("EMAIL_PASSWORD", ""),
             imap_host=os.environ.get("IMAP_HOST") or None,
             smtp_host=os.environ.get("SMTP_HOST") or None,
@@ -321,15 +349,126 @@ def _send_email(args: Dict) -> str:
             body=body,
             in_reply_to=in_reply_to,
         )
-        return f"Email sent to {to}" f" (ID: {result.get('id', 'unknown')})"
+        sent_id = result.get("id") or ""
+        # Best-effort local mirror. Never let a storage hiccup turn a
+        # successful send into a failure — return the same string we
+        # used to return.
+        try:
+            _mirror_sent_email_locally(
+                store=store,
+                owner_id=owner_id,
+                sent_id=sent_id,
+                from_email=email_addr,
+                to=to,
+                subject=subject,
+                body=body,
+                in_reply_to=in_reply_to,
+            )
+        except Exception as e:
+            logger.warning(f"[send_email] local mirror failed: {e}", exc_info=True)
+        return f"Email sent to {to} (ID: {sent_id or 'unknown'})"
     except Exception as e:
         return f"Send failed: {e}"
 
 
-def _send_whatsapp(args: Dict) -> str:
-    """Send WhatsApp message via neonize."""
-    import time
+def _mirror_sent_email_locally(
+    store,
+    owner_id: str,
+    sent_id: str,
+    from_email: str,
+    to: str,
+    subject: str,
+    body: str,
+    in_reply_to: Optional[str],
+) -> None:
+    """Append the outbound email to the ``emails`` table.
 
+    Thread resolution: if ``in_reply_to`` references an email already in
+    the local DB, reuse its ``thread_id`` so the new row joins the
+    existing conversation. Otherwise the message stands on its own as a
+    new thread, keyed on its own Message-ID — matching what IMAP would
+    pick if it ever re-pulled the message (``imap_client.py:406``: "use
+    References chain or Message-ID").
+    """
+    from datetime import datetime, timezone
+
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Email
+
+    if not sent_id:
+        logger.debug("[send_email] no Message-ID returned by SMTP — skipping mirror")
+        return
+
+    thread_id = sent_id
+    if in_reply_to:
+        try:
+            with get_session() as session:
+                parent = (
+                    session.query(Email)
+                    .filter(
+                        Email.owner_id == owner_id,
+                        Email.message_id_header == in_reply_to,
+                    )
+                    .first()
+                )
+                if parent and parent.thread_id:
+                    thread_id = parent.thread_id
+        except Exception as e:
+            logger.debug(f"[send_email] parent lookup failed: {e}")
+
+    now = datetime.now(timezone.utc)
+    # SQLite stores DateTime as naive UTC; mirror what
+    # `parse_email_date_to_utc_naive` produces for inbound rows.
+    naive_now = now.replace(tzinfo=None)
+    record = {
+        "id": sent_id,
+        "thread_id": thread_id,
+        "from_email": from_email,
+        "from_name": "",
+        "to_email": to,
+        "cc_email": "",
+        "subject": subject,
+        "date": naive_now,
+        "date_timestamp": int(now.timestamp()),
+        "snippet": (body or "")[:200],
+        "body_plain": body,
+        "body_html": "",
+        "labels": "",
+        "message_id_header": sent_id,
+        "in_reply_to": in_reply_to or "",
+        "references": in_reply_to or "",
+        "has_attachments": False,
+        "attachment_filenames": [],
+        "is_auto_reply": False,
+    }
+    store.store_email(owner_id, record)
+    logger.info(
+        f"[send_email] local mirror upserted: thread_id={thread_id} "
+        f"message_id={sent_id}"
+    )
+
+
+def _send_whatsapp(args: Dict, store, owner_id: str) -> str:
+    """Send a WhatsApp message and mirror the outbound row locally.
+
+    Two reasons the previous shape was wrong:
+
+    1. **Sound-of-conflict**: it instantiated a brand-new
+       ``WhatsAppClient`` and connected, on top of the persistent one
+       kept by ``whatsapp_actions._active_client``. WhatsApp enforces
+       one session per device, so the existing socket got
+       ``<stream:error><conflict type="replaced"/></stream:error>`` and
+       died with an EOF on every solve send.
+    2. **No local persistence**: nothing called ``store_outgoing``, so
+       the sent message vanished from the renderer's thread list until
+       the next live-socket echo (``deviceSentMessage``) hit the new
+       throwaway client — which by then was already dead.
+
+    Fix: reuse the persistent client when alive (no second socket, so
+    no conflict), and call ``WhatsAppSyncService.store_outgoing`` after
+    a successful send so the row lives in ``whatsapp_messages``
+    immediately.
+    """
     phone = args.get("phone_number", "")
     message = args.get("message", "")
     if not phone or not message:
@@ -339,23 +478,105 @@ def _send_whatsapp(args: Dict) -> str:
         from neonize.utils import build_jid
 
         from zylch.whatsapp.client import WhatsAppClient
+        from zylch.whatsapp.sync import WhatsAppSyncService
+    except ImportError:
+        return "neonize not installed"
 
-        wa = WhatsAppClient()
-        if not wa.has_session():
-            return "WhatsApp not connected. Run zylch init."
+    # Resolve the canonical chat_jid: prefer the persisted contact row
+    # (covers @lid pseudonyms — sending to <phone>@s.whatsapp.net would
+    # split the local thread). Falls back to the raw phone JID when no
+    # contact match.
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    if not digits:
+        return f"Invalid phone number: {phone}"
+    chat_jid = f"{digits}@s.whatsapp.net"
+    try:
+        from zylch.storage.database import get_session
+        from zylch.storage.models import WhatsAppContact
 
-        wa.connect(blocking=False)
-        for _ in range(20):
-            if wa.is_connected():
-                break
-            time.sleep(0.5)
+        with get_session() as session:
+            row = (
+                session.query(WhatsAppContact.jid)
+                .filter(
+                    WhatsAppContact.owner_id == owner_id,
+                    WhatsAppContact.phone_number == f"+{digits}",
+                )
+                .first()
+            )
+            if row and row[0]:
+                chat_jid = row[0]
+    except Exception as e:
+        logger.debug(f"[send_whatsapp] chat_jid resolve failed: {e}")
+
+    # Prefer the persistent client to avoid the "session replaced" kick.
+    live_client = None
+    live_sync = None
+    try:
+        from zylch.rpc import whatsapp_actions as _wa_actions
+
+        with _wa_actions._state_lock:
+            candidate = _wa_actions._active_client
+            candidate_sync = _wa_actions._active_sync
+        if candidate is not None:
+            try:
+                socket_up = bool(candidate.is_connected())
+                logged_in = bool(candidate.is_logged_in()) if socket_up else False
+            except Exception:
+                socket_up = False
+                logged_in = False
+            if socket_up and logged_in:
+                live_client = candidate
+                live_sync = candidate_sync
+    except Exception as e:
+        logger.debug(f"[send_whatsapp] live-client check skipped: {e}")
+
+    use_persistent = live_client is not None
+    wa = live_client if use_persistent else WhatsAppClient()
+    sync_svc = live_sync if live_sync is not None else WhatsAppSyncService(store, owner_id)
+
+    try:
+        if not use_persistent:
+            if not wa.has_session():
+                return "WhatsApp not connected. Run zylch init."
+            import time as _time
+
+            wa.connect(blocking=False)
+            for _ in range(20):
+                if wa.is_connected() and wa.is_logged_in():
+                    break
+                _time.sleep(0.5)
+            else:
+                return "WhatsApp connection timeout"
+
+        # Address the JID. For real-phone chats build_jid is correct; for
+        # @lid the resolved chat_jid above already carries the right
+        # server, so we send via the chat_jid directly.
+        if chat_jid.endswith("@s.whatsapp.net"):
+            to_jid = build_jid(digits)
         else:
-            return "WhatsApp connection timeout"
+            user, _sep, server = chat_jid.partition("@")
+            to_jid = build_jid(user, server)
 
-        number = phone.lstrip("+")
-        jid = build_jid(number)
-        result = wa.send_message(jid, message)
-        return f"WhatsApp sent to {phone}" if result else "Send failed"
+        result = wa.send_message(to_jid, message)
+        if not result:
+            return "Send failed"
+
+        # Mirror outgoing into whatsapp_messages so the renderer + the
+        # next reanalyze see the user's reply without a full sync.
+        msg_id = str(getattr(result, "ID", "") or "")
+        if msg_id:
+            try:
+                from datetime import datetime, timezone
+
+                sync_svc.store_outgoing(
+                    chat_jid=chat_jid,
+                    text=message,
+                    msg_id=msg_id,
+                    timestamp=datetime.now(timezone.utc),
+                )
+            except Exception as e:
+                logger.warning(f"[send_whatsapp] store_outgoing failed: {e}")
+        return f"WhatsApp sent to {phone}"
     except ImportError:
         return "neonize not installed"
     except Exception as e:

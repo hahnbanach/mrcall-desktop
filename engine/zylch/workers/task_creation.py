@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from zylch.llm import make_llm_client
 from zylch.storage import Storage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
-from zylch.workers.thread_presenter import build_thread_history, strip_quoted
+from zylch.workers.thread_presenter import strip_quoted
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,13 @@ class TaskWorker:
         self.user_domain = (
             user_email.split("@")[1].lower() if user_email and "@" in user_email else ""
         )
+        # Extra identities the user owns (e.g. ivan.marchese@cafe124milan.com
+        # alongside production@cafe124.it). Loaded from the
+        # EMAIL_ALIASES setting; used by _is_user_email so replies from a
+        # secondary address are still recognised as "the user's".
+        from zylch.workers.thread_presenter import load_user_aliases_for_owner
+
+        self.user_aliases = load_user_aliases_for_owner(owner_id)
 
         # Initialize hybrid search for blob retrieval
         config = MemoryConfig()
@@ -151,10 +158,15 @@ class TaskWorker:
         self._task_prompt_loaded: bool = False
 
     def _is_user_email(self, email: str) -> bool:
-        """Check if email belongs to the user (exact match only).
+        """Check if email belongs to the user (primary OR alias).
 
-        Only matches the user's own email address.
-        Colleagues on the same domain are NOT the user.
+        Colleagues on the same domain are NOT the user — match is
+        always exact. ``EMAIL_ALIASES`` adds secondary addresses the
+        user explicitly owns (e.g. Ivan writing from
+        ``ivan.marchese@cafe124milan.com`` on a profile keyed under
+        ``production@cafe124.it``). Without the alias check, those
+        replies showed up as ``CONTACT`` in the thread history and the
+        "close on user reply" / "cap urgency" rules silently missed.
         """
         if not email:
             return False
@@ -162,7 +174,11 @@ class TaskWorker:
         email_lower = email.lower()
 
         if self.user_email and email_lower == self.user_email:
-            logger.debug(f"[TASK] _is_user_email({email}) -> True (exact match)")
+            logger.debug(f"[TASK] _is_user_email({email}) -> True (primary)")
+            return True
+
+        if email_lower in self.user_aliases:
+            logger.debug(f"[TASK] _is_user_email({email}) -> True (alias)")
             return True
 
         logger.debug(f"[TASK] _is_user_email({email}) -> False")
@@ -432,14 +448,47 @@ class TaskWorker:
                     logger.debug(f"[TASK] Tool response: {result}")
 
                     task_action = result.get("task_action", "none")
+                    urgency = result.get("urgency", "medium")
+                    reason_text = result.get("reason", "")
+
+                    # Option B (Mario, 2026-05-28): proactive nudges
+                    # land at low urgency. When the last non-auto turn
+                    # in the thread is the user's own reply, any
+                    # create/update with medium/high urgency is a
+                    # follow-up on a silent contact — gentler than a
+                    # task with a real pending user action. Cap to low
+                    # and annotate reason so Mario can see WHY in the
+                    # task card.
+                    if task_action in ("create", "update") and thread_history_section:
+                        from zylch.workers.thread_presenter import (
+                            cap_urgency_for_silent_followup,
+                        )
+
+                        new_urgency, capped = cap_urgency_for_silent_followup(
+                            urgency, thread_history_section
+                        )
+                        if capped:
+                            urgency = new_urgency or "low"
+                            cap_note = (
+                                " [urgency capped to low: ball in contact's "
+                                "court, no pending user action]"
+                            )
+                            if cap_note.strip() not in reason_text:
+                                reason_text = (reason_text + cap_note).strip()
+                            logger.info(
+                                f"[TASK] urgency capped → low (user replied last) "
+                                f"event_type={event_type}"
+                            )
 
                     # Return full result for caller to handle task_action
                     return {
                         "action_required": result.get("action_required", False),
                         "task_action": task_action,
-                        "urgency": result.get("urgency", "medium"),
+                        "target_task_id": result.get("target_task_id"),
+                        "urgency": urgency,
                         "suggested_action": result.get("suggested_action", ""),
-                        "reason": result.get("reason", ""),
+                        "title": result.get("title", ""),
+                        "reason": reason_text,
                         "analyzed_at": datetime.now(timezone.utc).isoformat(),
                     }
 

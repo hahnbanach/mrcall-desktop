@@ -262,6 +262,41 @@ const api = {
     // "rpc timeout: update.run" error on new profiles.
     run: () => call<any>('update.run', {}, 12 * 3600 * 1000)
   },
+  sync: {
+    // Data-fetch only (email + WhatsApp); skips memory + tasks. Same
+    // 12h ceiling as update.run since the IMAP pull is the slowest part
+    // and is shared between the two.
+    run: (params: { days_back?: number } = {}) =>
+      call<{
+        success: boolean
+        summary: string
+        result: {
+          sync_new: number
+          wa_messages: number
+          wa_contacts: number
+          wa_skipped_reason?: string | null
+        }
+        errors: Array<{
+          severity?: string
+          title?: string
+          detail?: string
+          action?: string
+        }>
+      }>('sync.run', params, 12 * 3600 * 1000)
+  },
+  setup: {
+    // Read-only snapshot driving the gating of the Train / Update cards
+    // on the Update view. Default RPC timeout is fine — this is a single
+    // SQL query plus three indexed lookups.
+    state: () =>
+      call<{
+        has_synced: boolean
+        has_trained: boolean
+        emails_count: number
+        whatsapp_messages_count: number
+        agents_trained: string[]
+      }>('setup.state', {})
+  },
   agents: {
     // Runs the 3 personalised-agent trainers serially (memory_message —
     // channel-aware over email + WhatsApp; task_email — task detection;

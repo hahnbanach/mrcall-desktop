@@ -28,12 +28,49 @@ from __future__ import annotations
 
 import json
 import logging
+import zlib
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+# Gzip magic bytes per RFC 1952 §2.3.1. Used to sniff a gzipped SSE
+# body the proxy may have leaked through without a Content-Encoding
+# header (mrcall-agent <= 2026-05-31 forwards Anthropic's gzipped
+# bytes verbatim via httpx.aiter_raw and strips Content-Encoding in
+# the StreamingResponse, so httpx on this side doesn't auto-decode).
+_GZIP_MAGIC = b"\x1f\x8b"
+
+
+def _wrap_gzip_iter(byte_iter: Iterator[bytes]) -> Iterator[bytes]:
+    """Inflate a gzipped byte stream chunk-by-chunk.
+
+    Uses zlib's raw `decompressobj` with the gzip wbits magic
+    (`16 + MAX_WBITS = 31`). Yields decompressed chunks as they
+    become available; we don't buffer the whole stream so SSE
+    parsing downstream stays incremental.
+    """
+    decomp = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    for chunk in byte_iter:
+        if not chunk:
+            continue
+        try:
+            out = decomp.decompress(chunk)
+        except zlib.error as e:
+            logger.warning(f"[mrcall-proxy] gzip decode failed mid-stream: {e}")
+            return
+        if out:
+            yield out
+    try:
+        tail = decomp.flush()
+    except zlib.error as e:
+        logger.warning(f"[mrcall-proxy] gzip flush failed: {e}")
+        return
+    if tail:
+        yield tail
 
 
 # ─── Exceptions ───────────────────────────────────────────────────────
@@ -140,9 +177,22 @@ def _iter_sse_events(byte_iter: Iterator[bytes]) -> Iterator[Tuple[Optional[str]
     even though Anthropic always emits single-line data today.
     """
     buffer = b""
+    chunk_count = 0
+    total_bytes = 0
     for chunk in byte_iter:
         if not chunk:
             continue
+        chunk_count += 1
+        total_bytes += len(chunk)
+        # First-chunk preview tells us if the proxy is sending ANY body
+        # over a 200 OK SSE — Mario 2026-05-31 hit a path where the proxy
+        # opened the stream but flushed zero bytes, and we couldn't tell
+        # "empty body" from "parser bug" until we logged the raw bytes.
+        if chunk_count == 1:
+            logger.debug(
+                f"[mrcall-proxy] SSE first chunk: {len(chunk)}B preview="
+                f"{chunk[:200]!r}"
+            )
         buffer += chunk
         while b"\n\n" in buffer:
             raw_event, buffer = buffer.split(b"\n\n", 1)
@@ -158,6 +208,10 @@ def _iter_sse_events(byte_iter: Iterator[bytes]) -> Iterator[Tuple[Optional[str]
                     data_lines.append(line[len("data:") :].lstrip())
             if data_lines:
                 yield event_name, "\n".join(data_lines)
+    logger.debug(
+        f"[mrcall-proxy] SSE stream end: chunks={chunk_count} "
+        f"total_bytes={total_bytes} trailing_buffer={len(buffer)}B"
+    )
     # Flush any trailing event that lacked the final blank line — the
     # proxy is expected to always end with `\n\n`, but be robust anyway.
     if buffer.strip():
@@ -196,8 +250,19 @@ def _accumulate_events(events: Iterator[Tuple[Optional[str], str]]) -> _ProxyMes
     blocks_by_index: Dict[int, Any] = {}
     tool_input_json_buf: Dict[int, str] = {}
     text_buf: Dict[int, List[str]] = {}
+    # Permanent diagnostic — when a solve ends with "no thinking, no
+    # tool calls, just done" we need to know which SSE events actually
+    # arrived. Mario hit this on 2026-05-31 after the credits proxy
+    # routing came online: the executor produced only `starting` →
+    # `done` and the cause was an empty content list. Logging every
+    # event name + count keeps that visibility permanent.
+    event_count = 0
+    event_names_seen: List[str] = []
 
     for event_name, data_str in events:
+        event_count += 1
+        ev_for_log = event_name or "(no-name)"
+        event_names_seen.append(ev_for_log)
         try:
             data = json.loads(data_str)
         except json.JSONDecodeError:
@@ -336,6 +401,30 @@ def _accumulate_events(events: Iterator[Tuple[Optional[str], str]]) -> _ProxyMes
     msg.content = [blocks_by_index[i] for i in sorted(blocks_by_index.keys())]
     if msg.usage is None:
         msg.usage = _ProxyUsage()
+    # Permanent diagnostic at INFO so empty-response problems are visible
+    # WITHOUT having to flip the logger to DEBUG (Mario hit this on
+    # 2026-05-31 and we couldn't see what came back). Includes the full
+    # sequence of SSE event names + a preview of the first block.
+    first_block_preview = "(no content blocks)"
+    if msg.content:
+        first = msg.content[0]
+        ftype = getattr(first, "type", "?")
+        if ftype == "text":
+            txt = (getattr(first, "text", "") or "").replace("\n", " ")
+            first_block_preview = f"text[{len(txt)} chars]={txt[:200]!r}"
+        elif ftype == "tool_use":
+            first_block_preview = (
+                f"tool_use name={getattr(first, 'name', '?')} "
+                f"input_keys={list(getattr(first, 'input', {}) or {})}"
+            )
+        else:
+            first_block_preview = f"type={ftype}"
+    logger.debug(
+        "[mrcall-proxy] response assembled: "
+        f"events={event_count} ({','.join(event_names_seen[:20])}{'…' if event_count > 20 else ''}) "
+        f"stop_reason={msg.stop_reason} blocks={len(msg.content)} "
+        f"first={first_block_preview}"
+    )
     return msg
 
 
@@ -419,7 +508,7 @@ class MrCallProxyClient:
         # Match the engine's logging policy: never log the token; only
         # its length, which is a safe fingerprint.
         token = self._current_id_token()
-        logger.info(
+        logger.debug(
             f"[mrcall-proxy] init proxy_base_url={self.proxy_base_url} "
             f"token_len={len(token) if token else 0}"
         )
@@ -495,9 +584,23 @@ class MrCallProxyClient:
         url = f"{self.proxy_base_url}/api/desktop/llm/proxy"
         model = body.get("model", "?")
         msg_count = len(body.get("messages") or [])
+        tools_count = len(body.get("tools") or [])
+        sys_chars = 0
+        sys_block = body.get("system")
+        if isinstance(sys_block, str):
+            sys_chars = len(sys_block)
+        elif isinstance(sys_block, list):
+            sys_chars = sum(
+                len(b.get("text", "") if isinstance(b, dict) else "") for b in sys_block
+            )
+        # DEBUG — engine ships with log_level=DEBUG by default
+        # (zylch/config.py), so these breadcrumbs show up automatically
+        # in zylch.log without anyone flipping a switch. Same for the
+        # rest of the proxy diagnostics below.
         logger.debug(
             f"[mrcall-proxy] POST {url} model={model} messages={msg_count} "
-            f"stream={body.get('stream')}"
+            f"tools={tools_count} system_chars={sys_chars} "
+            f"max_tokens={body.get('max_tokens')} stream={body.get('stream')}"
         )
 
         # Sync httpx — we open and close per call. The engine wraps the
@@ -509,11 +612,47 @@ class MrCallProxyClient:
                     if response.status_code >= 400:
                         # Buffer the body so _raise_for_status can read JSON.
                         response.read()
+                        logger.warning(
+                            f"[mrcall-proxy] HTTP {response.status_code} "
+                            f"body={(response.text or '')[:500]!r}"
+                        )
                         self._raise_for_status(response)
                     logger.debug(
-                        f"[mrcall-proxy] stream open status={response.status_code} model={model}"
+                        f"[mrcall-proxy] stream open status={response.status_code} "
+                        f"content-type={response.headers.get('content-type', '?')!r} "
+                        f"model={model}"
                     )
-                    events = _iter_sse_events(response.iter_bytes())
+                    # Sniff the first chunk for gzip magic. If the
+                    # proxy forwarded compressed Anthropic bytes
+                    # without a Content-Encoding header (so httpx
+                    # didn't auto-decode), wrap the rest in an on-the-
+                    # fly inflater. This is purely defensive — the
+                    # right fix is server-side (mrcall-agent should
+                    # negotiate identity or aiter_bytes the stream)
+                    # but the client should not break in the meantime.
+                    raw_iter = response.iter_bytes()
+                    try:
+                        first = next(raw_iter)
+                    except StopIteration:
+                        first = b""
+
+                    def _chained(seed: bytes, rest: Iterator[bytes]) -> Iterator[bytes]:
+                        if seed:
+                            yield seed
+                        for c in rest:
+                            yield c
+
+                    if first.startswith(_GZIP_MAGIC):
+                        logger.warning(
+                            "[mrcall-proxy] detected gzipped SSE body without "
+                            "Content-Encoding header — auto-inflating "
+                            "(server-side fix pending in mrcall-agent)"
+                        )
+                        decoded_iter = _wrap_gzip_iter(_chained(first, raw_iter))
+                    else:
+                        decoded_iter = _chained(first, raw_iter)
+
+                    events = _iter_sse_events(decoded_iter)
                     msg = _accumulate_events(events)
         except (MrCallProxyError, MrCallAuthError, MrCallInsufficientCredits):
             raise

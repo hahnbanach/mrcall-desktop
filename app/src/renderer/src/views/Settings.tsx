@@ -6,6 +6,7 @@ import ConnectGoogleCalendar from './ConnectGoogleCalendar'
 import ConnectWhatsApp from './ConnectWhatsApp'
 import { performSignOut } from '../App'
 import { auth } from '../firebase/config'
+import { ensureEngineSession } from '../firebase/authUtils'
 
 type FieldType = 'text' | 'password' | 'number' | 'select' | 'textarea'
 
@@ -564,9 +565,34 @@ function LLMProviderCard({
     if (!signedIn) return
     setBalanceLoading(true)
     setBalanceErr(null)
+    // Self-heal: the engine holds the Firebase token in memory only,
+    // so every sidecar restart starts session-less and the first
+    // account.balance call after one fails with NoActiveSession (code
+    // -32010) until the auth listener pushes the token. Re-push +
+    // verify via account.whoAmI BEFORE the balance call so the user
+    // sees real numbers, not a stale balance frozen at the last
+    // successful fetch — Mario flagged the suspiciously-static credit
+    // count on production@cafe124.it, that was the underlying cause.
+    const sessionOk = await ensureEngineSession()
+    if (!sessionOk) {
+      setBalance(null)
+      setBalanceErr('Session not yet established — sign in again or wait a moment.')
+      setBalanceLoading(false)
+      return
+    }
     try {
       const r = await window.zylch.account.balance()
       if ('error' in r && r.error === 'auth_expired') {
+        // One retry: maybe the re-push just landed and a follow-up
+        // call now has a fresh session.
+        const recovered = await ensureEngineSession()
+        if (recovered) {
+          const r2 = await window.zylch.account.balance()
+          if ('balance_credits' in r2) {
+            setBalance(r2)
+            return
+          }
+        }
         setBalance(null)
         setBalanceErr('Session expired — please sign in again.')
       } else if ('balance_credits' in r) {

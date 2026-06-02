@@ -18,6 +18,7 @@ import {
   Check,
   Trash2,
   Terminal,
+  Lightbulb,
 } from 'lucide-react'
 
 const REGISTRY = {
@@ -40,6 +41,7 @@ const REGISTRY = {
   check: Check,
   trash: Trash2,
   terminal: Terminal,
+  solve: Lightbulb,
 } as const
 
 export type IconName = keyof typeof REGISTRY

@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = Field(
-        default="INFO",
+        default="DEBUG",
         description="Log level: DEBUG, INFO, WARNING, ERROR",
     )
 
@@ -156,6 +156,17 @@ class Settings(BaseSettings):
     smtp_port: int = Field(
         default=587,
         description="SMTP server port (default 587)",
+    )
+    email_aliases: str = Field(
+        default="",
+        description=(
+            "Additional email addresses the user owns, comma-separated "
+            "(e.g. 'ivan.marchese@cafe124milan.com,info@cafe124.it'). "
+            "Replies from any of these are treated as the user's own — "
+            "without this, threads where the user writes from a "
+            "non-primary identity look as if the contact had the last "
+            "word and `tasks.reanalyze` keeps the task open."
+        ),
     )
 
     # Email archive

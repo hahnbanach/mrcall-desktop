@@ -303,14 +303,46 @@ Event union (see `app/src/renderer/src/types.ts:SolveEvent`):
   "approved": boolean
 }
 
-// Clean completion (incl. user-cancelled).
-{ "type": "done", "result": { "messages": list, "cancelled"?: boolean } }
+// Clean completion (incl. user-cancelled). When the executor ran at
+// least one mutating tool (send_email, send_whatsapp, send_sms,
+// update_memory, run_python), the engine kicks off `tasks.reanalyze`
+// before emitting `done` and decorates the payload with
+// `auto_reanalyzed`. Renderer uses `auto_reanalyzed.action='closed'`
+// to flip the conversation to read-only and refresh `tasks.list`;
+// pure-research solves omit the field entirely (no extra LLM call).
+{
+  "type": "done",
+  "result": {
+    "messages": list,
+    "cancelled"?: boolean,
+    "auto_reanalyzed"?: {
+      "action": "kept" | "closed" | "updated" | "skipped",
+      "reason"?: string,
+      "error"?: string
+    }
+  }
+}
 
 // Unexpected exception in run(). CancelledError does NOT come
 // through here — it's caught and emitted as `done` with
 // `result.cancelled: True`.
 { "type": "error", "message": string }
 ```
+
+### `whatsapp.threads.changed` (notification, no payload)
+
+Emitted by the engine after a successful `_on_message` (live MessageEv)
+or `_on_history` (HistorySyncEv batch) stores at least one row into
+`whatsapp_messages`. The renderer's `views/WhatsApp.tsx` subscribes and
+debounces (~600 ms trailing) before re-fetching `whatsapp.list_threads`
++ the active chat's messages. Without this, the thread list reflected
+the state at first connect and never updated — Mario reported 4-hour-old
+messages still showing "6d ago" because no fresh `loadThreads()` ran.
+
+Important nuance: the engine boot-time auto-reconnect in
+`rpc/server.py:_auto_reconnect_whatsapp` must use the real
+`_make_notify()` (not a no-op) for these notifications to reach the
+renderer on the most common path.
 
 ### `tasks.topic_dedup_now()`
 
@@ -381,6 +413,73 @@ Notification stream — `agents.train.progress`:
 ```
 
 Backs the "Train assistant" card in `Update.tsx` (above the Update button). 30-minute RPC timeout in `app/src/preload/index.ts`.
+
+### `sync.run(days_back?)`
+
+Data-fetch phase of the pipeline (IMAP email + WhatsApp). Skips memory
+extraction and task detection — those still belong to `update.run`.
+Backs the new **Sync** card on the Update view; the full `update.run`
+button calls this implicitly as its first step.
+
+| Param | Type | Required | Notes |
+|-------|------|----------|-------|
+| `days_back` | int | no | Default 60. Same semantics as the CLI `/process --days N`. |
+
+Returns:
+
+```jsonc
+{
+  "success": true,                       // false only on a FATAL stage (email_sync)
+  "summary": "12 new emails, 4 WhatsApp messages",
+  "result": {
+    "sync_new": 12,
+    "wa_messages": 4,
+    "wa_contacts": 0,
+    "wa_skipped_reason": null            // string when WA wasn't configured
+  },
+  "errors": [                            // one entry per failed stage, humanized
+    { "severity": "error"|"warning", "title": "...", "detail": "...", "action": "..." }
+  ]
+}
+```
+
+WhatsApp failures are non-fatal (`severity: "warning"`) and don't flip
+`success`. Email-sync failure is fatal. Email credentials missing →
+short-circuits with a single structured error (does NOT raise).
+
+Notification stream — `sync.progress`:
+
+```jsonc
+{ "pct": 0..100, "message": string }
+```
+
+12-hour RPC timeout (same as `update.run` — a first sync on a busy
+inbox is the slow part). Implementation: `engine/zylch/rpc/setup.py`
+delegating to `process_pipeline.run_sync_only`.
+
+### `setup.state()`
+
+Read-only snapshot driving the gating of the Train + Update cards on
+the Update view. Each card's enabled state derives from a different
+field of this payload (Sync is always enabled).
+
+Returns:
+
+```jsonc
+{
+  "has_synced": true,                    // ≥1 email OR WA msg in this profile's DB
+  "has_trained": true,                   // ≥1 agent_prompts row exists
+  "emails_count": 1234,
+  "whatsapp_messages_count": 0,
+  "agents_trained": ["memory_message", "task_email", "emailer"]
+}
+```
+
+Per-profile (driven by the active SQLite DB), so a brand-new profile
+starts gated even if a sibling profile on the same machine is fully
+set up. Cheap (one COUNT + three indexed lookups) — the renderer
+refetches on mount, after every Sync/Train/Update completion, and on
+`engine.ready` revival.
 
 ### `mrcall.list_my_businesses(offset?, limit?)`
 

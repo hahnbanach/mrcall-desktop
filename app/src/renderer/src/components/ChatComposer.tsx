@@ -12,6 +12,19 @@ export interface ChatComposerProps {
     attachmentPaths: string[],
     taskContext?: ChatComposerTaskContext
   ) => Promise<void> | void
+  /**
+   * Optional secondary action: route the typed text + attachments
+   * through `tasks.solve(task_id, instructions=text)` instead of the
+   * regular `chat.send`. When provided, a lightbulb button appears next
+   * to "Invia" so the user can pick free-chat (Send) vs. agentic-solve
+   * (Solve). Workspace.tsx supplies this only for task conversations —
+   * for plain chats the button is hidden.
+   */
+  onSolve?: (
+    text: string,
+    attachmentPaths: string[],
+    taskContext?: ChatComposerTaskContext
+  ) => Promise<void> | void
   disabled?: boolean
   placeholder?: string
   taskContext?: ChatComposerTaskContext
@@ -35,6 +48,7 @@ export interface ChatComposerProps {
  */
 export default function ChatComposer({
   onSubmit,
+  onSolve,
   disabled = false,
   placeholder = 'Scrivi un messaggio…',
   taskContext,
@@ -78,9 +92,17 @@ export default function ChatComposer({
     setPendingAttachments((prev) => prev.filter((p) => p !== path))
   }
 
-  const send = async (): Promise<void> => {
+  const dispatch = async (
+    action: 'send' | 'solve'
+  ): Promise<void> => {
     const trimmed = text.trim()
-    if (!trimmed || isDisabled) return
+    // Solve allows empty text — Mario can click the lightbulb on a fresh
+    // task to fire the default agent run (same as the legacy auto-solve
+    // on Open). Send still requires a message.
+    if (action === 'send' && !trimmed) return
+    if (isDisabled) return
+    const handler = action === 'solve' ? onSolve : onSubmit
+    if (!handler) return
     const attachmentsSnapshot = pendingAttachments.slice()
     // Clear the input up-front so the user isn't staring at a duplicate of
     // what they just sent while the LLM takes its 30s to answer. If the
@@ -90,15 +112,18 @@ export default function ChatComposer({
     setPendingAttachments([])
     setBusy(true)
     try {
-      await onSubmit(trimmed, attachmentsSnapshot, taskContext)
+      await handler(trimmed, attachmentsSnapshot, taskContext)
     } catch (e) {
       setText(trimmed)
       setPendingAttachments(attachmentsSnapshot)
-      console.error('[ChatComposer] onSubmit failed', e)
+      console.error(`[ChatComposer] ${action} failed`, e)
     } finally {
       setBusy(false)
     }
   }
+
+  const send = (): Promise<void> => dispatch('send')
+  const solve = (): Promise<void> => dispatch('solve')
 
   return (
     <div className="border-t bg-white flex flex-col relative">
@@ -154,6 +179,21 @@ export default function ChatComposer({
             aria-label="Allega file"
           >
             <Icon name="attach" size={16} />
+          </button>
+        )}
+        {onSolve && (
+          <button
+            onClick={solve}
+            disabled={isDisabled}
+            title={
+              text.trim()
+                ? 'Solve con queste istruzioni (Solve with these instructions)'
+                : 'Solve (avvia l\'agente sulla task)'
+            }
+            aria-label="Solve task"
+            className="px-3 py-2 border border-brand-mid-grey bg-white text-brand-grey-80 rounded text-sm hover:bg-brand-light-grey disabled:opacity-50 transition-colors"
+          >
+            <Icon name="solve" size={16} />
           </button>
         )}
         <button

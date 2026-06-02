@@ -122,6 +122,17 @@ class TaskExecutor:
         self._max_turns = max_turns
         # Map tool_use_id -> Future set by approve()
         self._pending: Dict[str, asyncio.Future] = {}
+        # How many mutating tool calls (i.e. APPROVAL_TOOLS items) the
+        # user approved AND the executor ran during this solve. The
+        # caller reads it after the loop to decide whether to fire a
+        # follow-up `reanalyze_task` — running it on every solve would
+        # waste an LLM call for pure-search sessions where nothing
+        # changed in the world.
+        self._mutating_actions_taken: int = 0
+
+    @property
+    def mutating_actions_taken(self) -> int:
+        return self._mutating_actions_taken
 
     @property
     def messages(self) -> List[Dict]:
@@ -165,12 +176,33 @@ class TaskExecutor:
                     ),
                 )
 
+                # Permanent diagnostic — the executor is the gatekeeper
+                # for which `tasks.solve.event` types reach the
+                # renderer. When a solve looks like "nothing happened"
+                # in the UI (Mario 2026-05-31: starting → done in 10 s
+                # with no thinking and no tool calls), the question is
+                # always "what did the LLM actually return?" — content
+                # block types + count + stop_reason answer it in one
+                # line.
+                block_types: List[str] = []
+                for blk in response.content or []:
+                    btype = getattr(blk, "type", type(blk).__name__)
+                    block_types.append(btype)
+                logger.debug(
+                    f"[executor] turn={_turn} stop_reason={response.stop_reason} "
+                    f"blocks={len(response.content or [])} types={block_types}"
+                )
+
                 if response.stop_reason != "tool_use":
                     # Final text
                     text = ""
                     for block in response.content:
                         if hasattr(block, "text"):
                             text += block.text
+                    logger.debug(
+                        f"[executor] end_turn path: text_len={len(text)} "
+                        f"yield_thinking={'yes' if text else 'NO (empty content!)'}"
+                    )
                     if text:
                         self._messages.append(
                             {"role": "assistant", "content": text},
@@ -258,6 +290,18 @@ class TaskExecutor:
                                     self._store,
                                     self._owner_id,
                                 )
+                                # Track only mutating successes —
+                                # APPROVAL_TOOLS is the canonical list
+                                # of "this had side-effects" tools. A
+                                # send that returned "Send failed: …"
+                                # still counts as an attempt; treating
+                                # it as not-mutating would skip
+                                # reanalyze even though the user's
+                                # state may have shifted in their
+                                # mental model. We err on the side of
+                                # firing reanalyze.
+                                if tool_name in APPROVAL_TOOLS:
+                                    self._mutating_actions_taken += 1
                             except Exception as e:
                                 logger.exception(f"[executor] tool {tool_name} failed")
                                 output = f"Tool error: {e}"

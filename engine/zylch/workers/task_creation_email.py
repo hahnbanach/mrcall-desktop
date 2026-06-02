@@ -20,7 +20,7 @@ from zylch.workers.task_creation import (
     _pick_force_update_target,
     _strip_quoted,
 )
-from zylch.workers.thread_presenter import build_thread_history
+from zylch.workers.thread_presenter import build_thread_history, load_user_aliases_for_owner
 
 if TYPE_CHECKING:
     from zylch.workers.task_creation import TaskWorker
@@ -38,8 +38,6 @@ async def analyze_recent_email_events(
     totals. See the module docstring for the history of fixes folded
     into this branch.
     """
-    import asyncio
-
     user_emails = {worker.user_email} if worker.user_email else set()
     logger.debug(
         f"[TASK] _analyze_recent_events" f" user_emails={user_emails}",
@@ -369,6 +367,7 @@ async def analyze_recent_email_events(
                     owner_id=worker.owner_id,
                     thread_id=thread_id,
                     user_email=worker.user_email,
+                    user_aliases=load_user_aliases_for_owner(worker.owner_id),
                 )
         # Out-of-band field — _analyze_event pops it before JSON serialization
         event_data["_thread_history"] = thread_history_section

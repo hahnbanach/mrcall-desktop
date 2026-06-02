@@ -475,7 +475,12 @@ function ProfilesDropdown({
 }
 
 function AppInner(): JSX.Element {
-  const [view, setView] = useState<View>('tasks')
+  // Land on Update by default — that's where Sync / Train / Update live
+  // (the three-step onboarding the user needs to complete after signup
+  // before Tasks / Chat have anything to show). Manually clicking a
+  // sidebar item overrides for the rest of the session; the next launch
+  // returns here again.
+  const [view, setView] = useState<View>('update')
   const [profileEmail, setProfileEmail] = useState<string>('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [profilesRefreshKey] = useState(0)

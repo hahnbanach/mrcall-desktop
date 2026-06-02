@@ -92,6 +92,21 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "group": "Email",
         "optional": True,
     },
+    {
+        "key": "EMAIL_ALIASES",
+        "label": "Email aliases",
+        "type": "text",
+        "group": "Email",
+        "optional": True,
+        "help": (
+            "Other email addresses you also write from, comma-separated "
+            "(e.g. 'ivan.marchese@cafe124milan.com, info@cafe124.it'). "
+            "Replies from any of these count as YOUR reply for task "
+            "tracking — without them, threads where you wrote from a "
+            "secondary address look like the contact had the last word "
+            "and the task stays open."
+        ),
+    },
     # ─── Sync ────────────────────────────────────────────────
     #
     # While the desktop app is open, the renderer schedules an

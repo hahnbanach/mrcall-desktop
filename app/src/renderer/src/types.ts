@@ -186,7 +186,26 @@ export type SolveEvent = SolveEventBase &
         output: string
         approved: boolean
       }
-    | { type: 'done'; result: { messages?: unknown[]; cancelled?: boolean; task_missing?: boolean } }
+    | {
+        type: 'done'
+        result: {
+          messages?: unknown[]
+          cancelled?: boolean
+          task_missing?: boolean
+          /**
+           * Set by the engine when a mutating solve was followed by an
+           * automatic `tasks.reanalyze`. ``action`` mirrors the
+           * reanalyze decision (`kept` / `closed` / `updated` /
+           * `skipped`); the renderer uses `closed` to flip the
+           * conversation to read-only mode and refresh the Tasks tab.
+           */
+          auto_reanalyzed?: {
+            action: 'kept' | 'closed' | 'updated' | 'skipped'
+            reason?: string
+            error?: string
+          }
+        }
+      }
     | { type: 'error'; message: string }
   )
 
@@ -265,6 +284,43 @@ export interface ZylchAPI {
   }
   update: {
     run: () => Promise<any>
+  }
+  sync: {
+    /** Data-fetch only (IMAP email + WhatsApp). Skips memory extraction
+     *  and task detection. Progress is streamed via the ``sync.progress``
+     *  notification with ``{pct, message}``. The "Sync" card on the
+     *  Update view drives this. */
+    run: (params?: { days_back?: number }) => Promise<{
+      success: boolean
+      summary: string
+      result: {
+        sync_new: number
+        wa_messages: number
+        wa_contacts: number
+        wa_skipped_reason?: string | null
+      }
+      errors: Array<{
+        severity?: string
+        title?: string
+        detail?: string
+        action?: string
+      }>
+    }>
+  }
+  setup: {
+    /** Read-only snapshot used by the Update view to decide which of the
+     *  three cards (Sync / Train / Update) is selectable.
+     *  - ``has_synced``: ≥1 email or WhatsApp message in the local DB
+     *    (gates the Train card).
+     *  - ``has_trained``: ≥1 ``agent_prompts`` row exists (gates the
+     *    Update card). */
+    state: () => Promise<{
+      has_synced: boolean
+      has_trained: boolean
+      emails_count: number
+      whatsapp_messages_count: number
+      agents_trained: string[]
+    }>
   }
   agents: {
     /** Runs the 3 personalised-agent trainers serially (memory_message —

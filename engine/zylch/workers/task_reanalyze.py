@@ -116,9 +116,23 @@ def _build_user_content(
     Provides the existing task summary + the full thread history so the
     LLM can decide keep/close/update.
     """
+    # Build the "Contact:" line from whatever the task carries — email
+    # for email tasks, phone/name for WhatsApp tasks. Falling back to
+    # "(unknown)" on a WA task strips Angelo Leto's identity from the
+    # prompt and the LLM has nothing to anchor relationship context on.
+    contact_bits: List[str] = []
+    if task.get("contact_name"):
+        contact_bits.append(str(task.get("contact_name")))
+    if task.get("contact_email"):
+        contact_bits.append(str(task.get("contact_email")))
+    if task.get("contact_phone"):
+        contact_bits.append(str(task.get("contact_phone")))
+    contact_str = " / ".join(contact_bits) if contact_bits else "(unknown)"
+    channel_str = (task.get("channel") or "").strip() or "(unknown)"
     existing = (
         f"EXISTING TASK (ID: {task.get('id')}):\n"
-        f"- Contact: {task.get('contact_email') or '(unknown)'}\n"
+        f"- Channel: {channel_str}\n"
+        f"- Contact: {contact_str}\n"
         f"- Urgency: {task.get('urgency') or '(unknown)'}\n"
         f"- Suggested action: {task.get('suggested_action') or '(empty)'}\n"
         f"- Reason: {task.get('reason') or '(empty)'}\n"
@@ -179,7 +193,11 @@ async def reanalyze_task(
     from zylch.llm import try_make_llm_client
     from zylch.storage.database import get_session
     from zylch.storage.storage import Storage
-    from zylch.workers.thread_presenter import build_thread_history
+    from zylch.workers.thread_presenter import (
+        build_thread_history,
+        build_whatsapp_thread_history,
+        load_user_aliases_for_owner,
+    )
 
     logger.debug(f"[reanalyze_task] owner_id={owner_id} task_id={task_id}")
 
@@ -190,65 +208,98 @@ async def reanalyze_task(
         logger.debug(f"[reanalyze_task] task not found task_id={task_id}")
         return {"ok": False, "error": "task not found", "task_id": task_id}
 
-    # Resolve thread_id (sources.thread_id, else lookup via first source email)
+    # WhatsApp tasks need a different thread reconstruction (chat_jid →
+    # whatsapp_messages) than the email path (Email.thread_id). Without
+    # this branch the LLM sees "(No thread history available)" for every
+    # WA task and reasons solely from `created_at`, producing claims like
+    # "task is 6 days old" even when the contact re-asked the same
+    # question moments ago.
+    channel = (task.get("channel") or "").lower()
+    sources = task.get("sources") or {}
+    wa_chat_jid = (sources.get("whatsapp_chat_jid") or "").strip()
+    if not wa_chat_jid and channel == "whatsapp":
+        # Older WA tasks stored the chat_jid only in `sources.thread_id`.
+        wa_chat_jid = (sources.get("thread_id") or "").strip()
+    is_whatsapp = channel == "whatsapp" or bool(wa_chat_jid)
+
     with get_session() as sess:
-        thread_id = _resolve_thread_id({**task, "owner_id": owner_id}, sess)
-        if not thread_id:
-            logger.debug(f"[reanalyze_task] no thread_id resolved for task_id={task_id}")
-            return {
-                "ok": False,
-                "error": "no thread_id",
-                "task_id": task_id,
-            }
-
         user_email = get_email(owner_id) or os.environ.get("EMAIL_ADDRESS", "")
-        primary_history = build_thread_history(
-            session=sess,
-            owner_id=owner_id,
-            thread_id=thread_id,
-            user_email=user_email or "",
-        )
-
-        # F6 (2026-05-05): pull sibling threads where the user already
-        # corresponded with the same contact_email — single-thread
-        # reanalyze misses cross-thread resolutions (real case: Salamone
-        # task on thread A, user's "reactivate access" reply on thread
-        # B; without sibling history the LLM can't see the ball is in
-        # the contact's court).
-        contact_for_siblings = (task.get("contact_email") or "").strip().lower()
-        sibling_thread_ids: List[str] = []
-        if contact_for_siblings:
-            sibling_thread_ids = store.get_sibling_threads_with_contact(
-                owner_id=owner_id,
-                contact_email=contact_for_siblings,
-                user_email=user_email or "",
-                primary_thread_id=thread_id,
-                days=60,
-            )
-
-        sibling_sections: List[str] = []
-        for sid in sibling_thread_ids:
-            section = build_thread_history(
+        user_aliases = load_user_aliases_for_owner(owner_id)
+        if is_whatsapp:
+            if not wa_chat_jid:
+                logger.debug(f"[reanalyze_task] WA task with no chat_jid task_id={task_id}")
+                return {
+                    "ok": False,
+                    "error": "no chat_jid",
+                    "task_id": task_id,
+                }
+            thread_history_section = build_whatsapp_thread_history(
                 session=sess,
                 owner_id=owner_id,
-                thread_id=sid,
+                chat_jid=wa_chat_jid,
                 user_email=user_email or "",
             )
-            if section:
-                sibling_sections.append(
-                    f"--- RELATED THREAD ({sid}, same contact, last 60d) ---\n{section}"
-                )
-
-        if sibling_sections:
-            thread_history_section = "\n\n".join(
-                [primary_history] + sibling_sections
-            )
             logger.debug(
-                f"[reanalyze_task] task_id={task_id} primary_thread={thread_id} "
-                f"siblings={len(sibling_sections)}"
+                f"[reanalyze_task] task_id={task_id} channel=whatsapp "
+                f"chat_jid={wa_chat_jid} history_len={len(thread_history_section)}"
             )
         else:
-            thread_history_section = primary_history
+            thread_id = _resolve_thread_id({**task, "owner_id": owner_id}, sess)
+            if not thread_id:
+                logger.debug(f"[reanalyze_task] no thread_id resolved for task_id={task_id}")
+                return {
+                    "ok": False,
+                    "error": "no thread_id",
+                    "task_id": task_id,
+                }
+
+            primary_history = build_thread_history(
+                session=sess,
+                owner_id=owner_id,
+                thread_id=thread_id,
+                user_email=user_email or "",
+                user_aliases=user_aliases,
+            )
+
+            # F6 (2026-05-05): pull sibling threads where the user already
+            # corresponded with the same contact_email — single-thread
+            # reanalyze misses cross-thread resolutions (real case: Salamone
+            # task on thread A, user's "reactivate access" reply on thread
+            # B; without sibling history the LLM can't see the ball is in
+            # the contact's court).
+            contact_for_siblings = (task.get("contact_email") or "").strip().lower()
+            sibling_thread_ids: List[str] = []
+            if contact_for_siblings:
+                sibling_thread_ids = store.get_sibling_threads_with_contact(
+                    owner_id=owner_id,
+                    contact_email=contact_for_siblings,
+                    user_email=user_email or "",
+                    primary_thread_id=thread_id,
+                    days=60,
+                )
+
+            sibling_sections: List[str] = []
+            for sid in sibling_thread_ids:
+                section = build_thread_history(
+                    session=sess,
+                    owner_id=owner_id,
+                    thread_id=sid,
+                    user_email=user_email or "",
+                    user_aliases=user_aliases,
+                )
+                if section:
+                    sibling_sections.append(
+                        f"--- RELATED THREAD ({sid}, same contact, last 60d) ---\n{section}"
+                    )
+
+            if sibling_sections:
+                thread_history_section = "\n\n".join([primary_history] + sibling_sections)
+                logger.debug(
+                    f"[reanalyze_task] task_id={task_id} primary_thread={thread_id} "
+                    f"siblings={len(sibling_sections)}"
+                )
+            else:
+                thread_history_section = primary_history
 
     client = try_make_llm_client()
     if client is None:
@@ -292,9 +343,7 @@ async def reanalyze_task(
         # runaway noise; one warning per failure is enough.
         err_str = str(e)
         if "529" in err_str or "overloaded" in err_str.lower():
-            logger.warning(
-                f"[reanalyze_task] provider overloaded (529) task_id={task_id}"
-            )
+            logger.warning(f"[reanalyze_task] provider overloaded (529) task_id={task_id}")
         else:
             logger.exception(f"[reanalyze_task] LLM call failed task_id={task_id}")
         return {"ok": False, "error": f"LLM error: {e}", "task_id": task_id}
@@ -315,6 +364,40 @@ async def reanalyze_task(
     action = (decision.get("action") or "keep").lower()
     reason = (decision.get("reason") or "").strip()
     usage = response.usage or {"input_tokens": 0, "output_tokens": 0}
+
+    # Option B (Mario, 2026-05-28): a task whose last non-auto turn is
+    # the user's own reply is a *proactive nudge* — the contact is
+    # silent, no user-side action is pending. Cap medium/high to low
+    # so it doesn't crowd the genuinely user-blocking items. Applies
+    # to KEEP and UPDATE; CLOSE is unaffected (the task is leaving the
+    # open list anyway).
+    if action in ("update", "keep"):
+        from zylch.workers.thread_presenter import cap_urgency_for_silent_followup
+
+        raw_urgency = (decision.get("urgency") or "").strip().lower() or None
+        # On a bare KEEP the decision often omits urgency; cap against
+        # the current task's value so a pre-existing medium can be
+        # demoted on the next sweep.
+        check_urgency = raw_urgency or (task.get("urgency") or None)
+        new_urgency, capped = cap_urgency_for_silent_followup(check_urgency, thread_history_section)
+        if capped:
+            decision["urgency"] = new_urgency
+            # Promote a KEEP to UPDATE so the cap actually lands on disk
+            # — a bare KEEP doesn't touch urgency in storage below.
+            if action == "keep":
+                action = "update"
+            reason_suffix = (
+                " [urgency capped to low: ball in contact's court, "
+                "no pending user action]"
+            )
+            if reason and reason_suffix.strip() not in reason:
+                reason = (reason + reason_suffix).strip()
+            elif not reason:
+                reason = reason_suffix.strip()
+            logger.info(
+                f"[reanalyze_task] task_id={task_id} urgency capped "
+                f"{check_urgency} → low (user replied last)"
+            )
 
     # Apply decision
     applied: str

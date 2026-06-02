@@ -15,7 +15,7 @@
  * `whatsapp.send_message` over the live connection. The returned message
  * is appended optimistically (no full reload).
  */
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { WhatsAppMessage, WhatsAppThread } from '../types'
 import { errorMessage } from '../lib/errors'
 import { formatAbsolute, formatRelative } from '../lib/dates'
@@ -135,6 +135,42 @@ export default function WhatsAppView(): JSX.Element {
     }
   }, [connected])
 
+  // Re-fetch messages for the currently active chat. Used both when
+  // the user switches chats AND when a `whatsapp.threads.changed`
+  // notification fires for a chat already open (background message
+  // arrival while the user has the chat in view).
+  const reloadActiveMessages = useCallback(
+    (jid: string): (() => void) => {
+      let cancelled = false
+      setMessagesLoading(true)
+      setMessagesError(null)
+      window.zylch.whatsapp
+        .listMessages({ chat_jid: jid, limit: 200 })
+        .then((r) => {
+          if (cancelled) return
+          if (r.error) {
+            setMessagesError(r.error)
+            setMessages([])
+          } else {
+            setMessages(r.messages)
+          }
+        })
+        .catch((e) => {
+          if (!cancelled) {
+            setMessagesError(errorMessage(e))
+            setMessages([])
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setMessagesLoading(false)
+        })
+      return () => {
+        cancelled = true
+      }
+    },
+    []
+  )
+
   // Load messages whenever the active thread changes.
   useEffect(() => {
     // Switching chats clears any half-typed draft + stale send error.
@@ -144,33 +180,36 @@ export default function WhatsAppView(): JSX.Element {
       setMessages([])
       return
     }
-    let cancelled = false
-    setMessagesLoading(true)
-    setMessagesError(null)
-    window.zylch.whatsapp
-      .listMessages({ chat_jid: activeJid, limit: 200 })
-      .then((r) => {
-        if (cancelled) return
-        if (r.error) {
-          setMessagesError(r.error)
-          setMessages([])
-        } else {
-          setMessages(r.messages)
+    const cancel = reloadActiveMessages(activeJid)
+    return cancel
+  }, [activeJid, reloadActiveMessages])
+
+  // Live thread-list refresh — the engine emits `whatsapp.threads.changed`
+  // after every new message (history-sync batch OR live MessageEv).
+  // Without this, the list shows the state at first connect and never
+  // updates: a chat that received fresh messages keeps its old "Nd ago"
+  // preview, which Mario reported as "messages from 4h ago labelled
+  // 6d old". Debounce 600 ms — the history sync after a re-connect
+  // delivers hundreds of events in a burst; we want ONE refresh after
+  // the storm settles, not one per message.
+  useEffect(() => {
+    if (!connected) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const off = window.zylch.onNotification('whatsapp.threads.changed', () => {
+      if (timer !== null) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = null
+        void loadThreads()
+        if (activeJid) {
+          reloadActiveMessages(activeJid)
         }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setMessagesError(errorMessage(e))
-          setMessages([])
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setMessagesLoading(false)
-      })
+      }, 600)
+    })
     return () => {
-      cancelled = true
+      if (timer !== null) clearTimeout(timer)
+      off()
     }
-  }, [activeJid])
+  }, [connected, activeJid, reloadActiveMessages])
 
   // Keep the message pane pinned to the bottom as messages arrive.
   useEffect(() => {

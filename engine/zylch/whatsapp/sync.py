@@ -63,11 +63,25 @@ class WhatsAppSyncService:
         Returns:
             Number of messages stored.
         """
+        # The Neonize_pb2.HistorySync event wraps the inner
+        # waHistorySync.HistorySync on a field called ``Data`` (capital
+        # D, per the proto definition). The previous code read
+        # ``event.data`` (lowercase), which always missed and silently
+        # treated the outer proto as the data — at which point
+        # ``hasattr(data, "conversations")`` was False and every
+        # HistorySyncEv logged "0 conversations" (see zylch.log
+        # 2026-05-06: ~30 consecutive "0 conversations / 0 messages
+        # stored" entries). Fix: prefer ``Data``, keep ``data`` as a
+        # fallback in case future neonize versions add a lowercase alias.
         count = 0
         try:
-            data = event.data if hasattr(event, "data") else event
+            data = (
+                event.Data
+                if hasattr(event, "Data") and event.HasField("Data")
+                else (event.data if hasattr(event, "data") else event)
+            )
             conversations = data.conversations if hasattr(data, "conversations") else []
-            logger.info(f"[wa-sync] history sync: {len(conversations)}" " conversations")
+            logger.info(f"[wa-sync] history sync: {len(conversations)} conversations")
 
             for conv in conversations:
                 messages = conv.messages if hasattr(conv, "messages") else []
@@ -78,7 +92,7 @@ class WhatsAppSyncService:
                         count += 1
 
             self._messages_synced += count
-            logger.info(f"[wa-sync] history sync complete:" f" {count} messages stored")
+            logger.info(f"[wa-sync] history sync complete: {count} messages stored")
         except Exception as e:
             logger.error(f"[wa-sync] history sync error: {e}")
         return count
@@ -459,7 +473,15 @@ class WhatsAppSyncService:
             sender_jid = _format_jid(getattr(src, "Sender", None)) if src is not None else ""
             is_from_me = bool(getattr(src, "IsFromMe", False)) if src is not None else False
             is_group = bool(getattr(src, "IsGroup", False)) if src is not None else False
-            timestamp = _extract_timestamp(info)
+            # `event` is the neonize Message proto (the MessageEv). For
+            # OFFLINE CATCH-UP it delivers `info.Timestamp = 0` and stamps
+            # the original sender timestamp on the wire-level
+            # `SourceWebMsg.messageTimestamp` instead. Without that
+            # fallback every catch-up message collapses to
+            # `datetime.now()` and the chat lands as a sub-second burst
+            # (Mario reported 717 messages from 2026-05-06..19 all stored
+            # as `2026-05-19 07:55:25.x`).
+            timestamp = _extract_timestamp(info, event=event)
             text = _extract_text(message)
             sender_name = str(info.Pushname) if hasattr(info, "Pushname") else ""
 
@@ -1014,13 +1036,47 @@ def _safe_from_timestamp(ts) -> Optional[datetime]:
         return None
 
 
-def _extract_timestamp(info) -> Optional[datetime]:
-    """Extract timestamp from message info."""
+def _extract_timestamp(info, event=None) -> Optional[datetime]:
+    """Extract timestamp from a neonize MessageEv.
+
+    Tries, in order:
+
+    1. ``info.Timestamp`` — neonize MessageInfo Unix timestamp. Set for
+       live MessageEv during a normal online session.
+    2. ``event.SourceWebMsg.messageTimestamp`` — the original sender
+       timestamp from the wire WebMessageInfo. whatsmeow populates this
+       even when it leaves ``info.Timestamp`` at 0, which happens for
+       **offline catch-up** messages delivered after a reconnect.
+       Without this fallback every catch-up message gets stamped with
+       ``datetime.now()`` at storage time and a multi-day backlog
+       collapses to a single instant (the symptom Mario reported on the
+       Andrea Censoni chat — 8 messages spanning 13 minutes in reality
+       all stored as ``2026-05-19 07:55:25.6+``).
+
+    Returns ``None`` if neither field carries a usable value; the caller
+    falls back to ``datetime.now(timezone.utc)`` for storage but logs a
+    warning so the gap is visible in zylch.log.
+    """
+    # Primary: neonize MessageInfo.Timestamp (int, Unix seconds).
     if hasattr(info, "Timestamp") and info.Timestamp:
         ts = info.Timestamp
         if isinstance(ts, datetime):
             return ts
-        return _safe_from_timestamp(ts)
+        result = _safe_from_timestamp(ts)
+        if result is not None:
+            return result
+    # Fallback: wire-level WebMessageInfo.messageTimestamp (catch-up path).
+    if event is not None:
+        try:
+            if hasattr(event, "HasField") and event.HasField("SourceWebMsg"):
+                src = event.SourceWebMsg
+                ts2 = getattr(src, "messageTimestamp", 0)
+                if ts2:
+                    result = _safe_from_timestamp(ts2)
+                    if result is not None:
+                        return result
+        except (ValueError, AttributeError):
+            pass
     return None
 
 

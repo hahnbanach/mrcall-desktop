@@ -67,8 +67,19 @@ def _resolve_wa_sender(
             resolved = (contact.get("phone_number") or "").strip()
             if resolved.startswith("+"):
                 phone = resolved
-            if not sender_name:
-                sender_name = contact.get("name") or contact.get("push_name") or sender_name
+            # Address-book ``name`` beats the message's WA ``Pushname``.
+            # WhatsApp's Pushname is the sender's self-chosen display
+            # nick (e.g. Roberto Scoppa set his to "Imperatore"). The
+            # rubric ``name`` is stable and what Mario thinks of as the
+            # contact's identity, so the task prompt should use it — the
+            # docstring above promises this; the previous logic
+            # (``if not sender_name``) never reached the address-book
+            # branch because Pushname is always present.
+            address_book = (contact.get("name") or "").strip()
+            if address_book:
+                sender_name = address_book
+            elif not sender_name:
+                sender_name = (contact.get("push_name") or "").strip() or sender_name
     return phone, lid, sender_name
 
 
