@@ -1,0 +1,23 @@
+# Cross-machine WS backend (mrcall-desktop) — Caddy site config.
+#
+# desktop.mrcall.ai → the zylch engine on this VPS. The desktop app
+# connects to wss://desktop.mrcall.ai/ws/<uid>; Caddy auto-provisions a
+# Let's Encrypt cert (DNS-only A record → this VPS), terminates TLS,
+# transparently upgrades the WebSocket, and forwards the
+# `Authorization: Bearer <jwt>` header to the engine, which enforces
+# `token.uid == OWNER_ID`.
+#
+# Single-profile today: one engine on 127.0.0.1:5174 answers every
+# /ws/* (it ignores the path). When multiple profiles run, give each its
+# own per-uid unix socket and route by the uid in the path instead:
+#
+#     desktop.mrcall.ai {
+#         @ws path_regexp uid ^/ws/([^/]+)
+#         reverse_proxy @ws unix//run/zylch/{re.uid.1}.sock
+#     }
+#
+# (the engine already supports `serve --ws --unix <socket>`).
+
+desktop.mrcall.ai {
+	reverse_proxy /ws/* 127.0.0.1:5174
+}

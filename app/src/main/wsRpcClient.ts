@@ -85,6 +85,16 @@ export class WebSocketRpcClient extends EventEmitter implements RpcClient {
     super()
   }
 
+  // The configured remote URL is a BASE (e.g. wss://desktop.mrcall.ai, or
+  // ws://127.0.0.1:5174 over an SSH tunnel). We always append `/ws/<uid>`
+  // so a Caddy reverse-proxy can route each profile to its own engine
+  // socket — the app stores ONE base URL but each window reaches its own
+  // backend. A direct engine ignores the path, so this is backward-
+  // compatible with a plain base URL (tunnel / local).
+  private connectUrl(): string {
+    return `${this.url.replace(/\/+$/, '')}/ws/${encodeURIComponent(this.profile)}`
+  }
+
   isAlive(): boolean {
     return this.connected && this.ws !== null && this.ws.readyState === WebSocket.OPEN
   }
@@ -143,11 +153,19 @@ export class WebSocketRpcClient extends EventEmitter implements RpcClient {
     if (this.stopped) return
     if (this.ws) {
       // Defensive: never leak a half-open socket across a reconnect.
-      try {
-        this.ws.removeAllListeners()
-        this.ws.terminate()
-      } catch {}
+      // `terminate()` on a still-CONNECTING socket makes `ws` emit an
+      // ASYNC 'error' ("WebSocket was closed before the connection was
+      // established"). After removeAllListeners() there is no 'error'
+      // listener, so Node would rethrow it as an UNCAUGHT exception (the
+      // crash popup). Attach a no-op error sink before terminating so the
+      // late error is absorbed.
+      const old = this.ws
       this.ws = null
+      try {
+        old.removeAllListeners()
+        old.on('error', () => {})
+        old.terminate()
+      } catch {}
     }
 
     let token: string | null
@@ -174,10 +192,11 @@ export class WebSocketRpcClient extends EventEmitter implements RpcClient {
     }
 
     this.connectStartedAtMs = Date.now()
-    console.log(`[ws] connecting url=${this.url} profile=${this.profile}`)
+    const target = this.connectUrl()
+    console.log(`[ws] connecting url=${target} profile=${this.profile}`)
     let ws: WebSocket
     try {
-      ws = new WebSocket(this.url, {
+      ws = new WebSocket(target, {
         headers: { Authorization: `Bearer ${token}` },
         // Frame ceiling mirrors the engine's 16 MiB max_size (chat.send
         // with embedded email bodies can be large).
@@ -286,9 +305,14 @@ export class WebSocketRpcClient extends EventEmitter implements RpcClient {
       }
       this.connected = false
       this.emitStatusDown(code, message, hint)
-      // 'close' won't fire for a rejected upgrade; drive reconnect here.
-      // Auth failures use a longer floor via backoff so we don't hammer.
-      this.scheduleReconnect()
+      // 'close' won't fire for a rejected upgrade; drive reconnect here —
+      // EXCEPT 403 (signed-in account doesn't own this profile / backend
+      // bound to another account): retrying can't fix that without the
+      // user switching account or backend URL, so we stop the loop and
+      // leave the banner up. 401 may self-heal next connect (fresh JWT).
+      if (statusCode !== 403) {
+        this.scheduleReconnect()
+      }
       try {
         res.destroy()
       } catch {}

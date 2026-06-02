@@ -212,25 +212,48 @@ def _warmup() -> None:
         logger.warning(f"[ws] warmup failed (non-fatal): {e}")
 
 
-async def serve_ws(host: str, port: int, warmup: bool = True) -> None:
+async def serve_ws(
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+    warmup: bool = True,
+    unix_path: Optional[str] = None,
+) -> None:
     """Run the WebSocket JSON-RPC server until cancelled.
+
+    Listens on a TCP ``host:port`` OR a Unix domain socket (``unix_path``).
+    The Unix-socket mode is for the multi-tenant VPS deploy: each profile's
+    daemon owns a socket (named by uid) and Caddy reverse-proxies
+    ``/ws/<uid>`` to it — no TCP port juggling across users. The
+    ``Authorization: Bearer`` gate is identical (Caddy forwards the header
+    through to the upstream).
 
     ``warmup=False`` is used by tests that only exercise the transport +
     auth path (no DB needed).
     """
-    from websockets.asyncio.server import serve
+    from websockets.asyncio.server import serve, unix_serve
 
     if warmup:
         _warmup()
 
-    logger.info(f"[ws] serving JSON-RPC on ws://{host}:{port}")
-    async with serve(
-        _handle_connection,
-        host,
-        port,
-        process_request=_process_request,
-        # Generous frame size — a chat.send with embedded email bodies can
-        # be large, same rationale as the stdio reader's 16 MiB limit.
-        max_size=16 * 1024 * 1024,
-    ) as server:
+    # Generous frame size — a chat.send with embedded email bodies can be
+    # large, same rationale as the stdio reader's 16 MiB limit.
+    if unix_path:
+        logger.info(f"[ws] serving JSON-RPC on unix:{unix_path}")
+        server_cm = unix_serve(
+            _handle_connection,
+            unix_path,
+            process_request=_process_request,
+            max_size=16 * 1024 * 1024,
+        )
+    else:
+        logger.info(f"[ws] serving JSON-RPC on ws://{host}:{port}")
+        server_cm = serve(
+            _handle_connection,
+            host,
+            port,
+            process_request=_process_request,
+            max_size=16 * 1024 * 1024,
+        )
+
+    async with server_cm as server:
         await server.serve_forever()

@@ -15,7 +15,7 @@ discipline: |
 
 # Cross-machine transport (backend remoto + client thin)
 
-## Status — 2026-06-01 (in-progress)
+## Status — 2026-06-02 (in-progress)
 
 - **Phase 1 ✅** (commit `5294587a`) — engine WS (`zylch serve --ws`), Firebase
   JWT handshake gate (`uid == OWNER_ID`), shared `dispatch_raw`, `auth.refresh`,
@@ -39,6 +39,17 @@ discipline: |
   `engine/scripts/systemd/zylch-server@.service`) + per-profile
   `/etc/zylch/<uid>.conf` (`ZYLCH_WS_ADDR=127.0.0.1:<port>`). Enabled (boot),
   auto-restart proven (`kill -9` → respawn, `NRestarts=1`).
+- **Phase 3b ✅** (2026-06-02) — public TLS endpoint. **Caddy** v2.11 on the VPS,
+  `desktop.mrcall.ai` (DNS-only A record → the IP), auto Let's Encrypt cert
+  (tls-alpn-01). `reverse_proxy /ws/* 127.0.0.1:5174` → the engine. Engine gained
+  `serve --ws --unix <socket>`; the app's `WebSocketRpcClient` appends `/ws/<uid>`
+  to a BASE URL (one machine-global config, per-window routing; an unrouted
+  direct engine ignores the path → backward-compatible with the tunnel). Live-
+  validated end-to-end: production@cafe124 over `wss://desktop.mrcall.ai`, no
+  tunnel; auth gate proven (no token → engine 401 *through Caddy*). Also fixed: a
+  reconnect crash (`terminate()` on a CONNECTING socket emitted an uncaught async
+  'error' after `removeAllListeners`) and an infinite retry loop on 403.
+  Artifact: `engine/scripts/caddy/desktop.Caddyfile`.
 
 ### Architecture correction (2026-06-01)
 "One daemon per **Linux user**" — NOT per-Firebase-tenant. The engine is **one
@@ -54,11 +65,64 @@ Already running: `mrcall-agent` (Docker `:8000`) + postgres (`:5432`); a node on
 holds 4 profiles. All heavy aarch64/py3.12 wheels resolved cleanly.
 
 ### Pending
-- **3b — Caddy + TLS + domain** for a public `wss://` (needs a DNS name → the IP).
-  The SSH tunnel is already a valid, secure endpoint (nothing public); Caddy is
-  only for tunnel-free / future-mobile access.
-- The other 3 VPS profiles: trivial via the template (one conf + `enable --now`).
+- **Multi-profile / multi-user routing** — the next milestone (brief below). Today
+  Caddy sends every `/ws/*` to the single Gn9Icu daemon on `:5174`, so any other
+  profile gets a (correct) 403.
 - Multi-client broadcast + reconnect-resume → Phase 5.
+- App Settings card: the URL field help should read "base URL (wss://host), no path".
+
+## Next session — multi-profile / multi-user routing (brief)
+
+**Goal.** Serve *many* profiles (and many Linux users) over the one
+`wss://desktop.mrcall.ai` endpoint, each routed to its own engine daemon. The app
+already appends `/ws/<uid>`; the missing piece is per-uid routing on the server so
+each window reaches *its* backend.
+
+**Why it's blocked today.** The `Caddyfile` proxies `/ws/* → 127.0.0.1:5174` (one
+upstream = the Gn9Icu daemon). Any non-Gn9Icu token → the gate returns 403
+(correct behaviour). The engine's `--unix` socket support exists and is tested
+locally, but is NOT yet used on the VPS.
+
+**Target design (already explained + agreed with Mario).**
+- One daemon per profile on a **Unix socket named by uid**:
+  `zylch -p <uid> serve --ws --unix /run/zylch/<uid>.sock`. No TCP-port juggling,
+  no collisions across users (the firebase uid is globally unique).
+- **Caddy routes by the uid in the path:**
+  ```
+  desktop.mrcall.ai {
+      @ws path_regexp uid ^/ws/([^/]+)
+      reverse_proxy @ws unix//run/zylch/{re.uid.1}.sock
+  }
+  ```
+- **`/run/zylch/`** is a shared dir so Caddy (user `caddy`) can reach every user's
+  socket: `tmpfiles.d` `d /run/zylch 2775 <owner> caddy -` (setgid → sockets
+  inherit group `caddy`), and the daemon runs with `UMask=0007` so the socket is
+  group-writable (caddy can connect).
+- **Per Linux user**: their own daemons via `systemctl --user`
+  (`loginctl enable-linger <user>` once) — runs as that user, locks its own
+  `~/.zylch/profiles/<uid>/`. (The current 3c unit is system-level `User=mal`;
+  evolve it to a `--user` template, or keep system units with the per-uid socket.)
+- **Security boundary stays the JWT gate** (`uid==OWNER_ID`) per daemon: a
+  mis-route fails 403, so routing is a hint, not the security. (Assumes the Linux
+  users are trusted — Mario's own server. For hostile multi-tenancy, namespace
+  sockets per user + a registry.)
+
+**Concrete steps.**
+1. Switch the `Caddyfile` to the `path_regexp` per-uid socket form.
+2. Create `/run/zylch/` (tmpfiles.d, group `caddy`, setgid); add `UMask=0007` and
+   `--unix /run/zylch/%i.sock` to the systemd unit ExecStart.
+3. Migrate the Gn9Icu daemon to `--unix`; verify production@cafe124 still works
+   over `wss://` (regression).
+4. Add the `mario.alemi@mrcall.ai` (uid `x59G6…`) daemon: its VPS DB is **empty** —
+   `rsync ~/.zylch/profiles/x59G6…/ claude:.zylch/profiles/x59G6…/` from the Mac (or
+   `zylch -p x59G6… update` on the VPS) — then `enable --now`. Verify
+   `wss://desktop.mrcall.ai/ws/x59G6…` with mario.alemi's token serves his data.
+5. For another Linux user: `enable-linger`, their own `systemctl --user` daemons;
+   sockets land in the shared `/run/zylch/`.
+
+**Open decisions.** `systemctl --user` (linger) vs system units; flat `/run/zylch`
++ group `caddy` (trusted) vs per-user namespacing; how each user's profile data
+reaches the VPS.
 
 ## Cosa Mario ha chiesto
 

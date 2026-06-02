@@ -398,8 +398,14 @@ def rpc(ctx):
     default="127.0.0.1:5174",
     help="WebSocket bind address HOST:PORT (default 127.0.0.1:5174)",
 )
+@click.option(
+    "--unix",
+    "unix_path",
+    default=None,
+    help="Unix-socket path to listen on instead of --ws (for a Caddy reverse-proxy).",
+)
 @click.pass_context
-def serve(ctx, ws_addr):
+def serve(ctx, ws_addr, unix_path):
     """WebSocket JSON-RPC backend for cross-machine clients.
 
     Same RPC surface as `rpc` (stdio) but over a WebSocket, so an
@@ -445,17 +451,22 @@ def serve(ctx, ws_addr):
         )
         raise SystemExit(1)
 
-    host, sep, port_str = ws_addr.rpartition(":")
-    if not sep or not host or not port_str.isdigit():
-        sys.stderr.write(f"Invalid --ws address {ws_addr!r}; expected HOST:PORT.\n")
-        raise SystemExit(2)
-    port = int(port_str)
-
-    logger.info(f"[CLI] serve --ws {host}:{port} profile={profile} owner={owner_uid}")
     from zylch.rpc.server_ws import serve_ws
 
+    if unix_path:
+        logger.info(f"[CLI] serve --unix {unix_path} profile={profile} owner={owner_uid}")
+        coro = serve_ws(unix_path=unix_path)
+    else:
+        host, sep, port_str = ws_addr.rpartition(":")
+        if not sep or not host or not port_str.isdigit():
+            sys.stderr.write(f"Invalid --ws address {ws_addr!r}; expected HOST:PORT.\n")
+            raise SystemExit(2)
+        port = int(port_str)
+        logger.info(f"[CLI] serve --ws {host}:{port} profile={profile} owner={owner_uid}")
+        coro = serve_ws(host, port)
+
     try:
-        asyncio.run(serve_ws(host, port))
+        asyncio.run(coro)
     except KeyboardInterrupt:
         logger.info("[CLI] serve interrupted, shutting down")
 
