@@ -97,3 +97,54 @@ per profile. Running several profiles (or several people) behind one endpoint wi
 automatic per-user routing is designed but not yet built — see the full design and
 the multi-profile brief in
 [`execution-plans/cross-machine-transport.md`](execution-plans/cross-machine-transport.md).
+
+## Agent runbook — provision one profile's daemon (exact commands)
+
+For an agent (or a script) bringing up the backend for one profile on a server.
+Run from a checkout of this repo on your Mac. Set `PROF` to the Firebase UID,
+`SSH` to the server (`user@host` or an ssh-config alias), and `PORT` to a free
+port (one per profile: 5174, 5175, …).
+
+> Use `PROF`, **not** `UID` — `UID` is a read-only shell variable, so the
+> assignment silently fails and you target the wrong path (`/profiles/501`).
+
+```bash
+PROF=<firebase-uid>; SSH=<user@host>; PORT=5174
+
+# 1 · engine onto the server + venv install (idempotent)
+rsync -az --exclude venv --exclude __pycache__ engine/ "$SSH:zylch-engine/"
+ssh "$SSH" 'cd ~/zylch-engine && [ -x venv/bin/zylch ] || (python3 -m venv venv && ./venv/bin/pip install -e .)'
+
+# 2 · this profile's data onto the server
+rsync -az ~/.zylch/profiles/"$PROF"/ "$SSH:.zylch/profiles/$PROF/"
+
+# 3 · systemd unit (once) + this profile's port + enable & start
+ssh "$SSH" "set -e
+  sudo cp ~/zylch-engine/scripts/systemd/zylch-server@.service /etc/systemd/system/
+  sudo mkdir -p /etc/zylch
+  printf 'ZYLCH_WS_ADDR=127.0.0.1:$PORT\n' | sudo tee /etc/zylch/$PROF.conf >/dev/null
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now zylch-server@$PROF
+  sleep 6
+  systemctl is-active zylch-server@$PROF
+  ss -tlnp 2>/dev/null | grep ':$PORT' || echo 'NOT listening'"
+```
+
+The systemd unit hard-codes `User=mal` and `/home/mal/zylch-engine/…`; edit it for
+a different server user. Then expose the port (§4 — SSH tunnel or Caddy) and set
+the app's URL (§5).
+
+**Traps a prior agent hit on this exact task — don't repeat them:**
+
+- **`pkill -f "serve --ws …"` kills its own SSH shell.** The remote command line
+  *contains* that string, so `pkill -f` matches the shell running it (→ exit 255,
+  no output). Kill by port instead: `fuser -k "$PORT"/tcp`.
+- **Backgrounding a daemon over SSH with a bare `&` hangs / exits 255** — the job
+  keeps the SSH channel open. Use systemd (above) or detach fully:
+  `( setsid CMD </dev/null >/tmp/log 2>&1 & )`.
+- **The "serving" line is INFO**, which lands in the profile log, not the console.
+  An empty console after start is normal — check `systemctl is-active` + `ss`, or
+  `~/.zylch/profiles/$PROF/zylch.log` for `[ws] serving`.
+- **The server clock must be roughly correct** — Firebase ID-token verification
+  checks `exp`; a badly skewed clock rejects valid tokens. `timedatectl` should
+  report synchronized.
