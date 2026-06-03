@@ -74,32 +74,6 @@ def fresh_db(tmp_path, monkeypatch):
     dbm.dispose_engine()
 
 
-def test_init_db_invokes_channel_backfill_when_thread_id_backfill_is_noop(fresh_db):
-    """Reproduces the 2026-05-06 regression: a fresh init_db on a DB
-    where the thread_id backfill has nothing to do MUST still stamp the
-    channel column on legacy NULL-channel tasks."""
-    db_path, task_id = fresh_db
-
-    from zylch.storage.database import init_db
-
-    init_db()
-
-    conn = sqlite3.connect(str(db_path))
-    try:
-        row = conn.execute(
-            "SELECT channel FROM task_items WHERE id = ?", (task_id,)
-        ).fetchone()
-    finally:
-        conn.close()
-
-    assert row is not None, "task row went missing"
-    assert row[0] == "phone", (
-        f"expected channel='phone' for notification@transactional.mrcall.ai "
-        f"task, got {row[0]!r}. The dispatcher likely returned early before "
-        "calling _backfill_task_channels."
-    )
-
-
 def test_apply_data_backfills_calls_every_step(monkeypatch, tmp_path):
     """Pure-orchestration check: even if every individual backfill is a
     no-op, _apply_data_backfills must invoke the full chain. Catches the

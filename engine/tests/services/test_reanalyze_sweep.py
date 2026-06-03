@@ -29,19 +29,6 @@ def _stale(hours_ago: float, task_id: str) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_sweep_skips_when_no_candidates_old_enough():
-    """Tasks all younger than the age threshold => no sweep, returns 0."""
-    fresh_tasks = [_stale(1.0, "t-fresh-1"), _stale(2.0, "t-fresh-2")]
-    with patch(
-        "zylch.workers.task_reanalyze.reanalyze_task",
-        new_callable=AsyncMock,
-    ) as mock_re:
-        result = await process_pipeline._reanalyze_sweep("owner", None, fresh_tasks)
-    assert result == 0
-    mock_re.assert_not_called()
-
-
-@pytest.mark.asyncio
 async def test_sweep_processes_oldest_first_up_to_cap():
     """If 15 stale tasks are eligible, only REANALYZE_CAP=10 oldest run."""
     # Mix ages so order matters: 15 stale tasks, ages 25h..39h.

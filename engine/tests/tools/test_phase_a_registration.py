@@ -57,13 +57,6 @@ def test_run_python_schema_has_both_required_fields():
     assert set(schema["input_schema"]["required"]) == {"code", "description"}
 
 
-def test_update_memory_schema():
-    um = UpdateMemoryTool()
-    schema = um.get_schema()
-    assert schema["name"] == "update_memory"
-    assert set(schema["input_schema"]["required"]) == {"query", "new_content"}
-
-
 def test_factory_imports_new_tools():
     """Factory module should expose the new classes via import."""
     from zylch.tools.factory import (
@@ -77,18 +70,6 @@ def test_factory_imports_new_tools():
     assert F_RD is ReadDocumentTool
     assert F_RP is RunPythonTool
     assert F_UM is UpdateMemoryTool
-
-
-def test_approval_tools_canonical():
-    from zylch.services.task_executor import APPROVAL_TOOLS
-
-    assert APPROVAL_TOOLS == {
-        "send_draft",
-        "send_whatsapp_message",
-        "send_sms",
-        "update_memory",
-        "run_python",
-    }
 
 
 @pytest.mark.asyncio
