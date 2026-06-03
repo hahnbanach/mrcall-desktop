@@ -18,40 +18,39 @@ frontend that embeds it.
 
 ## Getting started
 
-**Prerequisite — a (free) MrCall account.** The app gates everything
-behind a sign-in with your MrCall identity, the same account you use on
-the [web dashboard](https://mrcall.ai). Create one there first if you
-don't have it. For the AI itself you then pick a mode in **Settings**:
-either bring your own LLM key (Anthropic or OpenAI), or top up **MrCall
-credits** on the dashboard.
+1. **Create a (free) MrCall account** if you don't have one — the app signs
+   in with the same account as the [web dashboard](https://mrcall.ai).
+2. **Download and launch** the installer for your platform from
+   [Releases](https://github.com/hahnbanach/mrcall-desktop/releases)
+   (per-platform notes under [Install](#install-alpha)).
+3. **Sign in** and follow the onboarding wizard — connect your email and,
+   optionally, WhatsApp and your MrCall phone number.
 
-**Run the packaged app (easiest).** Download the installer for your
-platform from
-[Releases](https://github.com/hahnbanach/mrcall-desktop/releases) (see
-[Install](#install-alpha) for per-platform notes), launch it, and sign
-in.
+That's it: the **backend runs locally on your machine** by default, nothing
+else to set up. (For the AI itself you pick a mode in **Settings** — your own
+LLM key, or MrCall credits.)
 
-**Run from source (dev).** Build the two halves and point the app at the
-engine binary:
+**Backend on another machine (optional).** You can run the engine on an
+always-on server instead, so it keeps working with your laptop closed. Follow
+[`docs/remote-backend.md`](docs/remote-backend.md), then point the app at your
+server in **Settings → Backend location → Remote**.
+
+**Run from source (dev).** Build the two halves and run the app against the
+engine you just built:
 
 ```bash
 # 1 · engine (Python sidecar) — needs Python 3.11+
 cd engine
 python3 -m venv venv && ./venv/bin/pip install -e .
 
-# 2 · desktop app — run it against the engine you just built
+# 2 · desktop app
 cd ../app
 npm ci
 ZYLCH_BINARY="$PWD/../engine/venv/bin/zylch" npm run dev
 ```
 
-Full dev / packaging details live in [`app/README.md`](app/README.md)
-and [`engine/README.md`](engine/README.md).
-
-**First launch.** Sign in with your MrCall account → an onboarding
-wizard walks you through connecting email (IMAP / SMTP) and, optionally,
-WhatsApp and your MrCall phone number → the main window (chat · tasks ·
-emails).
+Full dev / packaging details: [`app/README.md`](app/README.md) and
+[`engine/README.md`](engine/README.md).
 
 ## Repository layout
 
