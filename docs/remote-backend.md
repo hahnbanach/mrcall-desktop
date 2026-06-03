@@ -17,16 +17,25 @@ with `403`).
 A Linux box with **Python 3.11+** and outbound internet (for IMAP / the LLM):
 
 ```bash
-# from a checkout of this repo, copy the engine over and install it in a venv
-rsync -az engine/ user@server:zylch-engine/
-ssh user@server 'cd zylch-engine && python3 -m venv venv && ./venv/bin/pip install -e .'
+# the engine code is public (MIT) — clone it on the server (no credentials)
+# and install it into a venv
+git clone https://github.com/hahnbanach/mrcall-desktop.git
+cd mrcall-desktop/engine && python3 -m venv venv && ./venv/bin/pip install -e .
+```
+
+To update later, pull and reinstall only if dependencies changed — an editable
+install already tracks code edits:
+
+```bash
+git -C ~/mrcall-desktop pull && ~/mrcall-desktop/engine/venv/bin/pip install -e ~/mrcall-desktop/engine
 ```
 
 ## 2 · Put your profile on the server
 
 The engine reads a profile from `~/.zylch/profiles/<firebase-uid>/` (credentials
-in `.env`, data in `zylch.db`). Copy yours from your Mac, or create + sync it on
-the server with `zylch init` / `zylch -p <uid> update`:
+in `.env`, data in `zylch.db`). Unlike the engine code, this is **private data —
+not in git**, so copy yours from your Mac directly, or create + sync it on the
+server with `zylch init` / `zylch -p <uid> update`:
 
 ```bash
 rsync -az ~/.zylch/profiles/<uid>/ user@server:.zylch/profiles/<uid>/
@@ -47,7 +56,8 @@ For a real daemon (starts at boot, restarts on crash) use the systemd template a
 [`../engine/scripts/systemd/zylch-server@.service`](../engine/scripts/systemd/zylch-server@.service):
 
 ```bash
-sudo cp engine/scripts/systemd/zylch-server@.service /etc/systemd/system/
+sudo cp ~/mrcall-desktop/engine/scripts/systemd/zylch-server@.service /etc/systemd/system/
+sudo mkdir -p /etc/zylch
 printf 'ZYLCH_WS_ADDR=127.0.0.1:5174\n' | sudo tee /etc/zylch/<uid>.conf
 sudo systemctl enable --now zylch-server@<uid>      # start now + at boot
 ```
@@ -111,16 +121,19 @@ port (one per profile: 5174, 5175, …).
 ```bash
 PROF=<firebase-uid>; SSH=<user@host>; PORT=5174
 
-# 1 · engine onto the server + venv install (idempotent)
-rsync -az --exclude venv --exclude __pycache__ engine/ "$SSH:zylch-engine/"
-ssh "$SSH" 'cd ~/zylch-engine && [ -x venv/bin/zylch ] || (python3 -m venv venv && ./venv/bin/pip install -e .)'
+# 1 · engine onto the server via git — clone once, pull to update — + venv (idempotent)
+ssh "$SSH" 'set -e
+  if [ -d ~/mrcall-desktop/.git ]; then git -C ~/mrcall-desktop pull --ff-only
+  else git clone https://github.com/hahnbanach/mrcall-desktop.git ~/mrcall-desktop; fi
+  cd ~/mrcall-desktop/engine && { [ -d venv ] || python3 -m venv venv; }
+  ./venv/bin/pip install -e . -q'
 
-# 2 · this profile's data onto the server
+# 2 · this profile's PRIVATE data onto the server (not in git → rsync, not clone)
 rsync -az ~/.zylch/profiles/"$PROF"/ "$SSH:.zylch/profiles/$PROF/"
 
 # 3 · systemd unit (once) + this profile's port + enable & start
 ssh "$SSH" "set -e
-  sudo cp ~/zylch-engine/scripts/systemd/zylch-server@.service /etc/systemd/system/
+  sudo cp ~/mrcall-desktop/engine/scripts/systemd/zylch-server@.service /etc/systemd/system/
   sudo mkdir -p /etc/zylch
   printf 'ZYLCH_WS_ADDR=127.0.0.1:$PORT\n' | sudo tee /etc/zylch/$PROF.conf >/dev/null
   sudo systemctl daemon-reload
@@ -130,9 +143,9 @@ ssh "$SSH" "set -e
   ss -tlnp 2>/dev/null | grep ':$PORT' || echo 'NOT listening'"
 ```
 
-The systemd unit hard-codes `User=mal` and `/home/mal/zylch-engine/…`; edit it for
-a different server user. Then expose the port (§4 — SSH tunnel or Caddy) and set
-the app's URL (§5).
+The systemd unit hard-codes `User=mal` and `/home/mal/mrcall-desktop/engine/…`
+(the git-clone path from step 1); edit it for a different server user or clone
+location. Then expose the port (§4 — SSH tunnel or Caddy) and set the app's URL (§5).
 
 **Traps a prior agent hit on this exact task — don't repeat them:**
 

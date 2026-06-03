@@ -15,7 +15,9 @@ Group=mal
 Environment=HOME=/home/mal
 WorkingDirectory=/home/mal
 EnvironmentFile=/etc/zylch/%i.conf
-ExecStart=/home/mal/zylch-engine/venv/bin/zylch -p %i serve --ws ${ZYLCH_WS_ADDR}
+# Path assumes the repo was git-cloned to ~/mrcall-desktop (see
+# docs/remote-backend.md); the venv lives at engine/venv inside it.
+ExecStart=/home/mal/mrcall-desktop/engine/venv/bin/zylch -p %i serve --ws ${ZYLCH_WS_ADDR}
 Restart=on-failure
 RestartSec=3
 # Engine logs INFO/DEBUG to ~/.zylch/profiles/%i/zylch.log; only WARNING+
