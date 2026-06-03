@@ -25,6 +25,7 @@ from zylch.storage.database import get_session
 from zylch.storage.models import Blob
 from zylch.memory import HybridSearchEngine
 from zylch.memory.hybrid_search import SearchResult
+from zylch.services.solve_constants import get_operating_rules_block
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ EMAIL_AGENT_TOOLS = [
     },
     {
         "name": "search_memory",
-        "description": "Search memory blobs for context about a person, company, or template. Use when you need more information before answering or composing.",
+        "description": "Search memory blobs for context about a person, company, or style. Use when you need more information before answering or composing.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -124,7 +125,7 @@ class EmailContext:
 
     # Blobs from hybrid search, separated by entity type
     contact_blobs: List[SearchResult] = field(default_factory=list)
-    template_blobs: List[SearchResult] = field(default_factory=list)
+    style_blobs: List[SearchResult] = field(default_factory=list)
     company_blobs: List[SearchResult] = field(default_factory=list)
 
     # From task sources (if task_num provided)
@@ -138,7 +139,7 @@ class EmailContextGatherer:
     Strategy:
     1. If task_num provided, get task and its sources (emails, blobs)
     2. Run hybrid search with full user request
-    3. Separate results by entity type (PERSON, COMPANY, TEMPLATE)
+    3. Separate results by entity type (PERSON, COMPANY, STYLE)
     4. If recipient_email provided, boost exact match results
     """
 
@@ -191,7 +192,7 @@ class EmailContextGatherer:
             search_query = f"{user_request} {recipient_email}"
             logger.debug(f"[EMAILER] Enhanced query with recipient_email: {search_query}")
 
-        # Run hybrid search - finds PERSON, COMPANY, TEMPLATE blobs
+        # Run hybrid search - finds PERSON, COMPANY, STYLE blobs
         namespace = f"user:{self.owner_id}"
         results = self.search_engine.search(
             owner_id=self.owner_id,
@@ -206,15 +207,15 @@ class EmailContextGatherer:
             content = result.content
             if "Entity type: PERSON" in content:
                 context.contact_blobs.append(result)
-            elif "Entity type: TEMPLATE" in content:
-                context.template_blobs.append(result)
+            elif "Entity type: STYLE" in content:
+                context.style_blobs.append(result)
             elif "Entity type: COMPANY" in content:
                 context.company_blobs.append(result)
 
         logger.info(
             f"[EMAILER] Gathered context: "
             f"{len(context.contact_blobs)} contacts, "
-            f"{len(context.template_blobs)} templates, "
+            f"{len(context.style_blobs)} styles, "
             f"{len(context.company_blobs)} companies, "
             f"{len(context.source_emails)} source emails"
         )
@@ -253,8 +254,8 @@ def _format_person_blobs(blobs: List[SearchResult]) -> str:
     return "\n\n".join(sections)
 
 
-def _format_template_blobs(blobs: List[SearchResult]) -> str:
-    """Format TEMPLATE blobs for prompt context."""
+def _format_style_blobs(blobs: List[SearchResult]) -> str:
+    """Format STYLE blobs for prompt context."""
     if not blobs:
         return ""
 
@@ -305,7 +306,7 @@ def build_prompt_context(context: EmailContext) -> str:
         ("ABOUT THE RECIPIENT", _format_person_blobs(context.contact_blobs)),
         ("RELEVANT COMPANY INFO", _format_company_blobs(context.company_blobs)),
         ("EMAIL THREAD / SOURCES", _format_source_emails(context.source_emails)),
-        ("TEMPLATES TO USE", _format_template_blobs(context.template_blobs)),
+        ("STYLE REFERENCE (tone/structure only)", _format_style_blobs(context.style_blobs)),
     ]
 
     for label, content in priority_items:
@@ -382,12 +383,18 @@ class EmailerAgent(SpecializedAgent):
         # Build prompt context
         context_text = build_prompt_context(context)
 
+        # Always-on binding rules (same framing as the solve/chat path).
+        # Placed at the very top so they outrank the trained persona and
+        # the model's default politeness.
+        rules_block = get_operating_rules_block(self.owner_id)
+        rules_prefix = f"{rules_block}\n\n---\n\n" if rules_block else ""
+
         # Check for trained prompt (personalized style)
         trained_prompt = self._get_trained_prompt()
 
         if trained_prompt:
             # Use trained prompt - already contains style instructions
-            prompt = f"""{trained_prompt}
+            prompt = f"""{rules_prefix}{trained_prompt}
 
 ---
 
@@ -401,7 +408,7 @@ USER REQUEST: {user_request}
 Use the write_email tool to output your composed email."""
         else:
             # Fallback to generic prompt (no personalized style)
-            prompt = f"""You are writing an email for the user.
+            prompt = f"""{rules_prefix}You are writing an email for the user.
 
 {context_text}
 
@@ -414,7 +421,7 @@ Write the email in the appropriate language:
 - in the same language used by the recipient in other exchanges (if any)
 - try to infer if no clue!
 
-If TEMPLATE entities are provided, use them as reference for tone and structure.
+If STYLE entities are provided, use them as reference for tone and structure only.
 If recipient info is available, personalize the email appropriately.
 
 Use the write_email tool to output your composed email."""
@@ -735,7 +742,7 @@ Choose the appropriate tool based on what the user wants:
 
 If writing an email:
 - Use appropriate language (match recipient's language if known)
-- If TEMPLATE entities are provided, use them as reference for tone and structure
+- If STYLE entities are provided, use them as reference for tone and structure only
 - If recipient info is available, personalize appropriately
 
 IMPORTANT: Your goal is to COMPLETE the user's request. If you searched for information,

@@ -35,6 +35,10 @@ NotifyFn = Callable[[str, Dict[str, Any]], None]
 _solve_lock = asyncio.Lock()
 _active_executor = None  # type: Optional[Any]
 _solve_tasks: Dict[str, asyncio.Task] = {}
+# Fire-and-forget background tasks (e.g. correction learning). Held here
+# so the event loop keeps a strong reference — without it asyncio may GC
+# the task mid-run.
+_bg_tasks: set = set()
 
 # Upper bound on simultaneous queued+active solves. Prevents a stuck UI
 # (or a misclick spree) from accumulating tens of LLM-burning solves
@@ -469,6 +473,22 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
                     _notify(done_event)
                     final = {"ok": True, "result": done_event["result"]}
 
+                # Learn durable rules from any edits the user made to
+                # approval-gated sends. Fire-and-forget in a thread so it
+                # never delays the response; the function never raises.
+                corrections = list(getattr(executor, "corrections", []))
+                if corrections:
+                    from zylch.services.correction_learning import (
+                        learn_from_corrections,
+                    )
+
+                    bg = asyncio.create_task(
+                        asyncio.to_thread(
+                            learn_from_corrections, corrections, owner_id
+                        )
+                    )
+                    _bg_tasks.add(bg)
+                    bg.add_done_callback(_bg_tasks.discard)
                 return final or {"ok": False, "error": "stream ended"}
             finally:
                 _active_executor = None

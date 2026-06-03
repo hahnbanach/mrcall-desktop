@@ -29,6 +29,8 @@ def execute_tool(
         "web_search": _web_search,
         "send_whatsapp": _send_whatsapp,
         "send_sms": _send_sms,
+        "list_fact_categories": _list_fact_categories,
+        "get_facts_by_category": _get_facts_by_category,
     }
     fn = dispatch.get(name)
     if not fn:
@@ -38,6 +40,8 @@ def execute_tool(
     # that the next `tasks.reanalyze` rebuilds the thread history without
     # seeing the user's reply and keeps the task open until the next full
     # ``update.run`` does an IMAP sync of the Sent folder.
+    # `_list_fact_categories` / `_get_facts_by_category` likewise read the
+    # owner-scoped facts store.
     if fn in (
         _search_emails,
         _search_memory,
@@ -46,9 +50,45 @@ def execute_tool(
         _update_memory,
         _send_email,
         _send_whatsapp,
+        _list_fact_categories,
+        _get_facts_by_category,
     ):
         return fn(args, store, owner_id)
     return fn(args)
+
+
+# ─── Facts (category-gated, read-only) ───────────────
+
+
+def _list_fact_categories(args: Dict, store, owner_id: str) -> str:
+    """Enumerate the business-fact categories the user has stored."""
+    from zylch.services.facts_store import list_categories
+
+    cats = list_categories(owner_id)
+    if not cats:
+        return "No fact categories stored yet."
+    lines = [f"- {c['category']} ({c['count']} fact(s))" for c in cats]
+    return (
+        "Fact categories (pick the one that fits the request, then call "
+        "get_facts_by_category to load ALL and ONLY its facts):\n" + "\n".join(lines)
+    )
+
+
+def _get_facts_by_category(args: Dict, store, owner_id: str) -> str:
+    """Return all and only the facts in one category (exact match)."""
+    from zylch.services.facts_store import get_facts_by_category
+
+    category = (args.get("category") or "").strip()
+    if not category:
+        return "No category provided"
+    facts = get_facts_by_category(owner_id, category)
+    if not facts:
+        return (
+            f"No facts found in category '{category}'. Call "
+            f"list_fact_categories to see the available categories."
+        )
+    blocks = [f["content"] for f in facts]
+    return f"All facts in category '{category}' ({len(facts)}):\n\n" + "\n\n".join(blocks)
 
 
 # ─── Read-only tools ─────────────────────────────────

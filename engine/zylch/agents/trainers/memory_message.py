@@ -52,7 +52,7 @@ Each entity blob has 3 sections:
 - **#ABOUT**: One sentence definition (who/what this entity IS) - rarely changes
 - **#HISTORY**: Evolving narrative (what's HAPPENING over time) - accumulates with each email
 
-Entity can only be of 3 types:
+Entity can only be of 4 types:
 
 1. **PERSON** - Who is this person?
    #IDENTIFIERS: Name (required), Email, Phone, Company, Role/title
@@ -64,10 +64,16 @@ Entity can only be of 3 types:
    #ABOUT: One sentence describing what the company does
    #HISTORY: What information we gathered about the company in this email exchange (e.g., "They signed up for a plan", "Started collaboration")
 
-3. **TEMPLATE** - A TEMPLATE is a reusable response pattern - how the user typically responds to a category of inquiries. Extract the user's response style and content for recurring question types so the assistant can draft similar responses.
-   #IDENTIFIERS: Name (short descriptive title, e.g., "Product Price", "IT Consulting offer" etc )
-   #ABOUT: A paragraph describing what this TEMPLATE is about.
-   #HISTORY: Very short description of what happened in this email regarding the template. Eg. 2025-12-22 "The user sent a revised offer for..."
+3. **STYLE** - A STYLE is a reusable response pattern - WHEN the user responds to a category of inquiries and in WHAT TONE. Capture the trigger and the tone/structure ONLY. Do NOT put prices, terms, quantities, deadlines or any concrete business value here — those are FACTs (type 4). A STYLE describes HOW the user writes; a FACT is WHAT the numbers are.
+   #IDENTIFIERS: Name (short descriptive title, e.g., "Pricing inquiry reply", "Support complaint reply")
+   #ABOUT: Trigger (what incoming message starts this) + tone/structure (formal/informal, language, signature, typical length). NO concrete values.
+   #HISTORY: Very short description of what happened in this email regarding the style. Eg. 2025-12-22 "The user sent a revised offer for..."
+
+4. **FACT** - A FACT is a single volatile business value the assistant must quote EXACTLY in offers/replies: a price, rate, minimum order, lead time, SLA, opening hours, a deliverable. Each FACT belongs to a CATEGORY so the assistant can load all and only the facts for a given kind of request (e.g. a business may offer "white-label", "private-label" and "own-brand" production with different prices — these are different categories and must never be mixed).
+   Output FACTs in this FLAT format (no #IDENTIFIERS/#ABOUT/#HISTORY):
+   - `Category:` the kind of offer/topic this fact belongs to (reuse an existing category name when one fits; keep names stable, e.g. "white-label")
+   - `Key:` a short stable name for the value (e.g. "Minimum order quantity")
+   - `Value:` the value itself, with units (e.g. "500 units; lead time 6 weeks")
 
 === USER'S PROFILE ===
 {user_profile}
@@ -103,7 +109,8 @@ The prompt must include:
 3. **EXTRACTION RULES**
    - Extract PERSON for each individual mentioned (sender, recipients, people referenced), if any WITH THE EXCEPTION OF THE USER_PERSON: don't extract entity about the USER_PERSON
    - Extract COMPANY for each organization mentioned, if any WITH THE EXCEPTION OF THE USER_COMPANY: don't extract entity about the USER_COMPANY
-   - Extract TEMPLATES for the main topic of conversations in the communication. Remember: TEMPLATES are generic entities, do not quote other companies in a TEMPLATES's #ABOUT section!
+   - Extract STYLEs for the main topic of conversations in the communication. Remember: STYLEs are generic entities, do not quote other companies in a STYLE's #ABOUT section! A STYLE captures trigger + tone only — never prices or terms.
+   - Extract FACTs for every concrete business value the user states in their own messages (prices, rates, minimum orders, lead times, SLAs, hours, deliverables). Assign each a stable Category (the kind of offer it belongs to) and a short Key. Pull these values OUT of STYLE: a price is a FACT, not part of a STYLE. Do NOT extract values quoted by other parties as their own — only the user's business facts.
    - For EVERY external sender (email OR WhatsApp), create or update a PERSON entity.
   Even if the message is routine, record what you learn about the person.
    - Keep #ABOUT section minimal
@@ -160,41 +167,37 @@ NB DO NOT CREATE PERSON entity about USER_PERSON!!
 
 ---ENTITY---
 #IDENTIFIERS
-Entity type: TEMPLATE
-Name: Name of the TEMPLATE (e.g., "Unhandled Call Complaints Response", "Pricing Inquiry Response", "Subscription Cancellation Response")
+Entity type: STYLE
+Name: Name of the STYLE (e.g., "Unhandled Call Complaints Response", "Pricing Inquiry Response", "Subscription Cancellation Response")
 
 #ABOUT
-A TEMPLATE is a **reusable response pattern** - how the user typically responds to a recurring category of inquiries or situations.
+A STYLE is a **reusable response pattern** - WHEN the user responds to a recurring category of inquiries, and in WHAT TONE.
 
-This section should contain:
+This section should contain ONLY:
 - **Trigger**: What kind of incoming message triggers this response? (e.g., "Customer asks why they received a certain email from the administration")
-- **Response content**: The actual response the user sends, including tone, language, and key points covered
-- **Response style**: Formal/informal, language used, signature style
+- **Tone/structure**: Formal/informal, language used, signature style, typical length, any standard phrases the user reuses verbatim.
+
+It must NOT contain prices, rates, quantities, deadlines, or any concrete business value — those are FACTs (type 4). If a reply hinges on numbers, extract a STYLE for the tone AND separate FACTs for the numbers.
 
 Examples:
-- Customer complaint about service issue → User's standard apology + explanation + reassurance template
-- Pricing inquiry → User's standard pricing response with features and terms
+- Customer complaint about service issue → User's standard apology + explanation + reassurance tone
+- Pricing inquiry → User's standard pricing-reply tone (the actual prices are FACTs)
 - Partnership request → User's standard collaboration proposal format
-- Technical support question → User's standard troubleshooting response
 
-The goal is to capture HOW the user responds so the assistant can draft similar messages for future inquiries of the same type.
+The goal is to capture HOW the user writes so the assistant can match their voice.
 
-**CRITICAL FOR TEMPLATES:** The #ABOUT section MUST contain enough detail to actually draft a response. Include:
-- The key information points the user always includes (prices, links, instructions, etc.)
-- The exact tone and formality level
-- The language used (Italian, English, etc.)
-- Any standard phrases the user reuses verbatim
-- The typical length and structure (short reply vs detailed explanation)
-
-A good TEMPLATE lets the assistant write a draft that the user only needs to lightly edit before sending. A bad TEMPLATE is too vague to be useful.
-
-**TEMPLATE FREQUENCY MATTERS:** If the user responds to the same type of inquiry 5+ times in the analyzed emails, that TEMPLATE is extremely valuable. Count occurrences in #HISTORY.
+**STYLE FREQUENCY MATTERS:** If the user responds to the same type of inquiry 5+ times in the analyzed emails, that STYLE is extremely valuable. Count occurrences in #HISTORY.
 
 #HISTORY
 Record each instance where this response pattern was used:
 - 2025-01-08: Sent to customer A regarding complaints about...
 - 2025-01-07: Sent to customer B regarding same issue
 - (Count: used 7 times in analyzed period)
+---ENTITY---
+Entity type: FACT
+Category: white-label
+Key: Minimum order quantity
+Value: 500 units; lead time 6 weeks
 ```
 
 5. **IMPORTANCE ASSESSMENT**
@@ -203,12 +206,14 @@ Record each instance where this response pattern was used:
    - Judge by message tone and content (same yardstick for both channels)
    - PRIORITIZE PERSON and COMPANY extraction -- every non-trivial contact
   should have a PERSON entity with their role, company, and relationship
-  history. TEMPLATEs are also valuable but secondary to relationship data.
+  history. STYLEs and FACTs are also valuable but secondary to relationship data.
 - For PERSON entities: always include what you can infer about who they are,
   what company they represent, and the nature of their relationship with
   the user (customer, prospect, partner, vendor, colleague).
-- For TEMPLATE entities: only extract when the user has sent substantially
+- For STYLE entities: only extract when the user has sent substantially
   similar responses to 3+ different contacts on the same topic.
+- For FACT entities: extract the user's own business values (prices, terms,
+  lead times, hours), each with a stable Category and Key.
 
 **INPUT FORMAT** at extraction time:
 
@@ -285,8 +290,9 @@ class MessageMemoryAgentTrainer:
 ---
 
 CRITICAL OUTPUT FORMAT:
-- You can extract any amount of entities, and they MUST be one of these 3 types: `PERSON`, `COMPANY`, `TEMPLATE`
-- In case a single email contains more entities, you must create different sections, each one with its own #IDENTIFIERS, #ABOUT and #HISTORY.
+- You can extract any amount of entities, and they MUST be one of these 4 types: `PERSON`, `COMPANY`, `STYLE`, `FACT`
+- PERSON / COMPANY / STYLE use the 3-section format (#IDENTIFIERS, #ABOUT, #HISTORY). FACT uses the flat Category/Key/Value format (no sections).
+- In case a single email contains more entities, you must create different sections.
 - Each entity is separated by ---ENTITY--- on its own line
 - If email is noise/marketing, output only: SKIP
 - The output should NOT contain sensitive data like password, account numbers, credit cards
@@ -319,14 +325,19 @@ Acme Corp is a B2B software company specializing in CRM solutions.
 Acme Corp contacted MrCall in December 2025 about a possible IT Consulting Offer
 ---ENTITY---
 #IDENTIFIERS
-Entity type: TEMPLATE
-Name: IT Consulting Offer
+Entity type: STYLE
+Name: IT Consulting Offer reply
 
 #ABOUT
-Our company's IT Consulting Offer includes [blah blah blah]. Prices are etc etc. Deliverables are etc etc. ANY USEFUL INFORMATION TO BE EVENTUALLY USED BY THE ASSISTANT FOR WRITING AN EMAIL WITH AN OFFER 
+Trigger: a prospect asks for our IT consulting offer. Tone: warm but concise, Italian, signed with first name, 1-2 short paragraphs. (The actual prices and deliverables are FACTs, not part of this STYLE.)
 
 #HISTORY
 In December 2025 John Doe from Acme Corp initiated discussions about the offer...
+---ENTITY---
+Entity type: FACT
+Category: IT consulting
+Key: Day rate
+Value: 800 EUR/day; minimum engagement 5 days
 """
 
     async def build_memory_message_prompt(self) -> Tuple[str, Dict[str, Any]]:

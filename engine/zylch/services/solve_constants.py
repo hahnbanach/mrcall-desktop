@@ -54,6 +54,12 @@ a recipient who does not legitimately need it.
 AVAILABLE TOOLS:
 - search_memory: Cross-channel contact knowledge (email + WhatsApp + \
 phone). Use only if the task context lacks something specific.
+- list_fact_categories / get_facts_by_category: Business facts (prices, \
+terms, deliverables, hours) grouped by category. BEFORE drafting an offer \
+or quote, call list_fact_categories, pick the category that fits the \
+request, then get_facts_by_category to load ALL and ONLY that category's \
+facts. Never mix categories (e.g. white-label vs private-label) — using \
+the wrong category's numbers produces a wrong offer.
 - search_emails: Full-text email search across the local archive.
 - download_attachment: Save email attachments to /tmp/zylch/attachments/.
 - read_document: Read files from the user's document folders.
@@ -97,6 +103,35 @@ SOLVE_TOOLS = [
                 },
             },
             "required": ["query"],
+        },
+    },
+    {
+        "name": "list_fact_categories",
+        "description": (
+            "List the business-fact categories the user has stored"
+            " (e.g. white-label, private-label, brand-124), each with a"
+            " fact count. Call this BEFORE drafting an offer or quote to"
+            " decide which category the request belongs to."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_facts_by_category",
+        "description": (
+            "Return ALL and ONLY the business facts in one category"
+            " (exact match). Use the category name from"
+            " list_fact_categories. Never mix categories — white-label and"
+            " private-label terms are different offers."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "description": "Exact category name from list_fact_categories",
+                },
+            },
+            "required": ["category"],
         },
     },
     {
@@ -309,6 +344,28 @@ def _get_learned_preferences(owner_id: str) -> str:
     return joined
 
 
+def get_operating_rules_block(owner_id: Optional[str] = None) -> str:
+    """Return the framed, always-on OPERATING RULES block, or ''.
+
+    Wraps the user's learned `prefs:` rules in binding-imperative framing
+    that overrides the model's default politeness. Shared by the solve/chat
+    personal-data section and the standalone emailer agent so the framing
+    can't drift between the two generation paths.
+    """
+    if not owner_id:
+        return ""
+    prefs = _get_learned_preferences(owner_id)
+    if not prefs:
+        return ""
+    return (
+        "OPERATING RULES — learned from this user's own corrections. "
+        "They are ABSOLUTE and override your defaults: when a rule "
+        "conflicts with sounding helpful, friendly, or accommodating, "
+        "follow the rule, not the instinct. Never offer or promise "
+        "anything a rule forbids.\n" + prefs
+    )
+
+
 _LANGUAGE_NAMES = {
     "it": "Italian",
     "en": "English",
@@ -347,10 +404,14 @@ def get_user_language_directive() -> str:
 def get_personal_data_section(owner_id: Optional[str] = None) -> str:
     """Build personal data + notes + secret + learned-prefs section.
 
-    `owner_id` enables the `## Learned preferences` sub-section, pulled
-    from blobs with `namespace == f"prefs:{owner_id}"`. Without owner_id,
-    only env-backed sections render — matches the old behaviour for call
-    sites that don't have a user in scope (cron, one-off CLI).
+    `owner_id` enables the `OPERATING RULES` block, pulled from blobs
+    with `namespace == f"prefs:{owner_id}"`. The block is placed FIRST and
+    framed as binding imperatives that override the model's default
+    helpfulness/politeness — a soft "## Learned preferences" footer lost
+    to the RLHF politeness prior (e.g. the model kept offering to phone
+    customers despite a policy never to). Without owner_id, only env-backed
+    sections render — matches the old behaviour for call sites that don't
+    have a user in scope (cron, one-off CLI).
     """
     import os
 
@@ -402,6 +463,9 @@ def get_personal_data_section(owner_id: Optional[str] = None) -> str:
         )
 
     if owner_id:
+        rules_block = get_operating_rules_block(owner_id)
+        if rules_block:
+            parts.insert(0, rules_block)
         rules = _get_learned_preferences(owner_id)
         if rules:
             parts.append("## Rules — always apply (saved templates)\n" + rules)
