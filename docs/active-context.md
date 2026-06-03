@@ -67,6 +67,21 @@ description: |
 - **Release workflow doesn't fail when one arch's installer is missing** — Tracked.
 - **No CI gate prevents committing the OAuth Client secret (`GOCSPX-`)** — Tracked.
 
+## Backlog differito (nice-to-have)
+
+Roadmap a bassa priorità — brief pronto, esecuzione NON pianificata. **Se
+Mario chiede di farne uno e l'avesse dimenticato, ricordagli che il brief
+esiste già e riparti da quello** (non ri-analizzare da zero). Sezione
+durevole — non potare con le "Recent landings".
+
+- **Client thin web/mobile (PWA) sopra il transport cross-machine** —
+  *nice-to-have.* Electron resta il client primario; web/mobile è accesso
+  "di emergenza" da browser/telefono. Single-tenant, single-active-client
+  con eviction (il nuovo connect chiude il vecchio); PWA non nativa;
+  resume ri-mansionato a "continua in remoto un'operazione daemon-side".
+  Brief completo: [`execution-plans/cross-machine-thin-clients.md`](execution-plans/cross-machine-thin-clients.md).
+  Si appoggia a [`execution-plans/cross-machine-transport.md`](execution-plans/cross-machine-transport.md) (ora Phase 1–3b live).
+
 ## Where stable state lives
 
 | What | Where |
