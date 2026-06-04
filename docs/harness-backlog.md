@@ -157,9 +157,10 @@ materialises) `app/docs/harness-backlog.md`.
 
 - [ ] **No CI for `pytest` on engine.**
   Discovered: 2026-05-02
-  Impact: 3 tests in `tests/workers/test_task_worker_bugs.py` were
-  silently broken on HEAD before this session — `git stash` confirmed
-  pre-existing failure. Without CI, a "14/14 green" claim in
+  Impact: a partial / `-k`-filtered local run hides reds. On 2026-06-04
+  a filtered run reported 2 red groups while the FULL suite had 6 (3
+  failed + 16 errors across 4 files); caught only by manually re-running
+  the whole suite. Without CI on the full suite, a "green" claim in
   active-context.md can age into a lie.
   Recommendation: GitHub Actions step `cd engine && venv/bin/python
   -m pytest tests/workers tests/services -q`. The `tests/` directory

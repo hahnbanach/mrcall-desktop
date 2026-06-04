@@ -80,7 +80,7 @@ Enforcement gaps, missing tooling, and documentation debt.
   - Cross-channel match works anyway via `Phone:` (resolved from `whatsapp_contacts`), so this is a *future-proofing* gap, not a current functional break. The gap closes either when the user retrains (`/agent memory train email` or the Settings → Maintenance button if one ever exists) or when a future schema-change migration force-invalidates the legacy key.
   - Recommendation: add a one-shot auto-retrain prompt on startup if `get_agent_prompt('memory_message')` is None but `get_agent_prompt('memory_email')` is not None, OR document the "retrain after upgrade" step in a release-notes file users can read.
 
-- [ ] **`tests/workers/test_task_worker_bugs.py` further out of sync (2026-05-06).**
+- [ ] **`tests/workers/test_task_worker_bugs.py` DELETED 2026-06-04 — coverage gap.** The whole file (14 cases) was removed: broken since 2026-05-04 and the mocks were unsalvageable without a rewrite (detail below). Consequence: the invariants it guarded — `_is_user_email` exact-match (no same-domain-colleague false-positive), user-reply-closes-task across single/multi/CC recipients, `get_tasks(refresh=True)` doesn't delete tasks — are now **untested**. Re-add against the current API (plural `get_tasks_by_contact`, lazy `LLMClient`/`EmbeddingEngine`/`HybridSearchEngine`, dedup'd `existing_tasks_all`) if the task-worker area churns. Historical drift detail:
   - Already broken by the 2026-05-04 transport refactor (mocks removed
     `LLMClient` attribute on `task_creation`).
   - Fase 1.1 (`3473348`) widened the gap further — `_collect` now calls

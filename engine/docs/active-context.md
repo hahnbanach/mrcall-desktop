@@ -8,7 +8,9 @@ description: |
 
 # Active Context — Engine
 
-## Current focus (as of 2026-06-02)
+## Current focus (as of 2026-06-04)
+
+**Correction-learning landed (merged from `origin/main`).** When the user edits an approval-gated send (`send_email`/`send_whatsapp`/`send_sms`) before approving it, `task_executor` captures the `{tool_name, proposed, edited}` diff; after the send, `services/correction_learning.learn_from_corrections` (fire-and-forget bg task in `rpc/methods`) judges each diff TWICE with a cheap Haiku pass — as a durable **rule** (tone/policy → `prefs:<owner>` blob, injected always-on into generation via `solve_constants.get_operating_rules_block`) and as a corrected **business fact** (price/term → `services/facts_store`, `facts:<owner>` namespace, category-tagged, deduped by exact (Category, Key), retrieved all-and-only by category through the new `list_fact_categories`/`get_facts_by_category` solve tools). `APPROVAL_TOOLS` gained `send_email`/`send_whatsapp` so their edits are captured. NOT yet live-verified by us (background path; never blocks the send).
 
 **Cross-machine backend live on the Scaleway VPS.** The engine runs as a persistent daemon reachable from the Mac over `wss://desktop.mrcall.ai` (Caddy + Let's Encrypt), not just the local stdio sidecar. New: `rpc/dispatch.py` — the transport-agnostic dispatch core BOTH stdio (`rpc/server.py`) and the WS server route through (and where `_redact_params` now lives); `rpc/server_ws.py` (`zylch serve --ws HOST:PORT | --unix <socket>`); `rpc/firebase_auth.py` (RS256 verify of the Firebase ID token; handshake gate `uid == OWNER_ID`); `auth.refresh` + close-code 4401 on expiry; `config.firebase_project_id`; deps `websockets` + `pyjwt[crypto]`. Deployed via the `zylch-server@<uid>` systemd template behind Caddy. NEXT: multi-profile per-uid routing (Unix sockets + Caddy `path_regexp`) — see [`execution-plans/`'s cross-machine plan](../../docs/execution-plans/cross-machine-transport.md).
 
@@ -22,6 +24,8 @@ description: |
 
 | Date | What | Refs |
 |---|---|---|
+| 2026-06-04 | **Deploy via git + 6 stale tests removed.** Engine deploys/updates by `git clone`/`git pull` → `~/mrcall-desktop/engine` (was rsync → `~/zylch-engine`; profile stays rsync — private, not in git); systemd `ExecStart` follows. Operator + agent runbook: [`../../docs/remote-backend.md`](../../docs/remote-backend.md). Removed 6 stale red tests (intentional-change drift); suite green (303 passed). | `fa2598d2..ccfa0143` |
+| 2026-06-03 | **Correction-learning merged** (`origin/main`): `services/correction_learning` + `services/facts_store`; rules → `prefs:`, facts → `facts:` (category all-and-only); solve tools `list_fact_categories`/`get_facts_by_category`; `APPROVAL_TOOLS` += `send_email`/`send_whatsapp`. | `a63b33d3..f83b9d14` |
 | 2026-06-02 | **Cross-machine transport — Phase 1–3b** (live: `wss://desktop.mrcall.ai`). `rpc/dispatch.py` (transport-agnostic core + `_redact_params`), `rpc/server_ws.py` (`serve --ws`/`--unix`, Firebase-JWT handshake gate), `rpc/firebase_auth.py` (RS256), `auth.refresh`/4401, `config.firebase_project_id`, deps `websockets`+`pyjwt`. VPS: `~/zylch-engine` venv, `zylch-server@<uid>` systemd template, Caddy/LE. Next: multi-profile per-uid sockets. | [cross-machine-transport.md](../../docs/execution-plans/cross-machine-transport.md) |
 | 2026-05-31 | **MrCall credits — five fixes**: shell-env leak (`llm/client._read_profile_anthropic_key`); defensive gzip-SSE inflate (`llm/proxy_client._wrap_gzip_iter`); secret redaction in dispatcher `params=` log (`rpc/dispatch._redact_params`); `LOG_LEVEL` default DEBUG (`cli/main.py`); `config.email_aliases` field. Tests: autouse `_isolate_profile_dir` provisions a per-test profile so `MemoryWorker`/`LLMMergeService`/`TaskWorker` constructors work without the dev machine's shell env. Companion deploy on `mrcall-agent/production`: `accept-encoding: identity` upstream + `aiter_bytes()` forward + pricing YAML aligned with Anthropic 2026-05 (Opus 4.7 was wrongly priced at $15/$75; new Opus 4.8 + Haiku 4.5 dated IDs added). | `ed6eeef8` |
 | 2026-05-31 | **Solve lightbulb + auto-reanalyze + outbound mirror**: `task_executor` tracks `mutating_actions_taken`; `rpc/methods._maybe_reanalyze_after_solve` runs `reanalyze_task` after a mutating solve and decorates the done event; `solve_tools._send_email` upserts into `emails` keyed on Message-ID, `_send_whatsapp` reuses the persistent `_active_client` + calls `WhatsAppSyncService.store_outgoing` (resolves canonical `chat_jid` from `whatsapp_contacts.phone_number` to avoid LID/phone split). Removes the throwaway-neonize-client kick that previously fired `<conflict type="replaced"/>` on every Solve. | `9be36c9b` |
@@ -32,7 +36,6 @@ description: |
 | 2026-05-26 | `agents.train_all` RPC (memory_message → task_email → emailer serial + `agents.train.progress`); WhatsApp 1-on-1 samples folded into `MessageMemoryAgentTrainer`. | `3c152cc7` |
 | 2026-05-22 | Current datetime injected into EVERY LLM request (single LLMClient chokepoint + chat_compaction bypass). | `5f5c73e8` |
 | 2026-05-20 | MrCall delegated/PKCE OAuth + `/mrcall` command surface + `mrcall_link` removed (−~3000 LOC); StarChat via Firebase JWT only; `mrcall.search_businesses` RPC. | `770522e8..2b0a54ce` |
-| 2026-05-20 | WhatsApp voice-note transcription — event-time download + deferred faster-whisper `small`/int8 pass; `transcription`/`media_path` cols. Live download + packaged bundling still unverified. | [whatsapp-voice-transcription.md](execution-plans/whatsapp-voice-transcription.md) |
 
 ## In progress
 
@@ -59,7 +62,6 @@ description: |
 - WhatsApp session DB (`~/.zylch/whatsapp.db`) is global, not per-profile — multi-profile with different WA accounts not supported.
 - Slash-separated phones (`02 316562 / 338 594946`) parsed as one value. Tracked.
 - `LID:` kind not indexed on profiles that haven't retrained memory agent (cross-channel match still works via `Phone:` resolved from `whatsapp_contacts`).
-- `tests/workers/test_task_worker_bugs.py` broken at HEAD since 2026-05-04 transport refactor (15 errors). Tracked.
 - **`sandbox_service` dangling import** — `command_handlers.py:171` + `chat_service.py:399` import a missing module. Lazy branch; harmless until reached.
 
 ## Where stable state lives

@@ -51,6 +51,17 @@ discipline: |
   'error' after `removeAllListeners`) and an infinite retry loop on 403.
   Artifact: `engine/scripts/caddy/desktop.Caddyfile`.
 
+### Deploy method (updated 2026-06-04)
+The engine is now installed/updated on the server **via git** — `git clone`
+the (public / MIT) repo → `~/mrcall-desktop/engine`, `git pull` to update; no
+credentials. The initial bring-up used `rsync` to `~/zylch-engine`, and the
+systemd unit's `ExecStart` now points at the git path
+(`~/mrcall-desktop/engine/venv`). The **profile** still moves by `rsync`
+(private data, not in git). Operator guide + an exact agent runbook:
+[`../remote-backend.md`](../remote-backend.md). NOTE: the live Gn9Icu daemon
+was NOT re-deployed — it still runs from the original `~/zylch-engine` rsync
+path; only new deploys use the git layout.
+
 ### Architecture correction (2026-06-01)
 "One daemon per **Linux user**" — NOT per-Firebase-tenant. The engine is **one
 process per profile** (fcntl lock + single active-profile globals: `settings`,

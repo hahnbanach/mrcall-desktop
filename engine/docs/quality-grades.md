@@ -60,9 +60,9 @@ Curated live set as of 2026-05-12 (after whatsapp-pipeline-parity Phase 2 landin
 - `tests/llm/test_proxy_client.py` — 8 cases (MrCallProxyClient SSE + 401 + 402 + auth header + body forwarding + streaming reconstruction).
 - `tests/whatsapp/test_sync.py` — 5 cases (`_store_message_from_event` JID extraction, real `Neonize_pb2.Message` events).
 - `tests/workers/test_task_phase2_ordering.py` — 5 cases (F5 phase-2 sort key).
-- `tests/workers/test_task_worker_bugs.py` — 14 cases at HEAD; **broken** since 2026-05-04 transport refactor + 2026-05-06 Fase 1.1 plural `get_tasks_by_contact`. Tracked in `harness-backlog.md`. Do not count.
-- `tests/services/test_reanalyze_sweep.py` — 6 cases, **5 green** (1 pre-existing fail `test_sweep_skips_when_no_candidates_old_enough`, AsyncMock un-awaited; tracked).
-- `tests/storage/test_data_backfills.py` — 1 of 2 green (`test_apply_data_backfills_calls_every_step` passes; `test_init_db_invokes_channel_backfill_when_thread_id_backfill_is_noop` fails at setup with `NOT NULL constraint failed: task_items.pinned` — pre-existing on HEAD before whatsapp-pipeline-parity Phase 2 work; tracked in `harness-backlog.md`).
+- `tests/services/test_reanalyze_sweep.py` — 5 cases, all green (the stale `test_sweep_skips_when_no_candidates_old_enough` was removed 2026-06-04: the F4 age gate was intentionally lowered 24h→1h; verified semantically that genuinely-fresh <1h tasks are still skipped).
+- `tests/storage/test_data_backfills.py` — 1 case, green (`test_apply_data_backfills_calls_every_step`; the `task_items.pinned` NOT NULL fixture test was removed 2026-06-04 as stale).
+- `tests/workers/test_task_worker_bugs.py` — **DELETED 2026-06-04** (14 cases, all broken since the 2026-05-04 transport refactor — mocks patched a `LLMClient` attribute that had moved to a lazy import). The invariants it guarded (`_is_user_email` exact-match, multi-recipient/CC reply-closes-task, refresh-doesn't-delete-tasks) are now **uncovered** — see `harness-backlog.md`.
 
 Total green: ~131 across 9 active files. The rest of `tests/` references the old SaaS architecture and needs a rewrite.
 
