@@ -36,6 +36,44 @@ def _error(req_id: Optional[Any], code: int, message: str) -> Dict[str, Any]:
     return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
 
 
+# Secrets MUST never reach the DEBUG "method=X params=Y" line below —
+# stderr is captured by the renderer's narration pipeline and forwarded to
+# the LLM proxy for summarisation, so anything here ends up in Anthropic's
+# request logs. Keep synced with any RPC method that takes a JWT, API key,
+# password, OTP, OAuth code, etc. (Origin: the Firebase id_token leak Mario
+# caught flowing to Anthropic via narration after the engine defaulted to
+# DEBUG logging — ported here when the dispatcher moved out of server.py.)
+_SECRET_PARAM_KEYS_BY_METHOD: Dict[str, set] = {
+    "account.set_firebase_token": {"id_token"},
+    "auth.refresh": {"id_token"},
+}
+_SECRET_PARAM_KEYS_GLOBAL: set = {
+    # Defence-in-depth: redact regardless of method, in case a new RPC
+    # ships before this table is updated. Broad, but not so broad we hit
+    # innocent fields like "passenger" or usage "*_tokens".
+    "id_token",
+    "access_token",
+    "refresh_token",
+    "api_key",
+    "password",
+    "client_secret",
+    "secret",
+}
+
+
+def _redact_params(method: Optional[str], params: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a copy of ``params`` with known-sensitive fields masked."""
+    if not isinstance(params, dict) or not params:
+        return params
+    secret_keys = _SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set()) | _SECRET_PARAM_KEYS_GLOBAL
+    redacted = dict(params)
+    for k in list(redacted.keys()):
+        if k in secret_keys and redacted[k]:
+            v = redacted[k]
+            redacted[k] = f"<redacted len={len(v)}>" if isinstance(v, str) else "<redacted>"
+    return redacted
+
+
 async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
     """Parse + dispatch one JSON-RPC line. Performs NO I/O.
 
@@ -81,7 +119,7 @@ async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
             return None
         return _error(req_id, METHOD_NOT_FOUND, f"Method not found: {method}")
 
-    logger.debug(f"[rpc] method={method} params={params}")
+    logger.debug(f"[rpc] method={method} params={_redact_params(method, params)}")
     try:
         result = await handler(params, notify)
     except Exception as e:
