@@ -17,62 +17,6 @@ This test would have failed prior to the fix. Keep it green so the
 pattern doesn't recur the next time someone appends a backfill.
 """
 
-import os
-import sqlite3
-import uuid
-from datetime import datetime
-
-import pytest
-
-
-@pytest.fixture
-def fresh_db(tmp_path, monkeypatch):
-    """Build a tiny SQLite DB containing one task with channel NULL and
-    `sources.thread_id` already populated (so the thread_id backfill has
-    nothing to do — the exact shape that triggered the original bug).
-    """
-    db_path = tmp_path / "test.db"
-    monkeypatch.setenv("ZYLCH_DB_PATH", str(db_path))
-
-    # Reset module-level singletons so the engine picks up the env var.
-    from zylch.storage import database as dbm
-
-    dbm.dispose_engine()
-
-    # Bootstrap the schema (the first init_db call will create tables).
-    dbm.init_db()
-
-    # Inject one open task with a NULL channel and sources.thread_id set.
-    # We bypass the ORM to keep the test independent of `Storage`.
-    conn = sqlite3.connect(str(db_path))
-    try:
-        task_id = str(uuid.uuid4())
-        conn.execute(
-            "INSERT INTO task_items "
-            "(id, owner_id, event_type, event_id, contact_email, "
-            "action_required, urgency, sources, created_at, channel) VALUES "
-            "(?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
-            (
-                task_id,
-                "owner@example.com",
-                "email",
-                "evt-1",
-                "notification@transactional.mrcall.ai",
-                1,
-                "low",
-                '{"emails": ["e1"], "thread_id": "t1"}',  # already populated
-                datetime.utcnow().isoformat(),
-            ),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    # Force the next init_db to re-run backfills (engine cached the singleton).
-    dbm.dispose_engine()
-    yield db_path, task_id
-    dbm.dispose_engine()
-
 
 def test_apply_data_backfills_calls_every_step(monkeypatch, tmp_path):
     """Pure-orchestration check: even if every individual backfill is a
