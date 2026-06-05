@@ -84,6 +84,13 @@ holds 4 profiles. All heavy aarch64/py3.12 wheels resolved cleanly.
 
 ## Next session — multi-profile / multi-user routing (brief)
 
+> **SUPERSEDED 2026-06-05** by [`multi-profile-routing.md`](multi-profile-routing.md).
+> Mario locked the design: a dedicated `mrcalld` service user owns + runs ALL
+> profiles (NOT per-Linux-user `systemctl --user`/linger), and per-uid **Unix
+> sockets** (NOT TCP ports), so every user shares the one
+> `wss://desktop.mrcall.ai` URL and the app needs no change. Read that plan; the
+> sketch below is kept for context only.
+
 **Goal.** Serve *many* profiles (and many Linux users) over the one
 `wss://desktop.mrcall.ai` endpoint, each routed to its own engine daemon. The app
 already appends `/ws/<uid>`; the missing piece is per-uid routing on the server so
