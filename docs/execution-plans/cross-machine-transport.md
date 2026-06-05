@@ -42,7 +42,7 @@ discipline: |
 - **Phase 3b ✅** (2026-06-02) — public TLS endpoint. **Caddy** v2.11 on the VPS,
   `desktop.mrcall.ai` (DNS-only A record → the IP), auto Let's Encrypt cert
   (tls-alpn-01). `reverse_proxy /ws/* 127.0.0.1:5174` → the engine. Engine gained
-  `serve --ws --unix <socket>`; the app's `WebSocketRpcClient` appends `/ws/<uid>`
+  `serve --unix <socket>`; the app's `WebSocketRpcClient` appends `/ws/<uid>`
   to a BASE URL (one machine-global config, per-window routing; an unrouted
   direct engine ignores the path → backward-compatible with the tunnel). Live-
   validated end-to-end: production@cafe124 over `wss://desktop.mrcall.ai`, no
@@ -76,9 +76,11 @@ Already running: `mrcall-agent` (Docker `:8000`) + postgres (`:5432`); a node on
 holds 4 profiles. All heavy aarch64/py3.12 wheels resolved cleanly.
 
 ### Pending
-- **Multi-profile / multi-user routing** — the next milestone (brief below). Today
-  Caddy sends every `/ws/*` to the single Gn9Icu daemon on `:5174`, so any other
-  profile gets a (correct) 403.
+- **Multi-profile / multi-user routing** — ✅ **DONE / live 2026-06-05** (see
+  [`multi-profile-routing.md`](multi-profile-routing.md)): `mrcalld` service user
+  + per-uid Unix sockets + static Caddy `path_regexp` + `update-daemons.sh`.
+  `Gn9Icu` migrated `mal`→`mrcalld`; multi-profile proven on one URL. (Caddy no
+  longer points `/ws/*` at a single TCP daemon.)
 - Multi-client broadcast + reconnect-resume → Phase 5.
 - App Settings card: the URL field help should read "base URL (wss://host), no path".
 
@@ -103,7 +105,7 @@ locally, but is NOT yet used on the VPS.
 
 **Target design (already explained + agreed with Mario).**
 - One daemon per profile on a **Unix socket named by uid**:
-  `zylch -p <uid> serve --ws --unix /run/zylch/<uid>.sock`. No TCP-port juggling,
+  `zylch -p <uid> serve --unix /run/zylch/<uid>.sock`. No TCP-port juggling,
   no collisions across users (the firebase uid is globally unique).
 - **Caddy routes by the uid in the path:**
   ```

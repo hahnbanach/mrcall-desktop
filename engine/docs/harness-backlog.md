@@ -209,4 +209,9 @@ Enforcement gaps, missing tooling, and documentation debt.
 - [ ] WhatsApp session DB (`~/.zylch/whatsapp.db`) is global, not per-profile
   Discovered: 2026-04-04
   Impact: Multi-profile with different WA accounts not supported
+  Update 2026-06-05: now a LIVE hazard — the cross-machine `mrcalld` deploy runs
+  N profiles under one Linux user sharing one `~/.zylch/whatsapp.db`; two
+  WhatsApp profiles conflict (`<conflict type="replaced"/>`, wrong-account data).
+  Safe only with <=1 WhatsApp profile until whatsapp.db is per-profile. See
+  docs/remote-backend.md (Caveats) + execution-plans/multi-profile-routing.md (R2).
   19 SaaS-only files deleted, 8 files rewritten for standalone, README index rebuilt

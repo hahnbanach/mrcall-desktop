@@ -12,152 +12,204 @@ your Firebase ID token on the connection, and the engine only serves the profile
 whose `OWNER_ID` matches your account (a token for any other account is rejected
 with `403`).
 
-## 1 · Install the engine on the server
+Two ways to run it remotely:
+
+- **[A] Quick (one profile, no domain)** — a loopback TCP WebSocket reached
+  through an SSH tunnel. Good for trying it out.
+- **[B] Production (many profiles, one public URL)** — a dedicated `mrcalld`
+  service user runs one daemon per profile on a per-uid **Unix socket**, behind
+  **Caddy** (TLS + Let's Encrypt). Every profile shares one URL
+  `wss://<host>`; the app appends `/ws/<uid>` itself. This is what runs on the
+  Scaleway VPS today.
+
+Your `<uid>` is the Firebase UID shown next to your email in the app's
+IdentityBanner — it is also the profile directory name.
+
+---
+
+## A · Quick: one profile over an SSH tunnel
 
 A Linux box with **Python 3.11+** and outbound internet (for IMAP / the LLM):
 
 ```bash
-# the engine code is public (MIT) — clone it on the server (no credentials)
-# and install it into a venv
+# the engine code is public (MIT) — clone it, no credentials, install into a venv
 git clone https://github.com/hahnbanach/mrcall-desktop.git
 cd mrcall-desktop/engine && python3 -m venv venv && ./venv/bin/pip install -e .
 ```
 
-To update later, pull and reinstall only if dependencies changed — an editable
-install already tracks code edits:
-
-```bash
-git -C ~/mrcall-desktop pull && ~/mrcall-desktop/engine/venv/bin/pip install -e ~/mrcall-desktop/engine
-```
-
-## 2 · Put your profile on the server
-
-The engine reads a profile from `~/.zylch/profiles/<firebase-uid>/` (credentials
-in `.env`, data in `zylch.db`). Unlike the engine code, this is **private data —
-not in git**, so copy yours from your Mac directly, or create + sync it on the
-server with `zylch init` / `zylch -p <uid> update`:
+Copy your profile (private data, **not** in git):
 
 ```bash
 rsync -az ~/.zylch/profiles/<uid>/ user@server:.zylch/profiles/<uid>/
 ```
 
-Your `<uid>` is the Firebase UID shown next to your email in the app's
-IdentityBanner (it's also the profile directory name).
-
-## 3 · Run the engine as a WebSocket server
-
-Quick check, foreground:
+Run it on loopback and tunnel from your Mac:
 
 ```bash
+# on the server (foreground; for a daemon use option B's systemd unit)
 zylch -p <uid> serve --ws 127.0.0.1:5174
-```
-
-For a real daemon (starts at boot, restarts on crash) use the systemd template at
-[`../engine/scripts/systemd/zylch-server@.service`](../engine/scripts/systemd/zylch-server@.service):
-
-```bash
-sudo cp ~/mrcall-desktop/engine/scripts/systemd/zylch-server@.service /etc/systemd/system/
-sudo mkdir -p /etc/zylch
-printf 'ZYLCH_WS_ADDR=127.0.0.1:5174\n' | sudo tee /etc/zylch/<uid>.conf
-sudo systemctl enable --now zylch-server@<uid>      # start now + at boot
-```
-
-Adjust `User=` and the binary path in the unit to match your server. Logs:
-`journalctl -u zylch-server@<uid>` (warnings) and
-`~/.zylch/profiles/<uid>/zylch.log` (full).
-
-## 4 · Reach it from your Mac
-
-Pick one:
-
-**A — SSH tunnel** (simplest; no domain or certificate). Keep this open on your
-Mac, and the app's URL is `ws://127.0.0.1:5174`:
-
-```bash
+# on your Mac — keep this open
 ssh -L 5174:127.0.0.1:5174 user@server
 ```
 
-**B — Public endpoint with TLS** (no tunnel; reachable as `wss://…`). Put
-[Caddy](https://caddyserver.com) in front of the engine — it provisions a Let's
-Encrypt certificate automatically. You need a hostname pointing at the server: a
-real domain, or a free `<server-ip>.sslip.io`. Minimal Caddyfile (see
-[`../engine/scripts/caddy/desktop.Caddyfile`](../engine/scripts/caddy/desktop.Caddyfile)):
-
-```caddy
-your-host.example.com {
-    reverse_proxy /ws/* 127.0.0.1:5174
-}
-```
-
-The app's URL is then `wss://your-host.example.com`.
-
-## 5 · Point the app at it
-
-In the app: **Settings → Backend location → Remote**, enter the URL from step 4,
-hit **Test connection**, then **Apply & reconnect**. The app appends
-`/ws/<your-uid>` to the URL itself. To switch back, choose **Local**.
-
-The choice is stored per-machine in `~/.zylch/backend-config.json`; a fresh
-install (no such file) always runs local.
+In the app: **Settings → Backend location → Remote**, URL `ws://127.0.0.1:5174`,
+**Test connection**, **Apply & reconnect**.
 
 ---
 
-Today this is a **single-operator** setup: you provision the daemon yourself, one
-per profile. Running several profiles (or several people) behind one endpoint with
-automatic per-user routing is designed but not yet built — see the full design and
-the multi-profile brief in
-[`execution-plans/cross-machine-transport.md`](execution-plans/cross-machine-transport.md).
+## B · Production: many profiles behind one URL (`mrcalld` + Caddy)
 
-## Agent runbook — provision one profile's daemon (exact commands)
+The model:
 
-For an agent (or a script) bringing up the backend for one profile on a server.
-Run from a checkout of this repo on your Mac. Set `PROF` to the Firebase UID,
-`SSH` to the server (`user@host` or an ssh-config alias), and `PORT` to a free
-port (one per profile: 5174, 5175, …).
+- A dedicated **system user `mrcalld`** owns the engine checkout, **all**
+  profiles, and runs **all** daemons (system-level systemd — no per-human
+  `systemctl --user` / linger).
+- One daemon per profile on a **per-uid Unix socket**
+  `/run/mrcalld/<uid>.sock` (`serve --unix …`). No TCP ports to assign or
+  remember, no collisions.
+- **Caddy** routes `/ws/<uid>` → that socket with one **static** rule
+  (`path_regexp`), so adding/removing profiles never touches Caddy. Every user
+  shares `wss://<host>`; the app already appends `/ws/<uid>`.
+- Security is the per-daemon Firebase-JWT gate (`token.uid == OWNER_ID`); a
+  mis-route just fails `403`, so the routing is a hint, not the boundary.
+- One idempotent **`sudo update-daemons.sh`** is the operational entry-point:
+  pull code, discover profiles, ensure one daemon each, prune orphans.
 
-> Use `PROF`, **not** `UID` — `UID` is a read-only shell variable, so the
-> assignment silently fails and you target the wrong path (`/profiles/501`).
+### B.1 · One-time server setup
 
 ```bash
-PROF=<firebase-uid>; SSH=<user@host>; PORT=5174
-
-# 1 · engine onto the server via git — clone once, pull to update — + venv (idempotent)
-ssh "$SSH" 'set -e
-  if [ -d ~/mrcall-desktop/.git ]; then git -C ~/mrcall-desktop pull --ff-only
-  else git clone https://github.com/hahnbanach/mrcall-desktop.git ~/mrcall-desktop; fi
-  cd ~/mrcall-desktop/engine && { [ -d venv ] || python3 -m venv venv; }
-  ./venv/bin/pip install -e . -q'
-
-# 2 · this profile's PRIVATE data onto the server (not in git → rsync, not clone)
-rsync -az ~/.zylch/profiles/"$PROF"/ "$SSH:.zylch/profiles/$PROF/"
-
-# 3 · systemd unit (once) + this profile's port + enable & start
-ssh "$SSH" "set -e
-  sudo cp ~/mrcall-desktop/engine/scripts/systemd/zylch-server@.service /etc/systemd/system/
-  sudo mkdir -p /etc/zylch
-  printf 'ZYLCH_WS_ADDR=127.0.0.1:$PORT\n' | sudo tee /etc/zylch/$PROF.conf >/dev/null
-  sudo systemctl daemon-reload
-  sudo systemctl enable --now zylch-server@$PROF
-  sleep 6
-  systemctl is-active zylch-server@$PROF
-  ss -tlnp 2>/dev/null | grep ':$PORT' || echo 'NOT listening'"
+SVC=mrcalld
+# 1. service user (no login)
+sudo useradd --system --create-home --home-dir /home/$SVC --shell /usr/sbin/nologin $SVC
+# 2. engine checkout + venv, owned by the service user
+sudo -u $SVC git clone https://github.com/hahnbanach/mrcall-desktop.git /home/$SVC/mrcall-desktop
+sudo -u $SVC /usr/bin/python3 -m venv /home/$SVC/mrcall-desktop/engine/venv
+sudo -u $SVC /home/$SVC/mrcall-desktop/engine/venv/bin/pip install -e /home/$SVC/mrcall-desktop/engine
+ENG=/home/$SVC/mrcall-desktop/engine
+# 3. runtime dir for the sockets (creates /run/mrcalld, group = Caddy's group)
+sudo install -m 644 "$ENG/scripts/tmpfiles.d/mrcalld.conf" /etc/tmpfiles.d/
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/mrcalld.conf
+# 4. systemd template
+sudo install -m 644 "$ENG/scripts/systemd/zylch-server@.service" /etc/systemd/system/
+sudo systemctl daemon-reload
+# 5. Caddy site (static path_regexp) — EDIT the hostname inside first
+sudo install -m 644 "$ENG/scripts/caddy/desktop.Caddyfile" /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile && sudo systemctl reload caddy
 ```
 
-The systemd unit hard-codes `User=mal` and `/home/mal/mrcall-desktop/engine/…`
-(the git-clone path from step 1); edit it for a different server user or clone
-location. Then expose the port (§4 — SSH tunnel or Caddy) and set the app's URL (§5).
+> **Confirm two assumptions for your box.** The unit template hard-codes user
+> `mrcalld` and `/home/mrcalld/mrcall-desktop/engine`. The tmpfiles entry
+> (`d /run/mrcalld 2750 mrcalld caddy -`) assumes **Caddy's group is `caddy`**
+> — check with `id caddy`; if it differs (e.g. `www-data`), edit
+> `scripts/tmpfiles.d/mrcalld.conf` before installing. The setgid dir + the
+> daemon's `chmod(0o660)` on its socket are what let Caddy connect.
 
-**Traps a prior agent hit on this exact task — don't repeat them:**
+### B.2 · Per profile: bring the data, then run the updater
 
-- **`pkill -f "serve --ws …"` kills its own SSH shell.** The remote command line
-  *contains* that string, so `pkill -f` matches the shell running it (→ exit 255,
-  no output). Kill by port instead: `fuser -k "$PORT"/tcp`.
-- **Backgrounding a daemon over SSH with a bare `&` hangs / exits 255** — the job
-  keeps the SSH channel open. Use systemd (above) or detach fully:
-  `( setsid CMD </dev/null >/tmp/log 2>&1 & )`.
-- **The "serving" line is INFO**, which lands in the profile log, not the console.
-  An empty console after start is normal — check `systemctl is-active` + `ss`, or
-  `~/.zylch/profiles/$PROF/zylch.log` for `[ws] serving`.
-- **The server clock must be roughly correct** — Firebase ID-token verification
-  checks `exp`; a badly skewed clock rejects valid tokens. `timedatectl` should
-  report synchronized.
+The engine **discovers** profiles; it does not create them. Put each profile's
+private data (not in git) under the service user, then run the updater:
+
+```bash
+# from your Mac: profile data -> server (rsync to /tmp, then move as root)
+rsync -az ~/.zylch/profiles/<uid>/ user@server:/tmp/<uid>/
+ssh user@server 'sudo mkdir -p /home/mrcalld/.zylch/profiles \
+  && sudo mv /tmp/<uid> /home/mrcalld/.zylch/profiles/ \
+  && sudo chown -R mrcalld:mrcalld /home/mrcalld/.zylch'
+# discover + start every profile
+ssh user@server 'sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh'
+```
+
+`update-daemons.sh` (idempotent, run as root):
+
+1. `git pull`, then `pip install -e .` **only** if `engine/pyproject.toml`
+   changed (an editable install already tracks code edits).
+2. ensures the systemd template + tmpfiles are current.
+3. discovers every profile dir whose `.env` sets `OWNER_ID`, and enables +
+   (re)starts one `zylch-server@<uid>` daemon for each.
+4. with `--prune`, disables daemons whose profile dir is gone (orphans).
+
+Flags: `--dry-run` (print actions, change nothing), `--restart-all` (restart
+every daemon even with no new commits — default restarts only when `git pull`
+brought new commits, so a no-op run doesn't drop live WebSocket connections),
+`--prune` (**off by default**: only pass it when every profile you still want is
+present under the discovery dir, or it will stop the missing ones).
+
+### B.3 · Point the app at it
+
+**Settings → Backend location → Remote**, URL `wss://<host>` (base URL only — no
+path; the app appends `/ws/<your-uid>`), **Test connection**, **Apply &
+reconnect**. To switch back, choose **Local**. The choice is stored per-machine
+in `~/.zylch/backend-config.json`; a fresh install always runs local.
+
+### B.4 · Updating later
+
+```bash
+sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh           # pull + restart changed
+sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh --prune   # + remove orphans
+```
+
+---
+
+## Caveats
+
+- **Single-operator trust.** `mrcalld` owns the code and every profile; this is
+  fine for your own server. Hostile multi-tenancy (untrusted Linux users sharing
+  the box) would need per-tenant isolation — a separate design.
+- **WhatsApp is global, not per-profile.** `~/.zylch/whatsapp.db` (the neonize
+  session) is shared across **all** of `mrcalld`'s daemons. Until it's made
+  per-profile, run **at most one** profile with WhatsApp; two WhatsApp profiles
+  under one `mrcalld` will conflict (`<conflict type="replaced"/>`, wrong-account
+  data).
+- **Server clock must be ~correct.** Firebase ID-token verification checks
+  `exp`; a skewed clock rejects valid tokens. `timedatectl` should report
+  synchronized.
+
+## Agent runbook — exact commands
+
+For an agent or script bringing up / updating the backend. Run from a checkout on
+your Mac; set `SSH=<user@host>` (or an ssh-config alias). Use a variable like
+`PROF`, **not** `UID` — `UID` is a read-only shell variable, so the assignment
+silently fails and you target the wrong path.
+
+```bash
+SSH=<user@host>; PROF=<firebase-uid>
+
+# one-time: service user + engine + runtime dir + units + Caddy (idempotent)
+ssh "$SSH" 'set -e
+  id mrcalld >/dev/null 2>&1 || sudo useradd --system --create-home --home-dir /home/mrcalld --shell /usr/sbin/nologin mrcalld
+  [ -d /home/mrcalld/mrcall-desktop/.git ] || sudo -u mrcalld git clone https://github.com/hahnbanach/mrcall-desktop.git /home/mrcalld/mrcall-desktop
+  ENG=/home/mrcalld/mrcall-desktop/engine
+  [ -d "$ENG/venv" ] || sudo -u mrcalld /usr/bin/python3 -m venv "$ENG/venv"
+  sudo -u mrcalld "$ENG/venv/bin/pip" install -e "$ENG" -q
+  sudo install -m 644 "$ENG/scripts/tmpfiles.d/mrcalld.conf" /etc/tmpfiles.d/
+  sudo systemd-tmpfiles --create /etc/tmpfiles.d/mrcalld.conf
+  sudo install -m 644 "$ENG/scripts/systemd/zylch-server@.service" /etc/systemd/system/
+  sudo install -m 644 "$ENG/scripts/caddy/desktop.Caddyfile" /etc/caddy/Caddyfile   # EDIT hostname
+  sudo systemctl daemon-reload
+  sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile && sudo systemctl reload caddy'
+
+# per profile: PRIVATE data up (rsync, not git), then discover + start
+rsync -az ~/.zylch/profiles/"$PROF"/ "$SSH:/tmp/$PROF/"
+ssh "$SSH" "sudo mkdir -p /home/mrcalld/.zylch/profiles \
+  && sudo rm -rf /home/mrcalld/.zylch/profiles/$PROF \
+  && sudo mv /tmp/$PROF /home/mrcalld/.zylch/profiles/ \
+  && sudo chown -R mrcalld:mrcalld /home/mrcalld/.zylch \
+  && sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh"
+
+# verify
+ssh "$SSH" "systemctl is-active zylch-server@$PROF; sudo ls -l /run/mrcalld/$PROF.sock"
+curl -s -o /dev/null -w 'gate %{http_code}\n' https://<host>/ws/$PROF   # expect 401 (no token)
+```
+
+**Traps (still apply):**
+
+- **`pkill -f "serve …"` over SSH kills its own shell** — the remote command line
+  *contains* that string. Stop by unit instead: `sudo systemctl stop zylch-server@<uid>`.
+- **The "[ws] serving" line is INFO**, which lands in
+  `~mrcalld/.zylch/profiles/<uid>/zylch.log`, not the console. An empty console
+  after start is normal — check `systemctl is-active zylch-server@<uid>` and
+  `sudo ls -l /run/mrcalld/<uid>.sock` (expect `srw-rw---- mrcalld caddy`).
+- **`/run/mrcalld` is on tmpfs** → recreated at boot by `systemd-tmpfiles`; the
+  daemons re-bind their sockets on start, so a reboot self-heals.
+- **The server clock must be roughly correct** (token `exp` check); `timedatectl`
+  should report synchronized.

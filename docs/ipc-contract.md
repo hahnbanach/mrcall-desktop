@@ -18,6 +18,9 @@ read/write of bytes is the adapter's job). Two adapters:
   `app/src/main/sidecar.ts` (`StdioRpcClient`).
 - **Remote (cross-machine, Phase 2)** — one JSON object per WebSocket TEXT
   message, against an engine running `zylch -p <uid> serve --ws HOST:PORT`
+  (loopback + SSH tunnel) or `serve --unix /run/mrcalld/<uid>.sock` — the
+  production multi-profile deploy, where Caddy routes `/ws/<uid>` to the per-uid
+  socket (see [`remote-backend.md`](remote-backend.md))
   (`engine/zylch/rpc/server_ws.py`). The upgrade carries `Authorization:
   Bearer <firebaseIdToken>`; the engine verifies it (RS256) and gates
   `token.sub == profile OWNER_ID`, rejecting with HTTP **401** (no/invalid
