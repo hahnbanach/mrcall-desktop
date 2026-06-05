@@ -66,7 +66,7 @@ event = calendar.create_event(
    - Example: "giovedì 27/11 alle ore 10:00" → Thursday, Nov 27, 2025 at 10:00 CET
 3. **Identifies all participants**:
    - Sender: contact@example.com
-   - To/CC recipients: mario.alemi@mrcall.ai, ...
+   - To/CC recipients: you@example.com, ...
 4. **Creates calendar event** with:
    - Title: Based on email subject ("Call - Project Discussion")
    - Time: Parsed from email

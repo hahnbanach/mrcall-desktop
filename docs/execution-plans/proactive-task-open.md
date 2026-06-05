@@ -478,7 +478,7 @@ Quindi:
    - Se l'utente clicca "Vuoi che..." → primo cliccare "Sì"
      (chat libera) → l'agente chiama `send_email` (NON
      `draft_email`) → approval card con preview completa
-     (To: portaleimprese@istat.it, subject: "Chiave indagine
+     (To: org@example.com, subject: "Chiave indagine
      12698 — Codice utente 32924352", body con scuse + richiesta
      submit tardivo).
    - Click "Send" sull'approval card → mail parte via SMTP →

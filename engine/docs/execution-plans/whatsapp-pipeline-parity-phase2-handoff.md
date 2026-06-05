@@ -121,9 +121,9 @@ parser + normaliser in `engine/zylch/workers/memory.py`. Refactored
 `engine/zylch/memory/llm_merge.py`.
 
 Live impact (CLI sweeps, BYOK):
-- `support@mrcall.ai`: 805 → 307 blobs (-62%, 0 identifier dup-keys).
-- `mario.alemi@cafe124.it`: 731 → 315 blobs (-57%, 0 identifier dup-keys).
-- `mario.alemi@gmail.com`: pending; Mario clicks Settings → Maintenance
+- `support@example.com`: 805 → 307 blobs (-62%, 0 identifier dup-keys).
+- `you.work@example.com`: 731 → 315 blobs (-57%, 0 identifier dup-keys).
+- `you.personal@example.com`: pending; Mario clicks Settings → Maintenance
   → "Reconsolidate memory" (Firebase session needed).
 
 ### What's broken in production today (relevant to Phase 2)

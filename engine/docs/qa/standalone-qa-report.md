@@ -2,7 +2,7 @@
 
 **Data**: 2026-03-31
 **Tester**: Claude (QA Engineer)
-**Account test**: support@mrcall.ai (Firebase UID: REDACTED-FIREBASE-UID)
+**Account test**: support@example.com (Firebase UID: REDACTED-FIREBASE-UID)
 **Ambiente**: Docker locale → Railway DB di produzione
 **Email analizzate**: 193 (DB) + 5014 totali (IMAP), 148 non-notification negli ultimi 30 giorni
 
@@ -48,7 +48,7 @@ Due migration con ID `0002` (`add_business_id_to_background_jobs` e `add_error_l
 
 ### Valutazione complessiva: **ECCELLENTE**
 
-Cross-reference con le email reali (IMAP) di support@mrcall.ai:
+Cross-reference con le email reali (IMAP) di support@example.com:
 
 | Contatto | Task Zylch | Priorità | Accuratezza |
 |----------|-----------|----------|-------------|
@@ -142,7 +142,7 @@ Un utente che deploya Zylch fresh non può connettersi a nulla. Manca seed autom
 
 ## Appendice: Ground Truth (IMAP)
 
-Email analizzate via IMAP diretto a support@mrcall.ai:
+Email analizzate via IMAP diretto a support@example.com:
 - 5014 email totali in INBOX
 - 409 negli ultimi 30 giorni
 - 148 non-notification (escluse MrCall transactional)

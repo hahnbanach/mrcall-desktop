@@ -128,7 +128,7 @@ No `whatsapp_messages` slot today.
 There is NO `Person` table and NO `BlobIdentifier` table. A blob's
 `#IDENTIFIERS` block is free text inside `Blob.content`. Reconsolidation
 matches via embedding cosine on that block — works for e.g.
-`Name: Carmine Salamone\nEmail: carmine@cnit.it` matching a second blob
+`Name: Carmine Salamone\nEmail: contact@example.com` matching a second blob
 with the same email, but does NOT cross-match an email blob to a
 WhatsApp blob unless the LLM happened to emit the same identifier on
 both sides.
@@ -146,7 +146,7 @@ person_identifiers
   owner_id      str index
   blob_id       fk Blob.id
   kind          str          # 'email' | 'phone' | 'lid' | 'name_norm'
-  value         str          # 'carmine@cnit.it', '+393395040816', '19095575629933@lid', 'carmine salamone'
+  value         str          # 'contact@example.com', '+393395040816', '19095575629933@lid', 'carmine salamone'
   created_at    datetime
   unique (owner_id, kind, value, blob_id)
 ```
@@ -297,9 +297,9 @@ Split into three landings:
 - ✅ Tests: 13 new tests covering migrate per-table semantics,
   cluster builder edge cases, end-to-end mock-based scenarios.
 - ✅ Live impact:
-   - `support@mrcall.ai`: 805 → 307 (-62%, 498 dups merged across 10 cap-50 runs).
-   - `mario.alemi@cafe124.it`: 731 → 315 (-57%, 416 dups merged across 9 runs).
-   - `mario.alemi@gmail.com`: pending — Mario clicks Settings → Maintenance → "Reconsolidate memory" (Firebase session needed).
+   - `support@example.com`: 805 → 307 (-62%, 498 dups merged across 10 cap-50 runs).
+   - `you.work@example.com`: 731 → 315 (-57%, 416 dups merged across 9 runs).
+   - `you.personal@example.com`: pending — Mario clicks Settings → Maintenance → "Reconsolidate memory" (Firebase session needed).
 
 **What 1c does NOT do**: pure name-only typos (`Salomone` vs `Salamone`)
 remain — same as before, no regression. The `groups_examined` counter

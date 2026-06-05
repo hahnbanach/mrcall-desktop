@@ -30,11 +30,11 @@ Ogni fase ha un criterio di done verificabile sul Mac (no unit-test = done — v
 
 ## Stato di partenza (dump live, 2026-05-06)
 
-Profile UID `HxiZh...`, `EMAIL_ADDRESS=mario.alemi@gmail.com` (verified via `engine/scripts/diag_sent_email.py`):
+Profile UID `HxiZh...`, `EMAIL_ADDRESS=you.personal@example.com` (verified via `engine/scripts/diag_sent_email.py`):
 
 - 74 open `action_required` task.
 - ~30 task con `contact_email = notification@transactional.mrcall.ai` (telefonate non richiamate).
-- Task del corso CNIT Salamone (`e30581f3`) ha `sent_in_thread=2` sul thread `<0BC008F8...@cnit.it>` — l'utente ha già risposto da una settimana.
+- Task del corso CNIT Salamone (`e30581f3`) ha `sent_in_thread=2` sul thread `<0BC008F8...@example.com>` — l'utente ha già risposto da una settimana.
 - Task Omniaimpianti `cc962e54`: `sent_in_thread=4`. Task Ali Lotia `35b48cc6`: `sent_in_thread=4`. Tutti aperti nonostante user reply pre-esistente.
 - Causa diretta del "non chiude mai": F4 reanalyze sweep era gated dietro `pending_tasks > 0` in `process_pipeline.py:133`. Per profili dove le sent mail recenti sono già `task_processed_at IS NOT NULL`, sweep non parte mai. Fixato in `cc66279`.
 
@@ -72,7 +72,7 @@ Tutti identificati durante la sessione del 2026-05-06. La fase indicata è dove 
 
 ### 1.1 — Bug E: `_collect` vede tutti i task del contact
 
-`task_creation.py:330` chiama `get_task_by_contact` (singolare → ritorna `.first()`). `noreply@cnit.it` ha 5 task aperti, l'LLM ne vede 1. Decide UPDATE su quello → gli altri 4 restano duplicati eterni.
+`task_creation.py:330` chiama `get_task_by_contact` (singolare → ritorna `.first()`). `noreply@example.com` ha 5 task aperti, l'LLM ne vede 1. Decide UPDATE su quello → gli altri 4 restano duplicati eterni.
 
 - **Change**: sostituire con `get_tasks_by_contact` (plurale, già esiste, `storage.py:2592`). Costruire `existing_tasks_all = thread_tasks + task_by_contact_list` con dedup by id.
 - **Done**: nuova mail noreply CNIT entra → existing_task_context mostra TUTTI i task aperti del contact → LLM sceglie `target_task_id` corretto o NONE/UPDATE invece di CREATE.
@@ -137,7 +137,7 @@ L'utente vuole un bottone "ripulisci ora", per non aspettare il prossimo `update
 `hybrid_search.py:148` ha `RECONSOLIDATION_THRESHOLD = 0.65`. La `reconsolidation` cerca per CONTENT del nuovo blob, non per ENTITY identifier. Due "Salamone" da mail diverse hanno content diverso → score < 0.65 → blob nuovo invece di merge.
 
 - **Indagine prima** (mezza giornata): inserire log in `_upsert_entity` (`memory.py:160-221`) che stampa per ogni nuovo blob "Salamone" i top-3 candidati con score. Capire perché quello giusto è < 0.65.
-- **Fix probabile**: usare gli `IDENTIFIERS` (Email, Phone) come search query invece del content full. Una mail Salamone include `Email: c.salamone@cnit.it` — query su quello matcha esattamente il blob esistente.
+- **Fix probabile**: usare gli `IDENTIFIERS` (Email, Phone) come search query invece del content full. Una mail Salamone include `Email: contact@example.com` — query su quello matcha esattamente il blob esistente.
 - **Done**: nuova mail Salamone → log mostra match 0.85+ con blob esistente → `Reconsolidated blob ... with email ...`. Niente nuovo blob.
 
 ## Fase 3 — Strutturale

@@ -62,7 +62,7 @@ Open tasks were computed from wrong chronology. Options:
 - **A (destructive)**: `DELETE FROM task_items WHERE completed_at IS NULL;` then `zylch -p <profile> process` to rebuild. Fast, clean, but loses any manual task edits. **User confirmation required.**
 - **B (gentle)**: clear `emails.task_processed_at` for affected threads only, re-run task worker. Preserves existing tasks; detector updates/closes them based on corrected dates. Slower, risk of duplicates.
 
-Recommendation: **B for production profiles**, **A for the support@mrcall.ai profile** where the user is actively testing and has seen fewer than a dozen tasks.
+Recommendation: **B for production profiles**, **A for the support@example.com profile** where the user is actively testing and has seen fewer than a dozen tasks.
 
 ## Test Plan (user-facing, per project rules)
 
@@ -70,7 +70,7 @@ Use the product as a user would.
 
 1. **Pre-fix snapshot** (read-only, already confirmed):
    ```
-   sqlite3 ~/.zylch/profiles/support@mrcall.ai/zylch.db \
+   sqlite3 ~/.zylch/profiles/support@example.com/zylch.db \
      "SELECT date, date_timestamp FROM emails WHERE message_id_header LIKE '%CAECLDjt9-OHBwsCzvjaMjPWM%';"
    ```
    Expected current (buggy) output: `2026-02-27 07:42:27 | 1740663747` (timestamp is already correct; naive date is wrong).
@@ -84,16 +84,16 @@ Use the product as a user would.
 3. **Fresh-sync test**: delete one known row, re-sync, verify correct date.
    ```
    # delete the Tentacools 14:42 reply row (by gmail_id), then:
-   zylch -p support@mrcall.ai sync
+   zylch -p support@example.com sync
    sqlite3 ... "SELECT date FROM emails WHERE message_id_header LIKE '%CAECLDjt9-OHBwsCzvjaMjPWM%';"
    ```
    Expected: `2026-02-27 13:42:27`.
 
-4. **Run backfill dry-run** on support@mrcall.ai profile. Verify printed before/after for 3–5 known rows.
+4. **Run backfill dry-run** on support@example.com profile. Verify printed before/after for 3–5 known rows.
 
 5. **Apply backfill (real)**. Re-query the Tentacools row. Must now read `13:42:27`.
 
-6. **Re-run task detection** on support@mrcall.ai (strategy A: delete open tasks + `zylch process`). Verify the Tentacools task is now auto-closed (support replied after the customer's last message).
+6. **Re-run task detection** on support@example.com (strategy A: delete open tasks + `zylch process`). Verify the Tentacools task is now auto-closed (support replied after the customer's last message).
 
 7. **Regression guard**: add `tests/email/test_date_parsing.py` with three cases:
    - `Fri, 27 Feb 2026 07:42:27 -0600` → stored value `2026-02-27 13:42:27` naive UTC.
@@ -106,7 +106,7 @@ Use the product as a user would.
 1. Write failing unit test (step 7) — verifies bug before fix.
 2. Patch `storage.py:164` and `email_sync.py:595-601`.
 3. Confirm test passes. `make lint`.
-4. Manual sync test (step 3 above) on support@mrcall.ai.
+4. Manual sync test (step 3 above) on support@example.com.
 5. Write `scripts/backfill_email_date_utc.py` (dry-run default).
 6. User runs backfill dry-run, reviews output.
 7. User runs backfill for real (per-profile).
@@ -119,5 +119,5 @@ No deploy step. Local CLI.
 
 - Parse at source (imap_client return tz-aware datetime) vs fix only at storage? → **Recommendation: fix only at storage**, leave raw-string contract.
 - Column type change `DateTime` → `DateTime(timezone=True)`? → **Recommendation: no**, separate task.
-- Task cleanup strategy A vs B? → **Recommendation: A for support@mrcall.ai, B elsewhere**.
+- Task cleanup strategy A vs B? → **Recommendation: A for support@example.com, B elsewhere**.
 - Is the project OK depending on `date_timestamp` always being populated? Any code path that inserts without setting it? A quick audit of `storage.py` insertion sites is a prerequisite for the backfill SQL above.

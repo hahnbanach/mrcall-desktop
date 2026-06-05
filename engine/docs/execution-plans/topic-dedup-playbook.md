@@ -15,10 +15,10 @@ real `update.run` against the live DB. Don't be the sixth.
 User has N tasks open. Among them, M tasks all describe the same
 underlying real-world problem but come from different
 contacts / channels. Concrete example seen on profile
-`HxiZhWEBoRUarPzqX8eRWP21FuJ3` (`mario.alemi@gmail.com`):
+`HxiZhWEBoRUarPzqX8eRWP21FuJ3` (`you.personal@example.com`):
 
-- email task from `carmine.salamone@cnit.it` ("Riscontro Formazione Obbligatoria")
-- email task from `noreply@aifos.it` (automated platform notification)
+- email task from `contact@example.com` ("Riscontro Formazione Obbligatoria")
+- email task from `noreply@example.com` (automated platform notification)
 - MrCall missed-call task from `notification@transactional.mrcall.ai` (Apr 14)
 - MrCall missed-call task from `notification@transactional.mrcall.ai` (Apr 20)
 

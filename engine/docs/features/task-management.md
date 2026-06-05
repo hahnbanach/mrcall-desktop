@@ -85,7 +85,7 @@ Zylch AI aggregates ALL threads from the same contact into a unified task view.
 ```
 📋 Task: Luisa Boni
 
-Email: studioped.boni@gmail.com
+Email: contact@example.com
 Status: open
 Priority: 10/10 (URGENT)
 Threads: 5
@@ -133,7 +133,7 @@ oggi per rassicurarla e risolvere i problemi di configurazione.
 │ {                                                           │
 │   "thread_123": {                                           │
 │     "subject": "settaggio wa",                              │
-│     "participants": ["studioped.boni@gmail.com"],           │
+│     "participants": ["contact@example.com"],           │
 │     "summary": "Chiede come resettare messaggio WA",        │
 │     "open": true,                                           │
 │     "expected_action": "answer"                             │
@@ -157,7 +157,7 @@ oggi per rassicurarla e risolvere i problemi di configurazione.
 │ {                                                           │
 │   "contact_luisa_boni": {                                   │
 │     "contact_name": "Luisa Boni",                           │
-│     "contact_email": "studioped.boni@gmail.com",            │
+│     "contact_email": "contact@example.com",            │
 │     "status": "open",                                       │
 │     "score": 10,                                            │
 │     "view": "Cliente ansiosa...",                           │
@@ -191,21 +191,21 @@ Zylch AI needs to identify **who is the contact** (vs. you) in each thread.
 
 **Example thread participants:**
 ```
-From: Luisa Boni <studioped.boni@gmail.com>
-To: Mario Alemi <mario.alemi@mrcall.ai>
-Cc: Support <support@mrcall.ai>
+From: Luisa Boni <contact@example.com>
+To: Mario Alemi <you@example.com>
+Cc: Support <support@example.com>
 ```
 
 **Question:** Who is the "contact" here?
-- Not mario.alemi@mrcall.ai (that's you!)
-- Not support@mrcall.ai (that's you too!)
-- **Answer:** studioped.boni@gmail.com
+- Not you@example.com (that's you!)
+- Not support@example.com (that's you too!)
+- **Answer:** contact@example.com
 
 ### Solution: MY_EMAILS Configuration
 
 In `.env`:
 ```bash
-MY_EMAILS=mario.alemi@gmail.com,mario.alemi@mrcall.ai,support@mrcall.ai,*@pipedrivemail.com
+MY_EMAILS=you.personal@example.com,you@example.com,support@example.com,*@pipedrivemail.com
 ```
 
 **Features:**
@@ -234,7 +234,7 @@ When analyzing a contact, TaskManager provides the LLM with:
 
 ```json
 {
-  "contact_email": "studioped.boni@gmail.com",
+  "contact_email": "contact@example.com",
   "contact_name": "Luisa Boni",
   "threads_count": 5,
   "threads": [
@@ -288,7 +288,7 @@ Rules:
 ```json
 {
   "contact_name": "Luisa Boni",
-  "contact_emails": ["studioped.boni@gmail.com", "lunibo@gmail.com"],
+  "contact_emails": ["contact@example.com", "contact2@example.com"],
   "view": "Il contatto ha avuto problemi con l'assistente precedente...",
   "status": "open",
   "score": 10,
@@ -335,7 +335,7 @@ You: sync emails
 # Fast: only fetches new emails since last sync
 
 # Update specific contact's task
-You: get contact task studioped.boni@gmail.com
+You: get contact task contact@example.com
 # On-demand: re-analyzes only that contact
 # Cost: <$0.01
 ```
@@ -369,7 +369,7 @@ You: build tasks force_rebuild=true
 **Usage:**
 ```
 You: status di Luisa Boni
-You: get contact task studioped.boni@gmail.com
+You: get contact task contact@example.com
 ```
 
 **Cost:** ~$0.007 per contact (< 1 cent)

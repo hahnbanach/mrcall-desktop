@@ -814,7 +814,7 @@ is different (`MATCH` instead of `@@`) but the concept is the same.
 name = "zylch"
 version = "0.2.0"
 description = "Local AI sales intelligence — email analysis, memory, task management"
-authors = [{name = "Mario Alemi", email = "mario@zylchai.com"}]
+authors = [{name = "Mario Alemi", email = "you@example.com"}]
 license = {text = "MIT"}
 requires-python = ">=3.11"
 keywords = ["cli", "ai", "email", "sales", "intelligence", "memory"]

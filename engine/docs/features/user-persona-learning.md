@@ -43,17 +43,17 @@ User Persona Learning is a background system that analyzes conversations between
 ```
 User: "Scrivi una mail a mia sorella Francesca per ricordarle della cena"
 Zylch: "Certo! Mi serve l'email di Francesca..."
-User: "francesca.rossi@gmail.com"
+User: "contact@example.com"
 ```
 
 **What Zylch Learns:**
 - User has a sister named Francesca
-- Francesca's email is francesca.rossi@gmail.com
+- Francesca's email is contact@example.com
 
 **Future Interaction:**
 ```
 User: "Manda un messaggio a Francesca"
-Zylch: "Scrivo a tua sorella Francesca (francesca.rossi@gmail.com)?"
+Zylch: "Scrivo a tua sorella Francesca (contact@example.com)?"
 ```
 
 ---

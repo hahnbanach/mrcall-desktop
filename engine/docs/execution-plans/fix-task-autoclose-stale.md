@@ -2,18 +2,18 @@
 
 status: completed (F1 + F2 + F3 + F4 + cleanup, 2026-05-01)
 created: 2026-05-01
-profile observed: mario.alemi@cafe124.it
+profile observed: you.work@example.com
 
 ## Symptom
 
 User replied in thread `<PAVPR10MB7034484AF4E54E024C85090BE648A@…>`
-on 2026-04-30 18:16:39 UTC (Superhuman). The reply went `to=e.argento@realstep.it`,
-`cc=ivan.marchese@cafe124milan.com + m.scacciati@realstep.it`. The
+on 2026-04-30 18:16:39 UTC (Superhuman). The reply went `to=alice@example.com`,
+`cc=carol@example.com + bob@example.com`. The
 post-reply task run at 18:20:58 closed only the e.argento task (61af55e3).
 Two open tasks on the same thread survived:
 
-- de342a1d (m.scacciati@realstep.it) — created 04-21 17:00, never closed
-- 5c66fa63 (ivan.marchese@cafe124milan.com) — created 04-27 12:31, never closed
+- de342a1d (bob@example.com) — created 04-21 17:00, never closed
+- 5c66fa63 (carol@example.com) — created 04-27 12:31, never closed
 
 Both `suggested_action` fields had been corrupted earlier with the LLM's
 advisory text ("Keep existing task as-is: …", "No action needed — Ivan
@@ -265,7 +265,7 @@ inside the test body alongside `build_thread_history`. 14/14 tests
 green now.
 
 **Manual cleanup — DONE.** de342a1d and 5c66fa63 on
-`mario.alemi@cafe124.it` were closed via direct SQL UPDATE on the
+`you.work@example.com` were closed via direct SQL UPDATE on the
 profile DB at 2026-05-01 10:49:32 UTC (Mario had already replied to
 the thread on 04-30, so closing is correct). The corrupted
 `suggested_action` strings remain on the rows but the tasks are no
