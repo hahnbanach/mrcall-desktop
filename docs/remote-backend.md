@@ -104,10 +104,30 @@ sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile && sudo sy
 > `scripts/tmpfiles.d/mrcalld.conf` before installing. The setgid dir + the
 > daemon's `chmod(0o660)` on its socket are what let Caddy connect.
 
+**Working as `mrcalld`.** It is a **nologin service account** by design, so
+`su - mrcalld` / SSH login is refused (`This account is currently not
+available`) — that's expected, not a misconfiguration. You never need to log in
+as it; operate through `sudo`:
+
+```bash
+sudo -u mrcalld git -C /home/mrcalld/mrcall-desktop pull   # run one command as mrcalld
+sudo -u mrcalld -H bash                                    # interactive shell as mrcalld
+sudo su -s /bin/bash - mrcalld                             # su-style (-s overrides the nologin shell)
+```
+
+Day-to-day you don't even need that — admin runs as root: `sudo update-daemons.sh`,
+`sudo systemctl {status,restart} zylch-server@<uid>`, `journalctl -u zylch-server@<uid>`.
+
 ### B.2 · Per profile: bring the data, then run the updater
 
-The engine **discovers** profiles; it does not create them. Put each profile's
-private data (not in git) under the service user, then run the updater:
+The engine **discovers** profiles; it does not create them. Copy **only the
+profiles you want to run remotely** (not necessarily all of them), one dir per
+uid, under the service user — it's private data, not in git. Note: a profile
+runs **either** locally **or** remotely, never both at once (the fcntl lock
+enforces it), and there is **no two-way sync** — once a profile is served from
+the server, the server copy is the source of truth; don't keep running that same
+profile locally against the old Mac copy, the two SQLite DBs would diverge. (And
+≤1 WhatsApp profile per server — see Caveats.) Then run the updater:
 
 ```bash
 # from your Mac: profile data -> server (rsync to /tmp, then move as root)
