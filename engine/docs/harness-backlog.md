@@ -4,6 +4,19 @@ Enforcement gaps, missing tooling, and documentation debt.
 
 ## Open
 
+- [ ] **No test for the secret-redactor `rpc/dispatch._redact_params` (discovered 2026-06-05).**
+  - It masks `id_token` / `api_key` / etc. out of the DEBUG `[rpc] method=…
+    params=…` line (stderr → renderer narration → Anthropic request logs). A
+    regression here silently re-opens the Firebase-JWT leak Mario caught, and
+    `_SECRET_PARAM_KEYS_*` must be kept in sync by hand whenever a new RPC takes
+    a secret param. No unit test asserts the mask.
+  - Worse: this very fix sat **uncommitted in the worktree for the whole
+    session** (HEAD's `dispatch.py` still logged `params={params}` raw); it only
+    landed on `main` in `2657b873` (2026-06-05). A dirty-tree gate before a
+    "done" claim — and CI on the FULL suite — would each have caught it.
+  - Action: add `tests/rpc/test_redact.py` (mask each per-method + global secret
+    key; pass innocent fields through); add a pre-claim `git status` check.
+
 - [ ] **`humanize_error` only wired into `update.run` (discovered 2026-05-26).**
   - The `services/error_messages.humanize_error` classifier (added on
     `feat/session-may-26`) is currently consumed only by
