@@ -238,6 +238,15 @@ async def serve_ws(
     # Generous frame size — a chat.send with embedded email bodies can be
     # large, same rationale as the stdio reader's 16 MiB limit.
     if unix_path:
+        # Remove a stale socket left by a SIGKILLed predecessor: asyncio's
+        # create_unix_server (py3.12) does NOT pre-unlink, so a leftover file
+        # makes bind() fail with EADDRINUSE and the daemon can't respawn. The
+        # profile fcntl lock (cli.profiles.acquire_lock, held before we reach
+        # here) guarantees we're the only instance, so a residual socket of
+        # this name is ours to remove.
+        if os.path.exists(unix_path):
+            logger.info(f"[ws] removing stale socket {unix_path}")
+            os.unlink(unix_path)
         logger.info(f"[ws] serving JSON-RPC on unix:{unix_path}")
         server_cm = unix_serve(
             _handle_connection,
@@ -256,4 +265,10 @@ async def serve_ws(
         )
 
     async with server_cm as server:
+        if unix_path:
+            # Guarantee the socket is group-writable so the reverse-proxy
+            # (Caddy, group `caddy`, inherited via the setgid /run/mrcalld dir)
+            # can connect — independent of the process umask / library default.
+            os.chmod(unix_path, 0o660)
+            logger.info(f"[ws] chmod 0o660 {unix_path} (group-writable for the reverse-proxy)")
         await server.serve_forever()

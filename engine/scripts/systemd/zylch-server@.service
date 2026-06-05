@@ -1,23 +1,35 @@
 [Unit]
-# Cross-machine WS engine, one instance per profile (%i = Firebase uid).
-# Start:  sudo systemctl enable --now zylch-server@<uid>
-# Each instance reads its bind address from /etc/zylch/<uid>.conf
-# (ZYLCH_WS_ADDR=127.0.0.1:<port>) and serves that profile's data over a
-# loopback WebSocket — reachable via SSH tunnel or a Caddy reverse-proxy.
-Description=zylch cross-machine WS engine (profile %i)
+# Cross-machine WebSocket engine, one instance per profile (%i = Firebase uid).
+# Owned and run by the dedicated service user `mrcalld`, which holds the engine
+# checkout (git) and ALL profiles and runs every profile's daemon. Each
+# instance serves one profile over a per-uid Unix socket in /run/mrcalld/;
+# Caddy reverse-proxies /ws/<uid> to <uid>.sock — one URL for everyone, no
+# per-user port. See docs/execution-plans/multi-profile-routing.md.
+#   sudo systemctl enable --now zylch-server@<uid>
+Description=mrcall-desktop cross-machine WS engine (profile %i)
 After=network-online.target
 Wants=network-online.target
+# Don't crash-loop forever on a misconfigured profile (e.g. one with no
+# OWNER_ID makes the engine exit non-zero): give up after 5 starts in 60s.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
-User=mal
-Group=mal
-Environment=HOME=/home/mal
-WorkingDirectory=/home/mal
-EnvironmentFile=/etc/zylch/%i.conf
-# Path assumes the repo was git-cloned to ~/mrcall-desktop (see
-# docs/remote-backend.md); the venv lives at engine/venv inside it.
-ExecStart=/home/mal/mrcall-desktop/engine/venv/bin/zylch -p %i serve --ws ${ZYLCH_WS_ADDR}
+User=mrcalld
+Group=mrcalld
+Environment=HOME=/home/mrcalld
+WorkingDirectory=/home/mrcalld
+# The socket is /run/mrcalld/<uid>.sock. That dir is setgid group `caddy`
+# (engine/scripts/tmpfiles.d/mrcalld.conf), so the socket inherits group
+# `caddy`; UMask=0007 + an explicit chmod(0o660) in server_ws.py make it
+# group-writable so the Caddy reverse-proxy (group caddy) can connect. The
+# socket path derives from the instance name %i — no EnvironmentFile, no port.
+UMask=0007
+ExecStart=/home/mrcalld/mrcall-desktop/engine/venv/bin/zylch -p %i serve --unix /run/mrcalld/%i.sock
+# Remove the socket when the daemon stops for good (clean disable/prune). The
+# unlink-before-bind in server_ws.py separately covers the crash/respawn case.
+ExecStopPost=/bin/rm -f /run/mrcalld/%i.sock
 Restart=on-failure
 RestartSec=3
 # Engine logs INFO/DEBUG to ~/.zylch/profiles/%i/zylch.log; only WARNING+
