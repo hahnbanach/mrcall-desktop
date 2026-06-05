@@ -4,7 +4,7 @@ owner: cross-cutting (engine + ops/Caddy + deploy)
 created: 2026-06-05
 supersedes: the "Next session — multi-profile / multi-user routing (brief)" section in cross-machine-transport.md
 discipline: |
-  Standard regole Mario. È PRODUZIONE: production@cafe124 gira live su
+  Standard regole Mario. È PRODUZIONE: <prod-profile> gira live su
   desktop.mrcall.ai. NEVER claim "fatto"/"verificato" finché Mario non ha
   riconnesso il suo Electron e visto i SUOI dati passare DOPO la migrazione.
   Unit test / RPC probe / log NON contano: il test reale è "due profili
@@ -19,7 +19,7 @@ discipline: |
 ## Stato sviluppo — 2026-06-05
 
 **Phase 0 + Phase 1 fatte e PROVATE sul VPS reale** (engine + ops, zero impatto
-sul live `Gn9Icu`):
+sul live `<prod-uid>`):
 - `server_ws.py` patchato: `chmod(0o660)` dopo bind + `unlink` del socket stale
   prima del bind (RISCHIO #1 + C2). py_compile OK.
 - unit `zylch-server@.service` riscritta (mrcalld / `--unix` / UMask / StartLimit);
@@ -37,9 +37,9 @@ sul live `Gn9Icu`):
   (è il path reale di produzione, meno il TLS).
 
 **Cutover (Phase 2 + Phase 4) — FATTO live 2026-06-05** (Mario: «non c'è
-produzione vera, continua pure»). `Gn9Icu` (production@cafe124) migrato
+produzione vera, continua pure»). `<prod-uid>` (<prod-profile>) migrato
 `mal`→`mrcalld`, dati intatti (54 email / 18 task), su unix socket; Caddy
-passato a `path_regexp`. Verificato `https://desktop.mrcall.ai/ws/Gn9Icu` →
+passato a `path_regexp`. Verificato `https://desktop.mrcall.ai/ws/<prod-uid>` →
 401, uid inesistente → 502. **Multi-profilo dimostrato**: un 2° profilo
 sintetico → due daemon/due socket sullo STESSO url, poi rimosso con `--prune`
 (disabilita solo l'orfano). Aggiunto `ExecStopPost=rm <socket>` all'unit (stato
@@ -50,8 +50,8 @@ si committa+pusha e il VPS fa `git pull`).
 **Restano:** (1) `git commit` + push delle modifiche worktree (gated su ok
 esplicito) → poi il VPS gira `git pull` invece dello scp di oggi; (2) test
 end-to-end dall'app col **token di Mario** (app → Remote → `wss://desktop.mrcall.ai`:
-firmando come owner di Gn9Icu vede i suoi dati; un altro uid → 403); (3)
-opzionale: portare il profilo `x59G6` (mario.alemi) sul VPS per provarlo col
+firmando come owner di <prod-uid> vede i suoi dati; un altro uid → 403); (3)
+opzionale: portare il profilo `<uid-2>` (<your-account>) sul VPS per provarlo col
 proprio account; (4) rimuovere il vecchio `~mal/zylch-engine` + `/etc/zylch/`
 (tenuti ora come rollback).
 
@@ -115,7 +115,7 @@ Un uid senza socket → Caddy 502 (nessun dato esposto, accettabile).
 | `serve --ws 127.0.0.1:5174` (porta) | `serve --unix /run/mrcalld/<uid>.sock` |
 | `/etc/zylch/<uid>.conf` con `ZYLCH_WS_ADDR` | **non serve più** (il path socket deriva da `%i`) |
 | Caddy `reverse_proxy /ws/* 127.0.0.1:5174` (1 upstream) | `path_regexp uid` → socket per-uid (statico, N upstream) |
-| 1 profilo raggiungibile (Gn9Icu); gli altri → 403 | tutti i profili raggiungibili, stesso url |
+| 1 profilo raggiungibile (<prod-uid>); gli altri → 403 | tutti i profili raggiungibili, stesso url |
 | provisioning a mano (runbook per-profilo in remote-backend.md) | `sudo update-daemons.sh` (auto-discovery) |
 
 ## Fasi (una alla volta, STOP + verifica di Mario ad ognuna)
@@ -160,19 +160,19 @@ si connette senza permission denied; (b) `kill -9` del daemon → `systemctl` lo
 fa ripartire e ri-binda lo stesso socket senza `EADDRINUSE`.
 
 ### Phase 2 ✅(Caddy fatto; app e2e = Mario) — Caddy per-uid + test end-to-end (un profilo)
-⚠️ **Accoppiata con Phase 4.** Oggi il live `Gn9Icu` gira su **TCP** (`mal`,
+⚠️ **Accoppiata con Phase 4.** Oggi il live `<prod-uid>` gira su **TCP** (`mal`,
 `127.0.0.1:5174`) e il Caddy attuale è `reverse_proxy /ws/* 127.0.0.1:5174`.
-Passando Caddy alla forma `path_regexp` → socket, il traffico di Gn9Icu verrebbe
-instradato a `/run/mrcalld/Gn9Icu….sock` che **non esiste** finché Gn9Icu non è
+Passando Caddy alla forma `path_regexp` → socket, il traffico di <prod-uid> verrebbe
+instradato a `/run/mrcalld/<prod-uid>….sock` che **non esiste** finché <prod-uid> non è
 migrato sotto mrcalld → **production 502**. Due opzioni:
 - **(A) consigliata** — fare Phase 2 + Phase 4 nella STESSA finestra: prima
-  migra Gn9Icu a mrcalld/socket (Phase 4), poi switcha Caddy. Un solo downtime.
-- **(B) dual-route temporaneo** — tieni Gn9Icu su TCP e manda solo gli ALTRI uid
+  migra <prod-uid> a mrcalld/socket (Phase 4), poi switcha Caddy. Un solo downtime.
+- **(B) dual-route temporaneo** — tieni <prod-uid> su TCP e manda solo gli ALTRI uid
   sul socket, finché non migri anche lui:
   ```
   desktop.mrcall.ai {
-      @gn9 path /ws/Gn9IcuWzYyY7DBMHkVUGB7bIiTp2
-      reverse_proxy @gn9 127.0.0.1:5174
+      @prod path /ws/<prod-uid>
+      reverse_proxy @prod 127.0.0.1:5174
       @ws path_regexp uid ^/ws/([^/]+)$
       reverse_proxy @ws unix//run/mrcalld/{re.uid.1}.sock
   }
@@ -200,7 +200,7 @@ Idempotente, gira da root/`sudo`:
    `daemon-reload` una volta se il template è cambiato.
 4. `disable --now zylch-server@<uid>` per le istanze attive senza più dir
    profilo (orfani). **Opt-in `--prune` (OFF di default)**: un prune
-   pre-cutover vedrebbe il live `mal` Gn9Icu come orfano e lo spegnerebbe →
+   pre-cutover vedrebbe il live `mal` <prod-uid> come orfano e lo spegnerebbe →
    production giù. Passare `--prune` SOLO dopo che ogni profilo è sotto mrcalld.
 5. log riassuntivo: N profili trovati / N avviati / N orfani. NON tocca Caddy
    (statico).
@@ -211,7 +211,7 @@ raggiungibile; rimuove la dir → re-run → daemon spento; re-run a vuoto = no-
 
 ### Phase 4 ✅ — migrazione del live (`mal` → `mrcalld`) + cutover
 - Finestra di downtime breve concordata con Mario.
-- `systemctl stop zylch-server@<uid>` (Gn9Icu = production@cafe124, l'unico
+- `systemctl stop zylch-server@<uid>` (<prod-uid> = <prod-profile>, l'unico
   daemon `mal` live) → rilascia il fcntl lock.
 - Sposta `~mal/.zylch/profiles/<uid>` → `/home/mrcalld/.zylch/profiles/`,
   `chown -R mrcalld:mrcalld`.
@@ -231,7 +231,7 @@ raggiungibile; rimuove la dir → re-run → daemon spento; re-run a vuoto = no-
   dal vecchio `~mal/zylch-engine`, quindi un suo restart oggi fallirebbe),
   `/etc/zylch/*.conf`, `~mal/zylch-engine`.
 
-**STOP.** Mario: production@cafe124 E mario.alemi, stesso url, ognuno i propri
+**STOP.** Mario: <prod-profile> E <your-account>, stesso url, ognuno i propri
 dati in contemporanea; `kill -9` un daemon → respawn; `reboot` del server →
 `/run/mrcalld` ricreata da tmpfiles + tutti i daemon risalgono.
 

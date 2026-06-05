@@ -154,6 +154,23 @@ brought new commits, so a no-op run doesn't drop live WebSocket connections),
 `--prune` (**off by default**: only pass it when every profile you still want is
 present under the discovery dir, or it will stop the missing ones).
 
+**Several profiles at once.** Stage them under a disk dir you own, move them in,
+then a single updater run picks them all up (use real disk, not `/tmp` if it's
+`tmpfs` — the email DBs can be hundreds of MB each):
+
+```bash
+# from your Mac — rsync the profiles you want remote (exclude any already on the
+# server) into a staging dir under your own home, then move + chown as root:
+rsync -az --exclude='<uid-already-on-server>' ~/.zylch/profiles/ user@server:_stage/profiles/
+ssh user@server 'sudo mv ~/_stage/profiles/* /home/mrcalld/.zylch/profiles/ \
+  && sudo chown -R mrcalld:mrcalld /home/mrcalld/.zylch \
+  && sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh \
+  && rm -rf ~/_stage'
+```
+
+`update-daemons.sh` enables + starts one daemon per discovered profile;
+already-running ones with no new commits are left alone (live connections kept).
+
 ### B.3 · Point the app at it
 
 **Settings → Backend location → Remote**, URL `wss://<host>` (base URL only — no

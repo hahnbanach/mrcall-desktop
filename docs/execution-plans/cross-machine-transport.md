@@ -45,7 +45,7 @@ discipline: |
   `serve --unix <socket>`; the app's `WebSocketRpcClient` appends `/ws/<uid>`
   to a BASE URL (one machine-global config, per-window routing; an unrouted
   direct engine ignores the path → backward-compatible with the tunnel). Live-
-  validated end-to-end: production@cafe124 over `wss://desktop.mrcall.ai`, no
+  validated end-to-end: <prod-profile> over `wss://desktop.mrcall.ai`, no
   tunnel; auth gate proven (no token → engine 401 *through Caddy*). Also fixed: a
   reconnect crash (`terminate()` on a CONNECTING socket emitted an uncaught async
   'error' after `removeAllListeners`) and an infinite retry loop on 403.
@@ -58,7 +58,7 @@ credentials. The initial bring-up used `rsync` to `~/zylch-engine`, and the
 systemd unit's `ExecStart` now points at the git path
 (`~/mrcall-desktop/engine/venv`). The **profile** still moves by `rsync`
 (private data, not in git). Operator guide + an exact agent runbook:
-[`../remote-backend.md`](../remote-backend.md). NOTE: the live Gn9Icu daemon
+[`../remote-backend.md`](../remote-backend.md). NOTE: the live <prod-uid> daemon
 was NOT re-deployed — it still runs from the original `~/zylch-engine` rsync
 path; only new deploys use the git layout.
 
@@ -79,7 +79,7 @@ holds 4 profiles. All heavy aarch64/py3.12 wheels resolved cleanly.
 - **Multi-profile / multi-user routing** — ✅ **DONE / live 2026-06-05** (see
   [`multi-profile-routing.md`](multi-profile-routing.md)): `mrcalld` service user
   + per-uid Unix sockets + static Caddy `path_regexp` + `update-daemons.sh`.
-  `Gn9Icu` migrated `mal`→`mrcalld`; multi-profile proven on one URL. (Caddy no
+  `<prod-uid>` migrated `mal`→`mrcalld`; multi-profile proven on one URL. (Caddy no
   longer points `/ws/*` at a single TCP daemon.)
 - Multi-client broadcast + reconnect-resume → Phase 5.
 - App Settings card: the URL field help should read "base URL (wss://host), no path".
@@ -99,7 +99,7 @@ already appends `/ws/<uid>`; the missing piece is per-uid routing on the server 
 each window reaches *its* backend.
 
 **Why it's blocked today.** The `Caddyfile` proxies `/ws/* → 127.0.0.1:5174` (one
-upstream = the Gn9Icu daemon). Any non-Gn9Icu token → the gate returns 403
+upstream = the <prod-uid> daemon). Any non-<prod-uid> token → the gate returns 403
 (correct behaviour). The engine's `--unix` socket support exists and is tested
 locally, but is NOT yet used on the VPS.
 
@@ -131,12 +131,12 @@ locally, but is NOT yet used on the VPS.
 1. Switch the `Caddyfile` to the `path_regexp` per-uid socket form.
 2. Create `/run/zylch/` (tmpfiles.d, group `caddy`, setgid); add `UMask=0007` and
    `--unix /run/zylch/%i.sock` to the systemd unit ExecStart.
-3. Migrate the Gn9Icu daemon to `--unix`; verify production@cafe124 still works
+3. Migrate the <prod-uid> daemon to `--unix`; verify <prod-profile> still works
    over `wss://` (regression).
-4. Add the `mario.alemi@mrcall.ai` (uid `x59G6…`) daemon: its VPS DB is **empty** —
-   `rsync ~/.zylch/profiles/x59G6…/ claude:.zylch/profiles/x59G6…/` from the Mac (or
-   `zylch -p x59G6… update` on the VPS) — then `enable --now`. Verify
-   `wss://desktop.mrcall.ai/ws/x59G6…` with mario.alemi's token serves his data.
+4. Add the `<your-account>` (uid `<uid-2>…`) daemon: its VPS DB is **empty** —
+   `rsync ~/.zylch/profiles/<uid-2>…/ claude:.zylch/profiles/<uid-2>…/` from the Mac (or
+   `zylch -p <uid-2>… update` on the VPS) — then `enable --now`. Verify
+   `wss://desktop.mrcall.ai/ws/<uid-2>…` with <your-account>'s token serves his data.
 5. For another Linux user: `enable-linger`, their own `systemctl --user` daemons;
    sockets land in the shared `/run/zylch/`.
 
