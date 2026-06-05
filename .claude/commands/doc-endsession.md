@@ -1,127 +1,54 @@
 ---
-description: Commit session state to documentation (root + engine + app).
+description: Commit Session State to Documentation
+disable-model-invocation: true
+allowed-tools: Bash(git *)
 ---
-Consolidate session knowledge using the Dream pattern: Orient → Gather → Consolidate → Prune.
 
-This monorepo has three parallel doc trees mirroring the three `CLAUDE.md`
-files. **Route each fact to the tree that owns it**:
+## Repo profile — monorepo, three doc trees (root / engine / app)
+*Only this block varies per repo; everything below it is identical across all repos.*
+- Smoke/build: engine `cd engine && make lint`; app `cd app && npm run typecheck`. Run only the side that moved.
+- Static docs (on demand): root `CLAUDE.md` is auto-loaded, but `engine/CLAUDE.md` + `app/CLAUDE.md` are NOT — read them; `engine/docs/system-rules.md`, `engine/docs/ARCHITECTURE.md`, `engine/docs/CONVENTIONS.md`, `app/docs/ARCHITECTURE.md`, `docs/ipc-contract.md`.
+- Active-context: primary `docs/active-context.md` (root — one git repo, one `doc_baseline_commit`); plus `engine/docs/active-context.md` and `app/docs/active-context.md`.
+- Execution plans: `docs/execution-plans/`, `engine/docs/execution-plans/`, `app/docs/execution-plans/`.
+- Routing (multi-tree — route each fact to the owning tree): engine internals (storage, workers, channels, memory, LLM client, CLI) → `engine/docs/`; Electron app (views, preload, main, sidecar lifecycle, packaging) → `app/docs/`; both / JSON-RPC contract / brand-rename / release → `docs/`. Size caps: engine active-context ≤150 lines, root ≤130, app ≤120; each `CLAUDE.md` ≤100, pointer-only; "Recent landings" ≤12 rows / ~2 weeks, older rows deleted (git keeps them).
+- Repo-specific alignment checks: IPC contract is the most common silent breakage — a JSON-RPC method / payload / error change must move `engine/zylch/rpc/` (server) and `app/src/preload` + `app/src/main` (client) together and log the delta in `docs/ipc-contract.md`; layering renderer → preload → main → sidecar (never reverse; engine never imports app types); profile writes go through the `~/.zylch/profiles/<email>/` abstraction; sidecar spawn / stdio / shutdown intact.
+- Notes: `zylch → mrcall` rename is mid-flight — existing `zylch.*`, `ZYLCH_*`, `~/.zylch/` are intentional until the dedicated sweep; don't rewrite them as a side effect or add new `zylch` strings.
 
-| If the change is about… | Write to… |
-|--------------------------|-----------|
-| Engine internals (storage, workers, channels, memory, LLM client, CLI) | `./engine/docs/` |
-| Electron app internals (views, preload, main process, sidecar lifecycle, packaging) | `./app/docs/` |
-| Both subsystems together (JSON-RPC contract, brand/rename rollout, release pipeline) | `./docs/` |
+Consolidate session knowledge — Dream pattern: Orient → Gather → Consolidate → Prune. Ground truth is git plus the session transcript, never half-remembered context.
 
-Engine `active-context.md` historically doubled as the monorepo's freshest
-source. The migration to the three-tree split is in progress: don't
-duplicate facts, route them.
+## Gate check — is consolidation needed?
+At least one must hold, else output `No consolidation needed.` and stop:
+- Change gate: `git status` / `git diff` shows uncommitted or recently committed work.
+- Context gate: the primary active-context (see profile) no longer matches reality.
+- Plan gate: an execution plan has completed-but-unchecked steps.
 
-## Gate Check — Is consolidation needed?
+## Phase 1 — Orient (ground truth, pre-injected)
+Uncommitted work:
+!`git status --short`
+Recent commits:
+!`git log --oneline -n 15`
 
-Before doing anything, verify at least one gate passes:
+1. Read `doc_baseline_commit` from the primary active-context frontmatter (see profile). The change set to consolidate is everything in `git diff <doc_baseline_commit>..HEAD` — precise; do not guess a `HEAD~N` range. If the field is absent, fall back to `git diff HEAD~5..HEAD` and note you are establishing the baseline now.
+2. If unsure what landed this session vs. earlier, ask rather than guess.
+3. Read the docs you will edit: the active-context file(s), and the static doc for any area with a real structural change (see profile).
 
-- **Change gate**: `git status` or `git diff` shows uncommitted or recently committed changes.
-- **Context gate**: any of the three `active-context.md` files (or one that should exist but doesn't) is out of sync with what the code now does.
-- **Plan gate**: an execution plan in `./docs/execution-plans/`, `./engine/docs/execution-plans/`, or `./app/docs/execution-plans/` has steps that were completed but not checked off.
-
-If no gate passes, output `No consolidation needed.` and stop.
-
-## Phase 1 — Orient
-
-Ground truth comes from git, not from conversation memory.
-
-1. Run `git status` and `git diff` for uncommitted work.
-2. Run `git log --oneline -n 10` and `git diff HEAD~3` (or appropriate range) for committed work.
-3. If unsure what was *this session* vs. prior, ask rather than guess.
-4. Read the current documentation baseline from whichever trees the change touched:
-   - `./CLAUDE.md`, `./engine/CLAUDE.md`, `./app/CLAUDE.md`
-   - `./docs/active-context.md` (if exists)
-   - `./engine/docs/active-context.md` (if exists)
-   - `./app/docs/active-context.md` (if exists)
-   - `./engine/docs/ARCHITECTURE.md` (if structural change is suspected)
-
-## Phase 2 — Gather Signal
-
-Identify what changed that is worth persisting. Priority order:
-
-- **Structural changes**: new modules, changed boundaries, new IPC methods, new dependencies.
-- **Completed execution plan steps**.
-- **New decisions or constraints** discovered (especially around the JSON-RPC contract, profile layout, or sidecar lifecycle).
-- **Quality changes**: tests added/broken, tech debt created/resolved.
-- **Harness gaps identified** — anything where the lack of a mechanical check let a regression slip through.
-- **Release-pipeline changes**: signing, notarization, electron-builder config, sidecar bundling.
-- **Rename progress**: `zylch → mrcall` strings touched, scope of remaining sweep.
+## Phase 2 — Gather signal
+Two kinds. The second is the one git CANNOT show you and is most often lost:
+- From the diff (code / structure): new modules, resources, endpoints; changed boundaries; new deps; completed plan steps; tests added or broken; tech debt; harness gaps.
+- From the session, NOT the diff: decisions made and why; approaches tried and rejected and why; user corrections and preferences stated this session; constraints and gotchas discovered. None of this appears in `git diff` — capture it here or it is gone.
 
 ## Phase 3 — Consolidate (reconsolidate, don't append)
+Merge into existing content — no changelogs (git log is the changelog). Living docs are declarative and present-tense.
+Verify-before-done gate: record a feature as built / working ONLY if it was verified end-to-end this session, the way the user runs it (CLI / API / browser / REPL) — not because code was written or unit tests passed. Coded-but-unverified ⇒ in progress / needs verification, never working.
+- Primary active-context (see profile): overwrite to the state right now — built & verified, completed this session, unresolved / failing / incomplete, immediate next steps. Route each fact per the profile's routing (single tree ⇒ all here; multi-tree ⇒ to the owning tree). Respect any size caps / pruning rules in the profile.
+- Static docs (architecture / conventions — see profile): update ONLY on real structural change; delete descriptions of things that no longer exist.
+- Execution plans: check off completed steps, record decisions, set `status: completed` when done; match each plan's existing shape.
+- Quality / harness docs (see profile, where the repo keeps them): update quality grades if coverage / debt / quality moved; log enforcement gaps to harness-backlog.
 
-All docs are declarative, present-tense, living documents. **Merge knowledge into existing content — do not append changelogs.** Git log is the changelog; `active-context.md` is a working list.
-
-**Hard caps (enforce, don't drift past):**
-
-- `engine/docs/active-context.md` ≤ ~150 lines.
-- `docs/active-context.md` ≤ ~130 lines.
-- `app/docs/active-context.md` ≤ ~120 lines.
-- `CLAUDE.md` / `engine/CLAUDE.md` / `app/CLAUDE.md` ≤ ~100 lines, pointer-only.
-- "Recent landings" table in each active-context: ≤ ~12 rows, last ~2 weeks. Older entries get **deleted** (git keeps them) — do NOT migrate them into a "What is built" section.
-
-If you find an active-context file already over its cap when you arrive, prune it before adding the new session's facts. Detailed implementation history → git log + execution-plans/. Per-feature reference → `features/`. Architecture → `ARCHITECTURE.md`.
-
-Route each fact to the tree that owns it. If a single change touches two trees (e.g. a new RPC method = engine impl + app client + IPC contract), write the engine-side facts to engine, the app-side facts to app, and the contract delta to `./docs/`.
-
-Each active-context follows the same shape:
-
-```
----
-description: …  (≤ ~3 lines)
----
-# Active Context — <Tree>
-## Current focus (as of YYYY-MM-DD)   ← 1-2 short paragraphs, what's in flight NOW
-## Recent landings (last ~2 weeks)    ← table, ≤ ~12 rows
-## In progress                        ← bullets
-## Next steps                         ← numbered
-## Known issues                       ← bullets, link to harness-backlog.md
-## Where stable state lives           ← pointer table
-```
-
-Do not introduce a "What is built and working" section. Stable feature state belongs in `features/`, `ARCHITECTURE.md`, or the relevant `CLAUDE.md` static layer — not in active-context.
-
-5. **`./engine/docs/active-context.md`** — engine-side state. Replace or trim sections to reflect current reality; respect the cap.
-
-6. **`./app/docs/active-context.md`** — app-side state. UI views, preload/main wiring, sidecar lifecycle from the Electron side, packaging quirks. Respect the cap.
-
-7. **`./docs/active-context.md`** — cross-cutting state. IPC contract drift, release pipeline, rename rollout, brand. Respect the cap.
-
-8. **`./engine/docs/ARCHITECTURE.md`** / **`./app/docs/ARCHITECTURE.md`** — update ONLY if structural changes occurred (new module, changed dependency direction, changed IPC surface). Remove stale descriptions of things that no longer exist.
-
-9. **`./engine/docs/CONVENTIONS.md`** / **`./app/docs/CONVENTIONS.md`** — update ONLY if a new convention was introduced or an existing one was deliberately broken with a documented reason.
-
-10. **Execution plans** (`./docs/execution-plans/`, `./engine/docs/execution-plans/`, `./app/docs/execution-plans/`) — check off completed steps, append a one-line completion note (date + outcome), set `status: completed` if done. Don't fabricate a `## Decisions Made` section if the plan didn't have one — match the existing structure of each plan.
-
-11. **`./docs/ipc-contract.md`** — if a JSON-RPC method was added, removed, or changed shape, log the delta here. Create the file if missing the first time a contract change needs to land.
-
-12. **Quality grades** (`./engine/docs/quality-grades.md`, `./app/docs/quality-grades.md`) — update only if test coverage, tech debt, or module quality changed.
-
-13. **Harness backlog** (`./docs/harness-backlog.md`, `./engine/docs/harness-backlog.md`, `./app/docs/harness-backlog.md`) — append any harness gap discovered this session. Pick the tree the gap belongs to.
-
-14. **`./CLAUDE.md`** / **`./engine/CLAUDE.md`** / **`./app/CLAUDE.md`** — update only if pointers became stale or the layout changed. These are indexes; keep them ≤ ~100 lines and pointer-only.
-
-## Phase 4 — Prune
-
-If a doc references a feature, file, or decision that no longer exists, delete the stale reference. Stale docs are worse than no docs.
-
-If `engine/docs/active-context.md` still carries cross-cutting facts (release, IPC contract drift, brand) that now have a home in `./docs/active-context.md` or `./docs/ipc-contract.md`, migrate them — don't duplicate.
-
-**Verify line counts before finishing.** `wc -l` on each touched active-context.md. If any is over its cap, drop the oldest "Recent landings" rows and any narrative section older than ~2 weeks. Git already has the history; the working list does not need to re-tell it.
+## Phase 4 — Prune & advance the baseline
+- Delete stale references — a doc naming a file, feature, or decision that no longer exists is worse than no doc. Rename or merge; don't accumulate.
+- Keep the index `CLAUDE.md` thin and its pointers valid.
+- Advance the baseline: set `doc_baseline_commit` to the output of `git rev-parse HEAD` and update `doc_baseline_date` in the primary active-context frontmatter. This is what the next session diffs from.
 
 ## Output
-
-One line per doc touched, naming the tree:
-
-```
-Updated engine/docs/active-context.md (new tasks.complete note column).
-Updated app/docs/active-context.md (Tasks.tsx inline note composer).
-Updated docs/ipc-contract.md (tasks.complete gained optional note param).
-Logged harness gap: no contract test for tasks.complete payload (engine/docs/harness-backlog.md).
-```
-
-If nothing was written: `No consolidation needed.`
+`Session state committed. Baseline advanced to <sha>. [docs touched]. [N plan steps completed. N harness gaps logged.]`
