@@ -67,7 +67,7 @@ def test_parse_real_block_support_profile():
 #IDENTIFIERS
 Entity type: PERSON
 Name: Caterina
-Email: info@mrbrownsuite.it
+Email: brown@example.com
 Phone: 3296813937
 Company: Mr. Brown Suite
 Role: Front Office / Receptionist
@@ -76,7 +76,7 @@ Role: Front Office / Receptionist
 Caterina is a Front Office / Receptionist at Mr. Brown Suite ...
 """
     assert _parse_identifiers_block(content) == [
-        ("email", "info@mrbrownsuite.it"),
+        ("email", "brown@example.com"),
         ("phone", "3296813937"),
     ]
 
@@ -87,12 +87,12 @@ def test_parse_multi_value_phone():
 #IDENTIFIERS
 Entity type: PERSON
 Name: Carlos Eduardo Bitencourt
-Email: carlos@cafezal.it
+Email: carlos@example.com
 Phone: +39 347 4636 824, +393925358412
 Company: Cafezal srl Società Benefit
 """
     assert _parse_identifiers_block(content) == [
-        ("email", "carlos@cafezal.it"),
+        ("email", "carlos@example.com"),
         ("phone", "+393474636824"),
         ("phone", "+393925358412"),
     ]
@@ -912,7 +912,7 @@ async def test_reconsolidate_now_merges_and_migrates_refs(fresh_db, monkeypatch)
         owner,
         content=(
             "#IDENTIFIERS\nEntity type: COMPANY\nName: FEFARMA\n"
-            "Email: info@fefarma.it\n\n#ABOUT\nKeeper has more history.\n"
+            "Email: pharma@example.com\n\n#ABOUT\nKeeper has more history.\n"
             "lots of additional content to make this the longer one"
         ),
     )
@@ -920,11 +920,11 @@ async def test_reconsolidate_now_merges_and_migrates_refs(fresh_db, monkeypatch)
         owner,
         content=(
             "#IDENTIFIERS\nEntity type: COMPANY\nName: FeFarma\n"
-            "Email: info@fefarma.it\n\n#ABOUT\nDup."
+            "Email: pharma@example.com\n\n#ABOUT\nDup."
         ),
     )
-    storage.add_person_identifiers(owner, keeper, [("email", "info@fefarma.it")])
-    storage.add_person_identifiers(owner, dup, [("email", "info@fefarma.it")])
+    storage.add_person_identifiers(owner, keeper, [("email", "pharma@example.com")])
+    storage.add_person_identifiers(owner, dup, [("email", "pharma@example.com")])
 
     dup_email_id = "00000000-0000-0000-0000-eeeeeeeeeee9"
     from datetime import datetime as _dt, timezone as _tz
@@ -936,7 +936,7 @@ async def test_reconsolidate_now_merges_and_migrates_refs(fresh_db, monkeypatch)
                 owner_id=owner,
                 gmail_id=dup_email_id,
                 thread_id=dup_email_id,
-                from_email="info@fefarma.it",
+                from_email="pharma@example.com",
                 date=_dt.now(_tz.utc),
             )
         )
@@ -961,7 +961,7 @@ async def test_reconsolidate_now_merges_and_migrates_refs(fresh_db, monkeypatch)
     fake_merge_service.merge = MagicMock(
         return_value=(
             "#IDENTIFIERS\nEntity type: COMPANY\nName: FeFarma\n"
-            "Email: info@fefarma.it\n\n#ABOUT\nMerged.\n"
+            "Email: pharma@example.com\n\n#ABOUT\nMerged.\n"
             "longer than ten chars to bypass the INSERT length check"
         )
     )
@@ -978,7 +978,7 @@ async def test_reconsolidate_now_merges_and_migrates_refs(fresh_db, monkeypatch)
     assert summary["task_items_updated"] == 1
 
     keeper_ids = storage.get_identifiers_for_blob(owner, keeper)
-    assert ("email", "info@fefarma.it") in {(r["kind"], r["value"]) for r in keeper_ids}
+    assert ("email", "pharma@example.com") in {(r["kind"], r["value"]) for r in keeper_ids}
 
     keeper_emails = storage.get_blobs_for_email(owner, dup_email_id)
     assert keeper in keeper_emails
