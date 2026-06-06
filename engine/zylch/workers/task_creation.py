@@ -99,7 +99,7 @@ def _pick_force_update_target(
     thread, which the LLM is allowed to overrule with CREATE.
 
     2026-05-13 incident (Inverardi/Liuzzi overwriting an Occhiaperti
-    task on support@mrcall.ai): Fix D originally fired on
+    task on support@example.com): Fix D originally fired on
     ``existing_tasks_all[0]`` whenever the list was non-empty. After F7
     started surfacing cross-contact topical siblings into the same
     list, a CREATE on an unrelated customer's email could land on the
@@ -138,8 +138,8 @@ class TaskWorker:
         self.user_domain = (
             user_email.split("@")[1].lower() if user_email and "@" in user_email else ""
         )
-        # Extra identities the user owns (e.g. ivan.marchese@cafe124milan.com
-        # alongside production@cafe124.it). Loaded from the
+        # Extra identities the user owns (e.g. carol@example.com
+        # alongside production@example.com). Loaded from the
         # EMAIL_ALIASES setting; used by _is_user_email so replies from a
         # secondary address are still recognised as "the user's".
         from zylch.workers.thread_presenter import load_user_aliases_for_owner
@@ -163,8 +163,8 @@ class TaskWorker:
         Colleagues on the same domain are NOT the user — match is
         always exact. ``EMAIL_ALIASES`` adds secondary addresses the
         user explicitly owns (e.g. Ivan writing from
-        ``ivan.marchese@cafe124milan.com`` on a profile keyed under
-        ``production@cafe124.it``). Without the alias check, those
+        ``carol@example.com`` on a profile keyed under
+        ``production@example.com``). Without the alias check, those
         replies showed up as ``CONTACT`` in the thread history and the
         "close on user reply" / "cap urgency" rules silently missed.
         """

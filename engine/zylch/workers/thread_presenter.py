@@ -164,8 +164,8 @@ def build_thread_history(
         te_from = (te.from_email or "").lower()
         # USER REPLY ✓ when the address is the profile's primary OR any
         # configured EMAIL_ALIASES entry — without alias support, Ivan
-        # writing from ivan.marchese@cafe124milan.com on a thread keyed
-        # under production@cafe124.it gets marked CONTACT and the cap +
+        # writing from carol@example.com on a thread keyed
+        # under production@example.com gets marked CONTACT and the cap +
         # close-on-user-reply rule both miss.
         is_user = bool(user_email_lc) and (
             te_from == user_email_lc or te_from in aliases

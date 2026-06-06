@@ -62,7 +62,7 @@ def test_normalise_phone(raw, expected):
 
 
 def test_parse_real_block_support_profile():
-    """Real shape from support@mrcall.ai blob ca832b39-…"""
+    """Real shape from support@example.com blob ca832b39-…"""
     content = """
 #IDENTIFIERS
 Entity type: PERSON
@@ -151,13 +151,13 @@ def test_parse_stops_at_next_section():
 #IDENTIFIERS
 Entity type: PERSON
 Name: Carmine
-Email: c.salamone@cnit.it
+Email: contact@example.com
 
 #ABOUT
 You can reach Carmine at Phone: +393331234567 (this MUST NOT be picked up).
 """
     parsed = _parse_identifiers_block(content)
-    assert parsed == [("email", "c.salamone@cnit.it")]
+    assert parsed == [("email", "contact@example.com")]
     # Verify the prose phone was NOT extracted
     assert ("phone", "+393331234567") not in parsed
 
@@ -235,13 +235,13 @@ def test_add_identifiers_inserts_new_rows(fresh_db):
     n = storage.add_person_identifiers(
         owner_id="alice@example.com",
         blob_id=blob_id,
-        identifiers=[("email", "carmine@cnit.it"), ("phone", "+393395040816")],
+        identifiers=[("email", "contact@example.com"), ("phone", "+393395040816")],
     )
     assert n == 2
 
     rows = storage.get_identifiers_for_blob("alice@example.com", blob_id)
     assert {(r["kind"], r["value"]) for r in rows} == {
-        ("email", "carmine@cnit.it"),
+        ("email", "contact@example.com"),
         ("phone", "+393395040816"),
     }
 
@@ -303,7 +303,7 @@ def test_find_blobs_by_identifiers_finds_match(fresh_db):
     storage.add_person_identifiers(
         "alice@example.com",
         blob1,
-        [("phone", "+393395040816"), ("email", "carmine@cnit.it")],
+        [("phone", "+393395040816"), ("email", "contact@example.com")],
     )
     storage.add_person_identifiers("alice@example.com", blob2, [("phone", "+393925358412")])
 
@@ -397,7 +397,7 @@ def test_cascade_delete_blob_removes_identifiers(fresh_db):
 # index is real (uses fresh_db).
 #
 # The interesting case is "Carmine Salamone, 8 duplicate blobs": the
-# new entity carries `Email: carmine@cnit.it` which was indexed for
+# new entity carries `Email: contact@example.com` which was indexed for
 # blob A. Cosine-search returns blob B (a different, lower-quality
 # match) because A's content has drifted past the threshold. We assert
 # that A is tried FIRST as a merge candidate, before B.
@@ -452,7 +452,7 @@ def _make_worker_with_mocks(owner_id: str, llm_merge_returns: list):
 @pytest.mark.asyncio
 async def test_upsert_entity_prefers_identifier_match_over_cosine(fresh_db):
     """Two existing blobs about Carmine Salamone:
-      - blob A is in the identifier index (kind=email, value=carmine@cnit.it)
+      - blob A is in the identifier index (kind=email, value=contact@example.com)
       - blob B is NOT in the index but is the only cosine-match.
 
     A new entity arrives with the same email. Phase 1b must try A first
@@ -466,7 +466,7 @@ async def test_upsert_entity_prefers_identifier_match_over_cosine(fresh_db):
     blob_a = _make_blob(owner, content="A_OLD_CONTENT")
     blob_b = _make_blob(owner, content="B_OLD_CONTENT")
 
-    storage.add_person_identifiers(owner, blob_a, [("email", "carmine@cnit.it")])
+    storage.add_person_identifiers(owner, blob_a, [("email", "contact@example.com")])
     # blob_b deliberately has NO identifier rows
 
     worker = _make_worker_with_mocks(
@@ -487,7 +487,7 @@ async def test_upsert_entity_prefers_identifier_match_over_cosine(fresh_db):
 #IDENTIFIERS
 Entity type: PERSON
 Name: Carmine Salamone
-Email: carmine@cnit.it
+Email: contact@example.com
 """
     await worker._upsert_entity(
         entity_content=new_entity,

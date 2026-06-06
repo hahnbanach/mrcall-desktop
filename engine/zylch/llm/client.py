@@ -363,7 +363,7 @@ def _read_profile_anthropic_key() -> Optional[str]:
     user thinks they're on MrCall credits (no key in the Settings UI,
     `LLMProviderCard` shows "MrCall credits") but the credit balance
     never decreases because no call ever reaches the proxy. Mario
-    chased this for days on ``production@cafe124.it``.
+    chased this for days on ``production@example.com``.
 
     The profile ``.env`` is the source of truth the Settings UI writes
     to, so anchoring the BYOK decision there closes the leak. Returns

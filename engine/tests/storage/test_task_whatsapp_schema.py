@@ -531,7 +531,7 @@ def test_update_task_item_email_and_whatsapp_coexist(fresh_db):
     storage = Storage()
     owner = "alice@example.com"
     eid = _insert_task(
-        owner, contact_email="carmine@cnit.it", event_type="email", contact_phone=None
+        owner, contact_email="contact@example.com", event_type="email", contact_phone=None
     )
 
     with get_session() as s:
@@ -561,7 +561,7 @@ def test_update_task_item_stamps_whatsapp_chat_jid_on_first_touchpoint(fresh_db)
 
     storage = Storage()
     owner = "alice@example.com"
-    eid = _insert_task(owner, contact_email="carmine@cnit.it", event_type="email")
+    eid = _insert_task(owner, contact_email="contact@example.com", event_type="email")
 
     with get_session() as s:
         task_id = s.query(TaskItem).filter(TaskItem.event_id == eid).one().id
@@ -591,7 +591,7 @@ def test_update_task_item_does_not_overwrite_existing_chat_jid(fresh_db):
 
     storage = Storage()
     owner = "alice@example.com"
-    eid = _insert_task(owner, contact_email="carmine@cnit.it", event_type="email")
+    eid = _insert_task(owner, contact_email="contact@example.com", event_type="email")
 
     with get_session() as s:
         task_id = s.query(TaskItem).filter(TaskItem.event_id == eid).one().id
@@ -628,7 +628,7 @@ def test_update_task_item_whatsapp_chat_jid_only_with_a_message(fresh_db):
 
     storage = Storage()
     owner = "alice@example.com"
-    eid = _insert_task(owner, contact_email="carmine@cnit.it", event_type="email")
+    eid = _insert_task(owner, contact_email="contact@example.com", event_type="email")
 
     with get_session() as s:
         task_id = s.query(TaskItem).filter(TaskItem.event_id == eid).one().id

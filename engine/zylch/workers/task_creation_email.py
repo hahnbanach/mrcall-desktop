@@ -87,7 +87,7 @@ async def analyze_recent_email_events(
         # 1. user_replied: tracks LATEST REAL user reply per
         #    thread. A user-from auto-response (out-of-office,
         #    vacation responder, server auto-ack like
-        #    support@mrcall.ai) is NOT user engagement and must
+        #    support@example.com) is NOT user engagement and must
         #    not trigger the "user replied after contact → close"
         #    path. Without this guard, support@'s auto-ack would
         #    have closed any task on its thread on the next
@@ -234,7 +234,7 @@ async def analyze_recent_email_events(
         )
         # Bug E (2026-05-06): pull EVERY open task for this contact, not
         # just the first one. `get_task_by_contact` (.first()) hid sibling
-        # tasks from the LLM — for a noreply@cnit.it with 5 open tasks
+        # tasks from the LLM — for a noreply@example.com with 5 open tasks
         # the model only saw 1, decided UPDATE on it, the other 4 lived
         # forever as duplicates. The plural form is canonical-lower
         # matched and orders newest-first.

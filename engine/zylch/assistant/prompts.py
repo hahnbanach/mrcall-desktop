@@ -269,7 +269,7 @@ as you get hits.
    `Salomone` → `Salamone`, `Cattaneo` → `Catanneo`. Try the most likely
    single-character substitution.
 3. **Switch surface.** If the name fails, try a fragment you can derive
-   from context: an email domain (`from:@cnit.it`), a phone fragment, a
+   from context: an email domain (`from:@example.com`), a phone fragment, a
    role/keyword from the conversation (`RSPP`, `sicurezza`, the company
    name). Bare `body:` queries on `search_local_emails` are cheap.
 

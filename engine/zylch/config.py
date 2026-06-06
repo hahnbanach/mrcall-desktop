@@ -161,7 +161,7 @@ class Settings(BaseSettings):
         default="",
         description=(
             "Additional email addresses the user owns, comma-separated "
-            "(e.g. 'ivan.marchese@cafe124milan.com,info@cafe124.it'). "
+            "(e.g. 'carol@example.com,info@example.com'). "
             "Replies from any of these are treated as the user's own — "
             "without this, threads where the user writes from a "
             "non-primary identity look as if the contact had the last "

@@ -572,7 +572,7 @@ function LLMProviderCard({
     // verify via account.whoAmI BEFORE the balance call so the user
     // sees real numbers, not a stale balance frozen at the last
     // successful fetch — Mario flagged the suspiciously-static credit
-    // count on production@cafe124.it, that was the underlying cause.
+    // count on production@example.com, that was the underlying cause.
     const sessionOk = await ensureEngineSession()
     if (!sessionOk) {
       setBalance(null)

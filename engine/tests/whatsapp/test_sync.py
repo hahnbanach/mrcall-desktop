@@ -218,7 +218,7 @@ def test_outbound_devicesent_message_extracts_text(fresh_db):
     desktop wrapped in ``deviceSentMessage.message``. ``_extract_text``
     must unwrap that envelope and pull the text from the inner Message,
     otherwise ``is_from_me=True`` rows land with ``text=NULL`` (the
-    ``[empty]`` bubbles seen on `mario.alemi@gmail.com` 2026-05-06)."""
+    ``[empty]`` bubbles seen on `you.personal@example.com` 2026-05-06)."""
     from zylch.storage.database import get_session
     from zylch.storage.models import WhatsAppMessage
     from zylch.whatsapp.sync import WhatsAppSyncService

@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 #     #IDENTIFIERS
 #     Entity type: PERSON
 #     Name: Carmine Salamone
-#     Email: c.salamone@cnit.it
+#     Email: contact@example.com
 #     Phone: +39 339 6584014, +393925358412
 #
 # `_parse_identifiers_block` extracts the (kind, value) tuples that we
@@ -189,7 +189,7 @@ def _extract_identifier_query(entity_content: str) -> Optional[str]:
         #IDENTIFIERS
         Entity type: person
         Name: Carmine Salamone
-        Email: c.salamone@cnit.it
+        Email: contact@example.com
         Phone: ...
 
     These literals are the same across emails about the same entity,
@@ -403,7 +403,7 @@ class MemoryWorker:
              match on the new entity's email / phone / lid identifiers
              against the ``person_identifiers`` index. Catches the
              "8 distinct Carmine Salamone PERSON blobs" case where two
-             records of the same person share `Email: c.salamone@cnit.it`
+             records of the same person share `Email: contact@example.com`
              but their #ABOUT / #HISTORY paragraphs have drifted enough
              that the cosine score on the full block dropped below the
              0.65 reconsolidation threshold.

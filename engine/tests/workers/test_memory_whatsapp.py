@@ -224,7 +224,7 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
                     "#IDENTIFIERS\n"
                     "Entity type: PERSON\n"
                     "Name: Carmine Salamone\n"
-                    "Email: carmine@cnit.it\n"
+                    "Email: contact@example.com\n"
                     "Phone: +393395040816\n"
                     "\n"
                     "#ABOUT\nFrom email signature.\n"
@@ -234,7 +234,7 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
     storage.add_person_identifiers(
         owner,
         pre_blob_id,
-        [("email", "carmine@cnit.it"), ("phone", "+393395040816")],
+        [("email", "contact@example.com"), ("phone", "+393395040816")],
     )
 
     # Now arrive a WhatsApp message from the same phone.
@@ -247,7 +247,7 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
         "#IDENTIFIERS\n"
         "Entity type: PERSON\n"
         "Name: Carmine Salamone\n"
-        "Email: carmine@cnit.it\n"
+        "Email: contact@example.com\n"
         "Phone: +393395040816\n"
         "\n"
         "#ABOUT\nFrom email signature.\n"

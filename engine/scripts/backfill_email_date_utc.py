@@ -8,10 +8,10 @@ so we can rebuild `date` from it without touching IMAP.
 
 Usage:
     # Single profile, dry-run (default):
-    ZYLCH_PROFILE=support@mrcall.ai venv/bin/python scripts/backfill_email_date_utc.py
+    ZYLCH_PROFILE=support@example.com venv/bin/python scripts/backfill_email_date_utc.py
 
     # Single profile, apply changes:
-    ZYLCH_PROFILE=support@mrcall.ai venv/bin/python scripts/backfill_email_date_utc.py --apply
+    ZYLCH_PROFILE=support@example.com venv/bin/python scripts/backfill_email_date_utc.py --apply
 
     # All profiles found under ~/.zylch/profiles/:
     venv/bin/python scripts/backfill_email_date_utc.py --all

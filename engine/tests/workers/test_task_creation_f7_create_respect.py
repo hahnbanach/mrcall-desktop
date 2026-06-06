@@ -1,7 +1,7 @@
 """Fix D restriction to thread-tasks (2026-05-13).
 
 Regression for the Inverardi/Liuzzi-overwrites-Occhiaperti incident on
-``support@mrcall.ai``. Pre-fix, ``Fix D`` in
+``support@example.com``. Pre-fix, ``Fix D`` in
 ``zylch/workers/task_creation.py`` converted any ``task_action="create"``
 LLM decision into ``update_task_item(existing_tasks_all[0], …)`` whenever
 the candidate list was non-empty. After F7 began surfacing cross-contact

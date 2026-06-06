@@ -304,12 +304,12 @@ async def test_cross_channel_wa_updates_existing_email_task(fresh_db):
         {
             "event_type": "email",
             "event_id": email_event_id,
-            "contact_email": "carmine@cnit.it",
+            "contact_email": "contact@example.com",
             "contact_name": "Carmine",
             "action_required": True,  # F7 lookup filters on this
             "urgency": "high",
             "suggested_action": "Reply to Carmine about CNIT course logistics.",
-            "reason": "Original email from carmine@cnit.it asking about safety course.",
+            "reason": "Original email from contact@example.com asking about safety course.",
             "sources": {
                 "emails": [email_event_id],
                 "blobs": [blob_id],

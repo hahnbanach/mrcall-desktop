@@ -100,7 +100,7 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "optional": True,
         "help": (
             "Other email addresses you also write from, comma-separated "
-            "(e.g. 'ivan.marchese@cafe124milan.com, info@cafe124.it'). "
+            "(e.g. 'carol@example.com, info@example.com'). "
             "Replies from any of these count as YOUR reply for task "
             "tracking — without them, threads where you wrote from a "
             "secondary address look like the contact had the last word "
