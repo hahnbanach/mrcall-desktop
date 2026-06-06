@@ -1,12 +1,12 @@
 # Zylch installer for Windows
-# Run: irm https://raw.githubusercontent.com/malemi/zylch/main/scripts/install.ps1 | iex
+# Run: irm https://raw.githubusercontent.com/example-owner/zylch/main/scripts/install.ps1 | iex
 
 Write-Host ""
 Write-Host "  Zylch - Sales Intelligence"
 Write-Host "  ==========================="
 Write-Host ""
 
-$url = "https://github.com/malemi/zylch/releases/latest/download/zylch-windows-x64.exe"
+$url = "https://github.com/example-owner/zylch/releases/latest/download/zylch-windows-x64.exe"
 $installDir = "$env:LOCALAPPDATA\Zylch"
 $exe = "$installDir\zylch.exe"
 
@@ -23,7 +23,7 @@ Write-Host "  Downloading..."
 try {
     Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing
 } catch {
-    Write-Host "  Download failed. Check: https://github.com/malemi/zylch/releases"
+    Write-Host "  Download failed. Check: https://github.com/example-owner/zylch/releases"
     Write-Host ""
     Write-Host "  Alternative (requires Python 3.11+):"
     Write-Host "    pip install zylch"

@@ -4,7 +4,7 @@ Phase 1a is additive: rows are written by the memory worker on every
 upsert, but no read path consults them yet. These tests cover:
 
 - `_normalise_phone` — canonicalisation of phone strings, with the same
-  formats observed in real Mario blobs.
+  formats observed in real blobs.
 - `_parse_identifiers_block` — extraction of (kind, value) tuples from
   the structured `#IDENTIFIERS` header. Only structured input is parsed;
   prose in #ABOUT / #HISTORY is never consulted.
@@ -29,21 +29,21 @@ from zylch.workers.memory import _normalise_phone, _parse_identifiers_block
     [
         # Italian mobile in various formats — all collide on the
         # canonical "+39<digits>" form when a leading + is present.
-        ("+39 339 6584014", "+393396584014"),
-        ("+393925358412", "+393925358412"),
-        ("+39 347 4636 824", "+393474636824"),
-        ("+39.339.6584014", "+393396584014"),
-        ("+39-339-6584014", "+393396584014"),
+        ("+39 333 1234567", "+393331234567"),
+        ("+393331234567", "+393331234567"),
+        ("+39 347 0000000", "+393470000000"),
+        ("+39.333.1234567", "+393331234567"),
+        ("+39-333-1234567", "+393331234567"),
         # 00 prefix maps to +
-        ("00393395040816", "+393395040816"),
+        ("00393331234567", "+393331234567"),
         # Bare 10-digit form (Italian local) — kept as-is. We don't
         # invent a country code (that would be a heuristic that mis-fires
         # on non-Italian numbers).
-        ("3296813937", "3296813937"),
+        ("3290000000", "3290000000"),
         # International number with parens (US format)
         ("  +1 (415) 555-1234 ", "+14155551234"),
         # Embedded narrative tail — clipped at first non-numeric char.
-        ("+39 339 6584014 (cell)", "+393396584014"),
+        ("+39 333 1234567 (cell)", "+393331234567"),
         # Placeholders / noise — None
         ("(none)", None),
         ("unknown", None),
@@ -66,35 +66,35 @@ def test_parse_real_block_support_profile():
     content = """
 #IDENTIFIERS
 Entity type: PERSON
-Name: Caterina
+Name: Maria
 Email: brown@example.com
-Phone: 3296813937
-Company: Mr. Brown Suite
+Phone: 3290000000
+Company: Beta Spa
 Role: Front Office / Receptionist
 
 #ABOUT
-Caterina is a Front Office / Receptionist at Mr. Brown Suite ...
+Maria is a Front Office / Receptionist at Beta Spa ...
 """
     assert _parse_identifiers_block(content) == [
         ("email", "brown@example.com"),
-        ("phone", "3296813937"),
+        ("phone", "3290000000"),
     ]
 
 
 def test_parse_multi_value_phone():
-    """Real shape from cafe124 blob 085bfe05-…"""
+    """Real shape from examplebiz blob 085bfe05-…"""
     content = """
 #IDENTIFIERS
 Entity type: PERSON
-Name: Carlos Eduardo Bitencourt
+Name: Pedro Alvarez
 Email: carlos@example.com
-Phone: +39 347 4636 824, +393925358412
-Company: Cafezal srl Società Benefit
+Phone: +39 347 0000000, +393331234567
+Company: Acme srl Società Benefit
 """
     assert _parse_identifiers_block(content) == [
         ("email", "carlos@example.com"),
-        ("phone", "+393474636824"),
-        ("phone", "+393925358412"),
+        ("phone", "+393470000000"),
+        ("phone", "+393331234567"),
     ]
 
 
@@ -118,12 +118,12 @@ def test_parse_with_lid_identifier():
     content = """
 #IDENTIFIERS
 Entity type: PERSON
-Name: Alessandro Simonetti
-Phone: +393395040816
+Name: Luca Bianchi
+Phone: +393331234567
 LID: 19095575629933@lid
 """
     assert _parse_identifiers_block(content) == [
-        ("phone", "+393395040816"),
+        ("phone", "+393331234567"),
         ("lid", "19095575629933@lid"),
     ]
 
@@ -150,11 +150,11 @@ def test_parse_stops_at_next_section():
     content = """
 #IDENTIFIERS
 Entity type: PERSON
-Name: Carmine
+Name: John
 Email: contact@example.com
 
 #ABOUT
-You can reach Carmine at Phone: +393331234567 (this MUST NOT be picked up).
+You can reach John at Phone: +393331234567 (this MUST NOT be picked up).
 """
     parsed = _parse_identifiers_block(content)
     assert parsed == [("email", "contact@example.com")]
@@ -235,14 +235,14 @@ def test_add_identifiers_inserts_new_rows(fresh_db):
     n = storage.add_person_identifiers(
         owner_id="alice@example.com",
         blob_id=blob_id,
-        identifiers=[("email", "contact@example.com"), ("phone", "+393395040816")],
+        identifiers=[("email", "contact@example.com"), ("phone", "+393331234567")],
     )
     assert n == 2
 
     rows = storage.get_identifiers_for_blob("alice@example.com", blob_id)
     assert {(r["kind"], r["value"]) for r in rows} == {
         ("email", "contact@example.com"),
-        ("phone", "+393395040816"),
+        ("phone", "+393331234567"),
     }
 
 
@@ -303,18 +303,18 @@ def test_find_blobs_by_identifiers_finds_match(fresh_db):
     storage.add_person_identifiers(
         "alice@example.com",
         blob1,
-        [("phone", "+393395040816"), ("email", "contact@example.com")],
+        [("phone", "+393331234567"), ("email", "contact@example.com")],
     )
-    storage.add_person_identifiers("alice@example.com", blob2, [("phone", "+393925358412")])
+    storage.add_person_identifiers("alice@example.com", blob2, [("phone", "+393339998888")])
 
     # Match by phone — finds blob1 only
-    hits = storage.find_blobs_by_identifiers("alice@example.com", [("phone", "+393395040816")])
+    hits = storage.find_blobs_by_identifiers("alice@example.com", [("phone", "+393331234567")])
     assert hits == [blob1]
 
     # OR semantics: ANY of the tuples matches
     hits = storage.find_blobs_by_identifiers(
         "alice@example.com",
-        [("phone", "+393395040816"), ("phone", "+393925358412")],
+        [("phone", "+393331234567"), ("phone", "+393339998888")],
     )
     assert set(hits) == {blob1, blob2}
 
@@ -332,11 +332,11 @@ def test_find_blobs_by_identifiers_isolates_owners(fresh_db):
     blob_a = _make_blob("alice@example.com")
     blob_b = _make_blob("bob@example.com")
 
-    storage.add_person_identifiers("alice@example.com", blob_a, [("phone", "+393395040816")])
-    storage.add_person_identifiers("bob@example.com", blob_b, [("phone", "+393395040816")])
+    storage.add_person_identifiers("alice@example.com", blob_a, [("phone", "+393331234567")])
+    storage.add_person_identifiers("bob@example.com", blob_b, [("phone", "+393331234567")])
 
-    hits_a = storage.find_blobs_by_identifiers("alice@example.com", [("phone", "+393395040816")])
-    hits_b = storage.find_blobs_by_identifiers("bob@example.com", [("phone", "+393395040816")])
+    hits_a = storage.find_blobs_by_identifiers("alice@example.com", [("phone", "+393331234567")])
+    hits_b = storage.find_blobs_by_identifiers("bob@example.com", [("phone", "+393331234567")])
     assert hits_a == [blob_a]
     assert hits_b == [blob_b]
 
@@ -396,7 +396,7 @@ def test_cascade_delete_blob_removes_identifiers(fresh_db):
 # BlobStorage) replaced by mocks. The Storage / person_identifiers
 # index is real (uses fresh_db).
 #
-# The interesting case is "Carmine Salamone, 8 duplicate blobs": the
+# The interesting case is "John Smith, 8 duplicate blobs": the
 # new entity carries `Email: contact@example.com` which was indexed for
 # blob A. Cosine-search returns blob B (a different, lower-quality
 # match) because A's content has drifted past the threshold. We assert
@@ -451,7 +451,7 @@ def _make_worker_with_mocks(owner_id: str, llm_merge_returns: list):
 
 @pytest.mark.asyncio
 async def test_upsert_entity_prefers_identifier_match_over_cosine(fresh_db):
-    """Two existing blobs about Carmine Salamone:
+    """Two existing blobs about John Smith:
       - blob A is in the identifier index (kind=email, value=contact@example.com)
       - blob B is NOT in the index but is the only cosine-match.
 
@@ -486,7 +486,7 @@ async def test_upsert_entity_prefers_identifier_match_over_cosine(fresh_db):
     new_entity = """
 #IDENTIFIERS
 Entity type: PERSON
-Name: Carmine Salamone
+Name: John Smith
 Email: contact@example.com
 """
     await worker._upsert_entity(
@@ -860,8 +860,8 @@ def test_dedup_cluster_builder_falls_back_to_name():
     from zylch.memory.llm_merge import _build_dedup_clusters
 
     blobs = [
-        {"id": "A", "content": "#IDENTIFIERS\nName: Carmine Salamone\n"},
-        {"id": "B", "content": "#IDENTIFIERS\nName: carmine salamone\n"},
+        {"id": "A", "content": "#IDENTIFIERS\nName: John Smith\n"},
+        {"id": "B", "content": "#IDENTIFIERS\nName: john smith\n"},
         {"id": "C", "content": "#IDENTIFIERS\nName: Different Person\n"},
     ]
     clusters = _build_dedup_clusters(blobs, {})
@@ -899,7 +899,7 @@ def test_dedup_cluster_builder_empty_input():
 async def test_reconsolidate_now_merges_and_migrates_refs(fresh_db, monkeypatch):
     """Flagship Phase 1c case: 2 blobs sharing email get clustered, LLM
     merge accepts, references migrate, dup is deleted. Models the
-    FeFarma duplicate observed live on 2026-05-08."""
+    Examplepharma duplicate observed live on 2026-05-08."""
     from zylch.memory import llm_merge as merge_mod
     from zylch.storage.database import get_session
     from zylch.storage.models import Email, TaskItem
@@ -911,7 +911,7 @@ async def test_reconsolidate_now_merges_and_migrates_refs(fresh_db, monkeypatch)
     keeper = _make_blob(
         owner,
         content=(
-            "#IDENTIFIERS\nEntity type: COMPANY\nName: FEFARMA\n"
+            "#IDENTIFIERS\nEntity type: COMPANY\nName: EXAMPLEPHARMA\n"
             "Email: pharma@example.com\n\n#ABOUT\nKeeper has more history.\n"
             "lots of additional content to make this the longer one"
         ),
@@ -919,7 +919,7 @@ async def test_reconsolidate_now_merges_and_migrates_refs(fresh_db, monkeypatch)
     dup = _make_blob(
         owner,
         content=(
-            "#IDENTIFIERS\nEntity type: COMPANY\nName: FeFarma\n"
+            "#IDENTIFIERS\nEntity type: COMPANY\nName: Examplepharma\n"
             "Email: pharma@example.com\n\n#ABOUT\nDup."
         ),
     )
@@ -960,7 +960,7 @@ async def test_reconsolidate_now_merges_and_migrates_refs(fresh_db, monkeypatch)
     fake_merge_service = MagicMock()
     fake_merge_service.merge = MagicMock(
         return_value=(
-            "#IDENTIFIERS\nEntity type: COMPANY\nName: FeFarma\n"
+            "#IDENTIFIERS\nEntity type: COMPANY\nName: Examplepharma\n"
             "Email: pharma@example.com\n\n#ABOUT\nMerged.\n"
             "longer than ten chars to bypass the INSERT length check"
         )

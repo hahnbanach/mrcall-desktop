@@ -60,9 +60,9 @@ def _make_wa_message(owner_id: str, message_id: str | None = None) -> str:
                 id=row_id,
                 owner_id=owner_id,
                 message_id=message_id or row_id,
-                chat_jid="393395040816@s.whatsapp.net",
-                sender_jid="393395040816@s.whatsapp.net",
-                sender_name="Carmine",
+                chat_jid="393331234567@s.whatsapp.net",
+                sender_jid="393331234567@s.whatsapp.net",
+                sender_name="John",
                 text="ciao",
                 timestamp=datetime.now(timezone.utc),
             )

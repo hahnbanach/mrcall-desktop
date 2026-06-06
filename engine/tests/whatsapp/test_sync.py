@@ -102,7 +102,7 @@ def test_store_message_populates_chat_jid(fresh_db):
         chat_server="s.whatsapp.net",
         sender_user="393281234567",
         sender_server="s.whatsapp.net",
-        push_name="Mario",
+        push_name="Alex",
         text="ciao",
         is_from_me=False,
         is_group=False,
@@ -124,7 +124,7 @@ def test_store_message_populates_chat_jid(fresh_db):
         f"chat_jid should be user@server format, got {row.chat_jid!r}"
     )
     assert row.sender_jid == "393281234567@s.whatsapp.net"
-    assert row.sender_name == "Mario"
+    assert row.sender_name == "Alex"
     assert row.text == "ciao"
     assert row.is_from_me is False
     assert row.is_group is False
@@ -480,7 +480,7 @@ def test_sync_groups_upserts_group_names(fresh_db):
 
     groups = [
         _FakeGroupInfo("120363252655016357", "AI Founders"),
-        _FakeGroupInfo("120363408928080207", "Mirko fan club"),
+        _FakeGroupInfo("120363408928080207", "Tennis fan club"),
         _FakeGroupInfo("999999999", ""),  # missing name → must skip
     ]
     fake_client = _FakeWAClient(groups)
@@ -495,7 +495,7 @@ def test_sync_groups_upserts_group_names(fresh_db):
         )
     by_jid = {r.jid: r for r in rows}
     assert by_jid["120363252655016357@g.us"].name == "AI Founders"
-    assert by_jid["120363408928080207@g.us"].name == "Mirko fan club"
+    assert by_jid["120363408928080207@g.us"].name == "Tennis fan club"
     assert "999999999@g.us" not in by_jid
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Zylch uninstaller
-#   curl -sL https://raw.githubusercontent.com/malemi/zylch/main/scripts/uninstall.sh | bash
+#   curl -sL https://raw.githubusercontent.com/example-owner/zylch/main/scripts/uninstall.sh | bash
 #
 set -euo pipefail
 

@@ -153,10 +153,10 @@ the `subprocess.Popen(...zylch...rpc...)` invocation in commit
 **Covers:**
 - Cross-channel duplication (email + phone notification + automated
   platform notification all about one issue).
-- Cross-contact duplication (Salamone person + AiFOS company + MrCall
+- Cross-contact duplication (Smith person + ExampleOrg company + MrCall
   notification address all about the safety course).
-- Repeated callbacks from the same caller (Pietro Giana 5→1 case).
-- Repeated low-balance / quota alerts (Tiscali Store 10→1 case).
+- Repeated callbacks from the same caller (Frank Moore 5→1 case).
+- Repeated low-balance / quota alerts (Beta Telecom 10→1 case).
 
 **Does not cover:**
 - LLM-driven CLOSE of a single task because the user replied. That
@@ -209,7 +209,7 @@ Two commits, both pushed to `origin/main`:
 
 ## What I didn't fix and why
 
-- **Reanalyze (F4) keeps the Salamone email task open even though
+- **Reanalyze (F4) keeps the Smith email task open even though
   the user replied to a sibling thread.** The reason is the
   Opus 4.6 model itself: shown a clear thread + sibling thread with
   the user's "Se lo riattivate vedo di finirlo" reply, the model

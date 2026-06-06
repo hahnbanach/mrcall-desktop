@@ -1,4 +1,4 @@
-# Fix task auto-close stale (RealStep / cafe124 case)
+# Fix task auto-close stale (ExampleCorp / examplebiz case)
 
 status: completed (F1 + F2 + F3 + F4 + cleanup, 2026-05-01)
 created: 2026-05-01
@@ -9,15 +9,15 @@ profile observed: you.work@example.com
 User replied in thread `<PAVPR10MB7034484AF4E54E024C85090BE648A@…>`
 on 2026-04-30 18:16:39 UTC (Superhuman). The reply went `to=alice@example.com`,
 `cc=carol@example.com + bob@example.com`. The
-post-reply task run at 18:20:58 closed only the e.argento task (61af55e3).
+post-reply task run at 18:20:58 closed only the alice task (61af55e3).
 Two open tasks on the same thread survived:
 
 - de342a1d (bob@example.com) — created 04-21 17:00, never closed
 - 5c66fa63 (carol@example.com) — created 04-27 12:31, never closed
 
 Both `suggested_action` fields had been corrupted earlier with the LLM's
-advisory text ("Keep existing task as-is: …", "No action needed — Ivan
-is managing MareTerra…").
+advisory text ("Keep existing task as-is: …", "No action needed — Jane
+is managing Project Alpha…").
 
 Suspected cause from user (timestamping): ruled out — `Date:` parsing was
 fixed in v0.1.24, and the user-reply email's `date_timestamp` is correct.
@@ -36,7 +36,7 @@ returns 2 tasks. Cause not reproduced. Plausible candidates:
   (some `add_source_email` call later updated the linkage).
 - Sources state: at run time, neither task had any `sources.emails`
   entry whose `Email.thread_id` matched PAVPR (would be surprising —
-  de342a1d should have had m.scacciati's emails since 04-21 19:40).
+  de342a1d should have had bob's emails since 04-21 19:40).
 - Read-side staleness inside the same SQLite connection (less likely
   given WAL + sequential access).
 
@@ -55,9 +55,9 @@ existing task as-is: …"` — which then becomes the literal task body.
 
 **Evidence in this incident:**
 - 04-21 19:40:30 log shows `'task_action': 'none'` and
-  `Forcing update on stale task de342a1d-… for m.scacciati`. The
+  `Forcing update on stale task de342a1d-… for bob`. The
   resulting `suggested_action` on de342a1d is "Keep existing task
-  as-is: Coordinate with Ivan to reply to Edoardo Argento…".
+  as-is: Coordinate with Jane to reply to Alice Green…".
 - 5c66fa63 received `add_source_email` from at least 4 different
   thread runs (04-28 10:11, 04-29 16:37, 04-30 10:41, 04-30 12:11×2)
   — frankenization.
@@ -67,7 +67,7 @@ existing task as-is: …"` — which then becomes the literal task body.
 `task_creation.py:433-445`. The per-recipient fallback (used when the
 per-thread path produces nothing) splits only `email.get("to_email")`.
 `cc_email` and `bcc_email` are silently ignored. In this incident the
-user replied with Ivan and Michele in CC; both their tasks would have
+user replied with Jane and Bob in CC; both their tasks would have
 been closed via `get_task_by_contact` had the loop included CC.
 
 This is the smallest, lowest-risk fix and would have rescued this exact
@@ -301,6 +301,6 @@ tasks on one profile.
 - F3 produces a debug line on the next "missed close" event.
 - F4 unit + smoke tests pass; observed cost increase per `update` run
   documented.
-- A re-run of the RealStep scenario on a fresh profile (mock or
-  real) closes all three tasks (Argento, Michele, Ivan) in a single
+- A re-run of the ExampleCorp scenario on a fresh profile (mock or
+  real) closes all three tasks (Green, Bob, Jane) in a single
   user-reply pass.

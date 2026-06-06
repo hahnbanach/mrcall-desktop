@@ -52,32 +52,32 @@ Cross-reference con le email reali (IMAP) di support@example.com:
 
 | Contatto | Task Zylch | Priorità | Accuratezza |
 |----------|-----------|----------|-------------|
-| Roberto Minasi (Studio Dentistico) | 3 issue: email mancanti, WhatsApp, iPhone 17 | MEDIUM | ✅ Corretto, draft dettagliato |
-| Pietro Nudo | Hallucination AI, necessità istruzioni config | MEDIUM | ✅ Corretto, riconosce thread di 2 mesi |
-| Marco Mazzocco (Efficient Driving) | Cambio comportamento AI, domanda voci custom | MEDIUM | ✅ Corretto |
-| Domenico Santoro (Studio Dentalsi) | 3 issue tecniche, draft pronto | MEDIUM | ✅ Corretto |
-| La Baita Case | Consulenza da schedulare | MEDIUM | ✅ Corretto |
-| Massimo De Luca | Richiesta prefisso 081 | MEDIUM | ✅ Corretto, riconosce trial customer |
-| Mr Brown Suite (Caterina) | 5+ richieste dettagliate, conversione in corso | MEDIUM | ✅ **Eccellente** — riconosce momento conversione |
-| Antonietta Lonati | Config rotta senza preavviso, furiosa | MEDIUM | ✅ Corretto |
-| Akezhan Yergali | Internship, da inoltrare | LOW | ✅ Corretto, non è support |
-| Dario Occhiaperti (L'Eredità) | Pacchetto custom €500 | LOW | ✅ Corretto |
-| Francesco Zuccaro | Riattivazione con domande piano | LOW | ✅ Corretto |
+| Mark Wilson (Acme Dental) | 3 issue: email mancanti, WhatsApp, iPhone 17 | MEDIUM | ✅ Corretto, draft dettagliato |
+| Paul Jones | Hallucination AI, necessità istruzioni config | MEDIUM | ✅ Corretto, riconosce thread di 2 mesi |
+| David Miller (Gamma Srl) | Cambio comportamento AI, domanda voci custom | MEDIUM | ✅ Corretto |
+| Frank Harris (Beta Dental) | 3 issue tecniche, draft pronto | MEDIUM | ✅ Corretto |
+| Delta Srl | Consulenza da schedulare | MEDIUM | ✅ Corretto |
+| Peter Clark | Richiesta prefisso 081 | MEDIUM | ✅ Corretto, riconosce trial customer |
+| Acme Corp (Laura) | 5+ richieste dettagliate, conversione in corso | MEDIUM | ✅ **Eccellente** — riconosce momento conversione |
+| Nancy Adams | Config rotta senza preavviso, furiosa | MEDIUM | ✅ Corretto |
+| Kevin Scott | Internship, da inoltrare | LOW | ✅ Corretto, non è support |
+| Steve Young (Zeta Show) | Pacchetto custom €500 | LOW | ✅ Corretto |
+| George Hall | Riattivazione con domande piano | LOW | ✅ Corretto |
 
 **False Positive**: 0
-**False Negative**: Antonio Sorvillo (cancellazione abbonamento) — ma email del 30-31 marzo, fuori finestra sync (fino al 27)
+**False Negative**: Henry King (cancellazione abbonamento) — ma email del 30-31 marzo, fuori finestra sync (fino al 27)
 
 **Draft email**: Presenti per 6/11 task. Qualità media-alta, tono corretto (professionale, empatico), ma a volte troppo lunghi.
 
 ### Punti di forza:
 - **Aggregazione thread**: più email dello stesso contatto → 1 task. Funziona benissimo.
-- **Contesto storico**: riconosce thread lunghi (Pietro Nudo ~2 mesi), promesse passate (sconto €15 Zuccaro)
+- **Contesto storico**: riconosce thread lunghi (Paul Jones ~2 mesi), promesse passate (sconto €15 Hall)
 - **Prioritizzazione**: coerente, anche se tendenzialmente troppo "MEDIUM" (nessun HIGH)
 - **Draft automatici**: pronti all'uso, risparmiano tempo significativo
 
 ### Punti deboli:
-- **Tutte le priorità MEDIUM**: manca granularità. Lonati (furiosa) e La Baita (nuova consulenza) non dovrebbero avere la stessa priorità
-- **Nessun task HIGH**: per un support team, Lonati e Di Chiara (errore pagamento) dovrebbero essere HIGH
+- **Tutte le priorità MEDIUM**: manca granularità. Adams (furiosa) e Delta Srl (nuova consulenza) non dovrebbero avere la stessa priorità
+- **Nessun task HIGH**: per un support team, Adams e Wright (errore pagamento) dovrebbero essere HIGH
 
 ## 4. Qualità Memoria
 
@@ -85,8 +85,8 @@ Cross-reference con le email reali (IMAP) di support@example.com:
 
 La memoria contiene 49 blob, ma sono quasi tutti **template di risposta** (pattern di email support), non informazioni sulle persone/entità.
 
-- `/memory search "Antonietta Lonati"` → restituisce template generici, score 0.20
-- Non ci sono blob tipo "Antonietta Lonati è dermatologa a [città], cliente dal [data], usa il numero 347..."
+- `/memory search "Nancy Adams"` → restituisce template generici, score 0.20
+- Non ci sono blob tipo "Nancy Adams è dermatologa a [città], cliente dal [data], usa il numero 333..."
 - La memoria funziona come **knowledge base di template email**, non come **relationship intelligence**
 
 Questo è un problema architetturale: il memory processing (`/agent memory run email`) sta estraendo pattern di risposta invece di fatti sulle persone.
@@ -112,7 +112,7 @@ La sync mostra "10%" e poi nulla per minuti. Dovrebbe mostrare conteggio email s
 Tutti MEDIUM. Un utente con 11 task non sa da dove cominciare. Servono HIGH/CRITICAL per i casi urgenti.
 
 ### UX-005: Memoria non utile per lookup persone
-`/memory search` dovrebbe restituire info sulla persona, non template di email. L'utente chiede "chi è Antonietta Lonati?" e riceve un template generico.
+`/memory search` dovrebbe restituire info sulla persona, non template di email. L'utente chiede "chi è Nancy Adams?" e riceve un template generico.
 
 ### UX-006: Token Firebase scade in 1 ora
 Per test automatici e CLI long-running, il token scade troppo presto. Il refresh token esiste ma non c'è auto-refresh nel client.
@@ -149,9 +149,9 @@ Email analizzate via IMAP diretto a support@example.com:
 - 71 nell'ultima settimana
 
 Top mittenti (ultimi 30 giorni):
-- Dario Occhiaperti (Banijay/L'Eredità): 9 email
-- Immobiliare Leonardi: 5 email
-- Mr Brown Suite: 5 email
-- Francesco Zuccaro: 5 email
-- Pietro Nudo: 4 email
-- Capital Casa Livorno: 4 email
+- Steve Young (Epsilon Group/Zeta Show): 9 email
+- Theta Immobiliare: 5 email
+- Acme Corp: 5 email
+- George Hall: 5 email
+- Paul Jones: 4 email
+- Iota Srl: 4 email

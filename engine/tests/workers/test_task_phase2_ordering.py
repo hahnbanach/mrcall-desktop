@@ -28,7 +28,7 @@ def test_llm_creates_run_before_user_reply_closes():
     The Phase 2 sort key flips that so LLM items run first."""
     collected = [
         ("user_reply", {"id": "user-reply-email", "thread_id": "T-newer"}),
-        ("llm", {"id": "salamone-email", "thread_id": "T-older"}, {"result": {}}),
+        ("llm", {"id": "smith-email", "thread_id": "T-older"}, {"result": {}}),
     ]
     ordered = sorted(collected, key=_phase2_key)
     assert ordered[0][0] == "llm"

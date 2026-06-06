@@ -197,7 +197,7 @@ def _print_dashboard(profile: str, owner_id: str):
     if user_name:
         user_name = user_name.split()[0]  # First name
     else:
-        user_name = profile.split("@")[0]  # mario.alemi → mario
+        user_name = profile.split("@")[0]  # you.personal → mario
 
     console.print()
     console.print(

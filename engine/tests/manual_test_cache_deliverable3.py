@@ -46,7 +46,7 @@ def _pad_text(i: int) -> str:
     """Produce ~5k chars of meaningful-ish prose for turn i."""
     blob = (
         f"Turn {i}. We were discussing the 2026 product roadmap for the "
-        "Cafezal cold-brew private label. Pricing tiers across volumes "
+        "Acme cold-brew private label. Pricing tiers across volumes "
         "250ml, 500ml, 750ml have been debated. The supplier offered a "
         "minimum order of 10,000 bottles at €1.80/unit ex-works for the "
         "500ml SKU. Shipping to Milano adds €0.12/unit. Payment terms "

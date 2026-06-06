@@ -79,8 +79,8 @@ release (only on tag push; needs build-app)
 - `app/src/main/profileFS.ts` — `.env` header comment
 
 ### Docs
-- `app/CLAUDE.md` — Distribution section: replace `malemi/zylch-desktop` / `malemi/zylch` references with `hahnbanach/mrcall-desktop` and "the workflow builds the sidecar from `engine/` in this repo".
-- `app/README.md` — top brand line, Releases URL, asset names in download table, install-time strings, dev-build instructions (sidecar comes from `engine/`, not `malemi/zylch`).
+- `app/CLAUDE.md` — Distribution section: replace `example-owner/zylch-desktop` / `example-owner/zylch` references with `hahnbanach/mrcall-desktop` and "the workflow builds the sidecar from `engine/` in this repo".
+- `app/README.md` — top brand line, Releases URL, asset names in download table, install-time strings, dev-build instructions (sidecar comes from `engine/`, not `example-owner/zylch`).
 
 ### Explicitly NOT touched (engine-internal, would belong to Level 3)
 - `window.zylch` API namespace in `preload/index.ts` and references

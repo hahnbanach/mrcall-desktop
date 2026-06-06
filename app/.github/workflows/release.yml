@@ -60,7 +60,7 @@ jobs:
         run: |
           mkdir -p bin
           gh release download \
-            --repo malemi/zylch \
+            --repo example-owner/zylch \
             --pattern "${{ matrix.sidecar_asset }}" \
             --output "${{ matrix.sidecar_out }}"
           # Make executable on posix; no-op on Windows.

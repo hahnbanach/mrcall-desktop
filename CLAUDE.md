@@ -74,7 +74,7 @@ App pieces: new `LLMProviderCard` in `app/src/renderer/src/views/Settings.tsx`
 ## Naming and identifiers — the rename in flight
 
 This monorepo was assembled by subtree-merging two predecessor repos
-(`malemi/zylch` and `malemi/zylch-desktop`, now private/archived). Until
+(`example-owner/zylch` and `example-owner/zylch-desktop`, now private/archived). Until
 the planned rename completes, the engine still uses **`zylch`** as its
 internal identifier in many places:
 

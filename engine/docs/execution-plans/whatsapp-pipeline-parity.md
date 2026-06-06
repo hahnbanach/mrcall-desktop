@@ -22,7 +22,7 @@ outcome: |
   stamping + ThreadPanel Email/WhatsApp tab pills. Live results on
   the gmail profile: 6 WA tasks created, all with `contact_phone` +
   `sources.whatsapp_chat_jid`. Cross-channel toggle live-verified
-  via a synthetic SQL setup (Birger Lie email task + Ivan Marchese
+  via a synthetic SQL setup (Tom Lee email task + Jane Doe
   WA chat) on 2026-05-19. F4/F8/F9 sweeps inherit WA tasks without
   changes (they're channel-agnostic on `contact_email`/`contact_phone`
   OR blob overlap). The Fix-D restriction (`f5196e7f`) protects
@@ -49,9 +49,9 @@ Two coupled goals:
 
 1. **Pipeline parity**: every WhatsApp message goes through memory
    extraction + task creation, the same way email does today.
-2. **Cross-channel identity**: a memory blob about Carmine Salamone
-   merges email + WhatsApp records, and a task about Carmine has ONE
-   row in `task_items` regardless of how Carmine wrote in.
+2. **Cross-channel identity**: a memory blob about John Smith
+   merges email + WhatsApp records, and a task about John has ONE
+   row in `task_items` regardless of how John wrote in.
 
 ## How the email side works today (must mirror this)
 
@@ -128,7 +128,7 @@ No `whatsapp_messages` slot today.
 There is NO `Person` table and NO `BlobIdentifier` table. A blob's
 `#IDENTIFIERS` block is free text inside `Blob.content`. Reconsolidation
 matches via embedding cosine on that block — works for e.g.
-`Name: Carmine Salamone\nEmail: contact@example.com` matching a second blob
+`Name: John Smith\nEmail: contact@example.com` matching a second blob
 with the same email, but does NOT cross-match an email blob to a
 WhatsApp blob unless the LLM happened to emit the same identifier on
 both sides.
@@ -146,7 +146,7 @@ person_identifiers
   owner_id      str index
   blob_id       fk Blob.id
   kind          str          # 'email' | 'phone' | 'lid' | 'name_norm'
-  value         str          # 'contact@example.com', '+393395040816', '19095575629933@lid', 'carmine salamone'
+  value         str          # 'contact@example.com', '+393330000000', '19095575629933@lid', 'john smith'
   created_at    datetime
   unique (owner_id, kind, value, blob_id)
 ```
@@ -237,12 +237,12 @@ Add `TaskWorker.process_whatsapp_message_batch()` mirroring
   `sources.whatsapp_messages` carries the message id and `channel =
   'whatsapp'`.
 
-Cross-channel sharing emerges naturally: an email task about Carmine
-already has `sources.blobs = [carmine_blob]`. A WA message from
-Carmine extracts into the same blob (D1 identifier match). The WA
-task path queries `get_open_tasks_by_blobs` with `[carmine_blob]` →
+Cross-channel sharing emerges naturally: an email task about John
+already has `sources.blobs = [john_blob]`. A WA message from
+John extracts into the same blob (D1 identifier match). The WA
+task path queries `get_open_tasks_by_blobs` with `[john_blob]` →
 finds the existing task → LLM picks `update`/`close` instead of
-`create`. ONE task on Carmine across channels.
+`create`. ONE task on John across channels.
 
 ## Phasing
 
@@ -281,7 +281,7 @@ Split into three landings:
   including 3 mock-based end-to-end Phase 1b scenarios (priority,
   fallback on LLM-INSERT, no-match → create).
 - ✅ Live verification 2026-05-08 update on gmail profile: 1 of 8
-  emails captured an identifier match (FeFarma `5491bb51` +
+  emails captured an identifier match (Examplepharma `5491bb51` +
   `5b6075e3` — two duplicate company blobs cosine alone would have
   missed).
 
@@ -301,7 +301,7 @@ Split into three landings:
    - `you.work@example.com`: 731 → 315 (-57%, 416 dups merged across 9 runs).
    - `you.personal@example.com`: pending — Mario clicks Settings → Maintenance → "Reconsolidate memory" (Firebase session needed).
 
-**What 1c does NOT do**: pure name-only typos (`Salomone` vs `Salamone`)
+**What 1c does NOT do**: pure name-only typos (`Smith` vs `Smith`)
 remain — same as before, no regression. The `groups_examined` counter
 hit 0 on both BYOK profiles, so the sweep is exhaustive on
 identifier-shared dups.
@@ -329,7 +329,7 @@ discovered during live verification. Full engine-side description in
 - ✅ Pipeline step [3/5] iterates email AND WhatsApp; `[update.summary]` log line carries `wa_memory=` alongside `memory=`.
 - ✅ Parser hardening (discovered during live test): `_normalise_phone` rejects inputs containing `@`; `_parse_identifiers_block` reroutes `Phone: X@lid` mislabels into kind `lid`.
 - ✅ Tests: 28 new cases across `tests/storage/test_whatsapp_blobs.py` (9), `tests/workers/test_memory_whatsapp.py` (14), `tests/agents/test_memory_message_trainer.py` (9). Plus 1 update to `tests/workers/test_person_identifiers.py` for the new `whatsapp_blobs_migrated` key in `migrate_blob_references`.
-- ✅ Live-verified on gmail profile (`HxiZh…`): 106 of 106 WhatsApp 1-on-1 messages processed cleanly, 0 LID-as-phone in `person_identifiers`, first cross-channel blob landed (`CANNING ITALIA S.R.L.` n_em=1 + n_wa=1; Ivan Marchese #HISTORY combining MrCall calls 2024–2026 and WhatsApp 2026-05).
+- ✅ Live-verified on gmail profile (`HxiZh…`): 106 of 106 WhatsApp 1-on-1 messages processed cleanly, 0 LID-as-phone in `person_identifiers`, first cross-channel blob landed (`EXAMPLE SPA` n_em=1 + n_wa=1; Jane Doe #HISTORY combining MrCall calls 2024–2026 and WhatsApp 2026-05).
 
 Discrepancy vs. the original brief: this phase landed as ONE commit rather than the originally-planned 2a/2b/2c sub-commits — the three are functionally indivisible (none of them works without the others) so the unified landing matches the deployment reality.
 

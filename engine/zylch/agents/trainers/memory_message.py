@@ -238,10 +238,10 @@ EMAIL envelope:
 
 WHATSAPP envelope:
     Channel: WhatsApp
-    From: Carmine Salamone (+393395040816)
+    From: John Smith (+393331234567)
     At: 2026-05-08T10:11:12+00:00
     Group: (1-on-1)
-    Contact: +393395040816  (or LID pseudonym, e.g. 19095575629933@lid)
+    Contact: +393331234567  (or LID pseudonym, e.g. 19095575629933@lid)
 
 The body follows the envelope after a blank line. For WhatsApp the body
 is a single short text (no quoted history); for email it may be a long

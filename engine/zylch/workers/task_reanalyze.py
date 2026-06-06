@@ -58,8 +58,8 @@ REANALYZE_TOOL = {
                 "description": (
                     "Short, scannable task title — 3 to 6 words, in the "
                     "user's language. Name the real person or subject, "
-                    "NOT the email-sender envelope (e.g. 'Richiamare Luca "
-                    "Festa', not 'MrCall Notification'). Provide it on "
+                    "NOT the email-sender envelope (e.g. 'Richiamare John "
+                    "Smith', not 'MrCall Notification'). Provide it on "
                     "both keep and update so tasks created before titles "
                     "existed gain one when reanalyzed."
                 ),
@@ -118,7 +118,7 @@ def _build_user_content(
     """
     # Build the "Contact:" line from whatever the task carries — email
     # for email tasks, phone/name for WhatsApp tasks. Falling back to
-    # "(unknown)" on a WA task strips Angelo Leto's identity from the
+    # "(unknown)" on a WA task strips John Smith's identity from the
     # prompt and the LLM has nothing to anchor relationship context on.
     contact_bits: List[str] = []
     if task.get("contact_name"):
@@ -263,7 +263,7 @@ async def reanalyze_task(
 
             # F6 (2026-05-05): pull sibling threads where the user already
             # corresponded with the same contact_email — single-thread
-            # reanalyze misses cross-thread resolutions (real case: Salamone
+            # reanalyze misses cross-thread resolutions (real case: Smith
             # task on thread A, user's "reactivate access" reply on thread
             # B; without sibling history the LLM can't see the ball is in
             # the contact's court).

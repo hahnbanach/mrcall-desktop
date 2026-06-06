@@ -10,7 +10,7 @@ To keep the cache cold for turn 1 we include a random nonce that changes
 with every test run, so we don't pick up stale cache entries written by
 earlier runs of this same test.
 
-Run with the cafe124 profile:
+Run with the examplebiz profile:
     venv/bin/python tests/manual_test_cache_deliverable1.py
 """
 

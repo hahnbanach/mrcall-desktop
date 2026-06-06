@@ -1,14 +1,14 @@
 """Fix D restriction to thread-tasks (2026-05-13).
 
-Regression for the Inverardi/Liuzzi-overwrites-Occhiaperti incident on
+Regression for the Wilson/Rossi-overwrites-Baker incident on
 ``support@example.com``. Pre-fix, ``Fix D`` in
 ``zylch/workers/task_creation.py`` converted any ``task_action="create"``
 LLM decision into ``update_task_item(existing_tasks_all[0], …)`` whenever
 the candidate list was non-empty. After F7 began surfacing cross-contact
 topical-blob siblings into ``existing_tasks_all``, this meant an
 unrelated customer's email could land its content on the topical
-sibling's task — corrupting ``contact_email`` (kept Occhiaperti) vs
-``suggested_action`` (rewritten as Inverardi).
+sibling's task — corrupting ``contact_email`` (kept Baker) vs
+``suggested_action`` (rewritten as Wilson).
 
 The fix restricts the create→update conversion to candidates that came
 from the thread-tasks branch specifically. The predicate is exposed as
@@ -42,7 +42,7 @@ def test_f7_only_candidate_does_not_force_update():
     """The reported bug: ``existing_tasks_all`` contains only an F7
     topical-blob sibling (different thread, possibly different contact).
     A CREATE from the LLM MUST be respected — no force-update — or
-    Inverardi's email lands on Occhiaperti's task again."""
+    Wilson's email lands on Baker's task again."""
     f7_sibling = _task("f7-sibling")
     existing = [f7_sibling]
     thread_ids: set = set()  # no thread-tasks were collected

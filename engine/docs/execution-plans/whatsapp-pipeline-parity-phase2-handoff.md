@@ -7,12 +7,12 @@ prerequisites_done:
   - Phase 1a (`d0baa6b1`): person_identifiers index, additive write.
   - Phase 1b (`315c56d1`): identifier-first match in `_upsert_entity`.
   - Phase 1c (`6ae8a5fa`): identifier-clustered `reconsolidate_now`
-    + cross-reference migration. Live-verified on support / cafe124.
+    + cross-reference migration. Live-verified on support / examplebiz.
 outcome: |
   Landed end-to-end and live-verified on the gmail profile
   (`HxiZh…`). 106 of 106 WhatsApp 1-on-1 messages processed; 0
   LID-as-phone rows in person_identifiers; first cross-channel
-  blob landed (CANNING ITALIA S.R.L., email + WhatsApp). Detailed
+  blob landed (EXAMPLE SPA, email + WhatsApp). Detailed
   outcome lives in `../active-context.md` "WhatsApp pipeline parity
   — Phase 2 a/b/c". Next: Phase 3 (D3 + D5) — task creation from
   WhatsApp.

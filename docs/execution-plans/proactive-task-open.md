@@ -6,7 +6,7 @@ completed: 2026-05-12
 outcome: |
   Landed across 5 commits (df1e1fb1, 4cd8ec39, 336bc152, a1896df6,
   b36e15b3) on main. Live-verified by Mario on Mac dev against
-  real profile tasks (ISTAT, Aleide, Google Workspace closed
+  real profile tasks (ExampleGov, Acme Utility, Google Workspace closed
   task). Engine + app + IPC contract all updated. See
   - engine/docs/active-context.md "Agentic task Open"
   - app/docs/active-context.md "Workspace + agentic Open flow"
@@ -43,8 +43,8 @@ Mario vuole che cliccare **Open** mostri direttamente la
 **risposta dell'agente** — breve, in italiano, azionabile:
 
 > "Hai ricevuto 4 reminder, secondo me è da pagare. Bonifico
-> all'IBAN xyz di €XX dal tuo conto Fineco. Vuoi che ti prepari
-> la mail di conferma ad Aleide?"
+> all'IBAN xyz di €XX dal tuo conto Example Bank. Vuoi che ti prepari
+> la mail di conferma ad Acme Utility?"
 
 …e con un singolo click sul draft → invio. Tre click totali
 (Open → "sì prepara" → Invia), non sette.
@@ -466,10 +466,10 @@ Quindi:
 1. **Setup.** Profile pulito, signin Firebase, USER_FULL_NAME +
    USER_PHONE + USER_NOTES + USER_SECRET_INSTRUCTIONS popolati,
    `USER_LANGUAGE=it`. Almeno 1 task aperta sul DB con un'email
-   di origine (la task ISTAT o Aleide attuali sul DB di Mario
+   di origine (la task ExampleGov o Acme Utility attuali sul DB di Mario
    vanno bene).
 
-2. **Open task ISTAT.** Aspettative:
+2. **Open task ExampleGov.** Aspettative:
    - Bubble assistant compare in <8s con: 1 frase recap in
      italiano (data scaduta, riferimenti chiave indagine /
      codice utente), 1 frase azione concreta (chiamare 1510 o
@@ -479,12 +479,12 @@ Quindi:
      (chat libera) → l'agente chiama `send_email` (NON
      `draft_email`) → approval card con preview completa
      (To: org@example.com, subject: "Chiave indagine
-     12698 — Codice utente 32924352", body con scuse + richiesta
+     00000 — Codice utente 00000000", body con scuse + richiesta
      submit tardivo).
    - Click "Send" sull'approval card → mail parte via SMTP →
      bubble di conferma engine-side.
 
-3. **Open task Aleide.** Aspettative:
+3. **Open task Acme Utility.** Aspettative:
    - Recap menziona "4 reminder", date, importo se presente
      nella memory.
    - Proposta: "preparo mail di conferma pagamento" o
@@ -565,7 +565,7 @@ con o senza A.5/B.6.
   fallback `match the language of the source email` lo fa il
   modello da solo guardando il context. NON serve rilevatore
   language separato.
-- Playwright / browser automation per ISTAT: no. Resta come
+- Playwright / browser automation per ExampleGov: no. Resta come
   "Vuoi che ti scriva un appunto con username / password?" se
   presenti nella memory.
 - Streaming token-by-token: gli eventi `thinking` arrivano già a

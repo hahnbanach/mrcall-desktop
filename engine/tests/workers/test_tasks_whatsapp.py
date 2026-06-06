@@ -53,10 +53,10 @@ def fresh_db(tmp_path, monkeypatch):
 def _insert_wa_message(
     owner: str,
     *,
-    text: str = "Ciao Mario, sono Carmine.",
-    chat_jid: str = "393395040816@s.whatsapp.net",
+    text: str = "Ciao Alex, sono John.",
+    chat_jid: str = "393331234567@s.whatsapp.net",
     sender_jid: str | None = None,
-    sender_name: str = "Carmine",
+    sender_name: str = "John",
     is_from_me: bool = False,
     is_group: bool = False,
     timestamp: datetime | None = None,
@@ -121,8 +121,8 @@ def _decision(
     action: str = "create",
     target_task_id: str | None = None,
     urgency: str = "medium",
-    suggested: str = "Reply to Carmine about the course.",
-    reason: str = "Carmine pinged via WhatsApp and is waiting for a reply on the safety course logistics.",
+    suggested: str = "Reply to John about the course.",
+    reason: str = "John pinged via WhatsApp and is waiting for a reply on the safety course logistics.",
     action_required: bool = True,
 ) -> dict:
     return {
@@ -158,15 +158,15 @@ async def test_single_wa_message_creates_whatsapp_task(fresh_db):
     t = tasks[0]
     assert t.channel == "whatsapp"
     assert t.event_type == "whatsapp"
-    assert t.contact_phone == "+393395040816"
+    assert t.contact_phone == "+393331234567"
     assert t.contact_email == ""  # explicitly empty for WA tasks
     assert (t.sources or {}).get("whatsapp_messages") == [msg_id]
     assert (t.sources or {}).get("emails") == []
-    assert (t.sources or {}).get("thread_id") == "393395040816@s.whatsapp.net"
+    assert (t.sources or {}).get("thread_id") == "393331234567@s.whatsapp.net"
     # Fase 4 cross-channel: explicit chat_jid pointer for the renderer
     # toggle (here equals thread_id since this is a WA-only task).
     assert (
-        (t.sources or {}).get("whatsapp_chat_jid") == "393395040816@s.whatsapp.net"
+        (t.sources or {}).get("whatsapp_chat_jid") == "393331234567@s.whatsapp.net"
     )
 
     # watermark advanced — message no longer unprocessed
@@ -229,7 +229,7 @@ async def test_is_from_me_after_contact_closes_task(fresh_db):
     # Round 1 — contact's incoming message creates a task.
     earlier = datetime.now(timezone.utc).replace(microsecond=0)
     contact_ts = earlier
-    _insert_wa_message(owner, text="Ciao Mario, novità?", timestamp=contact_ts)
+    _insert_wa_message(owner, text="Ciao Alex, novità?", timestamp=contact_ts)
 
     worker = _make_worker(owner, analyze_returns=[_decision(action="create")])
     await worker._analyze_recent_whatsapp_events()
@@ -269,8 +269,8 @@ async def test_is_from_me_after_contact_closes_task(fresh_db):
 
 @pytest.mark.asyncio
 async def test_cross_channel_wa_updates_existing_email_task(fresh_db):
-    """An email task already references a memory blob about Carmine.
-    A new WA message from Carmine extracts into the SAME blob (Phase 1b
+    """An email task already references a memory blob about John.
+    A new WA message from John extracts into the SAME blob (Phase 1b
     identifier match — simulated here by linking the blob to the WA
     message directly via whatsapp_blobs, since we're not running the
     memory worker in this test). F7 topical lookup finds the existing
@@ -283,7 +283,7 @@ async def test_cross_channel_wa_updates_existing_email_task(fresh_db):
     owner = "alice@example.com"
     storage = Storage()
 
-    # Pre-existing memory blob for Carmine.
+    # Pre-existing memory blob for John.
     blob_id = str(uuid.uuid4())
     with get_session() as s:
         s.add(
@@ -292,7 +292,7 @@ async def test_cross_channel_wa_updates_existing_email_task(fresh_db):
                 owner_id=owner,
                 namespace=f"user:{owner}",
                 content=(
-                    "#IDENTIFIERS\nName: Carmine Salamone\nPhone: +393395040816\n"
+                    "#IDENTIFIERS\nName: John Smith\nPhone: +393331234567\n"
                 ),
             )
         )
@@ -305,10 +305,10 @@ async def test_cross_channel_wa_updates_existing_email_task(fresh_db):
             "event_type": "email",
             "event_id": email_event_id,
             "contact_email": "contact@example.com",
-            "contact_name": "Carmine",
+            "contact_name": "John",
             "action_required": True,  # F7 lookup filters on this
             "urgency": "high",
-            "suggested_action": "Reply to Carmine about CNIT course logistics.",
+            "suggested_action": "Reply to John about ACME course logistics.",
             "reason": "Original email from contact@example.com asking about safety course.",
             "sources": {
                 "emails": [email_event_id],
@@ -324,7 +324,7 @@ async def test_cross_channel_wa_updates_existing_email_task(fresh_db):
 
     # New WA message. Link it to the same blob via whatsapp_blobs so F7
     # finds the existing email task.
-    wa_id = _insert_wa_message(owner, text="Carmine: ti chiamo per il corso?")
+    wa_id = _insert_wa_message(owner, text="John: ti chiamo per il corso?")
     storage.add_whatsapp_blob_link(owner, wa_id, blob_id)
 
     # LLM picks UPDATE on the email task id.
@@ -345,7 +345,7 @@ async def test_cross_channel_wa_updates_existing_email_task(fresh_db):
     # Fase 4 cross-channel: chat_jid stamped by the WA touchpoint so
     # the renderer toggle can fetch the WhatsApp chat alongside the
     # original email thread.
-    assert sources.get("whatsapp_chat_jid") == "393395040816@s.whatsapp.net"
+    assert sources.get("whatsapp_chat_jid") == "393331234567@s.whatsapp.net"
 
 
 # ---------------------------------------------------------------------

@@ -60,9 +60,9 @@ def _make_wa_message(
                 id=row_id,
                 owner_id=owner_id,
                 message_id=row_id,
-                chat_jid=chat_jid or "393395040816@s.whatsapp.net",
-                sender_jid="393395040816@s.whatsapp.net",
-                sender_name="Alessandro",
+                chat_jid=chat_jid or "393331234567@s.whatsapp.net",
+                sender_jid="393331234567@s.whatsapp.net",
+                sender_name="Luca",
                 text=text,
                 timestamp=timestamp or datetime.now(timezone.utc),
                 is_group=is_group,
@@ -228,8 +228,8 @@ def test_store_task_item_persists_contact_phone(fresh_db):
             "event_type": "whatsapp",
             "event_id": msg_id,
             "contact_email": "",
-            "contact_phone": "+393395040816",
-            "contact_name": "Alessandro",
+            "contact_phone": "+393331234567",
+            "contact_name": "Luca",
             "urgency": "low",
             "suggested_action": "Reply.",
             "reason": "Pinged via WA.",
@@ -247,7 +247,7 @@ def test_store_task_item_persists_contact_phone(fresh_db):
             .filter(TaskItem.owner_id == owner, TaskItem.event_id == msg_id)
             .one()
         )
-        assert row.contact_phone == "+393395040816"
+        assert row.contact_phone == "+393331234567"
         assert row.channel == "whatsapp"  # inferred from event_type
         assert row.contact_email == ""
 
@@ -338,12 +338,12 @@ def test_get_tasks_by_contact_phone_returns_open_plural(fresh_db):
 
     storage = Storage()
     owner = "alice@example.com"
-    e1 = _insert_task(owner, contact_phone="+393395040816")
-    e2 = _insert_task(owner, contact_phone="+393395040816")
+    e1 = _insert_task(owner, contact_phone="+393331234567")
+    e2 = _insert_task(owner, contact_phone="+393331234567")
     _insert_task(owner, contact_phone="+390000000000")  # different phone
-    _insert_task(owner, contact_phone="+393395040816", completed=True)
+    _insert_task(owner, contact_phone="+393331234567", completed=True)
 
-    out = storage.get_tasks_by_contact_phone(owner, "+393395040816")
+    out = storage.get_tasks_by_contact_phone(owner, "+393331234567")
     event_ids = {r["event_id"] for r in out}
     assert event_ids == {e1, e2}
 
@@ -353,9 +353,9 @@ def test_get_tasks_by_contact_phone_strips_input_whitespace(fresh_db):
 
     storage = Storage()
     owner = "alice@example.com"
-    _insert_task(owner, contact_phone="+393395040816")
+    _insert_task(owner, contact_phone="+393331234567")
 
-    out = storage.get_tasks_by_contact_phone(owner, "  +393395040816  ")
+    out = storage.get_tasks_by_contact_phone(owner, "  +393331234567  ")
     assert len(out) == 1
 
 
@@ -363,10 +363,10 @@ def test_get_tasks_by_contact_phone_isolates_owner(fresh_db):
     from zylch.storage.storage import Storage
 
     storage = Storage()
-    _insert_task("alice", contact_phone="+393395040816")
-    _insert_task("bob", contact_phone="+393395040816")
+    _insert_task("alice", contact_phone="+393331234567")
+    _insert_task("bob", contact_phone="+393331234567")
 
-    out = storage.get_tasks_by_contact_phone("alice", "+393395040816")
+    out = storage.get_tasks_by_contact_phone("alice", "+393331234567")
     assert len(out) == 1
 
 
@@ -480,7 +480,7 @@ def test_update_task_item_appends_whatsapp_message(fresh_db):
 
     storage = Storage()
     owner = "alice@example.com"
-    eid = _insert_task(owner, contact_phone="+393395040816", event_type="whatsapp")
+    eid = _insert_task(owner, contact_phone="+393331234567", event_type="whatsapp")
 
     # Resolve the task PK to call update_task_item.
     with get_session() as s:
@@ -570,12 +570,12 @@ def test_update_task_item_stamps_whatsapp_chat_jid_on_first_touchpoint(fresh_db)
         owner,
         task_id,
         add_source_whatsapp_message="wa-1",
-        whatsapp_chat_jid="393395040816@s.whatsapp.net",
+        whatsapp_chat_jid="393331234567@s.whatsapp.net",
     )
 
     with get_session() as s:
         row = s.query(TaskItem).filter(TaskItem.id == task_id).one()
-        assert row.sources.get("whatsapp_chat_jid") == "393395040816@s.whatsapp.net"
+        assert row.sources.get("whatsapp_chat_jid") == "393331234567@s.whatsapp.net"
         assert row.sources.get("whatsapp_messages") == ["wa-1"]
 
 
@@ -600,7 +600,7 @@ def test_update_task_item_does_not_overwrite_existing_chat_jid(fresh_db):
         owner,
         task_id,
         add_source_whatsapp_message="wa-1",
-        whatsapp_chat_jid="393395040816@s.whatsapp.net",
+        whatsapp_chat_jid="393331234567@s.whatsapp.net",
     )
     storage.update_task_item(
         owner,
@@ -612,7 +612,7 @@ def test_update_task_item_does_not_overwrite_existing_chat_jid(fresh_db):
     with get_session() as s:
         row = s.query(TaskItem).filter(TaskItem.id == task_id).one()
         # Original chat_jid preserved.
-        assert row.sources.get("whatsapp_chat_jid") == "393395040816@s.whatsapp.net"
+        assert row.sources.get("whatsapp_chat_jid") == "393331234567@s.whatsapp.net"
         # Both messages accumulated.
         assert row.sources.get("whatsapp_messages") == ["wa-1", "wa-2"]
 
@@ -636,7 +636,7 @@ def test_update_task_item_whatsapp_chat_jid_only_with_a_message(fresh_db):
     storage.update_task_item(
         owner,
         task_id,
-        whatsapp_chat_jid="393395040816@s.whatsapp.net",
+        whatsapp_chat_jid="393331234567@s.whatsapp.net",
         urgency="high",
     )
 

@@ -57,11 +57,11 @@ event = calendar.create_event(
 ### Email-to-Event Workflow
 
 **User request:**
-> "Rispondi gentilmente a Anna che va benissimo, crea un invito per tutti i partecipanti dell'ultima mail all'orario richiesto, con link meet"
+> "Rispondi gentilmente a Jane che va benissimo, crea un invito per tutti i partecipanti dell'ultima mail all'orario richiesto, con link meet"
 
 **What Zylch AI does:**
 
-1. **Searches the email** from Anna
+1. **Searches the email** from Jane
 2. **Extracts proposed time** from email body
    - Example: "giovedì 27/11 alle ore 10:00" → Thursday, Nov 27, 2025 at 10:00 CET
 3. **Identifies all participants**:
@@ -140,11 +140,11 @@ You: Add video conference to the client meeting
 
 **When asked to create event from email:**
 ```
-You: Create invite for all participants in Sarah's email at the proposed time with Meet link
+You: Create invite for all participants in Alice's email at the proposed time with Meet link
 ```
 
 **Zylch AI automatically:**
-1. Finds Sarah's latest email
+1. Finds Alice's latest email
 2. Parses the proposed date/time (e.g., "next Tuesday at 2pm")
 3. Extracts all participants from From/To/CC
 4. Creates event with Meet link
@@ -173,7 +173,7 @@ Participants = [
 ### Event Title Format
 - Based on email subject
 - Prefixed with "Call -" for video meetings
-- Example: "Call - Flusso Dati IVR Connecto"
+- Example: "Call - Flusso Dati IVR Acme"
 
 ### Description Content
 - Original email subject

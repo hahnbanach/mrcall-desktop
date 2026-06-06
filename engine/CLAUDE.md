@@ -25,8 +25,8 @@ After context compaction, run /doc-intrasession before resuming work!
 This product spans three repos under `~/private/`:
 
 - **`zylch-standalone/`** — this one. Python CLI + Python sidecar (the "brain").
-- **`zylch-desktop/`** — Electron + React shell that embeds the sidecar via JSON-RPC over stdio. Repo: `malemi/zylch-desktop`.
-- **`zylch-website/`** — static marketing site at https://zylchai.com. Repo: `malemi/zylch-website`.
+- **`zylch-desktop/`** — Electron + React shell that embeds the sidecar via JSON-RPC over stdio. Repo: `example-owner/zylch-desktop`.
+- **`zylch-website/`** — static marketing site at https://example.com. Repo: `example-owner/zylch-website`.
 
 When a change cuts across repos (e.g. a CLI flag rename that the desktop UI also relies on), check the matching repo before merging.
 
@@ -51,7 +51,7 @@ Re-running the same script upgrades in place. `pip install -e .` is for **dev on
 
 ```bash
 # Install / Upgrade
-curl -sL https://raw.githubusercontent.com/malemi/zylch/main/scripts/install.sh | bash
+curl -sL https://raw.githubusercontent.com/example-owner/zylch/main/scripts/install.sh | bash
 
 # Dev mode (contributors only)
 pip install -e .

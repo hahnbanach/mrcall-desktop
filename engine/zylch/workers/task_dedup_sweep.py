@@ -326,7 +326,7 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
         # eventually shrink the cluster under the cap.
         #
         # Notification-only clusters BELOW the cap (e.g. 2 GitHub
-        # alerts about the same failed build, or 3 ISTAT survey
+        # alerts about the same failed build, or 3 ExampleGov survey
         # reminders) are still sent to the arbiter — those are real
         # duplicate candidates and the model judges correctly when
         # the prompt is small.

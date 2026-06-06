@@ -58,7 +58,7 @@ Tasks are grouped by PERSON:
 
 Traditional email clients (Gmail, Outlook, Superhuman) organize emails by **threads**. This creates problems for B2B sales professionals:
 
-### Example: Luisa Boni's 5 Threads
+### Example: Carol White's 5 Threads
 ```
 Thread 1: "Re: Urgente" (Feb 2024)
 Thread 2: "Passaggio al nuovo assistente MrCall" (Nov 5)
@@ -68,7 +68,7 @@ Thread 5: "Richiesta per passaggio" (Nov 13-19)
 ```
 
 **Problem**: You have to mentally aggregate:
-- What's the overall situation with Luisa?
+- What's the overall situation with Carol?
 - Is she happy or at risk?
 - What action do I need to take?
 - How urgent is it?
@@ -83,7 +83,7 @@ Zylch AI aggregates ALL threads from the same contact into a unified task view.
 
 ### Example Output
 ```
-📋 Task: Luisa Boni
+📋 Task: Carol White
 
 Email: contact@example.com
 Status: open
@@ -155,8 +155,8 @@ oggi per rassicurarla e risolvere i problemi di configurazione.
 │                                                             │
 │ Example:                                                    │
 │ {                                                           │
-│   "contact_luisa_boni": {                                   │
-│     "contact_name": "Luisa Boni",                           │
+│   "contact_carol_white": {                                   │
+│     "contact_name": "Carol White",                           │
 │     "contact_email": "contact@example.com",            │
 │     "status": "open",                                       │
 │     "score": 10,                                            │
@@ -191,8 +191,8 @@ Zylch AI needs to identify **who is the contact** (vs. you) in each thread.
 
 **Example thread participants:**
 ```
-From: Luisa Boni <contact@example.com>
-To: Mario Alemi <you@example.com>
+From: Carol White <contact@example.com>
+To: Alex Doe <you@example.com>
 Cc: Support <support@example.com>
 ```
 
@@ -235,7 +235,7 @@ When analyzing a contact, TaskManager provides the LLM with:
 ```json
 {
   "contact_email": "contact@example.com",
-  "contact_name": "Luisa Boni",
+  "contact_name": "Carol White",
   "threads_count": 5,
   "threads": [
     {
@@ -261,7 +261,7 @@ When analyzing a contact, TaskManager provides the LLM with:
 
 ### LLM Prompt
 ```
-Analyze these 5 email threads for Luisa Boni and create a TASK summary.
+Analyze these 5 email threads for Carol White and create a TASK summary.
 
 IMPORTANT: This is B2B context. One person = one task maximum.
 Aggregate ALL threads into a single unified view.
@@ -287,7 +287,7 @@ Rules:
 ### Output
 ```json
 {
-  "contact_name": "Luisa Boni",
+  "contact_name": "Carol White",
   "contact_emails": ["contact@example.com", "contact2@example.com"],
   "view": "Il contatto ha avuto problemi con l'assistente precedente...",
   "status": "open",
@@ -320,7 +320,7 @@ You: show urgent tasks
 # Returns: All tasks with score >= 8
 
 # Work on specific contact
-You: status di Luisa Boni
+You: status di Carol White
 # Returns: Full aggregated view + action
 
 # Update after contact
@@ -368,7 +368,7 @@ You: build tasks force_rebuild=true
 
 **Usage:**
 ```
-You: status di Luisa Boni
+You: status di Carol White
 You: get contact task contact@example.com
 ```
 
@@ -388,7 +388,7 @@ You: get contact task contact@example.com
 ```
 You: show urgent tasks          # min_score=8
 You: show open tasks            # status=open
-You: search tasks luisa         # query="luisa"
+You: search tasks carol         # query="carol"
 You: tasks score 7 status open  # combined
 ```
 
@@ -440,7 +440,7 @@ Track decisions and actions over time:
 
 ```json
 {
-  "task_id": "contact_luisa",
+  "task_id": "contact_carol",
   "reasoning_history": [
     {
       "date": "2025-11-19T10:00:00Z",
@@ -574,11 +574,11 @@ This enriches the task with phone numbers, CRM data, etc.
 ### Thread View (Traditional)
 ```
 Inbox:
-1. "settaggio wa" - Luisa Boni
-2. "Re: Urgente" - Luisa Boni
-3. "Passaggio al nuovo assistente" - Luisa Boni
-4. "Order confirmation" - Amazon
-5. "settaggio orari" - Luisa Boni
+1. "settaggio wa" - Carol White
+2. "Re: Urgente" - Carol White
+3. "Passaggio al nuovo assistente" - Carol White
+4. "Order confirmation" - Acme Retail
+5. "settaggio orari" - Carol White
 ```
 
 **You must mentally:**
@@ -590,11 +590,11 @@ Inbox:
 ### Task View (Zylch AI)
 ```
 Tasks:
-1. Luisa Boni (10/10 URGENT) - 5 threads
+1. Carol White (10/10 URGENT) - 5 threads
    Status: open
    Action: Contattare SUBITO - rischio perdita cliente
 
-2. Amazon (1/10) - 1 thread
+2. Acme Retail (1/10) - 1 thread
    Status: closed
    Action: None
 ```

@@ -33,9 +33,9 @@ logger = logging.getLogger(__name__)
 #
 #     #IDENTIFIERS
 #     Entity type: PERSON
-#     Name: Carmine Salamone
+#     Name: John Smith
 #     Email: contact@example.com
-#     Phone: +39 339 6584014, +393925358412
+#     Phone: +39 333 1234567, +393331234567
 #
 # `_parse_identifiers_block` extracts the (kind, value) tuples that we
 # index into `person_identifiers` for cross-channel identity matching.
@@ -78,7 +78,7 @@ def _normalise_phone(raw: str) -> Optional[str]:
         # LID-shaped or email-shaped value labelled as a phone — refuse.
         return None
     s = raw.strip()
-    # Remove embedded narrative tails like "+39 339 6584014 (cell)"
+    # Remove embedded narrative tails like "+39 333 1234567 (cell)"
     # by clipping at the first character that is neither a digit, +,
     # whitespace, dot, dash, parenthesis, or slash.
     cleaned = []
@@ -188,7 +188,7 @@ def _extract_identifier_query(entity_content: str) -> Optional[str]:
 
         #IDENTIFIERS
         Entity type: person
-        Name: Carmine Salamone
+        Name: John Smith
         Email: contact@example.com
         Phone: ...
 
@@ -402,7 +402,7 @@ class MemoryWorker:
           1. Blobs returned by ``find_blobs_by_identifiers`` — exact
              match on the new entity's email / phone / lid identifiers
              against the ``person_identifiers`` index. Catches the
-             "8 distinct Carmine Salamone PERSON blobs" case where two
+             "8 distinct John Smith PERSON blobs" case where two
              records of the same person share `Email: contact@example.com`
              but their #ABOUT / #HISTORY paragraphs have drifted enough
              that the cosine score on the full block dropped below the
@@ -1015,9 +1015,9 @@ class MemoryWorker:
         elif "@lid" in sender_jid:
             lid = sender_jid
             # Resolve LID → real phone via whatsapp_contacts. Critical
-            # for cross-channel identity: an email blob about Carmine
-            # carries Phone: +393395... and a WhatsApp message from
-            # Carmine arrives with sender_jid=<lid>@lid. Without this
+            # for cross-channel identity: an email blob about John
+            # carries Phone: +393331... and a WhatsApp message from
+            # John arrives with sender_jid=<lid>@lid. Without this
             # lookup the WA blob can't match the email blob.
             try:
                 contact = self.storage.get_whatsapp_contact_by_jid(self.owner_id, sender_jid)

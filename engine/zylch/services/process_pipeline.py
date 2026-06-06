@@ -736,7 +736,7 @@ async def _run_tasks(owner_id: str, store) -> str:
 
     # F4: bounded reanalyze sweep — defense in depth for tasks that escaped
     # initial closure (e.g. RC-1: get_tasks_by_thread returning empty in
-    # user_reply, RealStep / cafe124 case 2026-04-30). Pick the oldest open
+    # user_reply, ExampleCorp / examplebiz case 2026-04-30). Pick the oldest open
     # tasks whose analyzed_at (or created_at) is older than the threshold,
     # cap at REANALYZE_CAP per run, run serial via reanalyze_task.
     swept = await _reanalyze_sweep(owner_id, store, tasks)
@@ -749,8 +749,8 @@ async def _run_tasks(owner_id: str, store) -> str:
 
     # F9: cross-contact topic dedup. F8 only catches duplicates that
     # share contact_email or memory blobs; the user's "same problem
-    # arrived via 3 channels from 3 senders" case (e.g. Salamone email
-    # + AiFOS noreply notification + MrCall missed-call alert about
+    # arrived via 3 channels from 3 senders" case (e.g. Smith email
+    # + ExampleOrg noreply notification + MrCall missed-call alert about
     # the SAME safety course) slips past F8 because the three rows
     # have disjoint contact_emails AND disjoint blob ids. F9 sends the
     # whole open list to the LLM in one prompt and lets it cluster by

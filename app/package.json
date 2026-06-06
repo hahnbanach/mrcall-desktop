@@ -4,7 +4,7 @@
   "version": "0.1.34",
   "description": "MrCall Desktop (Electron + React)",
   "main": "out/main/index.js",
-  "author": "Mario Alemi",
+  "author": "Alex Doe",
   "license": "MIT",
   "scripts": {
     "postinstall": "node scripts/patch-electron-name.mjs && node scripts/setup-oauth-secrets.mjs",

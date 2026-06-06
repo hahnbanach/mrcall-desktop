@@ -44,9 +44,9 @@ def _make_wa_row(
                 id=row_id,
                 owner_id=owner,
                 message_id=row_id,
-                chat_jid="393395040816@s.whatsapp.net",
-                sender_jid="393395040816@s.whatsapp.net",
-                sender_name="Carmine",
+                chat_jid="393331234567@s.whatsapp.net",
+                sender_jid="393331234567@s.whatsapp.net",
+                sender_name="John",
                 text=text,
                 media_type=media_type,
                 media_path=media_path,
@@ -103,8 +103,8 @@ async def test_short_voice_transcription_is_not_dropped(fresh_db):
             "text": "[voice]",
             "media_type": "voice",
             "transcription": "Richiamami",
-            "sender_jid": "393395040816@s.whatsapp.net",
-            "sender_name": "Carmine",
+            "sender_jid": "393331234567@s.whatsapp.net",
+            "sender_name": "John",
             "timestamp": "2026-05-20T10:00:00+00:00",
             "is_from_me": False,
             "is_group": False,
@@ -132,8 +132,8 @@ async def test_short_plain_text_still_skipped(fresh_db):
         {
             "id": wa_id,
             "text": "ok",
-            "sender_jid": "393395040816@s.whatsapp.net",
-            "sender_name": "Carmine",
+            "sender_jid": "393331234567@s.whatsapp.net",
+            "sender_name": "John",
             "timestamp": "2026-05-20T10:00:00+00:00",
             "is_from_me": False,
             "is_group": False,
@@ -159,12 +159,12 @@ def test_format_whatsapp_data_uses_transcription_as_body(fresh_db):
 
     out = worker._format_whatsapp_data(
         {
-            "sender_jid": "393395040816@s.whatsapp.net",
-            "sender_name": "Carmine",
+            "sender_jid": "393331234567@s.whatsapp.net",
+            "sender_name": "John",
             "timestamp": "2026-05-20T10:00:00+00:00",
             "text": "[voice]",
-            "transcription": "Ciao Mario, ti richiamo domani per il preventivo.",
+            "transcription": "Ciao Alex, ti richiamo domani per il preventivo.",
         }
     )
-    assert "Ciao Mario, ti richiamo domani per il preventivo." in out
+    assert "Ciao Alex, ti richiamo domani per il preventivo." in out
     assert "[voice]" not in out  # the placeholder must not leak into the envelope

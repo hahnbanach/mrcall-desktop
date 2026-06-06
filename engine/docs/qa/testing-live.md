@@ -100,7 +100,7 @@ For each Zylch task, check:
 | Is priority correct? | HIGH = urgent/time-sensitive, MEDIUM = should do soon | Mispriced (e.g. spam marked HIGH) |
 | Is the description accurate? | Matches email content | Hallucinated details or wrong attribution |
 | Is it deduplicated? | One task per action item | Same situation appears as multiple tasks |
-| Assigned to correct person? | Task is for the user, not for someone in CC | Task created for something Ivan/colleague already handled |
+| Assigned to correct person? | Task is for the user, not for someone in CC | Task created for something Jane/colleague already handled |
 
 For each email that should be a task, check:
 - Did Zylch find it?
@@ -120,53 +120,53 @@ Record:
 ### Ground truth (from Gmail, 3-10 April)
 
 Action required by Mario:
-1. Riccardo Cargnel — update pitch deck with patent
-2. Mohamed Ndiaye — reply to white label inquiry
-3. French caller +33640523977 via MrCall — same prospect, no response yet
-4. Jacobacci — patent extension text overdue
-5. Business Show Media — invoice INV-9142 £341.30 overdue since 24 Mar
-6. Matteo Castoldi (CERN) — declined meeting twice, needs follow-up
-7. Rodrik Cave — subscription payment failed, claims already paid
+1. Daniel Lewis — update pitch deck with patent
+2. Omar Farah — reply to white label inquiry
+3. French caller +39 333 0000000 via MrCall — same prospect, no response yet
+4. Acme IP — patent extension text overdue
+5. Beta Media — invoice INV-0000 £100.00 overdue since 24 Mar
+6. Luca Ferrari (Acme Labs) — declined meeting twice, needs follow-up
+7. Victor Hughes — subscription payment failed, claims already paid
 
-Monitor (Ivan handling):
-8. RealStep SGR — meeting rescheduling (week of 27 Apr proposed)
-9. Cafezal — contract sent, awaiting signed copy
-10. Morettino — cold brew specs/costs, awaiting payment
-11. PanaComm/David Bajza — white label samples ordered
+Monitor (Jane handling):
+8. Example SGR — meeting rescheduling (week of 27 Apr proposed)
+9. Acme — contract sent, awaiting signed copy
+10. Gamma — cold brew specs/costs, awaiting payment
+11. DeltaComm/Chris Walker — white label samples ordered
 
 ### Zylch BEFORE fixes (7 tasks, v0.1.19)
 
-1. Michele Scacciati / RealStep follow-up (HIGH) — true positive
+1. Bob Brown / ExampleCorp follow-up (HIGH) — true positive
 2. Google security alert for Zylch app password (HIGH) — FALSE POSITIVE
-3. Ivan/Cafezal contract monitor (MEDIUM) — true positive
-4. Mohamed Ndiaye white label reply (MEDIUM) — true positive
-5. Ivan/RealStep week of 27 Apr (MEDIUM) — DUPLICATE of #1
+3. Jane/Acme contract monitor (MEDIUM) — true positive
+4. Omar Farah white label reply (MEDIUM) — true positive
+5. Jane/ExampleCorp week of 27 Apr (MEDIUM) — DUPLICATE of #1
 6. MrCall French caller (MEDIUM) — true positive
-7. Riccardo Cargnel pitch deck (MEDIUM) — true positive
+7. Daniel Lewis pitch deck (MEDIUM) — true positive
 
 Score: Precision 71%, Recall 56%. 1 false positive, 1 duplicate, 5 false negatives.
 
 ### Zylch AFTER fixes (14 tasks)
 
 HIGH:
-1. Ivan Marchese — Cafezal/Nomoq slot confirmation
-2. Michela Apostoli — Patent text for PCT extension (Jacobacci)
-3. Michele Scacciati — RealStep SGR meeting follow-up
-4. Rodrik Cave — Payment status, blend change, missing order
+1. Jane Doe — Acme/Beta slot confirmation
+2. Emma Davis — Patent text for PCT extension (Acme IP)
+3. Bob Brown — Example SGR meeting follow-up
+4. Victor Hughes — Payment status, blend change, missing order
 
 MEDIUM:
-5. Credit Control — Business Show Media INV-9142 (overdue)
-6. Custom124 — David Bajza/PanaComm white label quote
-7. Debora Ciccotosto — March payroll documents
-8. Ivan Marchese — Cafezal contract monitor
-9. Ivan Marchese — Morettino deposit follow-up
-10. Mario Alemi — da compilare (self-sent reminder)
+5. Credit Control — Beta Media INV-0000 (overdue)
+6. Custom124 — Chris Walker/DeltaComm white label quote
+7. Rita Romano — March payroll documents
+8. Jane Doe — Acme contract monitor
+9. Jane Doe — Gamma deposit follow-up
+10. Alex Doe — da compilare (self-sent reminder)
 11. MrCall — French caller white label inquiry
-12. Riccardo Cargnel — Pitch deck with patent
-13. Mohamed Ndiaye — White label inquiry reply
+12. Daniel Lewis — Pitch deck with patent
+13. Omar Farah — White label inquiry reply
 
 LOW:
-14. Matteo Castoldi — 3 meeting declines, reschedule
+14. Luca Ferrari — 3 meeting declines, reschedule
 
 Score: Precision 100%, Recall 100%. 0 false positives, 0 duplicates, 0 false negatives.
 
@@ -176,8 +176,8 @@ Score: Precision 100%, Recall 100%. 0 false positives, 0 duplicates, 0 false neg
 2. **Notification filter** — no-reply@, notification@, etc. skipped (fixes Google alert false positive)
 3. **Task dedup by title** — SequenceMatcher >50% similarity prevents duplicates across threads
 4. **Post-discuss default = back** — "Let's discuss" no longer auto-closes tasks
-5. **Hard-coded invoice rule** — 2+ reminders from same sender = MEDIUM task (fixes Business Show)
-6. **Hard-coded decline rule** — 2+ declines from same person = LOW task (fixes Castoldi)
-7. **Case-insensitive DB queries** — from_email comparison uses ilike (fixes Castoldi count=0 bug)
+5. **Hard-coded invoice rule** — 2+ reminders from same sender = MEDIUM task (fixes Beta Media)
+6. **Hard-coded decline rule** — 2+ declines from same person = LOW task (fixes Ferrari)
+7. **Case-insensitive DB queries** — from_email comparison uses ilike (fixes Ferrari count=0 bug)
 8. **Sync default 60 days** — was 7, now catches older emails
 9. **Prompt trainer updated** — no longer blanket-filters invoice reminders or calendar declines

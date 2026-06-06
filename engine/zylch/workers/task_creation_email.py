@@ -8,7 +8,7 @@ instance and returns ``(analyzed, action)`` counts.
 The email branch carries the deepest history of fixes (Fix A through G,
 F4 reanalyze siblings, F7 topical blob siblings, Phase-2 ordering bug
 F5, Fix-D restricted to same-thread candidates after the
-Inverardi/Liuzzi incident). All of that logic moves here verbatim;
+Wilson/Rossi incident). All of that logic moves here verbatim;
 ``self`` is replaced by the explicit ``worker`` parameter.
 """
 
@@ -267,7 +267,7 @@ async def analyze_recent_email_events(
         #     simply doesn't arise — a noreply email's blobs are
         #     just its blobs, not the cross-platform anchor),
         #   - FTS dominance (body text overlap pulled in unrelated
-        #     real-estate entities for a CNIT email),
+        #     real-estate entities for a ACME email),
         #   - threshold tuning per profile (every reading required
         #     calibration on score distribution),
         #   - candidate-cap arbitrariness (8-most-recent was a
@@ -406,7 +406,7 @@ async def analyze_recent_email_events(
     # batch with no recovery until the F4 reanalyze sweep (which is
     # gated by REANALYZE_MIN_AGE_HOURS=24 and capped at 10 tasks/run).
     # Real case 2026-05-04 on profile HxiZh…: thread <0BC008F8…>
-    # (Salamone's "Riscontro Formazione Obbligatoria") got the task
+    # (Smith's "Riscontro Formazione Obbligatoria") got the task
     # created from his Mar 31 mail; the user's Apr 26 reply was on a
     # sibling thread <50C17CA8…> ("Riscontro presente email"). Both in
     # the same batch — the user_reply consumed first, found no task,
@@ -459,8 +459,8 @@ async def analyze_recent_email_events(
 
             # F1: per-recipient fallback iterates To AND Cc. The original
             # code only walked to_email, so a user reply with the contact
-            # in Cc never closed that contact's task (real case: RealStep
-            # thread on cafe124 profile, 2026-04-30).
+            # in Cc never closed that contact's task (real case: ExampleCorp
+            # thread on examplebiz profile, 2026-04-30).
             def _split_addrs(raw) -> list:
                 if not raw:
                     return []
@@ -573,9 +573,9 @@ async def analyze_recent_email_events(
             # F2: previously this branch wrote result.suggested_action
             # into existing_tasks_all[0] even when task_action == "none",
             # turning LLM advisory text ("Keep existing task as-is: …",
-            # "No action needed — Ivan is managing …") into the literal
+            # "No action needed — Jane is managing …") into the literal
             # task description. That corrupted de342a1d / 5c66fa63 on
-            # the cafe124 profile. The LLM has the create/update/close
+            # the examplebiz profile. The LLM has the create/update/close
             # vocabulary; if it picks none we trust it. The email is
             # still marked task_processed via the unconditional
             # _mark_thread_nonuser_processed below so the thread is not
@@ -594,7 +594,7 @@ async def analyze_recent_email_events(
             # contact-only candidates from a different thread are
             # surfaced to the LLM as context but never auto-merged
             # behind a CREATE decision. (Pre-fix incident:
-            # Inverardi/Liuzzi emails overwrote an Occhiaperti task
+            # Wilson/Rossi emails overwrote an Baker task
             # via Fix D firing on an F7 sibling.)
             force_update_target = _pick_force_update_target(existing_tasks_all, thread_task_ids)
             if force_update_target is not None:

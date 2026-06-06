@@ -22,7 +22,7 @@ Complete documentation for Zylch standalone (local CLI sales intelligence tool).
 | [execution-plans/next-features.md](execution-plans/next-features.md) | Backlog: agentic solve, CalDAV, dedup, cleanup, tests |
 | [execution-plans/task-pipeline-overhaul.md](execution-plans/task-pipeline-overhaul.md) | Live: 4-phase plan that landed 2026-05-06 morning (F1–F8 + channel + age sweeps) |
 | [execution-plans/topic-dedup-playbook.md](execution-plans/topic-dedup-playbook.md) | Live: F9 cross-contact topic dedup + diagnostic playbook for "4 task per UN problema" |
-| [execution-plans/fix-task-autoclose-stale.md](execution-plans/fix-task-autoclose-stale.md) | Completed: F1–F4 RealStep / cafe124 fixes (2026-05-01) |
+| [execution-plans/fix-task-autoclose-stale.md](execution-plans/fix-task-autoclose-stale.md) | Completed: F1–F4 ExampleCorp / examplebiz fixes (2026-05-01) |
 
 ## Guides
 

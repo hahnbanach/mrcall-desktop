@@ -18,7 +18,7 @@ from zylch.utils import parse_email_date_to_utc_naive
 
 
 def test_rfc2822_negative_offset_converted_to_utc():
-    """Missive sends from US Central (-0600). Regression case for Tentacools bug."""
+    """Missive sends from US Central (-0600). Regression case for Delta bug."""
     result = parse_email_date_to_utc_naive("Fri, 27 Feb 2026 07:42:27 -0600")
     assert result == datetime(2026, 2, 27, 13, 42, 27)
     assert result.tzinfo is None

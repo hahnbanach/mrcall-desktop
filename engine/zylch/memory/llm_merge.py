@@ -93,7 +93,7 @@ Output ONLY the merged entity in this exact format, nothing else."""
 
 # Cap the number of merge pairs we attempt per /reconsolidate_now call.
 # Each pair is one LLM call, so a profile with many duplicate-name
-# blobs (the Salamone case had 8 PERSON blobs collapsing into 1) burns
+# blobs (the Smith case had 8 PERSON blobs collapsing into 1) burns
 # 7 calls. We cap to bound user-perceived latency on the button.
 RECONSOLIDATION_PAIR_CAP = 50
 

@@ -34,8 +34,8 @@ Profile UID `HxiZh...`, `EMAIL_ADDRESS=you.personal@example.com` (verified via `
 
 - 74 open `action_required` task.
 - ~30 task con `contact_email = notification@transactional.mrcall.ai` (telefonate non richiamate).
-- Task del corso CNIT Salamone (`e30581f3`) ha `sent_in_thread=2` sul thread `<0BC008F8...@example.com>` — l'utente ha già risposto da una settimana.
-- Task Omniaimpianti `cc962e54`: `sent_in_thread=4`. Task Ali Lotia `35b48cc6`: `sent_in_thread=4`. Tutti aperti nonostante user reply pre-esistente.
+- Task del corso ACME Smith (`e30581f3`) ha `sent_in_thread=2` sul thread `<0BC008F8...@example.com>` — l'utente ha già risposto da una settimana.
+- Task AcmeSpa `cc962e54`: `sent_in_thread=4`. Task Sam Park `35b48cc6`: `sent_in_thread=4`. Tutti aperti nonostante user reply pre-esistente.
 - Causa diretta del "non chiude mai": F4 reanalyze sweep era gated dietro `pending_tasks > 0` in `process_pipeline.py:133`. Per profili dove le sent mail recenti sono già `task_processed_at IS NOT NULL`, sweep non parte mai. Fixato in `cc66279`.
 
 ## Bug map (snapshot)
@@ -61,21 +61,21 @@ Tutti identificati durante la sessione del 2026-05-06. La fase indicata è dove 
 | Task | Done quando |
 |------|-------------|
 | Pull su Mac, restart app, click `Update` | sidecar.stderr stampa `[TASK] Reanalyze sweep: N of M eligible (cap=10, min_age_h=1)` |
-| Conta task aperti prima/dopo | almeno il task Salamone primary `e30581f3` chiude. Idealmente Omniaimpianti `cc962e54` e Ali Lotia `35b48cc6` (entrambi `sent_in_thread=4`) anche |
+| Conta task aperti prima/dopo | almeno il task Smith primary `e30581f3` chiude. Idealmente AcmeSpa `cc962e54` e Sam Park `35b48cc6` (entrambi `sent_in_thread=4`) anche |
 | Se NESSUN task chiude pur eligible | indagare in `task_reanalyze.py:_build_user_content` — il prompt LLM non sta convincendo Sonnet a CHIUDERE. Gate per Fase 1 |
 
 **Criterio**: numero open task scende ad almeno 71 (era 74 nel dump). Se sì, procedi. Se no, non ha senso fare altro: prima capisci perché reanalyze decide KEEP.
 
 ## Fase 1 — Stop the bleeding
 
-**Goal**: nessun nuovo duplicato creato da `update`. A regime ogni nuova mail noreply CNIT/AIFOS NON deve generare un task in più.
+**Goal**: nessun nuovo duplicato creato da `update`. A regime ogni nuova mail noreply ACME/ExampleOrg NON deve generare un task in più.
 
 ### 1.1 — Bug E: `_collect` vede tutti i task del contact
 
 `task_creation.py:330` chiama `get_task_by_contact` (singolare → ritorna `.first()`). `noreply@example.com` ha 5 task aperti, l'LLM ne vede 1. Decide UPDATE su quello → gli altri 4 restano duplicati eterni.
 
 - **Change**: sostituire con `get_tasks_by_contact` (plurale, già esiste, `storage.py:2592`). Costruire `existing_tasks_all = thread_tasks + task_by_contact_list` con dedup by id.
-- **Done**: nuova mail noreply CNIT entra → existing_task_context mostra TUTTI i task aperti del contact → LLM sceglie `target_task_id` corretto o NONE/UPDATE invece di CREATE.
+- **Done**: nuova mail noreply ACME entra → existing_task_context mostra TUTTI i task aperti del contact → LLM sceglie `target_task_id` corretto o NONE/UPDATE invece di CREATE.
 
 ### 1.2 — Bug F: `update_task_item` aggiorna `analyzed_at`
 
@@ -89,7 +89,7 @@ Tutti identificati durante la sessione del 2026-05-06. La fase indicata è dove 
 `task_creation.py:854-876`. F7-calendar surface i task esistenti, ma il caller scarta `task_action`/`target_task_id` e chiama `store_task_item` ogni volta. Sui calendar event ricorrenti = task duplicato per ogni occurrence.
 
 - **Change**: replicare la logica di `_collect`/Phase 2 dell'email branch — risolvere `target_task` da `existing_tasks_all` (cal_related), gestire i 4 casi (close/update/create/none), validare `action_required`.
-- **Done**: calendar event sync con summary "Corso CNIT" e cnit-blob match → log mostra `Converting create→update on cal task=...` invece di sempre create.
+- **Done**: calendar event sync con summary "Corso ACME" e acme-blob match → log mostra `Converting create→update on cal task=...` invece di sempre create.
 
 ### 1.4 — Bug C: rimuovere la trap del reset silenzioso
 
@@ -100,10 +100,10 @@ Tutti identificati durante la sessione del 2026-05-06. La fase indicata è dove 
 
 ### 1.5 — Bug D: F7 sui notification senders, ma con threshold elevato
 
-Skip totale dei `noreply/notification/etc.` è troppo grossolano: AIFOS, ISTAT, CNIT-noreply etc. mai dedupati. Ma il caso `MrCall Notification → 35 task non correlati` era reale.
+Skip totale dei `noreply/notification/etc.` è troppo grossolano: ExampleOrg, ExampleGov, ACME-noreply etc. mai dedupati. Ma il caso `MrCall Notification → 35 task non correlati` era reale.
 
-- **Change**: in `task_creation.py:362-453`, rimuovere lo skip incondizionato. Aumentare la soglia per i notification senders (`TOPICAL_MIN_SCORE = 0.50` invece di 0.30 quando `_is_notification`). I task MrCall hanno blob anchor sulla piattaforma stessa con score < 0.5; CNIT/AIFOS/topical real con score > 0.5.
-- **Done**: nuova mail AIFOS noreply su un corso esistente → log mostra `[TASK] F7 topical-sibling tasks added=N`. Il LLM converte create→update su task esistente.
+- **Change**: in `task_creation.py:362-453`, rimuovere lo skip incondizionato. Aumentare la soglia per i notification senders (`TOPICAL_MIN_SCORE = 0.50` invece di 0.30 quando `_is_notification`). I task MrCall hanno blob anchor sulla piattaforma stessa con score < 0.5; ACME/ExampleOrg/topical real con score > 0.5.
+- **Done**: nuova mail ExampleOrg noreply su un corso esistente → log mostra `[TASK] F7 topical-sibling tasks added=N`. Il LLM converte create→update su task esistente.
 
 **Esce dalla Fase 1**: i 70+ task non aumentano più di run in run.
 
@@ -122,7 +122,7 @@ Skip totale dei `noreply/notification/etc.` è troppo grossolano: AIFOS, ISTAT, 
 - **Schema migration**: nuova colonna `task_items.dedup_skip_until` (Integer epoch nullable, applicata via `_apply_column_migrations` come `close_note`).
 - **`tasks.reopen` set `dedup_skip_until = now + 7d`**: F8 esclude i task con skip attivo da entrambi i lati. Niente ping-pong.
 - **Hook**: chiamata dopo `_reanalyze_sweep` in `process_pipeline._run_tasks` e nel nuovo `_reanalyze_only` (introdotto da `cc66279`).
-- **Done**: i 30 task `notification@transactional.mrcall.ai` con call-back diversi vengono raggruppati per `contact_email` → cluster di 30 → Opus dice "tutti diversi, NESSUNO è duplicato" → restano. Cluster Salamone-email + Salamone-call con stesso topical-blob → Opus dice "stesso problema" → uno chiuso.
+- **Done**: i 30 task `notification@transactional.mrcall.ai` con call-back diversi vengono raggruppati per `contact_email` → cluster di 30 → Opus dice "tutti diversi, NESSUNO è duplicato" → restano. Cluster Smith-email + Smith-call con stesso topical-blob → Opus dice "stesso problema" → uno chiuso.
 
 ### 2.2 — Bug H: comandi manuali di cleanup
 
@@ -132,13 +132,13 @@ L'utente vuole un bottone "ripulisci ora", per non aspettare il prossimo `update
 - **App**: pulsante in Settings → "Clean up tasks" / "Reconsolidate memory".
 - **Done**: click → notification stream → "Closed N duplicates across M groups", lista task aggiornata.
 
-### 2.3 — Bug G: capire perché 8 blob "Salamone PERSON"
+### 2.3 — Bug G: capire perché 8 blob "Smith PERSON"
 
-`hybrid_search.py:148` ha `RECONSOLIDATION_THRESHOLD = 0.65`. La `reconsolidation` cerca per CONTENT del nuovo blob, non per ENTITY identifier. Due "Salamone" da mail diverse hanno content diverso → score < 0.65 → blob nuovo invece di merge.
+`hybrid_search.py:148` ha `RECONSOLIDATION_THRESHOLD = 0.65`. La `reconsolidation` cerca per CONTENT del nuovo blob, non per ENTITY identifier. Due "Smith" da mail diverse hanno content diverso → score < 0.65 → blob nuovo invece di merge.
 
-- **Indagine prima** (mezza giornata): inserire log in `_upsert_entity` (`memory.py:160-221`) che stampa per ogni nuovo blob "Salamone" i top-3 candidati con score. Capire perché quello giusto è < 0.65.
-- **Fix probabile**: usare gli `IDENTIFIERS` (Email, Phone) come search query invece del content full. Una mail Salamone include `Email: contact@example.com` — query su quello matcha esattamente il blob esistente.
-- **Done**: nuova mail Salamone → log mostra match 0.85+ con blob esistente → `Reconsolidated blob ... with email ...`. Niente nuovo blob.
+- **Indagine prima** (mezza giornata): inserire log in `_upsert_entity` (`memory.py:160-221`) che stampa per ogni nuovo blob "Smith" i top-3 candidati con score. Capire perché quello giusto è < 0.65.
+- **Fix probabile**: usare gli `IDENTIFIERS` (Email, Phone) come search query invece del content full. Una mail Smith include `Email: contact@example.com` — query su quello matcha esattamente il blob esistente.
+- **Done**: nuova mail Smith → log mostra match 0.85+ con blob esistente → `Reconsolidated blob ... with email ...`. Niente nuovo blob.
 
 ## Fase 3 — Strutturale
 
@@ -153,7 +153,7 @@ Già discussa nel commit di F7 (`a2d6d53`) come "the cleaner long-term architect
 - **Backfill**: `engine/scripts/backfill_email_blobs.py` parsing del campo strutturato `blob.event_description = "Extracted from email <id>"`. Idempotente.
 - **F7 refactor in `_collect`**: usa `Storage.get_blobs_for_email(new_email_id)` → `Storage.get_open_tasks_by_blobs(blobs)`. Niente più `hybrid_search` come bridge.
 - **Skip noreply rimosso completamente**: con index esatto, una mail noreply restituisce solo i SUOI blob, non un anchor di rete. Il rumore del MrCall Notification sparisce a monte.
-- **Done**: esegui backfill → conta `SELECT COUNT(*) FROM email_blobs ≈ N×K` (N email × K blob/email). Su una mail Salamone nuova, log F7 mostra `matched_blobs=3 (via index, not search)`.
+- **Done**: esegui backfill → conta `SELECT COUNT(*) FROM email_blobs ≈ N×K` (N email × K blob/email). Su una mail Smith nuova, log F7 mostra `matched_blobs=3 (via index, not search)`.
 
 ### 3.2 — Tag canale per i task
 

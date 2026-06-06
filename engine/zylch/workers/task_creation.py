@@ -62,9 +62,9 @@ TASK_DECISION_TOOL = {
                     "user's language. Name the real person or subject, "
                     "NOT the email-sender envelope: for an MrCall phone "
                     "call notification use the caller's name (e.g. "
-                    "'Richiamare Luca Festa'), not 'MrCall Notification'. "
-                    "More examples: 'Riattivare corso Carmine Salomone', "
-                    "'Rispondere a proposta Enel'. Required for "
+                    "'Richiamare John Smith'), not 'MrCall Notification'. "
+                    "More examples: 'Riattivare corso John Smith', "
+                    "'Rispondere a proposta Acme'. Required for "
                     "create/update."
                 ),
             },
@@ -98,12 +98,12 @@ def _pick_force_update_target(
     topical-blob siblings or contact-only candidates from a different
     thread, which the LLM is allowed to overrule with CREATE.
 
-    2026-05-13 incident (Inverardi/Liuzzi overwriting an Occhiaperti
+    2026-05-13 incident (Wilson/Rossi overwriting an Baker
     task on support@example.com): Fix D originally fired on
     ``existing_tasks_all[0]`` whenever the list was non-empty. After F7
     started surfacing cross-contact topical siblings into the same
     list, a CREATE on an unrelated customer's email could land on the
-    Occhiaperti task — corrupting contact_email vs suggested_action.
+    Baker task — corrupting contact_email vs suggested_action.
     Restricting Fix D to thread-tasks restores the original intent
     while keeping F7 as pure LLM context.
     """
@@ -162,7 +162,7 @@ class TaskWorker:
 
         Colleagues on the same domain are NOT the user — match is
         always exact. ``EMAIL_ALIASES`` adds secondary addresses the
-        user explicitly owns (e.g. Ivan writing from
+        user explicitly owns (e.g. Jane writing from
         ``carol@example.com`` on a profile keyed under
         ``production@example.com``). Without the alias check, those
         replies showed up as ``CONTACT`` in the thread history and the

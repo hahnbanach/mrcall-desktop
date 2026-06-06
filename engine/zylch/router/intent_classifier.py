@@ -34,7 +34,7 @@ class IntentRouter:
             {
                 "primary_skill": "draft_composer",
                 "context_skills": ["email_triage"],
-                "params": {"contact": "luisa", "type": "reminder"},
+                "params": {"contact": "carol", "type": "reminder"},
                 "confidence": 0.95
             }
         """

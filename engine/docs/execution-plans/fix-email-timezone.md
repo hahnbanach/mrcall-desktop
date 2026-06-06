@@ -83,7 +83,7 @@ Use the product as a user would.
 
 3. **Fresh-sync test**: delete one known row, re-sync, verify correct date.
    ```
-   # delete the Tentacools 14:42 reply row (by gmail_id), then:
+   # delete the Delta 14:42 reply row (by gmail_id), then:
    zylch -p support@example.com sync
    sqlite3 ... "SELECT date FROM emails WHERE message_id_header LIKE '%CAECLDjt9-OHBwsCzvjaMjPWM%';"
    ```
@@ -91,9 +91,9 @@ Use the product as a user would.
 
 4. **Run backfill dry-run** on support@example.com profile. Verify printed before/after for 3–5 known rows.
 
-5. **Apply backfill (real)**. Re-query the Tentacools row. Must now read `13:42:27`.
+5. **Apply backfill (real)**. Re-query the Delta row. Must now read `13:42:27`.
 
-6. **Re-run task detection** on support@example.com (strategy A: delete open tasks + `zylch process`). Verify the Tentacools task is now auto-closed (support replied after the customer's last message).
+6. **Re-run task detection** on support@example.com (strategy A: delete open tasks + `zylch process`). Verify the Delta task is now auto-closed (support replied after the customer's last message).
 
 7. **Regression guard**: add `tests/email/test_date_parsing.py` with three cases:
    - `Fri, 27 Feb 2026 07:42:27 -0600` → stored value `2026-02-27 13:42:27` naive UTC.
@@ -111,7 +111,7 @@ Use the product as a user would.
 6. User runs backfill dry-run, reviews output.
 7. User runs backfill for real (per-profile).
 8. User re-runs task detection per profile (strategy A or B).
-9. User verifies Tentacools task auto-closes — then this plan is done.
+9. User verifies Delta task auto-closes — then this plan is done.
 
 No deploy step. Local CLI.
 

@@ -232,8 +232,8 @@ class BlobSentence(DictMixin, Base):
 #
 # The pair (email_id, blob_id) is the natural key; same for
 # (event_id, blob_id). A single blob may be linked to many emails
-# (the canonical "Carmine Salamone PERSON" blob is referenced by
-# every email Salamone wrote) and vice-versa (one email can extract
+# (the canonical "John Smith PERSON" blob is referenced by
+# every email Smith wrote) and vice-versa (one email can extract
 # multiple entities).
 
 
@@ -298,7 +298,7 @@ class WhatsAppBlob(Base):
 # 2026-05-07 (whatsapp-pipeline-parity, Phase 1a): structured index of
 # identifiers (email / phone / lid) extracted from each PERSON-blob's
 # `#IDENTIFIERS` block. Queried by future cross-channel match logic so
-# a WhatsApp message from +393395... merges into the same blob already
+# a WhatsApp message from +393331... merges into the same blob already
 # carrying that phone from a prior email signature.
 #
 # Phase 1a is additive only: rows are written by the memory worker on

@@ -7,7 +7,7 @@ Prints, for the active profile (or one named on the command line):
   * total blobs and a per-namespace breakdown
   * full-text hits for an arbitrary needle across both stores
 
-Run after a complaint like "the assistant didn't find Carmine Salomone"
+Run after a complaint like "the assistant didn't find John Smith"
 to know quickly whether the answer is "memory pipeline never ran on
 those emails", "ran but extracted nothing", or "person genuinely not
 in the data".

@@ -1,7 +1,7 @@
 ---
 description: |
   Background system that analyzes user conversations to extract persistent persona facts (e.g.,
-  "has a sister named Francesca"). Runs asynchronously, uses LLM for extraction, stores in user's
+  "has a sister named Emma"). Runs asynchronously, uses LLM for extraction, stores in user's
   memory namespace with reconsolidation (merges similar facts, no duplicates). Zylch references
   learned facts proactively in future interactions when relevant.
 ---
@@ -41,19 +41,19 @@ User Persona Learning is a background system that analyzes conversations between
 
 **Conversation:**
 ```
-User: "Scrivi una mail a mia sorella Francesca per ricordarle della cena"
-Zylch: "Certo! Mi serve l'email di Francesca..."
+User: "Scrivi una mail a mia sorella Emma per ricordarle della cena"
+Zylch: "Certo! Mi serve l'email di Emma..."
 User: "contact@example.com"
 ```
 
 **What Zylch Learns:**
-- User has a sister named Francesca
-- Francesca's email is contact@example.com
+- User has a sister named Emma
+- Emma's email is contact@example.com
 
 **Future Interaction:**
 ```
-User: "Manda un messaggio a Francesca"
-Zylch: "Scrivo a tua sorella Francesca (contact@example.com)?"
+User: "Manda un messaggio a Emma"
+Zylch: "Scrivo a tua sorella Emma (contact@example.com)?"
 ```
 
 ---
@@ -102,9 +102,9 @@ User <--> Zylch Agent (main conversation)
 
 | Category | What It Captures | Example |
 |----------|------------------|---------|
-| **relationships** | Family, colleagues, partners | "Ha una sorella Francesca (francesca@email.com)" |
+| **relationships** | Family, colleagues, partners | "Ha una sorella Emma (emma@example.com)" |
 | **preferences** | Communication style, habits | "Preferisce email brevi e dirette" |
-| **work_context** | Role, company, clients | "Sales Manager presso TechCorp" |
+| **work_context** | Role, company, clients | "Sales Manager presso Acme Corp" |
 | **patterns** | Behavioral patterns | "Fa /sync ogni mattina alle 8" |
 
 ### What It Does NOT Learn
@@ -152,7 +152,7 @@ memory.store_memory(
     namespace="user:mario:persona",
     category="relationships",
     context="Family relationship",
-    pattern="Ha una sorella Francesca (email: francesca@email.com)",
+    pattern="Ha una sorella Emma (email: emma@example.com)",
     confidence=0.7,
     force_new=False  # Reconsolidation enabled
 )
@@ -181,8 +181,8 @@ if self.persona_analyzer:
 ```
 user:{owner_id}:persona
   ├── category: "relationships"
-  │   └── "Ha una sorella Francesca (tel: 333..., email: ...)"
-  │   └── "Il suo socio è Marco Bianchi"
+  │   └── "Ha una sorella Emma (tel: 333..., email: ...)"
+  │   └── "Il suo socio è Tom Baker"
   │
   ├── category: "preferences"
   │   └── "Preferisce email brevi e dirette"
@@ -201,18 +201,18 @@ user:{owner_id}:persona
 
 **First mention:**
 ```
-"Ha una sorella Francesca (email: francesca@email.com)"
+"Ha una sorella Emma (email: emma@example.com)"
 confidence: 0.7
 ```
 
 **Second mention (adds phone):**
 ```
-User: "Chiama Francesca al 333-1234567"
+User: "Chiama Emma al 333 0000000"
 ```
 
 **After reconsolidation (similarity > 0.85):**
 ```
-"Ha una sorella Francesca (email: francesca@email.com, tel: 333-1234567)"
+"Ha una sorella Emma (email: emma@example.com, tel: 333 0000000)"
 confidence: 0.8  # Boosted
 ```
 
@@ -228,15 +228,15 @@ The persona is injected into the system prompt in this format:
 **ABOUT THE USER:**
 
 **Personal And Professional Relationships:**
-- Ha una sorella Francesca (francesca@email.com, 333-1234567)
-- Il suo socio è Marco Bianchi (CTO di TechCorp)
+- Ha una sorella Emma (emma@example.com, 333 0000000)
+- Il suo socio è Tom Baker (CTO di Acme Corp)
 
 **Communication And Work Preferences:**
 - Preferisce email brevi e dirette
 - Usa tono informale con colleghi, formale con clienti nuovi
 
 **Professional Context And Role:**
-- Sales Manager presso TechCorp (settore B2B)
+- Sales Manager presso Acme Corp (settore B2B)
 - Top clients: Azienda Alfa, Beta Srl
 
 **Behavioral Patterns And Habits:**
@@ -252,7 +252,7 @@ The system prompt includes instructions for proactive usage:
 **USER PERSONA:**
 You may have access to learned information about the user.
 Use this information PROACTIVELY when relevant:
-- Reference known relationships naturally ("Since Francesca is your sister...")
+- Reference known relationships naturally ("Since Emma is your sister...")
 - Apply known preferences without asking ("I'll keep this email brief as you prefer...")
 - Acknowledge context ("Given your role as sales manager...")
 
@@ -333,7 +333,7 @@ class PersonaAnalyzer:
 
 ### For Users
 
-1. **Be specific**: "Mia sorella Francesca" teaches relationship + name
+1. **Be specific**: "Mia sorella Emma" teaches relationship + name
 2. **Include details**: Email, phone, role when mentioning contacts
 3. **Express preferences**: "Preferisco email brevi" will be remembered
 

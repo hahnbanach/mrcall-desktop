@@ -193,9 +193,9 @@ class SearchLocalEmailsTool(Tool):
                         "type": "string",
                         "description": (
                             "Gmail-style search. Examples: "
-                            "`from:salomone`, "
+                            "`from:smith`, "
                             "`subject:invoice has:attachment`, "
-                            "`carmine -is:read`, "
+                            "`john -is:read`, "
                             "`body:contract after:2025-01-01`, "
                             'subject:"q3 plan". '
                             "Multiple predicates of the same operator "

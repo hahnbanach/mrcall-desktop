@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Zylch installer — one-line install:
-#   curl -sL https://zylchai.com/install.sh | bash
+#   curl -sL https://example.com/install.sh | bash
 #
 set -euo pipefail
 
@@ -29,12 +29,12 @@ esac
 
 BINARY="zylch-${PLATFORM}-${ARCH}"
 INSTALL_DIR="/usr/local/bin"
-URL="https://github.com/malemi/zylch/releases/latest/download/${BINARY}"
+URL="https://github.com/example-owner/zylch/releases/latest/download/${BINARY}"
 
 echo "  Platform: ${PLATFORM} ${ARCH}"
 
 # Get latest version
-VERSION=$(curl -sfL "https://api.github.com/repos/malemi/zylch/releases/latest" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+VERSION=$(curl -sfL "https://api.github.com/repos/example-owner/zylch/releases/latest" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
 if [ -n "$VERSION" ]; then
     echo "  Version:  ${VERSION}"
 else
@@ -48,7 +48,7 @@ TMP="$(mktemp)"
 if command -v curl &>/dev/null; then
     curl -sfL -o "$TMP" "$URL" || {
         echo "  Download failed. No release found for ${BINARY}."
-        echo "  Check: https://github.com/malemi/zylch/releases"
+        echo "  Check: https://github.com/example-owner/zylch/releases"
         echo ""
         echo "  Alternative install (requires Python 3.11+):"
         echo "    pip install zylch"
@@ -57,7 +57,7 @@ if command -v curl &>/dev/null; then
     }
 elif command -v wget &>/dev/null; then
     wget -q -O "$TMP" "$URL" || {
-        echo "  Download failed. Check https://github.com/malemi/zylch/releases"
+        echo "  Download failed. Check https://github.com/example-owner/zylch/releases"
         rm -f "$TMP"
         exit 1
     }

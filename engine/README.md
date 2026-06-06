@@ -6,7 +6,7 @@ Zylch connects your email, WhatsApp, and phone — detects what you need to do, 
 
 ```bash
 # One-line install (no Python needed)
-curl -sL https://raw.githubusercontent.com/malemi/zylch/main/scripts/install.sh | bash
+curl -sL https://raw.githubusercontent.com/example-owner/zylch/main/scripts/install.sh | bash
 
 # Or via pip (requires Python 3.11+)
 pip install zylch
@@ -14,7 +14,7 @@ pip install zylch
 
 Windows:
 ```powershell
-irm https://raw.githubusercontent.com/malemi/zylch/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/example-owner/zylch/main/scripts/install.ps1 | iex
 ```
 
 ## Setup

@@ -46,8 +46,8 @@ def _make_wa_message(
     *,
     owner: str,
     text: str,
-    sender_jid: str = "393395040816@s.whatsapp.net",
-    sender_name: str = "Carmine",
+    sender_jid: str = "393331234567@s.whatsapp.net",
+    sender_name: str = "John",
     is_from_me: bool = False,
     is_group: bool = False,
 ) -> str:
@@ -121,7 +121,7 @@ async def test_process_whatsapp_message_creates_blob_and_writes_links(fresh_db):
     from zylch.storage.storage import Storage
 
     owner = "alice@example.com"
-    wa_id = _make_wa_message(owner=owner, text="Ciao Mario, sono Carmine. Ti scrivo per organizzare il corso sicurezza.")
+    wa_id = _make_wa_message(owner=owner, text="Ciao Alex, sono John. Ti scrivo per organizzare il corso sicurezza.")
 
     worker = _make_worker(owner, llm_merge_returns=[])
 
@@ -129,11 +129,11 @@ async def test_process_whatsapp_message_creates_blob_and_writes_links(fresh_db):
     extracted = (
         "#IDENTIFIERS\n"
         "Entity type: PERSON\n"
-        "Name: Carmine Salamone\n"
-        "Phone: +393395040816\n"
+        "Name: John Smith\n"
+        "Phone: +393331234567\n"
         "\n"
         "#ABOUT\n"
-        "Carmine reached out about the safety course.\n"
+        "John reached out about the safety course.\n"
         "\n"
         "#HISTORY\n"
         "First message via WhatsApp."
@@ -143,9 +143,9 @@ async def test_process_whatsapp_message_creates_blob_and_writes_links(fresh_db):
     ok = await worker.process_whatsapp_message(
         {
             "id": wa_id,
-            "text": "Ciao Mario, sono Carmine. Ti scrivo per organizzare il corso sicurezza.",
-            "sender_jid": "393395040816@s.whatsapp.net",
-            "sender_name": "Carmine",
+            "text": "Ciao Alex, sono John. Ti scrivo per organizzare il corso sicurezza.",
+            "sender_jid": "393331234567@s.whatsapp.net",
+            "sender_name": "John",
             "timestamp": "2026-05-08T10:11:12+00:00",
             "is_from_me": False,
             "is_group": False,
@@ -180,7 +180,7 @@ async def test_process_whatsapp_message_creates_blob_and_writes_links(fresh_db):
             .all()
         )
     kinds_values = {(r.kind, r.value) for r in id_rows}
-    assert ("phone", "+393395040816") in kinds_values
+    assert ("phone", "+393331234567") in kinds_values
 
     # memory_processed_at watermark advanced
     with get_session() as s:
@@ -200,7 +200,7 @@ async def test_process_whatsapp_message_creates_blob_and_writes_links(fresh_db):
 @pytest.mark.asyncio
 async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db):
     """Phase 1b + Phase 2c happy path: an existing PERSON blob with
-    `Phone: +393395040816` in person_identifiers (created during email
+    `Phone: +393331234567` in person_identifiers (created during email
     extraction) should be picked up as the merge target when a WA
     message from the same phone arrives — NO duplicate blob."""
     from zylch.storage.database import get_session
@@ -212,7 +212,7 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
 
     # Pre-seed an "email-derived" blob with a Phone identifier already
     # indexed into person_identifiers. Mirrors what process_email would
-    # leave behind after the user received an email signed by Carmine.
+    # leave behind after the user received an email signed by John.
     pre_blob_id = str(uuid.uuid4())
     with get_session() as s:
         s.add(
@@ -223,9 +223,9 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
                 content=(
                     "#IDENTIFIERS\n"
                     "Entity type: PERSON\n"
-                    "Name: Carmine Salamone\n"
+                    "Name: John Smith\n"
                     "Email: contact@example.com\n"
-                    "Phone: +393395040816\n"
+                    "Phone: +393331234567\n"
                     "\n"
                     "#ABOUT\nFrom email signature.\n"
                 ),
@@ -234,11 +234,11 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
     storage.add_person_identifiers(
         owner,
         pre_blob_id,
-        [("email", "contact@example.com"), ("phone", "+393395040816")],
+        [("email", "contact@example.com"), ("phone", "+393331234567")],
     )
 
     # Now arrive a WhatsApp message from the same phone.
-    wa_id = _make_wa_message(owner=owner, text="Mario, ricordi del corso? Aspetto risposta.")
+    wa_id = _make_wa_message(owner=owner, text="Alex, ricordi del corso? Aspetto risposta.")
 
     # The LLM merge will be asked to merge the new WA-derived entity
     # with the existing blob's content. Return a "merged" string so the
@@ -246,9 +246,9 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
     merged_content = (
         "#IDENTIFIERS\n"
         "Entity type: PERSON\n"
-        "Name: Carmine Salamone\n"
+        "Name: John Smith\n"
         "Email: contact@example.com\n"
-        "Phone: +393395040816\n"
+        "Phone: +393331234567\n"
         "\n"
         "#ABOUT\nFrom email signature.\n"
         "\n"
@@ -259,8 +259,8 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
     extracted = (
         "#IDENTIFIERS\n"
         "Entity type: PERSON\n"
-        "Name: Carmine Salamone\n"
-        "Phone: +393395040816\n"
+        "Name: John Smith\n"
+        "Phone: +393331234567\n"
         "\n"
         "#ABOUT\nWhatsApp follow-up about the course.\n"
         "\n"
@@ -271,9 +271,9 @@ async def test_process_whatsapp_message_merges_into_existing_email_blob(fresh_db
     ok = await worker.process_whatsapp_message(
         {
             "id": wa_id,
-            "text": "Mario, ricordi del corso? Aspetto risposta.",
-            "sender_jid": "393395040816@s.whatsapp.net",
-            "sender_name": "Carmine",
+            "text": "Alex, ricordi del corso? Aspetto risposta.",
+            "sender_jid": "393331234567@s.whatsapp.net",
+            "sender_name": "John",
             "timestamp": "2026-05-08T11:00:00+00:00",
             "is_from_me": False,
             "is_group": False,
@@ -318,8 +318,8 @@ async def test_process_whatsapp_skips_short_text_but_marks_processed(fresh_db):
         {
             "id": wa_id,
             "text": "ok",
-            "sender_jid": "393395040816@s.whatsapp.net",
-            "sender_name": "Carmine",
+            "sender_jid": "393331234567@s.whatsapp.net",
+            "sender_name": "John",
             "timestamp": "2026-05-08T10:11:12+00:00",
             "is_from_me": False,
             "is_group": False,
@@ -354,8 +354,8 @@ async def test_process_whatsapp_marks_processed_when_extractor_returns_empty(fre
         {
             "id": wa_id,
             "text": "Some long enough message that the worker will try to extract from.",
-            "sender_jid": "393395040816@s.whatsapp.net",
-            "sender_name": "Carmine",
+            "sender_jid": "393331234567@s.whatsapp.net",
+            "sender_name": "John",
             "timestamp": "2026-05-08T10:11:12+00:00",
             "is_from_me": False,
             "is_group": False,
@@ -444,18 +444,18 @@ def test_format_whatsapp_data_emits_channel_phone_and_text(fresh_db):
     worker = _make_envelope_worker()
     out = worker._format_whatsapp_data(
         {
-            "sender_jid": "393395040816@s.whatsapp.net",
-            "sender_name": "Carmine",
+            "sender_jid": "393331234567@s.whatsapp.net",
+            "sender_name": "John",
             "timestamp": "2026-05-08T10:11:12+00:00",
-            "text": "Ciao Mario, ricordi del corso?",
+            "text": "Ciao Alex, ricordi del corso?",
         }
     )
     assert "Channel: WhatsApp" in out
-    assert "Carmine" in out
-    assert "+393395040816" in out
+    assert "John" in out
+    assert "+393331234567" in out
     assert "Group: (1-on-1)" in out
-    assert "Phone: +393395040816" in out
-    assert "Ciao Mario, ricordi del corso?" in out
+    assert "Phone: +393331234567" in out
+    assert "Ciao Alex, ricordi del corso?" in out
     # No bogus +<lid> string
     assert "@lid" not in out
 
@@ -488,8 +488,8 @@ def test_format_whatsapp_data_resolves_lid_to_phone_via_contacts(fresh_db):
     _add_wa_contact(
         owner,
         jid="185800503328844@lid",
-        phone="+393395040816",
-        name="Carmine Salamone",
+        phone="+393331234567",
+        name="John Smith",
     )
 
     worker = _make_envelope_worker(owner)
@@ -498,15 +498,15 @@ def test_format_whatsapp_data_resolves_lid_to_phone_via_contacts(fresh_db):
             "sender_jid": "185800503328844@lid",
             "sender_name": "",  # the contact lookup fills this in
             "timestamp": "2026-05-08T10:11:12+00:00",
-            "text": "Ciao Mario, sentiamoci per il corso.",
+            "text": "Ciao Alex, sentiamoci per il corso.",
         }
     )
     assert "Channel: WhatsApp" in out
     # Resolved name appears in the From line, not the bare jid
-    assert "Carmine Salamone" in out
-    assert "+393395040816" in out
+    assert "John Smith" in out
+    assert "+393331234567" in out
     # Both Phone: AND LID: lines emitted — Phase 1 indexes both
-    assert "Phone: +393395040816" in out
+    assert "Phone: +393331234567" in out
     assert "LID: 185800503328844@lid" in out
 
 
@@ -520,8 +520,8 @@ def test_normalise_phone_rejects_lid_shaped_input():
     assert _normalise_phone("185800503328844@lid") is None
     assert _normalise_phone("user@example.com") is None
     # Real phones still parse
-    assert _normalise_phone("+393395040816") == "+393395040816"
-    assert _normalise_phone("00393395040816") == "+393395040816"
+    assert _normalise_phone("+393331234567") == "+393331234567"
+    assert _normalise_phone("00393331234567") == "+393331234567"
 
 
 def test_parse_identifiers_reroutes_lid_in_phone_field_to_lid_kind():
@@ -533,7 +533,7 @@ def test_parse_identifiers_reroutes_lid_in_phone_field_to_lid_kind():
     block = (
         "#IDENTIFIERS\n"
         "Entity type: PERSON\n"
-        "Name: Tania\n"
+        "Name: Nina\n"
         "Phone: 185800503328844@lid\n"
         "\n"
         "#ABOUT\n"

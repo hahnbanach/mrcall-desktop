@@ -846,8 +846,8 @@ class Storage:
     # entity in this new email/WA-message is the same person we already
     # have a blob for, even though the cosine similarity on free-text
     # would miss it" — for example: an email signed with phone
-    # +393395040816 and a WhatsApp message from JID 393395040816@s.whatsapp.net
-    # both produce identifier kind='phone' value='+393395040816'.
+    # +393331234567 and a WhatsApp message from JID 393331234567@s.whatsapp.net
+    # both produce identifier kind='phone' value='+393331234567'.
 
     def add_person_identifiers(
         self,
@@ -1241,8 +1241,8 @@ class Storage:
         Used to find topically-related open tasks across senders / threads:
         the memory worker links blobs to events (emails, calls, WA), and a
         single blob can be referenced by tasks created from very different
-        sources (e.g. a CNIT/training blob shared by a task off Salamone's
-        email, a task off an AIFOS noreply, and a task off an MrCall phone
+        sources (e.g. a ACME/training blob shared by a task off Smith's
+        email, a task off an ExampleOrg noreply, and a task off an MrCall phone
         notification). Surfacing those siblings lets the task-detection LLM
         decide UPDATE/CLOSE/CREATE/NONE with full topical context, not just
         thread + sender.
@@ -1294,7 +1294,7 @@ class Storage:
         """Return thread_ids ≠ primary where user and contact corresponded.
 
         Used by ``reanalyze_task`` to surface cross-thread replies a
-        single-thread reanalyze would miss (real case: Salamone task on
+        single-thread reanalyze would miss (real case: Smith task on
         thread A, user's resolving reply on thread B addressed to the
         same contact, both within the same conversation cluster but
         with different `thread_id` in the DB).

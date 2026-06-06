@@ -28,7 +28,7 @@ def _check_update():
             from zylch import __version__
 
             resp = httpx.get(
-                "https://api.github.com/repos/malemi/zylch" "/releases/latest",
+                "https://api.github.com/repos/example-owner/zylch" "/releases/latest",
                 timeout=3,
             )
             if resp.status_code != 200:
@@ -98,7 +98,7 @@ def _show_update():
                         "bash",
                         "-c",
                         "curl -sfL https://raw.githubusercontent.com"
-                        "/malemi/zylch/main/scripts/install.sh | bash",
+                        "/example-owner/zylch/main/scripts/install.sh | bash",
                     ],
                     check=True,
                 )
@@ -110,7 +110,7 @@ def _show_update():
                 click.echo(
                     "  Update failed. Run manually:\n"
                     "  curl -sL https://raw.githubusercontent"
-                    ".com/malemi/zylch/main/scripts"
+                    ".com/example-owner/zylch/main/scripts"
                     "/install.sh | bash",
                 )
         else:

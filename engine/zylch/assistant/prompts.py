@@ -244,8 +244,8 @@ This provides O(1) lookup from local cache, avoiding expensive 10+ second remote
 - If result has `"not_found": true` → Cascade outward, cheapest first:
   1. **`search_local_emails`** — instant Gmail-style search over the FULL local email archive
      (all synced history, not capped at 1 year). Try the most specific predicate first
-     (`from:salomone`, `body:"Carmine Salomone"`) AND a free-term variant
-     (just `salomone`). The local archive is the cheapest place to confirm
+     (`from:smith`, `body:"John Smith"`) AND a free-term variant
+     (just `smith`). The local archive is the cheapest place to confirm
      whether the person ever exchanged email with the user.
   2. `get_contact` — check if the contact exists in StarChat CRM
   3. `search_provider_emails` — IMAP round-trip; defaults to last 1 year, set
@@ -260,13 +260,13 @@ stored. Before reporting "not found", run UP TO 3 follow-up queries on the
 SAME tool, each varying the previous in exactly one way. Stop early as soon
 as you get hits.
 
-1. **Drop one token.** "Carmine Salomone" → try `carmine` alone, then
-   `salomone` alone. First-name-only catches misspelled-surname cases;
+1. **Drop one token.** "John Smith" → try `john` alone, then
+   `smith` alone. First-name-only catches misspelled-surname cases;
    surname-only catches wrong-first-name cases. Pick the rarer-looking
    token first (uncommon first names; long surnames).
 2. **Vary one letter.** Italian spelling often confuses single/double
    consonants (Rosselli ↔ Roselli) and adjacent vowels (a/o, e/i):
-   `Salomone` → `Salamone`, `Cattaneo` → `Catanneo`. Try the most likely
+   `Romano` → `Ramano`, `Galletti` → `Galetti`. Try the most likely
    single-character substitution.
 3. **Switch surface.** If the name fails, try a fragment you can derive
    from context: an email domain (`from:@example.com`), a phone fragment, a
@@ -274,7 +274,7 @@ as you get hits.
    name). Bare `body:` queries on `search_local_emails` are cheap.
 
 After 3 retries with no hits, STOP. Report verbatim each query you tried
-("I tried `carmine salomone`, `salomone`, `carmine` — all empty") so the
+("I tried `john smith`, `smith`, `john` — all empty") so the
 user can correct a typo in their original request. Don't pretend to have
 exhausted the data when you've only tried one phrasing.
 

@@ -63,7 +63,7 @@ async def memory_reconsolidate_now(params: Dict[str, Any], notify: NotifyFn) -> 
 
     Runs the memory reconsolidation pass on the active profile. The
     pass walks blob entities, merges semantically-equivalent duplicates
-    (same person across multiple "Carmine Salomone PERSON" blobs etc.),
+    (same person across multiple "John Smith PERSON" blobs etc.),
     and returns counts.
 
     Implementation lives in zylch.memory.llm_merge — this RPC is a

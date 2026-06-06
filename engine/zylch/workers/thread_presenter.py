@@ -76,7 +76,7 @@ def parse_user_aliases(raw: Optional[str]) -> "frozenset[str]":
     """Parse the ``EMAIL_ALIASES`` setting into a normalised set.
 
     The setting is a comma-separated free-text string; users will paste
-    addresses with quirky whitespace and casing (``Ivan.Marchese@…``).
+    addresses with quirky whitespace and casing (``Jane.Doe@…``).
     Lowercases, strips, drops empties. Frozen so callers can pass it
     around without worrying about mutation.
     """
@@ -97,7 +97,7 @@ def load_user_aliases_for_owner(owner_id: str) -> "frozenset[str]":
     Never raises — a missing setting / unbootable Settings object just
     means no aliases (degrades to the pre-2026-05-28 strict-match
     behaviour). Caller passes the result to ``build_thread_history`` /
-    ``_is_user_email`` so all turns Ivan sent from a secondary identity
+    ``_is_user_email`` so all turns Jane sent from a secondary identity
     are marked ``USER REPLY ✓``.
     """
     try:
@@ -163,7 +163,7 @@ def build_thread_history(
     for te in thread_emails:
         te_from = (te.from_email or "").lower()
         # USER REPLY ✓ when the address is the profile's primary OR any
-        # configured EMAIL_ALIASES entry — without alias support, Ivan
+        # configured EMAIL_ALIASES entry — without alias support, Jane
         # writing from carol@example.com on a thread keyed
         # under production@example.com gets marked CONTACT and the cap +
         # close-on-user-reply rule both miss.
