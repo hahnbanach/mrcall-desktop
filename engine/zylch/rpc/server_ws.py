@@ -212,6 +212,64 @@ def _warmup() -> None:
         logger.warning(f"[ws] warmup failed (non-fatal): {e}")
 
 
+def _auto_update_enabled() -> bool:
+    """Headless auto-update on/off (AUTO_UPDATE_ENABLED, default yes)."""
+    val = (os.environ.get("AUTO_UPDATE_ENABLED") or "y").strip().lower()
+    return val not in ("n", "no", "false", "0", "off", "")
+
+
+def _auto_update_interval_seconds() -> int:
+    """Interval from AUTO_UPDATE_INTERVAL_MINUTES (default 30, clamped 5..360)."""
+    raw = (os.environ.get("AUTO_UPDATE_INTERVAL_MINUTES") or "30").strip()
+    try:
+        minutes = int(raw)
+    except ValueError:
+        minutes = 30
+    minutes = max(5, min(360, minutes))
+    return minutes * 60
+
+
+async def _auto_update_loop() -> None:
+    """Headless auto-update — the renderer's ``useAutoUpdate``, server-side.
+
+    A ``serve`` daemon with NO GUI attached still syncs mail, builds
+    memory and detects tasks every ``AUTO_UPDATE_INTERVAL_MINUTES``, so
+    replies and new leads land without anyone opening the desktop app.
+    Runs the same pipeline as ``update.run`` / ``zylch update``.
+
+    Single sequential loop ⇒ its own ticks never overlap. Per-tick
+    failures are logged (never swallowed) and the loop keeps running. The
+    memory/task stages need an LLM credential (a BYOK key in the profile
+    ``.env`` or a live Firebase session for proxy mode); the IMAP sync
+    stage runs regardless, so mail still lands headless.
+    """
+    from zylch.rpc.methods import update_run
+
+    def _notify(method: str, params: Dict[str, Any]) -> None:
+        if method == "update.progress":
+            logger.debug(f"[auto-update] {params.get('pct')}% {params.get('message')}")
+
+    await asyncio.sleep(60)  # let warmup + any first handshake settle
+    while True:
+        try:
+            if not _auto_update_enabled():
+                logger.info("[auto-update] disabled via AUTO_UPDATE_ENABLED — skipping tick")
+            else:
+                logger.info("[auto-update] tick — running pipeline headless")
+                result = await update_run({}, _notify)
+                if isinstance(result, dict) and result.get("success"):
+                    logger.info("[auto-update] tick OK")
+                else:
+                    errs = result.get("errors") if isinstance(result, dict) else result
+                    logger.warning(f"[auto-update] tick finished with errors: {errs}")
+        except asyncio.CancelledError:
+            logger.info("[auto-update] cancelled — exiting loop")
+            raise
+        except Exception:
+            logger.exception("[auto-update] tick crashed — will retry next interval")
+        await asyncio.sleep(_auto_update_interval_seconds())
+
+
 async def serve_ws(
     host: Optional[str] = None,
     port: Optional[int] = None,
@@ -271,4 +329,15 @@ async def serve_ws(
             # can connect — independent of the process umask / library default.
             os.chmod(unix_path, 0o660)
             logger.info(f"[ws] chmod 0o660 {unix_path} (group-writable for the reverse-proxy)")
-        await server.serve_forever()
+        # Headless auto-update: keep syncing with no GUI attached.
+        auto_task = asyncio.create_task(_auto_update_loop())
+        logger.info(
+            f"[ws] headless auto-update started "
+            f"(every {_auto_update_interval_seconds() // 60} min, "
+            f"enabled={_auto_update_enabled()})"
+        )
+        try:
+            await server.serve_forever()
+        finally:
+            auto_task.cancel()
+            await asyncio.gather(auto_task, return_exceptions=True)
