@@ -43,17 +43,15 @@ Rules for any agent working in this repo:
 
 ## Install
 
-Zylch is distributed as a **prebuilt binary** via `scripts/install.sh` (curl one-liner).
-The installer downloads from GitHub Releases and puts the binary in `/usr/local/bin/zylch`.
-Re-running the same script upgrades in place. `pip install -e .` is for **dev only**.
+The engine ships as a PyInstaller sidecar bundled inside the **MrCall Desktop**
+app, built in CI from `engine/` on each `v*` tag (see
+`.github/workflows/release.yml`). There is no standalone installer.
+`pip install -e .` is for **dev only**.
 
 ## Quick Reference
 
 ```bash
-# Install / Upgrade
-curl -sL https://raw.githubusercontent.com/example-owner/zylch/main/scripts/install.sh | bash
-
-# Dev mode (contributors only)
+# Dev mode (contributors only) — the engine ships inside MrCall Desktop
 pip install -e .
 
 # Setup

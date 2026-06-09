@@ -4,17 +4,11 @@ Zylch connects your email, WhatsApp, and phone — detects what you need to do, 
 
 ## Install
 
+The engine ships as a PyInstaller sidecar bundled inside the **MrCall Desktop**
+app — it is not installed separately. For local development (Python 3.11+):
+
 ```bash
-# One-line install (no Python needed)
-curl -sL https://raw.githubusercontent.com/example-owner/zylch/main/scripts/install.sh | bash
-
-# Or via pip (requires Python 3.11+)
-pip install zylch
-```
-
-Windows:
-```powershell
-irm https://raw.githubusercontent.com/example-owner/zylch/main/scripts/install.ps1 | iex
+pip install -e .
 ```
 
 ## Setup
