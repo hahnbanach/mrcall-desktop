@@ -20,6 +20,7 @@ import threading
 from typing import Any, Dict
 
 from zylch.rpc.dispatch import dispatch_raw
+from zylch.rpc.reaper import reap_orphans_loop
 
 logger = logging.getLogger(__name__)
 
@@ -196,12 +197,24 @@ async def serve() -> None:
     tasks.add(auto_reconnect_task)
     auto_reconnect_task.add_done_callback(tasks.discard)
 
-    async for line in _read_lines(loop):
-        task = asyncio.create_task(_handle_request(line))
-        tasks.add(task)
-        task.add_done_callback(tasks.discard)
+    # Reap zombie children leaked by the whatsmeow Go c-shared lib (the same
+    # janitor the WS serve daemon runs). The stdio engine loads whatsmeow too
+    # — at boot via _auto_reconnect_whatsapp and on every whatsapp sync — so
+    # without this a long-lived desktop session slowly accrues `[sh] <defunct>`
+    # zombies. Kept OUT of `tasks` because it loops forever: it is cancelled on
+    # exit, not awaited in the drain below.
+    reaper_task = asyncio.create_task(reap_orphans_loop())
 
-    # Drain outstanding handlers before exiting.
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+    try:
+        async for line in _read_lines(loop):
+            task = asyncio.create_task(_handle_request(line))
+            tasks.add(task)
+            task.add_done_callback(tasks.discard)
+
+        # Drain outstanding handlers before exiting.
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+    finally:
+        reaper_task.cancel()
+        await asyncio.gather(reaper_task, return_exceptions=True)
     logger.info("[rpc] server stopped (stdin closed)")
