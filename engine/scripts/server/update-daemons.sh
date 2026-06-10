@@ -32,6 +32,8 @@ UNIT_PREFIX="zylch-server@"
 UNIT_SRC="$ENGINE/scripts/systemd/zylch-server@.service"
 TMPFILES_SRC="$ENGINE/scripts/tmpfiles.d/mrcalld.conf"
 TMPFILES_DST="/etc/tmpfiles.d/mrcalld.conf"
+LOGROTATE_SRC="$ENGINE/scripts/logrotate.d/mrcalld"
+LOGROTATE_DST="/etc/logrotate.d/mrcalld"
 
 DRY=0; PRUNE=0; RESTART_ALL=0
 for a in "$@"; do
@@ -65,6 +67,7 @@ fi
 echo "== 2b. ensure systemd template + tmpfiles are current =="
 run install -m 644 "$UNIT_SRC" "/etc/systemd/system/zylch-server@.service"
 run install -m 644 "$TMPFILES_SRC" "$TMPFILES_DST"
+run install -m 644 "$LOGROTATE_SRC" "$LOGROTATE_DST"
 run systemd-tmpfiles --create "$TMPFILES_DST"
 run systemctl daemon-reload
 

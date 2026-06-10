@@ -1,0 +1,21 @@
+# Rotate the per-profile engine logs of the multi-tenant serve daemons.
+# Installed to /etc/logrotate.d/mrcalld by engine/scripts/server/update-daemons.sh
+# (run by the nightly logrotate.timer).
+#
+# copytruncate is REQUIRED: the Python daemon holds zylch.log open with a
+# logging.FileHandler in append mode and does NOT reopen on rename/SIGHUP.
+# A plain rename+create would leave the daemon writing to the now-unlinked
+# inode and the fresh zylch.log empty — the classic logrotate footgun.
+# copytruncate copies the file then truncates it in place, so the daemon's
+# open fd keeps appending to the same inode.
+/home/mrcalld/.zylch/profiles/*/zylch.log {
+    daily
+    size 50M
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    su mrcalld mrcalld
+}
