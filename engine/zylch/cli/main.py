@@ -177,6 +177,11 @@ def _configure_logging():
         "fastembed",
         "onnxruntime",
         "urllib3",
+        # The Anthropic/OpenAI SDKs DEBUG-log the FULL request body (system
+        # prompt ~10 KB + messages + tools) on every call. Left at DEBUG, a
+        # serve daemon looping on a failing LLM wrote a 1.6 GB zylch.log.
+        "anthropic",
+        "openai",
     ):
         logging.getLogger(noisy).setLevel(logging.ERROR)
 
@@ -188,8 +193,16 @@ def _setup_log_file():
         return
 
     log_path = os.path.join(profile_dir, "zylch.log")
-    handler = logging.FileHandler(
+    # RotatingFileHandler (not plain FileHandler): a long-running `serve`
+    # daemon must never write an unbounded log. 100 MB × 5 backups caps the
+    # on-disk footprint at ~600 MB even if a profile loops on a failing LLM
+    # (a 1.6 GB zylch.log was observed before this cap).
+    from logging.handlers import RotatingFileHandler
+
+    handler = RotatingFileHandler(
         log_path,
+        maxBytes=100 * 1024 * 1024,
+        backupCount=5,
         encoding="utf-8",
     )
     handler.setLevel(logging.DEBUG)

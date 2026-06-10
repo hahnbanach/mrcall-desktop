@@ -152,6 +152,33 @@ async def handle_process(
         if errors_out is not None:
             errors_out.append({"stage": "whatsapp", "error": e})
 
+    # --- Pre-flight LLM health check ───────────────────────────────────
+    # Memory + task detection (and the F4/F8/F9 sweeps) are LLM-bound, and
+    # every one of their dozens of per-item LLM calls catches-and-logs its
+    # OWN failure and continues. So when the LLM is systemically
+    # unreachable — MrCall-credits token expired (401), out of credits
+    # (402), or no provider configured — the run used to report "0 changes,
+    # no errors" while silently doing nothing AND hammering the proxy with
+    # hundreds of doomed calls per tick (a profile logged 31k proxy 401s in
+    # a day). One cheap probe turns that into a SINGLE structured, surfaced
+    # error (humanize_error already maps MrCallAuthError / InsufficientCredits
+    # / "no llm") and lets us SKIP the doomed stages.
+    llm_ok = True
+    try:
+        from zylch.llm.client import make_llm_client
+
+        _probe = make_llm_client()
+        await _probe.create_message(
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+        )
+    except Exception as e:
+        llm_ok = False
+        logger.warning(f"[/process] LLM preflight failed: {type(e).__name__}: {e}")
+        console.print(f"[red]  AI unavailable — skipping memory + tasks: {e}[/red]")
+        if errors_out is not None:
+            errors_out.append({"stage": "llm", "error": e})
+
     # --- Step 3: Memory extraction (email + WhatsApp) ---
     # Phase 2c (whatsapp-pipeline-parity): WhatsApp messages now flow
     # through the same MemoryWorker as emails. The trained prompt is the
@@ -160,7 +187,10 @@ async def handle_process(
     # `person_identifiers` index from Phase 1.
     pending_mem = len(store.get_unprocessed_emails(owner_id))
     pending_wa = len(store.get_unprocessed_whatsapp_messages(owner_id))
-    if pending_mem > 0 or pending_wa > 0:
+    if not llm_ok:
+        console.print("\n[bold cyan][3/5] Memory[/bold cyan] — skipped (AI unavailable)")
+        _p(30, "Memory — skipped (AI unavailable)", None)
+    elif pending_mem > 0 or pending_wa > 0:
         bits = []
         if pending_mem:
             bits.append(f"{pending_mem} emails")
@@ -215,7 +245,10 @@ async def handle_process(
     # it punished the user for clearing tasks manually — every /update
     # silently regenerated the entire backlog. The explicit `--force`
     # flag remains the only way to ask for that reset.
-    if pending_tasks > 0:
+    if not llm_ok:
+        console.print("\n[bold cyan][4/5] Tasks[/bold cyan] — skipped (AI unavailable)")
+        _p(90, "Tasks — skipped (AI unavailable)", None)
+    elif pending_tasks > 0:
         console.print(
             f"\n[bold cyan][4/5] Detecting tasks" f" in {pending_tasks} emails...[/bold cyan]"
         )
