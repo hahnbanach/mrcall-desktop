@@ -19,6 +19,11 @@ type TokenPusher = (info: {
   email: string | null
   idToken: string
   expiresAtMs: number
+  // Firebase REFRESH token (long-lived). Sent alongside the ID token so
+  // the engine can refresh the ID token server-side for headless / remote
+  // operation (used by the WS `auth.refresh` RPC and the local
+  // `account.set_firebase_token` path). Never persisted to disk.
+  refreshToken: string
 }) => Promise<void> | void
 
 let tokenPusher: TokenPusher | null = null
@@ -36,7 +41,8 @@ async function pushToken(user: User): Promise<void> {
         uid: user.uid,
         email: user.email,
         idToken: result.token,
-        expiresAtMs
+        expiresAtMs,
+        refreshToken: user.refreshToken
       })
     }
   } catch (e) {

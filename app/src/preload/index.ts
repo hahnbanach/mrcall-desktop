@@ -499,6 +499,10 @@ const api = {
       email: string | null
       idToken: string
       expiresAtMs: number
+      // Firebase REFRESH token — lets the engine refresh the ID token
+      // server-side for headless / remote operation (WS `auth.refresh`
+      // and the local `account.set_firebase_token` path).
+      refreshToken: string
     }): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('account:pushToken', args) as Promise<{ ok: boolean }>,
     // Push a freshly-issued Firebase ID token from the renderer DIRECTLY

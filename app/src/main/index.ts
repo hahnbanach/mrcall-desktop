@@ -251,6 +251,12 @@ interface CachedToken {
   email: string | null
   idToken: string
   expiresAtMs: number
+  // Firebase REFRESH token (long-lived). Forwarded to the engine so it can
+  // refresh the ID token server-side for headless operation: in REMOTE
+  // mode via the WS `auth.refresh` RPC, in LOCAL mode via
+  // `account.set_firebase_token`. Optional for back-compat with any cached
+  // entry written before this field existed. Never persisted to disk.
+  refreshToken?: string
 }
 const windowTokens = new Map<number, CachedToken>()
 
@@ -403,7 +409,12 @@ function makeWsClient(
     // window. Resolves null until the first `account:pushToken`, which the
     // client handles by surfacing "not signed in" and retrying.
     async () => windowTokens.get(window.id)?.idToken ?? null,
-    profile
+    profile,
+    // getRefreshToken: the long-lived Firebase refresh token, so the WS
+    // client can send it on `auth.refresh` and the engine can refresh the
+    // ID token server-side for headless operation. Null until the renderer
+    // pushes one (older builds didn't include it).
+    async () => windowTokens.get(window.id)?.refreshToken ?? null
   )
   client.on('notification', (msg) => {
     console.log(`[main][w${window.id}][ws] notification method=${msg.method}`)
@@ -456,7 +467,11 @@ async function forwardTokenToLocalEngine(
         uid: token.uid,
         email: token.email,
         id_token: token.idToken,
-        expires_at_ms: token.expiresAtMs
+        expires_at_ms: token.expiresAtMs,
+        // Only forward when present (older cached entries may lack it). The
+        // engine uses it to refresh the ID token server-side for headless
+        // operation.
+        ...(token.refreshToken ? { refresh_token: token.refreshToken } : {})
       },
       15000
     )
@@ -479,7 +494,12 @@ async function testBackendConnection(
   | { ok: true; signedIn: boolean; uid?: string; email?: string | null }
   | { ok: false; code: string; message: string }
 > {
-  const client = new WebSocketRpcClient(url, async () => token.idToken, profile)
+  const client = new WebSocketRpcClient(
+    url,
+    async () => token.idToken,
+    profile,
+    async () => token.refreshToken ?? null
+  )
   return new Promise((resolve) => {
     let settled = false
     const finish = (
@@ -1199,7 +1219,13 @@ function registerIpc(): void {
     'account:pushToken',
     async (
       event,
-      args: { uid: string; email: string | null; idToken: string; expiresAtMs: number }
+      args: {
+        uid: string
+        email: string | null
+        idToken: string
+        expiresAtMs: number
+        refreshToken?: string
+      }
     ): Promise<{ ok: boolean }> => {
       const win = BrowserWindow.fromWebContents(event.sender)
       if (!win) return { ok: false }
@@ -1219,7 +1245,10 @@ function registerIpc(): void {
         expiresAtMs:
           typeof args.expiresAtMs === 'number' && args.expiresAtMs > 0
             ? args.expiresAtMs
-            : Date.now() + 3600_000
+            : Date.now() + 3600_000,
+        ...(typeof args.refreshToken === 'string' && args.refreshToken
+          ? { refreshToken: args.refreshToken }
+          : {})
       }
       windowTokens.set(win.id, cached)
       // LOCAL mode: forward to the engine so set_firebase_token's effect

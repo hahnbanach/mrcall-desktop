@@ -455,6 +455,10 @@ export interface ZylchAPI {
       email: string | null
       idToken: string
       expiresAtMs: number
+      /** Firebase REFRESH token — lets the engine refresh the ID token
+       *  server-side for headless / remote operation (WS `auth.refresh`
+       *  and the local `account.set_firebase_token` path). */
+      refreshToken: string
     }) => Promise<{ ok: boolean }>
     /** Direct in-band push to the engine. Back-compat; prefer pushToken
      *  (which also covers the remote-WS handshake). */

@@ -27,6 +27,9 @@ const RECONNECT_MAX_MS = 15000
 const AUTH_REFRESH_INTERVAL_MS = 30 * 60 * 1000
 
 type GetToken = () => Promise<string | null>
+// Optional getter for the long-lived Firebase refresh token. Returns null
+// when none has been pushed yet (older app builds, or before first signin).
+type GetRefreshToken = () => Promise<string | null>
 
 /**
  * WebSocketRpcClient — the cross-machine transport. Speaks the SAME
@@ -80,7 +83,12 @@ export class WebSocketRpcClient extends EventEmitter implements RpcClient {
   constructor(
     private url: string,
     private getToken: GetToken,
-    private profile: string
+    private profile: string,
+    // Optional: lets the proactive `auth.refresh` include the Firebase
+    // refresh token so the engine can refresh the ID token server-side for
+    // headless operation. Omitted by callers that don't have one (e.g. the
+    // Settings "Test connection" probe may pass a snapshot without it).
+    private getRefreshToken?: GetRefreshToken
   ) {
     super()
   }
@@ -401,8 +409,25 @@ export class WebSocketRpcClient extends EventEmitter implements RpcClient {
         console.warn('[ws] auth refresh skipped — no token')
         return
       }
+      let refreshToken: string | null = null
+      if (this.getRefreshToken) {
+        try {
+          refreshToken = await this.getRefreshToken()
+        } catch (e) {
+          console.warn('[ws] auth refresh getRefreshToken threw', e)
+        }
+      }
       try {
-        await this.call('auth.refresh', { id_token: token }, 15000)
+        await this.call(
+          'auth.refresh',
+          // Include the refresh token only when present, so the engine can
+          // store it and refresh the ID token server-side for headless
+          // operation. Older engines ignore the extra field.
+          refreshToken
+            ? { id_token: token, refresh_token: refreshToken }
+            : { id_token: token },
+          15000
+        )
         console.log('[ws] auth.refresh ok')
       } catch (e) {
         // Non-fatal: if the token already lapsed the engine closes 4401

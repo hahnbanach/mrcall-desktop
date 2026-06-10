@@ -12,7 +12,12 @@ import MrcallView from './views/Mrcall'
 import Onboarding from './views/Onboarding'
 import SignIn from './views/SignIn'
 import { auth } from './firebase/config'
-import { repushTokenForCurrentUser, setupAuthListener, setTokenPusher } from './firebase/authUtils'
+import {
+  refreshAuthToken,
+  repushTokenForCurrentUser,
+  setupAuthListener,
+  setTokenPusher
+} from './firebase/authUtils'
 import { ConversationsProvider } from './store/conversations'
 import { ThreadProvider, useThread } from './store/thread'
 import { TasksProvider } from './store/tasks'
@@ -50,8 +55,8 @@ export async function installEngineTokenPusher(): Promise<boolean> {
   // mode — forwards it into the engine via `account.set_firebase_token`
   // (preserving the pre-Phase-2 effect). This replaces the direct in-band
   // `account.setFirebaseToken` RPC, which could not reach the WS handshake.
-  setTokenPusher(async ({ uid, email, idToken, expiresAtMs }) => {
-    await window.zylch.account.pushToken({ uid, email, idToken, expiresAtMs })
+  setTokenPusher(async ({ uid, email, idToken, expiresAtMs, refreshToken }) => {
+    await window.zylch.account.pushToken({ uid, email, idToken, expiresAtMs, refreshToken })
   })
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -520,6 +525,37 @@ function AppInner(): JSX.Element {
     return off
   }, [])
 
+  // FIX B — break the launch 4401 burst. When the remote WS connection
+  // reports an expired/absent Firebase session, force a fresh ID token in
+  // the renderer (getIdToken(true)) and push it, so the main process's
+  // next reconnect uses a valid token instead of replaying the stale one.
+  // We DON'T decode the JWT in main; the engine's 4401 close (surfaced as
+  // status code 'auth_expired') is the trigger. Guarded so a tight
+  // reconnect loop can't hammer Firebase: at most one refresh in flight,
+  // and a short cooldown between refreshes.
+  useEffect(() => {
+    const COOLDOWN_MS = 30_000
+    let inFlight = false
+    let lastRefreshAtMs = 0
+    const off = window.zylch.onSidecarStatus((s) => {
+      if (s.alive) return
+      if (s.code !== 'auth_expired' && s.code !== 'not_signed_in') return
+      if (inFlight) return
+      const now = Date.now()
+      if (now - lastRefreshAtMs < COOLDOWN_MS) return
+      inFlight = true
+      lastRefreshAtMs = now
+      void refreshAuthToken()
+        .catch((e) => {
+          console.warn('[App] auth_expired token refresh failed:', e)
+        })
+        .finally(() => {
+          inFlight = false
+        })
+    })
+    return off
+  }, [])
+
   // Background auto-Update loop. No-op when settings disable it; never
   // ticks against a locked or absent sidecar. Lives at the AppInner
   // level so it stops cleanly when the window unbinds the profile.
@@ -941,7 +977,7 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
           // the 50-min refresh kicks in. Views that need a live
           // session can recover by calling repushTokenForCurrentUser()
           // themselves (see ConnectGoogleCalendar.ensureEngineSession).
-          setTokenPusher(async ({ uid, email, idToken, expiresAtMs }) => {
+          setTokenPusher(async ({ uid, email, idToken, expiresAtMs, refreshToken }) => {
             try {
               // Out-of-band push to main (canonical Phase-2 path). Main
               // caches it for the remote-WS handshake and forwards it into
@@ -950,7 +986,8 @@ function FirebaseAuthGate({ children }: { children: React.ReactNode }): JSX.Elem
                 uid,
                 email,
                 idToken,
-                expiresAtMs
+                expiresAtMs,
+                refreshToken
               })
             } catch (e) {
               console.warn('[App] account.pushToken push failed:', e)
