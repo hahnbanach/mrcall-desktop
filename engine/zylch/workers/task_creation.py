@@ -392,7 +392,14 @@ class TaskWorker:
         logger.debug(f"[TASK] {formatted_prompt}")
         logger.debug("[TASK] ===== FULL PROMPT END =====")
         logger.debug(f"[TASK] Analyzing {event_type}")
-        logger.debug(f"[TASK] Event data: {event_data_json}")
+        # Redact the email body from this DEBUG breadcrumb — full bodies are
+        # PII and a shared VPS shouldn't keep them in plaintext logs. The LLM
+        # still receives the full body in user_content below; only the log line
+        # is sanitised.
+        _ed_log = dict(event_data)
+        if isinstance(_ed_log.get("body"), str) and _ed_log["body"]:
+            _ed_log["body"] = f"<redacted {len(_ed_log['body'])} chars>"
+        logger.debug(f"[TASK] Event data: {json.dumps(_ed_log, default=str)}")
         logger.debug(f"[TASK] Blob context length: {len(blob_context)}")
         logger.debug(
             f"[TASK] Existing task context: {existing_task_context if existing_task_context else 'None'}"
