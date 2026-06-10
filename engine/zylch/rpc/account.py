@@ -194,7 +194,24 @@ async def auth_refresh(params: Dict[str, Any], notify: NotifyFn) -> Any:
         id_token=id_token,
         expires_at_ms=expires_at_ms,
     )
-    logger.debug(f"[rpc:auth.refresh] uid={uid} expires_at_ms={expires_at_ms}")
+
+    # Persist the refresh token (encrypted) so this profile's headless serve
+    # daemon can mint fresh ID tokens once the WS client disconnects — the
+    # remote (WS) counterpart of the same storage in set_firebase_token. The
+    # dispatcher already redacts `refresh_token` from RPC param logging.
+    refresh_token = params.get("refresh_token")
+    if isinstance(refresh_token, str) and refresh_token:
+        try:
+            from zylch.storage.storage import Storage
+
+            Storage.get_instance().store_firebase_refresh_token(uid, refresh_token)
+        except Exception as e:
+            logger.warning(f"[rpc:auth.refresh] refresh-token store failed: {e}")
+
+    logger.debug(
+        f"[rpc:auth.refresh] uid={uid} expires_at_ms={expires_at_ms} "
+        f"refresh_token={'present' if refresh_token else 'absent'}"
+    )
     return {"ok": True, "uid": uid, "expires_at_ms": expires_at_ms}
 
 
