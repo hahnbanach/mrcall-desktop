@@ -19,12 +19,16 @@ Type=simple
 User=mrcalld
 Group=mrcalld
 Environment=HOME=/home/mrcalld
+# Optional at-rest encryption key (ENCRYPTION_KEY, Fernet) for the stored OAuth
+# / Firebase refresh tokens. The `-` makes it non-fatal if absent (encryption
+# falls back to passthrough). Lives out of git at /etc/mrcalld/env (mode 600).
+EnvironmentFile=-/etc/mrcalld/env
 WorkingDirectory=/home/mrcalld
 # The socket is /run/mrcalld/<uid>.sock. That dir is setgid group `caddy`
 # (engine/scripts/tmpfiles.d/mrcalld.conf), so the socket inherits group
 # `caddy`; UMask=0007 + an explicit chmod(0o660) in server_ws.py make it
 # group-writable so the Caddy reverse-proxy (group caddy) can connect. The
-# socket path derives from the instance name %i — no EnvironmentFile, no port.
+# socket path derives from the instance name %i — no per-user port.
 UMask=0007
 ExecStart=/home/mrcalld/mrcall-desktop/engine/venv/bin/zylch -p %i serve --unix /run/mrcalld/%i.sock
 # Remove the socket when the daemon stops for good (clean disable/prune). The
