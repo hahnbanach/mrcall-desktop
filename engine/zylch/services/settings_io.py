@@ -188,6 +188,16 @@ def update_env(updates: Dict[str, str]) -> List[str]:
             pass
         raise
 
+    # Hot-reload the LIVE process env so a running daemon picks up the change
+    # immediately — no restart. The startup load_dotenv populated os.environ
+    # once, and runtime readers (update_run, email_actions, …) use
+    # os.environ.get(...); without this, a changed EMAIL_PASSWORD / setting
+    # stays stale in memory until the daemon restarts — the root cause of the
+    # IMAP "Invalid credentials" seen after a correct-password change
+    # (2026-06-10). os.environ holds the unquoted value, matching load_dotenv.
+    for key, value in updates.items():
+        os.environ[key] = value
+
     applied = list(updates.keys())
     logger.info(f"[settings_io] updated profile={profile} keys={sorted(applied)}")
     return applied
