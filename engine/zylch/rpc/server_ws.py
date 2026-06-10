@@ -29,6 +29,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from http import HTTPStatus
 from typing import Any, Dict, Optional, Tuple
 
@@ -42,6 +43,16 @@ logger = logging.getLogger(__name__)
 # mid-session. The client should refresh its token and reconnect.
 # 4000-4999 is the private-use range per RFC 6455.
 WS_CLOSE_AUTH_EXPIRED = 4401
+
+# Don't tear the socket down the instant the token hits its `exp`. Most
+# launch-time RPCs (inbox, tasks, narration, …) are LOCAL and don't need the
+# Firebase token at all, so an immediate 4401 fails them for nothing and the
+# renderer reports a burst of "Session expired" (×2 with two windows). A small
+# grace lets in-flight local calls finish and gives the renderer's refresh a
+# moment to land before we force a reconnect. Auth-requiring calls (credits /
+# StarChat) still 401 at the proxy and surface their own error. NOTE: the root
+# fix is client-side (force-refresh a near-expiry token before connecting).
+WS_AUTH_GRACE_MS = 30_000
 
 
 def _expected_owner_uid() -> str:
@@ -181,8 +192,8 @@ async def _handle_connection(connection) -> None:
             # cached session is gone or expired, close 4401 so the client
             # refreshes and reconnects.
             sess = get_session()
-            if sess is None or sess.is_expired():
-                logger.info(f"[ws] closing uid={uid}: firebase token expired")
+            if sess is None or sess.is_expired(int(time.time() * 1000) - WS_AUTH_GRACE_MS):
+                logger.info(f"[ws] closing uid={uid}: firebase token expired (past grace)")
                 await connection.close(WS_CLOSE_AUTH_EXPIRED, "firebase token expired")
                 break
             task = asyncio.create_task(_handle_one(raw))
