@@ -2232,6 +2232,45 @@ class Storage:
             logger.debug("  No rows found")
             return None
 
+    def store_firebase_refresh_token(self, owner_id: str, refresh_token: str) -> None:
+        """Persist the Firebase refresh token (encrypted) so a headless daemon
+        can mint fresh ID tokens past the ~1h ID-token lifetime. Stored as an
+        OAuthToken row (provider='firebase') on the same encrypted-at-rest
+        path as the Google/Microsoft credentials."""
+        from zylch.utils.encryption import encrypt
+
+        data = {
+            "owner_id": owner_id,
+            "provider": "firebase",
+            "email": "",  # OAuthToken.email is NOT NULL; identity lives in owner_id
+            "credentials": encrypt(json.dumps({"refresh_token": refresh_token})),
+            "updated_at": datetime.now(timezone.utc),
+        }
+        with get_session() as session:
+            stmt = sqlite_insert(OAuthToken).values(**data)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["owner_id", "provider"],
+                set_={k: v for k, v in data.items() if k not in ("owner_id", "provider")},
+            )
+            session.execute(stmt)
+            logger.info(f"Stored Firebase refresh token for owner {owner_id}")
+
+    def get_firebase_refresh_token(self, owner_id: str) -> Optional[str]:
+        """Return the decrypted Firebase refresh token for ``owner_id``, or None."""
+        from zylch.utils.encryption import decrypt
+
+        row = self.get_oauth_token(owner_id, "firebase")
+        if not row:
+            return None
+        creds = row.get("credentials")
+        if not creds:
+            return None
+        try:
+            return json.loads(decrypt(creds)).get("refresh_token") or None
+        except Exception as e:
+            logger.warning(f"[storage] could not decode firebase refresh token: {e}")
+            return None
+
     def get_google_token(self, owner_id: str) -> Optional[str]:
         """Get Google OAuth token data (base64-encoded JSON, decrypted)."""
         creds = self.get_provider_credentials(owner_id, "google")

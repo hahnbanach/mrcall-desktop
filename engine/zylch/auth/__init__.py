@@ -19,6 +19,7 @@ would be defense-in-depth but would require shipping Firebase's public
 keys; it is out of scope for the initial integration.
 """
 
+from .refresh import ensure_fresh_session, exchange_refresh_token
 from .session import (
     FirebaseSession,
     NoActiveSession,
@@ -32,6 +33,8 @@ __all__ = [
     "FirebaseSession",
     "NoActiveSession",
     "clear_session",
+    "ensure_fresh_session",
+    "exchange_refresh_token",
     "get_session",
     "require_session",
     "set_session",

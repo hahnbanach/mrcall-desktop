@@ -66,9 +66,24 @@ async def account_set_firebase_token(params: Dict[str, Any], notify: NotifyFn) -
         raise ValueError("email, when provided, must be a string")
 
     set_session(uid=uid, email=email, id_token=id_token, expires_at_ms=expires_at_ms)
+
+    # Persist the refresh token (encrypted) so a headless daemon can mint
+    # fresh ID tokens past the ~1h ID-token lifetime. Optional — older
+    # clients don't send it (the session still works while connected). The
+    # dispatcher already redacts `refresh_token` from RPC param logging.
+    refresh_token = params.get("refresh_token")
+    if isinstance(refresh_token, str) and refresh_token:
+        try:
+            from zylch.storage.storage import Storage
+
+            Storage.get_instance().store_firebase_refresh_token(uid, refresh_token)
+        except Exception as e:
+            logger.warning(f"[rpc:account.set_firebase_token] refresh-token store failed: {e}")
+
     logger.debug(
         f"[rpc:account.set_firebase_token] uid={uid} "
-        f"email={email!r} expires_at_ms={expires_at_ms}"
+        f"email={email!r} expires_at_ms={expires_at_ms} "
+        f"refresh_token={'present' if refresh_token else 'absent'}"
     )
     return {"ok": True}
 

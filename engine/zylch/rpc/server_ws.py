@@ -257,6 +257,18 @@ async def _auto_update_loop() -> None:
                 logger.info("[auto-update] disabled via AUTO_UPDATE_ENABLED — skipping tick")
             else:
                 logger.info("[auto-update] tick — running pipeline headless")
+                # Refresh the Firebase ID token from the stored refresh token
+                # so headless credits-mode survives past the ~1h ID-token life.
+                # No-op when the cached token is still fresh or when no refresh
+                # token was ever pushed; never fatal to the tick.
+                try:
+                    from zylch.auth import ensure_fresh_session
+
+                    owner = os.environ.get("OWNER_ID", "")
+                    if owner:
+                        await asyncio.to_thread(ensure_fresh_session, owner)
+                except Exception as e:
+                    logger.warning(f"[auto-update] session refresh failed (non-fatal): {e}")
                 result = await update_run({}, _notify)
                 if isinstance(result, dict) and result.get("success"):
                     logger.info("[auto-update] tick OK")

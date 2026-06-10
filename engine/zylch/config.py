@@ -121,6 +121,15 @@ class Settings(BaseSettings):
         env="FIREBASE_PROJECT_ID",
         description="Firebase project ID for verifying ID tokens on the WS backend",
     )
+    # Firebase Web API key — PUBLIC (it identifies the project and is shipped
+    # in the desktop renderer's firebase config). Used only to exchange a
+    # stored refresh token for a fresh ID token via the Secure Token API, so
+    # a headless serve daemon survives past the ~1h ID-token lifetime.
+    firebase_web_api_key: str = Field(
+        default="AIzaSyDTaGASuYL5ZEW5YUaJvOa3DN-7LSaXn8g",
+        env="FIREBASE_WEB_API_KEY",
+        description="Firebase Web API key for the securetoken refresh exchange",
+    )
 
     # LLM models
     default_model: str = Field(
