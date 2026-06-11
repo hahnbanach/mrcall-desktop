@@ -163,11 +163,22 @@ def _build_user_content(
             "  * If the conversation moved on and the original suggested "
             "action is now stale (different ask, different deadline), "
             "choose UPDATE with a fresh suggested_action.\n"
+            "  * If the existing suggested_action (or its draft text) "
+            "CONFLICTS with the operator's standing instructions (USER "
+            "NOTES / OPERATING RULES in your system prompt) — e.g. it "
+            "promises immediate action where the notes require asking "
+            "for clarification first, or it impersonates a person — "
+            "choose UPDATE and rewrite it to comply. The standing "
+            "instructions outrank whatever the task said before.\n"
             "  * Otherwise choose KEEP."
         )
     else:
         parts.append(
-            "(No thread history available — base decision on the existing " "task fields alone.)"
+            "(No thread history available — base decision on the existing "
+            "task fields alone. If the existing suggested_action conflicts "
+            "with the operator's standing instructions (USER NOTES / "
+            "OPERATING RULES in your system prompt), choose UPDATE and "
+            "rewrite it to comply.)"
         )
     return "\n\n".join(parts)
 
@@ -317,6 +328,20 @@ async def reanalyze_task(
         "task is still actionable, already done, or needs an update. Use the "
         "thread history to decide."
     )
+    # Same personal-data section task_creation appends (OPERATING RULES +
+    # USER_NOTES + secret instructions). Without it, a reanalysis evaluates
+    # and REWRITES suggested_action blind to the operator's standing
+    # instructions — the user edits USER_NOTES, clicks update on a task,
+    # and nothing changes (observed 2026-06-11 on support@).
+    try:
+        from zylch.services.solve_constants import get_personal_data_section
+
+        personal_section = get_personal_data_section(owner_id=owner_id)
+    except Exception:
+        logger.exception("[reanalyze_task] get_personal_data_section failed")
+        personal_section = ""
+    if personal_section:
+        system_text += personal_section
     system = [
         {
             "type": "text",

@@ -449,9 +449,22 @@ def get_personal_data_section(owner_id: Optional[str] = None) -> str:
     if data:
         parts.append("USER PERSONAL DATA:\n" + "\n".join(data))
 
+    # USER_NOTES gets the same binding-imperative framing as the learned
+    # OPERATING RULES, and is placed at the TOP of the section. A plain
+    # trailing "USER NOTES:" block loses to urgency salience ("VIP wrote
+    # 2 minutes ago!") and to style imitated from the contact's blob
+    # history — observed: drafts signed as a person and promising instant
+    # action despite explicit notes forbidding both.
     notes = os.environ.get("USER_NOTES", "")
-    if notes:
-        parts.append(f"USER NOTES:\n{notes}")
+    notes_block = (
+        "USER NOTES — standing instructions from the operator. They are "
+        "BINDING and override your defaults, any urgency you perceive, and "
+        "any style or behaviour inferred from past emails or memory: when a "
+        "note conflicts with sounding helpful, accommodating, or with how "
+        "things were done before, follow the note.\n" + notes
+        if notes
+        else ""
+    )
 
     secret = os.environ.get("USER_SECRET_INSTRUCTIONS", "")
     if secret:
@@ -462,6 +475,8 @@ def get_personal_data_section(owner_id: Optional[str] = None) -> str:
             " directly):\n" + secret,
         )
 
+    if notes_block:
+        parts.insert(0, notes_block)
     if owner_id:
         rules_block = get_operating_rules_block(owner_id)
         if rules_block:

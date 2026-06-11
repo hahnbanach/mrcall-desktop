@@ -19,10 +19,12 @@ model's judgment rather than auto-merging on cluster shape alone.
 
 Reopen protection: ``Storage.reopen_task_item`` sets
 ``dedup_skip_until = now + 7d``. A task with that timestamp in the
-future is excluded from BOTH the candidate side (won't be closed
-again) and the keeper-comparison side (won't pull other tasks into a
-cluster). This prevents ping-pong between user manual reopen and
-sweep auto-close.
+future cannot be CLOSED by the sweep (prevents ping-pong between user
+manual reopen and sweep auto-close) but still participates in
+clustering and may be picked as keeper — otherwise a reopened task
+shields its own fresh duplicates from merging. Identical skip_until
+values shared by >= BULK_STAMP_MIN_TASKS tasks are treated as a bulk
+stamp (not user-generated) and disregarded with a WARNING.
 """
 
 from __future__ import annotations
@@ -98,6 +100,16 @@ DEDUP_SKIP_DAYS = 7
 # stale phone tasks) to prune the long tail.
 MAX_CLUSTER_FOR_ARBITER = 12
 
+# Bulk-stamp detector: `dedup_skip_until` is written by exactly one code
+# path (`Storage.reopen_task_item`, one task per user click), so two
+# legitimate reopens can share an epoch second only by extreme
+# coincidence. When >= this many open tasks carry the IDENTICAL
+# skip_until value, the protection was not produced by user reopens
+# (observed 2026-06-11 on support@: all 28 open tasks stamped with the
+# same epoch second by an unidentified out-of-process writer) — the
+# sweep disregards it, loudly, instead of going blind for 7 days.
+BULK_STAMP_MIN_TASKS = 5
+
 
 
 def _canonical_contact(email: Any) -> str | None:
@@ -159,6 +171,19 @@ def build_clusters(tasks: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
         for i in range(1, len(ids)):
             uf.union(ids[0], ids[i])
 
+    # (a2) by shared sources.thread_id — two open tasks born from the SAME
+    # email thread are duplicates by construction (real case: two "Simona
+    # Restelli nuovo problema appuntamenti" tasks 8 minutes apart on one
+    # thread). Deterministic signal, no arbiter ambiguity about it.
+    by_thread: Dict[str, List[str]] = {}
+    for tid, t in by_id.items():
+        th = ((t.get("sources") or {}).get("thread_id") or "").strip()
+        if th:
+            by_thread.setdefault(th, []).append(tid)
+    for ids in by_thread.values():
+        for i in range(1, len(ids)):
+            uf.union(ids[0], ids[i])
+
     # (b) by blob overlap >= BLOB_OVERLAP_MIN
     blobs_by_task: Dict[str, Set[str]] = {}
     for tid, t in by_id.items():
@@ -211,6 +236,11 @@ def _build_arbiter_prompt(cluster: List[Dict[str, Any]]) -> str:
         "30 different people the user has not yet called back → distinct "
         "(different real-world subjects funnelled through the same "
         "notification address). Do NOT merge.",
+        "  * The same customer complaining REPEATEDLY about their "
+        "assistant misbehaving (\"it messed up again\", new incident "
+        "mails every day or two) → ONE support workstream, not N tasks. "
+        "Merge into the most recent / most informative one — handling "
+        "the latest complaint necessarily handles the relationship.",
         "",
         "If duplicates, pick the keeper:",
         "  - prefer the most informative reason / suggested_action;",
@@ -250,31 +280,56 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
     store = Storage.get_instance()
     tasks = store.get_task_items(owner_id, action_required=True, limit=10000)
 
-    # Filter out tasks under reopen-protection — both as candidates
-    # (won't be closed) and as cluster anchors (won't pull others in).
+    # Reopen-protection semantics: a protected task cannot be CLOSED by
+    # this sweep (anti ping-pong with a user's manual reopen), but it
+    # still participates in clustering and may be chosen as keeper —
+    # otherwise a reopened task shields its own fresh duplicates from
+    # ever merging (observed: 6 open tasks for one contact, sweep blind).
     now = _now_epoch()
 
-    def _under_skip(t: Dict[str, Any]) -> bool:
+    def _skip_val(t: Dict[str, Any]) -> int | None:
         v = t.get("dedup_skip_until")
         try:
-            return v is not None and int(v) > now
+            iv = int(v) if v is not None else None
         except (TypeError, ValueError):
-            return False
+            return None
+        return iv if iv is not None and iv > now else None
 
-    active = [t for t in tasks if not _under_skip(t)]
-    skipped_count = len(tasks) - len(active)
+    # Bulk-stamp detector: identical skip_until on >= BULK_STAMP_MIN_TASKS
+    # tasks cannot come from per-click user reopens — disregard those
+    # protections entirely (see constant docstring; 2026-06-11 incident).
+    skip_counts: Dict[int, int] = {}
+    for t in tasks:
+        sv = _skip_val(t)
+        if sv is not None:
+            skip_counts[sv] = skip_counts.get(sv, 0) + 1
+    bulk_values = {v for v, n in skip_counts.items() if n >= BULK_STAMP_MIN_TASKS}
+    if bulk_values:
+        logger.warning(
+            f"[dedup] bulk reopen-protection stamp detected and DISREGARDED: "
+            f"{sorted((v, skip_counts[v]) for v in bulk_values)} "
+            f"(identical skip_until on >= {BULK_STAMP_MIN_TASKS} tasks — "
+            f"not user-generated; see reopen_task_item logging)"
+        )
 
-    clusters = build_clusters(active)
+    def _protected(t: Dict[str, Any]) -> bool:
+        sv = _skip_val(t)
+        return sv is not None and sv not in bulk_values
+
+    skipped_count = sum(1 for t in tasks if _protected(t))
+
+    clusters = build_clusters(tasks)
     if not clusters:
         logger.debug(
-            f"[dedup] no clusters of size >= 2 (active_open={len(active)} "
-            f"skipped={skipped_count})"
+            f"[dedup] no clusters of size >= 2 (open={len(tasks)} "
+            f"close_protected={skipped_count})"
         )
         return {
             "clusters_examined": 0,
             "clusters_with_dups": 0,
             "tasks_closed": 0,
             "skipped_recently_reopened": skipped_count,
+            "bulk_stamp_disregarded": len(bulk_values),
             "no_llm": False,
         }
 
@@ -289,6 +344,7 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
             "clusters_with_dups": 0,
             "tasks_closed": 0,
             "skipped_recently_reopened": skipped_count,
+            "bulk_stamp_disregarded": len(bulk_values),
             "no_llm": True,
         }
 
@@ -415,6 +471,16 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
             tid = t.get("id")
             if tid == keeper_id or not tid:
                 continue
+            if _protected(t):
+                # User-reopened within the protection window: judged a
+                # duplicate, but the user's explicit reopen outranks the
+                # arbiter — leave it open, it expires from protection in
+                # <= DEDUP_SKIP_DAYS anyway.
+                logger.info(
+                    f"[dedup] NOT closing {str(tid)[:12]} (duplicate of "
+                    f"{str(keeper_id)[:12]} but under reopen-protection)"
+                )
+                continue
             note = DEDUP_NOTE_TEMPLATE.format(keeper_id=keeper_id)
             ok = store.complete_task_item(owner_id, tid, note=note)
             if ok:
@@ -438,6 +504,7 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
         "skipped_recently_reopened": skipped_count,
         "skipped_oversize": arbiter_skipped_oversize,
         "aborted_overload": arbiter_aborted_overload,
+        "bulk_stamp_disregarded": len(bulk_values),
         "no_llm": False,
     }
     logger.info(f"[dedup] sweep complete: {summary}")

@@ -3824,6 +3824,14 @@ class Storage:
             import time as _time
 
             skip_until = int(_time.time() + 7 * 24 * 3600)
+            # INFO on purpose: dedup_skip_until has exactly one writer (this
+            # method) yet a bulk identical-epoch stamp appeared on every open
+            # task with no tasks.reopen RPC in the log (2026-06-11, support@).
+            # If a stamp ever shows up again without a matching line here,
+            # the writer is OUTSIDE the engine (direct SQLite access).
+            logger.info(
+                f"[reopen] task {task_id} reopened; dedup_skip_until={skip_until}"
+            )
             with get_session() as session:
                 count = (
                     session.query(TaskItem)
