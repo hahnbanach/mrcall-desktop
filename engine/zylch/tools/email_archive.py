@@ -297,6 +297,23 @@ class EmailArchiveManager:
         body_plain = msg.get("body_plain", msg.get("body", ""))
         body_html = msg.get("body_html")
 
+        # Stopgap (2026-06): MrCall's product auto-replies (from support@, the
+        # "MrCall. 📩 …" template) carry NO RFC-3834 auto headers, so the
+        # header-only detector above misses them and they read as "the user
+        # replied" → silently closing customer tasks. A literal sentinel was
+        # added to the FIRST LINE of that template; match it case-insensitively,
+        # tolerating both the "auto-reply" and "auto-replay" spelling and a
+        # hyphen/space/no separator. The proper fix is the product emitting
+        # Auto-Submitted on those mails; tracked separately.
+        if not is_auto_reply and body_plain:
+            import re as _re
+
+            _first_line = next(
+                (ln.strip() for ln in body_plain.splitlines() if ln.strip()), ""
+            )
+            if _re.search(r"\bauto[\s\-]?repl(?:ay|y)\b", _first_line, _re.I):
+                is_auto_reply = True
+
         return {
             "id": msg_id,
             "thread_id": msg.get("thread_id", ""),
