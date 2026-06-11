@@ -25,7 +25,7 @@ from zylch.storage.database import get_session
 from zylch.storage.models import Blob
 from zylch.memory import HybridSearchEngine
 from zylch.memory.hybrid_search import SearchResult
-from zylch.services.solve_constants import get_operating_rules_block
+from zylch.services.solve_constants import get_personal_data_section
 
 logger = logging.getLogger(__name__)
 
@@ -383,11 +383,13 @@ class EmailerAgent(SpecializedAgent):
         # Build prompt context
         context_text = build_prompt_context(context)
 
-        # Always-on binding rules (same framing as the solve/chat path).
-        # Placed at the very top so they outrank the trained persona and
-        # the model's default politeness.
-        rules_block = get_operating_rules_block(self.owner_id)
-        rules_prefix = f"{rules_block}\n\n---\n\n" if rules_block else ""
+        # Always-on binding rules + personal data + USER_NOTES (+ secret
+        # instructions) — the SAME section the solve/chat paths inject, so
+        # user-level guidance (identity, signature policy, language) cannot
+        # drift between generation paths. Placed at the very top so it
+        # outranks the trained persona and the model's default politeness.
+        personal_block = get_personal_data_section(self.owner_id)
+        rules_prefix = f"{personal_block}\n\n---\n\n" if personal_block else ""
 
         # Check for trained prompt (personalized style)
         trained_prompt = self._get_trained_prompt()
