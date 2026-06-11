@@ -34,7 +34,9 @@ def owner(monkeypatch):
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # asyncio.run creates a fresh loop per call — immune to loop state
+    # other tests in the suite may have closed or replaced.
+    return asyncio.run(coro)
 
 
 def _notify(method, params):  # noqa: ARG001 — unused test stub
