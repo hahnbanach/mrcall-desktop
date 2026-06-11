@@ -1897,6 +1897,16 @@ for _name, _fn in _MRCALL_METHODS.items():
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
 
+# Outreach campaigns — durable state for operator-driven outreach
+# (mrcall-cs / support sessions): campaign.create/list/add_contact/
+# contacts/update_contact. None of these send anything.
+from zylch.rpc.campaign_actions import METHODS as _CAMPAIGN_METHODS  # noqa: E402
+
+for _name, _fn in _CAMPAIGN_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
 # Maintenance RPCs — manual triggers for the dedup sweep + memory
 # reconsolidation pass. These are the "Clean up tasks" /
 # "Reconsolidate memory" buttons in Settings.

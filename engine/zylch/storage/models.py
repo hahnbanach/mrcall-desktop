@@ -716,3 +716,70 @@ class WhatsAppContact(DictMixin, Base):
     push_name = Column(Text)
     last_message_at = Column(DateTime)
     synced_at = Column(DateTime, default=_utcnow)
+
+
+# -------------------------------------------------------------------
+# CAMPAIGNS (outreach driven by mrcall-cs / support sessions)
+# -------------------------------------------------------------------
+
+
+class Campaign(DictMixin, Base):
+    """One outreach campaign: a brief + a set of contacts with state.
+
+    Lives in the engine DB (not in any satellite repo's SQLite) so the
+    state survives across sessions and is visible to every consumer of
+    this profile. Written via the `campaign.*` RPC methods.
+    """
+
+    __tablename__ = "campaigns"
+
+    id = Column(
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
+    )
+    owner_id = Column(Text, nullable=False, index=True)
+    name = Column(Text, nullable=False)
+    brief = Column(Text)  # the campaign instructions, verbatim
+    status = Column(Text, default="open")  # open | closed
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class CampaignContact(DictMixin, Base):
+    """One recipient inside a campaign, with full audit trail.
+
+    `state` lifecycle: drafted -> approved -> sent -> replied / bounced.
+    `skipped` (with `verdict` carrying the reason) for contacts the
+    legitimacy filter excluded. `dossier` stores the research snapshot
+    (threads / CRM / web findings) the draft was based on.
+    """
+
+    __tablename__ = "campaign_contacts"
+    __table_args__ = (
+        UniqueConstraint(
+            "campaign_id",
+            "email",
+            name="campaign_contact_unique",
+        ),
+    )
+
+    id = Column(
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
+    )
+    owner_id = Column(Text, nullable=False, index=True)
+    campaign_id = Column(String(36), nullable=False, index=True)
+    email = Column(Text, nullable=False)
+    uid = Column(Text)  # firebase uid, when known
+    stratum = Column(Text)  # active | ex | test_only | stalled | ...
+    verdict = Column(Text)  # legit | skip:<reason>
+    language = Column(Text)
+    dossier = Column(JSON, default=dict)
+    draft_subject = Column(Text)
+    draft_body = Column(Text)
+    state = Column(Text, default="drafted", index=True)
+    message_id = Column(Text)  # outbound Message-ID once sent
+    sent_at = Column(DateTime)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
