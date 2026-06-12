@@ -18,9 +18,10 @@ logger = logging.getLogger(__name__)
 # Matches a line that STARTS with "[YYYY-MM-DD HH:MM]" or "[YYYY-MM-DD]"
 # — the role-marker prefixes emitted by build_thread_history and
 # build_whatsapp_thread_history. Used by `is_last_turn_user_reply` to
-# walk backwards through a rendered thread without confusing role lines
-# with body content. Compiled once at module load.
-_ROLE_LINE_RE = re.compile(r"^\[\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?\]")
+# find role lines without confusing them with body content; the capture
+# groups feed the newest-turn timestamp comparison. Compiled once at
+# module load.
+_ROLE_LINE_RE = re.compile(r"^\[(\d{4}-\d{2}-\d{2})(?:\s+(\d{2}:\d{2}))?\]")
 
 
 # Regex patterns for quoted-history stripping (module-level, compiled once)
@@ -289,28 +290,45 @@ def build_whatsapp_thread_history(
 
 
 def is_last_turn_user_reply(thread_history_text: str) -> bool:
-    """Tell whether the most recent non-auto turn in a rendered thread
-    history is the user's reply.
+    """Tell whether the chronologically newest non-auto turn in a rendered
+    thread history is the user's reply.
 
-    The check walks role-marker lines (those starting with the bracketed
-    ISO date emitted by :func:`build_thread_history` /
-    :func:`build_whatsapp_thread_history`) from newest to oldest, skips
-    ``AUTO-REPLY`` lines (server auto-acks aren't engagement), and stops
-    at the first real turn. Returns True only when that turn is a
-    ``USER REPLY ✓``. Regex is intentional and safe here: the input is
-    OUR OWN structured presentation, not free-form prose.
+    The input may be a single thread OR a primary thread followed by
+    ``--- RELATED THREAD ---`` sibling sections (``reanalyze_task``).
+    Each section is chronological internally, but the last line of the
+    TEXT belongs to whichever sibling happens to be rendered last — so
+    "walk backwards, stop at the first role line" judged an arbitrary
+    thread's last turn, not the newest message. Real case (2026-06-12,
+    support@): a contact's fresh question in the primary thread was
+    outvoted by an old user reply at the bottom of a sibling section and
+    the urgency cap demoted the task to low five sweeps in a row.
+
+    Instead, parse the bracketed timestamp on every role line and judge
+    the newest non-``AUTO-REPLY`` one (server auto-acks aren't
+    engagement). Same-minute ties resolve to the later line in the text
+    (within a section, rendering order is chronological). Returns True
+    only when that newest turn is a ``USER REPLY ✓``. Regex is
+    intentional and safe here: the input is OUR OWN structured
+    presentation, not free-form prose.
     """
     if not thread_history_text:
         return False
-    # Lines start with "[YYYY-MM-DD HH:MM]" — we never emit a bracketed
-    # date outside a role marker, so this is a clean filter.
-    for line in reversed(thread_history_text.splitlines()):
-        if not _ROLE_LINE_RE.match(line):
+    best_key: "Optional[tuple[str, int]]" = None
+    best_line: Optional[str] = None
+    for idx, line in enumerate(thread_history_text.splitlines()):
+        m = _ROLE_LINE_RE.match(line)
+        if not m:
             continue
         if "AUTO-REPLY" in line:
             continue
-        return "USER REPLY ✓" in line
-    return False
+        # "YYYY-MM-DD HH:MM" — ISO order == lexicographic order, so the
+        # string key compares correctly; date-only lines sort as 00:00.
+        ts = f"{m.group(1)} {m.group(2) or '00:00'}"
+        key = (ts, idx)
+        if best_key is None or key > best_key:
+            best_key = key
+            best_line = line
+    return best_line is not None and "USER REPLY ✓" in best_line
 
 
 def cap_urgency_for_silent_followup(
