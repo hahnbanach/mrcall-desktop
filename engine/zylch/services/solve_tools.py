@@ -628,38 +628,82 @@ def _send_sms(
     store,
     owner_id: str,
 ) -> str:
-    """Send SMS via MrCall/StarChat."""
+    """Send an SMS via the MrCall credits proxy (mrcall-agent -> Vonage).
+
+    Routes through ``POST {MRCALL_PROXY_URL}/api/desktop/sms/send`` with the
+    signed-in user's Firebase ID token (header ``auth:``, no Bearer — same
+    convention as the LLM proxy). Billed to the unified CALLCREDIT pool.
+
+    Replaces the old direct StarChat ``/mrcall/v1/sms/send`` call, which
+    targeted a route that never existed on StarChat (it 404'd). ``store`` /
+    ``owner_id`` are kept for dispatch-signature compatibility; the proxy
+    scopes everything by the Firebase session.
+    """
     phone = args.get("phone_number", "")
     message = args.get("message", "")
     if not phone or not message:
         return "Missing phone_number or message"
 
+    from zylch.auth.session import get_session
+
+    sess = get_session()
+    if sess is None:
+        return "Sign in to MrCall to send SMS (no active session)."
+
+    import httpx
+
+    from zylch.config import settings
+
+    url = f"{settings.mrcall_proxy_url.rstrip('/')}/api/desktop/sms/send"
     try:
-        creds = store.get_provider_credentials(
-            owner_id,
-            "mrcall",
-        )
-        if not creds or not creds.get("access_token"):
-            return "MrCall not connected. Run zylch init."
-
-        import httpx
-
-        from zylch.config import settings
-
-        url = f"{settings.mrcall_base_url.rstrip('/')}" f"/mrcall/v1/sms/send"
         response = httpx.post(
             url,
-            headers={
-                "auth": creds["access_token"],
-                "Content-Type": "application/json",
-            },
-            json={"to": phone, "text": message},
+            headers={"auth": sess.id_token, "Content-Type": "application/json"},
+            json={"phone_number": phone, "message": message},
             timeout=30,
         )
-        response.raise_for_status()
-        return f"SMS sent to {phone}"
     except Exception as e:
+        logger.error(f"[send_sms] transport error to proxy: {e}")
         return f"SMS failed: {e}"
+
+    if response.status_code == 200:
+        cost = seg = None
+        try:
+            data = response.json()
+            cost = data.get("cost_credits")
+            seg = data.get("segments")
+        except Exception:
+            pass
+        suffix = ""
+        if cost is not None:
+            suffix = f" ({cost} credits"
+            if isinstance(seg, int) and seg > 1:
+                suffix += f", {seg} parts"
+            suffix += ")"
+        return f"SMS sent to {phone}{suffix}"
+    if response.status_code == 402:
+        topup = ""
+        try:
+            topup = response.json().get("topup_url", "") or ""
+        except Exception:
+            pass
+        return "Out of MrCall credits — top up to send SMS" + (f": {topup}" if topup else ".")
+    if response.status_code == 401:
+        return "MrCall sign-in expired — sign in again to send SMS."
+    if response.status_code == 429:
+        return "Too many SMS requests — wait a moment and retry."
+    detail = ""
+    try:
+        body = response.json()
+        detail = body.get("detail") or body.get("error") or ""
+    except Exception:
+        detail = (response.text or "")[:200]
+    logger.warning(f"[send_sms] proxy {response.status_code}: {detail}")
+    return (
+        f"SMS not sent ({response.status_code}): {detail}"
+        if detail
+        else f"SMS not sent ({response.status_code})"
+    )
 
 
 # ─── Document reading ────────────────────────────────
