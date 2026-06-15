@@ -12,6 +12,7 @@ from .turn_context import new_turn_id, get_turn_id
 from ..tools.base import Tool, ToolResult, ToolStatus
 from ..agents.base import BaseConversationalAgent
 from ..services.solve_constants import get_personal_data_section
+from ..services.channel_status import get_channel_status_block
 from ..services.task_executor import APPROVAL_TOOLS
 
 # Type alias for approval callback:
@@ -200,7 +201,10 @@ class ZylchAIAgent(BaseConversationalAgent):
         # invalidate the cached prefix.
         now = datetime.now()
         volatile_suffix = (
-            "\n\n[CURRENT DATE/TIME — " f"{now.strftime('%A, %B %d, %Y')}, {now.strftime('%H:%M')}]"
+            "\n\n[CURRENT DATE/TIME — "
+            f"{now.strftime('%A, %B %d, %Y')}, {now.strftime('%H:%M')}]"
+            "\n\n"
+            f"{get_channel_status_block()}"
         )
 
         # Create message with tool support (with current date/time)
