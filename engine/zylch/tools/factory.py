@@ -26,6 +26,7 @@ from .email_archive import EmailArchiveManager
 from .email_sync import EmailSyncManager
 from ..assistant.models import ModelSelector
 
+from .sms_tools import SendSMSTool
 from .call_tools import InitiateCallTool, ListMrCallAssistantsTool
 from .whatsapp_tools import (
     SearchWhatsAppTool,
@@ -221,6 +222,10 @@ class ToolFactory:
         # MrCall configuration tools removed — desktop is a consumer of
         # MrCall via StarChat, not a configurator. Configuration lives in
         # the dashboard / `mrcall-agent` repo.
+
+        # SMS tool (1 tool) — sends via the MrCall credits proxy
+        tools.append(SendSMSTool(session_state=session_state))
+        logger.info("SMS tool initialized (MrCall credits proxy)")
 
         # Call tools (1 tool)
         if starchat:
