@@ -313,6 +313,14 @@ class EmailArchiveManager:
             )
             if _re.search(r"\bauto[\s\-]?repl(?:ay|y)\b", _first_line, _re.I):
                 is_auto_reply = True
+            # The legacy Italian product auto-reply opens with the literal
+            # greeting "Ciao MrCaller!" (no RFC-3834 headers, no English
+            # sentinel). Real human replies from the mailbox open with
+            # "Buongiorno" or "Ciao <customer name>" — never "Ciao MrCaller"
+            # — so this opener is a safe, distinctive marker. (Operator
+            # request 2026-06-15; backfilled the historical rows separately.)
+            elif _first_line.lower().startswith("ciao mrcaller"):
+                is_auto_reply = True
 
         return {
             "id": msg_id,
