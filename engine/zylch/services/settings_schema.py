@@ -47,6 +47,20 @@ SETTINGS_SCHEMA: List[SettingsField] = [
             "app."
         ),
     },
+    {
+        "key": "SMS_BUSINESS_ID",
+        "label": "SMS billing business",
+        "type": "text",
+        "group": "LLM",
+        "optional": True,
+        "help": (
+            "Which business's credits to bill for SMS you send. Required if "
+            "your account can see more than one business (e.g. an admin "
+            "account, or you manage several assistants) — otherwise the "
+            "server refuses to guess. Leave blank if you have a single "
+            "business."
+        ),
+    },
     # ─── Email (IMAP) ────────────────────────────────────────
     {
         "key": "EMAIL_ADDRESS",

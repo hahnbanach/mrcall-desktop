@@ -228,6 +228,21 @@ the Firebase ID token in the bare `auth:` header (same convention as
 
 Both return the proxy payload verbatim — `{ "sender": string, "business_id": string }` — or `{ "error": "auth_expired" }` on a 401 (renderer refreshes the token and retries). No Firebase session → `require_session()` raises. Engine: `engine/zylch/rpc/sms_actions.py` (registered in `methods.py`). Client: `window.zylch.sms.getSender()` / `setSender(sender)` (`app/src/preload/index.ts`), backing the SMS-sender card in `views/Settings.tsx`.
 
+**Which business is billed / configured (`SMS_BUSINESS_ID`, 2026-06-16).**
+SMS send + sender read/write target a specific business. mrcall-agent's
+`resolve_business_id` is now **deterministic**: it bills/uses the
+`business_id` the client sends (the profile **`SMS_BUSINESS_ID`** setting,
+in `engine/zylch/config.py` + `settings_schema`), validated against the
+caller's visible set. If the caller can see **more than one** business (an
+admin token like `support@`, or an owner with several assistants) and sends
+no `business_id`, mrcall-agent returns **400 `business_id_required`** rather
+than guess; a not-visible id → **403**. The engine sends `SMS_BUSINESS_ID`
+in the `/api/desktop/sms/send` body (`zylch/tools/sms_send.py`); set it in
+the profile for any multi-business / admin account. Background: the old
+"first business from the JWT" mis-billed an arbitrary customer — see
+`mrcall-agent/docs/desktop-credits-proxy.md` and
+`~/hb/docs/known-issues-and-solutions.md`.
+
 ### `tasks.solve(task_id, instructions?)`
 
 Agentic loop on a single task. Builds the SOLVE_SYSTEM_PROMPT with

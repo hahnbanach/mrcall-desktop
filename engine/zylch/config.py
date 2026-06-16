@@ -105,6 +105,19 @@ class Settings(BaseSettings):
             " (POST /api/desktop/llm/proxy + GET /api/desktop/llm/balance)"
         ),
     )
+    sms_business_id: str = Field(
+        default="",
+        env="SMS_BUSINESS_ID",
+        description=(
+            "Which business's CALLCREDIT pool to bill for SMS sent from this "
+            "profile. Sent to POST /api/desktop/sms/send and validated "
+            "server-side against the caller's visible businesses. REQUIRED when "
+            "the account can see more than one business (an admin token like "
+            "support@, or an owner with several assistants) — without it the "
+            "server refuses to guess (400) rather than bill an arbitrary one. "
+            "An owner with a single business can leave it blank."
+        ),
+    )
     mrcall_credits_model: str = Field(
         default="claude-sonnet-4-5",
         env="MRCALL_CREDITS_MODEL",
