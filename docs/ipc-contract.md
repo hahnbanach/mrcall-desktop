@@ -211,6 +211,23 @@ credits toggle) on mount and on every window `focus` event so a top-up
 done in another tab is reflected when the user returns. Preload binding
 at `app/src/preload/index.ts` has a 15 s timeout.
 
+### `sms.get_sender()` / `sms.set_sender(sender)`
+
+Read/write the **SMS sender** (`SMS_FROM`, the alphanumeric "from" shown to
+recipients), used by the credits-proxy `send_sms` path. It is a **per-business
+StarChat variable stored server-side** — NOT the profile `.env`. Both forward
+the Firebase ID token in the bare `auth:` header (same convention as
+`account.balance`) to mrcall-agent, which proxies StarChat:
+
+- `sms.get_sender()` → `GET {MRCALL_PROXY_URL}/api/desktop/sms/sender`
+- `sms.set_sender(sender)` → `PUT …/api/desktop/sms/sender` with `{sender}`
+
+| Param | Type | Required | Notes |
+|-------|------|----------|-------|
+| `sender` | string | yes (set) | Trimmed, truncated to **≤11 chars** server-side. Empty/whitespace → `ValueError` (JSON-RPC error). |
+
+Both return the proxy payload verbatim — `{ "sender": string, "business_id": string }` — or `{ "error": "auth_expired" }` on a 401 (renderer refreshes the token and retries). No Firebase session → `require_session()` raises. Engine: `engine/zylch/rpc/sms_actions.py` (registered in `methods.py`). Client: `window.zylch.sms.getSender()` / `setSender(sender)` (`app/src/preload/index.ts`), backing the SMS-sender card in `views/Settings.tsx`.
+
 ### `tasks.solve(task_id, instructions?)`
 
 Agentic loop on a single task. Builds the SOLVE_SYSTEM_PROMPT with

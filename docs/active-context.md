@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: d01a04fc4a86e6d3c59a0ab646c23bdf47bcb6c9
+doc_baseline_commit: 2596dcd1fd1a206b5597c70186d5541b003ccd40
 doc_baseline_date: 2026-06-16
 description: |
   Cross-cutting state of mrcall-desktop — things that span engine ↔ app
