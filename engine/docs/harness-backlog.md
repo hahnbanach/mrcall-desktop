@@ -4,6 +4,20 @@ Enforcement gaps, missing tooling, and documentation debt.
 
 ## Open
 
+- [ ] **No cold-import smoke for the daemon's load chain (discovered 2026-06-16).**
+  - `tools/factory.py` carried `from .sms_tools import SendSMSTool` while
+    `sms_tools.py` was untracked/deleted — a broken import on `main` that only
+    surfaced when a deploy's `git clean` removed the stray copy, then
+    crash-looped **all 6 prod daemons** (`ModuleNotFoundError` at `serve`
+    startup). Nothing in CI imports the `serve` chain (`rpc.server_ws` →
+    `rpc.methods` → `tools.factory` → …), so a missing/renamed module sails to
+    prod.
+  - Action: a CI step that runs `python -c "import zylch.rpc.server_ws,
+    zylch.rpc.methods, zylch.tools.factory, zylch.services.solve_tools"` (cold
+    import) on every push; pairs with the existing "no CI for engine
+    lint/pytest" gap. A `git ls-files`-vs-imports check would also catch
+    importing an untracked module.
+
 - [ ] **No test for the secret-redactor `rpc/dispatch._redact_params` (discovered 2026-06-05).**
   - It masks `id_token` / `api_key` / etc. out of the DEBUG `[rpc] method=…
     params=…` line (stderr → renderer narration → Anthropic request logs). A
