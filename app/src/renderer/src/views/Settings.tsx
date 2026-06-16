@@ -337,14 +337,19 @@ function SMSSenderCard(): JSX.Element {
       try {
         const r = await window.zylch.sms.getSender()
         if (cancelled) return
-        if ('error' in r) {
-          setMsg({ kind: 'err', text: 'Sign-in expired — sign in again.' })
-        } else {
-          setSaved(r.sender ?? '')
-          setSender(r.sender ?? '')
+        // Loading the current sender is best-effort. If the RPC/endpoint
+        // isn't reachable or the token isn't ready, just show an empty
+        // editable field — don't shout. The real "not configured" signal
+        // is the 409 at send time; an actual save failure is surfaced on
+        // the explicit Save action below. (Mario 2026-06-16.)
+        const current = 'error' in r ? '' : (r.sender ?? '')
+        setSaved(current)
+        setSender(current)
+      } catch {
+        if (!cancelled) {
+          setSaved('')
+          setSender('')
         }
-      } catch (e) {
-        if (!cancelled) setMsg({ kind: 'err', text: errorMessage(e) })
       } finally {
         if (!cancelled) setLoading(false)
       }
