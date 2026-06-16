@@ -98,6 +98,21 @@ def send_sms_via_proxy(phone: str, message: str) -> SmsSendOutcome:
             pass
         msg = "Out of MrCall credits — top up to send SMS" + (f": {topup}" if topup else ".")
         return SmsSendOutcome(False, msg, status_code=402)
+    if sc == 409:
+        # sms_sender_not_configured — the business has no SMS_FROM set. Surface
+        # the server's guidance verbatim (no "(409)" noise).
+        detail = ""
+        try:
+            detail = resp.json().get("detail") or ""
+        except Exception:
+            pass
+        return SmsSendOutcome(
+            False,
+            detail
+            or "Your SMS sender isn't set up yet — configure your SMS sender "
+            "(SMS_FROM) before sending SMS.",
+            status_code=409,
+        )
     if sc == 429:
         return SmsSendOutcome(
             False, "Too many SMS requests — wait a moment and retry.", status_code=429
