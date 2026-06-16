@@ -200,6 +200,16 @@ sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh --prun
 - **Server clock must be ~correct.** Firebase ID-token verification checks
   `exp`; a skewed clock rejects valid tokens. `timedatectl` should report
   synchronized.
+- **Never open a live profile DB as a non-`mrcalld` user — not even
+  read-only.** `sqlite3 'file:.../zylch.db?mode=ro'` run as your login user
+  creates a `zylch.db-shm` owned by *you*; the daemon then can't write the
+  WAL and every write dies with `attempt to write a readonly database` (the
+  `.db` itself looks fine — check the `-wal`/`-shm` owners). For diagnostics,
+  copy the DB out first, or read via `sudo -u mrcalld sqlite3 <db>`
+  (`?immutable=1` only on a copy — it ignores the WAL, so it shows a stale
+  snapshot of a live DB). Recovery: `chown mrcalld:mrcalld` the `-wal`/`-shm`
+  (safe when `-wal` is 0 bytes = nothing pending) and `systemctl restart` the
+  unit.
 
 ## Agent runbook — exact commands
 

@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: 2657b8731188307413ac63623aa3dc2731b00443
-doc_baseline_date: 2026-06-05
+doc_baseline_commit: d01a04fc4a86e6d3c59a0ab646c23bdf47bcb6c9
+doc_baseline_date: 2026-06-16
 description: |
   Cross-cutting state of mrcall-desktop — things that span engine ↔ app
   or the repo as a whole (JSON-RPC contract drift, release pipeline,
@@ -28,6 +28,7 @@ description: |
 
 | Date | What | Spans | Refs |
 |---|---|---|---|
+| 2026-06-15 | **support@ auto-responder incident + `send_sms` on MrCall credits.** Two coupled engine bugs (Italian `Ciao MrCaller!` auto-reply mis-classified + multi-thread urgency-cap judging the wrong turn) starved the task list; both fixed, 138 rows backfilled, `pmscasevacanze` recovery verified live. Separately `send_sms` now bills the unified CALLCREDIT pool via `mrcall-agent`'s `/api/desktop/sms/send` (was a deleted-`sms_tools` broken import that crash-looped all 6 daemons). Engine detail in [`../engine/docs/active-context.md`](../engine/docs/active-context.md); incident in `~/hb/docs/known-issues-and-solutions.md`. | engine + ops + server | `b889eb8` `170cae7` `70172c9..d01a04f` |
 | 2026-06-05 | **Multi-profile routing — LIVE.** `mrcalld` service user + per-uid Unix sockets (`serve --unix`) + static Caddy `path_regexp` + idempotent `update-daemons.sh` (discover / enable / restart / `--prune`). `<prod-uid>` migrated `mal`→`mrcalld` (data intact), multi-profile proven on one URL; `server_ws.py` socket `chmod 0o660` + stale-`unlink`; unit `ExecStopPost`. App unchanged. `remote-backend.md` rewritten. | engine + ops + docs | [multi-profile-routing.md](execution-plans/multi-profile-routing.md) |
 | 2026-06-04 | **Remote-backend deploy via git + docs.** Engine deploys/updates by `git clone`/`git pull` → `~/mrcall-desktop/engine` (profile stays rsync — private); operator guide + agent runbook in `docs/remote-backend.md`; README local-first quickstart. Also: 6 stale engine tests removed (suite green). | ops + docs + engine | [`remote-backend.md`](remote-backend.md) |
 | 2026-06-02 | **Cross-machine transport — Phase 1–3b live** (`wss://desktop.mrcall.ai`, no tunnel). Engine `serve --ws`/`--unix` + shared `rpc/dispatch.py` + Firebase-JWT gate (`rpc/server_ws.py`, `rpc/firebase_auth.py`, `auth.refresh`/4401); app `WebSocketRpcClient` (base URL + `/ws/<uid>`, `account:pushToken` token flow, `BackendLocationCard`); VPS deploy = `zylch-server@<uid>` systemd + Caddy/LE. (Multi-profile per-uid sockets → landed 2026-06-05.) | engine + app + IPC + ops | [cross-machine-transport.md](execution-plans/cross-machine-transport.md) |
