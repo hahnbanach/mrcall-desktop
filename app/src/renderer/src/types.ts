@@ -490,6 +490,14 @@ export interface ZylchAPI {
       | { error: 'auth_expired' }
     >
   }
+  sms: {
+    /** Per-business SMS sender (SMS_FROM, <=11 chars) — the `from` used by
+     *  /api/desktop/sms/send. Backed by mrcall-agent -> StarChat. */
+    getSender: () => Promise<{ sender: string; business_id?: string } | { error: 'auth_expired' }>
+    setSender: (
+      sender: string
+    ) => Promise<{ sender: string; business_id?: string } | { error: 'auth_expired' }>
+  }
   mrcall: {
     listMyBusinesses: (params?: {
       offset?: number

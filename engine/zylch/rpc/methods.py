@@ -1954,3 +1954,12 @@ for _name, _fn in _SETUP_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
+
+# SMS sender (SMS_FROM) — the desktop Settings field reads/writes the
+# per-business StarChat variable via mrcall-agent /api/desktop/sms/sender.
+from zylch.rpc.sms_actions import METHODS as _SMS_METHODS  # noqa: E402
+
+for _name, _fn in _SMS_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn

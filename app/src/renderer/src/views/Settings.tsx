@@ -201,6 +201,13 @@ export default function Settings(): JSX.Element {
 
       <section className="mb-6">
         <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
+          SMS
+        </h2>
+        <SMSSenderCard />
+      </section>
+
+      <section className="mb-6">
+        <h2 className="text-sm font-semibold uppercase text-brand-grey-80 mb-3 border-b pb-1">
           Maintenance
         </h2>
         <MaintenanceCard />
@@ -310,6 +317,138 @@ const TOPUP_URL = 'https://dashboard.mrcall.ai/plan'
 // owns its own Apply button that writes the config and then restarts the
 // window's client (`sidecar.restart()` re-reads the config and builds the
 // matching transport).
+// SMS sender (SMS_FROM) — the alphanumeric "from" shown to recipients when
+// the assistant sends an SMS. It's a per-business StarChat variable (same one
+// the dashboard configures + the post-call SMS uses), so this card reads/writes
+// it through the engine RPC -> mrcall-agent -> StarChat, NOT the profile .env.
+function SMSSenderCard(): JSX.Element {
+  const [saved, setSaved] = useState('')
+  const [sender, setSender] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState<{ kind: 'idle' | 'ok' | 'err'; text: string }>({
+    kind: 'idle',
+    text: ''
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const r = await window.zylch.sms.getSender()
+        if (cancelled) return
+        if ('error' in r) {
+          setMsg({ kind: 'err', text: 'Sign-in expired — sign in again.' })
+        } else {
+          setSaved(r.sender ?? '')
+          setSender(r.sender ?? '')
+        }
+      } catch (e) {
+        if (!cancelled) setMsg({ kind: 'err', text: errorMessage(e) })
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const isDirty = sender !== saved
+  const isValid = sender.trim().length >= 1 && sender.length <= 11
+
+  const handleSave = async (): Promise<void> => {
+    if (!isDirty || !isValid) return
+    setSaving(true)
+    setMsg({ kind: 'idle', text: '' })
+    try {
+      const r = await window.zylch.sms.setSender(sender.trim())
+      if ('error' in r) {
+        setMsg({ kind: 'err', text: 'Sign-in expired — sign in again.' })
+        return
+      }
+      setSaved(r.sender)
+      setSender(r.sender)
+      setMsg({ kind: 'ok', text: 'SMS sender saved.' })
+    } catch (e) {
+      setMsg({ kind: 'err', text: errorMessage(e) })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-white border border-brand-mid-grey rounded-lg p-4 space-y-3">
+      <div>
+        <div className="text-sm font-semibold text-brand-black">SMS sender</div>
+        <p className="text-xs text-brand-grey-80 mt-0.5">
+          The name shown as the sender when you send an SMS (max 11 characters).
+          One-way: recipients can&apos;t reply. Leave it set and the assistant can
+          text contacts from chat.
+        </p>
+      </div>
+      {loading ? (
+        <div className="text-xs text-brand-grey-80">Loading…</div>
+      ) : (
+        <>
+          <label className="block">
+            <span className="flex items-center justify-between text-xs font-medium text-brand-grey-80 mb-1">
+              <span>Sender ID</span>
+              <span className="font-mono text-[10px] text-brand-mid-grey">{sender.length}/11</span>
+            </span>
+            <input
+              type="text"
+              value={sender}
+              maxLength={11}
+              onChange={(e) => {
+                setSender(e.target.value.slice(0, 11))
+                setMsg({ kind: 'idle', text: '' })
+              }}
+              placeholder="e.g. MrCall"
+              className={
+                'w-full px-3 py-2 border rounded text-sm focus:outline-none focus:ring-2 ' +
+                (isDirty && !isValid
+                  ? 'border-brand-danger bg-brand-danger/5 focus:ring-brand-danger/50'
+                  : 'border-brand-mid-grey focus:ring-brand-mid-grey')
+              }
+            />
+          </label>
+          {msg.kind !== 'idle' && (
+            <div
+              className={
+                'text-xs ' + (msg.kind === 'ok' ? 'text-brand-blue' : 'text-brand-danger')
+              }
+            >
+              {msg.text}
+            </div>
+          )}
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={() => void handleSave()}
+              disabled={!isDirty || !isValid || saving}
+              className="px-3 py-1.5 text-xs bg-brand-black text-white rounded disabled:bg-brand-mid-grey"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            {isDirty && (
+              <button
+                onClick={() => {
+                  setSender(saved)
+                  setMsg({ kind: 'idle', text: '' })
+                }}
+                disabled={saving}
+                className="px-3 py-1.5 text-xs border rounded text-brand-grey-80 hover:bg-brand-light-grey disabled:opacity-50"
+              >
+                Discard
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function BackendLocationCard(): JSX.Element {
   const signedIn = !!auth.currentUser
   const [loading, setLoading] = useState(true)

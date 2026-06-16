@@ -550,6 +550,17 @@ const api = {
       | { error: 'auth_expired' }
     > => call('account.balance', {}, 15000)
   },
+  sms: {
+    // Read/write the per-business SMS sender (SMS_FROM, <=11 chars) used as
+    // the `from` of /api/desktop/sms/send. Backed by mrcall-agent -> StarChat.
+    // Returns {error:'auth_expired'} on a 401 (renderer should refresh + retry).
+    getSender: (): Promise<{ sender: string; business_id?: string } | { error: 'auth_expired' }> =>
+      call('sms.get_sender', {}, 15000),
+    setSender: (
+      sender: string
+    ): Promise<{ sender: string; business_id?: string } | { error: 'auth_expired' }> =>
+      call('sms.set_sender', { sender }, 15000)
+  },
   mrcall: {
     // Lists businesses owned/managed by the signed-in user. Mirrors the
     // dashboard's `Business.checkUserHasBusinesses` call (POST
