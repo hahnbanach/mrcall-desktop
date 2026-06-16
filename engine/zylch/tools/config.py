@@ -50,9 +50,6 @@ class ToolConfig:
     graph_token: str = ""
     graph_refresh_token: str = ""
 
-    # Vonage SMS: credentials stored per-user in Supabase via /connect vonage
-    # (no fields here - fetched directly in sms_tools.py)
-
     # My Email Addresses
     my_emails: str = ""
 
