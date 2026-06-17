@@ -52,6 +52,24 @@ code as the source of truth until they're touched.
 
 ## Methods
 
+> **Return-shape quick reference — the wrapper key is NOT uniform.**
+> Most list-style methods wrap their array under a domain key, but three
+> return a **bare array** and the two email-list families use *different*
+> keys (`threads` vs `emails`). Parsing the wrong key silently yields zero
+> rows — it cost a debugging session on the mrcall-cs (support@) side on
+> 2026-06-17. Verified against `methods.py` + `campaign_actions.py`:
+>
+> | Method(s) | Returns |
+> |---|---|
+> | `emails.search`, `emails.list_inbox`, `emails.list_sent` | `{ threads: InboxThread[] }` (thread *summaries*) |
+> | `emails.list_by_thread` | `{ emails: Email[] }` (full *messages*, chronological) — **`emails`, not `threads`** |
+> | `tasks.list`, `campaign.list`, `campaign.contacts` | a **bare array** `[...]` (no wrapper object) |
+> | `campaign.create`, `campaign.add_contact` | the row dict; `campaign.update_contact` → `{ ok, contact }` |
+> | `mrcall.search_businesses`, `mrcall.list_my_businesses` | `{ businesses: CrmBusiness[], role }` |
+> | `settings.get` | `{ values: {KEY: string} }` (secrets masked `"<set>"`); `settings.update` → `{ ok, applied, skipped_unchanged }`; `settings.schema` → `{ fields: [...] }` |
+> | `account.who_am_i` | `{ signed_in, uid?, email?, expires_at_ms? }` |
+> | mutations (`tasks.complete/reopen/pin/skip`, `emails.pin/mark_read`, `chat.approve`) | `{ ok: boolean, … }` |
+
 ### `tasks.complete(task_id, note?)`
 
 | Param | Type | Required | Notes |
