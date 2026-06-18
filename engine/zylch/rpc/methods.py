@@ -1907,6 +1907,16 @@ for _name, _fn in _CAMPAIGN_METHODS.items():
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
 
+# Engine drafts — read-only `drafts.list` over the `Draft` model so the
+# desktop UI / operator tooling can enumerate composed reply/outreach
+# drafts. Owner-scoped; sends nothing.
+from zylch.rpc.draft_queries import METHODS as _DRAFT_QUERY_METHODS  # noqa: E402
+
+for _name, _fn in _DRAFT_QUERY_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn
+
 # Maintenance RPCs — manual triggers for the dedup sweep + memory
 # reconsolidation pass. These are the "Clean up tasks" /
 # "Reconsolidate memory" buttons in Settings.
