@@ -777,21 +777,33 @@ class MemoryWorker:
                 contact_email,
             )
 
-            # Try cached system prompt approach first.
-            # If prompt has old-style {from_email} placeholders,
-            # fall back to legacy format.
-            try:
-                # Test if prompt has format placeholders
-                prompt_template.format(
-                    from_email="",
-                    to_email="",
-                    cc_email="",
-                    subject="",
-                    date="",
-                    body="",
-                    contact_email="",
-                )
-                # Has placeholders → legacy prompt, format inline
+            # Route by whether the trained prompt actually uses old-style
+            # {placeholder} tokens.
+            #
+            # The previous heuristic — call ``prompt_template.format(...)``
+            # and treat "no exception raised" as "has placeholders" — was
+            # inverted: a prompt with NO placeholders ALSO formats without
+            # error (str.format is a no-op then), so it took the legacy
+            # branch and was sent as a bare user message with the email
+            # NEVER interpolated. The model received only the instructions
+            # + few-shot examples and replied "no message content was
+            # included", then echoed the prompt's OWN example entity. That
+            # is how the bogus "John Doe / Acme / IT Consulting Offer"
+            # PERSON and the ~440 duplicate TEMPLATE blobs were born — not
+            # from real mail, but from the example bleeding through on every
+            # email. Detect placeholders explicitly instead (mirrors
+            # ``_extract_entities_for_message``).
+            placeholder_tokens = (
+                "{body}",
+                "{from_email}",
+                "{to_email}",
+                "{cc_email}",
+                "{subject}",
+                "{date}",
+                "{contact_email}",
+            )
+            if any(tok in prompt_template for tok in placeholder_tokens):
+                # Legacy inline prompt → interpolate the email fields.
                 prompt = prompt_template.format(
                     from_email=email.get("from_email", "unknown"),
                     to_email=(
@@ -811,8 +823,9 @@ class MemoryWorker:
                     ],
                     max_tokens=1024,
                 )
-            except (KeyError, IndexError):
-                # No placeholders → use as cached system prompt
+            else:
+                # Modern cached-system prompt → instructions cached as the
+                # system block, the actual email as the user message.
                 system = [
                     {
                         "type": "text",
