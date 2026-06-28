@@ -678,6 +678,24 @@ async def _run_memory(owner_id: str, store) -> tuple[int, int]:
         # Reset cache so worker picks up the new prompt
         worker._custom_prompt_loaded = False
 
+    # Merge-gate canary (closes the 2026-06 broken-open regression). One
+    # cheap LLM call asserts the gate still REFUSES to merge two unrelated
+    # entities. If it doesn't, disable reconsolidation for this build so a
+    # broken gate cannot silently collapse every contact into one blob and
+    # discard their data. healthy is None (transient/no-LLM) leaves merging
+    # ON — only an explicit False disables it.
+    import asyncio
+
+    from zylch.memory import merge_gate_selfcheck
+
+    gate = await asyncio.to_thread(merge_gate_selfcheck, worker.llm_merge)
+    if gate.get("healthy") is False:
+        worker.merge_enabled = False
+        console.print(
+            "  [bold red]⚠ merge gate BROKEN-OPEN[/bold red] — reconsolidation "
+            "disabled this run to prevent memory corruption (see logs)"
+        )
+
     emails = store.get_unprocessed_emails(owner_id)
     email_count = await worker.process_batch(emails)
 

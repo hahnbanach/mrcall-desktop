@@ -12,7 +12,11 @@ from .hybrid_search import (
     InMemoryVectorIndex,
     SearchResult,
 )
-from .llm_merge import LLMMergeService
+from .llm_merge import (
+    LLMMergeService,
+    is_no_merge_response,
+    merge_gate_selfcheck,
+)
 from .text_processing import split_sentences
 from .pattern_detection import detect_pattern
 
@@ -24,6 +28,8 @@ __all__ = [
     "InMemoryVectorIndex",
     "SearchResult",
     "LLMMergeService",
+    "is_no_merge_response",
+    "merge_gate_selfcheck",
     "split_sentences",
     "detect_pattern",
 ]

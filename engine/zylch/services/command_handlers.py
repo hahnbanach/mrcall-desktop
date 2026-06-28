@@ -460,6 +460,7 @@ Use `/agent process` to extract facts from synced data:
         EmbeddingEngine,
         MemoryConfig,
         LLMMergeService,
+        is_no_merge_response,
     )
 
     try:
@@ -548,8 +549,8 @@ Memory will be searchable via hybrid search."""
             for existing in existing_blobs:
                 merged_content = llm_merge.merge(existing.content, content)
 
-                # If LLM says INSERT (entities don't match), try next candidate
-                if "INSERT" in merged_content.upper() and len(merged_content) < 10:
+                # If the gate returned the INSERT/SKIP sentinel, try next candidate
+                if is_no_merge_response(merged_content):
                     logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
                     continue
 

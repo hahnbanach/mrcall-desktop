@@ -19,6 +19,7 @@ from zylch.memory import (
     LLMMergeService,
     EmbeddingEngine,
     MemoryConfig,
+    is_no_merge_response,
 )
 
 logger = logging.getLogger(__name__)
@@ -265,6 +266,14 @@ class MemoryWorker:
         # Cache for user's custom prompt (lazy loaded)
         self._custom_prompt: Optional[str] = None
         self._custom_prompt_loaded: bool = False
+
+        # Merge-gate guard. When the build pipeline's merge_gate_selfcheck
+        # finds the gate broken-open (the model merges unrelated entities
+        # instead of refusing — the 2026-06 universal-"John"-sink
+        # regression), it flips this to False so reconsolidation is skipped
+        # and every entity becomes a fresh blob. Duplicates are recoverable
+        # via the reconsolidate sweep; a silent universal merge is not.
+        self.merge_enabled: bool = True
 
         logger.info(f"MemoryWorker initialized for namespace={self.namespace}")
 
@@ -557,6 +566,17 @@ class MemoryWorker:
         # search (Fase 3.1).
         linked_blob_id: Optional[str] = None
 
+        # Merge-gate guard: when the gate is known-broken (selfcheck found
+        # it merging unrelated entities), do NOT reconsolidate — fall
+        # through to create a fresh blob so we never feed the universal
+        # sink. See MemoryWorker.merge_enabled.
+        if not self.merge_enabled and merge_candidates:
+            logger.warning(
+                "[memory] merge gate unhealthy — skipping reconsolidation for "
+                "this entity, creating a new blob to avoid corruption"
+            )
+            merge_candidates = []
+
         for cand in merge_candidates:
             bid = cand["blob_id"]
             existing_content = cand["content"]
@@ -564,8 +584,9 @@ class MemoryWorker:
             logger.debug(f"[memory] merge attempt blob_id={bid} source={source}")
             merged_content = self.llm_merge.merge(existing_content, entity_content)
 
-            # If LLM says INSERT (entities don't match), try next candidate
-            if "INSERT" in merged_content.upper() and len(merged_content) < 10:
+            # If the gate returned the INSERT/SKIP sentinel (entities don't
+            # match), try next candidate.
+            if is_no_merge_response(merged_content):
                 logger.debug(f"[memory] LLM merge rejected blob_id={bid} source={source}")
                 continue
 
@@ -1345,6 +1366,11 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
             owner_id=self.owner_id, content=query, namespace=self.namespace, limit=3
         )
 
+        # Merge-gate guard (see MemoryWorker.merge_enabled): a known-broken
+        # gate must not reconsolidate — create a fresh blob instead.
+        if not self.merge_enabled:
+            existing_blobs = []
+
         upserted = False
 
         for existing in existing_blobs:
@@ -1353,7 +1379,7 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
             )
             merged_content = self.llm_merge.merge(existing.content, entity_content)
 
-            if "INSERT" in merged_content.upper() and len(merged_content) < 10:
+            if is_no_merge_response(merged_content):
                 logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
                 continue
 

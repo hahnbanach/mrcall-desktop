@@ -15,6 +15,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict
 
+from zylch.memory import is_no_merge_response
+
 if TYPE_CHECKING:
     from zylch.storage import Storage
     from zylch.workers import MemoryWorker
@@ -1191,8 +1193,8 @@ def _upsert_entity_sync(
         # Try to merge with this candidate (sync LLM call)
         merged_content = worker.llm_merge.merge(existing.content, entity_content)
 
-        # If LLM says INSERT (entities don't match), try next candidate
-        if "INSERT" in merged_content.upper() and len(merged_content) < 10:
+        # If the gate returned the INSERT/SKIP sentinel, try next candidate
+        if is_no_merge_response(merged_content):
             logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
             continue
 
@@ -1348,8 +1350,8 @@ def _upsert_mrcall_entity_sync(
         # Try to merge with this candidate (sync LLM call)
         merged_content = worker.llm_merge.merge(existing.content, entity_content)
 
-        # If LLM says INSERT (entities don't match), try next candidate
-        if "INSERT" in merged_content.upper() and len(merged_content) < 10:
+        # If the gate returned the INSERT/SKIP sentinel, try next candidate
+        if is_no_merge_response(merged_content):
             logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
             continue
 
