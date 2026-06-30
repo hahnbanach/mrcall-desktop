@@ -228,6 +228,24 @@ async def agents_train_all(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return {"ok": overall_ok, "results": results}
 
 
+async def agents_get_prompt(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """agents.get_prompt({key}) -> {ok, key, prompt}.
+
+    Read-only inspection of a trained agent prompt (``task_email`` |
+    ``memory_message`` | ``emailer``) for the active profile — so the operator
+    can SEE what the task/voice agent was actually trained with, WITHOUT
+    retraining. Until now there was no way to read a trained prompt back
+    (``agents.train_all`` only writes), so a misbehaving task agent could not
+    be diagnosed remotely.
+    """
+    from zylch.storage import Storage
+
+    key = (params or {}).get("key", "task_email")
+    prompt = Storage().get_agent_prompt(_owner_id(), key)
+    return {"ok": prompt is not None, "key": key, "prompt": prompt}
+
+
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "agents.train_all": agents_train_all,
+    "agents.get_prompt": agents_get_prompt,
 }

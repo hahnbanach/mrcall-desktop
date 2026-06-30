@@ -99,6 +99,13 @@ The generated prompt must:
    - Is there a deadline or time-sensitive element?
    - Is this a recurring question (FAQ)? → Suggest draft response, lower urgency
    - Is this marketing/promotional? → NO_ACTION
+   - Is this an unsolicited, vague request to "send your catalog / price list / company
+     profile", or a generic "we want to import/buy/distribute", from an UNKNOWN sender
+     (especially a free webmail — gmail/hotmail/yahoo/outlook — or a foreign first-contact)
+     with NO concrete product, quantity, company name, or order detail? → NO_ACTION
+     (advance-fee / export-scam pattern). A genuine B2B lead names a specific product, a
+     quantity/volume, or an identifiable company; a one-line "send catalogue" from nowhere
+     is noise, not a lead. This holds even with no learned history for the sender.
    - Is this an invoice reminder (Xero, QuickBooks, etc.)? → If 2+ reminders for the same
      invoice, ACTION: medium — the bill is overdue and needs payment or dispute
    - Is this a calendar decline? → If same person declined 3+ times, ACTION: low —
@@ -121,6 +128,7 @@ The generated prompt must:
    - `ACTION: medium | Follow up on call promise | User said "I'll call you this week" 5 days ago`
    - `ACTION: low | DRAFT: "Mi scusi per il disagio..." | Routine complaint about service, same pattern as 5 previous complaints`
    - `NO_ACTION: Newsletter from marketing platform, user ignores these`
+   - `NO_ACTION: Unsolicited one-line "please send your catalogue" from an unknown gmail address, no product / quantity / company named — advance-fee/export-scam pattern, not a real lead`
    - `NO_ACTION: Email is 6 weeks old, if it were urgent it would have been handled by now`
 
 The generated prompt will receive these template variables:
