@@ -15,6 +15,7 @@ Never raises — every failure becomes a user-facing `SmsSendOutcome.message`.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -52,11 +53,15 @@ def send_sms_via_proxy(phone: str, message: str) -> SmsSendOutcome:
 
     url = f"{settings.mrcall_proxy_url.rstrip('/')}/api/desktop/sms/send"
     payload = {"phone_number": phone, "message": message}
-    # Explicit billing business (profile SMS_BUSINESS_ID). Required for admin /
-    # multi-assistant accounts — the server refuses to guess otherwise. Omit
-    # the key entirely when unset so a single-business owner still works.
-    if settings.sms_business_id:
-        payload["business_id"] = settings.sms_business_id
+    # Explicit billing business (profile SMS_BUSINESS_ID). Read from os.environ,
+    # NOT the frozen `settings` singleton (`Settings()` snapshots the .env at
+    # daemon start), so a `settings.update` — which hot-reloads os.environ via
+    # settings_io.update_env — is picked up WITHOUT a daemon restart. Required
+    # for admin / multi-assistant accounts (the server refuses to guess); omit
+    # the key when unset so a single-business owner still works.
+    business_id = os.environ.get("SMS_BUSINESS_ID", "").strip()
+    if business_id:
+        payload["business_id"] = business_id
     try:
         resp = httpx.post(
             url,
