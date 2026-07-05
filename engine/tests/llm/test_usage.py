@@ -271,6 +271,18 @@ def test_budget_invalid_value_falls_back_to_default(fresh_db, monkeypatch):
     assert usage.daily_budget_usd() == pytest.approx(usage.DEFAULT_DAILY_BUDGET_USD)
 
 
+@pytest.mark.parametrize("raw", ["nan", "NaN", "inf", "-inf"])
+def test_budget_non_finite_falls_back_to_default(fresh_db, monkeypatch, raw):
+    """float() accepts 'nan'/'inf'; nan would make `budget > 0` False and
+    silently DISABLE the cap (T5 review, finding e). Non-finite values
+    must degrade to the default — the capped direction, never uncapped."""
+    owner = "bud-nan@example.com"
+    monkeypatch.setenv("LLM_DAILY_BUDGET_USD", raw)
+    assert usage.daily_budget_usd() == pytest.approx(usage.DEFAULT_DAILY_BUDGET_USD)
+    _seed(owner, usage.DEFAULT_DAILY_BUDGET_USD + 1.0)
+    assert usage.budget_state(owner)["exceeded"] is True  # cap still bites
+
+
 def test_budget_reads_env_live_mid_test(fresh_db, monkeypatch):
     """Changing os.environ mid-run changes the verdict — proves the cap
     is read at call time, not from a frozen pydantic settings snapshot."""

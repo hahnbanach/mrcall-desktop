@@ -85,11 +85,12 @@ def _insert_email(owner, *, thread_id, from_email, to_email="", cc_email="", ts=
     return eid
 
 
-def _insert_wa(owner, *, chat_jid, ts=None):
+def _insert_wa(owner, *, chat_jid, ts=None, memory_processed=False, task_processed=False):
     from zylch.storage.database import get_session
     from zylch.storage.models import WhatsAppMessage
 
     mid = str(uuid.uuid4())
+    when = ts or _now()
     with get_session() as s:
         s.add(
             WhatsAppMessage(
@@ -99,12 +100,36 @@ def _insert_wa(owner, *, chat_jid, ts=None):
                 chat_jid=chat_jid,
                 sender_jid=chat_jid,
                 text="hi",
-                timestamp=(ts or _now()),
+                timestamp=when,
                 is_from_me=False,
                 is_group=False,
+                memory_processed_at=(when if memory_processed else None),
+                task_processed_at=(when if task_processed else None),
             )
         )
     return mid
+
+
+def _insert_cal(owner, *, task_processed=False):
+    from zylch.storage.database import get_session
+    from zylch.storage.models import CalendarEvent
+
+    cid = str(uuid.uuid4())
+    when = _now()
+    with get_session() as s:
+        s.add(
+            CalendarEvent(
+                id=cid,
+                owner_id=owner,
+                google_event_id=cid,
+                summary="Sync call",
+                start_time=when,
+                end_time=when,
+                memory_processed_at=when,  # memory side already done
+                task_processed_at=(when if task_processed else None),
+            )
+        )
+    return cid
 
 
 def _insert_task_row(owner, **overrides):
@@ -151,11 +176,12 @@ def _task_dict(**overrides):
     return d
 
 
-def _sweeps_patched(dedup=None, topic=None, reanalyze=0, forbid=False):
+def _sweeps_patched(dedup=None, topic=None, reanalyze=0, f4_aborted=False, forbid=False):
     """Patch the three sweep impls on process_pipeline.
 
-    ``forbid=True`` makes any call fail the test — used to prove a
-    gated-off sweep is truly never invoked.
+    ``_reanalyze_sweep`` returns ``(ok_count, aborted)`` since the T5
+    daily-stamp fix. ``forbid=True`` makes any call fail the test —
+    used to prove a gated-off sweep is truly never invoked.
     """
     from zylch.services import process_pipeline as pp
 
@@ -167,7 +193,7 @@ def _sweeps_patched(dedup=None, topic=None, reanalyze=0, forbid=False):
             patch.object(pp, "_run_topic_dedup", boom),
         )
     return (
-        patch.object(pp, "_reanalyze_sweep", AsyncMock(return_value=reanalyze)),
+        patch.object(pp, "_reanalyze_sweep", AsyncMock(return_value=(reanalyze, f4_aborted))),
         patch.object(
             pp,
             "_run_dedup_sweep",
@@ -308,6 +334,51 @@ async def test_daily_stamp_not_written_when_sweeps_had_no_llm(fresh_db):
     owner = "o-d5"
     plan = WorkPlan(daily_pass=True, force_all=True, dedup_due=True)
     p1, p2, p3 = _sweeps_patched(dedup={"tasks_closed": 0, "no_llm": True})
+    with p1, p2, p3:
+        await run_gated_sweeps(owner, _store(), plan)
+    assert get_state(owner, WS_KEY_LAST_FULL_SWEEP) is None
+    assert plan.daily_stamped is False
+
+
+# T5 review, finding b: a HALF-completed daily pass (F4 aborted on
+# consecutive 529s, F8 aborted its arbiter loop, or F9's single call
+# failed) must NOT be stamped as done for 24h — the stamp is the 24h
+# safety net's only proof of completion.
+
+
+@pytest.mark.asyncio
+async def test_daily_stamp_not_written_when_f4_aborted(fresh_db, caplog):
+    owner = "o-d6"
+    _insert_task_row(owner)  # force_all makes it an F4 candidate
+    plan = WorkPlan(daily_pass=True, force_all=True, dedup_due=True)
+    p1, p2, p3 = _sweeps_patched(f4_aborted=True)
+    with caplog.at_level(logging.WARNING), p1, p2, p3:
+        result = await run_gated_sweeps(owner, _store(), plan)
+    assert result["f4_aborted"] is True
+    assert result["f8f9_ran"] is True  # F8/F9 still ran…
+    assert get_state(owner, WS_KEY_LAST_FULL_SWEEP) is None  # …but no stamp
+    assert plan.daily_stamped is False
+    assert "daily pass INCOMPLETE" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_daily_stamp_not_written_when_dedup_aborted_overload(fresh_db):
+    owner = "o-d7"
+    plan = WorkPlan(daily_pass=True, force_all=True, dedup_due=True)
+    p1, p2, p3 = _sweeps_patched(
+        dedup={"tasks_closed": 0, "no_llm": False, "aborted_overload": True}
+    )
+    with p1, p2, p3:
+        await run_gated_sweeps(owner, _store(), plan)
+    assert get_state(owner, WS_KEY_LAST_FULL_SWEEP) is None
+    assert plan.daily_stamped is False
+
+
+@pytest.mark.asyncio
+async def test_daily_stamp_not_written_when_topic_llm_failed(fresh_db):
+    owner = "o-d8"
+    plan = WorkPlan(daily_pass=True, force_all=True, dedup_due=True)
+    p1, p2, p3 = _sweeps_patched(topic={"tasks_closed": 0, "no_llm": False, "llm_failed": True})
     with p1, p2, p3:
         await run_gated_sweeps(owner, _store(), plan)
     assert get_state(owner, WS_KEY_LAST_FULL_SWEEP) is None
@@ -505,3 +576,94 @@ async def test_idle_tick_constructs_no_llm_client(fresh_db, monkeypatch, caplog)
 
     with get_session() as s:
         assert s.query(LlmUsage).count() == 0
+
+
+# =====================================================================
+# 7) Cross-channel task pendings (T5 review, finding a)
+# =====================================================================
+#
+# _analyze_recent_events consumes email AND WhatsApp AND calendar
+# task-pendings, so the work plan must count all three: a tick whose
+# only pending work is a WhatsApp message (memory-processed but not yet
+# task-processed) or a calendar event must NOT read as idle, and must
+# route to the detection stage (_run_tasks), not the sweep-only branch.
+
+
+def _seed_otherwise_idle(owner):
+    """worker_state fixture that would make the owner fully idle."""
+    set_state(owner, WS_KEY_DEDUP_FINGERPRINT, open_tasks_fingerprint([]))
+    set_state(owner, WS_KEY_LAST_FULL_SWEEP, _now().isoformat())
+
+
+def test_wa_task_pending_blocks_idle(fresh_db):
+    owner = "o-wa-pend"
+    _seed_otherwise_idle(owner)
+    _insert_wa(owner, chat_jid="391112223334@s.whatsapp.net", memory_processed=True)
+
+    plan = build_work_plan(owner, _store())
+    assert plan.pending_wa == 0  # memory side already drained…
+    assert plan.pending_tasks_wa == 1  # …but task detection still due
+    assert plan.pending_detect == 1
+    assert plan.idle is False
+
+
+def test_calendar_task_pending_blocks_idle(fresh_db):
+    owner = "o-cal-pend"
+    _seed_otherwise_idle(owner)
+    _insert_cal(owner)
+
+    plan = build_work_plan(owner, _store())
+    assert plan.pending_tasks_cal == 1
+    assert plan.pending_detect == 1
+    assert plan.idle is False
+
+
+def test_processed_wa_and_cal_rows_stay_idle(fresh_db):
+    """Fully-processed WhatsApp/calendar rows must not un-idle the tick
+    — otherwise every historic row would defeat the gate forever."""
+    owner = "o-proc-idle"
+    _seed_otherwise_idle(owner)
+    _insert_wa(
+        owner, chat_jid="391112223334@s.whatsapp.net", memory_processed=True, task_processed=True
+    )
+    _insert_cal(owner, task_processed=True)
+
+    plan = build_work_plan(owner, _store())
+    assert plan.pending_detect == 0
+    assert plan.idle is True
+
+
+@pytest.mark.asyncio
+async def test_wa_task_pending_routes_to_detection_stage(fresh_db, monkeypatch, caplog):
+    """Pipeline-level: a WA-only task pending must reach _run_tasks (the
+    detection stage), not fall through to the sweep-only branch."""
+    owner = "o-wa-route"
+    monkeypatch.setenv("EMAIL_ADDRESS", "support@mrcall.ai")
+    _seed_otherwise_idle(owner)
+    _insert_wa(owner, chat_jid="391112223334@s.whatsapp.net", memory_processed=True)
+
+    class _OkPreflight:
+        async def create_message(self, **kwargs):
+            return object()
+
+    from zylch.services import process_pipeline as pp
+
+    ran = AsyncMock(return_value="detection ran")
+    with (
+        patch.object(pp, "_run_sync", AsyncMock(return_value={"success": True, "new_messages": 0})),
+        patch.object(pp, "_run_whatsapp_sync", return_value={"skipped": True, "reason": "test"}),
+        patch("zylch.llm.client.make_llm_client", lambda *a, **k: _OkPreflight()),
+        patch.object(pp, "_run_tasks", ran),
+        patch.object(pp, "_reanalyze_only", AsyncMock(side_effect=AssertionError("wrong branch"))),
+        patch.object(pp, "_run_memory", AsyncMock(return_value=(0, 0))),
+        patch(
+            "zylch.services.command_handlers.handle_tasks",
+            AsyncMock(return_value="no tasks"),
+        ),
+        caplog.at_level(logging.INFO),
+    ):
+        await pp.handle_process([], None, owner)
+
+    ran.assert_awaited_once()
+    assert "wa_tasks=1" in caplog.text
+    assert "[update] idle tick" not in caplog.text

@@ -354,9 +354,15 @@ async def handle_process(
         # The free SQL-only close runs even with the LLM down (P3) —
         # same rationale as the hygiene stage above.
         store.auto_close_stale_phone_tasks(owner_id, max_age_days=PHONE_TASK_MAX_AGE_DAYS)
-    elif pending_tasks > 0:
+    elif plan.pending_detect > 0:
+        # Detection is cross-channel: email AND WhatsApp AND calendar
+        # task-pendings all flow through _analyze_recent_events, so the
+        # trigger sums all three (T5 review, finding a — the email-only
+        # gate let WhatsApp/calendar task work wait for the next email).
         console.print(
-            f"\n[bold cyan][4/5] Detecting tasks" f" in {pending_tasks} emails...[/bold cyan]"
+            f"\n[bold cyan][4/5] Detecting tasks in {pending_tasks} emails, "
+            f"{plan.pending_tasks_wa} WhatsApp message(s), "
+            f"{plan.pending_tasks_cal} calendar event(s)...[/bold cyan]"
         )
         try:
             task_result = await _run_tasks(owner_id, store, plan)
@@ -987,12 +993,15 @@ async def _reanalyze_only(owner_id: str, store, plan) -> int:
     )
 
 
-async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> int:
+async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> tuple[int, bool]:
     """Reanalyze a bounded slice of stale open tasks.
 
-    Skips silently if no tasks are eligible. Returns the number of
-    tasks for which reanalyze_task succeeded (not the number that
-    were closed/updated — that's logged but not surfaced here).
+    Skips silently if no tasks are eligible. Returns ``(ok_count,
+    aborted)``: the number of tasks for which reanalyze_task succeeded
+    (not the number that were closed/updated — that's logged but not
+    surfaced here), and whether the sweep ABORTED on consecutive
+    provider overloads — the daily-pass stamp must not advance on an
+    aborted pass (T5 review, finding b).
 
     The sweep is scoped to the tasks the caller already loaded
     (`tasks` from `worker.get_tasks(refresh=True)`) so we don't
@@ -1023,7 +1032,7 @@ async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> int:
             candidates.append((ref_dt, t))
 
     if not candidates:
-        return 0
+        return 0, False
 
     candidates.sort(key=lambda x: x[0])
     sweep_targets = candidates[:REANALYZE_CAP]
@@ -1033,6 +1042,7 @@ async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> int:
     )
 
     ok_count = 0
+    aborted = False
     consecutive_overload = 0
     for _, t in sweep_targets:
         task_id = t.get("id")
@@ -1058,13 +1068,14 @@ async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> int:
             if "529" in err or "overloaded" in err.lower():
                 consecutive_overload += 1
                 if consecutive_overload >= 2:
+                    aborted = True
                     logger.warning(
                         "[TASK] Reanalyze sweep aborted — provider overloaded "
                         f"after {consecutive_overload} consecutive 529s. "
                         "Remaining tasks left for next /update."
                     )
                     break
-    return ok_count
+    return ok_count, aborted
 
 
 async def _run_dedup_sweep(owner_id: str) -> dict:
@@ -1087,6 +1098,9 @@ async def _run_dedup_sweep(owner_id: str) -> dict:
             "tasks_closed": 0,
             "skipped_recently_reopened": 0,
             "no_llm": False,
+            # The sweep did NOT run to completion — the daily-pass stamp
+            # must not treat this tick as a full pass (T5, finding b).
+            "llm_failed": True,
         }
 
 
@@ -1109,6 +1123,9 @@ async def _run_topic_dedup(owner_id: str) -> dict:
             "skipped_too_few_tasks": False,
             "skipped_too_many_tasks": False,
             "no_llm": False,
+            # Same contract as _run_dedup_sweep: an aborted sweep must
+            # not count toward a completed daily pass (T5, finding b).
+            "llm_failed": True,
         }
 
 

@@ -295,6 +295,8 @@ class WorkPlan:
     pending_mem: int = 0
     pending_wa: int = 0
     pending_tasks: int = 0
+    pending_tasks_wa: int = 0
+    pending_tasks_cal: int = 0
     open_count: int = 0
     f4_eligible: int = 0
     daily_pass: bool = False
@@ -304,6 +306,19 @@ class WorkPlan:
     idle: bool = False
     sweeps_ran: bool = False
     daily_stamped: bool = False
+
+    @property
+    def pending_detect(self) -> int:
+        """Total events awaiting TASK detection across all channels.
+
+        ``_analyze_recent_events`` processes email AND WhatsApp AND
+        calendar task-pendings in one detection pass, so the pipeline's
+        "is detection due" question must sum all three — counting only
+        emails (the pre-T5 behavior, inherited from main) let a tick
+        with only WhatsApp/calendar task work read as idle (T5 review,
+        finding a).
+        """
+        return self.pending_tasks + self.pending_tasks_wa + self.pending_tasks_cal
 
 
 def build_work_plan(owner_id: str, store) -> WorkPlan:
@@ -317,6 +332,12 @@ def build_work_plan(owner_id: str, store) -> WorkPlan:
     pending_mem = len(store.get_unprocessed_emails(owner_id))
     pending_wa = len(store.get_unprocessed_whatsapp_messages(owner_id))
     pending_tasks = len(store.get_unprocessed_emails_for_task(owner_id))
+    # Task detection is cross-channel: `_analyze_recent_events` also
+    # consumes WhatsApp and calendar task-pendings, so they must count
+    # toward "is there detection work" or a WA/calendar-only tick would
+    # read as idle and silently skip real task work (T5, finding a).
+    pending_tasks_wa = len(store.get_unprocessed_whatsapp_messages_for_task(owner_id))
+    pending_tasks_cal = len(store.get_unprocessed_calendar_events_for_task(owner_id))
     open_tasks = store.get_task_items(owner_id=owner_id, action_required=True, limit=10000)
 
     force = force_full_sweeps_enabled()
@@ -331,11 +352,16 @@ def build_work_plan(owner_id: str, store) -> WorkPlan:
         pending_mem == 0
         and pending_wa == 0
         and pending_tasks == 0
+        and pending_tasks_wa == 0
+        and pending_tasks_cal == 0
         and not eligible
         and not dedup_due
     )
 
-    logger.info(f"[gating] pending: mem={pending_mem} wa={pending_wa} tasks={pending_tasks}")
+    logger.info(
+        f"[gating] pending: mem={pending_mem} wa={pending_wa} tasks={pending_tasks} "
+        f"wa_tasks={pending_tasks_wa} cal_tasks={pending_tasks_cal}"
+    )
     logger.info(
         f"[gating] f4 eligible={len(eligible)} of {len(open_tasks)} open "
         f"(force_all={force_all})"
@@ -350,6 +376,8 @@ def build_work_plan(owner_id: str, store) -> WorkPlan:
         pending_mem=pending_mem,
         pending_wa=pending_wa,
         pending_tasks=pending_tasks,
+        pending_tasks_wa=pending_tasks_wa,
+        pending_tasks_cal=pending_tasks_cal,
         open_count=len(open_tasks),
         f4_eligible=len(eligible),
         daily_pass=daily,
@@ -374,6 +402,8 @@ def fallback_work_plan(owner_id: str, store) -> WorkPlan:
         plan.pending_mem = len(store.get_unprocessed_emails(owner_id))
         plan.pending_wa = len(store.get_unprocessed_whatsapp_messages(owner_id))
         plan.pending_tasks = len(store.get_unprocessed_emails_for_task(owner_id))
+        plan.pending_tasks_wa = len(store.get_unprocessed_whatsapp_messages_for_task(owner_id))
+        plan.pending_tasks_cal = len(store.get_unprocessed_calendar_events_for_task(owner_id))
     except Exception as e:  # noqa: BLE001 — a dead count query must not kill the tick
         logger.error(f"[gating] fallback plan pending counts failed: {e}")
     return plan
@@ -410,6 +440,7 @@ async def run_gated_sweeps(owner_id: str, store, plan: WorkPlan) -> Dict[str, An
         "topic_summary": {},
         "aged_phone": 0,
         "f8f9_ran": False,
+        "f4_aborted": False,
     }
 
     # F4 — recompute eligibility on the CURRENT open set (detection may
@@ -418,7 +449,9 @@ async def run_gated_sweeps(owner_id: str, store, plan: WorkPlan) -> Dict[str, An
     open_tasks = store.get_task_items(owner_id=owner_id, action_required=True, limit=10000)
     candidates = f4_candidates(owner_id, store, open_tasks, force_all=plan.force_all)
     if candidates:
-        result["reanalyzed"] = int(await _reanalyze_sweep(owner_id, store, candidates) or 0)
+        reanalyzed, f4_aborted = await _reanalyze_sweep(owner_id, store, candidates)
+        result["reanalyzed"] = int(reanalyzed or 0)
+        result["f4_aborted"] = bool(f4_aborted)
 
     # F8/F9 — final decision from the post-detection+post-F4 open set.
     after_f4 = store.get_task_items(owner_id=owner_id, action_required=True, limit=10000)
@@ -443,17 +476,34 @@ async def run_gated_sweeps(owner_id: str, store, plan: WorkPlan) -> Dict[str, An
         set_state(owner_id, WS_KEY_DEDUP_FINGERPRINT, open_tasks_fingerprint(final))
         logger.info("[gating] post-sweep fingerprint stored")
 
-        # Daily-pass stamp: ONLY after the sweeps actually ran, and only
-        # when an LLM transport existed (a no_llm no-op proves nothing).
+        # Daily-pass stamp: ONLY after the sweeps actually COMPLETED with
+        # an LLM transport. A no_llm no-op proves nothing; neither does a
+        # pass where F4 aborted on consecutive 529s, F8 aborted its
+        # arbiter loop, or F9's single call / a whole sweep failed — a
+        # HALF-completed pass stamped as done would silence the 24h
+        # safety net (T5 review, finding b). Any of those leaves the
+        # stamp untouched so the next tick retries the full pass (529s
+        # are not billed; the budget cap still bounds the worst day).
         # A blocked tick (budget gate, preflight failure) never reaches
         # this code, so the next tick retries the full pass.
-        no_llm = bool(
-            (result["dedup_summary"] or {}).get("no_llm")
-            or (result["topic_summary"] or {}).get("no_llm")
+        dedup_s = result["dedup_summary"] or {}
+        topic_s = result["topic_summary"] or {}
+        incomplete = bool(
+            dedup_s.get("no_llm")
+            or topic_s.get("no_llm")
+            or dedup_s.get("aborted_overload")
+            or dedup_s.get("llm_failed")
+            or topic_s.get("llm_failed")
+            or result["f4_aborted"]
         )
-        if (plan.daily_pass or plan.force_full_sweeps) and not no_llm:
+        if (plan.daily_pass or plan.force_full_sweeps) and not incomplete:
             set_state(owner_id, WS_KEY_LAST_FULL_SWEEP, datetime.now(timezone.utc).isoformat())
             plan.daily_stamped = True
             logger.info("[gating] daily full pass complete — last_full_sweep_at stamped")
+        elif (plan.daily_pass or plan.force_full_sweeps) and incomplete:
+            logger.warning(
+                "[gating] daily pass INCOMPLETE (sweep aborted/failed) — "
+                "stamp not advanced, next tick retries"
+            )
 
     return result

@@ -354,6 +354,11 @@ async def run_topic_dedup(owner_id: str) -> Dict[str, Any]:
             "skipped_too_few_tasks": False,
             "skipped_too_many_tasks": False,
             "no_llm": False,
+            # F9 is a single LLM call — when it fails the sweep silently
+            # did nothing, indistinguishable from "no dupes" to the
+            # caller. Flag it so a daily pass whose F9 failed is not
+            # stamped complete for 24h (T5 review, finding b).
+            "llm_failed": True,
         }
 
     decision: Dict[str, Any] = {}

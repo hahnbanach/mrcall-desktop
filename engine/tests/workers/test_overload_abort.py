@@ -71,7 +71,9 @@ def test_reanalyze_sweep_aborts_on_2_consecutive_overload() -> None:
     assert call_count == 2, (
         f"Expected sweep to abort after 2 consecutive 529s, got {call_count} calls."
     )
-    assert result == 0, f"Expected 0 successful reanalyses, got {result}"
+    # (ok_count, aborted) since the T5 daily-stamp fix: the 529-abort must
+    # now also be SIGNALED so a half-completed daily pass is not stamped.
+    assert result == (0, True), f"Expected (0, aborted=True), got {result}"
 
 
 def test_dedup_sweep_aborts_on_2_consecutive_overload() -> None:

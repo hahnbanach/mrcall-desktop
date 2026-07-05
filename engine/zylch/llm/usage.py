@@ -26,6 +26,7 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import logging
+import math
 import os
 from datetime import datetime
 from typing import Any, Dict, Tuple
@@ -231,13 +232,23 @@ def daily_budget_usd() -> float:
     if raw is None or str(raw).strip() == "":
         return DEFAULT_DAILY_BUDGET_USD
     try:
-        return float(raw)
+        value = float(raw)
     except (TypeError, ValueError):
         logger.warning(
             f"[llm-usage] invalid LLM_DAILY_BUDGET_USD={raw!r} — using default "
             f"${DEFAULT_DAILY_BUDGET_USD}"
         )
         return DEFAULT_DAILY_BUDGET_USD
+    # float() accepts "nan"/"inf": nan would make `budget > 0` False and
+    # silently DISABLE the cap (T5 review, finding e). Non-finite values
+    # degrade to the default — the capped direction, never uncapped.
+    if not math.isfinite(value):
+        logger.warning(
+            f"[llm-usage] non-finite LLM_DAILY_BUDGET_USD={raw!r} — using "
+            f"default ${DEFAULT_DAILY_BUDGET_USD}"
+        )
+        return DEFAULT_DAILY_BUDGET_USD
+    return value
 
 
 def budget_state(owner_id: str) -> Dict[str, Any]:
