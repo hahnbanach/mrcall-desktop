@@ -182,60 +182,91 @@ async def handle_process(
         if errors_out is not None:
             errors_out.append({"stage": "hygiene", "error": e})
 
-    # --- Daily spend hard cap (checked BEFORE any LLM attempt) ─────────
-    # LLM_DAILY_BUDGET_USD is the structural guarantee against runaway
-    # spend (support-llm-cost-fix / P1): once today's estimated spend
-    # reaches the per-profile cap, the background pipeline does NOT even
-    # send the 1-token preflight ping below — an over-budget tick makes
-    # ZERO call attempts. Only THIS background pipeline is gated;
-    # interactive chat.send / tasks.solve (a human at the keyboard,
-    # approval-gated) are metered but never blocked. budget_state reads
-    # the cap live from os.environ, so a settings.update takes effect
-    # with no daemon restart.
-    from zylch.llm.usage import budget_state, call_site
+    # --- Event-gating work plan (support-llm-cost-fix / P3) ────────────
+    # Computed AFTER hygiene (which may drain pending rows) and BEFORE
+    # any budget / preflight / LLM code. Pure SQL; logs one [gating]
+    # line per concern on EVERY tick. This is what makes cost scale
+    # with information change: a tick with no new information makes
+    # ZERO LLM call attempts (not even the 1-token preflight ping),
+    # while a real change still reacts within one tick. On a plan
+    # failure we fail OPEN to the pre-gating behavior (full work),
+    # never closed.
+    from zylch.workers.task_gating import build_work_plan, fallback_work_plan
+
+    try:
+        plan = build_work_plan(owner_id, store)
+    except Exception as e:
+        logger.error(f"[/process] gating plan failed — fail-open to full work: {e}", exc_info=True)
+        plan = fallback_work_plan(owner_id, store)
+        if errors_out is not None:
+            errors_out.append({"stage": "gating", "error": e})
 
     llm_ok = True
-    budget = budget_state(owner_id)
-    if budget["exceeded"]:
-        llm_ok = False
-        budget_msg = (
-            f"[llm-budget] daily budget exceeded: "
-            f"spent=${budget['spent_usd']:.2f} budget=${budget['budget_usd']:.2f} "
-            f"— AI stages skipped"
-        )
-        logger.error(budget_msg)
-        console.print(f"[red]  {budget_msg}[/red]")
-        if errors_out is not None:
-            errors_out.append({"stage": "llm_budget", "error": RuntimeError(budget_msg)})
+    if plan.idle:
+        # --- IDLE TICK: zero LLM calls (support-llm-cost-fix / P3) ─────
+        # Nothing pending, no open task with new activity, open-set
+        # fingerprint unchanged, no daily pass due. Skip the budget
+        # gate (nothing to gate — and no [llm-budget] noise), the
+        # preflight ping and every AI stage below. NO LLM client may
+        # even be CONSTRUCTED on this path — construction reads keys /
+        # Firebase session. The free SQL-only bits (phone age-close)
+        # still run in the task stage below.
+        logger.info("[update] idle tick — zero LLM calls")
+        console.print("[dim]  idle tick — zero LLM calls[/dim]")
+    else:
+        # --- Daily spend hard cap (checked BEFORE any LLM attempt) ─────
+        # LLM_DAILY_BUDGET_USD is the structural guarantee against runaway
+        # spend (support-llm-cost-fix / P1): once today's estimated spend
+        # reaches the per-profile cap, the background pipeline does NOT even
+        # send the 1-token preflight ping below — an over-budget tick makes
+        # ZERO call attempts. Only THIS background pipeline is gated;
+        # interactive chat.send / tasks.solve (a human at the keyboard,
+        # approval-gated) are metered but never blocked. budget_state reads
+        # the cap live from os.environ, so a settings.update takes effect
+        # with no daemon restart.
+        from zylch.llm.usage import budget_state, call_site
 
-    # --- Pre-flight LLM health check ───────────────────────────────────
-    # Memory + task detection (and the F4/F8/F9 sweeps) are LLM-bound, and
-    # every one of their dozens of per-item LLM calls catches-and-logs its
-    # OWN failure and continues. So when the LLM is systemically
-    # unreachable — MrCall-credits token expired (401), out of credits
-    # (402), or no provider configured — the run used to report "0 changes,
-    # no errors" while silently doing nothing AND hammering the proxy with
-    # hundreds of doomed calls per tick (a profile logged 31k proxy 401s in
-    # a day). One cheap probe turns that into a SINGLE structured, surfaced
-    # error (humanize_error already maps MrCallAuthError / InsufficientCredits
-    # / "no llm") and lets us SKIP the doomed stages. Skipped entirely when
-    # the budget gate above already tripped — no ping, no attempt.
-    if llm_ok:
-        try:
-            from zylch.llm.client import make_llm_client
-
-            _probe = make_llm_client()
-            with call_site("preflight"):
-                await _probe.create_message(
-                    messages=[{"role": "user", "content": "ping"}],
-                    max_tokens=1,
-                )
-        except Exception as e:
+        budget = budget_state(owner_id)
+        if budget["exceeded"]:
             llm_ok = False
-            logger.warning(f"[/process] LLM preflight failed: {type(e).__name__}: {e}")
-            console.print(f"[red]  AI unavailable — skipping memory + tasks: {e}[/red]")
+            budget_msg = (
+                f"[llm-budget] daily budget exceeded: "
+                f"spent=${budget['spent_usd']:.2f} budget=${budget['budget_usd']:.2f} "
+                f"— AI stages skipped"
+            )
+            logger.error(budget_msg)
+            console.print(f"[red]  {budget_msg}[/red]")
             if errors_out is not None:
-                errors_out.append({"stage": "llm", "error": e})
+                errors_out.append({"stage": "llm_budget", "error": RuntimeError(budget_msg)})
+
+        # --- Pre-flight LLM health check ───────────────────────────────
+        # Memory + task detection (and the F4/F8/F9 sweeps) are LLM-bound, and
+        # every one of their dozens of per-item LLM calls catches-and-logs its
+        # OWN failure and continues. So when the LLM is systemically
+        # unreachable — MrCall-credits token expired (401), out of credits
+        # (402), or no provider configured — the run used to report "0 changes,
+        # no errors" while silently doing nothing AND hammering the proxy with
+        # hundreds of doomed calls per tick (a profile logged 31k proxy 401s in
+        # a day). One cheap probe turns that into a SINGLE structured, surfaced
+        # error (humanize_error already maps MrCallAuthError / InsufficientCredits
+        # / "no llm") and lets us SKIP the doomed stages. Skipped entirely when
+        # the budget gate above already tripped — no ping, no attempt.
+        if llm_ok:
+            try:
+                from zylch.llm.client import make_llm_client
+
+                _probe = make_llm_client()
+                with call_site("preflight"):
+                    await _probe.create_message(
+                        messages=[{"role": "user", "content": "ping"}],
+                        max_tokens=1,
+                    )
+            except Exception as e:
+                llm_ok = False
+                logger.warning(f"[/process] LLM preflight failed: {type(e).__name__}: {e}")
+                console.print(f"[red]  AI unavailable — skipping memory + tasks: {e}[/red]")
+                if errors_out is not None:
+                    errors_out.append({"stage": "llm", "error": e})
 
     # --- Step 3: Memory extraction (email + WhatsApp) ---
     # Phase 2c (whatsapp-pipeline-parity): WhatsApp messages now flow
@@ -243,8 +274,10 @@ async def handle_process(
     # channel-aware `memory_message` (Phase 2b) so the same blob can be
     # populated by either channel; cross-channel merge happens via the
     # `person_identifiers` index from Phase 1.
-    pending_mem = len(store.get_unprocessed_emails(owner_id))
-    pending_wa = len(store.get_unprocessed_whatsapp_messages(owner_id))
+    # Pending counts come from the work plan (computed post-hygiene);
+    # nothing between the plan and this point changes them.
+    pending_mem = plan.pending_mem
+    pending_wa = plan.pending_wa
     if not llm_ok:
         console.print("\n[bold cyan][3/5] Memory[/bold cyan] — skipped (AI unavailable)")
         _p(30, "Memory — skipped (AI unavailable)", None)
@@ -285,7 +318,7 @@ async def handle_process(
         _p(30, "Memory — nothing to process", None)
 
     # --- Step 3: Task detection ---
-    pending_tasks = len(store.get_unprocessed_emails_for_task(owner_id))
+    pending_tasks = plan.pending_tasks
     summary_stats["tasks_pending"] = int(pending_tasks)
     # Reach the boundary of memory → tasks. From here on, remaining work is
     # task detection (LLM-bound) + 3 sweeps (F4 + F8 + F9). Open-task count
@@ -303,15 +336,30 @@ async def handle_process(
     # it punished the user for clearing tasks manually — every /update
     # silently regenerated the entire backlog. The explicit `--force`
     # flag remains the only way to ask for that reset.
-    if not llm_ok:
+    if plan.idle:
+        console.print("\n[bold cyan][4/5] Tasks[/bold cyan] — idle, nothing new")
+        _p(90, "Tasks — idle", None)
+        # Free SQL-only close still runs on EVERY tick (P3): expiring a
+        # stale phone call-back needs no LLM and must not wait for the
+        # next non-idle tick.
+        aged_idle = store.auto_close_stale_phone_tasks(
+            owner_id, max_age_days=PHONE_TASK_MAX_AGE_DAYS
+        )
+        summary_stats["task_msg"] = (
+            f"idle ({aged_idle} stale phone task(s) auto-closed)" if aged_idle else "idle"
+        )
+    elif not llm_ok:
         console.print("\n[bold cyan][4/5] Tasks[/bold cyan] — skipped (AI unavailable)")
         _p(90, "Tasks — skipped (AI unavailable)", None)
+        # The free SQL-only close runs even with the LLM down (P3) —
+        # same rationale as the hygiene stage above.
+        store.auto_close_stale_phone_tasks(owner_id, max_age_days=PHONE_TASK_MAX_AGE_DAYS)
     elif pending_tasks > 0:
         console.print(
             f"\n[bold cyan][4/5] Detecting tasks" f" in {pending_tasks} emails...[/bold cyan]"
         )
         try:
-            task_result = await _run_tasks(owner_id, store)
+            task_result = await _run_tasks(owner_id, store, plan)
             summary_stats["task_msg"] = str(task_result or "")
             console.print(f"  {task_result}")
         except Exception as e:
@@ -336,7 +384,7 @@ async def handle_process(
         # `update` deliver on its promise of "see what changed since
         # last time" instead of being a silent no-op.
         try:
-            swept = await _reanalyze_only(owner_id, store)
+            swept = await _reanalyze_only(owner_id, store, plan)
             summary_stats["task_msg"] = (
                 f"sweep-only: {swept} closed/updated" if swept else "sweep-only: no change"
             )
@@ -367,6 +415,7 @@ async def handle_process(
     logger.info(
         "[update.summary] sync=%+d wa=%dmsgs/%dcontacts memory=%d wa_memory=%d "
         "tasks_pending=%d hygiene_autoack=%d hygiene_expired=%d "
+        "idle=%s sweeps_ran=%s daily_pass=%s "
         "open_before=%d open_after=%d delta=%s detail=%r",
         summary_stats["sync_new"],
         summary_stats["wa_messages"],
@@ -376,6 +425,9 @@ async def handle_process(
         summary_stats["tasks_pending"],
         summary_stats["auto_ack_marked"],
         summary_stats["expired_marked"],
+        plan.idle,
+        plan.sweeps_ran,
+        plan.daily_pass,
         before_open_count,
         after_open_count,
         f"{delta:+d}" if delta is not None else "n/a",
@@ -743,19 +795,26 @@ async def _run_memory(owner_id: str, store) -> tuple[int, int]:
     # cheap LLM call asserts the gate still REFUSES to merge two unrelated
     # entities. If it doesn't, disable reconsolidation for this build so a
     # broken gate cannot silently collapse every contact into one blob and
-    # discard their data. healthy is None (transient/no-LLM) leaves merging
-    # ON — only an explicit False disables it.
+    # discard their data. P3 (support-llm-cost-fix): the canary used to
+    # run on EVERY mail-bearing tick; it is now policy-gated — first
+    # memory pass since daemon start, then daily, and on every pass
+    # while unhealthy (sticky, merging disabled until it passes). The
+    # policy's residual risk and its rationale are documented in
+    # zylch.workers.merge_canary_gate.
     import asyncio
 
     from zylch.memory import merge_gate_selfcheck
+    from zylch.workers.merge_canary_gate import merge_canary_policy, record_merge_canary
 
-    gate = await asyncio.to_thread(merge_gate_selfcheck, worker.llm_merge)
-    if gate.get("healthy") is False:
-        worker.merge_enabled = False
-        console.print(
-            "  [bold red]⚠ merge gate BROKEN-OPEN[/bold red] — reconsolidation "
-            "disabled this run to prevent memory corruption (see logs)"
-        )
+    policy = merge_canary_policy(owner_id)
+    if policy["run"]:
+        gate = await asyncio.to_thread(merge_gate_selfcheck, worker.llm_merge)
+        worker.merge_enabled = record_merge_canary(owner_id, gate.get("healthy"))
+        if not worker.merge_enabled:
+            console.print(
+                "  [bold red]⚠ merge gate BROKEN-OPEN[/bold red] — reconsolidation "
+                "disabled this run to prevent memory corruption (see logs)"
+            )
 
     emails = store.get_unprocessed_emails(owner_id)
     email_count = await worker.process_batch(emails)
@@ -817,8 +876,8 @@ async def _run_memory(owner_id: str, store) -> tuple[int, int]:
     return email_count, wa_count
 
 
-async def _run_tasks(owner_id: str, store) -> str:
-    """Run task detection (awaitable)."""
+async def _run_tasks(owner_id: str, store, plan) -> str:
+    """Run task detection, then the event-gated sweeps (awaitable)."""
     from zylch.workers.task_creation import TaskWorker
 
     user_email = os.environ.get("EMAIL_ADDRESS", "")
@@ -846,35 +905,21 @@ async def _run_tasks(owner_id: str, store) -> str:
     tasks, _ = await worker.get_tasks(refresh=True)
     action_count = sum(1 for t in (tasks or []) if t.get("action_required"))
 
-    # F4: bounded reanalyze sweep — defense in depth for tasks that escaped
-    # initial closure (e.g. RC-1: get_tasks_by_thread returning empty in
-    # user_reply, ExampleCorp / examplebiz case 2026-04-30). Pick the oldest open
-    # tasks whose analyzed_at (or created_at) is older than the threshold,
-    # cap at REANALYZE_CAP per run, run serial via reanalyze_task.
-    swept = await _reanalyze_sweep(owner_id, store, tasks)
+    # F4 (reanalyze) + F8 (cluster dedup) + F9 (topic dedup) + Fase 3.3
+    # (age-based phone auto-close) — all delegated to the ONE shared,
+    # event-gated sweep stage (support-llm-cost-fix / P3). F4 runs only
+    # on tasks with activity newer than their last analysis; F8/F9 run
+    # only when the open-set fingerprint changed since the last sweep
+    # (or on the daily full pass). What each sweep does and why is
+    # documented in its worker; when it runs is decided in
+    # zylch.workers.task_gating.run_gated_sweeps.
+    from zylch.workers.task_gating import run_gated_sweeps
 
-    # F8: deterministic dedup sweep across all open tasks. Cluster by
-    # contact + blob overlap, ask LLM arbiter per cluster, close
-    # non-keepers. Runs after F4 so we operate on the freshest set —
-    # tasks F4 just closed are no longer in the candidate pool.
-    dedup_summary = await _run_dedup_sweep(owner_id)
-
-    # F9: cross-contact topic dedup. F8 only catches duplicates that
-    # share contact_email or memory blobs; the user's "same problem
-    # arrived via 3 channels from 3 senders" case (e.g. Smith email
-    # + ExampleOrg noreply notification + MrCall missed-call alert about
-    # the SAME safety course) slips past F8 because the three rows
-    # have disjoint contact_emails AND disjoint blob ids. F9 sends the
-    # whole open list to the LLM in one prompt and lets it cluster by
-    # topic. Runs after F8 so the (cheaper) deterministic sweep
-    # already trimmed obvious in-cluster repeats first.
-    topic_summary = await _run_topic_dedup(owner_id)
-
-    # Fase 3.3: age-based auto-close on phone (call-back) tasks. A
-    # missed call from 30+ days ago isn't actionable any more. Pure
-    # SQL bulk close, no LLM; the close_note explains why the task
-    # closed.
-    aged_phone = store.auto_close_stale_phone_tasks(owner_id, max_age_days=PHONE_TASK_MAX_AGE_DAYS)
+    sweep = await run_gated_sweeps(owner_id, store, plan)
+    swept = int(sweep["reanalyzed"])
+    dedup_summary = sweep["dedup_summary"]
+    topic_summary = sweep["topic_summary"]
+    aged_phone = int(sweep["aged_phone"])
 
     parts = [f"{action_count} action items detected"]
     if swept:
@@ -914,14 +959,16 @@ REANALYZE_MIN_AGE_HOURS = 1
 PHONE_TASK_MAX_AGE_DAYS = 30
 
 
-async def _reanalyze_only(owner_id: str, store) -> int:
-    """Run only the F4 reanalyze + F8 dedup + 3.3 age sweeps.
+async def _reanalyze_only(owner_id: str, store, plan) -> int:
+    """Run only the event-gated F4 + F8/F9 + 3.3 age sweeps.
 
     Used by `update` when there are no new emails to detect tasks from
     but open tasks may still need closure based on user replies that
     arrived in past batches, or be deduplicated against existing open
     tasks, or auto-close because they're stale phone call-backs.
-    Loading tasks straight from storage avoids spinning up a
+    Delegates to the same shared sweep stage as ``_run_tasks``
+    (``run_gated_sweeps``, support-llm-cost-fix / P3) so the two
+    branches cannot drift — and, as before, never spins up a
     ``TaskWorker`` (which requires a trained prompt + LLM client just
     for detection — neither is needed for the sweep, which uses
     ``try_make_llm_client`` via ``reanalyze_task``).
@@ -929,20 +976,14 @@ async def _reanalyze_only(owner_id: str, store) -> int:
     Returns the count of (reanalyzed + dedup-closed + age-closed)
     tasks so the caller can surface a single number.
     """
-    tasks = store.get_task_items(
-        owner_id=owner_id,
-        action_required=True,
-        limit=10000,
-    )
-    reanalyzed = await _reanalyze_sweep(owner_id, store, tasks)
-    dedup_summary = await _run_dedup_sweep(owner_id)
-    topic_summary = await _run_topic_dedup(owner_id)
-    aged_phone = store.auto_close_stale_phone_tasks(owner_id, max_age_days=PHONE_TASK_MAX_AGE_DAYS)
+    from zylch.workers.task_gating import run_gated_sweeps
+
+    sweep = await run_gated_sweeps(owner_id, store, plan)
     return (
-        reanalyzed
-        + int(dedup_summary.get("tasks_closed", 0))
-        + int(topic_summary.get("tasks_closed", 0))
-        + int(aged_phone or 0)
+        int(sweep["reanalyzed"])
+        + int(sweep["dedup_summary"].get("tasks_closed", 0) or 0)
+        + int(sweep["topic_summary"].get("tasks_closed", 0) or 0)
+        + int(sweep["aged_phone"] or 0)
     )
 
 

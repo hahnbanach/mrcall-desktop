@@ -184,6 +184,22 @@ SETTINGS_SCHEMA: List[SettingsField] = [
             "keep failing (e.g. the LLM was down). Default 14."
         ),
     },
+    {
+        "key": "FORCE_FULL_SWEEPS",
+        "label": "Force full AI sweeps every Update",
+        "type": "select",
+        "group": "Sync",
+        "optional": True,
+        "options": ["No", "Yes"],
+        "default": "No",
+        "help": (
+            "Emergency bypass for the event-gating that skips AI sweeps "
+            "when nothing changed since the last Update. Yes = every "
+            "Update behaves like the daily full pass (re-analyze every "
+            "open task, always run the dedup sweeps) — the old, "
+            "always-on cost profile. Leave No unless gating misbehaves."
+        ),
+    },
     # ─── Google ─────────────────────────────────────────────
     # Calendar is connected via the "Connect Google Calendar" button in
     # the Settings → Integrations section (PKCE OAuth on :19275, using the

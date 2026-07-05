@@ -822,3 +822,26 @@ class LlmUsage(DictMixin, Base):
     cache_creation_input_tokens = Column(Integer)
     cache_read_input_tokens = Column(Integer)
     est_cost_usd = Column(Float)
+
+
+# -------------------------------------------------------------------
+# WORKER STATE — per-owner KV for pipeline event-gating
+# -------------------------------------------------------------------
+#
+# 2026-07-05 (support-llm-cost-fix, T3/P3): tiny key-value store the
+# event-gating logic (`zylch.workers.task_gating`) uses to remember
+# state across ticks: the open-task fingerprint behind the F8/F9 dedup
+# gate ('dedup_fingerprint'), the daily full-sweep stamp
+# ('last_full_sweep_at'), and the merge-canary verdict
+# ('merge_canary_at' / 'merge_canary_healthy'). Accessed only through
+# `zylch.storage.worker_state.get_state/set_state`. New table —
+# `init_db`'s create_all provisions it; no column migration needed.
+
+
+class WorkerState(DictMixin, Base):
+    __tablename__ = "worker_state"
+
+    owner_id = Column(Text, primary_key=True)
+    key = Column(Text, primary_key=True)
+    value = Column(Text)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
