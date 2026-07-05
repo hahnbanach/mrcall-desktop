@@ -1973,3 +1973,12 @@ for _name, _fn in _SMS_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
+
+# LLM spend visibility — `usage.today` returns today's estimated spend,
+# the live daily cap, whether it tripped, and a per-call-site breakdown.
+from zylch.rpc.usage_queries import METHODS as _USAGE_METHODS  # noqa: E402
+
+for _name, _fn in _USAGE_METHODS.items():
+    if _name in METHODS:
+        raise RuntimeError(f"Duplicate RPC method name: {_name}")
+    METHODS[_name] = _fn

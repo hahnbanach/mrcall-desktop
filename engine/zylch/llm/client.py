@@ -23,6 +23,7 @@ silently skip when no LLM is configured use :func:`try_make_llm_client`.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import os
 from datetime import datetime
@@ -292,18 +293,28 @@ class LLMClient:
         model: Optional[str] = None,
         **kwargs: Any,
     ) -> LLMResponse:
-        """Async wrapper around :meth:`create_message_sync`."""
+        """Async wrapper around :meth:`create_message_sync`.
+
+        The sync call runs in a thread-pool executor, which starts with a
+        fresh contextvars context — so the caller's ``usage.call_site``
+        tag would be lost unless we carry the context across explicitly.
+        Copy it here and run the sync call inside it so spend recorded in
+        ``create_message_sync`` is attributed to the right call site.
+        """
+        ctx = contextvars.copy_context()
         return await asyncio.get_event_loop().run_in_executor(
             None,
-            lambda: self.create_message_sync(
-                messages=messages,
-                system=system,
-                tools=tools,
-                tool_choice=tool_choice,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                model=model,
-                **kwargs,
+            lambda: ctx.run(
+                lambda: self.create_message_sync(
+                    messages=messages,
+                    system=system,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    model=model,
+                    **kwargs,
+                )
             ),
         )
 
@@ -345,7 +356,19 @@ class LLMClient:
             f"messages={len(coerced)} tools={num_tools}"
         )
         raw = self._client.messages.create(**request_kwargs)
-        return LLMResponse(raw)
+        response = LLMResponse(raw)
+
+        # Meter the spend at the single chokepoint every LLM call flows
+        # through. record() never raises (its own catch-all), but guard
+        # the import/call too so metering can never break an LLM call.
+        try:
+            from zylch.llm import usage as _usage
+
+            _usage.record(model_name, self.transport, response.usage)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[llm-usage] recording skipped: {type(e).__name__}: {e}")
+
+        return response
 
 
 # ─── Factory ──────────────────────────────────────────────────────────

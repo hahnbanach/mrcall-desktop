@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     JSON,
@@ -783,3 +784,41 @@ class CampaignContact(DictMixin, Base):
     sent_at = Column(DateTime)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+# -------------------------------------------------------------------
+# LLM USAGE — spend metering + the daily hard cap
+# -------------------------------------------------------------------
+#
+# 2026-07-05 (support-llm-cost-fix, T1/P1): one row per SUCCESSFUL LLM
+# call, written by `zylch.llm.usage.record` at the single LLMClient
+# chokepoint (`create_message_sync`). Records the calling worker
+# (`call_site`), transport, model, token counts, and an estimated USD
+# cost. It powers two things the engine never had before:
+#   - the per-profile daily spend cap (`LLM_DAILY_BUDGET_USD`): the
+#     background pipeline sums today's `est_cost_usd` and refuses AI
+#     stages once it reaches the cap;
+#   - the `usage.today` RPC: today's spend in one query instead of a
+#     multi-day log reconstruction.
+# New table — `init_db`'s create_all provisions it; no column migration
+# is needed (nothing to ALTER onto an existing table).
+
+
+class LlmUsage(DictMixin, Base):
+    __tablename__ = "llm_usage"
+
+    id = Column(
+        String(36),
+        primary_key=True,
+        default=_new_uuid,
+    )
+    owner_id = Column(Text, nullable=False, index=True)
+    ts = Column(DateTime, default=_utcnow, index=True)
+    call_site = Column(Text)
+    transport = Column(Text)
+    model = Column(Text)
+    input_tokens = Column(Integer)
+    output_tokens = Column(Integer)
+    cache_creation_input_tokens = Column(Integer)
+    cache_read_input_tokens = Column(Integer)
+    est_cost_usd = Column(Float)

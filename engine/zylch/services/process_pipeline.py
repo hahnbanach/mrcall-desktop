@@ -152,6 +152,32 @@ async def handle_process(
         if errors_out is not None:
             errors_out.append({"stage": "whatsapp", "error": e})
 
+    # --- Daily spend hard cap (checked BEFORE any LLM attempt) ─────────
+    # LLM_DAILY_BUDGET_USD is the structural guarantee against runaway
+    # spend (support-llm-cost-fix / P1): once today's estimated spend
+    # reaches the per-profile cap, the background pipeline does NOT even
+    # send the 1-token preflight ping below — an over-budget tick makes
+    # ZERO call attempts. Only THIS background pipeline is gated;
+    # interactive chat.send / tasks.solve (a human at the keyboard,
+    # approval-gated) are metered but never blocked. budget_state reads
+    # the cap live from os.environ, so a settings.update takes effect
+    # with no daemon restart.
+    from zylch.llm.usage import budget_state, call_site
+
+    llm_ok = True
+    budget = budget_state(owner_id)
+    if budget["exceeded"]:
+        llm_ok = False
+        budget_msg = (
+            f"[llm-budget] daily budget exceeded: "
+            f"spent=${budget['spent_usd']:.2f} budget=${budget['budget_usd']:.2f} "
+            f"— AI stages skipped"
+        )
+        logger.error(budget_msg)
+        console.print(f"[red]  {budget_msg}[/red]")
+        if errors_out is not None:
+            errors_out.append({"stage": "llm_budget", "error": RuntimeError(budget_msg)})
+
     # --- Pre-flight LLM health check ───────────────────────────────────
     # Memory + task detection (and the F4/F8/F9 sweeps) are LLM-bound, and
     # every one of their dozens of per-item LLM calls catches-and-logs its
@@ -162,22 +188,24 @@ async def handle_process(
     # hundreds of doomed calls per tick (a profile logged 31k proxy 401s in
     # a day). One cheap probe turns that into a SINGLE structured, surfaced
     # error (humanize_error already maps MrCallAuthError / InsufficientCredits
-    # / "no llm") and lets us SKIP the doomed stages.
-    llm_ok = True
-    try:
-        from zylch.llm.client import make_llm_client
+    # / "no llm") and lets us SKIP the doomed stages. Skipped entirely when
+    # the budget gate above already tripped — no ping, no attempt.
+    if llm_ok:
+        try:
+            from zylch.llm.client import make_llm_client
 
-        _probe = make_llm_client()
-        await _probe.create_message(
-            messages=[{"role": "user", "content": "ping"}],
-            max_tokens=1,
-        )
-    except Exception as e:
-        llm_ok = False
-        logger.warning(f"[/process] LLM preflight failed: {type(e).__name__}: {e}")
-        console.print(f"[red]  AI unavailable — skipping memory + tasks: {e}[/red]")
-        if errors_out is not None:
-            errors_out.append({"stage": "llm", "error": e})
+            _probe = make_llm_client()
+            with call_site("preflight"):
+                await _probe.create_message(
+                    messages=[{"role": "user", "content": "ping"}],
+                    max_tokens=1,
+                )
+        except Exception as e:
+            llm_ok = False
+            logger.warning(f"[/process] LLM preflight failed: {type(e).__name__}: {e}")
+            console.print(f"[red]  AI unavailable — skipping memory + tasks: {e}[/red]")
+            if errors_out is not None:
+                errors_out.append({"stage": "llm", "error": e})
 
     # --- Step 3: Memory extraction (email + WhatsApp) ---
     # Phase 2c (whatsapp-pipeline-parity): WhatsApp messages now flow

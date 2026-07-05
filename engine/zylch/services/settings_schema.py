@@ -61,6 +61,21 @@ SETTINGS_SCHEMA: List[SettingsField] = [
             "business."
         ),
     },
+    {
+        "key": "LLM_DAILY_BUDGET_USD",
+        "label": "Daily LLM budget (USD)",
+        "type": "number",
+        "group": "LLM",
+        "optional": True,
+        "default": "10",
+        "help": (
+            "Daily USD cap on background AI work (task detection, memory "
+            "extraction, the dedup sweeps). When the day's estimated spend "
+            "reaches this, the background pipeline skips its AI stages until "
+            "tomorrow; interactive chat is never blocked. Default 10; "
+            "0 = uncapped."
+        ),
+    },
     # ─── Email (IMAP) ────────────────────────────────────────
     {
         "key": "EMAIL_ADDRESS",
