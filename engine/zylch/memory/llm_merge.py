@@ -4,7 +4,8 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
-from zylch.llm import LLMClient, make_llm_client, try_make_llm_client
+from zylch.llm import LLMClient, make_llm_client, routed_model, try_make_llm_client
+from zylch.llm.usage import call_site
 
 logger = logging.getLogger(__name__)
 
@@ -187,8 +188,11 @@ def merge_gate_selfcheck(merge_service: Optional["LLMMergeService"] = None) -> D
     and is logged at ERROR.
     """
     try:
-        svc = merge_service or LLMMergeService()
-        raw = svc.merge(_CANARY_EXISTING, _CANARY_NEW)
+        # MODEL_MEMORY_MERGE per-worker knob (empty → engine default). The
+        # canary must exercise the SAME model the live merge gate uses.
+        svc = merge_service or LLMMergeService(model=routed_model("MODEL_MEMORY_MERGE"))
+        with call_site("canary"):
+            raw = svc.merge(_CANARY_EXISTING, _CANARY_NEW)
     except Exception as e:
         logger.warning(f"[merge-gate] self-check could not run: {e}")
         return {"healthy": None, "verdict": "error", "raw": str(e)}
@@ -399,7 +403,8 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
     blob_storage = BlobStorage(get_session, embedding)
     main_storage = MainStorage.get_instance()
 
-    merge_service = LLMMergeService()
+    # MODEL_MEMORY_MERGE per-worker knob (empty → engine default).
+    merge_service = LLMMergeService(model=routed_model("MODEL_MEMORY_MERGE"))
 
     blobs_merged = 0
     blobs_kept_distinct = 0
@@ -427,10 +432,14 @@ async def reconsolidate_now(owner_id: str) -> Dict[str, Any]:
             pairs_done += 1
             try:
                 # Run the sync merge in a thread so we don't block
-                # the async event loop.
-                merged = await asyncio.to_thread(
-                    merge_service.merge, keeper["content"], other["content"]
-                )
+                # the async event loop. asyncio.to_thread propagates the
+                # current contextvars context, so the call_site tag survives
+                # into the worker thread and the spend records as
+                # "memory.reconsolidate".
+                with call_site("memory.reconsolidate"):
+                    merged = await asyncio.to_thread(
+                        merge_service.merge, keeper["content"], other["content"]
+                    )
                 consecutive_overload = 0
             except Exception as e:
                 err_str = str(e)

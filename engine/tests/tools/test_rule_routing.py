@@ -224,5 +224,10 @@ def test_get_learned_preferences_reads_template_and_prefs(fresh_db):
     assert "contact fact" not in out
 
     section = get_personal_data_section(owner_id=OWNER)
-    assert "Rules — always apply" in section
+    # Learned rules reach the section via the framed OPERATING RULES block.
+    # The old "## Rules — always apply" footer that re-embedded the same text
+    # a second time was removed in support-llm-cost-fix P4 / FIX 2, so the
+    # rule text must now appear EXACTLY ONCE.
+    assert "OPERATING RULES" in section
     assert "RULE A (template)" in section
+    assert section.count("RULE A (template)") == 1

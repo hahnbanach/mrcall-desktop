@@ -201,7 +201,8 @@ async def reanalyze_task(
     On failure returns {"ok": False, "error": "...", "task_id": task_id}.
     """
     from zylch.api.token_storage import get_email
-    from zylch.llm import try_make_llm_client
+    from zylch.llm import routed_model, try_make_llm_client
+    from zylch.llm.usage import call_site
     from zylch.storage.database import get_session
     from zylch.storage.storage import Storage
     from zylch.workers.thread_presenter import (
@@ -312,7 +313,8 @@ async def reanalyze_task(
             else:
                 thread_history_section = primary_history
 
-    client = try_make_llm_client()
+    # MODEL_REANALYZE per-worker knob (empty → engine default).
+    client = try_make_llm_client(model=routed_model("MODEL_REANALYZE"))
     if client is None:
         return {
             "ok": False,
@@ -354,13 +356,14 @@ async def reanalyze_task(
     user_content = _build_user_content(task, thread_history_section, today_str)
 
     try:
-        response = await client.create_message(
-            system=system,
-            messages=[{"role": "user", "content": user_content}],
-            max_tokens=500,
-            tools=[REANALYZE_TOOL],
-            tool_choice={"type": "tool", "name": "reanalyze_decision"},
-        )
+        with call_site("f4.reanalyze"):
+            response = await client.create_message(
+                system=system,
+                messages=[{"role": "user", "content": user_content}],
+                max_tokens=500,
+                tools=[REANALYZE_TOOL],
+                tool_choice={"type": "tool", "name": "reanalyze_decision"},
+            )
     except Exception as e:
         # 529 / overloaded is a known transient provider issue —
         # logging the full stack on every retry would flood stderr.

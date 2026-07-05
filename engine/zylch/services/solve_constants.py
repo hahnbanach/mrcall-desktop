@@ -478,12 +478,15 @@ def get_personal_data_section(owner_id: Optional[str] = None) -> str:
     if notes_block:
         parts.insert(0, notes_block)
     if owner_id:
+        # Learned rules go in EXACTLY ONE place: the framed OPERATING RULES
+        # block at the top (get_operating_rules_block already embeds
+        # _get_learned_preferences with binding-imperative framing). The old
+        # trailing "## Rules — always apply" footer re-embedded the same
+        # ~2,000 chars a second time in every solve / F4 / detection prompt —
+        # removed here (support-llm-cost-fix P4 / FIX 2).
         rules_block = get_operating_rules_block(owner_id)
         if rules_block:
             parts.insert(0, rules_block)
-        rules = _get_learned_preferences(owner_id)
-        if rules:
-            parts.append("## Rules — always apply (saved templates)\n" + rules)
 
     if not parts:
         return ""

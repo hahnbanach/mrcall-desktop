@@ -274,7 +274,8 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
         - Arbiter call failures on a single cluster do NOT abort the
           sweep — the cluster is left untouched and we move on.
     """
-    from zylch.llm import try_make_llm_client
+    from zylch.llm import routed_model, try_make_llm_client
+    from zylch.llm.usage import call_site
     from zylch.storage.storage import Storage
 
     store = Storage.get_instance()
@@ -333,7 +334,8 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
             "no_llm": False,
         }
 
-    client = try_make_llm_client()
+    # MODEL_DEDUP per-worker knob (empty → engine default).
+    client = try_make_llm_client(model=routed_model("MODEL_DEDUP"))
     if client is None:
         logger.warning(
             f"[dedup] no LLM transport configured — "
@@ -400,13 +402,14 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
 
         prompt = _build_arbiter_prompt(cluster)
         try:
-            resp = await client.create_message(
-                system=arbiter_system,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=400,
-                tools=[ARBITER_TOOL],
-                tool_choice={"type": "tool", "name": "dedup_decision"},
-            )
+            with call_site("dedup.f8"):
+                resp = await client.create_message(
+                    system=arbiter_system,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=400,
+                    tools=[ARBITER_TOOL],
+                    tool_choice={"type": "tool", "name": "dedup_decision"},
+                )
             consecutive_overload = 0
         except Exception as e:
             err_str = str(e)

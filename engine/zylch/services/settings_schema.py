@@ -76,6 +76,72 @@ SETTINGS_SCHEMA: List[SettingsField] = [
             "0 = uncapped."
         ),
     },
+    # Per-worker model overrides. Each pins ONE background job to a specific
+    # Anthropic model so extraction-shaped jobs can drop to a cheaper tier
+    # while judgment-shaped jobs stay strong. Blank = engine default (current
+    # behaviour). Applied on the worker's next call — no daemon restart.
+    {
+        "key": "MODEL_TASK_DETECTION",
+        "label": "Model — task detection",
+        "type": "text",
+        "group": "LLM",
+        "optional": True,
+        "help": (
+            "Full Anthropic model id for task detection (e.g. "
+            "claude-sonnet-4-5). Leave blank to use the engine default. "
+            "Applies on the next call — no restart."
+        ),
+    },
+    {
+        "key": "MODEL_REANALYZE",
+        "label": "Model — task re-analysis (F4)",
+        "type": "text",
+        "group": "LLM",
+        "optional": True,
+        "help": (
+            "Full Anthropic model id for the hourly task re-analysis sweep. "
+            "Leave blank to use the engine default. Applies on the next "
+            "call — no restart."
+        ),
+    },
+    {
+        "key": "MODEL_DEDUP",
+        "label": "Model — dedup sweeps (F8/F9)",
+        "type": "text",
+        "group": "LLM",
+        "optional": True,
+        "help": (
+            "Full Anthropic model id for the cluster- and topic-dedup "
+            "sweeps. Leave blank to use the engine default. Applies on the "
+            "next call — no restart."
+        ),
+    },
+    {
+        "key": "MODEL_MEMORY_EXTRACT",
+        "label": "Model — memory extraction",
+        "type": "text",
+        "group": "LLM",
+        "optional": True,
+        "help": (
+            "Full Anthropic model id for fact extraction into memory "
+            "(rigid structured output — a smaller model usually suffices). "
+            "Leave blank to use the engine default. Applies on the next "
+            "call — no restart."
+        ),
+    },
+    {
+        "key": "MODEL_MEMORY_MERGE",
+        "label": "Model — memory merge gate",
+        "type": "text",
+        "group": "LLM",
+        "optional": True,
+        "help": (
+            "Full Anthropic model id for the memory merge gate and its "
+            "canary. Keep this strong — the 2026-06 broken-open incident "
+            "showed this is not where to economise. Leave blank to use the "
+            "engine default. Applies on the next call — no restart."
+        ),
+    },
     # ─── Email (IMAP) ────────────────────────────────────────
     {
         "key": "EMAIL_ADDRESS",

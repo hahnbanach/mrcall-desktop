@@ -11,7 +11,8 @@ import logging
 import re
 from typing import Dict, List, Optional, Tuple
 
-from zylch.llm import LLMClient, make_llm_client
+from zylch.llm import LLMClient, make_llm_client, routed_model
+from zylch.llm.usage import call_site
 from zylch.storage import Storage
 from zylch.memory import (
     BlobStorage,
@@ -256,12 +257,14 @@ class MemoryWorker:
 
         self.blob_storage = BlobStorage(get_session, self.embedding_engine)
         self.hybrid_search = HybridSearchEngine(get_session, self.embedding_engine)
-        self.llm_merge = LLMMergeService()
+        # MODEL_MEMORY_MERGE per-worker knob (empty → engine default).
+        self.llm_merge = LLMMergeService(model=routed_model("MODEL_MEMORY_MERGE"))
 
         # LLM client for fact extraction. Raises RuntimeError if no
         # transport is configured — surfaces "no LLM" as a clear error
-        # rather than silently producing no memories.
-        self.client: LLMClient = make_llm_client()
+        # rather than silently producing no memories. MODEL_MEMORY_EXTRACT
+        # per-worker knob (empty → engine default).
+        self.client: LLMClient = make_llm_client(model=routed_model("MODEL_MEMORY_EXTRACT"))
 
         # Cache for user's custom prompt (lazy loaded)
         self._custom_prompt: Optional[str] = None
@@ -582,7 +585,8 @@ class MemoryWorker:
             existing_content = cand["content"]
             source = cand["source"]
             logger.debug(f"[memory] merge attempt blob_id={bid} source={source}")
-            merged_content = self.llm_merge.merge(existing_content, entity_content)
+            with call_site("memory.merge"):
+                merged_content = self.llm_merge.merge(existing_content, entity_content)
 
             # If the gate returned the INSERT/SKIP sentinel (entities don't
             # match), try next candidate.
@@ -817,12 +821,13 @@ class MemoryWorker:
                     body=(email.get("body_plain", "") or email.get("snippet", "")),
                     contact_email=contact_email,
                 )
-                response = self.client.create_message_sync(
-                    messages=[
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=1024,
-                )
+                with call_site("memory.extract"):
+                    response = self.client.create_message_sync(
+                        messages=[
+                            {"role": "user", "content": prompt},
+                        ],
+                        max_tokens=1024,
+                    )
             else:
                 # Modern cached-system prompt → instructions cached as the
                 # system block, the actual email as the user message.
@@ -835,16 +840,17 @@ class MemoryWorker:
                         },
                     },
                 ]
-                response = self.client.create_message_sync(
-                    system=system,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": ("Analyze this email:\n\n" + email_data),
-                        },
-                    ],
-                    max_tokens=1024,
-                )
+                with call_site("memory.extract"):
+                    response = self.client.create_message_sync(
+                        system=system,
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": ("Analyze this email:\n\n" + email_data),
+                            },
+                        ],
+                        max_tokens=1024,
+                    )
             raw_output = response.content[0].text.strip()
             logging.debug(f"RAW OUTPUT:\n{raw_output}")
             # Check for SKIP
@@ -1131,11 +1137,12 @@ class MemoryWorker:
                 }
             ]
             user_text = f"Analyze this message:\n\n{envelope}"
-            response = self.client.create_message_sync(
-                system=system,
-                messages=[{"role": "user", "content": user_text}],
-                max_tokens=1024,
-            )
+            with call_site("memory.extract"):
+                response = self.client.create_message_sync(
+                    system=system,
+                    messages=[{"role": "user", "content": user_text}],
+                    max_tokens=1024,
+                )
             raw_output = response.content[0].text.strip()
             if raw_output.upper() == "SKIP":
                 return []
@@ -1176,7 +1183,8 @@ class MemoryWorker:
 
             linked_blob_id: Optional[str] = None
             if existing:
-                merged_content = self.llm_merge.merge(existing.content, facts)
+                with call_site("memory.merge"):
+                    merged_content = self.llm_merge.merge(existing.content, facts)
                 self.blob_storage.update_blob(
                     blob_id=existing.blob_id,
                     owner_id=self.owner_id,
@@ -1273,9 +1281,10 @@ Include:
 Output ONLY the facts as natural language prose (2-5 sentences). If no meaningful facts, output "No significant facts."
 """
 
-            response = self.client.create_message_sync(
-                messages=[{"role": "user", "content": prompt}], max_tokens=512
-            )
+            with call_site("memory.extract"):
+                response = self.client.create_message_sync(
+                    messages=[{"role": "user", "content": prompt}], max_tokens=512
+                )
             return response.content[0].text.strip()
 
         except Exception as e:
@@ -1390,7 +1399,8 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
             logger.debug(
                 f"Trying to merge with blob {existing.blob_id} (score={existing.hybrid_score:.2f})"
             )
-            merged_content = self.llm_merge.merge(existing.content, entity_content)
+            with call_site("memory.merge"):
+                merged_content = self.llm_merge.merge(existing.content, entity_content)
 
             if is_no_merge_response(merged_content):
                 logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
@@ -1492,9 +1502,10 @@ Output ONLY the facts as natural language prose (2-5 sentences). If no meaningfu
             for placeholder, value in replacements.items():
                 prompt = prompt.replace(placeholder, str(value))
 
-            response = self.client.create_message_sync(
-                messages=[{"role": "user", "content": prompt}], max_tokens=1024
-            )
+            with call_site("memory.extract"):
+                response = self.client.create_message_sync(
+                    messages=[{"role": "user", "content": prompt}], max_tokens=1024
+                )
             raw_output = response.content[0].text.strip()
             logger.debug(f"MrCall RAW OUTPUT:\n{raw_output}")
 

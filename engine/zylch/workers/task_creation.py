@@ -9,7 +9,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from zylch.llm import make_llm_client
+from zylch.llm import make_llm_client, routed_model
+from zylch.llm.usage import call_site
 from zylch.storage import Storage
 from zylch.memory import HybridSearchEngine, EmbeddingEngine, MemoryConfig
 from zylch.workers.thread_presenter import strip_quoted
@@ -133,7 +134,8 @@ class TaskWorker:
         """
         self.storage = storage
         self.owner_id = owner_id
-        self.client = make_llm_client()
+        # MODEL_TASK_DETECTION per-worker knob (empty → engine default).
+        self.client = make_llm_client(model=routed_model("MODEL_TASK_DETECTION"))
         self.user_email = user_email.lower() if user_email else ""
         self.user_domain = (
             user_email.split("@")[1].lower() if user_email and "@" in user_email else ""
@@ -327,75 +329,51 @@ class TaskWorker:
             # Legacy field — also strip to keep payload small
             event_data.pop("thread_context", None)
 
-        # Format the prompt with event data
-        # Support both {var} and {{var}} formats (LLM may generate either)
+        # Assemble the (cache-stable system, per-event user) split. Per-event
+        # data lives ONLY in user_content; the system block is byte-identical
+        # across events for this owner so the ephemeral cache actually hits
+        # (support-llm-cost-fix P4 / FIX 1). The personal-data section
+        # (OPERATING RULES + USER_NOTES + secret instructions) stays inside
+        # the cached block — it changes only when the user edits Settings.
         try:
-            event_data_json = json.dumps(event_data, default=str)
-            formatted_prompt = (
-                prompt.replace("{{event_type}}", event_type)
-                .replace("{event_type}", event_type)
-                .replace("{{event_data}}", event_data_json)
-                .replace("{event_data}", event_data_json)
-                .replace("{{blob_context}}", blob_context)
-                .replace("{blob_context}", blob_context)
-                .replace("{{user_email}}", self.user_email)
-                .replace("{user_email}", self.user_email)
-                .replace("{{existing_task}}", existing_task_context)
-                .replace("{existing_task}", existing_task_context)
-                .replace("{{calendar_context}}", calendar_context)
-                .replace("{calendar_context}", calendar_context)
-                .replace("{{today}}", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
-                .replace("{today}", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+            from zylch.services.solve_constants import get_personal_data_section
+
+            personal_section = get_personal_data_section(owner_id=self.owner_id)
+        except Exception:
+            personal_section = ""
+
+        try:
+            from zylch.workers.task_prompt import build_detection_prompt
+
+            system_text, user_content = build_detection_prompt(
+                trained_prompt=prompt,
+                event_type=event_type,
+                event_data=event_data,
+                today_str=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                blob_context=blob_context,
+                existing_task_context=existing_task_context,
+                calendar_context=calendar_context,
+                thread_history_section=thread_history_section,
+                user_email=self.user_email,
+                personal_section=personal_section,
             )
-
-            # Append existing task context if provided (in case trained prompt doesn't have placeholder)
-            if (
-                existing_task_context
-                and "{{existing_task}}" not in prompt
-                and "{existing_task}" not in prompt
-            ):
-                formatted_prompt += f"\n\n{existing_task_context}"
-
-            # Append calendar context if provided (in case trained prompt doesn't have placeholder)
-            if (
-                calendar_context
-                and "{{calendar_context}}" not in prompt
-                and "{calendar_context}" not in prompt
-            ):
-                formatted_prompt += f"\n\n{calendar_context}"
-
-            # Append USER_NOTES + USER_SECRET_INSTRUCTIONS (+ the rest of
-            # the personal-data section) so the LLM can honour user-level
-            # guidance about how to classify / dedup specific flows.
-            # Kept INSIDE the cached system block so it's paid 10% on
-            # subsequent calls within a batch. Cache invalidates only when
-            # the user edits Settings — one write, amortised across the run.
-            try:
-                from zylch.services.solve_constants import get_personal_data_section
-
-                personal_section = get_personal_data_section(owner_id=self.owner_id)
-            except Exception:
-                personal_section = ""
-            if personal_section:
-                formatted_prompt += personal_section
-
         except Exception as e:
             logger.error(f"Failed to format prompt: {e}")
             return None
 
         # Debug logging
-        prompt_lines = formatted_prompt.count("\n") + 1
         logger.info(
-            f"[TASK] Sending prompt to LLM ({len(formatted_prompt)} chars, {prompt_lines} lines)"
+            f"[TASK] Sending prompt to LLM (system={len(system_text)} chars, "
+            f"user={len(user_content)} chars)"
         )
-        logger.debug("[TASK] ===== FULL PROMPT START =====")
-        logger.debug(f"[TASK] {formatted_prompt}")
-        logger.debug("[TASK] ===== FULL PROMPT END =====")
+        logger.debug("[TASK] ===== SYSTEM PROMPT START =====")
+        logger.debug(f"[TASK] {system_text}")
+        logger.debug("[TASK] ===== SYSTEM PROMPT END =====")
         logger.debug(f"[TASK] Analyzing {event_type}")
         # Redact the email body from this DEBUG breadcrumb — full bodies are
         # PII and a shared VPS shouldn't keep them in plaintext logs. The LLM
-        # still receives the full body in user_content below; only the log line
-        # is sanitised.
+        # still receives the full body in user_content; only the log line is
+        # sanitised.
         _ed_log = dict(event_data)
         if isinstance(_ed_log.get("body"), str) and _ed_log["body"]:
             _ed_log["body"] = f"<redacted {len(_ed_log['body'])} chars>"
@@ -410,43 +388,25 @@ class TaskWorker:
         system_prompt = [
             {
                 "type": "text",
-                "text": formatted_prompt,
+                "text": system_text,
                 "cache_control": {"type": "ephemeral"},
             },
         ]
-        user_content = (
-            f"Event type: {event_type}\n"
-            f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}\n"
-            f"Event data: {event_data_json}\n"
-        )
-        if thread_history_section:
-            user_content += f"\n{thread_history_section}\n"
-            user_content += (
-                "\nIMPORTANT — THREAD CONTEXT: The THREAD HISTORY above contains the FULL conversation history in chronological order, with user replies marked 'USER REPLY ✓'. "
-                "Your task description MUST reflect the LATEST state of the conversation, not just this single email. "
-                "If the user has already replied (look for 'USER REPLY ✓'), describe what remains to be done AFTER their reply — do NOT say the user hasn't responded. "
-                "If someone proposed a meeting date and is awaiting confirmation, say 'wait for confirmation' not 'propose a date'.\n"
-            )
-        if blob_context:
-            user_content += f"\nMemory context:\n{blob_context}"
-        if existing_task_context:
-            user_content += f"\nExisting task:\n{existing_task_context}"
-        if calendar_context:
-            user_content += f"\nCalendar context:\n{calendar_context}"
 
         try:
-            response = await self.client.create_message(
-                system=system_prompt,
-                messages=[
-                    {"role": "user", "content": user_content},
-                ],
-                max_tokens=500,
-                tools=[TASK_DECISION_TOOL],
-                tool_choice={
-                    "type": "tool",
-                    "name": "task_decision",
-                },
-            )
+            with call_site("task.detect"):
+                response = await self.client.create_message(
+                    system=system_prompt,
+                    messages=[
+                        {"role": "user", "content": user_content},
+                    ],
+                    max_tokens=500,
+                    tools=[TASK_DECISION_TOOL],
+                    tool_choice={
+                        "type": "tool",
+                        "name": "task_decision",
+                    },
+                )
 
             # Extract result from tool use response
             for block in response.content:

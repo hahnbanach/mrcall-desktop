@@ -257,7 +257,8 @@ async def run_topic_dedup(owner_id: str) -> Dict[str, Any]:
     """
     from datetime import datetime, timezone
 
-    from zylch.llm import try_make_llm_client
+    from zylch.llm import routed_model, try_make_llm_client
+    from zylch.llm.usage import call_site
     from zylch.storage.storage import Storage
 
     store = Storage.get_instance()
@@ -296,7 +297,8 @@ async def run_topic_dedup(owner_id: str) -> Dict[str, Any]:
             "no_llm": False,
         }
 
-    client = try_make_llm_client()
+    # MODEL_DEDUP per-worker knob (empty → engine default).
+    client = try_make_llm_client(model=routed_model("MODEL_DEDUP"))
     if client is None:
         logger.warning(
             f"[topic-dedup] no LLM transport configured — skipping sweep "
@@ -330,13 +332,14 @@ async def run_topic_dedup(owner_id: str) -> Dict[str, Any]:
     ]
 
     try:
-        resp = await client.create_message(
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=4000,
-            tools=[TOPIC_DEDUP_TOOL],
-            tool_choice={"type": "tool", "name": "topic_dedup_decision"},
-        )
+        with call_site("dedup.f9"):
+            resp = await client.create_message(
+                system=system,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=4000,
+                tools=[TOPIC_DEDUP_TOOL],
+                tool_choice={"type": "tool", "name": "topic_dedup_decision"},
+            )
     except Exception as e:
         err_str = str(e)
         if "529" in err_str or "overloaded" in err_str.lower():
