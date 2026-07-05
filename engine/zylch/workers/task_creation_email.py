@@ -110,9 +110,24 @@ async def analyze_recent_email_events(
 
         if is_user and is_auto:
             # Don't promote user-auto into the threads winner.
-            # Still kept in thread_all_emails so
-            # _mark_thread_nonuser_processed clears it on the
-            # next decision.
+            #
+            # Sink fix (support-llm-cost-fix / P2): a user-authored
+            # auto-reply (support@'s own auto-ack) is not a thread
+            # winner, but if it is the ONLY unprocessed email in its
+            # thread NO winner is ever decided for that thread, so
+            # _mark_thread_nonuser_processed is never called for it and
+            # the row is re-fetched every tick FOREVER (live sink:
+            # 9eefe615… 2026-06-11, d6097178… 2026-06-15). It can never
+            # become a task, so mark it task-processed right here. It is
+            # still kept in thread_all_emails, so a later winner's
+            # _mark_thread_nonuser_processed sweep is a harmless
+            # idempotent re-mark.
+            if email_id:
+                worker.storage.mark_email_task_processed(worker.owner_id, email_id)
+                logger.info(
+                    f"[TASK] user auto-reply {email_id} marked "
+                    f"task-processed (never analyzable)"
+                )
             continue
 
         existing = threads.get(thread_id)
@@ -501,14 +516,24 @@ async def analyze_recent_email_events(
         thread_task_ids: set = set(payload.get("thread_task_ids") or set())
 
         if result is None:
+            # No-mark-on-failure fix (support-llm-cost-fix / P2):
+            # previously a failed LLM analysis marked the whole thread
+            # task-processed anyway, so the email was never retried and
+            # never produced a task — silent task loss. Leave the thread
+            # UNPROCESSED so the next tick retries it. Boundedness comes
+            # from the 14-day expiry hygiene stage (task_hygiene.py), so
+            # a permanently-failing row cannot be re-fetched without
+            # bound.
             consecutive_failures += 1
+            logger.warning(
+                f"[TASK] LLM analysis failed for thread {thread_id} — "
+                f"left unprocessed, will retry next tick"
+            )
             if consecutive_failures >= 3:
                 logger.error(
                     "3+ LLM failures — stopping task analysis",
                 )
-                _mark_thread_nonuser_processed(thread_id)
                 break
-            _mark_thread_nonuser_processed(thread_id)
             continue
 
         consecutive_failures = 0

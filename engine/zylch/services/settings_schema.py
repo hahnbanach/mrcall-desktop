@@ -169,6 +169,21 @@ SETTINGS_SCHEMA: List[SettingsField] = [
         "default": "30",
         "help": "Minutes between automatic Updates. Allowed range 5–360.",
     },
+    {
+        "key": "TASK_BACKLOG_MAX_AGE_DAYS",
+        "label": "Task backlog max age (days)",
+        "type": "number",
+        "group": "Sync",
+        "optional": True,
+        "default": "14",
+        "help": (
+            "Backlog hygiene runs every Update without any AI, even when "
+            "the LLM is unavailable. Any email still un-analyzed for task "
+            "detection after this many days is marked processed so it stops "
+            "being retried every tick — this bounds retry of analyses that "
+            "keep failing (e.g. the LLM was down). Default 14."
+        ),
+    },
     # ─── Google ─────────────────────────────────────────────
     # Calendar is connected via the "Connect Google Calendar" button in
     # the Settings → Integrations section (PKCE OAuth on :19275, using the

@@ -82,6 +82,8 @@ async def handle_process(
         "memory_processed": 0,
         "wa_memory_processed": 0,
         "tasks_pending": 0,
+        "auto_ack_marked": 0,
+        "expired_marked": 0,
         "task_msg": "",
     }
 
@@ -151,6 +153,34 @@ async def handle_process(
         console.print(f"[yellow]  WhatsApp sync failed: {e}[/yellow]")
         if errors_out is not None:
             errors_out.append({"stage": "whatsapp", "error": e})
+
+    # --- Backlog hygiene (no LLM, support-llm-cost-fix / P2) ───────────
+    # Runs AFTER the email/WhatsApp sync and BEFORE the budget gate +
+    # preflight ping below, so it executes even when the key is dead or
+    # the daily budget is exhausted — that is the point: the unprocessed
+    # task backlog must stop growing silently in exactly those states.
+    # Two rules, no LLM: (1) mark user-authored auto-replies
+    # task-processed — they can never become a task; leaving them unmarked
+    # is the structural sink that stranded support@'s own auto-acks
+    # forever; (2) mark any row older than TASK_BACKLOG_MAX_AGE_DAYS with a
+    # WARN so a permanently-failing analysis can't be re-fetched every tick
+    # without bound. Best-effort: a hygiene failure must not break the run.
+    try:
+        from zylch.workers.task_hygiene import run_task_backlog_hygiene
+
+        hygiene = run_task_backlog_hygiene(owner_id, store)
+        summary_stats["auto_ack_marked"] = int(hygiene.get("auto_ack_marked", 0) or 0)
+        summary_stats["expired_marked"] = int(hygiene.get("expired_marked", 0) or 0)
+        if summary_stats["auto_ack_marked"] or summary_stats["expired_marked"]:
+            console.print(
+                f"  [dim]Backlog hygiene: "
+                f"{summary_stats['auto_ack_marked']} auto-ack, "
+                f"{summary_stats['expired_marked']} expired[/dim]"
+            )
+    except Exception as e:
+        logger.error(f"[/process] backlog hygiene failed: {e}", exc_info=True)
+        if errors_out is not None:
+            errors_out.append({"stage": "hygiene", "error": e})
 
     # --- Daily spend hard cap (checked BEFORE any LLM attempt) ─────────
     # LLM_DAILY_BUDGET_USD is the structural guarantee against runaway
@@ -336,13 +366,16 @@ async def handle_process(
     )
     logger.info(
         "[update.summary] sync=%+d wa=%dmsgs/%dcontacts memory=%d wa_memory=%d "
-        "tasks_pending=%d open_before=%d open_after=%d delta=%s detail=%r",
+        "tasks_pending=%d hygiene_autoack=%d hygiene_expired=%d "
+        "open_before=%d open_after=%d delta=%s detail=%r",
         summary_stats["sync_new"],
         summary_stats["wa_messages"],
         summary_stats["wa_contacts"],
         summary_stats["memory_processed"],
         summary_stats["wa_memory_processed"],
         summary_stats["tasks_pending"],
+        summary_stats["auto_ack_marked"],
+        summary_stats["expired_marked"],
         before_open_count,
         after_open_count,
         f"{delta:+d}" if delta is not None else "n/a",
