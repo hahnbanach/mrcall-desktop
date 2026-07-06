@@ -13,6 +13,7 @@ so the renderer can refresh the token and retry.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Awaitable, Callable, Dict
 
 import httpx
@@ -29,14 +30,36 @@ def _sender_url() -> str:
     return f"{settings.mrcall_proxy_url.rstrip('/')}/api/desktop/sms/sender"
 
 
+def _billing_business_id() -> str:
+    """The explicit billing business (profile ``SMS_BUSINESS_ID``).
+
+    Read from ``os.environ`` — NOT the frozen ``settings`` singleton, which
+    snapshots the ``.env`` at daemon start — so a ``settings.update`` (which
+    hot-reloads ``os.environ`` via ``settings_io.update_env``) is picked up
+    WITHOUT a daemon restart. Same convention as ``tools/sms_send.py``.
+
+    Required for admin / multi-assistant accounts (support@ is a reseller
+    token that sees EVERY business, so mrcall-agent's ``resolve_business_id``
+    refuses to guess and returns 400 ``business_id_required``); a single-
+    business owner works with it unset (empty → omitted → server uses the
+    sole visible business).
+    """
+    return os.environ.get("SMS_BUSINESS_ID", "").strip()
+
+
 async def sms_get_sender(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """sms.get_sender() -> {sender, business_id} | {error: 'auth_expired'}."""
     sess = require_session()
     url = _sender_url()
-    logger.debug(f"[rpc:sms.get_sender] GET {url} token_len={len(sess.id_token)}")
+    business_id = _billing_business_id()
+    params_q = {"business_id": business_id} if business_id else None
+    logger.debug(
+        f"[rpc:sms.get_sender] GET {url} business_id={business_id or '(unset)'} "
+        f"token_len={len(sess.id_token)}"
+    )
     try:
         async with httpx.AsyncClient(timeout=15.0) as c:
-            r = await c.get(url, headers={"auth": sess.id_token})
+            r = await c.get(url, headers={"auth": sess.id_token}, params=params_q)
     except httpx.HTTPError as exc:
         logger.warning(f"[rpc:sms.get_sender] transport error: {exc}")
         raise
@@ -55,12 +78,17 @@ async def sms_set_sender(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
     sess = require_session()
     url = _sender_url()
+    business_id = _billing_business_id()
+    body: Dict[str, Any] = {"sender": sender}
+    if business_id:
+        body["business_id"] = business_id
     logger.debug(
-        f"[rpc:sms.set_sender] PUT {url} sender_len={len(sender)} token_len={len(sess.id_token)}"
+        f"[rpc:sms.set_sender] PUT {url} sender_len={len(sender)} "
+        f"business_id={business_id or '(unset)'} token_len={len(sess.id_token)}"
     )
     try:
         async with httpx.AsyncClient(timeout=15.0) as c:
-            r = await c.put(url, headers={"auth": sess.id_token}, json={"sender": sender})
+            r = await c.put(url, headers={"auth": sess.id_token}, json=body)
     except httpx.HTTPError as exc:
         logger.warning(f"[rpc:sms.set_sender] transport error: {exc}")
         raise
