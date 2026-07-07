@@ -119,6 +119,20 @@ export default function Settings(): JSX.Element {
     setSaving(true)
     setError(null)
     setStatus({ kind: 'progress', text: 'Saving…' })
+    // Gate a changed SMS_BUSINESS_ID: it must resolve to a business the
+    // signed-in account can bill, or the failure only surfaces later as a
+    // cryptic 400/403 when SMS actually bills it. `null` = couldn't check
+    // (e.g. not signed in) → don't block; enforcement still happens at use.
+    const newBid = (changes.SMS_BUSINESS_ID ?? '').trim()
+    if (newBid) {
+      const valid = await validateBusinessId(newBid)
+      if (valid === false) {
+        setError('Business ID non valido o non è tra le tue business — controlla.')
+        setStatus({ kind: 'error', text: 'Save failed' })
+        setSaving(false)
+        return
+      }
+    }
     try {
       const res = await window.zylch.settings.update(changes)
       if (!res.ok) {
@@ -1132,6 +1146,279 @@ export function ModelSelect({
   )
 }
 
+// ─── Business picker (SMS_BUSINESS_ID) ───────────────────────────────
+//
+// SMS_BUSINESS_ID must be a real StarChat businessId (a UUID). Typing it
+// blind is a footgun: a wrong value gets a cryptic 400/403 only later,
+// when something bills it. This picker resolves it from the businesses
+// the signed-in account can actually see, via the engine RPCs that hit
+// StarChat directly (`mrcall.list_my_businesses` / `mrcall.search_businesses`).
+//
+// Search is a server-side SQL LIKE: the term must be wrapped in `%...%`
+// (mirrors mrcall-dashboard's /businesses search) — a bare term is an
+// exact match. That makes it scale to a reseller/admin with ~1000
+// businesses: we never page them all client-side, we `%q%` search.
+interface Business {
+  businessId: string
+  companyName?: string
+  nickname?: string
+  name?: string
+  surname?: string
+  emailAddress?: string
+  businessPhoneNumber?: string
+  totalHits?: number
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function bizLabel(b: Business): string {
+  const person = [b.name, b.surname].filter(Boolean).join(' ').trim()
+  return b.companyName || b.nickname || person || b.businessId
+}
+
+// Wrap a search term for the StarChat LIKE filter: strip stray % then
+// bracket with %...% so "contrast" matches "CONTRAST ARQUITECTURA".
+function likeWrap(q: string): string {
+  return '%' + q.replace(/^%+/, '').replace(/%+$/, '') + '%'
+}
+
+// Route a typed term to the right search filter. Empty → null (caller
+// lists the account's own businesses). A UUID → exact businessId (no
+// wildcards). An '@' → email %substring%. Otherwise company-name
+// %substring%. Exported so the routing is unit-testable without the DOM.
+export function businessQuery(query: string): Record<string, string> | null {
+  const q = query.trim()
+  if (!q) return null
+  if (UUID_RE.test(q)) return { businessId: q }
+  if (q.includes('@')) return { emailAddress: likeWrap(q) }
+  return { companyName: likeWrap(q) }
+}
+
+function asBusinesses(arr: unknown[]): Business[] {
+  return (arr as Business[]).filter((b) => b && typeof b.businessId === 'string')
+}
+
+// Validate a businessId against the caller's visible set (role-scoped by
+// StarChat). Returns true when it resolves, false when it doesn't, and
+// null when we couldn't check (e.g. not signed in) — callers must not
+// treat null as invalid.
+export async function validateBusinessId(bid: string): Promise<boolean | null> {
+  try {
+    const r = await window.zylch.mrcall.searchBusinesses({ businessId: bid, limit: 1 })
+    return asBusinesses(r.businesses).some((b) => b.businessId === bid)
+  } catch {
+    return null
+  }
+}
+
+export function BusinessPicker({
+  id,
+  value,
+  isDirty,
+  onChange
+}: {
+  id: string
+  value: string
+  isDirty: boolean
+  onChange: (v: string) => void
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<Business[]>([])
+  const [totalHits, setTotalHits] = useState<number | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [currentLabel, setCurrentLabel] = useState<string | null>(null)
+  const [invalid, setInvalid] = useState(false)
+  const [notSignedIn, setNotSignedIn] = useState(false)
+  const wrap = useRef<HTMLDivElement>(null)
+
+  // Resolve the current value's friendly name; "never empty" — if the
+  // account has exactly one business and nothing is set, adopt it.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        if (value) {
+          const r = await window.zylch.mrcall.searchBusinesses({ businessId: value, limit: 1 })
+          if (cancelled) return
+          const b = asBusinesses(r.businesses).find((x) => x.businessId === value)
+          setCurrentLabel(b ? bizLabel(b) : null)
+          setInvalid(!b)
+          setNotSignedIn(false)
+        } else {
+          const r = await window.zylch.mrcall.listMyBusinesses({ limit: 2 })
+          if (cancelled) return
+          const b = asBusinesses(r.businesses)
+          const total = b[0]?.totalHits
+          setNotSignedIn(false)
+          if (b.length === 1 && (total == null || total === 1)) {
+            onChange(b[0].businessId) // sole business — populate it, never empty
+          }
+        }
+      } catch (e) {
+        if (cancelled) return
+        if ((e as { code?: number })?.code === -32010) setNotSignedIn(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load options when open / query changes. Empty query → the account's
+  // own list; a term → a %substring% search (by businessId if a UUID, by
+  // email if it has an '@', else by company name).
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    const run = async (): Promise<void> => {
+      setLoading(true)
+      try {
+        const bq = businessQuery(query)
+        const r = bq
+          ? await window.zylch.mrcall.searchBusinesses({ ...bq, limit: 25 })
+          : await window.zylch.mrcall.listMyBusinesses({ limit: 25 })
+        if (cancelled) return
+        const b = asBusinesses(r.businesses)
+        setResults(b)
+        setTotalHits(b[0]?.totalHits ?? b.length)
+        setNotSignedIn(false)
+      } catch (e) {
+        if (cancelled) return
+        setResults([])
+        setTotalHits(null)
+        if ((e as { code?: number })?.code === -32010) setNotSignedIn(true)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    const t = setTimeout(run, query.trim() ? 250 : 0)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [open, query])
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const pick = (b: Business): void => {
+    onChange(b.businessId)
+    setCurrentLabel(bizLabel(b))
+    setInvalid(false)
+    setOpen(false)
+    setQuery('')
+  }
+
+  const btn =
+    'w-full px-3 py-2 border rounded text-sm flex items-center justify-between gap-2 ' +
+    'focus:outline-none focus:ring-2 focus:ring-brand-mid-grey ' +
+    (invalid
+      ? 'border-brand-danger bg-brand-danger/10'
+      : isDirty
+        ? 'border-brand-orange bg-brand-orange/10'
+        : 'border-brand-mid-grey')
+
+  return (
+    <div className="relative" ref={wrap}>
+      <button
+        id={id}
+        type="button"
+        className={btn}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="truncate text-left">
+          {value ? (
+            <>
+              {invalid && <span className="text-brand-danger mr-1">⚠</span>}
+              <span className={invalid ? 'text-brand-danger' : ''}>{currentLabel ?? value}</span>
+              <span className="ml-2 text-brand-mid-grey font-mono text-[10px]">{value}</span>
+            </>
+          ) : (
+            <span className="text-brand-grey-80">Select a business…</span>
+          )}
+        </span>
+        <span className="text-brand-grey-80 text-xs shrink-0">▾</span>
+      </button>
+      {invalid && (
+        <div className="text-xs text-brand-danger mt-1">
+          This business ID isn’t one your account can bill — pick the right one below.
+        </div>
+      )}
+      {open && (
+        <div className="absolute z-20 mt-1 w-full rounded border border-brand-mid-grey bg-white shadow-lg">
+          <div className="p-2 border-b border-brand-light-grey">
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name, email, or paste a business ID…"
+              className="w-full px-2 py-1.5 border border-brand-mid-grey rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-mid-grey"
+            />
+          </div>
+          <ul role="listbox" className="max-h-64 overflow-auto py-1">
+            {notSignedIn ? (
+              <li className="px-3 py-2 text-sm text-brand-grey-80">
+                Sign in to MrCall to pick a business.
+              </li>
+            ) : loading ? (
+              <li className="px-3 py-2 text-sm text-brand-grey-80">Searching…</li>
+            ) : results.length === 0 ? (
+              <li className="px-3 py-2 text-sm text-brand-grey-80">
+                {query.trim() ? 'No matching business.' : 'No businesses found.'}
+              </li>
+            ) : (
+              results.map((b) => (
+                <li key={b.businessId}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={b.businessId === value}
+                    onClick={() => pick(b)}
+                    className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-brand-light-grey"
+                  >
+                    <span className="w-4 shrink-0 text-brand-orange">
+                      {b.businessId === value && <Icon name="check" size={14} />}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="font-medium block truncate">{bizLabel(b)}</span>
+                      <span className="text-xs text-brand-grey-80 block truncate">
+                        {b.emailAddress || b.businessPhoneNumber || ''}
+                        <span className="ml-2 font-mono text-[10px]">{b.businessId}</span>
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+          {totalHits != null && totalHits > results.length && (
+            <div className="px-3 py-1.5 text-xs text-brand-grey-80 border-t border-brand-light-grey">
+              Showing {results.length} of {totalHits} — refine your search.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Element {
   const id = `field-${field.key}`
   const baseInput =
@@ -1139,7 +1426,9 @@ function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Eleme
     (isDirty ? 'border-brand-orange bg-brand-orange/10' : 'border-brand-mid-grey')
 
   let control: JSX.Element
-  if (field.type === 'model' && field.model_choices) {
+  if (field.key === 'SMS_BUSINESS_ID') {
+    control = <BusinessPicker id={id} value={value} isDirty={isDirty} onChange={onChange} />
+  } else if (field.type === 'model' && field.model_choices) {
     control = (
       <ModelSelect
         id={id}
