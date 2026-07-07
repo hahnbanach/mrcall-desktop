@@ -15,16 +15,43 @@ from __future__ import annotations
 from typing import Any, Dict, List, TypedDict
 
 
+class ModelChoice(TypedDict, total=False):
+    value: str  # canonical Anthropic model id written to the .env
+    label: str  # friendly tier name shown in the dropdown
+    note: str  # one-line hint (speed / cost positioning)
+
+
 class SettingsField(TypedDict, total=False):
     key: str
     label: str
-    type: str  # one of: text, password, number, select, textarea
+    type: str  # one of: text, password, number, select, textarea, model
     group: str
     optional: bool
     options: List[str]
+    model_choices: List[ModelChoice]  # for type "model": the tier dropdown
+    suggested: str  # for type "model": canonical id greyed as "recommended"
     help: str
     secret: bool  # True for password / api keys — masked in settings_get
     default: str  # placeholder / first-option hint shown when the value is unset
+
+
+# The friendly model tiers offered by every "model" field. Values are the
+# canonical DATELESS Anthropic model ids (web-verified 2026-07-07 against the
+# official model-ids catalogue — dateless aliases are canonical for the 4.6+
+# generation). Ordered cheapest→strongest so the dropdown reads as a value
+# ladder. Update the ids HERE when a tier ships a new version — single source,
+# consumed verbatim by the desktop Settings dropdown.
+MODEL_CHOICES: List[ModelChoice] = [
+    {"value": "claude-haiku-4-5", "label": "Haiku", "note": "Fastest & cheapest"},
+    {"value": "claude-sonnet-5", "label": "Sonnet", "note": "Balanced"},
+    {"value": "claude-opus-4-8", "label": "Opus", "note": "Strongest everyday"},
+    {"value": "claude-fable-5", "label": "Fable", "note": "Top tier (priciest)"},
+]
+
+# Convenience ids for per-knob `suggested` values (never suggest Fable).
+_HAIKU = "claude-haiku-4-5"
+_SONNET = "claude-sonnet-5"
+_OPUS = "claude-opus-4-8"
 
 
 # Order = display order. Groups are also rendered in this order.
@@ -83,63 +110,70 @@ SETTINGS_SCHEMA: List[SettingsField] = [
     {
         "key": "MODEL_TASK_DETECTION",
         "label": "Model — task detection",
-        "type": "text",
+        "type": "model",
         "group": "LLM",
         "optional": True,
+        "model_choices": MODEL_CHOICES,
+        "suggested": _OPUS,
         "help": (
-            "Full Anthropic model id for task detection (e.g. "
-            "claude-sonnet-4-5). Leave blank to use the engine default. "
-            "Applies on the next call — no restart."
+            "Which model reads new mail and decides what becomes a task. "
+            "Judgment-shaped work on customer mail — the suggestion keeps it "
+            "strong. Engine default leaves it unset. Applies on the next "
+            "call — no restart."
         ),
     },
     {
         "key": "MODEL_REANALYZE",
         "label": "Model — task re-analysis (F4)",
-        "type": "text",
+        "type": "model",
         "group": "LLM",
         "optional": True,
+        "model_choices": MODEL_CHOICES,
+        "suggested": _SONNET,
         "help": (
-            "Full Anthropic model id for the hourly task re-analysis sweep. "
-            "Leave blank to use the engine default. Applies on the next "
-            "call — no restart."
+            "Which model re-judges open tasks when their thread gets new "
+            "activity. Applies on the next call — no restart."
         ),
     },
     {
         "key": "MODEL_DEDUP",
         "label": "Model — dedup sweeps (F8/F9)",
-        "type": "text",
+        "type": "model",
         "group": "LLM",
         "optional": True,
+        "model_choices": MODEL_CHOICES,
+        "suggested": _SONNET,
         "help": (
-            "Full Anthropic model id for the cluster- and topic-dedup "
-            "sweeps. Leave blank to use the engine default. Applies on the "
-            "next call — no restart."
+            "Which model runs the cluster- and topic-dedup sweeps over the "
+            "open-task list. Applies on the next call — no restart."
         ),
     },
     {
         "key": "MODEL_MEMORY_EXTRACT",
         "label": "Model — memory extraction",
-        "type": "text",
+        "type": "model",
         "group": "LLM",
         "optional": True,
+        "model_choices": MODEL_CHOICES,
+        "suggested": _HAIKU,
         "help": (
-            "Full Anthropic model id for fact extraction into memory "
-            "(rigid structured output — a smaller model usually suffices). "
-            "Leave blank to use the engine default. Applies on the next "
+            "Which model extracts facts into memory. Rigid structured "
+            "output — a smaller model usually suffices. Applies on the next "
             "call — no restart."
         ),
     },
     {
         "key": "MODEL_MEMORY_MERGE",
         "label": "Model — memory merge gate",
-        "type": "text",
+        "type": "model",
         "group": "LLM",
         "optional": True,
+        "model_choices": MODEL_CHOICES,
+        "suggested": _OPUS,
         "help": (
-            "Full Anthropic model id for the memory merge gate and its "
-            "canary. Keep this strong — the 2026-06 broken-open incident "
-            "showed this is not where to economise. Leave blank to use the "
-            "engine default. Applies on the next call — no restart."
+            "Which model guards the memory merge gate. Keep this strong — "
+            "the 2026-06 broken-open incident showed this is not where to "
+            "economise. Applies on the next call — no restart."
         ),
     },
     # ─── Email (IMAP) ────────────────────────────────────────

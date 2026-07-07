@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { errorMessage, isProfileLockedError } from '../lib/errors'
 import Icon from '../components/Icon'
 import ConnectGoogleCalendar from './ConnectGoogleCalendar'
@@ -8,7 +8,16 @@ import { performSignOut } from '../App'
 import { auth } from '../firebase/config'
 import { ensureEngineSession } from '../firebase/authUtils'
 
-type FieldType = 'text' | 'password' | 'number' | 'select' | 'textarea'
+type FieldType = 'text' | 'password' | 'number' | 'select' | 'textarea' | 'model'
+
+/** One friendly model tier in a `type: 'model'` dropdown. `value` is the
+ *  canonical Anthropic model id written to the .env; `label` is the tier
+ *  name shown to the user. Supplied by the engine schema (single source). */
+interface ModelChoice {
+  value: string
+  label: string
+  note?: string
+}
 
 interface FieldDescriptor {
   key: string
@@ -17,6 +26,10 @@ interface FieldDescriptor {
   group: string
   optional?: boolean
   options?: string[]
+  /** For `type: 'model'`: the tier dropdown (Haiku/Sonnet/Opus/Fable). */
+  model_choices?: ModelChoice[]
+  /** For `type: 'model'`: canonical id greyed as the recommended pick. */
+  suggested?: string
   help?: string
   secret?: boolean
   /** Render a native folder picker next to the text input. */
@@ -1002,6 +1015,123 @@ interface FieldRowProps {
   isDirty: boolean
 }
 
+/** Friendly model-tier dropdown for `type: 'model'` fields.
+ *
+ * A custom popover (not a native <select>) because we need two things the
+ * OS menu can't render portably: the per-knob *suggested* tier greyed with a
+ * "Suggested" tag, and a ✓ tick on the currently-chosen row. Values written
+ * to the .env are the canonical model ids from the engine schema; the empty
+ * string means "Engine default" (left unset — current engine behaviour). */
+export function ModelSelect({
+  id,
+  value,
+  choices,
+  suggested,
+  isDirty,
+  onChange
+}: {
+  id: string
+  value: string
+  choices: ModelChoice[]
+  suggested?: string
+  isDirty: boolean
+  onChange: (v: string) => void
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const wrap = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  // "Engine default" is the implicit first row (empty value). A non-empty
+  // value not in `choices` (a legacy / hand-set id) still shows verbatim so
+  // we never hide what's actually in the .env.
+  const rows: ModelChoice[] = [{ value: '', label: 'Engine default', note: 'Leave unset' }, ...choices]
+  const current =
+    rows.find((r) => r.value === value) ??
+    (value ? { value, label: value, note: 'Custom id' } : rows[0])
+
+  const btn =
+    'w-full px-3 py-2 border rounded text-sm flex items-center justify-between gap-2 ' +
+    'focus:outline-none focus:ring-2 focus:ring-brand-mid-grey ' +
+    (isDirty ? 'border-brand-orange bg-brand-orange/10' : 'border-brand-mid-grey')
+
+  return (
+    <div className="relative" ref={wrap}>
+      <button
+        id={id}
+        type="button"
+        className={btn}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="truncate text-left">
+          {current.label}
+          {current.value !== '' && (
+            <span className="ml-2 text-brand-mid-grey font-mono text-[10px]">{current.value}</span>
+          )}
+        </span>
+        <span className="text-brand-grey-80 text-xs shrink-0">▾</span>
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          className="absolute z-20 mt-1 w-full max-h-72 overflow-auto rounded border border-brand-mid-grey bg-white shadow-lg py-1"
+        >
+          {rows.map((r) => {
+            const isSuggested = !!suggested && r.value === suggested
+            const isSelected = r.value === value
+            return (
+              <li key={r.value || '__default__'}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    onChange(r.value)
+                    setOpen(false)
+                  }}
+                  className={
+                    'w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-brand-light-grey ' +
+                    (isSuggested ? 'bg-brand-light-grey' : '')
+                  }
+                >
+                  <span className="w-4 shrink-0 text-brand-orange">
+                    {isSelected && <Icon name="check" size={14} />}
+                  </span>
+                  <span className="flex-1">
+                    <span className="font-medium">{r.label}</span>
+                    {r.note && <span className="ml-2 text-xs text-brand-grey-80">{r.note}</span>}
+                  </span>
+                  {isSuggested && (
+                    <span className="shrink-0 text-[10px] uppercase tracking-wide text-brand-grey-80 border border-brand-mid-grey rounded px-1.5 py-0.5">
+                      Suggested
+                    </span>
+                  )}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Element {
   const id = `field-${field.key}`
   const baseInput =
@@ -1009,7 +1139,18 @@ function FieldRow({ field, value, onChange, isDirty }: FieldRowProps): JSX.Eleme
     (isDirty ? 'border-brand-orange bg-brand-orange/10' : 'border-brand-mid-grey')
 
   let control: JSX.Element
-  if (field.type === 'select' && field.options) {
+  if (field.type === 'model' && field.model_choices) {
+    control = (
+      <ModelSelect
+        id={id}
+        value={value}
+        choices={field.model_choices}
+        suggested={field.suggested}
+        isDirty={isDirty}
+        onChange={onChange}
+      />
+    )
+  } else if (field.type === 'select' && field.options) {
     // When the stored value is empty, show the schema default as the
     // selected option (purely visual — we don't write it back unless the
     // user actively changes the select, so an untouched default stays
