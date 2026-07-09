@@ -253,7 +253,18 @@ class LLMClient:
             # 5 retries spans ~30 s, which covers transient capacity
             # blips without making the user wait forever on a real
             # outage.
-            self._client = anthropic.Anthropic(api_key=api_key, max_retries=5)
+            #
+            # 2026-07-08: add an explicit per-request `timeout`. Without one
+            # the SDK default (~10 min) applies to EACH attempt, so a
+            # stalled/overloaded non-streaming call × max_retries=5 can hang
+            # a single LLM call for ~50 min. That is the root cause of the
+            # memory-write chat turns "failing" client-side with a
+            # TimeoutError while the write completed engine-side: the agent
+            # loop's follow-up call stalled and the cs client always gave up
+            # first. 120 s is generous for a non-streaming Messages call
+            # (max_tokens ≤ 8192) yet bounds a stall; with retries the worst
+            # case is a few minutes, not ~50.
+            self._client = anthropic.Anthropic(api_key=api_key, max_retries=5, timeout=120.0)
             self.model = model or settings.anthropic_model
         elif transport == "proxy":
             if firebase_session is None:
