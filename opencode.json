@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "git push origin main": "allow",
+      "kubectl --kubeconfig=/home/mal/hb/zylch-deploy/production/kubeconfig.yaml logs *": "allow",
+      "KUBECONFIG=/home/mal/hb/zylch-deploy/production/kubeconfig.yaml kubectl logs *": "allow"
+    }
+  }
+}
