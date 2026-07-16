@@ -1,16 +1,19 @@
 # MrCall Desktop
 
 Local AI assistant for business communication — email (IMAP / SMTP),
-WhatsApp, and phone (via MrCall) unified with a shared semantic memory
-of every contact. Runs as a desktop app on **macOS** and **Windows**.
+WhatsApp, SMS, and phone (via MrCall) unified with a shared semantic
+memory of every contact. Runs as a desktop app on **macOS** and
+**Windows**.
 
 Your inbox, tasks, embeddings, and credentials live in a local profile
-directory under `~/.zylch/<firebase-uid>/`; nothing syncs to the cloud.
-The only network identity is a Firebase Auth signin that gates the
-app — the same MrCall account you use on the [web
+directory under `~/.zylch/profiles/<firebase-uid>/`; nothing syncs to
+the cloud. The only network identity is a Firebase Auth signin that
+gates the app — the same MrCall account you use on the [web
 dashboard](https://mrcall.ai). On signin the renderer pushes a short-
-lived ID token to the engine purely to authenticate outgoing MrCall
-phone calls; the token is held in memory only and never persisted.
+lived ID token to the engine, which uses it to authenticate outgoing
+calls to MrCall's backends (phone, SMS, business lookups, and MrCall-
+credits billing); the token itself is held in memory only and never
+persisted.
 
 This is a monorepo containing both the Python engine that talks to
 mail / WhatsApp / phone / LLMs, and the Electron + React desktop
@@ -55,8 +58,9 @@ Full dev / packaging details: [`app/README.md`](app/README.md) and
 ## Repository layout
 
 - **[`engine/`](engine/)** — Python 3.11+ sidecar (the brain). IMAP /
-  SMTP, WhatsApp (neonize), MrCall phone, blob memory, hybrid lexical +
-  semantic search over local SQLite. BYOK LLM (Anthropic or OpenAI).
+  SMTP, WhatsApp (neonize), SMS, MrCall phone, blob memory, hybrid
+  lexical + semantic search over local SQLite. BYOK LLM (Anthropic or
+  OpenAI).
 - **[`app/`](app/)** — Electron + React desktop frontend that embeds
   the engine via JSON-RPC over stdio. Builds `.dmg` and `.exe`
   installers via `electron-builder`.

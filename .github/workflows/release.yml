@@ -14,7 +14,9 @@ name: Build installers
 # explicitly, so `-intel` doesn't trip auto-detection).
 # On workflow_dispatch: installers attached as workflow artifacts only.
 #
-# No code signing. Gatekeeper / SmartScreen prompts on first launch.
+# macOS installers are code-signed (Developer ID Application cert) and
+# notarized via notarytool — no Gatekeeper warning. Windows installers are
+# not signed; SmartScreen prompts on first launch.
 
 on:
   push:

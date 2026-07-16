@@ -58,7 +58,7 @@ The workflow builds the sidecar in `engine/` via PyInstaller in the same run and
 | macOS Intel (x64) — opt-in | `MrCall Desktop-<ver>-x64.dmg` |
 | Windows x64 | `MrCall Desktop-Setup-<ver>-x64.exe` (NSIS) |
 
-**Installers are not code-signed.** macOS Gatekeeper and Windows SmartScreen will warn on first launch — `README.md` documents the bypass for testers, and the marketing site (`mrcall-website`) needs the same instructions in its download page.
+**macOS installers are code-signed and notarized** (Developer ID Application cert + notarytool) — no Gatekeeper warning. **Windows installers are not code-signed**; SmartScreen will warn on first launch — `README.md` documents the bypass for testers, and the marketing site (`mrcall-website`) needs the same instructions in its download page.
 
 ## Architecture notes
 
