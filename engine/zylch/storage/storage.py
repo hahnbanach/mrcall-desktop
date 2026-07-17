@@ -3550,6 +3550,31 @@ class Storage:
             logger.error(f"Failed to get task by contact {contact_email}: {e}")
             return None
 
+    def get_task_by_event(
+        self,
+        owner_id: str,
+        event_type: str,
+        event_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Get a task by its upsert key (owner_id, event_type, event_id),
+        regardless of completed state. Used to return the id after an
+        external tasks.create upsert."""
+        try:
+            with get_session() as session:
+                row = (
+                    session.query(TaskItem)
+                    .filter(
+                        TaskItem.owner_id == owner_id,
+                        TaskItem.event_type == event_type,
+                        TaskItem.event_id == event_id,
+                    )
+                    .first()
+                )
+                return row.to_dict() if row else None
+        except Exception as e:
+            logger.error(f"Failed to get task by event {event_type}/{event_id}: {e}")
+            return None
+
     def get_tasks_by_contact(
         self,
         owner_id: str,

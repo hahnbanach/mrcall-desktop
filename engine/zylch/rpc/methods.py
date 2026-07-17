@@ -142,6 +142,66 @@ async def tasks_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
     return tasks
 
 
+async def tasks_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """tasks.create(contact_email, title, event_id, event_type="email",
+    contact_name?, contact_phone?, urgency?, reason?, suggested_action?,
+    action_required=True, channel?, sources?) -> {ok, task_id, created}.
+
+    Record a task the engine's own detection pipeline never created (e.g. a
+    mail it did not see). Wraps storage.store_task_item — the SAME table the
+    detection pipeline writes — so the task lives in the ledger and its
+    lifecycle (complete/reopen/skip) works normally. Idempotent: upsert on
+    (owner_id, event_type, event_id), so re-creating the same event is a no-op
+    update, never a duplicate.
+    """
+    from zylch.storage.storage import Storage
+
+    contact_email = (params.get("contact_email") or "").strip()
+    title = (params.get("title") or "").strip()
+    event_id = (params.get("event_id") or "").strip()
+    if not contact_email or not title or not event_id:
+        raise ValueError("contact_email, title and event_id are required")
+
+    event_type = params.get("event_type") or "email"
+    item = {
+        "event_type": event_type,
+        "event_id": event_id,
+        "contact_email": contact_email,
+        "contact_phone": params.get("contact_phone"),
+        "contact_name": params.get("contact_name") or contact_email,
+        "title": title,
+        "action_required": params.get("action_required", True),
+        "urgency": params.get("urgency") or "medium",
+        "reason": params.get("reason"),
+        "suggested_action": params.get("suggested_action"),
+        "sources": params.get("sources") or {},
+        "channel": params.get("channel"),
+    }
+    owner_id = _owner_id()
+    logger.debug(
+        f"[rpc] tasks.create owner_id={owner_id} contact={contact_email} "
+        f"event_type={event_type} event_id={event_id}"
+    )
+    store = Storage.get_instance()
+    existed = store.get_task_by_event(
+        owner_id=owner_id, event_type=event_type, event_id=event_id
+    )
+    ok = store.store_task_item(owner_id=owner_id, item=item)
+    task = (
+        store.get_task_by_event(
+            owner_id=owner_id, event_type=event_type, event_id=event_id
+        )
+        if ok
+        else None
+    )
+    logger.debug(f"[rpc] tasks.create -> ok={ok} task_id={task.get('id') if task else None}")
+    return {
+        "ok": bool(ok),
+        "task_id": task.get("id") if task else None,
+        "created": bool(ok and existed is None),
+    }
+
+
 async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.complete(task_id, note?) -> {ok: bool}.
 
@@ -1834,6 +1894,7 @@ async def settings_update(params: Dict[str, Any], notify: NotifyFn) -> Any:
 # Dispatch table — kept explicit so adding/removing methods is obvious.
 METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.list": tasks_list,
+    "tasks.create": tasks_create,
     "tasks.complete": tasks_complete,
     "tasks.reopen": tasks_reopen,
     "tasks.skip": tasks_skip,
