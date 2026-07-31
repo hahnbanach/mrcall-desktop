@@ -1,5 +1,5 @@
 # Memory: key-first entity identity (stop the fragmentation)
-status: proposed
+status: in-progress — design changes landed in `ebb1c7f` (2026-07-31); corpus cleanup + live verification pending
 created: 2026-07-30
 origin: extracted from mrcall-cs `docs/execution-plans/2026-07-28-eternal-operator-loop.md` §1.3/§2.4 — this doc is now the source of truth for the ENGINE-side memory work; the cs-side (CRM cache, dossier tables in cs.db) stays there.
 
@@ -116,6 +116,52 @@ want a registry later; not required for this plan.)
    the keyed path can't see them).
 6. **Own the facts.** `facts:` rows acquire an owner link (contact identifier
    or blob FK) or are not written; retrieval scopes them to their owner.
+
+## Status (2026-07-31)
+
+Design points 1–4 are **landed** in commit `ebb1c7f` (uncommitted when built
+this session, committed by Mario before end of session):
+
+1. ✅ **Carry the source identifier into the upsert.** `_upsert_entity()`
+   (`workers/memory.py`) now takes `contact_identifier`; `process_email`
+   passes `from_email`, `process_whatsapp_message` resolves the sender phone
+   from `sender_jid` (LID → `whatsapp_contacts` lookup, shared
+   `_resolve_whatsapp_phone()` helper with `_format_whatsapp_data`). The
+   identifier is injected into the `#IDENTIFIERS` parse if the LLM omitted
+   it (normalised: lowercased email, `_normalise_phone` for phone) — never
+   rely on the LLM to re-extract a key the row already carries. The sync
+   path (`services/job_executor.py::_upsert_entity_sync`) got the same
+   treatment plus the identifier-first lookup / `email_blobs` /
+   `person_identifiers` writes it was missing (parity with the async path).
+2. ✅ **Candidate lookup order: identifier → exact `Name:` → similarity.**
+   (Identifier-first was already live since Phase 1b; the point above now
+   guarantees the identifier is *present* in the parse.)
+3. ✅ **No identifier → no blob** (simplified 2026-07-31 with Mario: no
+   queue / dream-pass / join-table staging). An entity with no email, no
+   phone and no exact-name match is discarded with a `logger.warning`.
+   The source identifier is *always* available from the channel row
+   (`emails.from_email`, `whatsapp_messages.sender_jid`,
+   `mrcall_conversations.contact_phone`) — reaching this point keyless
+   means an upstream bug, not a legitimate case.
+4. ✅ **Fix the text-search query.** `hybrid_search._text_search` strips
+   scaffolding tokens (`entity`, `type:`, `name:`, `(none)`, …) from the
+   FTS terms.
+5. ⏳ **Index identifiers at write time, always.** Covered for *new* blobs
+   by point 1 (write already happened on upsert); the 143 historical blobs
+   stating an address never indexed are a corpus-cleanup item.
+6. ❌ **Own the facts.** Not started. `facts:` rows (738, 0 linked, 243
+   with a `+39` number) still need an owner link or a refusal to write.
+
+**Verification so far:** `ruff` clean; `pytest` 390 passed with the 42
+pre-existing failures unchanged (A/B verified against baseline). **NOT yet
+live-verified** — the three Goal counts, the re-feed of an already-processed
+mail, and the `merge_gate_selfcheck` canary all still need to run against
+the live `support@` profile.
+
+**Corpus cleanup** (below) is next; the existing
+`scripts/backfill_person_identifiers.py` (tracked since 2026-05-08, Phase 1a,
+idempotent, `--dry-run`, reuses `_parse_identifiers_block`) covers cleanup
+step 1.
 
 ## One-off corpus cleanup (support@ profile)
 

@@ -187,7 +187,7 @@ class HybridSearchEngine:
             return {}
 
         # Strip scaffolding tokens that dilute real identifying terms
-        # (memory-entity-keys.md, punto 4).
+        # (memory-entity-keys.md, item 4).
         _scaffold_tokens = {
             "entity", "type:", "name:", "email:", "phone:", "website:",
             "address:", "vat:", "lid:", "---entity---", "(none)",

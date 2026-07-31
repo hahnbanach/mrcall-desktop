@@ -465,7 +465,7 @@ class MemoryWorker:
         identifiers = _parse_identifiers_block(entity_content)
 
         # Inject the source identifier if the LLM didn't include it
-        # (memory-entity-keys.md, punto 1 — never rely on the LLM to
+        # (memory-entity-keys.md, item 1 — never rely on the LLM to
         # re-extract a key the channel row already carries). Normalise
         # to match _parse_identifiers_block's output so the dedup check
         # catches duplicates the LLM already emitted and we don't write
@@ -488,7 +488,7 @@ class MemoryWorker:
 
         # Guardrail: no identifier at all → cannot link this entity to any
         # real-world contact. Warn and discard (memory-entity-keys.md,
-        # punto 3). The source identifier is always available upstream
+        # item 3). The source identifier is always available upstream
         # (emails.from_email, whatsapp_messages.sender_jid); reaching
         # this point with none means something upstream is wrong.
         if not identifiers:
@@ -999,7 +999,7 @@ class MemoryWorker:
             event_desc = f"Extracted from WhatsApp message {wa_id} ({ts}) from {sender_label}"
 
             # Resolve the sender's phone once (memory-entity-keys.md,
-            # punto 1) so _upsert_entity can inject it as the
+            # item 1) so _upsert_entity can inject it as the
             # contact_identifier even when the LLM omits it from the
             # #IDENTIFIERS block. '' for LIDs we can't resolve — the
             # guardrail in _upsert_entity then decides whether the

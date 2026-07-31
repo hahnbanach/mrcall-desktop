@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: 2596dcd1fd1a206b5597c70186d5541b003ccd40
-doc_baseline_date: 2026-06-16
+doc_baseline_commit: ebb1c7f82b30f2cecb3bacf2a437903953fcde40
+doc_baseline_date: 2026-07-31
 description: |
   Cross-cutting state of mrcall-desktop — things that span engine ↔ app
   or the repo as a whole (JSON-RPC contract drift, release pipeline,
