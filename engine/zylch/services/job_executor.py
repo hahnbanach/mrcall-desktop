@@ -13,9 +13,14 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from zylch.memory import is_no_merge_response
+from zylch.workers.memory import (
+    _extract_identifier_query,
+    _normalise_phone,
+    _parse_identifiers_block,
+)
 
 if TYPE_CHECKING:
     from zylch.storage import Storage
@@ -1146,7 +1151,7 @@ def _process_email_sync(worker: "MemoryWorker", email: Dict) -> bool:
         event_desc = f"Extracted from email {email_id} ({email.get('date', 'unknown date')})"
 
         for i, entity_content in enumerate(entities):
-            _upsert_entity_sync(worker, entity_content, event_desc, email_id, i + 1, len(entities))
+            _upsert_entity_sync(worker, entity_content, event_desc, email_id, i + 1, len(entities), contact_email)
 
         # Mark as processed - this is the checkpoint that enables resume
         worker.storage.mark_email_processed(worker.owner_id, email_id)
@@ -1169,6 +1174,7 @@ def _upsert_entity_sync(
     email_id: str,
     entity_num: int,
     total_entities: int,
+    contact_identifier: str = ""
 ) -> None:
     """Sync version of MemoryWorker._upsert_entity.
 
@@ -1179,33 +1185,104 @@ def _upsert_entity_sync(
         email_id: Source email ID
         entity_num: Entity number (1-indexed)
         total_entities: Total entities from this email
+        contact_identifier: Optional contact identifier (email/phone) to inject into #IDENTIFIERS
     """
     logger.debug(f"Upserting entity {entity_num}/{total_entities}")
 
-    # Get top 3 candidates above threshold
-    existing_blobs = worker.hybrid_search.find_candidates_for_reconsolidation(
-        owner_id=worker.owner_id, content=entity_content, namespace=worker.namespace, limit=3
+    # Parse identifiers from the entity content
+    identifiers = _parse_identifiers_block(entity_content)
+
+    # Inject contact_identifier if provided and not already present
+    if contact_identifier:
+        if "@" in contact_identifier:
+            contact_kind = "email"
+            norm_value = contact_identifier.strip().strip("<>").lower()
+        else:
+            contact_kind = "phone"
+            norm_value = _normalise_phone(contact_identifier) or ""
+        if norm_value and not any(
+            k == contact_kind and v == norm_value for k, v in identifiers
+        ):
+            identifiers.append((contact_kind, norm_value))
+
+    # If no identifiers, log warning and skip
+    if not identifiers:
+        logger.warning(f"No identifiers found for entity {entity_num}/{total_entities}, skipping blob creation")
+        return
+
+    # Identifier-first lookup
+    id_matched_blob_ids = worker.storage.find_blobs_by_identifiers(
+        owner_id=worker.owner_id,
+        identifiers=identifiers,
     )
 
-    upserted = False
+    # Use identifier block as search query, fall back to full content
+    query = _extract_identifier_query(entity_content) or entity_content
 
-    for existing in existing_blobs:
-        # Try to merge with this candidate (sync LLM call)
-        merged_content = worker.llm_merge.merge(existing.content, entity_content)
+    # Get cosine candidates above threshold
+    cosine_candidates = worker.hybrid_search.find_candidates_for_reconsolidation(
+        owner_id=worker.owner_id, content=query, namespace=worker.namespace, limit=3
+    )
+
+    # Compose merge candidates: identifier matches first, then cosine matches not already in set
+    merge_candidates: List[Dict[str, str]] = []
+    seen_ids = set()
+
+    # Add identifier-matched candidates
+    for bid in id_matched_blob_ids:
+        if bid in seen_ids:
+            continue
+        blob_dict = worker.blob_storage.get_blob(bid, worker.owner_id)
+        if not blob_dict or not blob_dict.get("content"):
+            continue
+        seen_ids.add(bid)
+        merge_candidates.append({
+            "blob_id": bid,
+            "content": blob_dict["content"],
+            "source": "identifier-only"
+        })
+
+    # Add cosine-matched candidates not already in identifier set
+    for cand in cosine_candidates:
+        bid = str(cand.blob_id)
+        if bid in seen_ids:
+            continue
+        seen_ids.add(bid)
+        merge_candidates.append({
+            "blob_id": bid,
+            "content": cand.content,
+            "source": f"cosine={cand.hybrid_score:.3f}"
+        })
+
+    # Try to merge with each candidate
+    upserted = False
+    linked_blob_id: Optional[str] = None
+
+    # Skip reconsolidation if merge gate is unhealthy
+    if not worker.merge_enabled:
+        merge_candidates = []
+
+    for cand in merge_candidates:
+        bid = cand["blob_id"]
+        existing_content = cand["content"]
+        source = cand["source"]
+        logger.debug(f"Trying to merge with blob {bid} (source={source})")
+        merged_content = worker.llm_merge.merge(existing_content, entity_content)
 
         # If the gate returned the INSERT/SKIP sentinel, try next candidate
         if is_no_merge_response(merged_content):
-            logger.debug(f"Skipping blob {existing.blob_id} - entities don't match")
+            logger.debug(f"Skipping blob {bid} - entities don't match (source={source})")
             continue
 
         # Successful merge
         worker.blob_storage.update_blob(
-            blob_id=existing.blob_id,
+            blob_id=bid,
             owner_id=worker.owner_id,
             content=merged_content,
             event_description=event_desc,
         )
-        logger.info(f"Reconsolidated blob {existing.blob_id} with email {email_id}")
+        logger.info(f"Reconsolidated blob {bid} with email {email_id} (source={source})")
+        linked_blob_id = bid
         upserted = True
         break
 
@@ -1218,6 +1295,31 @@ def _upsert_entity_sync(
             event_description=event_desc,
         )
         logger.info(f"Created new blob {blob['id']} from email {email_id}")
+        linked_blob_id = str(blob["id"])
+
+    # Write email_blobs link
+    if linked_blob_id and email_id:
+        try:
+            worker.storage.add_email_blob_link(
+                owner_id=worker.owner_id,
+                email_id=email_id,
+                blob_id=linked_blob_id
+            )
+        except Exception as e:
+            logger.warning(f"add_email_blob_link({email_id}, {linked_blob_id}) failed: {e}")
+
+    # Write person_identifiers
+    if linked_blob_id and identifiers:
+        try:
+            inserted = worker.storage.add_person_identifiers(
+                owner_id=worker.owner_id,
+                blob_id=linked_blob_id,
+                identifiers=identifiers
+            )
+            if inserted:
+                logger.debug(f"add_person_identifiers blob={linked_blob_id} new_rows={inserted} kinds={[k for k, _ in identifiers]}")
+        except Exception as e:
+            logger.warning(f"add_person_identifiers({linked_blob_id}) failed: {e}")
 
 
 def _process_calendar_event_sync(worker: "MemoryWorker", event: Dict) -> bool:

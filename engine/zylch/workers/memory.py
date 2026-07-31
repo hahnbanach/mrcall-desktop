@@ -367,7 +367,12 @@ class MemoryWorker:
 
             for i, entity_content in enumerate(entities):
                 await self._upsert_entity(
-                    entity_content, event_desc, email_id, i + 1, len(entities)
+                    entity_content,
+                    event_desc,
+                    email_id,
+                    i + 1,
+                    len(entities),
+                    contact_identifier=contact_email,
                 )
 
             # Step 3: Mark email as processed
@@ -404,6 +409,7 @@ class MemoryWorker:
         entity_num: int,
         total_entities: int,
         source_kind: str = "email",
+        contact_identifier: str = "",
     ) -> None:
         """Upsert a single entity blob with reconsolidation.
 
@@ -457,6 +463,40 @@ class MemoryWorker:
         # match (below) AND for writing rows into person_identifiers
         # after the upsert (Phase 1a).
         identifiers = _parse_identifiers_block(entity_content)
+
+        # Inject the source identifier if the LLM didn't include it
+        # (memory-entity-keys.md, punto 1 — never rely on the LLM to
+        # re-extract a key the channel row already carries). Normalise
+        # to match _parse_identifiers_block's output so the dedup check
+        # catches duplicates the LLM already emitted and we don't write
+        # redundant person_identifiers rows.
+        if contact_identifier:
+            if "@" in contact_identifier:
+                contact_kind = "email"
+                norm_value = contact_identifier.strip().strip("<>").lower()
+            else:
+                contact_kind = "phone"
+                norm_value = _normalise_phone(contact_identifier) or ""
+            if norm_value and not any(
+                k == contact_kind and v == norm_value for k, v in identifiers
+            ):
+                identifiers.append((contact_kind, norm_value))
+                logger.debug(
+                    f"[memory] injected contact_identifier {contact_kind}={norm_value} "
+                    f"for entity {entity_num}/{total_entities}"
+                )
+
+        # Guardrail: no identifier at all → cannot link this entity to any
+        # real-world contact. Warn and discard (memory-entity-keys.md,
+        # punto 3). The source identifier is always available upstream
+        # (emails.from_email, whatsapp_messages.sender_jid); reaching
+        # this point with none means something upstream is wrong.
+        if not identifiers:
+            logger.warning(
+                f"[memory] entity {entity_num}/{total_entities} from {email_id} "
+                f"has no identifiers — discarding (no blob created)"
+            )
+            return
 
         # Phase 1b — identifier-first lookup.
         # Returns blob ids that share at least one (kind, value) tuple
@@ -958,6 +998,14 @@ class MemoryWorker:
             sender_label = message.get("sender_name") or message.get("sender_jid") or "unknown"
             event_desc = f"Extracted from WhatsApp message {wa_id} ({ts}) from {sender_label}"
 
+            # Resolve the sender's phone once (memory-entity-keys.md,
+            # punto 1) so _upsert_entity can inject it as the
+            # contact_identifier even when the LLM omits it from the
+            # #IDENTIFIERS block. '' for LIDs we can't resolve — the
+            # guardrail in _upsert_entity then decides whether the
+            # entity is still linkable.
+            wa_phone = self._resolve_whatsapp_phone(message.get("sender_jid") or "")
+
             for i, entity_content in enumerate(entities):
                 await self._upsert_entity(
                     entity_content=entity_content,
@@ -966,6 +1014,7 @@ class MemoryWorker:
                     entity_num=i + 1,
                     total_entities=len(entities),
                     source_kind="whatsapp",
+                    contact_identifier=wa_phone,
                 )
 
             self.storage.mark_whatsapp_memory_processed(self.owner_id, wa_id)
@@ -1020,6 +1069,41 @@ class MemoryWorker:
         logger.info(f"WA batch complete: {processed}/{len(messages)} processed")
         return processed
 
+    def _resolve_whatsapp_phone(self, sender_jid: str) -> str:
+        """Resolve a WhatsApp ``sender_jid`` to a ``+<digits>`` phone, or ''.
+
+        For real-number JIDs (``<digits>@s.whatsapp.net``) the phone is
+        the local-part. For privacy-mode LIDs (``<digits>@lid``) the
+        local-part is a pseudonym; we look up the real phone in
+        ``whatsapp_contacts`` (populated locally by
+        ``WhatsAppSyncService.sync_lid_contacts`` from whatsmeow's
+        ``whatsmeow_lid_map``). Returns '' when the JID is empty, isn't
+        WhatsApp-shaped, or the LID has no known phone — callers treat
+        '' as "no contact_identifier".
+
+        Single source of truth for LID→phone resolution: both
+        ``_format_whatsapp_data`` (envelope) and
+        ``process_whatsapp_message`` (contact_identifier injection)
+        call this so the two paths cannot drift.
+        """
+        if not sender_jid:
+            return ""
+        if "@s.whatsapp.net" in sender_jid:
+            digits = sender_jid.split("@", 1)[0]
+            return "+" + digits if digits else ""
+        if "@lid" in sender_jid:
+            try:
+                contact = self.storage.get_whatsapp_contact_by_jid(self.owner_id, sender_jid)
+            except Exception as e:
+                logger.warning(f"[memory] LID resolve failed for {sender_jid}: {e}")
+                return ""
+            if contact:
+                resolved = (contact.get("phone_number") or "").strip()
+                if resolved.startswith("+"):
+                    return resolved
+            return ""
+        return ""
+
     def _format_whatsapp_data(self, message: Dict) -> str:
         """Render a WhatsApp message as the channel-aware envelope the
         Phase 2b memory_message prompt expects.
@@ -1043,33 +1127,25 @@ class MemoryWorker:
         # only a "[voice]" placeholder for audio messages).
         text = message.get("transcription") or message.get("text") or ""
 
-        # Resolve the sender phone for the From line. WA stores the JID
-        # canonicalised: digits + '@s.whatsapp.net' for real phone numbers,
-        # digits + '@lid' for privacy-mode pseudonyms.
-        phone = ""
-        lid = ""
-        if "@s.whatsapp.net" in sender_jid:
-            digits = sender_jid.split("@", 1)[0]
-            if digits:
-                phone = "+" + digits
-        elif "@lid" in sender_jid:
-            lid = sender_jid
-            # Resolve LID → real phone via whatsapp_contacts. Critical
-            # for cross-channel identity: an email blob about John
-            # carries Phone: +393331... and a WhatsApp message from
-            # John arrives with sender_jid=<lid>@lid. Without this
-            # lookup the WA blob can't match the email blob.
+        # Resolve the sender phone for the From line via the shared
+        # helper (single source of truth for LID→phone). WA stores the
+        # JID canonicalised: digits + '@s.whatsapp.net' for real phone
+        # numbers, digits + '@lid' for privacy-mode pseudonyms.
+        phone = self._resolve_whatsapp_phone(sender_jid)
+        lid = sender_jid if "@lid" in sender_jid else ""
+        # LID → sender_name resolution (phone already resolved above).
+        # Critical for cross-channel identity: an email blob about John
+        # carries Phone: +393331... and a WhatsApp message from John
+        # arrives with sender_jid=<lid>@lid. Without this lookup the
+        # WA blob can't match the email blob.
+        if lid and not sender_name:
             try:
                 contact = self.storage.get_whatsapp_contact_by_jid(self.owner_id, sender_jid)
             except Exception as e:
                 logger.warning(f"[memory] LID resolve failed for {sender_jid}: {e}")
                 contact = None
             if contact:
-                resolved = (contact.get("phone_number") or "").strip()
-                if resolved.startswith("+"):
-                    phone = resolved
-                if not sender_name:
-                    sender_name = contact.get("name") or contact.get("push_name") or sender_name
+                sender_name = contact.get("name") or contact.get("push_name") or sender_name
 
         # Build the From line: prefer "<Name> (<phone>)" when both are
         # present. Drop the phone when only the LID is known — emitting

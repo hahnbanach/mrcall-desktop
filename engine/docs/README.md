@@ -17,6 +17,7 @@ Complete documentation for Zylch standalone (local CLI sales intelligence tool).
 |------|---------|
 | [active-context.md](active-context.md) | What works, what's next, known issues |
 | [quality-grades.md](quality-grades.md) | Module quality, oversized files, stale code |
+| [execution-plans/memory-entity-keys.md](execution-plans/memory-entity-keys.md) | Proposed: key-first entity identity — stop the memory fragmentation (25× Tandoori Villa), support@ corpus cleanup |
 | [execution-plans/cleanup-and-split.md](execution-plans/cleanup-and-split.md) | Active: dead code removal, file splitting, lint |
 | [execution-plans/claude-code-patterns.md](execution-plans/claude-code-patterns.md) | Active: prompt caching, parallel LLM, dream, digest |
 | [execution-plans/next-features.md](execution-plans/next-features.md) | Backlog: agentic solve, CalDAV, dedup, cleanup, tests |

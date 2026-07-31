@@ -186,8 +186,15 @@ class HybridSearchEngine:
         if not query or not query.strip():
             return {}
 
-        # Split query into terms for multi-term matching
+        # Strip scaffolding tokens that dilute real identifying terms
+        # (memory-entity-keys.md, punto 4).
+        _scaffold_tokens = {
+            "entity", "type:", "name:", "email:", "phone:", "website:",
+            "address:", "vat:", "lid:", "---entity---", "(none)",
+            "identifiers", "#identifiers",
+        }
         terms = [t.strip().lower() for t in query.split() if t.strip()]
+        terms = [t for t in terms if t not in _scaffold_tokens]
         if not terms:
             return {}
 
