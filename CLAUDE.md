@@ -46,8 +46,11 @@ later. Configure `GOOGLE_CALENDAR_CLIENT_ID` (Desktop-app or Web
 loopback OAuth client) in profile settings before the first
 connect — no client secret is used.
 
-The legacy CLI MrCall PKCE flow on `:19274` (`zylch init`) is left
-intact for users who never sign in to the desktop UI.
+The legacy CLI MrCall PKCE flow on `:19274` (`zylch init`) was **removed
+2026-05** — MrCall connection today happens exclusively via the Firebase
+sign-in in the desktop UI (`tools/mrcall/starchat_firebase.py`); `zylch init`
+no longer runs any OAuth/PKCE code for MrCall (corrected 2026-07-14,
+doc-critic pass).
 
 ## LLM billing modes — BYOK vs MrCall credits (since 2026-05)
 
