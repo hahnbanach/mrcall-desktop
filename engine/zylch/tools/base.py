@@ -62,3 +62,18 @@ class Tool(ABC):
             Schema dictionary for Anthropic API
         """
         pass
+
+    def approval_input(self, tool_input: Dict[str, Any]) -> Dict[str, Any]:
+        """Fields to show (and let the user edit) in the approval card.
+
+        The renderer's approval card renders every string field of this
+        dict as an editable textarea/input, and the edited copy is swapped
+        back in as the tool's actual input before it runs. By default the
+        card mirrors the model-supplied ``tool_input`` verbatim.
+
+        Override when the model-facing schema is a *reference* (e.g. a bare
+        ``draft_id``) but the human needs the *content* in front of them to
+        review and edit — the override hydrates the referenced content into
+        editable fields. ``execute`` must then accept those extra fields.
+        """
+        return dict(tool_input or {})

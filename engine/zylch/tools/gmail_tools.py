@@ -8,8 +8,6 @@ CreateDraftTool and ListDraftsTool use Storage (DB drafts).
 
 import logging
 import os
-import subprocess
-import tempfile
 from typing import List, Optional
 
 from .base import Tool, ToolResult, ToolStatus
@@ -538,105 +536,6 @@ class ListDraftsTool(Tool):
         }
 
 
-class EditDraftTool(Tool):
-    """Edit a draft interactively with nano editor."""
-
-    def __init__(self, storage, owner_id: str):
-        super().__init__(
-            name="edit_draft",
-            description=("Open a draft in nano editor" " for manual editing"),
-        )
-        self.storage = storage
-        self.owner_id = owner_id
-
-    async def execute(self, draft_id: str):
-        try:
-            draft = self.storage.get_draft(self.owner_id, draft_id)
-            if not draft:
-                return ToolResult(
-                    status=ToolStatus.ERROR,
-                    data=None,
-                    error=f"Draft not found: {draft_id}",
-                )
-
-            to_addresses = draft.get("to_addresses", [])
-            to_str = ", ".join(to_addresses) if to_addresses else "Unknown"
-
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-                temp_path = f.name
-                f.write("# DRAFT METADATA (DO NOT EDIT)\n")
-                f.write(f"# To: {to_str}\n")
-                f.write(f"# Subject:" f" {draft.get('subject', '')}\n")
-                f.write("#\n")
-                f.write("# Edit the message body below:\n")
-                f.write("# ==========================" "================\n\n")
-                f.write(draft.get("body", ""))
-
-            subprocess.run(["nano", temp_path], check=True)
-
-            with open(temp_path, "r") as f:
-                content = f.read()
-
-            lines = content.split("\n")
-            body_lines = [line for line in lines if not line.startswith("#")]
-            body = "\n".join(body_lines).strip()
-
-            self.storage.update_draft(
-                self.owner_id,
-                draft_id,
-                {"body": body},
-            )
-
-            import os
-
-            os.unlink(temp_path)
-
-            return ToolResult(
-                status=ToolStatus.SUCCESS,
-                data={"draft_id": draft_id},
-                message=(
-                    f"Draft edited and saved!\n"
-                    f"To: {to_str}\n"
-                    f"Subject:"
-                    f" {draft.get('subject', '')}"
-                ),
-            )
-
-        except subprocess.CalledProcessError:
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error="Editing cancelled by user",
-            )
-        except Exception as e:
-            logger.error(f"Failed to edit draft: {e}")
-            return ToolResult(
-                status=ToolStatus.ERROR,
-                data=None,
-                error=(f"Error editing draft: {str(e)}"),
-            )
-
-    def get_schema(self):
-        return {
-            "name": self.name,
-            "description": (
-                "Open a draft in nano text editor for"
-                " manual editing. Changes are saved"
-                " back when nano is closed."
-            ),
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "draft_id": {
-                        "type": "string",
-                        "description": ("Draft ID to edit"),
-                    },
-                },
-                "required": ["draft_id"],
-            },
-        }
-
-
 class UpdateDraftTool(Tool):
     """Update an existing draft in database."""
 
@@ -847,30 +746,98 @@ class SendDraftTool(Tool):
         self.storage = storage
         self.owner_id = owner_id
 
-    async def execute(self, draft_id: str = None):
-        try:
-            if not draft_id:
-                drafts = self.storage.list_drafts(self.owner_id)
-                if not drafts:
-                    return ToolResult(
-                        status=ToolStatus.ERROR,
-                        data=None,
-                        error=("No drafts found." " Create a draft first."),
-                    )
-                draft = drafts[0]
-                draft_id = draft["id"]
-            else:
-                draft = self.storage.get_draft(self.owner_id, draft_id)
+    def _resolve_draft(self, draft_id):
+        """Return the draft to send: the one named by ``draft_id``, or the
+        most recent draft when no id is given. ``None`` if none exists."""
+        if draft_id:
+            return self.storage.get_draft(self.owner_id, draft_id)
+        drafts = self.storage.list_drafts(self.owner_id)
+        return drafts[0] if drafts else None
 
+    def approval_input(self, tool_input):
+        """Hydrate the send-approval card with the draft's editable content.
+
+        The model only supplies ``draft_id`` (or nothing → most recent),
+        but the human needs To / Subject / Body in front of them to review
+        and correct before the email goes out — the same inline-edit
+        affordance the WhatsApp card already has. ``draft_id`` rides along
+        (hidden in the card) so ``execute`` still knows which draft to send;
+        ``execute`` accepts the edited To / Subject / Body / Cc back and
+        applies them to the draft before sending.
+        """
+        data = dict(tool_input or {})
+        try:
+            draft = self._resolve_draft(data.get("draft_id"))
+        except Exception as e:  # storage hiccup — fall back to raw input
+            logger.warning(f"[send_draft] approval_input could not load draft: {e}")
+            return data
+        if not draft:
+            return data
+        to_addresses = draft.get("to_addresses", [])
+        card = {
+            "draft_id": draft.get("id", data.get("draft_id")),
+            "to": ", ".join(to_addresses) if to_addresses else "",
+            "subject": draft.get("subject", "") or "",
+            "body": draft.get("body", "") or "",
+        }
+        cc_addresses = draft.get("cc_addresses") or []
+        if cc_addresses:
+            card["cc"] = ", ".join(cc_addresses)
+        return card
+
+    async def execute(
+        self,
+        draft_id: str = None,
+        to: str = None,
+        subject: str = None,
+        body: str = None,
+        cc=None,
+        bcc=None,
+    ):
+        # to / subject / body / cc / bcc arrive ONLY when the user edited
+        # the send approval card (see approval_input). They override the
+        # stored draft and are persisted before sending, so the sent copy
+        # and the stored/thread copy stay in sync. Absent -> send as-is.
+        try:
+            draft = self._resolve_draft(draft_id)
             if not draft:
                 return ToolResult(
                     status=ToolStatus.ERROR,
                     data=None,
-                    error=(f"Draft not found: {draft_id}"),
+                    error=(
+                        f"Draft not found: {draft_id}"
+                        if draft_id
+                        else "No drafts found. Create a draft first."
+                    ),
                 )
+            draft_id = draft.get("id", draft_id)
+
+            edits = {}
+            if to is not None:
+                edits["to_addresses"] = [a.strip() for a in str(to).split(",") if a.strip()]
+            if subject is not None:
+                edits["subject"] = subject
+            if body is not None:
+                edits["body"] = body
+            if cc is not None:
+                edits["cc_addresses"] = (
+                    [a.strip() for a in str(cc).split(",") if a.strip()]
+                    if isinstance(cc, str)
+                    else list(cc)
+                )
+            if bcc is not None:
+                edits["bcc_addresses"] = (
+                    [a.strip() for a in str(bcc).split(",") if a.strip()]
+                    if isinstance(bcc, str)
+                    else list(bcc)
+                )
+            if edits:
+                logger.debug(f"[send_draft] applying card edits keys={list(edits.keys())}")
+                self.storage.update_draft(self.owner_id, draft_id, edits)
+                draft = self.storage.get_draft(self.owner_id, draft_id) or draft
 
             to_addresses = draft.get("to_addresses", [])
-            to = ", ".join(to_addresses) if to_addresses else None
+            to_str = ", ".join(to_addresses) if to_addresses else None
             subject = draft.get("subject", "")
             body = draft.get("body", "")
             in_reply_to = draft.get("in_reply_to")
@@ -879,7 +846,7 @@ class SendDraftTool(Tool):
             cc_addresses = draft.get("cc_addresses") or []
             bcc_addresses = draft.get("bcc_addresses") or []
 
-            if not to:
+            if not to_str:
                 return ToolResult(
                     status=ToolStatus.ERROR,
                     data=None,
@@ -898,14 +865,14 @@ class SendDraftTool(Tool):
                     )
 
             logger.debug(
-                f"[send_draft] Sending to={to},"
+                f"[send_draft] Sending to={to_str},"
                 f" cc={cc_addresses}, bcc={len(bcc_addresses)},"
                 f" subject={subject},"
                 f" attachments={len(attachment_paths)}"
             )
 
             sent_message = self.imap.send_message(
-                to=to,
+                to=to_str,
                 subject=subject,
                 body=body,
                 cc=cc_addresses or None,
@@ -936,7 +903,7 @@ class SendDraftTool(Tool):
                     thread_id=draft.get("thread_id"),
                     message_id=sent_message.get("id"),
                     from_email=owner_email,
-                    to_email=to,
+                    to_email=to_str,
                     cc=cc_addresses,
                     subject=subject,
                     body_plain=body,
@@ -952,7 +919,7 @@ class SendDraftTool(Tool):
                 data={"message_id": sent_message.get("id")},
                 message=(
                     f"Email sent successfully!\n"
-                    f"To: {to}\n"
+                    f"To: {to_str}\n"
                     f"Subject: {subject}\n\n"
                     f"Email sent and draft"
                     f" marked as sent."

@@ -372,10 +372,19 @@ class ZylchAIAgent(BaseConversationalAgent):
                 if approval_callback is not None and tool_name in APPROVAL_TOOLS:
                     approved = False
                     edited_input: Optional[Dict[str, Any]] = None
+                    # The card shows/edits the tool's `approval_input`, not
+                    # the raw model input. For most tools these are equal;
+                    # for reference-style tools (send_draft carries only a
+                    # draft_id) the override hydrates the editable content
+                    # (To / Subject / Body) so the widget has something to
+                    # edit. `execute` accepts the hydrated fields back.
+                    gate_tool = self.tool_map.get(tool_name)
+                    if gate_tool is not None:
+                        card_input = gate_tool.approval_input(dict(tool_input or {}))
+                    else:
+                        card_input = dict(tool_input or {})
                     try:
-                        decision = await approval_callback(
-                            block.id, tool_name, dict(tool_input or {})
-                        )
+                        decision = await approval_callback(block.id, tool_name, card_input)
                         # New shape: (approved, edited_input). Tolerate a
                         # bare bool for any older callback.
                         if isinstance(decision, tuple):
