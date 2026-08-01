@@ -80,7 +80,48 @@ class CreateMemoryTool(Tool):
         # See "SAVING a RULE" in the system prompt.
         et = (entry_type or "").strip().lower()
         if et == "behavioral_rule":
-            namespace = f"template:{owner_id}"
+            # Guarded door: the rule namespaces are injected verbatim
+            # into every prompt, so they refuse entity-shaped content,
+            # skip duplicates and supersede near-copies rather than
+            # accumulating them (see zylch.services.prefs_store).
+            from zylch.services.prefs_store import store_rule
+
+            outcome = store_rule(
+                owner_id,
+                content,
+                event_description="Manual creation via chat",
+                writer="create_memory",
+            )
+            if outcome["action"] in ("created", "superseded"):
+                return ToolResult(
+                    status=ToolStatus.SUCCESS,
+                    data={
+                        "blob_id": outcome["blob_id"],
+                        "namespace": f"template:{owner_id}",
+                        "action": outcome["action"],
+                    },
+                    message=(
+                        f"Memory {outcome['action']} (blob_id={outcome['blob_id']}).\n{content}"
+                    ),
+                )
+            if outcome["action"] == "duplicate":
+                return ToolResult(
+                    status=ToolStatus.SUCCESS,
+                    data={
+                        "blob_id": outcome["blob_id"],
+                        "namespace": f"template:{owner_id}",
+                        "action": "duplicate",
+                    },
+                    message=(
+                        f"That rule is already stored (blob_id={outcome['blob_id']}) — "
+                        f"nothing was added."
+                    ),
+                )
+            return ToolResult(
+                status=ToolStatus.ERROR,
+                data=None,
+                error=outcome["reason"],
+            )
         else:
             # Match the namespace the memory worker uses so that newly
             # created blobs are discoverable by the same search path.

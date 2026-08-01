@@ -116,11 +116,21 @@ async def analyze_recent_calendar_events(worker: "TaskWorker") -> tuple[int, int
         )
         analyzed_count += 1
 
-        # Mark as processed regardless of result
-        worker.storage.mark_calendar_event_task_processed(worker.owner_id, event_id)
-
         if not result:
+            # No-mark-on-failure (defect F2, mirroring the email and
+            # WhatsApp branches). The mark used to happen BEFORE this
+            # guard — "regardless of result" — so an event whose LLM
+            # analysis failed was retired without ever producing a task.
+            # Leave it unprocessed; the next tick retries, and the
+            # task_hygiene expiry rule bounds a permanently failing row.
+            logger.warning(
+                f"[TASK] LLM analysis failed for calendar event {event_id} — "
+                f"left unprocessed, will retry next tick"
+            )
             continue
+
+        # Analysis succeeded: this event is decided, don't re-analyze it.
+        worker.storage.mark_calendar_event_task_processed(worker.owner_id, event_id)
 
         # Bug B (2026-05-06): honour task_action on calendar events
         # the same way the email branch does. Without this, a
@@ -152,7 +162,13 @@ async def analyze_recent_calendar_events(worker: "TaskWorker") -> tuple[int, int
                 continue
 
         if task_action == "close" and target_task:
-            worker.storage.complete_task_item(worker.owner_id, target_task["id"])
+            worker.storage.complete_task_item(
+                worker.owner_id,
+                target_task["id"],
+                actor="detect.calendar.llm_close",
+                why=(result.get("reason") or "").strip()
+                or f"task detector closed on calendar event {event_id} without stating a reason",
+            )
             logger.debug(
                 f"[TASK] dedup/close-cal task_id={target_task['id']} "
                 f"event_id={event_id} decision=llm_close"

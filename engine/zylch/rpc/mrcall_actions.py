@@ -119,7 +119,9 @@ async def mrcall_list_my_businesses(params: Dict[str, Any], notify: NotifyFn) ->
 
 
 async def mrcall_search_businesses(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """mrcall.search_businesses(<filters>, offset?, limit?) -> {businesses, role}
+    """mrcall.search_businesses(businessId?, name?, surname?, companyName?,
+    nickname?, businessPhoneNumber?, emailAddress?, vatId?, address?,
+    countryAlpha2?, subscriptionStatus?, offset?, limit?) -> {businesses, role}
 
     Filtered business lookup for customer-service use — e.g. resolve the
     business behind an inbound email by ``emailAddress``. Recognised

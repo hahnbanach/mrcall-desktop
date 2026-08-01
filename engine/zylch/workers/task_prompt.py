@@ -63,6 +63,7 @@ def build_detection_prompt(
     thread_history_section: str = "",
     user_email: str = "",
     personal_section: str = "",
+    notifier_hint: str = "",
 ) -> Tuple[str, str]:
     """Return ``(system_text, user_content)`` for one detection call.
 
@@ -81,6 +82,13 @@ def build_detection_prompt(
     behaviour: event JSON, thread history (+ its IMPORTANT note), memory/blob
     context, existing task, calendar context; each included only when
     non-empty.
+
+    ``notifier_hint`` — non-empty only when the sender is a recognised
+    notification relay (see :mod:`zylch.utils.notifier_senders`). It asks
+    the model to report the REAL correspondent on the decision tool.
+    Per-event, so it belongs in ``user_content``: putting it in the
+    cache-stable system block would break the ephemeral cache for every
+    ordinary email.
     """
     event_data_json = json.dumps(event_data, default=str)
 
@@ -108,6 +116,14 @@ def build_detection_prompt(
             "Your task description MUST reflect the LATEST state of the conversation, not just this single email. "
             "If the user has already replied (look for 'USER REPLY ✓'), describe what remains to be done AFTER their reply — do NOT say the user hasn't responded. "
             "If someone proposed a meeting date and is awaiting confirmation, say 'wait for confirmation' not 'propose a date'.\n"
+        )
+    if notifier_hint:
+        user_content += (
+            f"\nSENDER IS A NOTIFICATION RELAY.\n{notifier_hint}\n"
+            "Fill contact_email / contact_phone / contact_name on the "
+            "task_decision tool with the REAL correspondent's details as "
+            "stated in the body. Leave a field empty when the body does not "
+            "state it — do not guess, and never repeat the relay address.\n"
         )
     if blob_context:
         user_content += f"\nMemory context:\n{blob_context}"

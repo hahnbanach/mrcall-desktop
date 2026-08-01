@@ -96,7 +96,16 @@ def test_complete_removes_from_open_but_kept_when_included(fresh_db):
     open_ids = {t["id"] for t in storage.get_task_items(OWNER)}
     assert task_id in open_ids, "task not in the open list before close"
 
-    assert storage.complete_task_item(OWNER, task_id, note="risposto da personale") is True
+    assert (
+        storage.complete_task_item(
+            OWNER,
+            task_id,
+            note="risposto da personale",
+            actor="human",
+            why="closed by the user in the test",
+        )
+        is True
+    )
 
     # Absent from the open list...
     open_ids_after = {t["id"] for t in storage.get_task_items(OWNER)}

@@ -1,7 +1,7 @@
 # Memory: key-first entity identity (stop the fragmentation)
 status: in-progress — design changes landed in `ebb1c7f` (2026-07-31); corpus cleanup + live verification pending
 created: 2026-07-30
-origin: extracted from mrcall-cs `docs/execution-plans/2026-07-28-eternal-operator-loop.md` §1.3/§2.4 — this doc is now the source of truth for the ENGINE-side memory work; the cs-side (CRM cache, dossier tables in cs.db) stays there.
+origin: extracted from cs-kernel `docs/execution-plans/2026-07-28-eternal-operator-loop.md` §1.3/§2.4 — this doc is now the source of truth for the ENGINE-side memory work; the cs-side (CRM cache, dossier tables in cs.db) stays there.
 
 ## Goal
 
@@ -191,7 +191,7 @@ the mess while it is being cleaned (32 duplicates on 28 Jul alone).
 ## Out of scope (lives in mrcall-cs)
 
 The CRM cache (`crm_business` in cs.db), the per-customer dossier tables, and
-how the cs operator loop reads/writes memory — see mrcall-cs
+how the cs operator loop reads/writes memory — see cs-kernel
 `docs/execution-plans/2026-07-28-eternal-operator-loop.md` §2.4. The engine
 stays product-generic; MrCall-specific identity enrichment arrives from the
 outside, through the same keyed interfaces this plan builds.

@@ -34,7 +34,7 @@ def _owner_id() -> str:
 
 
 async def sync_run(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """sync.run({days_back?: int}) -> result dict.
+    """sync.run(days_back?) -> result dict.
 
     Fetch new emails (IMAP) and WhatsApp messages, then return. Skips
     memory extraction + task detection — those are the responsibility of

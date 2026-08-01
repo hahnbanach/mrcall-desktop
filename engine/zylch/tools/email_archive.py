@@ -1,13 +1,27 @@
 """Email archive manager with IMAP integration.
 
-Uses IMAPClient (replaces Gmail API). All storage uses
-Supabase (NO local filesystem per ARCHITECTURE.md).
+Uses IMAPClient (replaces Gmail API). All storage goes through the
+engine's ``Storage`` layer (SQLite; NO local filesystem per
+ARCHITECTURE.md).
+
+Sync is **cursor-driven**, not content-driven. Each folder carries a
+persisted (UIDVALIDITY, highest-confirmed-UID) cursor — see
+``zylch.email.sync_cursor`` — and the cursor advances only over UIDs
+whose ingestion was confirmed. The scan covers INBOX + Sent + the
+provider's Archive/All-Mail folder, and a date-derived floor survives
+only as the seeding fallback and the self-healing overlap window.
+
+The previous implementation derived its floor from stored content
+(``newest_email_date - 1 day``, at day granularity) and scanned
+INBOX + Sent only. That combination is what hid a 2026-07-29 inbound
+for three days: one newer stored message pinned the floor above it, and
+once the message left INBOX there was no folder left to find it in.
 """
 
 import logging
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from zylch.storage import Storage
 
@@ -55,145 +69,397 @@ class EmailArchiveManager:
                     self.gmail.authenticate()
             self._connected = True
 
+    def _compute_date_floor(self, days_back: Optional[int], overlap: int) -> Dict[str, Any]:
+        """Decide the date floor used to seed cursors and to self-heal.
+
+        The floor plays two roles:
+
+        1. **Seeding.** A folder with no cursor has no confirmed
+           position, and the ``emails`` table stores no UIDs, so the
+           highest already-ingested UID is not recoverable from the
+           archive. The floor gives that first run a bounded scope.
+        2. **Backstop.** Every run also searches ``SINCE floor``, so a
+           message that a cursor wrongly skipped (a server that
+           renumbers, a hole left by an earlier failure) is picked up
+           within the overlap window instead of never.
+
+        Args:
+            days_back: History the caller wants covered (default 30).
+            overlap: Overlap window in days.
+
+        Returns:
+            ``{"floor": datetime, "reason": str}``.
+        """
+        now = datetime.now(timezone.utc)
+        sync_days = days_back if days_back is not None else 30
+        target_date = now - timedelta(days=sync_days)
+
+        newest = self.supabase.get_newest_email_date(self.owner_id)
+        if newest and newest.tzinfo is None:
+            newest = newest.replace(tzinfo=timezone.utc)
+        oldest = self.supabase.get_oldest_email_date(self.owner_id)
+        if oldest and oldest.tzinfo is None:
+            oldest = oldest.replace(tzinfo=timezone.utc)
+
+        if newest is None:
+            return {"floor": target_date, "reason": f"empty archive, days_back={sync_days}"}
+        if oldest is not None and target_date < oldest:
+            return {
+                "floor": target_date,
+                "reason": (
+                    f"extending coverage: days_back={sync_days} reaches before the "
+                    f"oldest stored email ({oldest.strftime('%Y-%m-%d')})"
+                ),
+            }
+        return {
+            "floor": newest - timedelta(days=overlap),
+            "reason": (
+                f"newest stored email ({newest.strftime('%Y-%m-%d')}) "
+                f"minus {overlap}d overlap window"
+            ),
+        }
+
     def incremental_sync(
         self,
         days_back: Optional[int] = None,
         force_full: bool = False,
         on_progress: Optional[Callable[[int, str], None]] = None,
     ) -> Dict[str, Any]:
-        """Sync emails from Gmail based on actual data in DB.
+        """Sync mail into the archive from every relevant IMAP folder.
 
-        Derives sync state from emails table - no separate sync_state needed.
+        Per folder (INBOX, Sent, Archive/All-Mail): EXAMINE read-only,
+        compare UIDVALIDITY against the stored cursor, UID SEARCH for
+        everything above the cursor plus everything inside the overlap
+        window, resolve Message-IDs, fetch only what the archive is
+        missing, store, then advance the cursor to the highest UID that
+        is fully accounted for.
+
+        Nothing here mutates the mailbox: every SELECT is read-only and
+        every FETCH is a peek.
+
+        Failure policy — a failure never looks like "no mail":
+
+        - a folder whose EXAMINE or SEARCH fails is logged at ERROR, its
+          cursor is left untouched, and it is reported in
+          ``folder_errors``;
+        - per-message fetch failures and store failures are counted,
+          logged at ERROR, and hold the folder's cursor below the lowest
+          failing UID so the next run retries them;
+        - ``success`` is False only when INBOX itself failed, because
+          that is the case where we cannot claim to know about new
+          inbound mail. A secondary folder failing degrades coverage but
+          must not abort the whole update pipeline.
 
         Args:
-            days_back: Number of days to sync (default: 30)
-            force_full: Ignored (kept for API compatibility)
+            days_back: History the caller wants covered (default 30).
+                Only widens the floor; the cursors drive the new end.
+            force_full: Ignored (kept for API compatibility).
+            on_progress: Optional ``(percent, message)`` callback.
 
         Returns:
-            Sync results
+            Sync results: ``success``, ``messages_added``,
+            ``messages_deleted`` (always 0 — the archive never deletes),
+            ``total_fetched``, ``folders`` (per-folder detail),
+            ``folder_errors``, ``fetch_failures``.
+        """
+        from zylch.email import sync_cursor
+        from zylch.email.imap_client import IMAPError
+
+        logger.info(f"[sync] Starting email sync (days_back={days_back})...")
+
+        # Ensure the IMAP client is authenticated (lazy).
+        self._ensure_connected()
+
+        overlap = sync_cursor.overlap_days()
+        floor_info = self._compute_date_floor(days_back, overlap)
+        floor: datetime = floor_info["floor"]
+        logger.info(
+            f"[sync] date floor {floor.strftime('%Y-%m-%d')} "
+            f"({floor_info['reason']}); per-folder UID cursors drive the new end"
+        )
+
+        if on_progress:
+            on_progress(5, "Discovering mail folders...")
+
+        try:
+            folders = self.gmail.sync_folders()
+        except Exception as e:
+            logger.error(f"[sync] folder discovery failed: {e}", exc_info=True)
+            return {"success": False, "error": f"folder discovery failed: {e}"}
+
+        existing_ids = self.supabase.get_existing_email_ids(self.owner_id)
+        logger.info(f"[sync] archive holds {len(existing_ids)} known message identifiers")
+
+        result: Dict[str, Any] = {
+            "success": True,
+            "messages_added": 0,
+            "messages_deleted": 0,
+            "total_fetched": 0,
+            "fetch_failures": 0,
+            "folders": {},
+            "folder_errors": [],
+        }
+
+        for index, folder in enumerate(folders):
+            if on_progress:
+                pct = 10 + int(80 * index / max(len(folders), 1))
+                on_progress(pct, f"Scanning {folder}...")
+            try:
+                folder_result = self._sync_folder(folder, floor, existing_ids)
+            except IMAPError as e:
+                # EXAMINE / SEARCH failed: explicitly NOT "no mail".
+                logger.error(f"[sync] {folder}: {e} -> cursor NOT advanced, folder skipped")
+                result["folder_errors"].append({"folder": folder, "error": str(e)})
+                if folder == "INBOX":
+                    result["success"] = False
+                continue
+            except Exception as e:
+                logger.error(f"[sync] {folder}: unexpected failure: {e}", exc_info=True)
+                result["folder_errors"].append({"folder": folder, "error": str(e)})
+                if folder == "INBOX":
+                    result["success"] = False
+                continue
+
+            result["folders"][folder] = folder_result
+            result["messages_added"] += folder_result["added"]
+            result["total_fetched"] += folder_result["fetched"]
+            result["fetch_failures"] += folder_result["failures"]
+
+        if on_progress:
+            on_progress(95, f"Stored {result['messages_added']} emails")
+
+        logger.info(
+            f"[sync] complete: +{result['messages_added']} stored, "
+            f"{result['total_fetched']} fetched, {result['fetch_failures']} failure(s), "
+            f"{len(result['folder_errors'])} folder error(s)"
+        )
+        return result
+
+    def _sync_folder(
+        self,
+        folder: str,
+        floor: datetime,
+        existing_ids: Set[str],
+    ) -> Dict[str, Any]:
+        """Scan, ingest and re-anchor the cursor for a single folder.
+
+        Args:
+            folder: IMAP folder name (quoted where the provider needs it).
+            floor: Date floor for seeding and for the overlap backstop.
+            existing_ids: Message identifiers already in the archive.
+                Mutated in place as rows are stored, so a message that
+                lives in two folders is ingested once per run.
+
+        Returns:
+            Per-folder counters plus the cursor position that was written.
+
+        Raises:
+            IMAPFolderError / IMAPSearchError: propagated to the caller,
+            which logs them and leaves the cursor untouched.
+        """
+        from zylch.email import sync_cursor
+        from zylch.email.imap_client import FolderState, format_imap_date
+
+        cursor = sync_cursor.get_cursor(self.owner_id, folder)
+        since = format_imap_date(floor)
+        # Filled in by the criteria builder below, which runs inside
+        # scan_folder once EXAMINE has reported UIDVALIDITY.
+        decision: Dict[str, Any] = {"cursor": cursor}
+
+        def build_criteria(state: FolderState) -> str:
+            active = decision["cursor"]
+            if active is not None and active.uidvalidity != state.uidvalidity:
+                logger.error(
+                    f"[sync] {folder}: UIDVALIDITY CHANGED "
+                    f"{active.uidvalidity} -> {state.uidvalidity}. Every UID stored for this "
+                    f"folder is void; dropping the cursor and re-seeding from the date floor "
+                    f"{floor.strftime('%Y-%m-%d')}"
+                )
+                sync_cursor.drop_cursor(self.owner_id, folder)
+                active = None
+                decision["cursor"] = None
+            if active is None:
+                # Seed run: no confirmed position for this folder. The
+                # archive stores no UIDs, so the date floor is the only
+                # honest starting point — once. NOT DRAFT keeps unsent
+                # drafts (visible in Gmail's All Mail) out of the
+                # archive: ingesting one would read as a reply that was
+                # never sent.
+                criteria = f'(SINCE "{since}" NOT DRAFT)'
+                logger.info(f"[sync] {folder}: no cursor -> seeding with {criteria}")
+            else:
+                criteria = f'(OR UID {active.last_uid + 1}:* SINCE "{since}" NOT DRAFT)'
+                logger.info(
+                    f"[sync] {folder}: cursor uid={active.last_uid} "
+                    f"(uidvalidity={active.uidvalidity}) -> {criteria}"
+                )
+            return criteria
+
+        scan = self.gmail.scan_folder(folder, build_criteria)
+        cursor = decision["cursor"]
+        state = scan.state
+
+        # Decide what actually needs fetching. Dedup is by Message-ID,
+        # the same identity the archive keys on (emails.gmail_id), so the
+        # same message seen in INBOX and in All Mail is stored once.
+        new_uids: List[int] = []
+        seen_in_folder: Set[str] = set()
+        skipped_no_id: List[int] = []
+        duplicates = 0
+        for uid in scan.uids:
+            message_id = scan.message_ids.get(uid)
+            if message_id is None:
+                continue  # unresolved — already counted in scan.unresolved_uids
+            if not message_id:
+                skipped_no_id.append(uid)
+                continue
+            if message_id in existing_ids:
+                continue
+            if message_id in seen_in_folder:
+                duplicates += 1
+                continue
+            seen_in_folder.add(message_id)
+            new_uids.append(uid)
+
+        if skipped_no_id:
+            logger.warning(
+                f"[sync] {folder}: {len(skipped_no_id)} message(s) have no Message-ID header "
+                f"and cannot be de-duplicated; skipping uid(s) {skipped_no_id}"
+            )
+
+        logger.info(
+            f"[sync] {folder}: {len(scan.uids)} candidate uid(s), "
+            f"{len(new_uids)} missing from the archive"
+        )
+
+        messages: Dict[int, Dict[str, Any]] = {}
+        fetch_failures: List[int] = []
+        if new_uids:
+            messages, fetch_failures = self.gmail.fetch_messages_by_uid(folder, new_uids)
+
+        stored_uids, store_failures, added = self._store_messages(messages, existing_ids)
+
+        blocked = sorted(set(scan.unresolved_uids) | set(fetch_failures) | set(store_failures))
+        new_last_uid = self._advance_cursor(
+            folder=folder,
+            state=state,
+            previous=cursor,
+            candidates=scan.uids,
+            blocked=blocked,
+        )
+
+        return {
+            "added": added,
+            "fetched": len(messages),
+            "candidates": len(scan.uids),
+            "missing": len(new_uids),
+            "duplicates_in_folder": duplicates,
+            "failures": len(blocked),
+            "unresolved_uids": scan.unresolved_uids,
+            "fetch_failed_uids": fetch_failures,
+            "store_failed_uids": store_failures,
+            "skipped_no_message_id": skipped_no_id,
+            "uidvalidity": state.uidvalidity,
+            "cursor_uid": new_last_uid,
+            "stored_uids": stored_uids,
+        }
+
+    def _store_messages(
+        self,
+        messages: Dict[int, Dict[str, Any]],
+        existing_ids: Set[str],
+    ) -> Tuple[List[int], List[int], int]:
+        """Store fetched messages in batches.
+
+        Returns:
+            ``(stored_uids, failed_uids, rows_written)``. A batch that
+            raises marks every UID in it as failed, which is what holds
+            the folder cursor back — the old code logged the error and
+            moved on, so the sync floor advanced over mail that was
+            never persisted.
         """
         from zylch.config import settings
 
-        logger.info(f"Starting email sync" f" (days_back={days_back})...")
+        uids = sorted(messages)
+        if not uids:
+            return [], [], 0
 
-        # Ensure Gmail is authenticated (lazy)
-        self._ensure_connected()
+        batch_size = max(int(settings.email_archive_batch_size or 1), 1)
+        stored: List[int] = []
+        failed: List[int] = []
+        rows_written = 0
 
-        # Calculate target date
-        now = datetime.now(timezone.utc)
-        sync_days = days_back if days_back is not None else 30
-        target_date = now - timedelta(days=sync_days)
+        for start in range(0, len(uids), batch_size):
+            chunk = uids[start : start + batch_size]
+            try:
+                archive_messages = [self._convert_message(messages[uid]) for uid in chunk]
+                rows_written += self.supabase.store_emails_batch(
+                    self.owner_id,
+                    archive_messages,
+                )
+                stored.extend(chunk)
+                for archived in archive_messages:
+                    if archived.get("id"):
+                        existing_ids.add(archived["id"])
+                logger.info(f"[sync] stored {len(chunk)} message(s), uids {chunk}")
+            except Exception as e:
+                logger.error(
+                    f"[sync] storing {len(chunk)} message(s) FAILED (uids {chunk}): {e} "
+                    f"-> cursor will not advance past uid {min(chunk)}",
+                    exc_info=True,
+                )
+                failed.extend(chunk)
 
-        # Determine sync_from: use newest email date minus 1 day
-        # (overlap for safety), or target_date if DB is empty or
-        # we need older coverage.
-        newest_email_date = self.supabase.get_newest_email_date(self.owner_id)
-        if newest_email_date and newest_email_date.tzinfo is None:
-            newest_email_date = newest_email_date.replace(tzinfo=timezone.utc)
-        oldest_email_date = self.supabase.get_oldest_email_date(self.owner_id)
-        if oldest_email_date and oldest_email_date.tzinfo is None:
-            oldest_email_date = oldest_email_date.replace(tzinfo=timezone.utc)
+        return stored, failed, rows_written
 
-        if newest_email_date is None:
-            # No emails in DB — first sync
-            sync_from = target_date
-            logger.info(f"No emails in DB. Syncing from {sync_from.strftime('%Y-%m-%d')}")
-        elif target_date < oldest_email_date:
-            # User wants older coverage than we have
-            sync_from = target_date
-            logger.info(
-                f"Extending coverage from"
-                f" {oldest_email_date.strftime('%Y-%m-%d')}"
-                f" back to"
-                f" {sync_from.strftime('%Y-%m-%d')}"
-            )
+    def _advance_cursor(
+        self,
+        folder: str,
+        state: Any,
+        previous: Any,
+        candidates: Sequence[int],
+        blocked: Sequence[int],
+    ) -> int:
+        """Persist the new confirmed position for a folder.
+
+        The cursor may advance to the highest candidate UID only when
+        nothing below it is unaccounted for. Any blocked UID caps the
+        cursor just below it, so the next run re-examines that range.
+
+        With no candidates at all and no cursor yet, the folder is
+        anchored at ``uidnext - 1``: the seed run examined the whole
+        window above the date floor and found nothing, and everything
+        older than the floor is what the archive already holds.
+        """
+        from zylch.email import sync_cursor
+
+        previous_uid = previous.last_uid if previous is not None else 0
+        if candidates:
+            new_last = max(max(candidates), previous_uid)
+        elif previous is not None:
+            new_last = previous_uid
         else:
-            # Normal incremental: from newest minus 1 day (overlap for timezone safety)
-            sync_from = newest_email_date - timedelta(days=1)
-            logger.info(f"Incremental sync from {sync_from.strftime('%Y-%m-%d')} (newest - 1 day)")
+            new_last = max(state.uidnext - 1, 0)
 
-        try:
-            # Fetch email IDs via IMAP date query
-            query = f"after:{sync_from.strftime('%Y/%m/%d')}"
-            logger.info(f"Searching for message IDs: {query}")
-            if on_progress:
-                on_progress(10, "Searching mailbox...")
-            message_ids = self.gmail.list_message_ids(
-                query=query,
-            )
-            logger.info(f"Found {len(message_ids)} message IDs")
-
-            if not message_ids:
-                return {"success": True, "messages_added": 0, "messages_deleted": 0}
-
-            # Get existing email IDs (lightweight — only ID columns)
-            existing_ids = self.supabase.get_existing_email_ids(
-                self.owner_id,
+        if blocked:
+            capped = min(blocked) - 1
+            if capped < new_last:
+                logger.error(
+                    f"[sync] {folder}: {len(blocked)} unaccounted uid(s) {list(blocked)} — "
+                    f"holding the cursor at {capped} instead of {new_last}; "
+                    f"the next run re-examines them"
+                )
+                new_last = capped
+        if new_last < previous_uid:
+            logger.warning(
+                f"[sync] {folder}: cursor moves BACK {previous_uid} -> {new_last} "
+                f"to re-cover uid(s) that could not be confirmed"
             )
 
-            new_message_ids = [msg_id for msg_id in message_ids if msg_id not in existing_ids]
-            logger.info(f"Found {len(new_message_ids)}" f" new messages to sync")
-
-            if not new_message_ids:
-                return {
-                    "success": True,
-                    "messages_added": 0,
-                    "messages_deleted": 0,
-                    "total_fetched": 0,
-                }
-
-            # Fetch full messages for the new IDs
-            if on_progress:
-                on_progress(
-                    30,
-                    f"Fetching {len(new_message_ids)} new emails...",
-                )
-            messages = self.gmail.get_batch(new_message_ids, format="full")
-            logger.info(f"Fetched {len(messages)}" f" full messages")
-
-            # Convert and store messages in batches
-            if on_progress:
-                on_progress(
-                    60,
-                    f"Storing {len(messages)} emails with embeddings...",
-                )
-            batch_size = settings.email_archive_batch_size
-            total_stored = 0
-
-            for i in range(0, len(messages), batch_size):
-                batch = messages[i : i + batch_size]
-                try:
-                    archive_messages = [self._convert_message(msg) for msg in batch]
-                    stored = self.supabase.store_emails_batch(
-                        self.owner_id,
-                        archive_messages,
-                    )
-                    total_stored += stored
-
-                    end = min(i + batch_size, len(messages))
-                    logger.info(f"Progress: {end}" f"/{len(messages)}" f" processed")
-                    if on_progress and len(messages) > 0:
-                        pct = 60 + int(30 * end / len(messages))
-                        on_progress(
-                            pct,
-                            f"Stored {end}/{len(messages)} emails",
-                        )
-
-                except Exception as e:
-                    logger.error(f"Error storing batch" f" at offset {i}: {e}")
-
-            logger.info(f"Email sync complete:" f" {total_stored} messages stored")
-
-            return {
-                "success": True,
-                "messages_added": total_stored,
-                "messages_deleted": 0,
-                "total_fetched": len(messages),
-            }
-
-        except Exception as e:
-            logger.error(f"Email sync failed: {e}", exc_info=True)
-            return {"success": False, "error": str(e)}
+        new_last = max(new_last, 0)
+        sync_cursor.set_cursor(self.owner_id, folder, state.uidvalidity, new_last)
+        logger.info(f"[sync] {folder}: cursor -> uid={new_last} (uidvalidity={state.uidvalidity})")
+        return new_last
 
     def _extract_emails_from_header(self, header: str) -> str:
         """Extract email addresses from RFC 5322 format.
@@ -308,9 +574,7 @@ class EmailArchiveManager:
         if not is_auto_reply and body_plain:
             import re as _re
 
-            _first_line = next(
-                (ln.strip() for ln in body_plain.splitlines() if ln.strip()), ""
-            )
+            _first_line = next((ln.strip() for ln in body_plain.splitlines() if ln.strip()), "")
             if _re.search(r"\bauto[\s\-]?repl(?:ay|y)\b", _first_line, _re.I):
                 is_auto_reply = True
             # The legacy Italian product auto-reply opens with the literal

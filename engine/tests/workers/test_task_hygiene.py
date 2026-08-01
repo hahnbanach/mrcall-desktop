@@ -158,7 +158,7 @@ def test_hygiene_marks_user_authored_auto_reply(fresh_db, monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger="zylch.workers.task_hygiene"):
         result = run_task_backlog_hygiene(owner, _store())
 
-    assert result == {"auto_ack_marked": 1, "expired_marked": 0}
+    assert result == {"auto_ack_marked": 1, "expired_marked": 0, "expired_whatsapp": 0, "expired_calendar": 0}
     assert _task_processed_at(owner, eid) is not None
     assert "never analyzable" in caplog.text
 
@@ -171,7 +171,7 @@ def test_hygiene_expires_old_contact_row_with_warning(fresh_db, monkeypatch, cap
     with caplog.at_level(logging.WARNING, logger="zylch.workers.task_hygiene"):
         result = run_task_backlog_hygiene(owner, _store())
 
-    assert result == {"auto_ack_marked": 0, "expired_marked": 1}
+    assert result == {"auto_ack_marked": 0, "expired_marked": 1, "expired_whatsapp": 0, "expired_calendar": 0}
     assert _task_processed_at(owner, eid) is not None
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert any("expired unanalyzed" in r.getMessage() for r in warnings)
@@ -184,7 +184,7 @@ def test_hygiene_leaves_recent_contact_row_untouched(fresh_db, monkeypatch):
 
     result = run_task_backlog_hygiene(owner, _store())
 
-    assert result == {"auto_ack_marked": 0, "expired_marked": 0}
+    assert result == {"auto_ack_marked": 0, "expired_marked": 0, "expired_whatsapp": 0, "expired_calendar": 0}
     assert _task_processed_at(owner, eid) is None
 
 
@@ -200,7 +200,7 @@ def test_hygiene_rule_order_user_auto_and_expired_counts_as_auto_ack(fresh_db, m
     with caplog.at_level(logging.INFO, logger="zylch.workers.task_hygiene"):
         result = run_task_backlog_hygiene(owner, _store())
 
-    assert result == {"auto_ack_marked": 1, "expired_marked": 0}
+    assert result == {"auto_ack_marked": 1, "expired_marked": 0, "expired_whatsapp": 0, "expired_calendar": 0}
     assert _task_processed_at(owner, eid) is not None
     assert "never analyzable" in caplog.text
     assert "expired unanalyzed" not in caplog.text  # NOT the expiry path
@@ -216,13 +216,13 @@ def test_hygiene_reads_max_age_live_from_environ(fresh_db, monkeypatch):
     # cap = 30 → a 20-day row is NOT expired
     monkeypatch.setenv("TASK_BACKLOG_MAX_AGE_DAYS", "30")
     r1 = run_task_backlog_hygiene(owner, _store())
-    assert r1 == {"auto_ack_marked": 0, "expired_marked": 0}
+    assert r1 == {"auto_ack_marked": 0, "expired_marked": 0, "expired_whatsapp": 0, "expired_calendar": 0}
     assert _task_processed_at(owner, eid) is None
 
     # cap = 10 → now the same 20-day row IS expired
     monkeypatch.setenv("TASK_BACKLOG_MAX_AGE_DAYS", "10")
     r2 = run_task_backlog_hygiene(owner, _store())
-    assert r2 == {"auto_ack_marked": 0, "expired_marked": 1}
+    assert r2 == {"auto_ack_marked": 0, "expired_marked": 1, "expired_whatsapp": 0, "expired_calendar": 0}
     assert _task_processed_at(owner, eid) is not None
 
 
@@ -234,8 +234,8 @@ def test_hygiene_is_idempotent(fresh_db, monkeypatch):
     first = run_task_backlog_hygiene(owner, _store())
     second = run_task_backlog_hygiene(owner, _store())
 
-    assert first == {"auto_ack_marked": 1, "expired_marked": 0}
-    assert second == {"auto_ack_marked": 0, "expired_marked": 0}  # nothing left pending
+    assert first == {"auto_ack_marked": 1, "expired_marked": 0, "expired_whatsapp": 0, "expired_calendar": 0}
+    assert second == {"auto_ack_marked": 0, "expired_marked": 0, "expired_whatsapp": 0, "expired_calendar": 0}  # nothing left pending
 
 
 def test_hygiene_expiry_falls_back_to_iso_date_when_timestamp_null(fresh_db, monkeypatch):
@@ -253,7 +253,7 @@ def test_hygiene_expiry_falls_back_to_iso_date_when_timestamp_null(fresh_db, mon
 
     result = run_task_backlog_hygiene(owner, _store())
 
-    assert result == {"auto_ack_marked": 0, "expired_marked": 1}
+    assert result == {"auto_ack_marked": 0, "expired_marked": 1, "expired_whatsapp": 0, "expired_calendar": 0}
     assert _task_processed_at(owner, eid) is not None
 
 
@@ -267,7 +267,7 @@ def test_hygiene_matches_user_via_email_aliases(fresh_db, monkeypatch):
 
     result = run_task_backlog_hygiene(owner, _store())
 
-    assert result == {"auto_ack_marked": 1, "expired_marked": 0}
+    assert result == {"auto_ack_marked": 1, "expired_marked": 0, "expired_whatsapp": 0, "expired_calendar": 0}
     assert _task_processed_at(owner, eid) is not None
 
 

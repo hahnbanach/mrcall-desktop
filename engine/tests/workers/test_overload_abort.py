@@ -73,7 +73,7 @@ def test_reanalyze_sweep_aborts_on_2_consecutive_overload() -> None:
     )
     # (ok_count, aborted) since the T5 daily-stamp fix: the 529-abort must
     # now also be SIGNALED so a half-completed daily pass is not stamped.
-    assert result == (0, True), f"Expected (0, aborted=True), got {result}"
+    assert result == (0, True, False), f"Expected (0, aborted=True, truncated=False), got {result}"
 
 
 def test_dedup_sweep_aborts_on_2_consecutive_overload() -> None:
@@ -120,7 +120,11 @@ def test_dedup_sweep_aborts_on_2_consecutive_overload() -> None:
         def get_task_items(self, owner_id, action_required, limit):
             return self.tasks
 
-        def complete_task_item(self, owner_id, task_id, note=None):
+        def complete_task_item(self, owner_id, task_id, note=None, *, actor, why):
+            # actor/why are mandatory keyword-only on the real method
+            # (defect D): a fake that accepted an anonymous close
+            # would let a call site regress unnoticed.
+            assert actor and why
             return True
 
     fake_store = FakeStorage(fake_tasks)

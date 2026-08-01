@@ -75,8 +75,30 @@ The generated prompt must:
      support question.
    - LOW: informational, nice-to-have follow-up, when time permits.
 
-   Time decay: emails older than 2 weeks cannot be CRITICAL.
-   But a 5-day-old unanswered customer question is still HIGH.
+   AGE — READ THIS BEFORE WRITING ANY TIME RULE.
+   Age means opposite things depending on WHO IS WAITING, and the
+   generated prompt MUST make that distinction explicitly instead of
+   writing a blanket decay rule:
+
+   - WAITING ON THE USER (the contact wrote and nobody answered):
+     age is EVIDENCE OF NEGLECT. Time elapsed RAISES urgency and never
+     lowers it. A three-month-old unanswered cancellation request is
+     MORE serious than a three-day-old one, not less. If such a request
+     genuinely no longer matters, the right output is NO_ACTION with
+     that stated reason — never a quiet demotion to LOW that leaves the
+     item open and invisible forever.
+   - WAITING ON THE CONTACT (the user already replied and the contact
+     went silent): this is a proactive nudge, nothing is blocked on the
+     user, and low urgency is appropriate. Age may reasonably lower it.
+   - NO ANSWER IS NOT AN ANSWER: an automatic acknowledgment sent from
+     the user's own mailbox does NOT move the thread into the contact's
+     court. It is still waiting on the user.
+
+   So: do NOT emit an unconditional rule of the form "emails older than
+   N days cannot be CRITICAL" or "older than N days are at most LOW".
+   Any time-decay rule you write must be scoped to threads WAITING ON
+   THE CONTACT. A 5-day-old unanswered customer question is still HIGH;
+   a 40-day-old one is not lower for being older.
 
    IMPORTANT: Do NOT default to MEDIUM. Actively evaluate sentiment,
    time elapsed, and business impact. If the customer uses angry language
@@ -129,7 +151,8 @@ The generated prompt must:
    - `ACTION: low | DRAFT: "Mi scusi per il disagio..." | Routine complaint about service, same pattern as 5 previous complaints`
    - `NO_ACTION: Newsletter from marketing platform, user ignores these`
    - `NO_ACTION: Unsolicited one-line "please send your catalogue" from an unknown gmail address, no product / quantity / company named — advance-fee/export-scam pattern, not a real lead`
-   - `NO_ACTION: Email is 6 weeks old, if it were urgent it would have been handled by now`
+   - `ACTION: high | Reply to the cancellation request and ask for the missing account details | Customer asked to cancel 6 weeks ago and received only an automatic acknowledgment; nobody has answered, so the delay makes this worse, not less relevant`
+   - `NO_ACTION: The user replied 6 weeks ago and the contact never came back; nothing is pending on the user's side`
 
 The generated prompt will receive these template variables:
 - {{event_type}} - "email" | "calendar" | "mrcall"

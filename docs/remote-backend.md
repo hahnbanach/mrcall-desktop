@@ -213,10 +213,27 @@ sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh --prun
 
 ## Agent runbook — exact commands
 
-For an agent or script bringing up / updating the backend. Run from a checkout on
-your Mac; set `SSH=<user@host>` (or an ssh-config alias). Use a variable like
-`PROF`, **not** `UID` — `UID` is a read-only shell variable, so the assignment
-silently fails and you target the wrong path.
+For an agent or script bringing up / updating the backend.
+
+### First: are you ON the server, or remote?
+
+**Deploying from the server itself** (hostname `desktop`, user `mrcalld` exists,
+`/run/mrcalld/` has sockets) — NO SSH needed, run directly:
+
+```bash
+sudo /home/mrcalld/mrcall-desktop/engine/scripts/server/update-daemons.sh   # pull + restart changed daemons
+```
+
+If `sudo` needs a password you don't have, or you're on another machine, use SSH
+below. The script is idempotent: run it repeatedly, it only restarts daemons
+when `git pull` brought new commits (pass `--restart-all` to force).
+
+### Remote (from your Mac or a checkout elsewhere)
+
+Set `SSH=<user@host>` (or an ssh-config alias; the production box answers at
+`mal@desktop.mrcall.ai`). Use a variable like `PROF`, **not** `UID` — `UID` is a
+read-only shell variable, so the assignment silently fails and you target the
+wrong path.
 
 ```bash
 SSH=<user@host>; PROF=<firebase-uid>

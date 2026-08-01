@@ -293,55 +293,45 @@ def _get_learned_preferences(owner_id: str) -> str:
 
     Blobs are sorted by created_at asc so the prompt stays byte-stable
     across turns (prompt cache wouldn't rehit if they reshuffled).
-    Soft cap ~8000 chars (~2000 tokens); if exceeded, keep the newest
-    and log a warning — defensive, not expected in practice.
+
+    Selection and the soft cap live in :mod:`zylch.services.prefs_store`,
+    which is also the single door on the WRITE side. Over-cap stores are
+    now selected by priority (real rules before misrouted entity blobs)
+    and recency, not by byte position: the old loop stopped at the first
+    oversized chunk, so one 5 KB stray hid every smaller rule behind it.
+    Truncation is the emergency valve — the real fix is the write-side
+    bound plus ``scripts/compact_learned_prefs.py``.
     """
     import logging
 
+    from zylch.services.prefs_store import (
+        learned_prefs_max_chars,
+        load_rules,
+        render,
+        select_within_cap,
+    )
+
     logger = logging.getLogger(__name__)
 
-    try:
-        from zylch.storage.database import get_session
-        from zylch.storage.models import Blob
-    except Exception as e:
-        logger.warning(f"[prefs] cannot import Blob/get_session: {e}")
+    rules = load_rules(owner_id)
+    if not rules:
         return ""
 
-    namespaces = [f"template:{owner_id}", f"prefs:{owner_id}"]
-    try:
-        with get_session() as session:
-            rows = (
-                session.query(Blob)
-                .filter(Blob.owner_id == owner_id, Blob.namespace.in_(namespaces))
-                .order_by(Blob.created_at.asc())
-                .all()
-            )
-            contents = [(r.created_at, r.content) for r in rows if (r.content or "").strip()]
-    except Exception as e:
-        logger.warning(f"[prefs] query failed for owner {owner_id!r}: {e}")
-        return ""
+    total = sum(len(r["content"]) for r in rules) + 2 * (len(rules) - 1)
+    cap = learned_prefs_max_chars()
+    if total <= cap:
+        return render(rules)
 
-    if not contents:
-        return ""
-
-    joined = "\n\n".join(c for _, c in contents)
-    soft_cap = 8000
-    if len(joined) > soft_cap:
-        logger.warning(
-            f"[prefs] learned preferences size {len(joined)} chars exceeds"
-            f" soft cap {soft_cap}; keeping newest"
-        )
-        kept: list[str] = []
-        total = 0
-        for _, c in sorted(contents, key=lambda t: t[0], reverse=True):
-            if total + len(c) > soft_cap:
-                break
-            kept.append(c)
-            total += len(c) + 2
-        kept.reverse()
-        joined = "\n\n".join(kept)
-
-    return joined
+    kept, dropped = select_within_cap(rules, cap)
+    logger.warning(
+        f"[prefs] learned preferences size {total} chars exceeds soft cap "
+        f"{cap}; injecting {len(kept)} of {len(rules)} entries "
+        f"(dropped {len(dropped)}, "
+        f"{sum(1 for r in dropped if r.get('namespace'))} from the rule "
+        f"namespaces). Run scripts/compact_learned_prefs.py to compact the "
+        f"store — every prompt is running on a truncated view until then."
+    )
+    return render(kept)
 
 
 def get_operating_rules_block(owner_id: Optional[str] = None) -> str:

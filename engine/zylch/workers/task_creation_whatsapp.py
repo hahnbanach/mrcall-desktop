@@ -201,7 +201,15 @@ async def analyze_recent_whatsapp_events(
             continue
         thread_tasks = worker.storage.get_tasks_by_thread(worker.owner_id, chat_jid, open_only=True)
         for t in thread_tasks:
-            worker.storage.complete_task_item(worker.owner_id, t["id"])
+            worker.storage.complete_task_item(
+                worker.owner_id,
+                t["id"],
+                actor="detect.whatsapp.user_replied",
+                why=(
+                    f"user replied on WhatsApp chat {chat_jid} after the "
+                    f"contact's last message"
+                ),
+            )
             logger.info(
                 f"[TASK-WA] Auto-closed task {t['id']} for chat "
                 f"{chat_jid} (user replied on WhatsApp)"
@@ -365,12 +373,20 @@ async def analyze_recent_whatsapp_events(
         chat_jid = msg.get("chat_jid") or ""
 
         if result is None:
+            # No-mark-on-failure (defect F1, mirroring the email branch).
+            # Marking the chat processed here threw the message away: it
+            # was never retried and never became a task — silent loss of
+            # a customer's WhatsApp message. Leave the chat UNPROCESSED
+            # so the next tick retries it. Boundedness comes from the
+            # task_hygiene expiry rule, which now covers WhatsApp too.
             consecutive_failures += 1
+            logger.warning(
+                f"[TASK-WA] LLM analysis failed for chat {chat_jid} — "
+                f"left unprocessed, will retry next tick"
+            )
             if consecutive_failures >= 3:
                 logger.error("[TASK-WA] 3+ LLM failures — stopping WA branch")
-                _mark_chat_processed(chat_jid)
                 break
-            _mark_chat_processed(chat_jid)
             continue
 
         consecutive_failures = 0
@@ -399,7 +415,13 @@ async def analyze_recent_whatsapp_events(
                 continue
 
         if task_action == "close" and target_task:
-            worker.storage.complete_task_item(worker.owner_id, target_task["id"])
+            worker.storage.complete_task_item(
+                worker.owner_id,
+                target_task["id"],
+                actor="detect.whatsapp.llm_close",
+                why=(result.get("reason") or "").strip()
+                or f"task detector closed on WhatsApp message {msg_id} without stating a reason",
+            )
             logger.debug(
                 f"[TASK-WA] dedup/close task_id={target_task['id']} "
                 f"chat_jid={chat_jid} decision=llm_close"

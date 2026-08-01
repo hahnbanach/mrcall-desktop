@@ -94,7 +94,8 @@ async def campaign_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 
 async def campaign_add_contact(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """campaign.add_contact(campaign_id, email, …fields) -> contact dict.
+    """campaign.add_contact(campaign_id, email, uid?, stratum?, verdict?, language?,
+    dossier?, draft_subject?, draft_body?, state?, message_id?) -> contact dict.
 
     Idempotent on (campaign_id, email): re-adding an existing contact
     updates the provided fields instead of failing on the unique
@@ -169,7 +170,8 @@ async def campaign_contacts(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 
 async def campaign_update_contact(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """campaign.update_contact(contact_id, …fields) -> {ok, contact}.
+    """campaign.update_contact(contact_id, uid?, stratum?, verdict?, language?,
+    dossier?, draft_subject?, draft_body?, state?, message_id?) -> {ok, contact}.
 
     `state=sent` stamps `sent_at` server-side.
     """

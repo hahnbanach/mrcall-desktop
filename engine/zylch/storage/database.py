@@ -190,6 +190,16 @@ def _apply_column_migrations(engine: Engine) -> None:
         # (`media_type` already exists in the model/schema.)
         ("whatsapp_messages", "transcription", "TEXT"),
         ("whatsapp_messages", "media_path", "TEXT"),
+        # 2026-08-01: audit column naming WHO closed a task — a stable
+        # machine token ('human', 'f4.reanalyze', 'dedup.topic', …).
+        # Every `complete_task_item` call site must declare one; NULL
+        # only on rows closed before this column existed.
+        ("task_items", "close_actor", "TEXT"),
+        # 2026-08-01: act-at timestamp (epoch seconds, UTC) — the
+        # "call me back in N days" primitive written by `tasks.snooze`.
+        # NULL means "actionable now", so an ALTER on an existing table
+        # leaves every current task exactly where it was.
+        ("task_items", "due_at", "REAL"),
     ]
     # Indexes the SQLAlchemy `index=True` declaration creates on FRESH
     # tables but never gets back-applied to tables that pre-date the

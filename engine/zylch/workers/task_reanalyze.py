@@ -68,8 +68,22 @@ REANALYZE_TOOL = {
                 "type": "string",
                 "description": ("Short reason explaining the decision. Always required."),
             },
+            "waiting_on": {
+                "type": "string",
+                "enum": ["us", "contact", "unclear"],
+                "description": (
+                    "Who owes the next message, in YOUR reading of the thread "
+                    "history. 'us' = the contact sent the newest real message "
+                    "and we have not answered it (automatic acknowledgments do "
+                    "not count as an answer). 'contact' = we sent the newest "
+                    "message and are waiting on them. 'unclear' = you cannot "
+                    "tell. Always provide it: it is compared against an "
+                    "independent deterministic reading of the same history, and "
+                    "disagreements are logged."
+                ),
+            },
         },
-        "required": ["action", "reason"],
+        "required": ["action", "reason", "waiting_on"],
     },
 }
 
@@ -110,11 +124,14 @@ def _build_user_content(
     task: Dict[str, Any],
     thread_history_section: str,
     today_str: str,
+    waiting_state=None,
 ) -> str:
     """Build the user message for the reanalysis LLM call.
 
     Provides the existing task summary + the full thread history so the
-    LLM can decide keep/close/update.
+    LLM can decide keep/close/update, plus — when ``waiting_state`` is
+    given — a computed statement of WHO IS WAITING and the reanalysis
+    -scoped urgency directive that follows from it.
     """
     # Build the "Contact:" line from whatever the task carries — email
     # for email tasks, phone/name for WhatsApp tasks. Falling back to
@@ -145,6 +162,51 @@ def _build_user_content(
         f"Today's date: {today_str}",
         existing,
     ]
+    if waiting_state is not None:
+        from zylch.workers.thread_presenter import (
+            WAITING_ON_US,
+            describe_waiting_state,
+        )
+
+        parts.append(describe_waiting_state(waiting_state))
+        # Reanalysis-scoped urgency directive. The system prompt is the
+        # TRAINED task-detection prompt, written for FIRST-TIME detection
+        # of a fresh message — and trained prompts routinely contain an
+        # age-decay rule ("older than 30 days is at most LOW"). Applied
+        # to a reanalysis it inverts the meaning: these tasks are old
+        # BECAUSE we never answered. Scope the decay rule explicitly to
+        # first-time detection and state the opposite direction here.
+        directive = [
+            "URGENCY POLICY FOR THIS REANALYSIS (overrides any age-decay rule "
+            "in your system prompt, which applies to FIRST-TIME detection of a "
+            "new message and NOT to re-judging an existing task):",
+            "  * Any age-decay rule you were trained with — 'older than N days "
+            "cannot be CRITICAL', 'older than N days is at most LOW' — is about "
+            "deciding whether a NEWLY ARRIVED message deserves a task. It has no "
+            "authority over a task that already exists.",
+        ]
+        if waiting_state.who == WAITING_ON_US:
+            directive.append(
+                "  * This task is WAITING ON US: the contact wrote and nobody "
+                "answered. Age is EVIDENCE OF NEGLECT, not of irrelevance. For "
+                "such a task, elapsed time RAISES urgency and NEVER lowers it. "
+                "Do not propose an urgency lower than the current one. If the "
+                "request genuinely no longer matters, CLOSE the task and say so "
+                "— do not quietly demote it to low and leave it open forever."
+            )
+        else:
+            directive.append(
+                "  * This task is NOT waiting on us (we spoke last, or the "
+                "history is unclear). Judge urgency on the merits; a proactive "
+                "follow-up where the contact has gone silent may legitimately be "
+                "low priority."
+            )
+        directive.append(
+            "  * Report your own reading in the `waiting_on` field. It is "
+            "compared with a deterministic parse of the same history; when they "
+            "disagree the safe direction wins and the disagreement is logged."
+        )
+        parts.append("\n".join(directive))
     if thread_history_section:
         parts.append(thread_history_section)
         parts.append(
@@ -214,11 +276,21 @@ async def reanalyze_task(
     logger.debug(f"[reanalyze_task] owner_id={owner_id} task_id={task_id}")
 
     store = Storage.get_instance()
-    tasks = store.get_task_items(owner_id=owner_id, limit=1000)
-    task = next((t for t in tasks if t.get("id") == task_id), None)
+    # Direct lookup (`tasks.get` / `Storage.get_task_by_id`). This used
+    # to be a 1000-row page scanned in Python, which reported "task not
+    # found" for anything past row 1000 and for tasks the default filter
+    # excluded — a lookup failure dressed up as a missing task.
+    task = store.get_task_by_id(owner_id=owner_id, task_id=task_id)
     if task is None:
         logger.debug(f"[reanalyze_task] task not found task_id={task_id}")
         return {"ok": False, "error": "task not found", "task_id": task_id}
+    if task.get("completed_at"):
+        logger.debug(
+            f"[reanalyze_task] task already closed task_id={task_id} "
+            f"completed_at={task.get('completed_at')} "
+            f"close_actor={task.get('close_actor')}"
+        )
+        return {"ok": False, "error": "task already closed", "task_id": task_id}
 
     # WhatsApp tasks need a different thread reconstruction (chat_jid →
     # whatsapp_messages) than the email path (Email.thread_id). Without
@@ -352,8 +424,25 @@ async def reanalyze_task(
         }
     ]
 
+    # Resolve WHO IS WAITING once, deterministically, and use the same
+    # answer for the prompt, for the floor and for the cap. Two
+    # independent resolutions of the same question would eventually
+    # disagree with each other on the same task.
+    from zylch.workers.thread_presenter import (
+        WAITING_ON_CONTACT,
+        WAITING_ON_US,
+        resolve_waiting_state,
+    )
+
+    waiting_state = resolve_waiting_state(thread_history_section)
+    logger.debug(
+        f"[reanalyze_task] task_id={task_id} waiting_state={waiting_state.who} "
+        f"last_turn_at={waiting_state.last_turn_at} "
+        f"age_days={waiting_state.age_days}"
+    )
+
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    user_content = _build_user_content(task, thread_history_section, today_str)
+    user_content = _build_user_content(task, thread_history_section, today_str, waiting_state)
 
     try:
         with call_site("f4.reanalyze"):
@@ -393,13 +482,41 @@ async def reanalyze_task(
     reason = (decision.get("reason") or "").strip()
     usage = response.usage or {"input_tokens": 0, "output_tokens": 0}
 
+    # The model answered "who is waiting?" too. Compare it with the
+    # deterministic parse: agreement is the normal case and costs
+    # nothing to confirm; disagreement means our rendering and the
+    # model read the same thread differently, which is exactly the
+    # situation where a silent automatic demotion is most dangerous.
+    model_waiting = (decision.get("waiting_on") or "").strip().lower() or None
+    disputed = (
+        model_waiting in (WAITING_ON_US, WAITING_ON_CONTACT)
+        and waiting_state.who in (WAITING_ON_US, WAITING_ON_CONTACT)
+        and model_waiting != waiting_state.who
+    )
+    if disputed:
+        logger.warning(
+            f"[reanalyze_task] task_id={task_id} WAITING-STATE DISAGREEMENT: "
+            f"model says waiting_on={model_waiting}, deterministic parse says "
+            f"{waiting_state.who} (last turn {waiting_state.last_turn_at}). "
+            f"Floor follows the deterministic read; cap is skipped."
+        )
+    elif model_waiting:
+        logger.debug(
+            f"[reanalyze_task] task_id={task_id} waiting_on agreed: "
+            f"model={model_waiting} parse={waiting_state.who}"
+        )
+
     # Option B (Mario, 2026-05-28): a task whose last non-auto turn is
     # the user's own reply is a *proactive nudge* — the contact is
     # silent, no user-side action is pending. Cap medium/high to low
     # so it doesn't crowd the genuinely user-blocking items. Applies
     # to KEEP and UPDATE; CLOSE is unaffected (the task is leaving the
     # open list anyway).
-    if action in ("update", "keep"):
+    #
+    # Skipped on a disputed read: the cap only ever demotes, so on a
+    # thread whose ownership the two readers cannot agree on, doing
+    # nothing is the safe move.
+    if action in ("update", "keep") and not disputed:
         from zylch.workers.thread_presenter import cap_urgency_for_silent_followup
 
         raw_urgency = (decision.get("urgency") or "").strip().lower() or None
@@ -427,10 +544,61 @@ async def reanalyze_task(
                 f"{check_urgency} → low (user replied last)"
             )
 
+    # ENFORCEMENT FLOOR — the other direction of the same question, and
+    # the part that does not depend on the model cooperating. When the
+    # contact spoke last and the task is still open, the task exists
+    # because WE never answered: age is neglect, so a reanalysis may
+    # raise urgency, hold it, or CLOSE the task, but it may not demote
+    # it. Directives can be ignored; on 2026-08-01 one was — an 8-week
+    # unanswered cancellation was demoted to `low` citing the trained
+    # prompt's own ">30 days ⇒ at most LOW" rule. The floor runs on the
+    # deterministic parse even when the model disagreed with it (safety
+    # direction), unlike the cap, which stands down on a dispute.
+    if action == "update":
+        from zylch.workers.thread_presenter import floor_urgency_for_unanswered_inbound
+
+        proposed_urgency = (decision.get("urgency") or "").strip().lower() or None
+        current_urgency = (task.get("urgency") or "").strip().lower() or None
+        floored_urgency, floored = floor_urgency_for_unanswered_inbound(
+            current_urgency,
+            proposed_urgency,
+            thread_history_section,
+            state=waiting_state,
+        )
+        if floored:
+            age_txt = (
+                f"{waiting_state.age_days:.0f}d" if waiting_state.age_days is not None else "?"
+            )
+            logger.warning(
+                f"[reanalyze_task] task_id={task_id} URGENCY FLOOR: refused to "
+                f"lower {current_urgency} → {proposed_urgency}; the contact "
+                f"spoke last {age_txt} ago and the task is open (waiting on us). "
+                f"Persisting {floored_urgency}."
+            )
+            decision["urgency"] = floored_urgency
+            reason_suffix = (
+                f" [urgency floor: proposed {proposed_urgency} refused — "
+                f"unanswered inbound, contact waiting {age_txt}; "
+                f"kept {floored_urgency}]"
+            )
+            if reason and "[urgency floor:" not in reason:
+                reason = (reason + reason_suffix).strip()
+            elif not reason:
+                reason = reason_suffix.strip()
+
     # Apply decision
     applied: str
     if action == "close":
-        ok = store.complete_task_item(owner_id, task_id)
+        # `reason` is the model's own justification, already computed
+        # above and returned to the caller — it used to be dropped on
+        # the floor here, leaving the Closed view blank (defect D).
+        ok = store.complete_task_item(
+            owner_id,
+            task_id,
+            actor="f4.reanalyze",
+            why=(reason or "").strip()
+            or "reanalyze sweep decided CLOSE without stating a reason",
+        )
         applied = "closed" if ok else "keep"
         if not ok:
             logger.warning(f"[reanalyze_task] complete_task_item failed task_id={task_id}")
@@ -488,20 +656,22 @@ def resolve_task_id_prefix(
     immediately. Otherwise requires at least `min_prefix_len` characters and
     a unique prefix match. `candidates` is populated with all matches when
     the resolution is ambiguous (for error messages).
+
+    Both lookups go to SQL (``get_task_by_id`` / ``find_task_ids_by_prefix``).
+    They used to scan a 1000-row page in Python, so a task past that page —
+    or filtered out of it — resolved to "not found".
     """
     from zylch.storage.storage import Storage
 
     if not prefix:
         return None, []
     store = Storage.get_instance()
-    tasks = store.get_task_items(owner_id=owner_id, limit=1000)
     # Exact match first
-    for t in tasks:
-        if t.get("id") == prefix:
-            return prefix, [prefix]
+    if store.get_task_by_id(owner_id=owner_id, task_id=prefix) is not None:
+        return prefix, [prefix]
     if len(prefix) < min_prefix_len:
         return None, []
-    matches = [t.get("id") for t in tasks if (t.get("id") or "").startswith(prefix)]
+    matches = store.find_task_ids_by_prefix(owner_id=owner_id, prefix=prefix)
     if len(matches) == 1:
         return matches[0], matches
     return None, matches

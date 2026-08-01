@@ -117,17 +117,32 @@ def _owner_id() -> str:
 
 async def tasks_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.list(include_completed=False, include_skipped=False,
-    limit=200) -> list of task dicts."""
+    limit=200, due_filter="all") -> list of task dicts.
+
+    ``due_filter`` decides what to do with tasks parked into the future
+    by ``tasks.snooze`` (``due_at``):
+
+    - ``"all"`` (DEFAULT) — every task, snoozed or not. Identical to the
+      behaviour before ``due_at`` existed, so no caller changes by
+      accident; the desktop UI, which knows nothing of the field, keeps
+      seeing exactly what it saw.
+    - ``"due_now"`` — only tasks actionable right now (``due_at`` NULL
+      or already past). This is the "what should I do today" list.
+    """
     from zylch.storage.storage import Storage
 
     include_completed = bool(params.get("include_completed", False))
     include_skipped = bool(params.get("include_skipped", False))
     limit = int(params.get("limit", 200))
+    due_filter = params.get("due_filter", "all")
+    if due_filter not in ("all", "due_now"):
+        raise ValueError(f"due_filter must be 'all' or 'due_now', got {due_filter!r}")
     owner_id = _owner_id()
     logger.debug(
         f"[rpc] tasks.list owner_id={owner_id} "
         f"include_completed={include_completed} "
-        f"include_skipped={include_skipped} limit={limit}"
+        f"include_skipped={include_skipped} limit={limit} "
+        f"due_filter={due_filter}"
     )
 
     store = Storage.get_instance()
@@ -135,6 +150,7 @@ async def tasks_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
         owner_id=owner_id,
         limit=limit,
         include_completed=include_completed,
+        due_filter=due_filter,
     )
     if not include_skipped:
         tasks = [t for t in tasks if not (t.get("sources") or {}).get("skipped_at")]
@@ -145,7 +161,8 @@ async def tasks_list(params: Dict[str, Any], notify: NotifyFn) -> Any:
 async def tasks_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
     """tasks.create(contact_email, title, event_id, event_type="email",
     contact_name?, contact_phone?, urgency?, reason?, suggested_action?,
-    action_required=True, channel?, sources?) -> {ok, task_id, created}.
+    action_required=True, channel?, sources?, reopen_if_closed=False)
+    -> {ok, task_id, created, reopened} | {ok: false, closed: true, …}.
 
     Record a task the engine's own detection pipeline never created (e.g. a
     mail it did not see). Wraps storage.store_task_item — the SAME table the
@@ -153,6 +170,18 @@ async def tasks_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
     lifecycle (complete/reopen/skip) works normally. Idempotent: upsert on
     (owner_id, event_type, event_id), so re-creating the same event is a no-op
     update, never a duplicate.
+
+    CLOSED TARGETS. When the key already belongs to a task somebody
+    CLOSED, an upsert would rewrite its content while leaving it closed —
+    the caller gets ``ok: true`` and nothing the user can see changes.
+    Instead:
+
+    - ``reopen_if_closed`` absent/false → NOTHING is written. The reply
+      is ``{ok: false, closed: true, task_id, completed_at, close_note,
+      error}`` and ``error`` tells the caller which flag revives it.
+    - ``reopen_if_closed: true`` → the task is revived (close fields
+      cleared, dedup protection stamped) and refreshed with the supplied
+      content; the reply carries ``reopened: true``.
     """
     from zylch.storage.storage import Storage
 
@@ -163,6 +192,7 @@ async def tasks_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
         raise ValueError("contact_email, title and event_id are required")
 
     event_type = params.get("event_type") or "email"
+    reopen_if_closed = bool(params.get("reopen_if_closed", False))
     item = {
         "event_type": event_type,
         "event_id": event_id,
@@ -180,13 +210,38 @@ async def tasks_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
     owner_id = _owner_id()
     logger.debug(
         f"[rpc] tasks.create owner_id={owner_id} contact={contact_email} "
-        f"event_type={event_type} event_id={event_id}"
+        f"event_type={event_type} event_id={event_id} "
+        f"reopen_if_closed={reopen_if_closed}"
     )
     store = Storage.get_instance()
     existed = store.get_task_by_event(
         owner_id=owner_id, event_type=event_type, event_id=event_id
     )
-    ok = store.store_task_item(owner_id=owner_id, item=item)
+    if existed and existed.get("completed_at") and not reopen_if_closed:
+        logger.warning(
+            f"[rpc] tasks.create REFUSED — task {existed.get('id')} for "
+            f"({event_type}, {event_id}) is closed "
+            f"(completed_at={existed.get('completed_at')}); nothing written"
+        )
+        return {
+            "ok": False,
+            "closed": True,
+            "task_id": existed.get("id"),
+            "created": False,
+            "completed_at": existed.get("completed_at"),
+            "close_note": existed.get("close_note"),
+            "close_actor": existed.get("close_actor"),
+            "error": (
+                "task already exists and is CLOSED — nothing was written. "
+                "Pass reopen_if_closed=true to revive it with this content, "
+                "or create a task under a different event_id."
+            ),
+        }
+
+    reviving = bool(existed and existed.get("completed_at") and reopen_if_closed)
+    ok = store.store_task_item(
+        owner_id=owner_id, item=item, reopen_if_closed=reviving
+    )
     task = (
         store.get_task_by_event(
             owner_id=owner_id, event_type=event_type, event_id=event_id
@@ -194,11 +249,15 @@ async def tasks_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
         if ok
         else None
     )
-    logger.debug(f"[rpc] tasks.create -> ok={ok} task_id={task.get('id') if task else None}")
+    logger.debug(
+        f"[rpc] tasks.create -> ok={ok} task_id={task.get('id') if task else None} "
+        f"reopened={reviving}"
+    )
     return {
         "ok": bool(ok),
         "task_id": task.get("id") if task else None,
         "created": bool(ok and existed is None),
+        "reopened": bool(ok and reviving),
     }
 
 
@@ -230,9 +289,79 @@ async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
         f"note_len={len(note) if note else 0}"
     )
     store = Storage.get_instance()
-    ok = store.complete_task_item(owner_id=owner_id, task_id=task_id, note=note)
+    ok = store.complete_task_item(
+        owner_id=owner_id,
+        task_id=task_id,
+        note=note,
+        actor="human",
+        why=note or "closed by the user from the desktop Tasks view",
+    )
     logger.debug(f"[rpc] tasks.complete -> {ok}")
     return {"ok": bool(ok)}
+
+
+async def tasks_snooze(params: Dict[str, Any], notify: NotifyFn) -> Any:
+    """tasks.snooze(task_id, due_at, days, actor, why) -> {ok, due_at, …}.
+
+    Park an OPEN task until a moment in the future — the "call me back
+    in N days" the ledger never had. Give EXACTLY ONE of:
+
+    - ``due_at`` — absolute epoch seconds, UTC;
+    - ``days`` — relative to now (``3`` = three days from now; ``0`` or
+      a negative value makes the task actionable again immediately).
+
+    A snooze is not a close. The task stays open with its urgency
+    intact; it merely drops out of ``tasks.list(due_filter="due_now")``,
+    out of the F4 reanalyze sweep, and out of reach of the phone
+    age-close until it comes due. ``actor`` and ``why`` follow the same
+    audit convention closing a task does — they default to the human
+    desktop action, and are recorded on the task's snooze history.
+
+    Returns ``{ok: false, error: …}`` for a missing or already-closed
+    task; reviving a closed task is ``tasks.reopen``'s job.
+    """
+    from zylch.storage.storage import Storage
+
+    task_id = params.get("task_id")
+    if not task_id:
+        raise ValueError("task_id is required")
+    if not isinstance(task_id, str):
+        raise ValueError("task_id must be a string")
+
+    raw_due_at = params.get("due_at")
+    raw_days = params.get("days")
+    if (raw_due_at is None) == (raw_days is None):
+        raise ValueError("pass exactly one of due_at (epoch seconds) or days")
+    due_at = float(raw_due_at) if raw_due_at is not None else None
+    days = float(raw_days) if raw_days is not None else None
+
+    actor = (params.get("actor") or "human").strip() or "human"
+    why = (params.get("why") or "").strip() or "snoozed by the user from the desktop Tasks view"
+
+    owner_id = _owner_id()
+    logger.debug(
+        f"[rpc] tasks.snooze owner_id={owner_id} task_id={task_id} "
+        f"due_at={due_at} days={days} actor={actor}"
+    )
+    store = Storage.get_instance()
+    resolved = store.snooze_task_item(
+        owner_id=owner_id,
+        task_id=task_id,
+        due_at=due_at,
+        days=days,
+        actor=actor,
+        why=why,
+    )
+    if resolved is None:
+        logger.warning(f"[rpc] tasks.snooze -> refused task_id={task_id}")
+        return {
+            "ok": False,
+            "task_id": task_id,
+            "due_at": None,
+            "error": "no OPEN task with that id — a closed task must be reopened first",
+        }
+    logger.debug(f"[rpc] tasks.snooze -> ok due_at={resolved}")
+    return {"ok": True, "task_id": task_id, "due_at": resolved}
 
 
 async def tasks_reopen(params: Dict[str, Any], notify: NotifyFn) -> Any:
@@ -458,8 +587,11 @@ async def tasks_solve(params: Dict[str, Any], notify: NotifyFn) -> Any:
             )
 
             store = Storage.get_instance()
-            tasks = store.get_task_items(owner_id=owner_id, limit=1000)
-            task = next((t for t in tasks if t.get("id") == task_id), None)
+            # Direct lookup, not a 1000-row page scanned in Python: the
+            # old form reported "task not found" for anything past row
+            # 1000 and for tasks the default filter excluded — a lookup
+            # failure dressed up as a missing task.
+            task = store.get_task_by_id(owner_id=owner_id, task_id=task_id)
             if task is None:
                 # Emit a done event so the client clears its busy state.
                 _notify({"type": "done", "result": {"task_missing": True}})
@@ -770,7 +902,7 @@ async def chat_send(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 
 async def chat_approve(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """chat.approve(tool_use_id, mode | approved) -> {ok: true}.
+    """chat.approve(tool_use_id, mode?, approved?, edited_input?) -> {ok: true}.
 
     Three modes:
       - "once"    -> approve only this single tool call (default).
@@ -1896,6 +2028,7 @@ METHODS: Dict[str, Callable[[Dict[str, Any], NotifyFn], Awaitable[Any]]] = {
     "tasks.list": tasks_list,
     "tasks.create": tasks_create,
     "tasks.complete": tasks_complete,
+    "tasks.snooze": tasks_snooze,
     "tasks.reopen": tasks_reopen,
     "tasks.skip": tasks_skip,
     "tasks.pin": tasks_pin,

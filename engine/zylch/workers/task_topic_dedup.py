@@ -35,6 +35,8 @@ import re
 import time
 from typing import Any, Dict, List
 
+from zylch.workers.task_contact_identity import describe_identity, task_identity_key
+
 logger = logging.getLogger(__name__)
 
 
@@ -129,10 +131,15 @@ def _under_skip(t: Dict[str, Any], now_epoch: int) -> bool:
 def _card(t: Dict[str, Any]) -> Dict[str, Any]:
     """Compact per-task summary the LLM clusters on. Trims long
     free-text fields so the prompt stays under control on big lists.
+
+    ``party`` is the resolved identity key (phone-first, notifier relay
+    addresses excluded) — the same value the post-decision precondition
+    enforces, so the model sees exactly what it will be held to.
     """
     return {
         "id": t.get("id"),
-        "contact": t.get("contact_email") or "(unknown)",
+        "contact": t.get("contact_email") or t.get("contact_phone") or "(unknown)",
+        "party": task_identity_key(t) or "(unknown)",
         "channel": t.get("channel") or "(unknown)",
         "urgency": t.get("urgency") or "(unknown)",
         "created": (str(t.get("created_at") or ""))[:10],
@@ -144,28 +151,40 @@ def _card(t: Dict[str, Any]) -> Dict[str, Any]:
 def _build_prompt(active_tasks: List[Dict[str, Any]], today_iso: str) -> str:
     """Render the open-task list as a JSON document for the LLM.
 
-    Includes worked examples on aggressive cross-channel clustering —
-    that's the case F8 cannot reach and the reason F9 exists.
+    F9's reach over F8 is CHANNEL and THREAD: the same customer can
+    surface via a phone call, an email and a platform alert, and F8
+    (contact / blob shape) never pulls those together. What F9 must
+    NOT do is cross PARTIES — merging two customers because they have
+    the same kind of problem destroys information, and 11 such merges
+    were found on the live support@ ledger. The identity precondition
+    in ``_validate_decision`` enforces it after the fact; the prompt
+    states it up front so the model doesn't waste a cluster on it.
     """
     cards = [_card(t) for t in active_tasks]
     return (
         "You are reviewing OPEN action items for ONE user.\n"
         f"Today is {today_iso}.\n"
         "\n"
-        "GOAL: cluster tasks that share a single underlying real-world "
-        "problem, EVEN IF the channel and sender differ. Cluster "
-        "AGGRESSIVELY when:\n"
-        "  - A missed phone call (notification@*mrcall*) from / about "
-        "person P concerning topic T, AND an email task with person P "
-        "about topic T, AND/OR an automated platform notification "
-        "about topic T → ALL ONE cluster.\n"
+        "GOAL: cluster tasks that are the SAME real-world problem for "
+        "the SAME party, even when they arrived on different channels "
+        "or in different threads. Cluster when:\n"
+        "  - A missed phone call from person P about topic T AND an "
+        "email task with the SAME person P about topic T → one "
+        "cluster (same party, two channels).\n"
         "  - The user already replied on one of the threads — close "
         "the others in that cluster: they're noise about the same "
-        "event.\n"
+        "event for that party.\n"
         "  - Repeated low-balance / low-minutes / quota alerts for the "
-        "same account → one cluster.\n"
-        "  - Repeated callback requests from the same caller → one "
+        "SAME account → one cluster.\n"
+        "  - Repeated callback requests from the SAME caller → one "
         "cluster.\n"
+        "\n"
+        "NEVER cluster across parties. Two different customers with "
+        "the same KIND of problem are two tasks, not one — closing "
+        "either loses a customer's issue. Each card carries a `party` "
+        "key: tasks whose `party` differs must NOT be put in the same "
+        "cluster, and a cluster containing a card with "
+        "`party = (unknown)` will be rejected.\n"
         "\n"
         "For each cluster of size > 1 pick ONE keeper (most "
         "informative or most actionable single line) and mark the "
@@ -178,12 +197,37 @@ def _build_prompt(active_tasks: List[Dict[str, Any]], today_iso: str) -> str:
 
 
 def _validate_decision(
-    decision: Dict[str, Any], active_ids: set
+    decision: Dict[str, Any],
+    active_ids: set,
+    tasks_by_id: Dict[str, Dict[str, Any]] | None = None,
 ) -> List[Dict[str, Any]]:
-    """Drop malformed clusters (unknown ids, keeper in duplicates,
-    duplicate ids appearing across clusters, etc.). Pure function — no
-    DB writes. Returns a sanitised list of clusters ready for closure.
+    """Drop malformed clusters and cross-party merges.
+
+    Structural checks first (unknown ids, keeper in duplicates,
+    duplicate ids appearing across clusters). Then the IDENTITY
+    PRECONDITION, applied per keeper/duplicate PAIR — never to the
+    whole cluster, so one bad pair does not throw away the good ones:
+
+    - both identities known and DIFFERENT → drop the pair, WARNING
+      naming both. Two parties are never one task.
+    - either identity unknown → drop the pair too. An unresolvable
+      identity is not permission to merge; silence is not consent.
+    - both known and equal → the pair survives to closure.
+
+    ``tasks_by_id`` supplies the rows to resolve identities from. It is
+    optional only so existing callers/tests that pass ids alone keep
+    working; without it the precondition cannot run and the function
+    logs that it is validating structure only.
+
+    Pure function — no DB writes. Returns a sanitised list of clusters
+    ready for closure.
     """
+    if tasks_by_id is None:
+        logger.warning(
+            "[topic-dedup] _validate_decision called without task rows — "
+            "identity precondition NOT applied (structure only)"
+        )
+        tasks_by_id = {}
     seen_dup_ids: set = set()
     seen_keeper_ids: set = set()
     out: List[Dict[str, Any]] = []
@@ -202,6 +246,8 @@ def _validate_decision(
                 f"[topic-dedup] keeper {keeper!r} already used in another cluster — skipping"
             )
             continue
+        keeper_row = tasks_by_id.get(keeper)
+        keeper_identity = task_identity_key(keeper_row) if keeper_row else None
         clean_dups: List[str] = []
         for d in dups:
             if not isinstance(d, str):
@@ -218,6 +264,26 @@ def _validate_decision(
                     f"[topic-dedup] duplicate id {d!r} already assigned elsewhere — dropping"
                 )
                 continue
+            if tasks_by_id:
+                dup_row = tasks_by_id.get(d)
+                dup_identity = task_identity_key(dup_row) if dup_row else None
+                if keeper_identity is None or dup_identity is None:
+                    logger.warning(
+                        f"[topic-dedup] REFUSED pair keeper={keeper} "
+                        f"({describe_identity(keeper_row or {})}) "
+                        f"duplicate={d} ({describe_identity(dup_row or {})}) "
+                        f"— identity of at least one side is unknown; "
+                        f"cannot prove same party, not merging"
+                    )
+                    continue
+                if keeper_identity != dup_identity:
+                    logger.warning(
+                        f"[topic-dedup] REFUSED cross-party pair "
+                        f"keeper={keeper} ({keeper_identity}) "
+                        f"duplicate={d} ({dup_identity}) — different "
+                        f"parties are never the same task"
+                    )
+                    continue
             clean_dups.append(d)
         if not clean_dups:
             continue
@@ -382,14 +448,28 @@ async def run_topic_dedup(owner_id: str) -> Dict[str, Any]:
         }
 
     active_ids = {t["id"] for t in active if t.get("id")}
-    clusters = _validate_decision(decision, active_ids)
+    tasks_by_id = {t["id"]: t for t in active if t.get("id")}
+    clusters = _validate_decision(decision, active_ids, tasks_by_id)
     closed_total = 0
     for c in clusters:
         keeper_id = c["keeper_id"]
         topic = c["topic"]
         note = TOPIC_DEDUP_NOTE_TEMPLATE.format(keeper_id=keeper_id, topic=topic)
+        rationale = (c.get("rationale") or "").strip()
         for dup_id in c["duplicate_ids"]:
-            ok = store.complete_task_item(owner_id, dup_id, note=note)
+            # `note` is the display line (the "Duplicate of …" template
+            # the Closed view renders); `why` carries the arbiter's own
+            # rationale into the audit trail.
+            ok = store.complete_task_item(
+                owner_id,
+                dup_id,
+                note=note,
+                actor="dedup.topic",
+                why=(
+                    f"merged into keeper {keeper_id} on topic {topic!r}: "
+                    f"{rationale or 'arbiter gave no rationale'}"
+                ),
+            )
             if ok:
                 closed_total += 1
                 logger.info(

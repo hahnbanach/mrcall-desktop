@@ -33,6 +33,8 @@ import logging
 import time
 from typing import Any, Dict, List, Set
 
+from zylch.workers.task_contact_identity import describe_identity, task_identity_key
+
 logger = logging.getLogger(__name__)
 
 
@@ -150,7 +152,12 @@ class _UnionFind:
 
 
 def build_clusters(tasks: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
-    """Cluster tasks by shared contact OR blob overlap >= BLOB_OVERLAP_MIN.
+    """Cluster tasks by shared contact, shared thread, or blob overlap.
+
+    Blob-overlap edges additionally require the two tasks to resolve to
+    the SAME party (see ``task_contact_identity.task_identity_key``) —
+    a shared memory blob proves a shared topic, never a shared
+    correspondent.
 
     Public for tests / diagnostics. Pure function — no LLM, no DB.
     Returns clusters of size >= 2 only; singletons are filtered out
@@ -184,18 +191,46 @@ def build_clusters(tasks: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
         for i in range(1, len(ids)):
             uf.union(ids[0], ids[i])
 
-    # (b) by blob overlap >= BLOB_OVERLAP_MIN
+    # (b) by blob overlap >= BLOB_OVERLAP_MIN, AND only when the two
+    #     tasks are the SAME PARTY.
+    #
+    #     Contact and thread edges (a / a2) are identity edges by
+    #     construction. A blob edge is not: memory blobs are TOPICS, and
+    #     two different customers hitting the same topic share blobs
+    #     while being two distinct issues. Left unguarded, that edge is
+    #     how an unrelated pair reaches the arbiter as a "cluster" in the
+    #     first place. Same precondition as F9: identities must be known
+    #     and equal — an unknown identity is not consent.
     blobs_by_task: Dict[str, Set[str]] = {}
     for tid, t in by_id.items():
         src = t.get("sources") or {}
         bs = {str(b) for b in (src.get("blobs") or []) if b}
         if bs:
             blobs_by_task[tid] = bs
+    identity_by_task: Dict[str, str | None] = {
+        tid: task_identity_key(t) for tid, t in by_id.items()
+    }
     ids_with_blobs = list(blobs_by_task.keys())
     for i, a in enumerate(ids_with_blobs):
         for b in ids_with_blobs[i + 1 :]:
-            if len(blobs_by_task[a] & blobs_by_task[b]) >= BLOB_OVERLAP_MIN:
-                uf.union(a, b)
+            if len(blobs_by_task[a] & blobs_by_task[b]) < BLOB_OVERLAP_MIN:
+                continue
+            ident_a, ident_b = identity_by_task.get(a), identity_by_task.get(b)
+            if ident_a is None or ident_b is None:
+                logger.warning(
+                    f"[dedup] blob-overlap edge {a} / {b} NOT taken — "
+                    f"identity unknown on at least one side "
+                    f"({describe_identity(by_id[a])} vs {describe_identity(by_id[b])})"
+                )
+                continue
+            if ident_a != ident_b:
+                logger.warning(
+                    f"[dedup] blob-overlap edge {a} / {b} NOT taken — "
+                    f"different parties ({ident_a} vs {ident_b}); shared "
+                    f"memory blobs mean shared TOPIC, not shared party"
+                )
+                continue
+            uf.union(a, b)
 
     groups = uf.groups()
     return [[by_id[tid] for tid in ids] for ids in groups.values() if len(ids) >= 2]
@@ -485,7 +520,19 @@ async def run_dedup_sweep(owner_id: str) -> Dict[str, Any]:
                 )
                 continue
             note = DEDUP_NOTE_TEMPLATE.format(keeper_id=keeper_id)
-            ok = store.complete_task_item(owner_id, tid, note=note)
+            # `note` is the display line; `why` carries the arbiter's own
+            # justification into the audit trail (it was already computed
+            # and only logged before — defect D).
+            ok = store.complete_task_item(
+                owner_id,
+                tid,
+                note=note,
+                actor="dedup.sweep",
+                why=(
+                    f"merged into keeper {keeper_id} by the cluster arbiter: "
+                    f"{reason or 'arbiter gave no reason'}"
+                ),
+            )
             if ok:
                 closed_total += 1
                 closed_in_cluster += 1

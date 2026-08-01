@@ -27,7 +27,12 @@ the states (dead key, exhausted budget) where the LLM stages are
 skipped. That is the whole point: the backlog must stop growing in
 precisely those states.
 
-Emails only — WhatsApp / calendar backlog is out of scope.
+Coverage: emails, WhatsApp messages and calendar events. The expiry
+rule now spans all three because the WhatsApp and calendar branches
+stopped marking their rows processed on LLM failure (defects F1/F2) —
+without a bound, "retry next tick" would become "retry forever". The
+auto-ack rule stays email-only: it exists for the user's own SMTP
+auto-responder, which has no WhatsApp or calendar analogue.
 """
 
 import logging
@@ -68,23 +73,35 @@ def task_backlog_max_age_days() -> float:
         return DEFAULT_TASK_BACKLOG_MAX_AGE_DAYS
 
 
-def _row_age_days(row: Dict, now: datetime) -> Optional[float]:
-    """Age of an email row in days, or ``None`` when it can't be told.
+def _row_age_days(
+    row: Dict,
+    now: datetime,
+    epoch_fields: tuple = ("date_timestamp", "timestamp_epoch"),
+    date_fields: tuple = ("date", "timestamp", "start_time"),
+) -> Optional[float]:
+    """Age of a pending row in days, or ``None`` when it can't be told.
 
-    Prefers the numeric ``date_timestamp`` (epoch seconds); falls back
-    to parsing the ISO ``date`` string. Returns ``None`` when neither is
-    usable — an undatable row is left untouched (we can't prove it's
-    expired) rather than marked.
+    Prefers a numeric epoch field; falls back to parsing an ISO
+    timestamp string. The field names differ per channel — emails carry
+    ``date_timestamp`` / ``date``, WhatsApp rows ``timestamp_epoch`` /
+    ``timestamp``, calendar events ``start_time`` — so both lookups walk
+    a small candidate list.
+
+    Returns ``None`` when nothing is usable: an undatable row is left
+    untouched (we can't prove it's expired) rather than marked.
     """
-    ts = row.get("date_timestamp")
-    if isinstance(ts, (int, float)) and ts > 0:
-        return (now.timestamp() - float(ts)) / 86400.0
-    date_str = row.get("date")
-    if date_str:
+    for field in epoch_fields:
+        ts = row.get(field)
+        if isinstance(ts, (int, float)) and ts > 0:
+            return (now.timestamp() - float(ts)) / 86400.0
+    for field in date_fields:
+        date_str = row.get(field)
+        if not date_str:
+            continue
         try:
             dt = datetime.fromisoformat(str(date_str).replace("Z", "+00:00"))
         except (ValueError, TypeError):
-            return None
+            continue
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return (now - dt).total_seconds() / 86400.0
@@ -109,7 +126,13 @@ def run_task_backlog_hygiene(owner_id: str, store) -> Dict[str, int]:
        WARNING. This bounds retry of failed analyses so the backlog
        cannot grow silently.
 
-    Returns ``{"auto_ack_marked": int, "expired_marked": int}``.
+    It then applies the SAME expiry rule to the WhatsApp and calendar
+    task backlogs (:func:`expire_stale_channel_backlog`), which became
+    retry-forever surfaces when F1/F2 stopped marking them processed on
+    LLM failure.
+
+    Returns ``{"auto_ack_marked": int, "expired_marked": int,
+    "expired_whatsapp": int, "expired_calendar": int}``.
     """
     max_age_days = task_backlog_max_age_days()
     now = datetime.now(timezone.utc)
@@ -159,8 +182,78 @@ def run_task_backlog_hygiene(owner_id: str, store) -> Dict[str, int]:
                 f"{max_age_days:g} days"
             )
 
+    channel_expired = expire_stale_channel_backlog(owner_id, store, max_age_days, now)
+
+    result = {
+        "auto_ack_marked": auto_ack_marked,
+        "expired_marked": expired_marked,
+        **channel_expired,
+    }
+    logger.debug(f"[hygiene] run_task_backlog_hygiene -> {result}")
+    return result
+
+
+def expire_stale_channel_backlog(
+    owner_id: str,
+    store,
+    max_age_days: float,
+    now: datetime,
+) -> Dict[str, int]:
+    """Apply the expiry rule to the WhatsApp + calendar task backlogs.
+
+    Same contract as the email expiry rule above: a row still awaiting
+    task analysis after ``max_age_days`` is marked task-processed with a
+    WARNING, so a permanently failing analysis cannot be retried without
+    bound. Undatable rows are left alone.
+
+    Each channel is guarded separately — a storage helper that raises
+    (an older DB missing a column, say) must not take the other channel
+    or the email pass down with it.
+
+    Returns ``{"expired_whatsapp": int, "expired_calendar": int}``.
+    """
+    out = {"expired_whatsapp": 0, "expired_calendar": 0}
+
+    try:
+        wa_rows = store.get_unprocessed_whatsapp_messages_for_task(owner_id)
+    except Exception as e:
+        logger.warning(f"[hygiene] WhatsApp backlog read failed, skipping: {e}")
+        wa_rows = []
+    for row in wa_rows:
+        msg_id = row.get("id") or ""
+        if not msg_id:
+            continue
+        age_days = _row_age_days(row, now)
+        if age_days is not None and age_days > max_age_days:
+            store.mark_whatsapp_task_processed(owner_id, msg_id)
+            out["expired_whatsapp"] += 1
+            logger.warning(
+                f"[hygiene] expired unanalyzed WhatsApp message {msg_id} "
+                f"chat={row.get('chat_jid')} timestamp={row.get('timestamp')} "
+                f"— marked after {max_age_days:g} days"
+            )
+
+    try:
+        cal_rows = store.get_unprocessed_calendar_events_for_task(owner_id)
+    except Exception as e:
+        logger.warning(f"[hygiene] calendar backlog read failed, skipping: {e}")
+        cal_rows = []
+    for row in cal_rows:
+        event_id = row.get("id") or ""
+        if not event_id:
+            continue
+        age_days = _row_age_days(row, now)
+        if age_days is not None and age_days > max_age_days:
+            store.mark_calendar_event_task_processed(owner_id, event_id)
+            out["expired_calendar"] += 1
+            logger.warning(
+                f"[hygiene] expired unanalyzed calendar event {event_id} "
+                f"summary={row.get('summary')} start_time={row.get('start_time')} "
+                f"— marked after {max_age_days:g} days"
+            )
+
     logger.debug(
-        f"[hygiene] run_task_backlog_hygiene -> auto_ack_marked="
-        f"{auto_ack_marked} expired_marked={expired_marked}"
+        f"[hygiene] expire_stale_channel_backlog(owner_id={owner_id}, "
+        f"max_age_days={max_age_days}) -> {out}"
     )
-    return {"auto_ack_marked": auto_ack_marked, "expired_marked": expired_marked}
+    return out

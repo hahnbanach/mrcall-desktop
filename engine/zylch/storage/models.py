@@ -466,6 +466,14 @@ class TaskItem(DictMixin, Base):
     analyzed_at = Column(DateTime)
     completed_at = Column(DateTime)
     close_note = Column(Text)
+    # 2026-08-01: WHO closed this task. A stable machine token, not
+    # prose — "human" for a user action, otherwise the code path
+    # ("f4.reanalyze", "detect.email.llm_close", "dedup.topic", …).
+    # `close_note` stays the DISPLAY field the Closed view renders;
+    # this column is the audit trail that answers "was it me or the
+    # machine?" without parsing free text. NULL on tasks closed before
+    # the column existed.
+    close_actor = Column(Text)
     sources = Column(JSON, default=dict)
     pinned = Column(Boolean, default=False, nullable=False, index=True)
     # 2026-05-06: epoch-seconds (UTC) until which the dedup sweep should
@@ -474,6 +482,20 @@ class TaskItem(DictMixin, Base):
     # against time.time() — NULL means no skip. Worker:
     # zylch.workers.task_dedup_sweep.
     dedup_skip_until = Column(BigInteger)
+    # 2026-08-01: epoch-seconds (UTC, REAL) at which this task becomes
+    # actionable again — the "call me back in N days" primitive. Distinct
+    # from `dedup_skip_until`, which is SUPPRESS-UNTIL (don't let the
+    # dedup sweep touch this) and says nothing about when to act:
+    # `due_at` is ACT-AT. NULL (the default, and the value on every task
+    # created before this column) means "actionable now", which is
+    # exactly the pre-column behaviour.
+    #
+    # Who honours it: `tasks.list(due_filter="due_now")` hides tasks
+    # parked in the future, the F4 gating/reanalyze sweep skips them
+    # (deliberately parked ≠ neglected), and the phone age-close refuses
+    # to expire one. Written only by `Storage.snooze_task_item`
+    # (`tasks.snooze` RPC).
+    due_at = Column(Float, nullable=True)
     # 2026-05-06 (Fase 3.2): semantic channel the task originated
     # from. Distinct from event_type — `event_type` is the technical
     # event we built the task off (always "email" or "calendar"

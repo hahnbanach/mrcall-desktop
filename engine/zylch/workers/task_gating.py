@@ -216,6 +216,28 @@ def _latest_task_activity(session, owner_id: str, task: Dict[str, Any]) -> Optio
     return best
 
 
+def is_snoozed(task: Dict[str, Any], now_ts: Optional[float] = None) -> bool:
+    """True when ``task.due_at`` parks it in the FUTURE.
+
+    The one place the "deliberately parked ≠ neglected" rule is
+    decided, so the gating pass and the reanalyze sweep cannot drift
+    apart on it. A NULL / unparseable ``due_at`` reads as "actionable
+    now" — the pre-``due_at`` behaviour and the safe direction (we
+    would rather re-judge a task than silently park it forever).
+    """
+    raw = task.get("due_at")
+    if raw is None:
+        return False
+    try:
+        due = float(raw)
+    except (TypeError, ValueError):
+        logger.warning(f"[gating] task {task.get('id')} has unparseable due_at={raw!r} — ignoring")
+        return False
+    if now_ts is None:
+        now_ts = datetime.now(timezone.utc).timestamp()
+    return due > now_ts
+
+
 def f4_candidates(
     owner_id: str,
     store,
@@ -237,9 +259,21 @@ def f4_candidates(
     ``process_pipeline._reanalyze_sweep`` — this function only answers
     "did anything move since we last judged this task?".
     """
-    open_tasks = [
-        t for t in (tasks or []) if not t.get("completed_at") and t.get("action_required")
-    ]
+    now_ts = datetime.now(timezone.utc).timestamp()
+    open_tasks = []
+    snoozed = 0
+    for t in tasks or []:
+        if t.get("completed_at") or not t.get("action_required"):
+            continue
+        # Rule: a task snoozed into the future is deliberately parked,
+        # not neglected — it is not "activity we failed to react to",
+        # so it never counts as F4 work (not even on the daily pass).
+        if is_snoozed(t, now_ts):
+            snoozed += 1
+            continue
+        open_tasks.append(t)
+    if snoozed:
+        logger.info(f"[gating] {snoozed} open task(s) snoozed (due_at in the future) — not F4 work")
     if force_all or not open_tasks:
         return open_tasks
 
@@ -441,17 +475,22 @@ async def run_gated_sweeps(owner_id: str, store, plan: WorkPlan) -> Dict[str, An
         "aged_phone": 0,
         "f8f9_ran": False,
         "f4_aborted": False,
+        "f4_truncated": False,
     }
 
     # F4 — recompute eligibility on the CURRENT open set (detection may
     # have just run: tasks it created carry analyzed_at=now and drop
     # out; tasks it closed are gone from the list).
+    is_daily_pass = bool(plan.daily_pass or plan.force_full_sweeps)
     open_tasks = store.get_task_items(owner_id=owner_id, action_required=True, limit=10000)
     candidates = f4_candidates(owner_id, store, open_tasks, force_all=plan.force_all)
     if candidates:
-        reanalyzed, f4_aborted = await _reanalyze_sweep(owner_id, store, candidates)
+        reanalyzed, f4_aborted, f4_truncated = await _reanalyze_sweep(
+            owner_id, store, candidates, daily_pass=is_daily_pass
+        )
         result["reanalyzed"] = int(reanalyzed or 0)
         result["f4_aborted"] = bool(f4_aborted)
+        result["f4_truncated"] = bool(f4_truncated)
 
     # F8/F9 — final decision from the post-detection+post-F4 open set.
     after_f4 = store.get_task_items(owner_id=owner_id, action_required=True, limit=10000)
@@ -486,24 +525,35 @@ async def run_gated_sweeps(owner_id: str, store, plan: WorkPlan) -> Dict[str, An
         # are not billed; the budget cap still bounds the worst day).
         # A blocked tick (budget gate, preflight failure) never reaches
         # this code, so the next tick retries the full pass.
+        #
+        # F4 TRUNCATION counts the same way (defect F3): a "full pass"
+        # that hit its cap left tasks un-judged, so it is not full. The
+        # remainder is the oldest-first tail and every judged task had
+        # its analyzed_at bumped, so the next tick makes progress rather
+        # than repeating the same slice.
         dedup_s = result["dedup_summary"] or {}
         topic_s = result["topic_summary"] or {}
-        incomplete = bool(
-            dedup_s.get("no_llm")
-            or topic_s.get("no_llm")
-            or dedup_s.get("aborted_overload")
-            or dedup_s.get("llm_failed")
-            or topic_s.get("llm_failed")
-            or result["f4_aborted"]
-        )
-        if (plan.daily_pass or plan.force_full_sweeps) and not incomplete:
+        incomplete_reasons = []
+        if dedup_s.get("no_llm") or topic_s.get("no_llm"):
+            incomplete_reasons.append("no_llm")
+        if dedup_s.get("aborted_overload"):
+            incomplete_reasons.append("dedup_aborted_overload")
+        if dedup_s.get("llm_failed"):
+            incomplete_reasons.append("dedup_llm_failed")
+        if topic_s.get("llm_failed"):
+            incomplete_reasons.append("topic_llm_failed")
+        if result["f4_aborted"]:
+            incomplete_reasons.append("f4_aborted")
+        if result["f4_truncated"]:
+            incomplete_reasons.append("f4_truncated")
+        if is_daily_pass and not incomplete_reasons:
             set_state(owner_id, WS_KEY_LAST_FULL_SWEEP, datetime.now(timezone.utc).isoformat())
             plan.daily_stamped = True
             logger.info("[gating] daily full pass complete — last_full_sweep_at stamped")
-        elif (plan.daily_pass or plan.force_full_sweeps) and incomplete:
+        elif is_daily_pass and incomplete_reasons:
             logger.warning(
-                "[gating] daily pass INCOMPLETE (sweep aborted/failed) — "
-                "stamp not advanced, next tick retries"
+                f"[gating] daily pass INCOMPLETE ({', '.join(incomplete_reasons)}) — "
+                f"stamp not advanced, next tick retries"
             )
 
     return result

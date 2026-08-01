@@ -31,6 +31,13 @@ logger = logging.getLogger(__name__)
 # Lazy-loaded embedding engine singleton
 _embedding_engine = None
 
+# Reopen protection: how long a freshly reopened/revived task is shielded
+# from the dedup sweeps. Written into `task_items.dedup_skip_until` as
+# epoch seconds. Single source of truth for `reopen_task_item` and for
+# `store_task_item(reopen_if_closed=True)`; the workers carry their own
+# DEDUP_SKIP_DAYS constant for messaging only.
+REOPEN_DEDUP_SKIP_DAYS = 7
+
 
 def _get_embedding_engine():
     """Get or create the embedding engine singleton."""
@@ -48,7 +55,11 @@ def _get_embedding_engine():
     return _embedding_engine
 
 
-def _infer_task_channel(contact_email: str, event_type: Optional[str]) -> str:
+def _infer_task_channel(
+    contact_email: str,
+    event_type: Optional[str],
+    notifier_email: Optional[str] = None,
+) -> str:
     """Pick the semantic channel for a task (Fase 3.2).
 
     Distinct from event_type:
@@ -59,28 +70,31 @@ def _infer_task_channel(contact_email: str, event_type: Optional[str]) -> str:
     Rules (in priority order):
       1. Calendar events → "calendar".
       2. WhatsApp events → "whatsapp" (whatsapp-pipeline-parity Fase 3a).
-      3. Email from a notification@*mrcall* / notification@*transactional*
-         address → "phone" (missed-call alerts).
+      3. Mail delivered by a recognised notifier relay → that relay's
+         channel ("phone" for call notifications).
       4. Otherwise → "email".
 
-    The detection is intentionally narrow: the user wants to filter
-    "my call-back tasks" out from "my email tasks" without false
-    positives polluting either side. Add additional notification
-    domains here as new platforms get integrated.
+    ``notifier_email`` carries the ENVELOPE sender when the task's
+    ``contact_email`` was re-pointed at the real correspondent found in
+    the body (notifier fix). Without it, a call-back task correctly
+    keyed to the caller would fall through to "email" and disappear
+    from the phone filter.
+
+    The notifier table itself lives in
+    :mod:`zylch.utils.notifier_senders` — engine-generic, one row per
+    integrated platform, never an ``if company ==`` here.
     """
+    from zylch.utils.notifier_senders import notifier_channel
+
     et = (event_type or "").lower()
     if et == "calendar":
         return "calendar"
     if et == "whatsapp":
         return "whatsapp"
-    contact = (contact_email or "").strip().lower()
-    if contact and "@" in contact:
-        local, domain = contact.split("@", 1)
-        if local.startswith("notification") or local.startswith("notifications"):
-            # MrCall + the test/staging variant. Add other call-platform
-            # notifier domains here as they integrate.
-            if domain.endswith("mrcall.ai") or "transactional.mrcall" in domain:
-                return "phone"
+    for candidate in (notifier_email, contact_email):
+        channel = notifier_channel(candidate)
+        if channel:
+            return channel
     return "email"
 
 
@@ -3463,8 +3477,29 @@ class Storage:
     # TASK ITEMS
     # ==========================================
 
-    def store_task_item(self, owner_id: str, item: Dict[str, Any]) -> bool:
-        """Store a single task item (upsert on owner_id + event_type + event_id)."""
+    def store_task_item(
+        self,
+        owner_id: str,
+        item: Dict[str, Any],
+        reopen_if_closed: bool = False,
+    ) -> bool:
+        """Store a single task item (upsert on owner_id + event_type + event_id).
+
+        ``reopen_if_closed`` controls what happens when the upsert lands
+        on a task the user (or a worker) already CLOSED:
+
+        - ``False`` (default) — the conflict update rewrites the content
+          fields but leaves ``completed_at`` / ``close_note`` /
+          ``close_actor`` alone, so a closed task stays closed. Callers
+          that must not resurrect closed work check first; the
+          ``tasks.create`` RPC refuses outright rather than writing
+          content nobody will see.
+        - ``True`` — deliberate revival. Clears ``completed_at``,
+          ``close_note`` and ``close_actor`` and stamps
+          ``dedup_skip_until`` exactly as :meth:`reopen_task_item` does,
+          so the dedup sweep does not immediately re-close the task it
+          had just merged away.
+        """
         try:
             # Ensure analyzed_at is a proper datetime
             analyzed_at = item.get("analyzed_at")
@@ -3484,8 +3519,16 @@ class Storage:
             # didn't set one, infer from event_type + contact_email. The
             # rule lives here so every store_task_item caller benefits
             # uniformly (email branch, calendar branch, whatsapp, …).
+            # `sources.notifier_email` keeps the phone channel truthful for
+            # tasks whose contact_email is now the CALLER, not the relay.
+            item_sources = item.get("sources") or {}
+            notifier_email = (
+                item_sources.get("notifier_email") if isinstance(item_sources, dict) else None
+            )
             channel = item.get("channel") or _infer_task_channel(
-                contact_email=raw_contact, event_type=item.get("event_type")
+                contact_email=raw_contact,
+                event_type=item.get("event_type"),
+                notifier_email=notifier_email,
             )
             data = {
                 "owner_id": owner_id,
@@ -3503,6 +3546,30 @@ class Storage:
                 "sources": item.get("sources", {}),
                 "channel": channel,
             }
+            conflict_set = {
+                k: v
+                for k, v in data.items()
+                if k
+                not in (
+                    "owner_id",
+                    "event_type",
+                    "event_id",
+                )
+            }
+            if reopen_if_closed:
+                import time as _time
+
+                conflict_set["completed_at"] = None
+                conflict_set["close_note"] = None
+                conflict_set["close_actor"] = None
+                conflict_set["dedup_skip_until"] = int(
+                    _time.time() + REOPEN_DEDUP_SKIP_DAYS * 24 * 3600
+                )
+                logger.info(
+                    f"[store_task_item] reviving on conflict "
+                    f"event_type={data['event_type']} event_id={data['event_id']} "
+                    f"dedup_skip_until={conflict_set['dedup_skip_until']}"
+                )
             with get_session() as session:
                 stmt = sqlite_insert(TaskItem).values(**data)
                 stmt = stmt.on_conflict_do_update(
@@ -3511,16 +3578,7 @@ class Storage:
                         "event_type",
                         "event_id",
                     ],
-                    set_={
-                        k: v
-                        for k, v in data.items()
-                        if k
-                        not in (
-                            "owner_id",
-                            "event_type",
-                            "event_id",
-                        )
-                    },
+                    set_=conflict_set,
                 )
                 session.execute(stmt)
             return True
@@ -3761,23 +3819,61 @@ class Storage:
             logger.error(f"Failed to merge task sources for {task_id}: {e}")
             return False
 
-    def complete_task_item(self, owner_id: str, task_id: str, note: str | None = None) -> bool:
-        """Mark a task as completed.
+    def complete_task_item(
+        self,
+        owner_id: str,
+        task_id: str,
+        note: str | None = None,
+        *,
+        actor: str,
+        why: str,
+    ) -> bool:
+        """Mark a task as completed, on the record.
 
-        ``note`` is an optional free-text closing reason supplied by the
-        user from the desktop UI. Stored on `task_items.close_note` and
-        rendered next to the task in the Closed view. Auto-close paths
-        (worker, reanalyze) leave it None so we don't fabricate a reason.
+        A close is the one irreversible thing this ledger does to a
+        task, so it may not happen anonymously. ``actor`` and ``why``
+        are keyword-ONLY and mandatory: every call site is forced to
+        say who is closing and on what grounds, and a new call site
+        cannot be added without deciding both.
+
+        Args:
+            owner_id: owner scope.
+            task_id: task to close.
+            note: explicit display text. When omitted, ``why`` is used —
+                the automated paths already hold the reason (the LLM's
+                own words, the keeper id, the user-replied verdict) and
+                used to throw it away. Pass ``note`` only when the
+                display text must differ from the audit reason (e.g. the
+                dedup workers' "Duplicate of <keeper>" template).
+            actor: stable machine token identifying the closer —
+                ``human`` for a user action, otherwise the code path
+                (``f4.reanalyze``, ``detect.email.user_replied``,
+                ``dedup.topic``, …). Persisted to ``close_actor``.
+            why: free text explaining the close. Lands in ``close_note``
+                when ``note`` is not given, so the Closed view shows it.
+
+        Returns True when a row was updated.
         """
+        actor = (actor or "").strip()
+        if not actor:
+            raise ValueError("complete_task_item requires a non-empty actor")
+        display_note = note if note is not None else (why or None)
         try:
             with get_session() as session:
-                values: dict = {"completed_at": datetime.now(timezone.utc)}
-                if note is not None:
-                    values["close_note"] = note.strip() or None
+                values: dict = {
+                    "completed_at": datetime.now(timezone.utc),
+                    "close_actor": actor,
+                }
+                if display_note is not None:
+                    values["close_note"] = str(display_note).strip() or None
                 count = (
                     session.query(TaskItem)
                     .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)
                     .update(values)
+                )
+                logger.debug(
+                    f"[complete_task_item] task_id={task_id} actor={actor} "
+                    f"why={why!r} rows={count}"
                 )
                 return count > 0
         except Exception as e:
@@ -3806,6 +3902,7 @@ class Storage:
         if max_age_days <= 0:
             return 0
         cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+        now_ts = datetime.now(timezone.utc).timestamp()
         note = f"Auto-closed: phone call-back > {max_age_days} days old " "(no longer actionable)"
         try:
             with get_session() as session:
@@ -3817,6 +3914,11 @@ class Storage:
                         TaskItem.action_required.is_(True),
                         TaskItem.channel == "phone",
                         TaskItem.created_at < cutoff,
+                        # Rule: hygiene never expires a task somebody
+                        # deliberately parked into the future — an old
+                        # call-back snoozed to next month is scheduled
+                        # work, not an abandoned one.
+                        or_(TaskItem.due_at.is_(None), TaskItem.due_at <= now_ts),
                     )
                     .all()
                 )
@@ -3826,6 +3928,7 @@ class Storage:
                 for r in rows:
                     r.completed_at = now
                     r.close_note = note
+                    r.close_actor = "age_sweep.phone"
                 session.flush()
                 logger.info(
                     f"[age-sweep] auto-closed {len(rows)} phone task(s) "
@@ -3836,19 +3939,101 @@ class Storage:
             logger.error(f"auto_close_stale_phone_tasks failed: {e}")
             return 0
 
-    def reopen_task_item(self, owner_id: str, task_id: str) -> bool:
-        """Clear completed_at + close_note and protect from dedup for 7d.
+    def snooze_task_item(
+        self,
+        owner_id: str,
+        task_id: str,
+        due_at: Optional[float] = None,
+        days: Optional[float] = None,
+        *,
+        actor: str,
+        why: str,
+    ) -> Optional[float]:
+        """Park an OPEN task until ``due_at`` — "call me back in N days".
 
-        Setting `dedup_skip_until = now + 7d` (epoch seconds) prevents
-        the dedup sweep from immediately re-closing this task after the
-        user manually reopened it — a ping-pong loop that would
-        otherwise be inevitable when the user disagrees with the
-        arbiter's keeper choice.
+        Exactly one of ``due_at`` (epoch seconds, UTC) or ``days``
+        (relative to now) must be given. ``due_at=None, days=None`` is
+        rejected rather than silently interpreted as "clear it"; use
+        ``days=0`` / a past ``due_at`` to make a task actionable again.
+
+        A snooze is NOT a close: the task stays open, keeps its urgency
+        and its place in the ledger, and only stops being *presented* as
+        something to do right now. It therefore does not write the close
+        audit columns — but it is a deliberate human/agent decision, so
+        it carries the same mandatory ``actor``/``why`` pair
+        :meth:`complete_task_item` requires and records them on the
+        task's ``sources.snoozes`` history (append-only) plus an INFO
+        log. ``sources`` is the only per-task free-form store this
+        schema has; a dedicated audit table for one field would be
+        heavier than the fact deserves.
+
+        Returns the stored ``due_at`` on success, ``None`` when no open
+        task with that id belongs to the owner.
+        """
+        actor = (actor or "").strip()
+        if not actor:
+            raise ValueError("snooze_task_item requires a non-empty actor")
+        if (due_at is None) == (days is None):
+            raise ValueError("snooze_task_item requires exactly one of due_at or days")
+        if days is not None:
+            resolved = datetime.now(timezone.utc).timestamp() + float(days) * 86400.0
+        else:
+            resolved = float(due_at)
+        try:
+            with get_session() as session:
+                task = (
+                    session.query(TaskItem)
+                    .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)
+                    .one_or_none()
+                )
+                if task is None:
+                    logger.debug(f"[snooze_task_item] task_id={task_id} not found")
+                    return None
+                if task.completed_at is not None:
+                    logger.warning(
+                        f"[snooze_task_item] task_id={task_id} is CLOSED "
+                        f"(completed_at={task.completed_at}) — refusing to snooze"
+                    )
+                    return None
+                previous = task.due_at
+                task.due_at = resolved
+                sources = dict(task.sources or {})
+                history = list(sources.get("snoozes") or [])
+                history.append(
+                    {
+                        "at": datetime.now(timezone.utc).isoformat(),
+                        "due_at": resolved,
+                        "previous_due_at": previous,
+                        "actor": actor,
+                        "why": (why or "").strip() or None,
+                    }
+                )
+                sources["snoozes"] = history
+                task.sources = sources
+                session.flush()
+                logger.info(
+                    f"[snooze] task {task_id} due_at {previous} → {resolved} "
+                    f"({datetime.fromtimestamp(resolved, tz=timezone.utc).isoformat()}) "
+                    f"actor={actor} why={why!r}"
+                )
+                return resolved
+        except Exception as e:
+            logger.error(f"Failed to snooze task {task_id}: {e}")
+            return None
+
+    def reopen_task_item(self, owner_id: str, task_id: str) -> bool:
+        """Clear the close fields and protect from dedup for 7d.
+
+        Setting `dedup_skip_until = now + REOPEN_DEDUP_SKIP_DAYS` (epoch
+        seconds) prevents the dedup sweep from immediately re-closing
+        this task after the user manually reopened it — a ping-pong loop
+        that would otherwise be inevitable when the user disagrees with
+        the arbiter's keeper choice.
         """
         try:
             import time as _time
 
-            skip_until = int(_time.time() + 7 * 24 * 3600)
+            skip_until = int(_time.time() + REOPEN_DEDUP_SKIP_DAYS * 24 * 3600)
             # INFO on purpose: dedup_skip_until has exactly one writer (this
             # method) yet a bulk identical-epoch stamp appeared on every open
             # task with no tasks.reopen RPC in the log (2026-06-11, support@).
@@ -3865,6 +4050,7 @@ class Storage:
                         {
                             "completed_at": None,
                             "close_note": None,
+                            "close_actor": None,
                             "dedup_skip_until": skip_until,
                         }
                     )
@@ -4065,13 +4251,28 @@ class Storage:
         action_required: Optional[bool] = None,
         limit: int = 100,
         include_completed: bool = False,
+        due_filter: str = "all",
     ) -> List[Dict[str, Any]]:
         """Get task items sorted by pinned, urgency, analyzed_at.
 
         Defaults to open tasks only (completed_at IS NULL). Pass
         include_completed=True to get the full list — callers decide
         which slice to render.
+
+        ``due_filter`` selects how snoozed tasks (``due_at`` in the
+        future, see :meth:`snooze_task_item`) are treated:
+
+        - ``"all"`` (default) — every task, snoozed or not. This is the
+          pre-``due_at`` behaviour, so no existing caller changes.
+        - ``"due_now"`` — only tasks that are actionable now:
+          ``due_at IS NULL OR due_at <= now``.
+
+        An unrecognised value is rejected loudly rather than degrading
+        to "all": a filter that silently does not filter is the exact
+        failure the RPC param check exists to prevent.
         """
+        if due_filter not in ("all", "due_now"):
+            raise ValueError(f"due_filter must be 'all' or 'due_now', got {due_filter!r}")
         try:
             with get_session() as session:
                 query = session.query(TaskItem).filter(
@@ -4081,6 +4282,11 @@ class Storage:
                     query = query.filter(TaskItem.completed_at.is_(None))
                 if action_required is not None:
                     query = query.filter(TaskItem.action_required == action_required)
+                if due_filter == "due_now":
+                    now_ts = datetime.now(timezone.utc).timestamp()
+                    query = query.filter(
+                        or_(TaskItem.due_at.is_(None), TaskItem.due_at <= now_ts)
+                    )
 
                 # DB-level: pinned DESC first, then analyzed_at DESC. Urgency
                 # bucketing is applied client-side via stable sort below so
@@ -4113,6 +4319,72 @@ class Storage:
 
         except Exception as e:
             logger.error(f"Failed to get task items: {e}")
+            return []
+
+    def get_task_by_id(self, owner_id: str, task_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch ONE task by primary key, open or closed.
+
+        The direct lookup the ledger was missing. Before it, code that
+        needed a single task pulled ``get_task_items(limit=1000)`` and
+        scanned the list in Python — which silently returned "not
+        found" past row 1000, and left closed tasks invisible unless
+        the caller remembered ``include_completed``.
+
+        Returns the full row (including ``completed_at``,
+        ``close_note`` and ``close_actor``) enriched with
+        ``last_signal_at``, or ``None``.
+        """
+        if not task_id:
+            return None
+        try:
+            with get_session() as session:
+                row = (
+                    session.query(TaskItem)
+                    .filter(TaskItem.owner_id == owner_id, TaskItem.id == task_id)
+                    .one_or_none()
+                )
+                if row is None:
+                    logger.debug(f"[get_task_by_id] task_id={task_id} -> None")
+                    return None
+                task = row.to_dict()
+                self._enrich_tasks_with_last_signal(session, [task])
+                logger.debug(
+                    f"[get_task_by_id] task_id={task_id} -> "
+                    f"completed_at={task.get('completed_at')} "
+                    f"close_actor={task.get('close_actor')}"
+                )
+                return task
+        except Exception as e:
+            logger.error(f"Failed to get task by id {task_id}: {e}")
+            return None
+
+    def find_task_ids_by_prefix(self, owner_id: str, prefix: str) -> List[str]:
+        """Task ids starting with ``prefix`` — SQL LIKE, not a scan.
+
+        Backs the CLI's short-id resolution. ``%`` and ``_`` in the
+        prefix are escaped so a user-typed wildcard cannot turn a
+        prefix match into a full-table match.
+        """
+        if not prefix:
+            return []
+        escaped = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        try:
+            with get_session() as session:
+                rows = (
+                    session.query(TaskItem.id)
+                    .filter(
+                        TaskItem.owner_id == owner_id,
+                        TaskItem.id.like(f"{escaped}%", escape="\\"),
+                    )
+                    .all()
+                )
+                ids = [str(r[0]) for r in rows]
+                logger.debug(
+                    f"[find_task_ids_by_prefix] prefix={prefix} -> {len(ids)} match(es)"
+                )
+                return ids
+        except Exception as e:
+            logger.error(f"Failed to resolve task id prefix {prefix}: {e}")
             return []
 
     def set_task_pinned(self, owner_id: str, task_id: str, pinned: bool) -> bool:
@@ -4152,18 +4424,19 @@ class Storage:
             return False
 
     def mark_task_complete(self, owner_id: str, task_id: str) -> bool:
-        """Mark a task as complete."""
-        try:
-            with get_session() as session:
-                count = (
-                    session.query(TaskItem)
-                    .filter(TaskItem.owner_id == owner_id, TaskItem.id == task_id)
-                    .update({"completed_at": datetime.now(timezone.utc)})
-                )
-                return count > 0
-        except Exception as e:
-            logger.error(f"Failed to mark task complete: {e}")
-            return False
+        """Close a task from the chat ``/tasks close N`` command.
+
+        Thin alias over :meth:`complete_task_item` — it exists only
+        because the chat command handler predates it. Routing through
+        the same method keeps the audit trail complete: every close in
+        the ledger names an actor.
+        """
+        return self.complete_task_item(
+            owner_id=owner_id,
+            task_id=task_id,
+            actor="human",
+            why="closed by the user with the /tasks close chat command",
+        )
 
     def get_task_items_stats(self, owner_id: str) -> Optional[Dict[str, Any]]:
         """Get task items statistics for a user."""

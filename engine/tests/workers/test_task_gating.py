@@ -176,12 +176,21 @@ def _task_dict(**overrides):
     return d
 
 
-def _sweeps_patched(dedup=None, topic=None, reanalyze=0, f4_aborted=False, forbid=False):
+def _sweeps_patched(
+    dedup=None,
+    topic=None,
+    reanalyze=0,
+    f4_aborted=False,
+    f4_truncated=False,
+    forbid=False,
+):
     """Patch the three sweep impls on process_pipeline.
 
-    ``_reanalyze_sweep`` returns ``(ok_count, aborted)`` since the T5
-    daily-stamp fix. ``forbid=True`` makes any call fail the test —
-    used to prove a gated-off sweep is truly never invoked.
+    ``_reanalyze_sweep`` returns ``(ok_count, aborted, truncated)``:
+    ``aborted`` since the T5 daily-stamp fix, ``truncated`` since the F3
+    daily-cap fix — both mean the pass did not cover its input, so the
+    daily stamp must not advance. ``forbid=True`` makes any call fail
+    the test — used to prove a gated-off sweep is truly never invoked.
     """
     from zylch.services import process_pipeline as pp
 
@@ -193,7 +202,11 @@ def _sweeps_patched(dedup=None, topic=None, reanalyze=0, f4_aborted=False, forbi
             patch.object(pp, "_run_topic_dedup", boom),
         )
     return (
-        patch.object(pp, "_reanalyze_sweep", AsyncMock(return_value=(reanalyze, f4_aborted))),
+        patch.object(
+            pp,
+            "_reanalyze_sweep",
+            AsyncMock(return_value=(reanalyze, f4_aborted, f4_truncated)),
+        ),
         patch.object(
             pp,
             "_run_dedup_sweep",

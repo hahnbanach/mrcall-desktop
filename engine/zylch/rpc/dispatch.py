@@ -19,8 +19,14 @@ import logging
 from typing import Any, Callable, Dict, Optional
 
 from zylch.rpc.methods import METHODS
+from zylch.rpc.param_spec import build_registry, unknown_params
 
 logger = logging.getLogger(__name__)
+
+# Accepted-parameter registry, derived from the handler docstrings at
+# import time. Built here (not in param_spec) so it happens exactly once,
+# after every sub-module has merged its methods into METHODS.
+build_registry(METHODS)
 
 # JSON-RPC 2.0 standard error codes
 PARSE_ERROR = -32700
@@ -118,6 +124,23 @@ async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
         if is_notification:
             return None
         return _error(req_id, METHOD_NOT_FOUND, f"Method not found: {method}")
+
+    # A parameter the handler never reads is a caller bug that used to
+    # pass silently — `tasks.list(status="open")` returned every task
+    # and looked like a filtered list. Refuse it by name instead.
+    rejected = unknown_params(method, params)
+    if rejected:
+        logger.warning(
+            f"[rpc] {method} called with unknown param(s) {rejected} — "
+            f"rejected (they would have been ignored)"
+        )
+        if is_notification:
+            return None
+        return _error(
+            req_id,
+            INVALID_PARAMS,
+            f"Unknown parameter(s) for {method}: {', '.join(rejected)}",
+        )
 
     logger.debug(f"[rpc] method={method} params={_redact_params(method, params)}")
     try:

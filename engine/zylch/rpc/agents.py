@@ -229,7 +229,7 @@ async def agents_train_all(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 
 async def agents_get_prompt(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """agents.get_prompt({key}) -> {ok, key, prompt}.
+    """agents.get_prompt(key="task_email") -> {ok, key, prompt}.
 
     Read-only inspection of a trained agent prompt (``task_email`` |
     ``memory_message`` | ``emailer``) for the active profile — so the operator

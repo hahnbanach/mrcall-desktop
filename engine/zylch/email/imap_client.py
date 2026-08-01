@@ -8,16 +8,99 @@ import imaplib
 import logging
 import mimetypes
 import os
+import re
 import smtplib
 import email as email_lib
+from dataclasses import dataclass
 from email.header import decode_header
 from email.message import EmailMessage
 from email.mime.text import MIMEText
 from email.utils import formatdate, make_msgid, parseaddr
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+class IMAPError(RuntimeError):
+    """Base class for IMAP failures that must NOT be read as 'no mail'.
+
+    The sync path used to translate every protocol failure into an empty
+    result: a SEARCH that returned NO looked exactly like an empty
+    mailbox, so a broken folder scan advanced the sync floor as if it had
+    seen everything. These exceptions exist so a caller has to decide
+    explicitly, and so the cursor never advances over a failure.
+
+    Only folder-wide failures raise. Per-message FETCH failures are
+    returned as counted UID lists instead: one unreadable message must
+    hold the cursor without costing the whole folder its scan.
+    """
+
+
+class IMAPFolderError(IMAPError):
+    """SELECT/EXAMINE of a folder failed, or the folder is unusable."""
+
+
+class IMAPSearchError(IMAPError):
+    """A SEARCH command returned a non-OK status or an unparsable result."""
+
+
+# IMAP date literals are `dd-Mon-yyyy` with ENGLISH month abbreviations
+# (RFC 3501). `strftime("%b")` is locale-dependent — under it_IT it emits
+# "ago" for August and the server rejects the search — so the month names
+# are spelled out here instead.
+_IMAP_MONTHS = (
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+)
+
+
+def format_imap_date(dt: datetime) -> str:
+    """Format a datetime as an RFC 3501 date literal (locale-independent)."""
+    return f"{dt.day:02d}-{_IMAP_MONTHS[dt.month - 1]}-{dt.year}"
+
+
+@dataclass(frozen=True)
+class FolderState:
+    """What EXAMINE told us about a folder.
+
+    ``uidvalidity`` anchors the sync cursor: if it changes, every UID we
+    stored for that folder is meaningless. ``uidnext`` is the UID the
+    next delivered message will get, so ``uidnext - 1`` is the highest
+    UID that currently exists.
+    """
+
+    name: str
+    uidvalidity: int
+    uidnext: int
+    exists: int
+
+
+@dataclass(frozen=True)
+class FolderScan:
+    """The result of one read-only pass over a folder.
+
+    ``unresolved_uids`` is the load-bearing field: those are UIDs the
+    server matched but whose identity we could not establish. They are
+    the reason a sync cursor is allowed to stall — silence about them is
+    what turned a fetch failure into a permanently skipped message.
+    """
+
+    state: FolderState
+    uids: List[int]
+    message_ids: Dict[int, str]
+    unresolved_uids: List[int]
+
 
 # Common IMAP server presets: domain -> (imap_host, imap_port)
 IMAP_PRESETS: Dict[str, tuple] = {
@@ -208,6 +291,123 @@ def _extract_plain_body(
     return plain, html
 
 
+def _parse_message_bytes(raw: Any) -> Optional[Dict[str, Any]]:
+    """Parse raw RFC 822 bytes into the archive's message dict.
+
+    Module-level (not a method) so the sequence-number path and the UID
+    path share exactly one parser, and so it is testable without a
+    connection. Returns None when ``raw`` is not bytes — a shape the
+    server should never send, but one that must not read as "empty
+    message" further up.
+    """
+    if not isinstance(raw, (bytes, bytearray)):
+        logger.warning(f"[IMAP] _parse_message_bytes: unexpected payload type {type(raw)}")
+        return None
+
+    msg = email_lib.message_from_bytes(bytes(raw))
+
+    # Decode headers
+    subject = _decode_header_value(msg.get("Subject"))
+    from_header = _decode_header_value(msg.get("From"))
+    to_header = _decode_header_value(msg.get("To", ""))
+    cc_header = _decode_header_value(msg.get("Cc", ""))
+    date_header = msg.get("Date", "")
+    message_id = msg.get("Message-ID", "")
+    in_reply_to = msg.get("In-Reply-To", "")
+    references_raw = msg.get("References", "")
+
+    # Parse from name/email
+    from_name, from_email = parseaddr(from_header)
+
+    # Extract body
+    body_plain, body_html = _extract_plain_body(msg)
+
+    # Attachment metadata — filenames only, no bytes. The LLM and the
+    # desktop Email tab need to know what files are present without
+    # paying for a re-fetch via fetch_attachments().
+    attachment_filenames = _extract_attachment_filenames(msg)
+
+    # Thread ID: use References chain or Message-ID
+    thread_id = ""
+    if references_raw:
+        refs = references_raw.strip().split()
+        thread_id = refs[0] if refs else message_id
+    elif in_reply_to:
+        thread_id = in_reply_to
+    else:
+        thread_id = message_id
+
+    return {
+        "message_id": message_id.strip(),
+        "from_email": from_email,
+        "from_name": from_name,
+        "from": from_header,
+        "to_email": to_header,
+        "to": to_header,
+        "cc_email": cc_header,
+        "cc": cc_header,
+        "subject": subject,
+        "date": date_header,
+        "body_plain": body_plain,
+        "body_html": body_html,
+        "body": body_plain or body_html,
+        "thread_id": thread_id.strip(),
+        "in_reply_to": (in_reply_to.strip() if in_reply_to else ""),
+        "references": (references_raw.strip() if references_raw else ""),
+        "snippet": body_plain or body_html or "",
+        # Attachment metadata. NEVER includes raw bytes — only filenames.
+        "has_attachments": bool(attachment_filenames),
+        "attachment_filenames": attachment_filenames,
+        # Auto-reply detection headers
+        "auto_submitted": msg.get("Auto-Submitted", ""),
+        "x_autoreply": msg.get("X-Autoreply", ""),
+        "precedence": msg.get("Precedence", ""),
+        "x_auto_response_suppress": msg.get("X-Auto-Response-Suppress", ""),
+    }
+
+
+def _parse_uid_from_prefix(prefix: Any) -> Optional[int]:
+    """Extract the UID from a FETCH response prefix.
+
+    imaplib hands back entries shaped like
+    ``(b'12 (UID 4711 BODY[HEADER.FIELDS (MESSAGE-ID)] {58}', b'...')``.
+    We always ask for ``UID`` explicitly in the fetch item list so this
+    match is not at the mercy of server-side response ordering.
+    """
+    if isinstance(prefix, (bytes, bytearray)):
+        text = bytes(prefix).decode("utf-8", errors="replace")
+    elif isinstance(prefix, str):
+        text = prefix
+    else:
+        return None
+    match = re.search(r"\bUID\s+(\d+)", text)
+    return int(match.group(1)) if match else None
+
+
+def _extract_message_id_header(raw: Any) -> str:
+    """Pull the Message-ID value out of a HEADER.FIELDS fetch payload.
+
+    Parsed with the email module rather than by splitting lines: RFC 5322
+    allows a header to be folded across lines, and a long Message-ID
+    (Exchange emits 90+ character ones) can legitimately arrive as
+    ``Message-ID:\\r\\n <...>``. A line-based reader would call that
+    message "no Message-ID" and skip it — silently losing exactly the
+    kind of mail this whole change exists to stop losing.
+    """
+    if isinstance(raw, (bytes, bytearray)):
+        payload = bytes(raw)
+    elif isinstance(raw, str):
+        payload = raw.encode("utf-8", errors="replace")
+    else:
+        return ""
+    parsed = email_lib.message_from_bytes(payload)
+    value = parsed.get("Message-ID")
+    if not value:
+        return ""
+    # Unfold: the parser keeps the CRLF+WSP of a folded value.
+    return " ".join(str(value).split())
+
+
 class IMAPClient:
     """IMAP email client with SMTP sending support.
 
@@ -368,6 +568,12 @@ class IMAPClient:
     ) -> Optional[Dict[str, Any]]:
         """Fetch and parse a single email by sequence number.
 
+        Uses ``BODY.PEEK[]`` rather than ``RFC822``: the latter is
+        defined to set the ``\\Seen`` flag. Read-only SELECT hides that
+        today, but a peek fetch means the sync path can never mark a
+        customer's mail as read even if a caller opens the folder
+        read/write.
+
         Args:
             conn: Active IMAP connection
             msg_num: IMAP message sequence number
@@ -375,71 +581,17 @@ class IMAPClient:
         Returns:
             Parsed email dict or None on error
         """
-        status, data = conn.fetch(msg_num, "(RFC822)")
-        if status != "OK" or not data[0]:
+        status, data = conn.fetch(msg_num, "(BODY.PEEK[])")
+        if status != "OK" or not data or not data[0]:
+            logger.warning(f"[IMAP] fetch({msg_num!r}) -> status={status!r}, no data")
             return None
 
-        raw = data[0][1]
-        msg = email_lib.message_from_bytes(raw)
+        entry = data[0]
+        if not isinstance(entry, tuple) or len(entry) < 2:
+            logger.warning(f"[IMAP] fetch({msg_num!r}) -> unexpected response shape")
+            return None
 
-        # Decode headers
-        subject = _decode_header_value(msg.get("Subject"))
-        from_header = _decode_header_value(msg.get("From"))
-        to_header = _decode_header_value(msg.get("To", ""))
-        cc_header = _decode_header_value(msg.get("Cc", ""))
-        date_header = msg.get("Date", "")
-        message_id = msg.get("Message-ID", "")
-        in_reply_to = msg.get("In-Reply-To", "")
-        references_raw = msg.get("References", "")
-
-        # Parse from name/email
-        from_name, from_email = parseaddr(from_header)
-
-        # Extract body
-        body_plain, body_html = _extract_plain_body(msg)
-
-        # Attachment metadata — filenames only, no bytes. The LLM and the
-        # desktop Email tab need to know what files are present without
-        # paying for a re-fetch via fetch_attachments().
-        attachment_filenames = _extract_attachment_filenames(msg)
-
-        # Thread ID: use References chain or Message-ID
-        thread_id = ""
-        if references_raw:
-            refs = references_raw.strip().split()
-            thread_id = refs[0] if refs else message_id
-        elif in_reply_to:
-            thread_id = in_reply_to
-        else:
-            thread_id = message_id
-
-        return {
-            "message_id": message_id.strip(),
-            "from_email": from_email,
-            "from_name": from_name,
-            "from": from_header,
-            "to_email": to_header,
-            "to": to_header,
-            "cc_email": cc_header,
-            "cc": cc_header,
-            "subject": subject,
-            "date": date_header,
-            "body_plain": body_plain,
-            "body_html": body_html,
-            "body": body_plain or body_html,
-            "thread_id": thread_id.strip(),
-            "in_reply_to": (in_reply_to.strip() if in_reply_to else ""),
-            "references": (references_raw.strip() if references_raw else ""),
-            "snippet": body_plain or body_html or "",
-            # Attachment metadata. NEVER includes raw bytes — only filenames.
-            "has_attachments": bool(attachment_filenames),
-            "attachment_filenames": attachment_filenames,
-            # Auto-reply detection headers
-            "auto_submitted": msg.get("Auto-Submitted", ""),
-            "x_autoreply": msg.get("X-Autoreply", ""),
-            "precedence": msg.get("Precedence", ""),
-            "x_auto_response_suppress": msg.get("X-Auto-Response-Suppress", ""),
-        }
+        return _parse_message_bytes(entry[1])
 
     def _find_sent_folder(self) -> Optional[str]:
         """Find the Sent mail folder name (cached per session).
@@ -644,96 +796,368 @@ class IMAPClient:
             logger.warning(f"[IMAP] COPY+EXPUNGE failed: {e}")
             return False
 
-    def list_message_ids(
-        self,
-        query: str = "",
-        max_results: int = 0,
-    ) -> List[str]:
-        """List message IDs from INBOX + Sent folders.
+    def sync_folders(self) -> List[str]:
+        """Folders the archive sync must scan, in scan order.
 
-        Syncs both received and sent emails so task detection
-        can see user replies.
+        INBOX first (cheapest, the common case), then Sent (so task
+        detection sees our own replies), then the provider's
+        Archive/All-Mail folder.
 
-        Args:
-            query: Gmail-style query (parsed for date filter)
-            max_results: 0 = no limit (default). All matching
-                emails are returned.
+        The archive folder is not optional bonus coverage: on Gmail the
+        "Archive" button only removes the INBOX label, so a message that
+        is filtered or archived — by a human in Superhuman, or by the
+        operator's own `emails.archive` — disappears from INBOX while
+        still being live mail. Scanning INBOX+Sent only made such a
+        message invisible to the archive forever.
 
         Returns:
-            List of Message-ID header values (deduplicated)
+            Ordered, de-duplicated list of IMAP folder names (quoted
+            where the provider needs it). Never empty: INBOX always
+            participates.
+        """
+        folders = ["INBOX"]
+        seen = {"inbox"}
+
+        for finder, label in (
+            (self._find_sent_folder, "sent"),
+            (self.find_archive_folder, "archive"),
+        ):
+            try:
+                name = finder()
+            except Exception as e:
+                logger.error(f"[IMAP] sync_folders: {label} folder discovery failed: {e}")
+                continue
+            if not name:
+                logger.warning(f"[IMAP] sync_folders: no {label} folder found")
+                continue
+            key = name.strip('"').lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            folders.append(name)
+
+        logger.info(f"[IMAP] sync_folders -> {folders}")
+        return folders
+
+    def examine_folder(self, folder: str) -> FolderState:
+        """EXAMINE a folder read-only and report its UID state.
+
+        Args:
+            folder: IMAP folder name, quoted if it needs quoting.
+
+        Returns:
+            FolderState with UIDVALIDITY / UIDNEXT / EXISTS.
+
+        Raises:
+            IMAPFolderError: the folder could not be selected. NEVER
+                returns a neutral value — "cannot open the folder" and
+                "the folder is empty" must not be indistinguishable.
         """
         conn = self._ensure_connected()
 
-        logger.debug(f"[IMAP] list_message_ids(query={query})")
+        try:
+            status, data = conn.select(folder, readonly=True)
+        except Exception as e:
+            raise IMAPFolderError(f"EXAMINE {folder} raised: {e}") from e
 
-        # Parse Gmail-style "after:YYYY/MM/DD" into IMAP
-        imap_criteria = self._gmail_query_to_imap(query)
+        if status != "OK":
+            raise IMAPFolderError(f"EXAMINE {folder} -> status={status!r} data={data!r}")
 
-        # Collect IDs from INBOX + Sent
-        all_ids = set()
-        folders = ["INBOX"]
-        sent_folder = self._find_sent_folder()
-        if sent_folder:
-            folders.append(sent_folder)
-
-        for folder in folders:
+        exists = 0
+        if data and data[0] not in (None, b"", ""):
             try:
-                conn.select(folder, readonly=True)
-            except Exception:
-                logger.warning(
-                    f"[IMAP] Cannot select {folder}",
-                )
-                continue
+                exists = int(data[0])
+            except (TypeError, ValueError):
+                exists = 0
 
-            ids = self._search_folder_ids(
-                conn,
-                imap_criteria,
-                max_results,
-            )
-            all_ids.update(ids)
-            logger.info(
-                f"[IMAP] {folder}: {len(ids)} message IDs",
-            )
+        def _code(name: str, default: int) -> int:
+            typ, values = conn.response(name)
+            if not values or values[0] in (None, b"", ""):
+                return default
+            try:
+                return int(values[0])
+            except (TypeError, ValueError):
+                return default
 
-        logger.info(
-            f"[IMAP] Total unique IDs: {len(all_ids)}",
+        uidvalidity = _code("UIDVALIDITY", 0)
+        uidnext = _code("UIDNEXT", 0)
+
+        if uidvalidity <= 0:
+            # Without UIDVALIDITY the cursor has no anchor and stored
+            # UIDs cannot be trusted. Refuse rather than sync blind.
+            raise IMAPFolderError(f"EXAMINE {folder} returned no usable UIDVALIDITY")
+
+        state = FolderState(
+            name=folder,
+            uidvalidity=uidvalidity,
+            uidnext=uidnext,
+            exists=exists,
         )
-        return list(all_ids)
+        logger.debug(
+            f"[IMAP] examine_folder(folder={folder}) -> uidvalidity={uidvalidity} "
+            f"uidnext={uidnext} exists={exists}"
+        )
+        return state
 
-    def _search_folder_ids(
-        self,
-        conn,
-        imap_criteria: str,
-        max_results: int = 0,
-    ) -> List[str]:
-        """Search current folder and return Message-IDs."""
-        status, data = conn.search(None, imap_criteria)
-        if status != "OK" or not data[0]:
+    def _uid_search_selected(self, folder: str, criteria: str) -> List[int]:
+        """UID SEARCH in the ALREADY-selected folder.
+
+        Raises:
+            IMAPSearchError: on a non-OK status or an unparsable
+                response. A failed search must never look like an empty
+                mailbox — that is precisely how the old code let a
+                broken scan advance the sync floor.
+        """
+        conn = self._ensure_connected()
+        try:
+            status, data = conn.uid("SEARCH", None, criteria)
+        except Exception as e:
+            raise IMAPSearchError(f"UID SEARCH {criteria!r} in {folder} raised: {e}") from e
+
+        if status != "OK":
+            raise IMAPSearchError(
+                f"UID SEARCH {criteria!r} in {folder} -> status={status!r} data={data!r}"
+            )
+
+        if not data or data[0] in (None, b"", ""):
+            logger.debug(f"[IMAP] UID SEARCH {criteria!r} in {folder} -> 0 uids")
             return []
 
-        msg_nums = data[0].split()
-        if max_results > 0:
-            msg_nums = msg_nums[-max_results:]
+        raw = data[0]
+        if isinstance(raw, (bytes, bytearray)):
+            tokens = bytes(raw).split()
+        else:
+            tokens = str(raw).split()
 
-        ids = []
-        for num in msg_nums:
+        uids: List[int] = []
+        for token in tokens:
             try:
-                status, hdr_data = conn.fetch(num, "(BODY[HEADER.FIELDS (MESSAGE-ID)])")
-                if status == "OK" and hdr_data[0]:
-                    raw = hdr_data[0][1]
-                    if isinstance(raw, bytes):
-                        raw = raw.decode("utf-8", errors="replace")
-                    # Extract Message-ID value
-                    for line in raw.strip().splitlines():
-                        if line.lower().startswith("message-id:"):
-                            mid = line.split(":", 1)[1].strip()
-                            ids.append(mid)
-                            break
-            except Exception as e:
-                logger.warning(f"[IMAP] Error fetching ID for " f"msg {num}: {e}")
+                uids.append(int(token))
+            except (TypeError, ValueError):
+                raise IMAPSearchError(
+                    f"UID SEARCH {criteria!r} in {folder} returned non-numeric uid {token!r}"
+                )
 
-        logger.info(f"[IMAP] list_message_ids -> {len(ids)} IDs")
-        return ids
+        uids.sort()
+        logger.debug(f"[IMAP] UID SEARCH {criteria!r} in {folder} -> {len(uids)} uids")
+        return uids
+
+    def uid_search(self, folder: str, criteria: str) -> List[int]:
+        """EXAMINE ``folder`` then UID SEARCH it. Raises on failure."""
+        self.examine_folder(folder)
+        return self._uid_search_selected(folder, criteria)
+
+    def _fetch_message_ids_selected(
+        self,
+        folder: str,
+        uids: Sequence[int],
+        chunk_size: int = 200,
+    ) -> Tuple[Dict[int, str], List[int]]:
+        """Batched Message-ID header fetch in the ALREADY-selected folder.
+
+        Returns:
+            (uid -> Message-ID header value, list of UIDs we failed to
+            resolve). The failure list is what blocks the sync cursor:
+            a UID whose identity we could not establish must not be
+            skipped over silently.
+        """
+        conn = self._ensure_connected()
+        resolved: Dict[int, str] = {}
+        failed: List[int] = []
+
+        wanted = sorted(set(int(u) for u in uids))
+        for start in range(0, len(wanted), chunk_size):
+            chunk = wanted[start : start + chunk_size]
+            uid_set = ",".join(str(u) for u in chunk)
+            data: Any = []
+            try:
+                status, data = conn.uid(
+                    "FETCH",
+                    uid_set,
+                    "(UID BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])",
+                )
+            except Exception as e:
+                logger.error(
+                    f"[IMAP] header FETCH raised for {len(chunk)} uids in {folder}: {e}",
+                )
+                status, data = "NO", []
+
+            if status != "OK":
+                logger.error(
+                    f"[IMAP] header FETCH -> status={status!r} for {len(chunk)} uids in "
+                    f"{folder}; retrying them one by one to isolate the bad uid(s)",
+                )
+                data = []
+
+            for entry in data or []:
+                if not isinstance(entry, tuple) or len(entry) < 2:
+                    continue
+                uid = _parse_uid_from_prefix(entry[0])
+                if uid is None:
+                    continue
+                message_id = _extract_message_id_header(entry[1])
+                resolved[uid] = message_id
+
+            missing = [u for u in chunk if u not in resolved]
+            for uid in missing:
+                # One retry on its own — a single bad message must not
+                # cost us the whole batch, and a UID that vanished
+                # between SEARCH and FETCH (expunged by another client)
+                # is a legitimate, loggable no-op rather than a failure.
+                single = self._fetch_single_message_id(folder, uid)
+                if single is None:
+                    failed.append(uid)
+                else:
+                    resolved[uid] = single
+
+        if failed:
+            logger.error(
+                f"[IMAP] {folder}: could not resolve Message-ID for {len(failed)} uid(s): "
+                f"{failed} — the sync cursor will NOT advance past the lowest of them"
+            )
+        logger.debug(
+            f"[IMAP] _fetch_message_ids_selected({folder}) -> {len(resolved)} resolved, "
+            f"{len(failed)} failed"
+        )
+        return resolved, failed
+
+    def _fetch_single_message_id(self, folder: str, uid: int) -> Optional[str]:
+        """Retry a single UID's Message-ID fetch. None means 'failed'.
+
+        An empty string is a valid answer: the message exists but has no
+        Message-ID header. That is a data problem, not a fetch failure,
+        and is handled by the caller.
+        """
+        conn = self._ensure_connected()
+        try:
+            status, data = conn.uid(
+                "FETCH",
+                str(uid),
+                "(UID BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])",
+            )
+        except Exception as e:
+            logger.warning(f"[IMAP] {folder}: single header FETCH uid={uid} raised: {e}")
+            return None
+        if status != "OK":
+            logger.warning(f"[IMAP] {folder}: single header FETCH uid={uid} -> {status!r}")
+            return None
+        for entry in data or []:
+            if isinstance(entry, tuple) and len(entry) >= 2:
+                return _extract_message_id_header(entry[1])
+        # No tuple in the response: on Gmail this is what an expunged
+        # UID looks like. Nothing to ingest and nothing to block on.
+        logger.warning(
+            f"[IMAP] {folder}: uid={uid} returned no data (expunged since SEARCH?) — skipping"
+        )
+        return ""
+
+    def scan_folder(
+        self,
+        folder: str,
+        criteria_builder: Callable[[FolderState], str],
+    ) -> "FolderScan":
+        """One read-only pass over a folder: EXAMINE + UID SEARCH + IDs.
+
+        Holds the folder selection for the whole pass so a sync tick
+        costs one SELECT, one SEARCH and one batched header FETCH per
+        folder.
+
+        Args:
+            folder: IMAP folder name (quoted if needed).
+            criteria_builder: called with the FolderState that EXAMINE
+                returned and must return raw IMAP SEARCH criteria, e.g.
+                ``(OR UID 4711:* SINCE "25-Jul-2026")``. It is a callback
+                rather than a plain string because the criteria depend on
+                UIDVALIDITY — the caller has to see the folder's current
+                UIDVALIDITY before it can decide whether its stored UID
+                cursor is still meaningful — and doing that with a second
+                EXAMINE would double the round trips on every tick.
+
+        Returns:
+            FolderScan with the folder state, the matching UIDs, the
+            uid -> Message-ID map, and the UIDs that could not be
+            resolved.
+
+        Raises:
+            IMAPFolderError, IMAPSearchError: never swallowed here.
+        """
+        state = self.examine_folder(folder)
+        criteria = criteria_builder(state)
+        uids = self._uid_search_selected(folder, criteria)
+        message_ids, failed = self._fetch_message_ids_selected(folder, uids)
+        logger.info(
+            f"[IMAP] scan_folder({folder}) criteria={criteria!r} -> {len(uids)} uid(s), "
+            f"{len(message_ids)} resolved, {len(failed)} unresolved "
+            f"(uidvalidity={state.uidvalidity}, uidnext={state.uidnext})"
+        )
+        return FolderScan(
+            state=state,
+            uids=uids,
+            message_ids=message_ids,
+            unresolved_uids=failed,
+        )
+
+    def fetch_messages_by_uid(
+        self,
+        folder: str,
+        uids: Sequence[int],
+    ) -> Tuple[Dict[int, Dict[str, Any]], List[int]]:
+        """Fetch full messages by UID from ``folder`` (read-only, peek).
+
+        Args:
+            folder: IMAP folder name (quoted if needed).
+            uids: UIDs to fetch.
+
+        Returns:
+            (uid -> parsed message dict, list of UIDs that failed).
+            Failures are counted and returned, never silently dropped:
+            the caller needs them to hold the sync cursor back.
+
+        Raises:
+            IMAPFolderError: the folder could not be examined.
+        """
+        wanted = sorted(set(int(u) for u in uids))
+        if not wanted:
+            return {}, []
+
+        self.examine_folder(folder)
+        conn = self._ensure_connected()
+
+        messages: Dict[int, Dict[str, Any]] = {}
+        failed: List[int] = []
+
+        for uid in wanted:
+            try:
+                status, data = conn.uid("FETCH", str(uid), "(UID BODY.PEEK[])")
+            except Exception as e:
+                logger.error(f"[IMAP] {folder}: FETCH uid={uid} raised: {e}")
+                failed.append(uid)
+                continue
+            if status != "OK":
+                logger.error(f"[IMAP] {folder}: FETCH uid={uid} -> status={status!r}")
+                failed.append(uid)
+                continue
+
+            parsed = None
+            for entry in data or []:
+                if isinstance(entry, tuple) and len(entry) >= 2:
+                    parsed = _parse_message_bytes(entry[1])
+                    break
+            if parsed is None:
+                logger.error(f"[IMAP] {folder}: FETCH uid={uid} returned no message body")
+                failed.append(uid)
+                continue
+            messages[uid] = parsed
+
+        if failed:
+            logger.error(
+                f"[IMAP] {folder}: {len(failed)}/{len(wanted)} message fetch(es) FAILED: {failed}"
+            )
+        logger.info(
+            f"[IMAP] fetch_messages_by_uid({folder}) -> {len(messages)}/{len(wanted)} fetched, "
+            f"{len(failed)} failed"
+        )
+        return messages, failed
 
     def get_message(self, message_id: str) -> Optional[Dict[str, Any]]:
         """Get a single message by Message-ID header.

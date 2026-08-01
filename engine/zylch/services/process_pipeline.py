@@ -171,11 +171,20 @@ async def handle_process(
         hygiene = run_task_backlog_hygiene(owner_id, store)
         summary_stats["auto_ack_marked"] = int(hygiene.get("auto_ack_marked", 0) or 0)
         summary_stats["expired_marked"] = int(hygiene.get("expired_marked", 0) or 0)
-        if summary_stats["auto_ack_marked"] or summary_stats["expired_marked"]:
+        summary_stats["expired_whatsapp"] = int(hygiene.get("expired_whatsapp", 0) or 0)
+        summary_stats["expired_calendar"] = int(hygiene.get("expired_calendar", 0) or 0)
+        expired_total = (
+            summary_stats["expired_marked"]
+            + summary_stats["expired_whatsapp"]
+            + summary_stats["expired_calendar"]
+        )
+        if summary_stats["auto_ack_marked"] or expired_total:
             console.print(
                 f"  [dim]Backlog hygiene: "
                 f"{summary_stats['auto_ack_marked']} auto-ack, "
-                f"{summary_stats['expired_marked']} expired[/dim]"
+                f"{summary_stats['expired_marked']} expired (email), "
+                f"{summary_stats['expired_whatsapp']} expired (whatsapp), "
+                f"{summary_stats['expired_calendar']} expired (calendar)[/dim]"
             )
     except Exception as e:
         logger.error(f"[/process] backlog hygiene failed: {e}", exc_info=True)
@@ -947,7 +956,51 @@ async def _run_tasks(owner_id: str, store, plan) -> str:
 
 # F4 sweep tunables — exposed as module constants for tests + future
 # overrides via env if it ever needs to be runtime-configurable.
+#
+# REANALYZE_CAP bounds an ORDINARY tick: those fire every few minutes,
+# and re-judging the whole open list on each of them would be pure
+# waste. The DAILY full pass is the opposite case — its entire job is
+# to look at every open task once a day, so the ordinary cap silently
+# amputated it (at support@'s ~35 open tasks, 25 were never re-judged
+# and nobody was told). It gets its own, much larger, cap.
 REANALYZE_CAP = 10
+DEFAULT_REANALYZE_CAP_DAILY = 200
+
+
+def reanalyze_cap_daily() -> int:
+    """Per-run cap for the DAILY full pass, read LIVE from os.environ.
+
+    ``REANALYZE_CAP_DAILY`` overrides
+    :data:`DEFAULT_REANALYZE_CAP_DAILY`. Read at call time (not from the
+    frozen pydantic settings snapshot) so a ``settings.update`` takes
+    effect without a daemon restart — same precedent as
+    ``LLM_DAILY_BUDGET_USD`` and ``TASK_BACKLOG_MAX_AGE_DAYS``.
+
+    The cap is not a silent truncation any more: when it bites, the
+    sweep logs a WARNING with both counts and reports ``truncated``, and
+    ``task_gating`` refuses to stamp the daily pass complete — so the
+    remainder is retried on the next tick instead of waiting 24h.
+    """
+    raw = os.environ.get("REANALYZE_CAP_DAILY")
+    if raw is None or str(raw).strip() == "":
+        return DEFAULT_REANALYZE_CAP_DAILY
+    try:
+        value = int(float(raw))
+    except (TypeError, ValueError):
+        logger.warning(
+            f"[TASK] invalid REANALYZE_CAP_DAILY={raw!r} — using default "
+            f"{DEFAULT_REANALYZE_CAP_DAILY}"
+        )
+        return DEFAULT_REANALYZE_CAP_DAILY
+    if value <= 0:
+        logger.warning(
+            f"[TASK] REANALYZE_CAP_DAILY={value} is not a usable cap — using "
+            f"default {DEFAULT_REANALYZE_CAP_DAILY}"
+        )
+        return DEFAULT_REANALYZE_CAP_DAILY
+    return value
+
+
 # Min age before a task becomes eligible for F4. Was 24h on F4
 # introduction (defense-in-depth, "give the thread time to settle"),
 # but in practice the user expects the task to close as soon as their
@@ -993,15 +1046,31 @@ async def _reanalyze_only(owner_id: str, store, plan) -> int:
     )
 
 
-async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> tuple[int, bool]:
+async def _reanalyze_sweep(
+    owner_id: str,
+    store,
+    tasks: list,
+    daily_pass: bool = False,
+) -> tuple[int, bool, bool]:
     """Reanalyze a bounded slice of stale open tasks.
 
     Skips silently if no tasks are eligible. Returns ``(ok_count,
-    aborted)``: the number of tasks for which reanalyze_task succeeded
-    (not the number that were closed/updated — that's logged but not
-    surfaced here), and whether the sweep ABORTED on consecutive
-    provider overloads — the daily-pass stamp must not advance on an
-    aborted pass (T5 review, finding b).
+    aborted, truncated)``:
+
+    - ``ok_count`` — tasks for which reanalyze_task succeeded (not the
+      number closed/updated — that's logged, not surfaced here);
+    - ``aborted`` — the sweep stopped on consecutive provider overloads;
+    - ``truncated`` — the cap bit, so eligible tasks went un-judged.
+
+    Both ``aborted`` and ``truncated`` mean the pass did NOT cover its
+    input, and ``task_gating`` must not stamp the daily pass complete on
+    either (T5 review finding b, extended by defect F3).
+
+    ``daily_pass`` selects the cap: an ordinary tick uses
+    :data:`REANALYZE_CAP` (10 — enough to react, cheap to repeat every
+    few minutes), the daily full pass uses :func:`reanalyze_cap_daily`
+    (200 by default), because "re-judge everything once a day" is the
+    only thing that pass is for.
 
     The sweep is scoped to the tasks the caller already loaded
     (`tasks` from `worker.get_tasks(refresh=True)`) so we don't
@@ -1009,14 +1078,27 @@ async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> tuple[int, bool
     """
     from datetime import datetime, timezone
 
+    from zylch.workers.task_gating import is_snoozed
     from zylch.workers.task_reanalyze import reanalyze_task
 
     now = datetime.now(timezone.utc)
+    now_ts = now.timestamp()
     candidates: list = []
+    snoozed_skipped = 0
     for t in tasks or []:
         if t.get("completed_at"):
             continue
         if not t.get("action_required"):
+            continue
+        # Rule: a task snoozed into the future is deliberately parked,
+        # not neglected — do not spend an LLM call re-judging work
+        # somebody explicitly scheduled for later.
+        if is_snoozed(t, now_ts):
+            snoozed_skipped += 1
+            logger.debug(
+                f"[TASK] Reanalyze sweep SKIP task_id={t.get('id')} — "
+                f"snoozed until {t.get('due_at')} (deliberately parked, not neglected)"
+            )
             continue
         ref = t.get("analyzed_at") or t.get("created_at")
         if not ref:
@@ -1031,15 +1113,34 @@ async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> tuple[int, bool
         if age_hours >= REANALYZE_MIN_AGE_HOURS:
             candidates.append((ref_dt, t))
 
-    if not candidates:
-        return 0, False
+    if snoozed_skipped:
+        logger.info(
+            f"[TASK] Reanalyze sweep: {snoozed_skipped} task(s) skipped — "
+            f"snoozed (due_at in the future, deliberately parked not neglected)"
+        )
 
+    if not candidates:
+        return 0, False, False
+
+    cap = reanalyze_cap_daily() if daily_pass else REANALYZE_CAP
     candidates.sort(key=lambda x: x[0])
-    sweep_targets = candidates[:REANALYZE_CAP]
+    sweep_targets = candidates[:cap]
+    truncated = len(candidates) > len(sweep_targets)
     logger.info(
         f"[TASK] Reanalyze sweep: {len(sweep_targets)} of {len(candidates)} "
-        f"eligible (cap={REANALYZE_CAP}, min_age_h={REANALYZE_MIN_AGE_HOURS})"
+        f"eligible (cap={cap}, daily_pass={daily_pass}, "
+        f"min_age_h={REANALYZE_MIN_AGE_HOURS})"
     )
+    if truncated:
+        # Oldest-analyzed_at first, and every judged task gets its
+        # analyzed_at bumped, so the tail is picked up next time —
+        # provided the caller does NOT stamp the pass complete.
+        logger.warning(
+            f"[TASK] Reanalyze sweep TRUNCATED: {len(candidates)} tasks "
+            f"eligible, {len(sweep_targets)} judged (cap={cap}, "
+            f"daily_pass={daily_pass}). "
+            f"{len(candidates) - len(sweep_targets)} left for the next tick"
+        )
 
     ok_count = 0
     aborted = False
@@ -1075,7 +1176,7 @@ async def _reanalyze_sweep(owner_id: str, store, tasks: list) -> tuple[int, bool
                         "Remaining tasks left for next /update."
                     )
                     break
-    return ok_count, aborted
+    return ok_count, aborted, truncated
 
 
 async def _run_dedup_sweep(owner_id: str) -> dict:

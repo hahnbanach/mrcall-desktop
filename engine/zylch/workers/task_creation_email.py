@@ -16,6 +16,7 @@ import asyncio  # noqa: F401  — imported here so callers can reference
 import logging
 from typing import Dict, List, TYPE_CHECKING
 
+from zylch.workers.task_contact_identity import resolve_contact_identity
 from zylch.workers.task_creation import (
     _pick_force_update_target,
     _strip_quoted,
@@ -165,7 +166,15 @@ async def analyze_recent_email_events(
                 worker.owner_id, thread_id, open_only=True
             )
             for t in thread_tasks:
-                worker.storage.complete_task_item(worker.owner_id, t["id"])
+                worker.storage.complete_task_item(
+                    worker.owner_id,
+                    t["id"],
+                    actor="detect.email.user_replied",
+                    why=(
+                        f"user replied in thread {thread_id} after the "
+                        f"contact's last message from {from_email}"
+                    ),
+                )
                 logger.info(
                     f"[TASK] Auto-closed task {t['id']} for thread "
                     f"{thread_id} (user replied in thread)"
@@ -174,7 +183,15 @@ async def analyze_recent_email_events(
             # linked to the thread).
             existing_task = worker.storage.get_task_by_contact(worker.owner_id, from_email)
             if existing_task and not any(t["id"] == existing_task["id"] for t in thread_tasks):
-                worker.storage.complete_task_item(worker.owner_id, existing_task["id"])
+                worker.storage.complete_task_item(
+                    worker.owner_id,
+                    existing_task["id"],
+                    actor="detect.email.user_replied",
+                    why=(
+                        f"user replied to {from_email} in thread {thread_id} "
+                        f"(task matched by contact, not by thread)"
+                    ),
+                )
                 logger.info(
                     f"[TASK] Auto-closed task {existing_task['id']} for "
                     f"{from_email} (user replied in thread)"
@@ -467,7 +484,15 @@ async def analyze_recent_email_events(
                     f"from_email={from_email} — falling back to recipients"
                 )
             for t in thread_tasks:
-                worker.storage.complete_task_item(worker.owner_id, t["id"])
+                worker.storage.complete_task_item(
+                    worker.owner_id,
+                    t["id"],
+                    actor="detect.email.user_replied",
+                    why=(
+                        f"user reply {email_id} landed in thread {thread_id} — "
+                        f"the task is answered"
+                    ),
+                )
                 logger.debug(
                     f"[TASK] dedup/close task_id={t['id']} thread_id={thread_id} decision=user_replied"
                 )
@@ -500,7 +525,15 @@ async def analyze_recent_email_events(
                 seen_addrs.add(addr)
                 existing = worker.storage.get_task_by_contact(worker.owner_id, addr)
                 if existing and not any(t["id"] == existing["id"] for t in thread_tasks):
-                    worker.storage.complete_task_item(worker.owner_id, existing["id"])
+                    worker.storage.complete_task_item(
+                        worker.owner_id,
+                        existing["id"],
+                        actor="detect.email.user_replied",
+                        why=(
+                            f"user reply {email_id} addressed {addr}, who had "
+                            f"this task open"
+                        ),
+                    )
                     logger.info(f"[TASK] Auto-closed task for {addr} (user replied)")
             # Fix C: mark ALL non-user siblings processed when the thread
             # winner is a user reply — otherwise they leak to the next run
@@ -572,7 +605,15 @@ async def analyze_recent_email_events(
                 continue
 
         if task_action == "close" and target_task:
-            worker.storage.complete_task_item(worker.owner_id, target_task["id"])
+            # The detector's own reason — previously computed, then
+            # discarded, leaving the Closed view blank (defect D).
+            worker.storage.complete_task_item(
+                worker.owner_id,
+                target_task["id"],
+                actor="detect.email.llm_close",
+                why=(result.get("reason") or "").strip()
+                or f"task detector closed on email {email_id} without stating a reason",
+            )
             logger.debug(
                 f"[TASK] dedup/close task_id={target_task['id']} thread_id={thread_id} decision=llm_close"
             )
@@ -638,20 +679,38 @@ async def analyze_recent_email_events(
                     add_source_email=email_id,
                 )
             else:
+                # Defect G: the envelope sender is not always the
+                # correspondent. For a notifier relay (call
+                # notifications) the real party is in the body and the
+                # detector reported it on its decision tool; resolve
+                # here so the task is keyed to the PERSON, never to the
+                # relay address that every such mail shares.
+                identity = resolve_contact_identity(
+                    from_email=from_email,
+                    from_name=email.get("from_name", ""),
+                    decision=result,
+                )
                 result["event_id"] = email_id
                 result["event_type"] = "email"
-                result["contact_email"] = from_email
-                result["contact_name"] = email.get("from_name", "")
+                result["contact_email"] = identity.email
+                result["contact_phone"] = identity.phone
+                result["contact_name"] = identity.name
                 result["email_date"] = email.get("date", "")
-                result["sources"] = {
-                    "emails": [email_id],
-                    "blobs": ([str(blob_id)] if blob_id else []),
-                    "calendar_events": [],
-                }
+                result["sources"] = identity.apply_to_sources(
+                    {
+                        "emails": [email_id],
+                        "blobs": ([str(blob_id)] if blob_id else []),
+                        "calendar_events": [],
+                    }
+                )
                 worker.storage.store_task_item(worker.owner_id, result)
                 action_count += 1
                 logger.debug(
-                    f"[TASK] create new task thread_id={thread_id} " f"from_email={from_email}"
+                    f"[TASK] create new task thread_id={thread_id} "
+                    f"from_email={from_email} "
+                    f"contact_email={identity.email} "
+                    f"contact_phone={identity.phone} "
+                    f"notifier_email={identity.notifier_email}"
                 )
 
         # Fix C: mark ALL non-user siblings of this thread processed,

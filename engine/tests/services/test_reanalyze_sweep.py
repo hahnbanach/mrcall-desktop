@@ -41,8 +41,9 @@ async def test_sweep_processes_oldest_first_up_to_cap():
         mock_re.return_value = {"ok": True, "action": "kept"}
         result = await process_pipeline._reanalyze_sweep("owner", None, tasks)
 
-    # _reanalyze_sweep returns (ok_count, aborted) since the T5 daily-stamp fix.
-    assert result == (process_pipeline.REANALYZE_CAP, False)
+    # _reanalyze_sweep returns (ok_count, aborted, truncated): aborted since the
+# T5 daily-stamp fix, truncated since the F3 daily-cap fix.
+    assert result == (process_pipeline.REANALYZE_CAP, False, True)
     assert process_pipeline.REANALYZE_CAP == 10
     # The 10 oldest are t-14 (39h), t-13, ..., t-05 (30h). Order: oldest first.
     swept_ids = [c.args[0] for c in mock_re.call_args_list]
@@ -83,7 +84,7 @@ async def test_sweep_tolerates_reanalyze_exception():
         result = await process_pipeline._reanalyze_sweep("owner", None, tasks)
     # 1 succeeded out of 2; the exception didn't bubble up (and a plain
     # exception is not an overload abort).
-    assert result == (1, False)
+    assert result == (1, False, False)
     assert mock_re.call_count == 2
 
 
@@ -106,7 +107,7 @@ async def test_sweep_uses_created_at_when_analyzed_at_missing():
     ) as mock_re:
         mock_re.return_value = {"ok": True, "action": "kept"}
         result = await process_pipeline._reanalyze_sweep("owner", None, tasks)
-    assert result == (1, False)
+    assert result == (1, False, False)
     swept_ids = [c.args[0] for c in mock_re.call_args_list]
     assert swept_ids == ["t-no-analyze"]
 

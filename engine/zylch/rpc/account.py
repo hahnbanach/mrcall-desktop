@@ -40,7 +40,7 @@ NotifyFn = Callable[[str, Dict[str, Any]], None]
 
 
 async def account_set_firebase_token(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """account.set_firebase_token(uid, id_token, expires_at_ms, email?) -> {ok}
+    """account.set_firebase_token(uid, id_token, expires_at_ms, email?, refresh_token?) -> {ok}
 
     `expires_at_ms` is the absolute Unix-ms timestamp at which Firebase
     will reject the token (the renderer reads this from
@@ -159,7 +159,7 @@ async def account_balance(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 
 async def auth_refresh(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """auth.refresh(id_token) -> {ok, uid, expires_at_ms}.
+    """auth.refresh(id_token?, refresh_token?) -> {ok, uid, expires_at_ms}.
 
     Verify a fresh Firebase ID token server-side and replace the cached
     session. WebSocket clients call this before their old token expires

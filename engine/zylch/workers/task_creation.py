@@ -74,6 +74,39 @@ TASK_DECISION_TOOL = {
                 "minLength": 20,
                 "description": "Why this needs attention - provide enough context for the executive to understand without reading the email",
             },
+            # --- Correspondent identity behind a notifier relay -------
+            # Only consulted when the envelope sender is a recognised
+            # relay address (zylch.utils.notifier_senders). For an
+            # ordinary correspondent the envelope wins and these are
+            # ignored, so the model cannot re-point a task at a third
+            # party.
+            "contact_email": {
+                "type": "string",
+                "description": (
+                    "ONLY when this message was delivered by a notification "
+                    "relay (the sender address belongs to a platform, not to "
+                    "a person): the email address of the REAL correspondent "
+                    "as stated in the body. Leave empty if the body does not "
+                    "state one — never guess, never repeat the relay address."
+                ),
+            },
+            "contact_phone": {
+                "type": "string",
+                "description": (
+                    "ONLY for a notification relay message: the phone number "
+                    "of the REAL correspondent as stated in the body, in "
+                    "international +country format. For a missed-call alert "
+                    "this is the caller's number. Leave empty if absent."
+                ),
+            },
+            "contact_name": {
+                "type": "string",
+                "description": (
+                    "ONLY for a notification relay message: the name of the "
+                    "REAL correspondent as stated in the body. Leave empty "
+                    "if the body does not state one."
+                ),
+            },
         },
         "required": ["action_required", "task_action", "suggested_action", "reason", "urgency"],
     },
@@ -342,6 +375,14 @@ class TaskWorker:
         except Exception:
             personal_section = ""
 
+        # Notifier relays (call notifications, …) hide the real
+        # correspondent in the body — ask the model to report it.
+        from zylch.utils.notifier_senders import notifier_identity_hint
+
+        notifier_hint = notifier_identity_hint(
+            event_data.get("from_email") if isinstance(event_data, dict) else None
+        )
+
         try:
             from zylch.workers.task_prompt import build_detection_prompt
 
@@ -356,6 +397,7 @@ class TaskWorker:
                 thread_history_section=thread_history_section,
                 user_email=self.user_email,
                 personal_section=personal_section,
+                notifier_hint=notifier_hint,
             )
         except Exception as e:
             logger.error(f"Failed to format prompt: {e}")
@@ -447,7 +489,10 @@ class TaskWorker:
                                 f"event_type={event_type}"
                             )
 
-                    # Return full result for caller to handle task_action
+                    # Return full result for caller to handle task_action.
+                    # contact_* are the correspondent behind a notifier
+                    # relay; `task_contact_identity.resolve_contact_identity`
+                    # decides whether they beat the envelope sender.
                     return {
                         "action_required": result.get("action_required", False),
                         "task_action": task_action,
@@ -457,6 +502,9 @@ class TaskWorker:
                         "title": result.get("title", ""),
                         "reason": reason_text,
                         "analyzed_at": datetime.now(timezone.utc).isoformat(),
+                        "contact_email": result.get("contact_email", ""),
+                        "contact_phone": result.get("contact_phone", ""),
+                        "contact_name": result.get("contact_name", ""),
                     }
 
             logger.warning(f"[TASK] No tool_use block in response for {event_type}")
@@ -756,7 +804,13 @@ If UPDATE or CLOSE, you MUST specify which task by setting target_task_id to the
                 return None
 
         if task_action == "close" and target_task:
-            self.storage.complete_task_item(self.owner_id, target_task["id"])
+            self.storage.complete_task_item(
+                self.owner_id,
+                target_task["id"],
+                actor=f"detect.{event_type}.llm_close",
+                why=(result.get("reason") or "").strip()
+                or f"task detector closed on {event_type} {item_id} without stating a reason",
+            )
             logger.info(f"[TASK] Closed task {target_task['id']} for {contact_email}")
             return None
 

@@ -295,24 +295,27 @@ def extract_fact(
 
 
 def _write_rule(owner_id: str, content: str) -> Optional[str]:
-    try:
-        from zylch.memory import EmbeddingEngine, MemoryConfig
-        from zylch.memory.blob_storage import BlobStorage
-        from zylch.storage.database import get_session
+    """Store a learned rule through the guarded store.
 
-        blob_store = BlobStorage(get_session, EmbeddingEngine(MemoryConfig()))
-        blob = blob_store.store_blob(
-            owner_id=owner_id,
-            namespace=f"prefs:{owner_id}",
-            content=content,
-            event_description="Learned from a message correction",
-        )
-        blob_id = str(blob["id"])
-        logger.debug(f"[learn] wrote rule blob_id={blob_id}: {content!r}")
-        return blob_id
-    except Exception as e:
-        logger.warning(f"[learn] failed to write rule: {e}")
-        return None
+    Was a bare INSERT into ``prefs:<owner>`` — always a new row, no
+    duplicate check, no bound. That is half of why support@'s rule
+    store reached 67k chars against an 8k cap. ``prefs_store.store_rule``
+    applies the shape guard, the duplicate check and substring
+    supersession, and writes to the canonical ``template:`` namespace.
+    """
+    from zylch.services.prefs_store import store_rule
+
+    outcome = store_rule(
+        owner_id,
+        content,
+        event_description="Learned from a message correction",
+        writer="correction_learning",
+    )
+    logger.debug(
+        f"[learn] rule outcome action={outcome['action']} "
+        f"blob_id={outcome['blob_id']} reason={outcome['reason']}"
+    )
+    return outcome["blob_id"] if outcome["action"] in ("created", "superseded") else None
 
 
 def learn_from_corrections(

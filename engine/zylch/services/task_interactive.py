@@ -57,7 +57,12 @@ def run_interactive_tasks(
         if choice == "1":
             continue
         elif choice == "2":
-            store.complete_task_item(owner_id, task["id"])
+            store.complete_task_item(
+                owner_id,
+                task["id"],
+                actor="human",
+                why="marked done by the user in the interactive task review",
+            )
             console.print("  [green]Marked as done.[/green]")
         elif choice == "3":
             _solve_task(task, store, owner_id, user_email)
@@ -293,7 +298,12 @@ def _post_solve_menu(
 
         lower = choice.lower()
         if lower == "d":
-            store.complete_task_item(owner_id, task["id"])
+            store.complete_task_item(
+                owner_id,
+                task["id"],
+                actor="human",
+                why="marked done by the user from the task instruction chat",
+            )
             console.print("  [green]Task marked as done.[/green]")
             break
         elif lower == "b":

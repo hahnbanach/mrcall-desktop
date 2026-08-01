@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime, timedelta as _timedelta, timezone
 from typing import List, Optional
 
@@ -289,9 +290,55 @@ def build_whatsapp_thread_history(
     )
 
 
-def is_last_turn_user_reply(thread_history_text: str) -> bool:
-    """Tell whether the chronologically newest non-auto turn in a rendered
-    thread history is the user's reply.
+# ───────────────────────────────────────────────────────────────────
+# WHO IS WAITING — the one question urgency policy turns on
+# ───────────────────────────────────────────────────────────────────
+#
+# Both directions of the same judgment live here, side by side, over a
+# SHARED resolution:
+#
+#   - the CAP demotes a task where WE spoke last (a proactive nudge —
+#     the contact is silent, nothing is blocked on us);
+#   - the FLOOR refuses to demote a task where the CONTACT spoke last
+#     (an unanswered inbound — the thread exists precisely because we
+#     never replied, so age makes it worse, never gentler).
+#
+# Keeping them in one module with one resolver is deliberate: split
+# across files they would inevitably answer "who is waiting?"
+# differently and quietly fight each other on the same task.
+
+#: Ordering used by the floor. Higher = more urgent.
+_URGENCY_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+
+#: Nobody replied yet / no history at all.
+WAITING_UNKNOWN = "unknown"
+#: The contact spoke last — the ball is in OUR court.
+WAITING_ON_US = "us"
+#: We spoke last — the ball is in the CONTACT's court.
+WAITING_ON_CONTACT = "contact"
+
+
+@dataclass(frozen=True)
+class WaitingState:
+    """Who owes the next message, decided from the rendered history.
+
+    ``who`` is one of :data:`WAITING_ON_US`, :data:`WAITING_ON_CONTACT`,
+    :data:`WAITING_UNKNOWN`. ``last_turn_at`` / ``age_days`` describe the
+    newest non-auto turn (``None`` when there is none). Frozen because
+    callers pass it into prompt construction and into two independent
+    urgency decisions — it must be the same answer everywhere.
+    """
+
+    who: str = WAITING_UNKNOWN
+    last_turn_at: Optional[datetime] = None
+    age_days: Optional[float] = None
+
+
+def resolve_waiting_state(
+    thread_history_text: str,
+    now: Optional[datetime] = None,
+) -> WaitingState:
+    """Parse the rendered history and say who is waiting, and since when.
 
     The input may be a single thread OR a primary thread followed by
     ``--- RELATED THREAD ---`` sibling sections (``reanalyze_task``).
@@ -303,18 +350,21 @@ def is_last_turn_user_reply(thread_history_text: str) -> bool:
     outvoted by an old user reply at the bottom of a sibling section and
     the urgency cap demoted the task to low five sweeps in a row.
 
-    Instead, parse the bracketed timestamp on every role line and judge
-    the newest non-``AUTO-REPLY`` one (server auto-acks aren't
-    engagement). Same-minute ties resolve to the later line in the text
-    (within a section, rendering order is chronological). Returns True
-    only when that newest turn is a ``USER REPLY ✓``. Regex is
-    intentional and safe here: the input is OUR OWN structured
-    presentation, not free-form prose.
+    So: parse the bracketed timestamp on every role line and judge the
+    newest non-``AUTO-REPLY`` one (server auto-acks aren't engagement).
+    Same-minute ties resolve to the later line in the text (within a
+    section, rendering order is chronological).
+
+    Regex is intentional and safe here: the input is OUR OWN structured
+    presentation, not free-form prose. What rides on it is only the
+    *deterministic* half of the judgment — the reanalysis model is asked
+    the same question independently and disagreements are logged.
     """
     if not thread_history_text:
-        return False
+        return WaitingState()
     best_key: "Optional[tuple[str, int]]" = None
     best_line: Optional[str] = None
+    best_ts: Optional[str] = None
     for idx, line in enumerate(thread_history_text.splitlines()):
         m = _ROLE_LINE_RE.match(line)
         if not m:
@@ -328,7 +378,65 @@ def is_last_turn_user_reply(thread_history_text: str) -> bool:
         if best_key is None or key > best_key:
             best_key = key
             best_line = line
-    return best_line is not None and "USER REPLY ✓" in best_line
+            best_ts = ts
+    if best_line is None:
+        return WaitingState()
+
+    who = WAITING_ON_CONTACT if "USER REPLY ✓" in best_line else WAITING_ON_US
+    last_turn_at: Optional[datetime] = None
+    try:
+        last_turn_at = datetime.strptime(best_ts or "", "%Y-%m-%d %H:%M").replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError:
+        logger.debug(f"[thread_presenter] unparseable role-line timestamp {best_ts!r}")
+    age_days: Optional[float] = None
+    if last_turn_at is not None:
+        reference = now or datetime.now(timezone.utc)
+        if reference.tzinfo is None:
+            reference = reference.replace(tzinfo=timezone.utc)
+        age_days = (reference - last_turn_at).total_seconds() / 86400.0
+    return WaitingState(who=who, last_turn_at=last_turn_at, age_days=age_days)
+
+
+def describe_waiting_state(state: WaitingState) -> str:
+    """One computed English line stating who is waiting, for the prompt.
+
+    The reanalysis model used to be handed a rendered thread and left to
+    infer this by itself — and a system prompt full of age-decay rules
+    made it infer "old, therefore less urgent" on threads that are old
+    precisely BECAUSE we never answered. Stating the fact removes the
+    inference.
+    """
+    if state.who == WAITING_ON_US:
+        who_text = (
+            "WAITING ON US — the contact sent the newest message and we have "
+            "not answered it"
+        )
+    elif state.who == WAITING_ON_CONTACT:
+        who_text = (
+            "WAITING ON THE CONTACT — we sent the newest message; the ball is "
+            "in their court"
+        )
+    else:
+        return "WAITING STATE: unknown — no datable non-automatic turn in the thread history."
+    when = ""
+    if state.last_turn_at is not None and state.age_days is not None:
+        when = (
+            f" Newest non-automatic turn: {state.last_turn_at.strftime('%Y-%m-%d %H:%M')} UTC, "
+            f"{state.age_days:.1f} days ago."
+        )
+    return f"WAITING STATE: {who_text}.{when}"
+
+
+def is_last_turn_user_reply(thread_history_text: str) -> bool:
+    """True when the newest non-auto turn is the USER's reply.
+
+    Thin wrapper over :func:`resolve_waiting_state` kept for the existing
+    callers; "the user spoke last" is the same fact as "the ball is in
+    the contact's court".
+    """
+    return resolve_waiting_state(thread_history_text).who == WAITING_ON_CONTACT
 
 
 def cap_urgency_for_silent_followup(
@@ -354,4 +462,42 @@ def cap_urgency_for_silent_followup(
         return urgency, False
     return "low", True
 
+
+def floor_urgency_for_unanswered_inbound(
+    current_urgency: Optional[str],
+    proposed_urgency: Optional[str],
+    thread_history_text: str,
+    state: Optional[WaitingState] = None,
+) -> "tuple[Optional[str], bool]":
+    """Refuse to LOWER the urgency of a thread that is waiting on us.
+
+    The other direction of :func:`cap_urgency_for_silent_followup`. When
+    the newest non-automatic turn is the CONTACT's, the task exists
+    because we never answered — time passing makes that worse, so a
+    reanalysis may raise the urgency, hold it, or close the task, but it
+    may not quietly demote it. This is an ENFORCEMENT floor, not advice:
+    the prompt-level directive that says the same thing can be ignored
+    by the model, and on 2026-08-01 it was (an 8-week unanswered
+    cancellation request was demoted to ``low`` citing the trained
+    prompt's own ">30 days ⇒ at most LOW" rule).
+
+    Pass ``state`` when the caller has already resolved it (so the model
+    /parser disagreement check and the floor see the identical answer).
+
+    Returns ``(urgency_to_persist, whether_the_floor_bit)``. A missing
+    proposal or a missing current value means "no change proposed" and
+    the floor stays out of it.
+    """
+    if not proposed_urgency or not current_urgency:
+        return proposed_urgency, False
+    resolved = state if state is not None else resolve_waiting_state(thread_history_text)
+    if resolved.who != WAITING_ON_US:
+        return proposed_urgency, False
+    proposed_rank = _URGENCY_RANK.get(proposed_urgency.lower(), 0)
+    current_rank = _URGENCY_RANK.get(current_urgency.lower(), 0)
+    if not proposed_rank or not current_rank:
+        return proposed_urgency, False
+    if proposed_rank >= current_rank:
+        return proposed_urgency, False
+    return current_urgency.lower(), True
 
