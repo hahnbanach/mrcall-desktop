@@ -292,9 +292,16 @@ async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
     else:
         raise ValueError("note must be a string when provided")
 
-    actor = str(params.get("actor") or "human").strip() or "human"
+    raw_actor = params.get("actor")
+    if raw_actor is not None and not isinstance(raw_actor, str):
+        raise ValueError("actor must be a string when provided")
+    actor = (raw_actor or "human").strip() or "human"
+
+    raw_why = params.get("why")
+    if raw_why is not None and not isinstance(raw_why, str):
+        raise ValueError("why must be a string when provided")
     why = (
-        str(params.get("why") or "").strip()
+        (raw_why or "").strip()
         or note
         or "closed by the user from the desktop Tasks view"
     )

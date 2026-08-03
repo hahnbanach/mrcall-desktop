@@ -3571,6 +3571,35 @@ class Storage:
                     f"dedup_skip_until={conflict_set['dedup_skip_until']}"
                 )
             with get_session() as session:
+                # The conflict UPDATE replaces `sources` wholesale with the
+                # incoming payload. The append-only audit histories on the row
+                # (sources.closes / sources.snoozes) must survive EVERY upsert
+                # — including an idempotent create-on-miss retry on an open
+                # task, not just an explicit reopen — so carry them over
+                # whenever the row already exists.
+                existing = (
+                    session.query(TaskItem)
+                    .filter(
+                        TaskItem.owner_id == data["owner_id"],
+                        TaskItem.event_type == data["event_type"],
+                        TaskItem.event_id == data["event_id"],
+                    )
+                    .one_or_none()
+                )
+                if existing is not None:
+                    old_sources = dict(existing.sources or {})
+                    merged_sources = dict(data.get("sources") or {})
+                    merged_any = False
+                    for audit_key in ("closes", "snoozes"):
+                        old_history = list(old_sources.get(audit_key) or [])
+                        if old_history:
+                            merged_sources[audit_key] = old_history + list(
+                                merged_sources.get(audit_key) or []
+                            )
+                            merged_any = True
+                    if merged_any:
+                        data["sources"] = merged_sources
+                        conflict_set["sources"] = merged_sources
                 stmt = sqlite_insert(TaskItem).values(**data)
                 stmt = stmt.on_conflict_do_update(
                     index_elements=[
@@ -3850,32 +3879,52 @@ class Storage:
                 (``f4.reanalyze``, ``detect.email.user_replied``,
                 ``dedup.topic``, …). Persisted to ``close_actor``.
             why: free text explaining the close. Lands in ``close_note``
-                when ``note`` is not given, so the Closed view shows it.
+                when ``note`` is not given, and always lands in the
+                append-only ``sources.closes`` audit history.
 
         Returns True when a row was updated.
         """
-        actor = (actor or "").strip()
+        if not isinstance(actor, str):
+            raise ValueError("complete_task_item requires actor to be a string")
+        if not isinstance(why, str):
+            raise ValueError("complete_task_item requires why to be a string")
+        actor = actor.strip()
         if not actor:
             raise ValueError("complete_task_item requires a non-empty actor")
-        display_note = note if note is not None else (why or None)
+        why = why.strip()
+        display_note = (note.strip() or None) if note is not None else (why or None)
+        audit_why = why or display_note or "task closed without a supplied reason"
         try:
             with get_session() as session:
-                values: dict = {
-                    "completed_at": datetime.now(timezone.utc),
-                    "close_actor": actor,
-                }
-                if display_note is not None:
-                    values["close_note"] = str(display_note).strip() or None
-                count = (
+                task = (
                     session.query(TaskItem)
                     .filter(TaskItem.id == task_id, TaskItem.owner_id == owner_id)
-                    .update(values)
+                    .one_or_none()
                 )
+                if task is None:
+                    return False
+                closed_at = datetime.now(timezone.utc)
+                sources = dict(task.sources or {})
+                history = list(sources.get("closes") or [])
+                history.append(
+                    {
+                        "at": closed_at.isoformat(),
+                        "actor": actor,
+                        "why": audit_why,
+                        "display_note": display_note,
+                    }
+                )
+                sources["closes"] = history
+                task.completed_at = closed_at
+                task.close_actor = actor
+                task.close_note = display_note
+                task.sources = sources
+                session.flush()
                 logger.debug(
                     f"[complete_task_item] task_id={task_id} actor={actor} "
-                    f"why={why!r} rows={count}"
+                    f"why={audit_why!r} rows=1"
                 )
-                return count > 0
+                return True
         except Exception as e:
             logger.error(f"Failed to complete task {task_id}: {e}")
             return False

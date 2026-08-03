@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from zylch.rpc.dispatch import (
+    INTERNAL_ERROR,
     INVALID_PARAMS,
     _NON_SECRET_PARAM_KEYS_BY_METHOD,
     _redact_params,
@@ -89,6 +90,13 @@ _MINIMAL_PAYLOAD_EXEMPT = {
     ),
 }
 
+# Some valid minima cannot be expressed as "all independently-required names".
+# Keep those cross-field/resource requirements explicit and executable.
+_MINIMAL_PAYLOAD_OVERRIDES = {
+    "tasks.snooze": lambda _ctx: {"days": 1},
+    "campaign.add_contact": lambda ctx: {"campaign_id": ctx["campaign_id"]},
+}
+
 _SYNTHETIC_DICT_PARAMS = {"values", "updates", "context", "sources", "edited_input"}
 _SYNTHETIC_LIST_PARAMS = {"lines", "conversation_history"}
 _SYNTHETIC_BOOL_PARAMS = {"pinned", "approved", "action_required", "forget_session"}
@@ -133,16 +141,25 @@ def offline_engine(tmp_path, monkeypatch):
     home = tmp_path / "home"
     profile = home / ".zylch" / "profiles" / "contract-probe"
     profile.mkdir(parents=True)
-    (profile / ".env").write_text("EMAIL_ADDRESS=contract-probe@example.test\n")
+    (profile / ".env").write_text(
+        "EMAIL_ADDRESS=contract-probe@example.test\n" "EMAIL_PASSWORD=contract-probe-password\n"
+    )
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("ZYLCH_PROFILE_DIR", str(profile))
     monkeypatch.setenv("ZYLCH_DB_PATH", str(tmp_path / "contract.db"))
+    monkeypatch.setenv("EMAIL_ADDRESS", "contract-probe@example.test")
+    monkeypatch.setenv("EMAIL_PASSWORD", "contract-probe-password")
 
     import httpx
 
     import zylch.llm as llm_mod
     from zylch.auth.session import clear_session
+    from zylch.cli import profiles as profiles_mod
+    from zylch.rpc import email_actions
+    from zylch.services import process_pipeline
     from zylch.storage import database as db_mod
+    from zylch.storage.database import get_session
+    from zylch.storage.models import Campaign
 
     def _no_network(*_args, **_kwargs):
         raise RuntimeError("network is blocked in the contract-boundary test")
@@ -151,11 +168,35 @@ def offline_engine(tmp_path, monkeypatch):
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _no_network)
     monkeypatch.setattr(llm_mod, "make_llm_client", _no_network)
     monkeypatch.setattr(llm_mod, "try_make_llm_client", lambda *a, **k: None)
+    monkeypatch.setattr(profiles_mod, "_active_profile", "contract-probe")
+    monkeypatch.setattr(profiles_mod, "_active_profile_dir", str(profile))
+    monkeypatch.setattr(
+        email_actions,
+        "_archive_on_imap",
+        lambda _thread_id, message_ids: {
+            "folder": "Archive",
+            "moved": len(message_ids),
+            "attempted": len(message_ids),
+        },
+    )
+
+    async def _no_process(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(process_pipeline, "handle_process", _no_process)
 
     db_mod.dispose_engine()
     db_mod.init_db()
+    with get_session() as session:
+        campaign = Campaign(
+            owner_id="contract-probe@example.test",
+            name="contract-boundary-campaign",
+        )
+        session.add(campaign)
+        session.flush()
+        campaign_id = campaign.id
     try:
-        yield profile
+        yield {"profile": profile, "campaign_id": campaign_id}
     finally:
         # `account.set_firebase_token` installs a process-global session;
         # do not leak it into the rest of the suite.
@@ -168,6 +209,45 @@ def test_minimal_payload_exemptions_name_real_methods():
     assert all(reason for reason in _MINIMAL_PAYLOAD_EXEMPT.values())
 
 
+def test_minimal_payload_overrides_name_real_accepted_params():
+    context = {"campaign_id": "contract-probe-campaign"}
+    for method, build in _MINIMAL_PAYLOAD_OVERRIDES.items():
+        assert method in METHODS
+        assert set(build(context)) <= ACCEPTED_PARAMS[method]
+
+
+def _minimal_payload(method: str, context: dict) -> dict:
+    params = {name: _synthetic(name) for name in sorted(REQUIRED_PARAMS.get(method, set()))}
+    build = _MINIMAL_PAYLOAD_OVERRIDES.get(method)
+    if build is not None:
+        params.update(build(context))
+    return params
+
+
+def _minimal_payload_problem(method: str, params: dict, response: dict) -> str | None:
+    error = response.get("error")
+    if not error:
+        return None
+    message = str(error.get("message") or "")
+    if (
+        message.startswith(_MISSING_PREFIX)
+        or message.startswith(_UNKNOWN_PREFIX)
+        or error.get("code") == INTERNAL_ERROR
+    ):
+        return f"{method} {sorted(params)} -> {error}"
+    return None
+
+
+def test_internal_handler_error_is_not_accepted_as_a_minimal_payload():
+    response = {
+        "error": {
+            "code": INTERNAL_ERROR,
+            "message": "ValueError: synthetic advertised minimum is invalid",
+        }
+    }
+    assert _minimal_payload_problem("contract.synthetic", {}, response)
+
+
 @pytest.mark.asyncio
 async def test_every_method_accepts_its_documented_minimal_payload(offline_engine):
     """No method may reject the payload its own docstring declares sufficient."""
@@ -176,16 +256,13 @@ async def test_every_method_accepts_its_documented_minimal_payload(offline_engin
     for method in sorted(METHODS):
         if method in _MINIMAL_PAYLOAD_EXEMPT:
             continue
-        params = {name: _synthetic(name) for name in sorted(REQUIRED_PARAMS.get(method, set()))}
+        params = _minimal_payload(method, offline_engine)
         response = await dispatch_raw(_request(method, params), _notify)
 
         assert response is not None, method
-        error = response.get("error")
-        if error and (
-            error["message"].startswith(_MISSING_PREFIX)
-            or error["message"].startswith(_UNKNOWN_PREFIX)
-        ):
-            refused.append(f"{method} {sorted(params)} -> {error['message']}")
+        problem = _minimal_payload_problem(method, params, response)
+        if problem:
+            refused.append(problem)
 
     assert not refused, "dispatcher refused a documented-minimal payload:\n" + "\n".join(refused)
 

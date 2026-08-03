@@ -136,6 +136,10 @@ def test_external_operator_lifecycle_preserves_audit_and_reopens_explicitly(fres
     assert open_row["reason"] == _item()["reason"]
     assert open_row["completed_at"] is None
 
+    # A snooze before the close: its audit history must survive the same
+    # lifecycle the close history survives.
+    asyncio.run(methods.tasks_snooze({"task_id": task_id, "days": 1}, notify))
+
     assert asyncio.run(
         methods.tasks_complete({"task_id": task_id, "note": "handled from the operator"}, notify)
     ) == {"ok": True}
@@ -162,6 +166,29 @@ def test_external_operator_lifecycle_preserves_audit_and_reopens_explicitly(fres
     assert row["completed_at"] is None
     assert row["close_note"] is None
     assert row["title"] == "Reconciled external work"
+    assert row["sources"]["closes"][-1]["actor"] == "human"
+    assert row["sources"]["closes"][-1]["why"] == "handled from the operator"
+    assert len(row["sources"]["snoozes"]) == 1, "snooze audit history lost on upsert-reopen"
+
+    first_close = dict(row["sources"]["closes"][-1])
+    assert asyncio.run(
+        methods.tasks_complete(
+            {
+                "task_id": task_id,
+                "actor": "operator",
+                "why": "reconciled and closed by the external operator",
+            },
+            notify,
+        )
+    ) == {"ok": True}
+    reclosed = asyncio.run(task_queries.tasks_get({"task_id": task_id}, notify))
+    assert len(reclosed["sources"]["closes"]) == 2
+    assert reclosed["sources"]["closes"][0] == first_close
+    assert reclosed["sources"]["closes"][1]["actor"] == "operator"
+    assert (
+        reclosed["sources"]["closes"][1]["why"]
+        == "reconciled and closed by the external operator"
+    )
 
 
 # ─── Through the JSON-RPC boundary ────────────────────────────────────
@@ -183,13 +210,18 @@ def rpc(fresh_db, monkeypatch):
     monkeypatch.setattr(methods_mod, "_owner_id", lambda: OWNER)
     monkeypatch.setattr(task_queries_mod, "_owner_id", lambda: OWNER)
 
-    def call(method: str, params: dict):
+    def raw(method: str, params: dict):
         frame = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
         response = asyncio.run(dispatch_raw(frame, lambda *a, **k: None))
         assert response is not None, method
+        return response
+
+    def call(method: str, params: dict):
+        response = raw(method, params)
         assert "error" not in response, f"{method} -> {response['error']}"
         return response["result"]
 
+    call.raw = raw
     return call
 
 
@@ -261,6 +293,11 @@ def test_tasks_complete_records_the_closing_actor_through_dispatch(rpc):
     assert closed["close_actor"] == "operator"
     assert closed["close_note"] == "answered from the shared mailbox"
     assert closed["completed_at"] is not None
+    close_event = closed["sources"]["closes"][-1]
+    assert close_event["actor"] == "operator"
+    assert close_event["why"] == "closed by the cs operator after replying"
+    assert close_event["display_note"] == "answered from the shared mailbox"
+    assert close_event["at"]
 
 
 def test_tasks_complete_still_defaults_to_human_for_callers_that_send_no_actor(rpc):
@@ -311,8 +348,59 @@ def test_reopen_touches_only_its_own_task_and_preserves_the_reason(rpc):
     assert reopened["completed_at"] is None
     assert reopened["close_actor"] is None
     assert reopened["reason"] == "inbound del 3 marzo, nessuna risposta"
+    assert reopened["sources"]["closes"][-1]["actor"] == "operator"
+    assert reopened["sources"]["closes"][-1]["why"]
 
     untouched = rpc("tasks.get", {"task_id": second["task_id"]})
     assert untouched["completed_at"] is not None
     assert untouched["close_actor"] == "f4.reanalyze"
     assert untouched["reason"] == "inbound del 7 marzo, nessuna risposta"
+
+
+def test_idempotent_recreate_on_an_open_task_preserves_audit_history(rpc):
+    """A create-on-miss retry (no reopen flag) must not erase the append-only
+    sources.closes / sources.snoozes histories the row has accumulated."""
+    payload = {
+        "event_id": "<recreate-audit@example.com>",
+        "contact_email": "cliente@example.com",
+        "title": "Richiesta pre-vendita",
+        "sources": {"emails": ["<recreate-audit@example.com>"]},
+    }
+    created = rpc("tasks.create", payload)
+    task_id = created["task_id"]
+
+    assert rpc(
+        "tasks.complete",
+        {"task_id": task_id, "actor": "operator", "why": "first close"},
+    ) == {"ok": True}
+    assert rpc("tasks.reopen", {"task_id": task_id}) == {"ok": True}
+    rpc("tasks.snooze", {"task_id": task_id, "days": 1})
+
+    again = rpc("tasks.create", payload)
+    assert again == {
+        "ok": True,
+        "task_id": task_id,
+        "created": False,
+        "reopened": False,
+    }
+
+    row = rpc("tasks.get", {"task_id": task_id})
+    assert len(row["sources"]["closes"]) == 1, "close audit history lost on re-create"
+    assert row["sources"]["closes"][0]["actor"] == "operator"
+    assert len(row["sources"]["snoozes"]) == 1, "snooze audit history lost on re-create"
+
+
+@pytest.mark.parametrize("field,value", [("actor", {"bad": "shape"}), ("why", ["bad"])])
+def test_tasks_complete_rejects_non_string_audit_fields(rpc, field, value):
+    created = rpc(
+        "tasks.create",
+        {
+            "event_id": f"<bad-{field}@example.com>",
+            "contact_email": "cliente@example.com",
+            "title": "Invalid audit payload",
+        },
+    )
+
+    response = rpc.raw("tasks.complete", {"task_id": created["task_id"], field: value})
+    assert response["error"]["code"] == -32603
+    assert f"{field} must be a string" in response["error"]["message"]

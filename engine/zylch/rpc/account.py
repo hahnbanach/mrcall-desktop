@@ -159,7 +159,7 @@ async def account_balance(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 
 async def auth_refresh(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """auth.refresh(id_token?, refresh_token?) -> {ok, uid, expires_at_ms}.
+    """auth.refresh(id_token, refresh_token?) -> {ok, uid, expires_at_ms}.
 
     Verify a fresh Firebase ID token server-side and replace the cached
     session. WebSocket clients call this before their old token expires
