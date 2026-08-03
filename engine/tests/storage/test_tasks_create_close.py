@@ -11,10 +11,14 @@ the storage layer and through the `tasks_create` RPC handler:
 - the ``tasks_create`` handler returns ``{ok, task_id, created}`` and is
   idempotent (second create of the same event -> ``created=False``);
 - after ``complete_task_item`` the task is ABSENT from the open
-  ``get_task_items()`` but PRESENT with ``include_completed=True``.
+  ``get_task_items()`` but PRESENT with ``include_completed=True``;
+- and, over the JSON-RPC boundary the operator actually speaks
+  (``dispatch_raw``): a full contact record round-trips, ``actor``
+  records who closed a task, and a reopen touches only its own row.
 """
 
 import asyncio
+import json
 
 import pytest
 
@@ -114,3 +118,201 @@ def test_complete_removes_from_open_but_kept_when_included(fresh_db):
     # ...but present with include_completed=True.
     all_ids = {t["id"] for t in storage.get_task_items(OWNER, include_completed=True)}
     assert task_id in all_ids, "completed task missing from include_completed list"
+
+
+def test_external_operator_lifecycle_preserves_audit_and_reopens_explicitly(fresh_db, monkeypatch):
+    """Pin the brain/body reconciliation contract across every lifecycle state."""
+    from zylch.rpc import methods, task_queries
+
+    monkeypatch.setattr(methods, "_owner_id", lambda: OWNER)
+    monkeypatch.setattr(task_queries, "_owner_id", lambda: OWNER)
+
+    def notify(*args, **kwargs):
+        return None
+
+    created = asyncio.run(methods.tasks_create(_item(), notify))
+    task_id = created["task_id"]
+    open_row = asyncio.run(task_queries.tasks_get({"task_id": task_id}, notify))
+    assert open_row["reason"] == _item()["reason"]
+    assert open_row["completed_at"] is None
+
+    assert asyncio.run(
+        methods.tasks_complete({"task_id": task_id, "note": "handled from the operator"}, notify)
+    ) == {"ok": True}
+    closed = asyncio.run(task_queries.tasks_get({"task_id": task_id}, notify))
+    assert closed["close_note"] == "handled from the operator"
+    assert closed["close_actor"] == "human"
+
+    refused = asyncio.run(methods.tasks_create(_item(), notify))
+    assert refused["ok"] is False
+    assert refused["closed"] is True
+    assert refused["task_id"] == task_id
+
+    refreshed = _item()
+    refreshed["title"] = "Reconciled external work"
+    refreshed["reopen_if_closed"] = True
+    reopened = asyncio.run(methods.tasks_create(refreshed, notify))
+    assert reopened == {
+        "ok": True,
+        "task_id": task_id,
+        "created": False,
+        "reopened": True,
+    }
+    row = asyncio.run(task_queries.tasks_get({"task_id": task_id}, notify))
+    assert row["completed_at"] is None
+    assert row["close_note"] is None
+    assert row["title"] == "Reconciled external work"
+
+
+# ─── Through the JSON-RPC boundary ────────────────────────────────────
+#
+# The tests above call the handlers as Python functions, which skips
+# everything the dispatcher does: param validation, the unknown/missing
+# gates, JSON encoding of the payload and of the reply. An external
+# operator only ever reaches the ledger through that boundary, so the
+# contract has to be pinned there too.
+
+
+@pytest.fixture
+def rpc(fresh_db, monkeypatch):
+    """Call the ledger the way an external operator does: over JSON-RPC."""
+    from zylch.rpc import methods as methods_mod
+    from zylch.rpc import task_queries as task_queries_mod
+    from zylch.rpc.dispatch import dispatch_raw
+
+    monkeypatch.setattr(methods_mod, "_owner_id", lambda: OWNER)
+    monkeypatch.setattr(task_queries_mod, "_owner_id", lambda: OWNER)
+
+    def call(method: str, params: dict):
+        frame = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+        response = asyncio.run(dispatch_raw(frame, lambda *a, **k: None))
+        assert response is not None, method
+        assert "error" not in response, f"{method} -> {response['error']}"
+        return response["result"]
+
+    return call
+
+
+def test_tasks_create_roundtrips_through_dispatch_with_full_contact_record(rpc):
+    """A representative payload survives JSON-RPC in both directions."""
+    payload = {
+        "event_type": "email",
+        "event_id": "<rpc-roundtrip@example.com>",
+        "contact_email": "cliente@example.com",
+        "contact_name": "Mario Rossi",
+        "contact_phone": "+393480000001",
+        "title": "Richiamare per il preventivo",
+        "urgency": "high",
+        "reason": "inbound 8 giorni fa, nessuna risposta",
+        "suggested_action": "rispondere con il listino aggiornato",
+        "channel": "phone",
+        "sources": {"emails": ["<rpc-roundtrip@example.com>"], "thread_id": "thread-77"},
+    }
+
+    created = rpc("tasks.create", payload)
+    assert created["ok"] is True and created["created"] is True
+
+    row = rpc("tasks.get", {"task_id": created["task_id"]})
+    assert row["contact_email"] == payload["contact_email"]
+    assert row["contact_name"] == payload["contact_name"]
+    assert row["contact_phone"] == payload["contact_phone"]
+    assert row["title"] == payload["title"]
+    assert row["reason"] == payload["reason"]
+    assert row["suggested_action"] == payload["suggested_action"]
+    assert row["urgency"] == "high"
+    assert row["sources"]["thread_id"] == "thread-77"
+    assert row["completed_at"] is None
+    assert row["close_actor"] is None
+
+    # Idempotent across the boundary too: same event key, no duplicate.
+    again = rpc("tasks.create", payload)
+    assert again == {
+        "ok": True,
+        "task_id": created["task_id"],
+        "created": False,
+        "reopened": False,
+    }
+
+
+def test_tasks_complete_records_the_closing_actor_through_dispatch(rpc):
+    """`actor` is what tells a machine close from a human one."""
+    created = rpc(
+        "tasks.create",
+        {
+            "event_id": "<actor-close@example.com>",
+            "contact_email": "cliente@example.com",
+            "title": "Richiesta pre-vendita",
+            "reason": "inbound senza risposta",
+        },
+    )
+    task_id = created["task_id"]
+
+    assert rpc(
+        "tasks.complete",
+        {
+            "task_id": task_id,
+            "note": "answered from the shared mailbox",
+            "actor": "operator",
+            "why": "closed by the cs operator after replying",
+        },
+    ) == {"ok": True}
+
+    closed = rpc("tasks.get", {"task_id": task_id})
+    assert closed["close_actor"] == "operator"
+    assert closed["close_note"] == "answered from the shared mailbox"
+    assert closed["completed_at"] is not None
+
+
+def test_tasks_complete_still_defaults_to_human_for_callers_that_send_no_actor(rpc):
+    """The two new params are additive: an old caller is unaffected."""
+    created = rpc(
+        "tasks.create",
+        {
+            "event_id": "<default-actor@example.com>",
+            "contact_email": "cliente@example.com",
+            "title": "Richiesta pre-vendita",
+        },
+    )
+
+    assert rpc("tasks.complete", {"task_id": created["task_id"]}) == {"ok": True}
+
+    closed = rpc("tasks.get", {"task_id": created["task_id"]})
+    assert closed["close_actor"] == "human"
+
+
+def test_reopen_touches_only_its_own_task_and_preserves_the_reason(rpc):
+    """Two tasks, one reopen: the other must not move, and `reason` survives."""
+    first = rpc(
+        "tasks.create",
+        {
+            "event_id": "<reopen-mine@example.com>",
+            "contact_email": "uno@example.com",
+            "title": "Preventivo A",
+            "reason": "inbound del 3 marzo, nessuna risposta",
+        },
+    )
+    second = rpc(
+        "tasks.create",
+        {
+            "event_id": "<reopen-other@example.com>",
+            "contact_email": "due@example.com",
+            "title": "Preventivo B",
+            "reason": "inbound del 7 marzo, nessuna risposta",
+        },
+    )
+    assert first["task_id"] != second["task_id"]
+
+    for task_id, actor in ((first["task_id"], "operator"), (second["task_id"], "f4.reanalyze")):
+        assert rpc("tasks.complete", {"task_id": task_id, "actor": actor}) == {"ok": True}
+
+    assert rpc("tasks.reopen", {"task_id": first["task_id"]}) == {"ok": True}
+
+    reopened = rpc("tasks.get", {"task_id": first["task_id"]})
+    assert reopened["completed_at"] is None
+    assert reopened["close_actor"] is None
+    assert reopened["reason"] == "inbound del 3 marzo, nessuna risposta"
+
+    untouched = rpc("tasks.get", {"task_id": second["task_id"]})
+    assert untouched["completed_at"] is not None
+    assert untouched["close_actor"] == "f4.reanalyze"
+    assert untouched["reason"] == "inbound del 7 marzo, nessuna risposta"

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Zylch — local AI-powered sales intelligence CLI. Python 3.11+ / SQLite / IMAP / WhatsApp (neonize) / BYOK or MrCall-credits LLM. Mono-user, no server.
+Zylch — the MrCall Desktop engine: local AI assistant for business communication (email / WhatsApp / SMS / MrCall phone). Python 3.11+ / SQLite / IMAP / WhatsApp (neonize) / BYOK or MrCall-credits LLM. One profile per user; runs as the app's stdio sidecar or as a per-profile VPS daemon (`zylch serve`).
 
 ## Documentation
 
@@ -18,17 +18,14 @@ All knowledge lives in `./docs/`. This file is the index.
 | [agents/README.md](docs/agents/README.md) | Agent system (memory, tasks, emailer) |
 | [qa/testing-live.md](docs/qa/testing-live.md) | Live testing: use Zylch, compare against Gmail |
 
-After context compaction, run /doc-intrasession before resuming work!
+## Sibling tree
 
-## Sibling repos
-
-This product spans three repos under `~/private/`:
-
-- **`zylch-standalone/`** — this one. Python CLI + Python sidecar (the "brain").
-- **`zylch-desktop/`** — Electron + React shell that embeds the sidecar via JSON-RPC over stdio. Repo: `example-owner/zylch-desktop`.
-- **`zylch-website/`** — static marketing site at https://example.com. Repo: `example-owner/zylch-website`.
-
-When a change cuts across repos (e.g. a CLI flag rename that the desktop UI also relies on), check the matching repo before merging.
+The engine lives inside the `mrcall-desktop` monorepo next to `app/` (the
+Electron + React shell that embeds this sidecar via JSON-RPC over stdio) and
+the cross-cutting `../docs/`. When a change cuts across engine ↔ app (e.g. an
+RPC rename the UI relies on), check the sibling tree before merging — see
+[`../CLAUDE.md`](../CLAUDE.md). (The pre-merge `zylch`/`zylch-desktop` repos
+were subtree-merged here and archived.)
 
 ## Memory discipline
 

@@ -538,10 +538,11 @@ async def whatsapp_list_threads(params: Dict[str, Any], notify: NotifyFn) -> Any
 
 
 async def whatsapp_list_messages(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """whatsapp.list_messages(chat_jid, limit=200, offset=0) -> {messages}.
+    """whatsapp.list_messages(chat_jid?, limit=200, offset=0) -> {messages}.
 
     Oldest-first within the page so the renderer can render top-to-bottom
-    without reversing.
+    without reversing. A missing/empty ``chat_jid`` returns an empty page
+    rather than an error, so the param is optional.
     """
     from zylch.storage.database import get_session
     from zylch.storage.models import WhatsAppMessage
@@ -627,14 +628,15 @@ async def whatsapp_cancel(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 
 async def whatsapp_search_messages(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """whatsapp.search_messages(query, limit=200) -> {threads, query}.
+    """whatsapp.search_messages(query?, limit=200) -> {threads, query}.
 
     Free-text search across the local store. Matches message text /
     transcription / sender name AND contact name / phone, returns the
     matching chats newest-first in the SAME shape as ``list_threads`` (so
     the renderer reuses the thread-row component) with a per-row
     ``match_snippet`` of the matching message. Reads SQLite only — no live
-    socket required.
+    socket required. A missing/empty ``query`` returns an empty result set
+    rather than an error, so the param is optional.
     """
     from zylch.services.whatsapp_search import build_thread_rows, search_thread_jids
     from zylch.storage.database import get_session
@@ -659,7 +661,7 @@ async def whatsapp_search_messages(params: Dict[str, Any], notify: NotifyFn) -> 
 
 
 async def whatsapp_send_message(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """whatsapp.send_message(chat_jid, text) -> {ok, message?, error?}.
+    """whatsapp.send_message(chat_jid?, text?) -> {ok, message?, error?}.
 
     Sends a text message to an existing chat over the LIVE connection
     (the persistent ``_active_client`` the connect flow keeps alive) —
@@ -672,6 +674,10 @@ async def whatsapp_send_message(params: Dict[str, Any], notify: NotifyFn) -> Any
     ``SendResponse.ID`` so the live-socket echo dedups) and returned in
     ``list_messages`` row shape so the renderer can append it without a
     full reload.
+
+    Both params are marked optional because the handler answers a
+    missing/empty one with ``{ok: false, error: …}`` — a refusal the
+    caller can render — rather than raising.
     """
     from datetime import datetime, timezone
 

@@ -19,7 +19,7 @@ import logging
 from typing import Any, Callable, Dict, Optional
 
 from zylch.rpc.methods import METHODS
-from zylch.rpc.param_spec import build_registry, unknown_params
+from zylch.rpc.param_spec import build_registry, missing_required_params, unknown_params
 
 logger = logging.getLogger(__name__)
 
@@ -53,31 +53,92 @@ _SECRET_PARAM_KEYS_BY_METHOD: Dict[str, set] = {
     "account.set_firebase_token": {"id_token"},
     "auth.refresh": {"id_token"},
 }
+#: Exact key names (compared case-insensitively) that always carry a
+#: secret. Deliberately includes the bare words a caller reaches for when
+#: it has no better name — ``{"session": …}``, ``{"token": …}`` — because
+#: those reached this module's DEBUG line verbatim before 2026-08.
 _SECRET_PARAM_KEYS_GLOBAL: set = {
-    # Defence-in-depth: redact regardless of method, in case a new RPC
-    # ships before this table is updated. Broad, but not so broad we hit
-    # innocent fields like "passenger" or usage "*_tokens".
+    "auth",
+    "credential",
+    "credentials",
+    "key",
+    "passwd",
+    "password",
+    "secret",
+    "session",
+    "token",
+    # Historical explicit entries; all also matched by the suffix rules
+    # below, kept so the table still reads as documentation.
     "id_token",
     "access_token",
     "refresh_token",
     "api_key",
-    "password",
     "client_secret",
-    "secret",
+}
+#: Compound shapes: ``firebase_id_token``, ``smtp_password``, ``x_api_key``…
+#: Suffixes are singular on purpose — ``input_tokens`` / ``output_tokens``
+#: are usage counters, not secrets, and must stay readable.
+_SECRET_PARAM_KEY_SUFFIXES: tuple = (
+    "_auth",
+    "_credential",
+    "_credentials",
+    "_key",
+    "_passwd",
+    "_password",
+    "_secret",
+    "_session",
+    "_token",
+)
+#: Per-method carve-out for a param whose name LOOKS secret but is a
+#: plain identifier the operator needs to see when reading logs. Applied
+#: to TOP-LEVEL params only — a key of the same name nested inside a
+#: payload is not the documented parameter and stays redacted.
+#: ``agents.get_prompt(key="task_email")`` names a prompt, not a secret.
+_NON_SECRET_PARAM_KEYS_BY_METHOD: Dict[str, set] = {
+    "agents.get_prompt": {"key"},
 }
 
 
+def _is_secret_key(key: Any, extra: set) -> bool:
+    """True when a param name must never have its value logged.
+
+    Matching is case-insensitive and covers exact names plus the
+    ``*_token`` / ``*_key`` / ``*_secret`` / ``*_password`` /
+    ``*_session`` / ``*_credential`` compounds. Over-redaction in a
+    DEBUG line is a cosmetic loss; under-redaction ships a credential to
+    the narration pipeline, so the rule errs wide.
+    """
+    if not isinstance(key, str):
+        return False
+    name = key.strip().lower()
+    if not name:
+        return False
+    if name in extra or name in _SECRET_PARAM_KEYS_GLOBAL:
+        return True
+    return name.endswith(_SECRET_PARAM_KEY_SUFFIXES)
+
+
 def _redact_params(method: Optional[str], params: Dict[str, Any]) -> Dict[str, Any]:
-    """Return a copy of ``params`` with known-sensitive fields masked."""
+    """Return a recursively redacted copy of ``params``."""
     if not isinstance(params, dict) or not params:
         return params
-    secret_keys = _SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set()) | _SECRET_PARAM_KEYS_GLOBAL
-    redacted = dict(params)
-    for k in list(redacted.keys()):
-        if k in secret_keys and redacted[k]:
-            v = redacted[k]
-            redacted[k] = f"<redacted len={len(v)}>" if isinstance(v, str) else "<redacted>"
-    return redacted
+    extra = _SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set())
+    allowed = _NON_SECRET_PARAM_KEYS_BY_METHOD.get(method or "", set())
+
+    def redact(value: Any, key: Optional[str] = None) -> Any:
+        if key is not None and _is_secret_key(key, extra) and value:
+            return f"<redacted len={len(value)}>" if isinstance(value, str) else "<redacted>"
+        if isinstance(value, dict):
+            return {k: redact(v, k) for k, v in value.items()}
+        if isinstance(value, list):
+            return [redact(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(redact(item) for item in value)
+        return value
+
+    # `redact(v, None)` keeps the value but still walks into containers,
+    # so a carve-out never becomes a hole for something nested under it.
+    return {k: redact(v, None if k in allowed else k) for k, v in params.items()}
 
 
 async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
@@ -140,6 +201,17 @@ async def dispatch_raw(raw: str, notify: NotifyFn) -> Optional[Dict[str, Any]]:
             req_id,
             INVALID_PARAMS,
             f"Unknown parameter(s) for {method}: {', '.join(rejected)}",
+        )
+
+    missing = missing_required_params(method, params)
+    if missing:
+        logger.warning(f"[rpc] {method} missing required param(s) {missing} — rejected")
+        if is_notification:
+            return None
+        return _error(
+            req_id,
+            INVALID_PARAMS,
+            f"Missing required parameter(s) for {method}: {', '.join(missing)}",
         )
 
     logger.debug(f"[rpc] method={method} params={_redact_params(method, params)}")

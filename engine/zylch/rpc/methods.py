@@ -262,11 +262,20 @@ async def tasks_create(params: Dict[str, Any], notify: NotifyFn) -> Any:
 
 
 async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """tasks.complete(task_id, note?) -> {ok: bool}.
+    """tasks.complete(task_id, note?, actor?, why?) -> {ok: bool}.
 
     `note` is an optional free-text closing reason. Stored on
     `task_items.close_note` and shown next to the task in the
     Closed view; never injected into any LLM prompt.
+
+    A close is the one irreversible thing this ledger does, so it is
+    recorded with WHO did it and WHY — the same audit convention
+    ``tasks.snooze`` follows. `actor` is a stable machine token
+    (``human`` for a user action in the desktop, otherwise the calling
+    code path or external operator, e.g. ``operator``); it lands in
+    `task_items.close_actor`. `why` is the audit reason and falls back
+    to `note`. Both default to the desktop-human close, so a caller
+    written before these params existed is unaffected.
     """
     from zylch.storage.storage import Storage
 
@@ -283,25 +292,32 @@ async def tasks_complete(params: Dict[str, Any], notify: NotifyFn) -> Any:
     else:
         raise ValueError("note must be a string when provided")
 
+    actor = str(params.get("actor") or "human").strip() or "human"
+    why = (
+        str(params.get("why") or "").strip()
+        or note
+        or "closed by the user from the desktop Tasks view"
+    )
+
     owner_id = _owner_id()
     logger.debug(
         f"[rpc] tasks.complete owner_id={owner_id} task_id={task_id} "
-        f"note_len={len(note) if note else 0}"
+        f"note_len={len(note) if note else 0} actor={actor}"
     )
     store = Storage.get_instance()
     ok = store.complete_task_item(
         owner_id=owner_id,
         task_id=task_id,
         note=note,
-        actor="human",
-        why=note or "closed by the user from the desktop Tasks view",
+        actor=actor,
+        why=why,
     )
     logger.debug(f"[rpc] tasks.complete -> {ok}")
     return {"ok": bool(ok)}
 
 
 async def tasks_snooze(params: Dict[str, Any], notify: NotifyFn) -> Any:
-    """tasks.snooze(task_id, due_at, days, actor, why) -> {ok, due_at, …}.
+    """tasks.snooze(task_id, due_at?, days?, actor?, why?) -> {ok, due_at, …}.
 
     Park an OPEN task until a moment in the future — the "call me back
     in N days" the ledger never had. Give EXACTLY ONE of:
@@ -703,7 +719,12 @@ async def tasks_solve_approve(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """tasks.solve.approve(tool_use_id, approved, edited_input=None)."""
+    """tasks.solve.approve(tool_use_id, approved?, edited_input=None).
+
+    ``approved`` defaults to False (a deny), so a caller that omits it
+    still reaches the handler — the `?` records the default the code has
+    always applied.
+    """
     tool_use_id = params.get("tool_use_id")
     approved = bool(params.get("approved", False))
     edited_input = params.get("edited_input")
@@ -1344,11 +1365,12 @@ async def narration_summarize(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """narration.summarize(lines, context="") -> {"text": str}.
+    """narration.summarize(lines?, context="") -> {"text": str}.
 
     Summarizes recent sidecar stderr lines into a short first-person
     Italian sentence using Haiku, for display while a chat.send is
-    in flight. Never raises; returns {"text": ""} on any failure.
+    in flight. Never raises; returns {"text": ""} on any failure —
+    including the no-`lines` call, which is why `lines` is optional.
     """
     import re
 
@@ -1612,7 +1634,7 @@ async def emails_search(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """emails.search(query, folder='inbox', limit=50, offset=0) -> {"threads": [...]}.
+    """emails.search(query?, folder='inbox', limit=50, offset=0) -> {"threads": [...]}.
 
     Gmail-style query language. Supported operators:
     ``from:`` / ``to:`` / ``cc:`` / ``subject:`` / ``body:``,
@@ -1621,6 +1643,10 @@ async def emails_search(
     ``older_than:Nd|w|m|y`` / ``newer_than:…``, ``filename:``.
     Bare terms match in subject/body/snippet/from. Prefix with ``-`` to
     negate. ``folder`` is ``inbox`` / ``sent`` / ``all``.
+
+    ``query`` is optional: an absent or empty query is an unfiltered
+    browse of ``folder``, which is what the renderer's "clear search"
+    already sends.
     """
     from zylch.api.token_storage import get_email
     from zylch.storage.storage import Storage
@@ -1706,12 +1732,13 @@ async def narration_predict(
     params: Dict[str, Any],
     notify: NotifyFn,
 ) -> Any:
-    """narration.predict(message, context="") -> {"text": str}.
+    """narration.predict(message?, context="") -> {"text": str}.
 
     Predicts in first-person Italian what Zylch is about to do, based on
     the user's message. Used as the immediate placeholder while a
     chat.send is in flight, before stderr-driven narration kicks in.
-    Never raises; returns {"text": ""} on any failure.
+    Never raises; returns {"text": ""} on any failure — including the
+    no-`message` call, which is why `message` is optional.
     """
     message = params.get("message") or ""
     context = params.get("context") or ""
