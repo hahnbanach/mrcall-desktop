@@ -8,7 +8,6 @@ import logging
 
 from zylch.email.imap_client import IMAPClient
 from zylch.tools.email_archive import EmailArchiveManager
-from zylch.config import settings
 
 # Avoid circular imports
 if TYPE_CHECKING:

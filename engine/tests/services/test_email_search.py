@@ -10,11 +10,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from zylch.services.email_search import (
     ParsedQuery,
-    Predicate,
     email_matches,
     parse_query,
 )

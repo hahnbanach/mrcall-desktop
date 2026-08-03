@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import time
 from typing import Any, Dict, List
 
@@ -409,7 +408,7 @@ async def run_topic_dedup(owner_id: str) -> Dict[str, Any]:
     except Exception as e:
         err_str = str(e)
         if "529" in err_str or "overloaded" in err_str.lower():
-            logger.warning(f"[topic-dedup] provider overloaded (529) — skipping sweep")
+            logger.warning("[topic-dedup] provider overloaded (529) — skipping sweep")
         else:
             logger.exception(f"[topic-dedup] LLM call failed: {e}")
         return {

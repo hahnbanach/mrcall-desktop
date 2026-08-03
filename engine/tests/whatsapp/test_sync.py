@@ -264,7 +264,6 @@ def test_ephemeral_extended_text_extracts_text(fresh_db):
     from zylch.storage.database import get_session
     from zylch.storage.models import WhatsAppMessage
     from zylch.whatsapp.sync import WhatsAppSyncService
-    import Neonize_pb2 as N
 
     owner_id = "test@example.com"
     sync = WhatsAppSyncService(storage=None, owner_id=owner_id)
