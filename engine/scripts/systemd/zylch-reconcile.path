@@ -1,0 +1,44 @@
+[Unit]
+Description=Watch for new mrcall-desktop profiles and trigger a daemon-set reconcile
+#
+# Directive choice, sourced from `man systemd.path`:
+#
+# PathModified= fires on directory-entry create/remove/rename AND on plain
+# writes to an already-watched entry (PathChanged= only fires on
+# close-after-write). PathModified= is the superset, so it is what we use.
+#
+# DirectoryNotEmpty= was considered and deliberately NOT added. Per the man
+# page: "If a ... directory already is not empty (in case of
+# DirectoryNotEmpty=) at the time the path unit is activated, then the
+# configured unit is immediately activated as well. Something similar does
+# not apply to PathChanged= and PathModified=." profiles/ is non-empty in
+# steady state (existing profiles are never removed by this automation),
+# so DirectoryNotEmpty= would fire once at enable time and then, per the
+# same man page's "when a service unit triggered by a path unit terminates
+# ... monitored paths are checked immediately again" rule, re-fire again
+# right after every run — "non-empty" never stops being true. That is a
+# tight self-retrigger loop bounded only by the default
+# TriggerLimitIntervalSec=2s / TriggerLimitBurst=200, not the "a new
+# profile arrived" signal we actually want. PathModified= is edge-triggered
+# on real change events rather than a persistent directory state, so it
+# does not have this problem.
+#
+# Limitation, also per `man systemd.path` ("path units use the inotify(7)
+# API ... suffers by the same limitations as inotify") and `man 7 inotify`
+# ("Inotify monitoring of directories is not recursive"): this watch on
+# profiles/ only sees entries created/removed/modified DIRECTLY inside
+# profiles/. It does NOT fire for a write deep inside an existing profile
+# dir, e.g. .../profiles/<uid>/.env edited after <uid> already exists —
+# that would need a separate recursive watch (one inotify watch per
+# profile dir), which this unit does not set up. Acceptable here: the case
+# this unit exists for is a NEW profile arriving, which IS a create-event
+# directly inside profiles/ and IS seen; edits to an existing profile's
+# own files are instead caught by zylch-reconcile.timer's daily run
+# (worst case ~24h latency, fine for this use case).
+
+[Path]
+PathModified=/home/mrcalld/.zylch/profiles
+Unit=zylch-reconcile.service
+
+[Install]
+WantedBy=multi-user.target

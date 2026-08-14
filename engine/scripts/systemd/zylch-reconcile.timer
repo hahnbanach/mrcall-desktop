@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily fallback reconcile of the mrcall-desktop daemon set (catches anything zylch-reconcile.path's non-recursive watch misses)
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=zylch-reconcile.service
+
+[Install]
+WantedBy=timers.target
