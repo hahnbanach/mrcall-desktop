@@ -1,0 +1,43 @@
+[Unit]
+# Reconciles the mrcalld daemon set: runs update-daemons.sh (the same
+# script an operator has been running by hand over SSH — see
+# engine/scripts/server/update-daemons.sh, unmodified by this unit) so a
+# newly-arrived profile under ~mrcalld/.zylch/profiles gets its daemon
+# started without a human in the loop. Triggered by zylch-reconcile.path
+# (new profile dir) and zylch-reconcile.timer (daily fallback) — both name
+# this same oneshot unit; see those files for trigger semantics.
+Description=mrcall-desktop daemon-set reconciler (update-daemons.sh wrapper)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+# update-daemons.sh itself enforces `id -u = 0`: it drops to $SVC_USER via
+# `sudo -u mrcalld` for the git/pip steps and calls systemctl directly for
+# the rest (daemon-reload, enable/start/restart per profile) — all of
+# which need root. Do not change User= here.
+EnvironmentFile=-/etc/mrcalld/env
+WorkingDirectory=/home/mrcalld
+# Belt-and-braces on top of the wrapper's own flock+settle-sleep: a
+# generous ceiling on how long one full reconcile (git pull + optional pip
+# install + N daemon restarts) may legitimately take before systemd steps
+# in, so a genuinely stuck run does not block the next trigger forever.
+TimeoutStartSec=600
+# Modest, safe hardening only. This unit needs full root — it writes under
+# /etc, talks to systemctl/PID1, and runs git+pip as another user via
+# `sudo -u mrcalld` inside update-daemons.sh — so the heavier sandboxing
+# directives (ProtectSystem=, ProtectHome=, etc.) are deliberately NOT used
+# here: they would break update-daemons.sh's own `install` calls into /etc
+# and its `sudo -u mrcalld` steps under /home. PrivateTmp= only isolates
+# /tmp, which nothing in this call chain needs, so it is safe to add.
+PrivateTmp=yes
+NoNewPrivileges=yes
+ExecStart=/home/mrcalld/mrcall-desktop/engine/scripts/server/reconcile-notify.sh
+
+# No [Install] section on purpose: this oneshot is never enabled directly,
+# only triggered by zylch-reconcile.path / zylch-reconcile.timer (see
+# engine/scripts/server/README-reconcile.md for the install steps).
+# `systemctl start zylch-reconcile.service` still works for a manual
+# one-off run regardless of the absence of [Install].
